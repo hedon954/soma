@@ -473,6 +473,8 @@ final class AIService {
         text: String,
         images: [Data],
         hasVideo: Bool,
+        imageAttachmentCount: Int? = nil,
+        videoAttachmentCount: Int? = nil,
         context: String,
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) -> AgentToolResult
@@ -495,7 +497,9 @@ final class AIService {
             text: text,
             context: context,
             imageCount: images.count,
-            hasVideo: hasVideo
+            hasVideo: hasVideo,
+            imageAttachmentCount: imageAttachmentCount,
+            videoAttachmentCount: videoAttachmentCount
         )
         var messages = [
             ChatCompletionParameters.Message(role: .system, content: .text(systemPrompt)),
@@ -504,7 +508,7 @@ final class AIService {
                 content: agentUserContent(
                     prompt: userPrompt,
                     images: images,
-                    maximumImageCount: hasVideo ? 6 : 4
+                    maximumImageCount: 12
                 )
             )
         ]
@@ -643,10 +647,12 @@ final class AIService {
                 }
 
                 guard !orderedDeltas.isEmpty else {
-                    let finalAnswer = assistantPassages
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                        .joined(separator: "\n\n")
+                    let finalAnswer = passage
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .nilIfEmpty
+                        ?? assistantPassages.last?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        ?? ""
                     guard !finalAnswer.isEmpty else {
                         throw ReActAgentError.emptyResponse
                     }
@@ -682,7 +688,7 @@ final class AIService {
                         id: spanID,
                         step: step,
                         kind: call.name == .loadSkill ? .skill : .tool,
-                        title: skill?.title ?? call.name.rawValue,
+                        title: skill?.title ?? call.name.displayTitle,
                         status: .running,
                         startedAt: startedAt,
                         endedAt: startedAt,
@@ -708,7 +714,7 @@ final class AIService {
                         id: spanID,
                         step: step,
                         kind: call.name == .loadSkill ? .skill : .tool,
-                        title: skill?.title ?? call.name.rawValue,
+                        title: skill?.title ?? call.name.displayTitle,
                         status: result.ok ? .succeeded : .failed,
                         startedAt: startedAt,
                         endedAt: endedAt,

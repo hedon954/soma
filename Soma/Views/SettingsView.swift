@@ -1493,8 +1493,18 @@ private struct AgentTraceDetailView: View {
 
     private var mediaDescription: String? {
         guard trace.mediaKind != .none else { return nil }
-        let name = trace.mediaKind == .video ? "视频" : "图片"
-        return "\(name) · \(trace.imageCount) 个分析帧"
+        var parts: [String] = []
+        if trace.imageAttachmentCount > 0 {
+            parts.append("\(trace.imageAttachmentCount) 张图片")
+        }
+        if trace.videoAttachmentCount > 0 {
+            parts.append("\(trace.videoAttachmentCount) 个视频")
+        }
+        if parts.isEmpty {
+            parts.append(trace.mediaKind == .video ? "视频" : "图片")
+        }
+        parts.append("\(trace.imageCount) 个分析帧")
+        return parts.joined(separator: " · ")
     }
 
     private func tracePreviewCard(

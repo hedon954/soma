@@ -20,8 +20,39 @@ enum MealType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum MediaKind: String, Codable {
+enum MediaKind: String, Codable, Hashable, Sendable {
     case none, image, video
+}
+
+struct MediaAttachmentReference: Codable, Hashable, Identifiable, Sendable {
+    var kind: MediaKind
+    var path: String
+
+    var id: String {
+        "\(kind.rawValue):\(path)"
+    }
+}
+
+private enum MediaAttachmentStorage {
+    static func encode(_ attachments: [MediaAttachmentReference]) -> Data {
+        (try? JSONEncoder().encode(attachments)) ?? Data()
+    }
+
+    static func decode(
+        _ data: Data,
+        legacyKind: MediaKind = .none,
+        legacyPath: String? = nil
+    ) -> [MediaAttachmentReference] {
+        let decoded = (try? JSONDecoder().decode(
+            [MediaAttachmentReference].self,
+            from: data
+        )) ?? []
+        if !decoded.isEmpty {
+            return decoded
+        }
+        guard legacyKind != .none, let legacyPath else { return [] }
+        return [MediaAttachmentReference(kind: legacyKind, path: legacyPath)]
+    }
 }
 
 enum BiologicalSex: String, Codable, CaseIterable, Identifiable {
@@ -221,6 +252,7 @@ final class MealEntry {
     var fat: Double
     var notes: String
     var imagePath: String?
+    var mediaAttachmentsData: Data = Data()
     var confidence: Double
 
     var mealType: MealType {
@@ -238,6 +270,7 @@ final class MealEntry {
         fat: Double,
         notes: String = "",
         imagePath: String? = nil,
+        mediaAttachments: [MediaAttachmentReference] = [],
         confidence: Double = 0.9
     ) {
         id = UUID()
@@ -250,7 +283,22 @@ final class MealEntry {
         self.fat = fat
         self.notes = notes
         self.imagePath = imagePath
+        mediaAttachmentsData = MediaAttachmentStorage.encode(mediaAttachments)
         self.confidence = confidence
+    }
+
+    var mediaAttachments: [MediaAttachmentReference] {
+        get {
+            MediaAttachmentStorage.decode(
+                mediaAttachmentsData,
+                legacyKind: imagePath == nil ? .none : .image,
+                legacyPath: imagePath
+            )
+        }
+        set {
+            mediaAttachmentsData = MediaAttachmentStorage.encode(newValue)
+            imagePath = newValue.first(where: { $0.kind == .image })?.path
+        }
     }
 }
 
@@ -263,6 +311,7 @@ final class BodyEntry {
     var waist: Double?
     var notes: String
     var imagePath: String?
+    var mediaAttachmentsData: Data = Data()
     var analysis: String
     var externalSource: String?
     var externalID: String?
@@ -274,6 +323,7 @@ final class BodyEntry {
         waist: Double? = nil,
         notes: String = "",
         imagePath: String? = nil,
+        mediaAttachments: [MediaAttachmentReference] = [],
         analysis: String = "",
         externalSource: String? = nil,
         externalID: String? = nil
@@ -285,9 +335,24 @@ final class BodyEntry {
         self.waist = waist
         self.notes = notes
         self.imagePath = imagePath
+        mediaAttachmentsData = MediaAttachmentStorage.encode(mediaAttachments)
         self.analysis = analysis
         self.externalSource = externalSource
         self.externalID = externalID
+    }
+
+    var mediaAttachments: [MediaAttachmentReference] {
+        get {
+            MediaAttachmentStorage.decode(
+                mediaAttachmentsData,
+                legacyKind: imagePath == nil ? .none : .image,
+                legacyPath: imagePath
+            )
+        }
+        set {
+            mediaAttachmentsData = MediaAttachmentStorage.encode(newValue)
+            imagePath = newValue.first(where: { $0.kind == .image })?.path
+        }
     }
 }
 
@@ -304,6 +369,7 @@ final class WorkoutEntry {
     var notes: String
     var mediaKindRaw: String
     var mediaPath: String?
+    var mediaAttachmentsData: Data = Data()
     var formScore: Int?
     var intensity: String?
     var feedback: String?
@@ -323,6 +389,21 @@ final class WorkoutEntry {
         set { mediaKindRaw = newValue.rawValue }
     }
 
+    var mediaAttachments: [MediaAttachmentReference] {
+        get {
+            MediaAttachmentStorage.decode(
+                mediaAttachmentsData,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            )
+        }
+        set {
+            mediaAttachmentsData = MediaAttachmentStorage.encode(newValue)
+            mediaKind = newValue.first?.kind ?? .none
+            mediaPath = newValue.first?.path
+        }
+    }
+
     init(
         date: Date = .now,
         exercise: String,
@@ -334,6 +415,7 @@ final class WorkoutEntry {
         notes: String = "",
         mediaKind: MediaKind = .none,
         mediaPath: String? = nil,
+        mediaAttachments: [MediaAttachmentReference] = [],
         formScore: Int? = nil,
         intensity: String? = nil,
         feedback: String? = nil,
@@ -355,6 +437,7 @@ final class WorkoutEntry {
         self.notes = notes
         mediaKindRaw = mediaKind.rawValue
         self.mediaPath = mediaPath
+        mediaAttachmentsData = MediaAttachmentStorage.encode(mediaAttachments)
         self.formScore = formScore
         self.intensity = intensity
         self.feedback = feedback
@@ -375,7 +458,11 @@ final class CoachMessage {
     var text: String
     var mediaKindRaw: String = MediaKind.none.rawValue
     var mediaPath: String?
+    var mediaAttachmentsData: Data = Data()
     var recordTypeRaw: String?
+    var agentTraceID: UUID?
+    var agentStatusRaw: String?
+    var agentEventsData: Data = Data()
 
     init(
         date: Date = .now,
@@ -383,7 +470,11 @@ final class CoachMessage {
         text: String,
         mediaKind: MediaKind = .none,
         mediaPath: String? = nil,
-        recordType: ConversationIntent? = nil
+        mediaAttachments: [MediaAttachmentReference] = [],
+        recordType: ConversationIntent? = nil,
+        agentTraceID: UUID? = nil,
+        agentStatus: AgentTraceStatus? = nil,
+        agentEvents: [AgentTraceSpan] = []
     ) {
         id = UUID()
         self.date = date
@@ -391,7 +482,11 @@ final class CoachMessage {
         self.text = text
         mediaKindRaw = mediaKind.rawValue
         self.mediaPath = mediaPath
+        mediaAttachmentsData = MediaAttachmentStorage.encode(mediaAttachments)
         recordTypeRaw = recordType?.rawValue
+        self.agentTraceID = agentTraceID
+        agentStatusRaw = agentStatus?.rawValue
+        agentEventsData = (try? JSONEncoder().encode(agentEvents)) ?? Data()
     }
 
     var mediaKind: MediaKind {
@@ -399,7 +494,47 @@ final class CoachMessage {
     }
 
     var recordType: ConversationIntent? {
-        recordTypeRaw.flatMap(ConversationIntent.init(rawValue:))
+        get { recordTypeRaw.flatMap(ConversationIntent.init(rawValue:)) }
+        set { recordTypeRaw = newValue?.rawValue }
+    }
+
+    var mediaAttachments: [MediaAttachmentReference] {
+        get {
+            MediaAttachmentStorage.decode(
+                mediaAttachmentsData,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            )
+        }
+        set {
+            mediaAttachmentsData = MediaAttachmentStorage.encode(newValue)
+            mediaKindRaw = (newValue.first?.kind ?? .none).rawValue
+            mediaPath = newValue.first?.path
+        }
+    }
+
+    var agentStatus: AgentTraceStatus? {
+        get { agentStatusRaw.flatMap(AgentTraceStatus.init(rawValue:)) }
+        set { agentStatusRaw = newValue?.rawValue }
+    }
+
+    var agentEvents: [AgentTraceSpan] {
+        (try? JSONDecoder().decode([AgentTraceSpan].self, from: agentEventsData)) ?? []
+    }
+
+    func applyAgentEvent(_ span: AgentTraceSpan) {
+        guard span.kind == .skill || span.kind == .tool else { return }
+        var current = agentEvents
+        if let index = current.firstIndex(where: { $0.id == span.id }) {
+            current[index] = span
+        } else {
+            current.append(span)
+        }
+        agentEventsData = (try? JSONEncoder().encode(current)) ?? agentEventsData
+    }
+
+    func replaceAgentEvents(_ events: [AgentTraceSpan]) {
+        agentEventsData = (try? JSONEncoder().encode(events)) ?? agentEventsData
     }
 }
 
@@ -511,6 +646,8 @@ final class AgentTrace {
     var contextSnapshot: String
     var mediaKindRaw: String
     var imageCount: Int
+    var imageAttachmentCount: Int = 0
+    var videoAttachmentCount: Int = 0
     var finalAnswer: String?
     var errorMessage: String?
     var spansData: Data
@@ -525,7 +662,9 @@ final class AgentTrace {
         userInput: String,
         contextSnapshot: String,
         mediaKind: MediaKind,
-        imageCount: Int
+        imageCount: Int,
+        imageAttachmentCount: Int? = nil,
+        videoAttachmentCount: Int? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -538,6 +677,10 @@ final class AgentTrace {
         self.contextSnapshot = contextSnapshot
         mediaKindRaw = mediaKind.rawValue
         self.imageCount = imageCount
+        self.imageAttachmentCount = imageAttachmentCount
+            ?? (mediaKind == .image ? 1 : 0)
+        self.videoAttachmentCount = videoAttachmentCount
+            ?? (mediaKind == .video ? 1 : 0)
         spansData = (try? JSONEncoder().encode([AgentTraceSpan]())) ?? Data()
     }
 

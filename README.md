@@ -16,10 +16,13 @@ open Soma.xcodeproj
 
 App 只保留两个界面：
 
-- **教练**：直接聊天、使用系统语音输入，或发送照片、视频。远程模式由受限的 [ReAct Agent](docs/react-agent.md) 查询本地上下文、调用记录工具并根据执行结果继续决策；无 API Key 时使用明确标注的本地演示分析器。
+- **教练**：直接聊天、使用系统语音输入，或一次发送多张照片、多个视频及其混合附件。远程模式由受限的 [ReAct Agent](docs/react-agent.md) 查询本地上下文、调用记录工具并根据执行结果继续决策；Tool/Skill 事件在对应回复中实时显示并持久保留。无 API Key 时使用明确标注的本地演示分析器。
 - **进展**：集中展示训练、饮食和身体记录列表、GitHub 风格连续性热力图，以及可左右拖动并切换周/双周/月/季的体重和训练容量趋势。结构化记录由聊天创建，历史列表支持进入即编辑、修改后保存和左滑删除。
 
 没有训练、饮食、身体或器械的传统“新增表单”。多个健身房及当前健身房也通过自然语言和照片维护。
+
+主屏幕可以添加中尺寸 **Soma 快速记录** Widget，也可以通过系统快捷指令直接开始文字、
+拍照或照片/视频输入。系统入口只负责打开教练和对应选择器，不会绕过聊天直接写入记录。
 
 ## 数据与 AI
 
@@ -67,6 +70,9 @@ App 只保留两个界面：
 make setup
 make check
 make verify
+
+# 连接已开启开发者模式的 iPhone 后
+DEVELOPMENT_TEAM=你的TeamID make install-device
 ```
 
 `make check` 是本地和 pre-commit 使用的快速静态门禁，包含格式、lint、仓库与隐私契约，
@@ -78,10 +84,11 @@ Actions、发布和完整交付验收使用。项目的 coding agent 统一遵�
 
 项目占位 Bundle ID 为 `top.hedon.soma`，使用 Automatic Signing。模拟器无需开发者账号；真机与 TestFlight 必须在 Xcode 中登录真实 Apple Developer 账号，并选择自己的 Team。
 
-选择 Team 后可以在 Xcode 中执行 Product → Archive，或在终端执行：
+连线安装使用 `make install-device`。选择 Team 后可以在 Xcode 中执行 Product → Archive，
+或在终端执行：
 
 ```bash
-DEVELOPMENT_TEAM=你的10位TeamID scripts/archive-testflight.sh
+DEVELOPMENT_TEAM=你的10位TeamID make archive
 ```
 
 归档位于 `build/Soma.xcarchive`，App Store Connect 导出内容位于 `build/TestFlight`。上传前还需要在 App Store Connect 创建同 Bundle ID 的 App 记录。

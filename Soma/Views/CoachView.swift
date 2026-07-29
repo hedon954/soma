@@ -1,12 +1,20 @@
 import Observation
+import OSLog
 import SwiftData
 import SwiftUI
 import UIKit
 
-private enum CoachSheet: String, Identifiable {
+private enum CoachSheet: Identifiable {
     case media
+    case quickCapture(CaptureEntryRequest)
+
     var id: String {
-        rawValue
+        switch self {
+        case .media:
+            "media"
+        case let .quickCapture(request):
+            "capture-\(request.id)"
+        }
     }
 }
 
@@ -30,6 +38,33 @@ struct PendingAttachment: Identifiable {
     }
 }
 
+private struct PreparedConversationMedia {
+    var attachments: [MediaAttachmentReference]
+    var frames: [Data]
+    var imageCount: Int
+    var videoCount: Int
+
+    var hasVideo: Bool {
+        videoCount > 0
+    }
+
+    var primaryKind: MediaKind {
+        attachments.first?.kind ?? .none
+    }
+
+    var primaryPath: String? {
+        attachments.first?.path
+    }
+
+    var displaySummary: String {
+        let parts = [
+            imageCount > 0 ? "\(imageCount) 张图片" : nil,
+            videoCount > 0 ? "\(videoCount) 个视频" : nil
+        ].compactMap { $0 }
+        return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
+    }
+}
+
 @MainActor
 @Observable
 final class ConversationProcessingService {
@@ -44,7 +79,7 @@ final class ConversationProcessingService {
     @discardableResult
     func submit(
         text: String,
-        attachment: PendingAttachment?,
+        attachments: [PendingAttachment],
         contextSummary: String,
         dataSpace: DataSpace,
         gyms: [GymProfile],
@@ -65,7 +100,7 @@ final class ConversationProcessingService {
             guard let self else { return }
             await process(
                 text: text,
-                attachment: attachment,
+                attachments: attachments,
                 contextSummary: contextSummary,
                 dataSpace: dataSpace,
                 gyms: gyms,
@@ -79,7 +114,7 @@ final class ConversationProcessingService {
 
     private func process(
         text: String,
-        attachment: PendingAttachment?,
+        attachments: [PendingAttachment],
         contextSummary: String,
         dataSpace: DataSpace,
         gyms: [GymProfile],
@@ -87,19 +122,22 @@ final class ConversationProcessingService {
         ai: AIService,
         modelContext: ModelContext
     ) async {
-        let media = await prepareMedia(attachment)
+        let media = await prepareMedia(attachments)
         let displayText = text.isEmpty
-            ? (attachment?.kind == .video ? "发送了一段训练视频" : "发送了一张照片")
+            ? media.displaySummary
             : text
         modelContext.insert(CoachMessage(
             isFromCoach: false,
-            text: displayText,
-            mediaKind: attachment?.kind ?? .none,
-            mediaPath: media.path
+            text: text,
+            mediaKind: media.primaryKind,
+            mediaPath: media.primaryPath,
+            mediaAttachments: media.attachments
         ))
         try? modelContext.save()
 
         var performedRecordType: ConversationIntent?
+        var responseMessage: CoachMessage?
+        var activeTrace: AgentTrace?
         do {
             let reply: String
             if ai.isRemoteEnabled {
@@ -114,31 +152,59 @@ final class ConversationProcessingService {
                     dataSpaceRaw: dataSpace.rawValue,
                     userInput: displayText,
                     contextSnapshot: contextSummary,
-                    mediaKind: attachment?.kind ?? .none,
-                    imageCount: media.frames.count
+                    mediaKind: media.primaryKind,
+                    imageCount: media.frames.count,
+                    imageAttachmentCount: media.imageCount,
+                    videoAttachmentCount: media.videoCount
                 )
+                activeTrace = trace
                 modelContext.insert(trace)
+                let message = CoachMessage(
+                    isFromCoach: true,
+                    text: "",
+                    agentTraceID: trace.id,
+                    agentStatus: .running
+                )
+                responseMessage = message
+                modelContext.insert(message)
                 try? modelContext.save()
 
                 let outcome = try await ai.runAgent(
                     text: text,
                     images: media.frames,
-                    hasVideo: attachment?.kind == .video,
+                    hasVideo: media.hasVideo,
+                    imageAttachmentCount: media.imageCount,
+                    videoAttachmentCount: media.videoCount,
                     context: contextSummary,
                     trace: { [weak self] event in
                         self?.applyLiveAgentEvent(event)
                         trace.apply(event)
-                        if case .assistantTextDelta = event {
-                            return
+                        switch event {
+                        case let .assistantTextDelta(delta):
+                            message.text += delta
+                        case let .span(span):
+                            if span.kind == .skill || span.kind == .tool,
+                               span.status == .running
+                            {
+                                message.text = ""
+                            }
+                            message.applyAgentEvent(span)
+                        case .completed:
+                            message.agentStatus = .succeeded
+                        case let .failed(_, cancelled, _):
+                            message.agentStatus = cancelled ? .cancelled : .failed
                         }
-                        try? modelContext.save()
+                        if case .assistantTextDelta = event {} else {
+                            try? modelContext.save()
+                        }
                     }
                 ) { call in
                     let result = ConversationRecorder.executeAgentTool(
                         call,
                         sourceText: text,
-                        mediaKind: attachment?.kind ?? .none,
-                        mediaPath: media.path,
+                        mediaKind: media.primaryKind,
+                        mediaPath: media.primaryPath,
+                        mediaAttachments: media.attachments,
                         in: modelContext
                     )
                     if let recordType = result.recordType {
@@ -148,43 +214,58 @@ final class ConversationProcessingService {
                 }
                 reply = outcome.finalAnswer
                 performedRecordType = outcome.primaryRecordType ?? performedRecordType
+                message.text = reply
+                message.recordType = performedRecordType
+                message.agentStatus = .succeeded
             } else {
                 let result = try await ai.interpretConversation(
                     text: text,
                     images: media.frames,
-                    hasVideo: attachment?.kind == .video,
+                    hasVideo: media.hasVideo,
                     context: contextSummary,
                     allowDemoFallback: dataSpace == .demo
                 )
                 reply = ConversationRecorder.apply(
                     result,
                     sourceText: text,
-                    mediaKind: attachment?.kind ?? .none,
-                    mediaPath: media.path,
+                    mediaKind: media.primaryKind,
+                    mediaPath: media.primaryPath,
+                    mediaAttachments: media.attachments,
                     gyms: gyms,
                     equipment: equipment,
                     in: modelContext
                 )
                 performedRecordType = result.intent
             }
-            modelContext.insert(CoachMessage(
-                isFromCoach: true,
-                text: reply,
-                recordType: performedRecordType
-            ))
+            if responseMessage == nil {
+                modelContext.insert(CoachMessage(
+                    isFromCoach: true,
+                    text: reply,
+                    recordType: performedRecordType
+                ))
+            }
         } catch {
             let reason = error.localizedDescription
             let recovery = if performedRecordType != nil {
                 "\n\nAgent 已完成的本地记录仍然保留，但生成最终回复时中断。"
-            } else if attachment != nil {
+            } else if !attachments.isEmpty {
                 "\n\n附件已保存在本机对话中，但这次没有自动生成统计记录。请检查模型的多模态能力后重试。"
             } else {
                 ""
             }
-            modelContext.insert(CoachMessage(
-                isFromCoach: true,
-                text: "这次没有处理成功：\(reason)。\(recovery)"
-            ))
+            let failureText = "这次没有处理成功：\(reason)。\(recovery)"
+            if let responseMessage {
+                responseMessage.text = failureText
+                responseMessage.agentStatus = .failed
+                if let activeTrace, activeTrace.status == .running {
+                    activeTrace.apply(.failed(message: reason, cancelled: false, at: .now))
+                }
+            } else {
+                modelContext.insert(CoachMessage(
+                    isFromCoach: true,
+                    text: failureText
+                ))
+            }
         }
 
         try? modelContext.save()
@@ -196,20 +277,64 @@ final class ConversationProcessingService {
     }
 
     private func prepareMedia(
-        _ attachment: PendingAttachment?
-    ) async -> (path: String?, frames: [Data]) {
-        guard let attachment else { return (nil, []) }
-        switch attachment.kind {
-        case .none:
-            return (nil, [])
-        case .image:
-            guard let data = attachment.imageData else { return (nil, []) }
-            return (try? MediaStore.saveImage(data), [data])
-        case .video:
-            guard let url = attachment.videoURL else { return (nil, []) }
-            let path = try? MediaStore.saveVideo(from: url)
-            return await (path, VideoFrameExtractor.frames(from: url))
+        _ attachments: [PendingAttachment]
+    ) async -> PreparedConversationMedia {
+        var references: [MediaAttachmentReference] = []
+        var frameGroups: [[Data]] = []
+        var imageCount = 0
+        var videoCount = 0
+
+        for attachment in attachments {
+            switch attachment.kind {
+            case .none:
+                continue
+            case .image:
+                guard
+                    let data = attachment.imageData,
+                    let path = try? MediaStore.saveImage(data)
+                else { continue }
+                references.append(MediaAttachmentReference(kind: .image, path: path))
+                frameGroups.append([data])
+                imageCount += 1
+            case .video:
+                guard
+                    let url = attachment.videoURL,
+                    let path = try? MediaStore.saveVideo(from: url)
+                else { continue }
+                references.append(MediaAttachmentReference(kind: .video, path: path))
+                await frameGroups.append(VideoFrameExtractor.frames(from: url))
+                videoCount += 1
+            }
         }
+
+        return PreparedConversationMedia(
+            attachments: references,
+            frames: Self.balancedFrames(from: frameGroups, limit: 12),
+            imageCount: imageCount,
+            videoCount: videoCount
+        )
+    }
+
+    private static func balancedFrames(
+        from groups: [[Data]],
+        limit: Int
+    ) -> [Data] {
+        guard limit > 0 else { return [] }
+        var result: [Data] = []
+        var index = 0
+        while result.count < limit {
+            var appended = false
+            for group in groups where index < group.count {
+                result.append(group[index])
+                appended = true
+                if result.count == limit {
+                    return result
+                }
+            }
+            guard appended else { break }
+            index += 1
+        }
+        return result
     }
 
     private func applyLiveAgentEvent(_ event: AgentTraceEvent) {
@@ -240,6 +365,7 @@ struct CoachView: View {
     @Environment(AIService.self) private var ai
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationProcessingService.self) private var processor
+    @Environment(SomaCaptureRouter.self) private var captureRouter
 
     @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
@@ -250,11 +376,12 @@ struct CoachView: View {
     @Query(sort: \UserProfile.updatedAt, order: .reverse) private var profiles: [UserProfile]
 
     @State private var draft = ""
-    @State private var attachment: PendingAttachment?
+    @State private var attachments: [PendingAttachment] = []
     @State private var sheet: CoachSheet?
     @State private var speechInput = SpeechInputService()
     @State private var draftBeforeSpeech = ""
     @State private var showsGyms = false
+    @State private var composerFocusRequest = UUID()
 
     private var currentGym: GymProfile? {
         GymSelection.current(in: gyms)
@@ -273,11 +400,15 @@ struct CoachView: View {
                     }
 
                     ForEach(messages) { message in
-                        CoachBubble(message: message)
-                            .id(message.id)
+                        CoachBubble(
+                            message: message,
+                            isLive: isProcessingHere
+                                && message.agentStatus == .running
+                        )
+                        .id(message.id)
                     }
 
-                    if isProcessingHere {
+                    if isProcessingHere, !ai.isRemoteEnabled {
                         LiveAgentResponse(
                             text: processor.liveAssistantText,
                             activity: processor.liveAgentActivity,
@@ -296,12 +427,13 @@ struct CoachView: View {
             .safeAreaInset(edge: .bottom) {
                 CoachComposer(
                     draft: $draft,
-                    attachment: $attachment,
+                    attachments: $attachments,
                     gyms: gyms,
                     currentGym: currentGym,
                     isSending: processor.isProcessing,
                     isListening: speechInput.isListening,
                     speechMessage: speechInput.errorMessage,
+                    focusRequest: composerFocusRequest,
                     onAddMedia: showMedia,
                     onSelectGym: selectGym,
                     onManageGyms: { showsGyms = true },
@@ -309,8 +441,8 @@ struct CoachView: View {
                     onSend: send
                 )
             }
-            .onChange(of: messages.count) {
-                scrollToBottom(proxy)
+            .onChange(of: messages.last?.id, initial: true) {
+                scrollToBottomAfterLayout(proxy)
             }
             .onChange(of: processor.isProcessing) {
                 scrollToBottom(proxy)
@@ -330,13 +462,39 @@ struct CoachView: View {
         .navigationDestination(isPresented: $showsGyms) {
             GymLibraryView()
         }
-        .sheet(item: $sheet) { destination in
+        .sheet(item: $sheet, onDismiss: clearDismissedCaptureRequest) { destination in
             switch destination {
             case .media:
-                MediaSourceDialog(allowsVideo: true) { media in
-                    attachment = PendingAttachment(media)
+                MediaSourceDialog(
+                    allowsVideo: true,
+                    selectionLimit: max(
+                        MediaPicker.maximumSelectionCount - attachments.count,
+                        1
+                    )
+                ) { media in
+                    let available = max(
+                        MediaPicker.maximumSelectionCount - attachments.count,
+                        0
+                    )
+                    attachments.append(
+                        contentsOf: media.prefix(available).map(PendingAttachment.init)
+                    )
+                }
+            case let .quickCapture(request):
+                MediaSourceDialog(
+                    allowsVideo: true,
+                    selectionLimit: MediaPicker.maximumSelectionCount,
+                    initialSource: request.mode == .camera ? .camera : .library
+                ) { media in
+                    captureRouter.deliver(media)
                 }
             }
+        }
+        .onChange(of: captureRouter.pendingRequest, initial: true) {
+            handleCaptureRequest()
+        }
+        .task(id: captureRouter.mediaDelivery?.id) {
+            handleMediaDelivery()
         }
         .onDisappear {
             speechInput.stop()
@@ -345,6 +503,50 @@ struct CoachView: View {
 
     private func showMedia() {
         sheet = .media
+    }
+
+    private func appendPickedMedia(_ media: [PickedMedia]) {
+        let available = max(
+            MediaPicker.maximumSelectionCount - attachments.count,
+            0
+        )
+        attachments.append(
+            contentsOf: media.prefix(available).map(PendingAttachment.init)
+        )
+    }
+
+    private func handleCaptureRequest() {
+        guard let request = captureRouter.pendingRequest else { return }
+        somaCaptureLogger.info(
+            "Routing capture request in coach: \(request.mode.rawValue, privacy: .public)"
+        )
+        if request.mode == .text {
+            composerFocusRequest = UUID()
+            captureRouter.clear(request.id)
+        } else {
+            Task { @MainActor in
+                await Task.yield()
+                guard captureRouter.pendingRequest?.id == request.id else { return }
+                sheet = .quickCapture(request)
+                somaCaptureLogger.info("Presented quick capture sheet state")
+            }
+        }
+    }
+
+    private func clearDismissedCaptureRequest() {
+        somaCaptureLogger.info("Quick capture sheet dismissed")
+        guard let request = captureRouter.pendingRequest,
+              request.mode != .text
+        else {
+            return
+        }
+        captureRouter.clear(request.id)
+    }
+
+    private func handleMediaDelivery() {
+        guard let delivery = captureRouter.mediaDelivery else { return }
+        appendPickedMedia(delivery.media)
+        captureRouter.clearDelivery(delivery.id)
     }
 
     private func selectGym(_ gym: GymProfile) {
@@ -359,12 +561,12 @@ struct CoachView: View {
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || attachment != nil, !processor.isProcessing else { return }
+        guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
         speechInput.stop()
-        let pending = attachment
+        let pending = attachments
         let accepted = processor.submit(
             text: text,
-            attachment: pending,
+            attachments: pending,
             contextSummary: contextSummary,
             dataSpace: dataSpace.activeSpace,
             gyms: gyms,
@@ -374,7 +576,7 @@ struct CoachView: View {
         )
         if accepted {
             draft = ""
-            attachment = nil
+            attachments = []
         }
     }
 
@@ -398,9 +600,25 @@ struct CoachView: View {
             .joined(separator: draftBeforeSpeech.isEmpty ? "" : " ")
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.25)) {
-            proxy.scrollTo(isProcessingHere ? "live-response" : "bottom", anchor: .bottom)
+    private func scrollToBottom(
+        _ proxy: ScrollViewProxy,
+        animated: Bool = true
+    ) {
+        let target = isProcessingHere ? "live-response" : "bottom"
+        if animated {
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo(target, anchor: .bottom)
+        }
+    }
+
+    private func scrollToBottomAfterLayout(_ proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            scrollToBottom(proxy, animated: false)
         }
     }
 
@@ -590,6 +808,7 @@ private struct SelectableChatText: UIViewRepresentable {
 
 private struct CoachBubble: View {
     let message: CoachMessage
+    var isLive = false
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -604,29 +823,38 @@ private struct CoachBubble: View {
                         .foregroundStyle(AppTheme.tint)
                 }
 
-                if message.mediaKind == .image {
-                    LocalImageView(path: message.mediaPath)
-                        .frame(width: 180, height: 150)
-                        .clipShape(RoundedRectangle(cornerRadius: 15))
-                } else if message.mediaKind == .video {
-                    Label("训练视频", systemImage: "play.rectangle.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(12)
-                        .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 14))
-                        .foregroundStyle(.white)
+                if !message.mediaAttachments.isEmpty {
+                    StoredMediaStrip(attachments: message.mediaAttachments)
                 }
 
-                SelectableChatText(
-                    content: message.text,
-                    color: message.isFromCoach ? .label : .white
-                )
-                .padding(.horizontal, 13)
-                .padding(.vertical, 10)
-                .background(
-                    message.isFromCoach ? Color(uiColor: .secondarySystemGroupedBackground) : AppTheme.tint,
-                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-                )
-                .foregroundStyle(message.isFromCoach ? Color.primary : Color.white)
+                if !message.text.isEmpty, !message.isAutomaticMediaSummary {
+                    Group {
+                        if message.isFromCoach {
+                            MarkdownText(message.text)
+                        } else {
+                            SelectableChatText(content: message.text, color: .white)
+                        }
+                    }
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 10)
+                    .background(
+                        message.isFromCoach
+                            ? Color(uiColor: .secondarySystemGroupedBackground)
+                            : AppTheme.tint,
+                        in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    )
+                    .foregroundStyle(message.isFromCoach ? Color.primary : Color.white)
+                }
+
+                if message.isFromCoach,
+                   !message.agentEvents.isEmpty || isLive
+                {
+                    AgentEventTimeline(
+                        events: message.agentEvents,
+                        status: message.agentStatus,
+                        isLive: isLive
+                    )
+                }
             }
 
             if message.isFromCoach {
@@ -634,6 +862,459 @@ private struct CoachBubble: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+enum FoldedMediaLayout {
+    static let cardWidth: CGFloat = 172
+    static let minimumHeight: CGFloat = 116
+    static let maximumHeight: CGFloat = 258
+    static let portraitCardSize = CGSize(width: 150, height: 200)
+    static let squareCardSize = CGSize(width: 160, height: 160)
+    static let landscapeCardSize = CGSize(width: 172, height: 116)
+    static let cornerRadius: CGFloat = 10
+    static let layerScaleStep: CGFloat = 0.10
+    static let middleLayerExposureRatio: CGFloat = 0.10
+    static let backLayerExposureRatio: CGFloat = 0.165
+    static let layerRotationStep: Double = 1.8
+
+    static func cardHeight(forAspectRatio aspectRatio: CGFloat) -> CGFloat {
+        guard aspectRatio.isFinite, aspectRatio > 0 else {
+            return cardWidth
+        }
+        return min(
+            maximumHeight,
+            max(minimumHeight, cardWidth / aspectRatio)
+        )
+    }
+
+    static func scale(forLayer layer: Int) -> CGFloat {
+        max(0.72, 1 - layerScaleStep * CGFloat(max(layer, 0)))
+    }
+
+    static func rotation(forLayer layer: Int) -> Double {
+        layerRotationStep * Double(max(layer, 0))
+    }
+
+    static func foldedFrontSize(forAspectRatio aspectRatio: CGFloat) -> CGSize {
+        guard aspectRatio.isFinite, aspectRatio > 0 else {
+            return squareCardSize
+        }
+        if aspectRatio < 0.90 {
+            return portraitCardSize
+        }
+        if aspectRatio > 1.10 {
+            return landscapeCardSize
+        }
+        return squareCardSize
+    }
+
+    static func scaledSize(
+        forLayer layer: Int,
+        frontSize: CGSize
+    ) -> CGSize {
+        let scale = scale(forLayer: layer)
+        return CGSize(
+            width: frontSize.width * scale,
+            height: frontSize.height * scale
+        )
+    }
+
+    static func targetExposure(
+        forLayer layer: Int,
+        frontWidth: CGFloat
+    ) -> CGFloat {
+        switch max(layer, 0) {
+        case 0:
+            0
+        case 1:
+            frontWidth * middleLayerExposureRatio
+        default:
+            frontWidth * backLayerExposureRatio
+        }
+    }
+
+    static func rotatedBoundingWidth(
+        forLayer layer: Int,
+        size: CGSize
+    ) -> CGFloat {
+        let radians = rotation(forLayer: layer) * .pi / 180
+        return size.width * abs(cos(radians)) +
+            size.height * abs(sin(radians))
+    }
+
+    static func centerX(
+        forLayer layer: Int,
+        size: CGSize,
+        frontSize: CGSize
+    ) -> CGFloat {
+        frontSize.width + targetExposure(
+            forLayer: layer,
+            frontWidth: frontSize.width
+        ) -
+            rotatedBoundingWidth(forLayer: layer, size: size) / 2
+    }
+
+    static func rightEdge(
+        forLayer layer: Int,
+        size: CGSize,
+        frontSize: CGSize
+    ) -> CGFloat {
+        centerX(
+            forLayer: layer,
+            size: size,
+            frontSize: frontSize
+        ) +
+            rotatedBoundingWidth(forLayer: layer, size: size) / 2
+    }
+
+    static func stackOverflowWidth(frontWidth: CGFloat) -> CGFloat {
+        targetExposure(forLayer: 2, frontWidth: frontWidth)
+    }
+}
+
+private extension CoachMessage {
+    var isAutomaticMediaSummary: Bool {
+        guard !isFromCoach, !mediaAttachments.isEmpty else { return false }
+        let normalized = text
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "个", with: "")
+        let imageCount = mediaAttachments.count { $0.kind == .image }
+        let videoCount = mediaAttachments.count { $0.kind == .video }
+        let parts = [
+            imageCount > 0 ? "\(imageCount)张图片" : nil,
+            videoCount > 0 ? "\(videoCount)视频" : nil
+        ].compactMap { $0 }
+        return normalized == "发送了" + parts.joined(separator: "和")
+    }
+}
+
+private struct StoredMediaStrip: View {
+    let attachments: [MediaAttachmentReference]
+    @State private var isExpanded = false
+
+    var body: some View {
+        Group {
+            if attachments.count >= 3 {
+                if isExpanded {
+                    expandedGrid
+                } else {
+                    foldedCard
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(attachments) { attachment in
+                        StoredMediaTile(attachment: attachment)
+                            .frame(width: 132, height: 108)
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: 14,
+                                    style: .continuous
+                                )
+                            )
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: 278, alignment: .trailing)
+        .animation(.snappy(duration: 0.28), value: isExpanded)
+    }
+
+    private var foldedCard: some View {
+        let backSize = foldedLayerSize(offset: 2)
+        let middleSize = foldedLayerSize(offset: 1)
+
+        return HStack(spacing: 10) {
+            Button {
+                isExpanded = true
+            } label: {
+                Text("展开 \(attachments.count)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 64, height: 32)
+                    .background(
+                        Color.black.opacity(0.065),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("展开 \(attachments.count) 个媒体附件")
+
+            ZStack(alignment: .topLeading) {
+                StoredMediaTile(
+                    attachment: foldedAttachment(offset: 2),
+                    cornerRadius: FoldedMediaLayout.cornerRadius
+                )
+                .frame(
+                    width: backSize.width,
+                    height: backSize.height
+                )
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: FoldedMediaLayout.cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .rotationEffect(
+                    .degrees(FoldedMediaLayout.rotation(forLayer: 2)),
+                    anchor: .center
+                )
+                .position(
+                    x: FoldedMediaLayout.centerX(
+                        forLayer: 2,
+                        size: backSize,
+                        frontSize: foldedFrontSize
+                    ),
+                    y: foldedCardHeight / 2
+                )
+
+                StoredMediaTile(
+                    attachment: foldedAttachment(offset: 1),
+                    cornerRadius: FoldedMediaLayout.cornerRadius
+                )
+                .frame(
+                    width: middleSize.width,
+                    height: middleSize.height
+                )
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: FoldedMediaLayout.cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .rotationEffect(
+                    .degrees(FoldedMediaLayout.rotation(forLayer: 1)),
+                    anchor: .center
+                )
+                .position(
+                    x: FoldedMediaLayout.centerX(
+                        forLayer: 1,
+                        size: middleSize,
+                        frontSize: foldedFrontSize
+                    ),
+                    y: foldedCardHeight / 2
+                )
+
+                StoredMediaTile(
+                    attachment: foldedAttachment(offset: 0),
+                    cornerRadius: FoldedMediaLayout.cornerRadius
+                )
+                .frame(
+                    width: foldedFrontSize.width,
+                    height: foldedFrontSize.height
+                )
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: FoldedMediaLayout.cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .position(
+                    x: foldedFrontSize.width / 2,
+                    y: foldedCardHeight / 2
+                )
+            }
+            .frame(
+                width: foldedFrontSize.width +
+                    FoldedMediaLayout.stackOverflowWidth(
+                        frontWidth: foldedFrontSize.width
+                    ),
+                height: foldedCardHeight,
+                alignment: .topLeading
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isExpanded = true
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("展开 \(attachments.count) 个媒体附件")
+            .accessibilityAddTraits(.isButton)
+        }
+    }
+
+    private var expandedGrid: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button {
+                isExpanded = false
+            } label: {
+                Text("收起")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 64, height: 32)
+                    .background(
+                        Color.black.opacity(0.065),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(.top, max(0, (foldedCardHeight - 32) / 2))
+            .accessibilityLabel("收起媒体附件")
+
+            LazyVStack(alignment: .trailing, spacing: 14) {
+                ForEach(attachments) { attachment in
+                    StoredMediaTile(
+                        attachment: attachment,
+                        cornerRadius: FoldedMediaLayout.cornerRadius
+                    )
+                    .frame(
+                        width: FoldedMediaLayout.cardWidth,
+                        height: cardHeight(for: attachment)
+                    )
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: FoldedMediaLayout.cornerRadius,
+                            style: .continuous
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private var foldedCardHeight: CGFloat {
+        foldedFrontSize.height
+    }
+
+    private var foldedFrontSize: CGSize {
+        FoldedMediaLayout.foldedFrontSize(
+            forAspectRatio: aspectRatio(for: attachments[0])
+        )
+    }
+
+    private func foldedLayerSize(offset: Int) -> CGSize {
+        FoldedMediaLayout.scaledSize(
+            forLayer: offset,
+            frontSize: foldedFrontSize
+        )
+    }
+
+    private func cardHeight(for attachment: MediaAttachmentReference) -> CGFloat {
+        FoldedMediaLayout.cardHeight(
+            forAspectRatio: aspectRatio(for: attachment)
+        )
+    }
+
+    private func aspectRatio(
+        for attachment: MediaAttachmentReference
+    ) -> CGFloat {
+        guard attachment.kind == .image,
+              let image = MediaStore.image(at: attachment.path),
+              image.size.width > 0,
+              image.size.height > 0
+        else {
+            return 1
+        }
+
+        return image.size.width / image.size.height
+    }
+
+    private func foldedAttachment(offset: Int) -> MediaAttachmentReference {
+        attachments[offset]
+    }
+}
+
+private struct StoredMediaTile: View {
+    let attachment: MediaAttachmentReference
+    var cornerRadius: CGFloat = 14
+
+    var body: some View {
+        Group {
+            if attachment.kind == .image {
+                LocalImageView(path: attachment.path)
+            } else {
+                ZStack {
+                    Color.black.opacity(0.84)
+                    VStack(spacing: 5) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                        Text("视频")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+        .accessibilityLabel(attachment.kind == .image ? "图片附件" : "视频附件")
+    }
+}
+
+private struct AgentEventTimeline: View {
+    let events: [AgentTraceSpan]
+    let status: AgentTraceStatus?
+    let isLive: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(events) { event in
+                HStack(alignment: .top, spacing: 8) {
+                    eventIcon(event)
+                        .frame(width: 18, height: 18)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(event.title)
+                            .font(.caption.weight(.semibold))
+                        if let detail = detail(for: event) {
+                            Text(detail)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
+
+            if isLive, events.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.mini)
+                    Text("Agent 正在分析…")
+                        .font(.caption.weight(.medium))
+                }
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+        )
+        .foregroundStyle(status == .failed ? Color.red : Color.primary)
+    }
+
+    @ViewBuilder
+    private func eventIcon(_ event: AgentTraceSpan) -> some View {
+        switch event.status {
+        case .running:
+            ProgressView().controlSize(.mini)
+        case .succeeded:
+            Image(systemName: event.kind == .skill ? "sparkles" : "checkmark.circle.fill")
+                .foregroundStyle(AppTheme.tint)
+        case .failed, .cancelled:
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func detail(for event: AgentTraceSpan) -> String? {
+        if event.status == .running {
+            return event.kind == .skill ? "正在加载 Skill" : "正在调用工具"
+        }
+        if let error = event.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !error.isEmpty
+        {
+            return error
+        }
+        guard event.kind == .tool,
+              let output = event.output,
+              let data = output.data(using: .utf8),
+              let result = try? JSONDecoder().decode(AgentToolResult.self, from: data)
+        else {
+            return event.status == .succeeded ? "已完成" : nil
+        }
+        return result.observation
     }
 }
 
@@ -646,7 +1327,7 @@ private struct LiveAgentResponse: View {
         VStack(alignment: .leading, spacing: 7) {
             if !text.isEmpty {
                 HStack {
-                    SelectableChatText(content: text, color: .label)
+                    MarkdownText(text)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 11)
                         .background(
@@ -685,12 +1366,13 @@ private struct LiveAgentResponse: View {
 
 private struct CoachComposer: View {
     @Binding var draft: String
-    @Binding var attachment: PendingAttachment?
+    @Binding var attachments: [PendingAttachment]
     let gyms: [GymProfile]
     let currentGym: GymProfile?
     let isSending: Bool
     let isListening: Bool
     let speechMessage: String?
+    let focusRequest: UUID
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
@@ -748,10 +1430,13 @@ private struct CoachComposer: View {
                 Spacer()
             }
 
-            if let attachment {
-                AttachmentPreview(attachment: attachment) {
-                    self.attachment = nil
-                }
+            if !attachments.isEmpty {
+                AttachmentPreview(
+                    attachments: attachments,
+                    onRemove: { id in
+                        attachments.removeAll { $0.id == id }
+                    }
+                )
             }
             if isListening {
                 Label("正在听写…", systemImage: "waveform")
@@ -773,9 +1458,10 @@ private struct CoachComposer: View {
                         .frame(width: 38, height: 38)
                         .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
                 }
-                .accessibilityLabel("添加照片或视频")
+                .disabled(attachments.count >= MediaPicker.maximumSelectionCount)
+                .accessibilityLabel("添加照片或视频，可多选")
 
-                TextField("说点什么，或发一张照片…", text: $draft, axis: .vertical)
+                TextField("说点什么，或添加照片与视频…", text: $draft, axis: .vertical)
                     .lineLimit(1 ... 5)
                     .focused($focused)
                     .padding(.horizontal, 13)
@@ -807,42 +1493,65 @@ private struct CoachComposer: View {
                     .foregroundStyle(.white)
                     .background(AppTheme.tint, in: Circle())
                 }
-                .disabled((draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachment == nil) || isSending)
+                .disabled(
+                    (
+                        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && attachments.isEmpty
+                    ) || isSending
+                )
                 .accessibilityLabel("发送")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(.bar)
+        .onChange(of: focusRequest) {
+            focused = true
+        }
     }
 }
 
 private struct AttachmentPreview: View {
-    let attachment: PendingAttachment
-    let onRemove: () -> Void
+    let attachments: [PendingAttachment]
+    let onRemove: (UUID) -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Group {
-                if let data = attachment.imageData, let image = UIImage(data: data) {
-                    Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    ZStack {
-                        Color.black.opacity(0.82)
-                        Image(systemName: "play.fill").foregroundStyle(.white)
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { attachment in
+                    ZStack(alignment: .topTrailing) {
+                        Group {
+                            if let data = attachment.imageData,
+                               let image = UIImage(data: data)
+                            {
+                                Image(uiImage: image).resizable().scaledToFill()
+                            } else {
+                                ZStack {
+                                    Color.black.opacity(0.82)
+                                    Image(systemName: "play.fill").foregroundStyle(.white)
+                                }
+                            }
+                        }
+                        .frame(width: 64, height: 58)
+                        .clipShape(RoundedRectangle(cornerRadius: 11))
+
+                        Button {
+                            onRemove(attachment.id)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.65))
+                        }
+                        .offset(x: 5, y: -5)
+                        .accessibilityLabel(
+                            attachment.kind == .video ? "移除视频" : "移除图片"
+                        )
                     }
                 }
             }
-            .frame(width: 48, height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            Text(attachment.kind == .video ? "视频已就绪" : "照片已就绪")
-                .font(.subheadline.weight(.medium))
-            Spacer()
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-            }
-            .accessibilityLabel("移除附件")
         }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
     }
 }

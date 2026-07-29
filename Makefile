@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env generate build test format format-check lint check verify archive clean
+.PHONY: help setup env generate build test format format-check lint check verify install-device archive clean
 
 help:
 	@echo "Soma development commands:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make lint          Run SwiftLint, actionlint, shellcheck, and repo validation"
 	@echo "  make check         Run fast static checks without a Simulator"
 	@echo "  make verify        Run static checks, build, and Simulator tests"
+	@echo "  make install-device Sign, install, and launch on a connected iPhone"
 	@echo "  make archive       Export a signed App Store Connect archive"
 	@echo "  make clean         Remove generated project and build artifacts"
 
@@ -35,10 +36,10 @@ test: generate
 	./scripts/xcodebuild.sh test
 
 format:
-	swiftformat Soma SomaTests
+	swiftformat Soma SomaWidget SomaTests
 
 format-check:
-	swiftformat Soma SomaTests --lint
+	swiftformat Soma SomaWidget SomaTests --lint
 
 lint:
 	swiftlint lint --strict --config .swiftlint.yml
@@ -55,6 +56,9 @@ verify:
 	@$(MAKE) check
 	@$(MAKE) build
 	@$(MAKE) test
+
+install-device: generate
+	./scripts/install-device.sh
 
 archive:
 	./scripts/archive-testflight.sh

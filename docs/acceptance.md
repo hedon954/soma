@@ -8,7 +8,8 @@
 | --- | --- |
 | 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
 | 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
-| 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；视频本机抽帧；`SpeechInputService` 使用系统语音识别；消息正文支持原生范围选择与复制。 |
+| 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；点击后展开为保留各自比例的竖直列表并可收起，不支持横向滑动；视频本机抽帧；`SpeechInputService` 使用系统语音识别；消息正文支持完整 Markdown、原生范围选择与复制。 |
+| Widget 与系统快捷入口 | 中尺寸 `SomaWidget` 和 App Shortcuts 提供文字、拍照、照片/视频入口；打开 App 后直接聚焦文字输入或呈现系统选择器，不在扩展内写记录或运行 Agent。 |
 | 异步对话处理 | `ConversationProcessingService` 由 App 根层持有；只要进程存活，离开聊天页不会中断当前解析。 |
 | 多个健身房和当前场馆 | 聊天可创建、更新、切换；健身房列表可直接选择当前场馆。 |
 | 健身房审查 | 详情展示全部上传照片、AI 环境总结和器械列表；健身房与器械支持编辑、删除。 |
@@ -28,7 +29,7 @@
 | 五个平台 | OpenAI、DeepSeek、阿里云百炼、火山引擎和腾讯云均可配置 Base URL、API Key 与模型。 |
 | 动态模型 | 保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以下拉菜单展示；始终保留手动模型 ID。 |
 | 多模态提醒 | 已知不支持的模型上传前阻止；未知能力由服务端验证，失败时把平台原始原因展示到聊天和 Trace。 |
-| 真正 ReAct | 最多八轮的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；相同写入去重，工具失败可回到下一轮修正。 |
+| 真正 ReAct | 最多八轮的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；相同写入去重，工具失败可回到下一轮修正；Tool/Skill 事件实时显示在对应回复下并持久保留。 |
 | 渐进式 Skills | 系统只披露目录；`load_skill` 按需加载八项可编辑 Skill，并生成独立 Span。 |
 | 系统协议边界 | 角色和安全策略可编辑；工具与参数 Schema 由 App 通过 API 注册，不进入提示词且不能被旧自定义值覆盖。 |
 | Trace | 一次远程消息生成一条成功或失败 Trace；model、skill、tool、output Span 作为 Event 实时更新 UI，并保存相对耗时、Token、入参与返回。 |
@@ -36,21 +37,10 @@
 ## 可重复验证
 
 ```bash
-# 模拟器测试
-xcodebuild test \
-  -project Soma.xcodeproj \
-  -scheme Soma \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+make verify
 
 # 已登录免费 Apple 账号时的连线真机构建
-xcodebuild build \
-  -project Soma.xcodeproj \
-  -scheme Soma \
-  -configuration Debug \
-  -destination 'platform=iOS,id=你的设备ID' \
-  DEVELOPMENT_TEAM=你的TeamID \
-  CODE_SIGN_STYLE=Automatic \
-  -allowProvisioningUpdates
+DEVELOPMENT_TEAM=你的TeamID make install-device
 ```
 
 TestFlight 需要付费 Apple Developer Program 和 App Store Connect 记录；免费 Personal Team 可以完成连线真机安装，但签名会定期过期。

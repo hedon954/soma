@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | [2026-07-27](2026-07-27-foundation-and-chat-first.md) | 从零到可运行 MVP | 私人多模态教练、多健身房、本地数据、聊天优先和基础统计 |
 | [2026-07-28](2026-07-28-react-data-and-observability.md) | Agent 与数据可信度 | 原生 ReAct、CRUD、Trace/Span、Skills、流式事件和数据真值 |
-| [2026-07-29](2026-07-29-soma-health-and-polish.md) | Soma 当前基线 | 个人档案、热量估算、HealthKit、异步处理、交互打磨和品牌迁移 |
+| [2026-07-29](2026-07-29-soma-health-and-polish.md) | Soma 当前基线 | 身体信息、热量估算、HealthKit、有序混合媒体、Widget、异步处理和交互打磨 |
 
 相关文档：
 

@@ -27,6 +27,8 @@ targets:
     dependencies:
       - package: SwiftOpenAI
       - package: MarkdownUI
+      - target: SomaWidget
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma
@@ -39,6 +41,20 @@ targets:
     scheme:
       testTargets:
         - SomaTests
+  SomaWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SomaWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma.widget
+        PRODUCT_NAME: SomaWidgetExtension
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: SomaWidget/Resources/Info.plist
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
   SomaTests:
     type: bundle.unit-test
     platform: iOS

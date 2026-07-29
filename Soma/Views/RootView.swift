@@ -1,3 +1,4 @@
+import OSLog
 import SwiftData
 import SwiftUI
 
@@ -5,16 +6,18 @@ enum AppTab: Hashable {
     case coach, insights
 }
 
-private enum RootSheet: String, Identifiable {
+private enum RootSheet: Identifiable {
     case settings
+
     var id: String {
-        rawValue
+        "settings"
     }
 }
 
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(DataSpaceController.self) private var dataSpace
+    @Environment(SomaCaptureRouter.self) private var captureRouter
     @State private var selectedTab: AppTab = .coach
     @State private var sheet: RootSheet?
 
@@ -37,8 +40,12 @@ struct RootView: View {
         .tint(AppTheme.tint)
         .sheet(item: $sheet) { destination in
             switch destination {
-            case .settings: SettingsView()
+            case .settings:
+                SettingsView()
             }
+        }
+        .onChange(of: captureRouter.pendingRequest, initial: true) {
+            handleCaptureRequest()
         }
         .task {
             if dataSpace.activeSpace == .demo {
@@ -47,6 +54,14 @@ struct RootView: View {
             DataIntegrityRepair.finalizeInterruptedAgentTraces(in: modelContext)
             DataIntegrityRepair.removeUnsupportedInferences(in: modelContext)
         }
+    }
+
+    private func handleCaptureRequest() {
+        guard let request = captureRouter.pendingRequest else { return }
+        somaCaptureLogger.info(
+            "Routing capture request in root: \(request.mode.rawValue, privacy: .public)"
+        )
+        selectedTab = .coach
     }
 
     @ToolbarContentBuilder

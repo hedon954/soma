@@ -150,6 +150,7 @@ enum ConversationRecorder {
         sourceText: String,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference] = [],
         gyms: [GymProfile],
         equipment: [GymEquipment],
         in context: ModelContext
@@ -160,17 +161,25 @@ enum ConversationRecorder {
                 result,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
                 gyms: gyms,
                 equipment: equipment,
                 in: context
             )
         case .meal:
-            recordMeal(result, sourceText: sourceText, mediaPath: mediaPath, in: context)
+            recordMeal(
+                result,
+                sourceText: sourceText,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
         case .body:
             recordBody(
                 result,
                 sourceText: sourceText,
                 mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
                 in: context
             )
         case .workout:
@@ -179,6 +188,7 @@ enum ConversationRecorder {
                 sourceText: sourceText,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
                 in: context
             )
         case .switchGym:
@@ -195,6 +205,7 @@ enum ConversationRecorder {
         sourceText: String,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
         switch call.name {
@@ -203,13 +214,40 @@ enum ConversationRecorder {
         case .queryUserData:
             queryUserData(call.arguments, in: context)
         case .recordWorkout:
-            recordWorkout(call.arguments, sourceText: sourceText, mediaKind: mediaKind, mediaPath: mediaPath, in: context)
+            recordWorkout(
+                call.arguments,
+                sourceText: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
         case .recordMeal:
-            recordMeal(call.arguments, sourceText: sourceText, mediaKind: mediaKind, mediaPath: mediaPath, in: context)
+            recordMeal(
+                call.arguments,
+                sourceText: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
         case .recordBody:
-            recordBody(call.arguments, sourceText: sourceText, mediaKind: mediaKind, mediaPath: mediaPath, in: context)
+            recordBody(
+                call.arguments,
+                sourceText: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
         case .updateGym:
-            updateGym(call.arguments, mediaKind: mediaKind, mediaPath: mediaPath, in: context)
+            updateGym(
+                call.arguments,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
         case .switchGym:
             switchGym(call.arguments, in: context)
         }
@@ -295,6 +333,7 @@ enum ConversationRecorder {
         sourceText: String,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
         guard let exercise = arguments.exercise?.trimmed.nilIfEmpty else {
@@ -338,6 +377,11 @@ enum ConversationRecorder {
             notes: sourceText,
             mediaKind: mediaKind,
             mediaPath: mediaPath,
+            mediaAttachments: resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            ),
             formScore: arguments.formScore,
             intensity: arguments.intensity?.trimmed.nilIfEmpty,
             feedback: arguments.feedback?.trimmed.nilIfEmpty,
@@ -390,6 +434,7 @@ enum ConversationRecorder {
         sourceText: String,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
         guard let title = arguments.title?.trimmed.nilIfEmpty else {
@@ -413,7 +458,12 @@ enum ConversationRecorder {
             carbs: carbs,
             fat: fat,
             notes: recordedText(sourceText, analysis: arguments.note?.trimmed ?? ""),
-            imagePath: mediaKind == .image ? mediaPath : nil
+            imagePath: mediaKind == .image ? mediaPath : nil,
+            mediaAttachments: resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            )
         ))
         try? context.save()
         return .success(
@@ -427,6 +477,7 @@ enum ConversationRecorder {
         sourceText: String,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
         if let weight = arguments.weight, !(0 ... 500).contains(weight) {
@@ -450,6 +501,11 @@ enum ConversationRecorder {
             waist: arguments.waist,
             notes: sourceText,
             imagePath: mediaKind == .image ? mediaPath : nil,
+            mediaAttachments: resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            ),
             analysis: analysis
         ))
         try? context.save()
@@ -461,6 +517,7 @@ enum ConversationRecorder {
         _ arguments: AgentToolArguments,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
         let gyms = fetchGyms(in: context)
@@ -488,11 +545,20 @@ enum ConversationRecorder {
         if let summary = arguments.summary?.trimmed.nilIfEmpty {
             target.notes = summary
         }
-        if mediaKind == .image, let mediaPath {
-            target.coverImagePath = mediaPath
+        let imageAttachments = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        ).filter { $0.kind == .image }
+        if let coverPath = imageAttachments.first?.path {
+            target.coverImagePath = coverPath
             let existingMedia = (try? context.fetch(FetchDescriptor<GymMedia>())) ?? []
-            if !existingMedia.contains(where: { $0.gymID == target.id && $0.path == mediaPath }) {
-                context.insert(GymMedia(gymID: target.id, path: mediaPath))
+            for attachment in imageAttachments where
+                !existingMedia.contains(where: {
+                    $0.gymID == target.id && $0.path == attachment.path
+                })
+            {
+                context.insert(GymMedia(gymID: target.id, path: attachment.path))
             }
         }
 
@@ -507,8 +573,8 @@ enum ConversationRecorder {
                 existing.category = input.category.trimmed
                 existing.capabilities = input.capabilities.trimmed
                 existing.confidence = min(max(input.confidence ?? existing.confidence, 0), 1)
-                if mediaKind == .image {
-                    existing.imagePath = mediaPath
+                if let imagePath = imageAttachments.first?.path {
+                    existing.imagePath = imagePath
                 }
             } else {
                 context.insert(GymEquipment(
@@ -517,7 +583,7 @@ enum ConversationRecorder {
                     category: input.category.trimmed,
                     capabilities: input.capabilities.trimmed,
                     confidence: min(max(input.confidence ?? 0.9, 0), 1),
-                    imagePath: mediaKind == .image ? mediaPath : nil
+                    imagePath: imageAttachments.first?.path
                 ))
             }
         }
@@ -653,6 +719,7 @@ enum ConversationRecorder {
         _ result: ConversationResult,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         gyms: [GymProfile],
         equipment: [GymEquipment],
         in context: ModelContext
@@ -660,9 +727,16 @@ enum ConversationRecorder {
         guard let analysis = result.gym else { return }
         let target = targetGym(named: result.gymName, gyms: gyms, in: context)
         target.notes = analysis.summary
-        if mediaKind == .image, let mediaPath {
-            target.coverImagePath = mediaPath
-            context.insert(GymMedia(gymID: target.id, path: mediaPath))
+        let imageAttachments = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        ).filter { $0.kind == .image }
+        if let coverPath = imageAttachments.first?.path {
+            target.coverImagePath = coverPath
+            for imageAttachment in imageAttachments {
+                context.insert(GymMedia(gymID: target.id, path: imageAttachment.path))
+            }
         }
         for item in analysis.equipment {
             let existing = equipment.first {
@@ -672,8 +746,8 @@ enum ConversationRecorder {
                 existing.category = item.category
                 existing.capabilities = item.capabilities
                 existing.confidence = item.confidence
-                if mediaKind == .image, let mediaPath {
-                    existing.imagePath = mediaPath
+                if let imagePath = imageAttachments.first?.path {
+                    existing.imagePath = imagePath
                 }
             } else {
                 context.insert(GymEquipment(
@@ -682,7 +756,7 @@ enum ConversationRecorder {
                     category: item.category,
                     capabilities: item.capabilities,
                     confidence: item.confidence,
-                    imagePath: mediaKind == .image ? mediaPath : nil
+                    imagePath: imageAttachments.first?.path
                 ))
             }
         }
@@ -716,6 +790,7 @@ enum ConversationRecorder {
         _ result: ConversationResult,
         sourceText: String,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) {
         guard let meal = result.meal else { return }
@@ -735,6 +810,11 @@ enum ConversationRecorder {
             fat: meal.fat,
             notes: recordedText(sourceText, analysis: meal.note),
             imagePath: mediaPath,
+            mediaAttachments: resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaPath == nil ? .none : .image,
+                legacyPath: mediaPath
+            ),
             confidence: meal.confidence
         ))
     }
@@ -743,6 +823,7 @@ enum ConversationRecorder {
         _ result: ConversationResult,
         sourceText: String,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) {
         guard let body = result.body else { return }
@@ -751,6 +832,11 @@ enum ConversationRecorder {
             bodyFat: body.estimatedBodyFat,
             notes: sourceText,
             imagePath: mediaPath,
+            mediaAttachments: resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaPath == nil ? .none : .image,
+                legacyPath: mediaPath
+            ),
             analysis: "\(body.postureNote)\n\(body.safetyNote)"
         ))
     }
@@ -760,6 +846,7 @@ enum ConversationRecorder {
         sourceText: String,
         mediaKind: MediaKind,
         mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) {
         guard let workout = result.workout else { return }
@@ -782,6 +869,11 @@ enum ConversationRecorder {
             notes: sourceText,
             mediaKind: mediaKind,
             mediaPath: mediaPath,
+            mediaAttachments: resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            ),
             formScore: workout.formScore,
             intensity: workout.intensity,
             feedback: workout.feedback,
@@ -805,6 +897,18 @@ enum ConversationRecorder {
             .compactMap { $0 }
             .joined(separator: "\n")
     }
+
+    private static func resolvedMediaAttachments(
+        _ attachments: [MediaAttachmentReference],
+        legacyKind: MediaKind,
+        legacyPath: String?
+    ) -> [MediaAttachmentReference] {
+        if !attachments.isEmpty {
+            return attachments
+        }
+        guard legacyKind != .none, let legacyPath else { return [] }
+        return [MediaAttachmentReference(kind: legacyKind, path: legacyPath)]
+    }
 }
 
 private extension String {
@@ -822,11 +926,13 @@ enum DataIntegrityRepair {
     static func finalizeInterruptedAgentTraces(in context: ModelContext) {
         let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
         let interrupted = traces.filter { $0.status == .running }
-        guard !interrupted.isEmpty else { return }
+        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
+        let interruptedMessages = messages.filter { $0.agentStatus == .running }
+        guard !interrupted.isEmpty || !interruptedMessages.isEmpty else { return }
 
         let endedAt = Date()
+        let message = "上一次 ReAct Agent 执行未正常结束，可能是 App 被关闭或任务被系统中断。"
         for trace in interrupted {
-            let message = "上一次 ReAct Agent 执行未正常结束，可能是 App 被关闭或任务被系统中断。"
             trace.apply(.span(AgentTraceSpan(
                 kind: .output,
                 title: "执行中断",
@@ -836,6 +942,19 @@ enum DataIntegrityRepair {
                 errorMessage: message
             )))
             trace.apply(.failed(message: message, cancelled: false, at: endedAt))
+        }
+        for response in interruptedMessages {
+            response.agentStatus = .failed
+            response.text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty ? message : response.text
+            response.replaceAgentEvents(response.agentEvents.map { event in
+                guard event.status == .running else { return event }
+                var failed = event
+                failed.statusRaw = AgentTraceStatus.failed.rawValue
+                failed.endedAt = endedAt
+                failed.errorMessage = message
+                return failed
+            })
         }
         try? context.save()
     }

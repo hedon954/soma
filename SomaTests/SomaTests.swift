@@ -52,7 +52,7 @@ final class SomaTests: XCTestCase {
 
         XCTAssertTrue(service.submit(
             text: "刚做完深蹲 4组8次 60kg",
-            attachment: nil,
+            attachments: [],
             contextSummary: "测试上下文",
             dataSpace: .demo,
             gyms: [],
@@ -655,6 +655,229 @@ final class SomaTests: XCTestCase {
         XCTAssertEqual(body.imagePath, mediaPath)
         XCTAssertNil(body.weight)
         XCTAssertTrue(body.analysis.contains("拍摄条件不同"))
+    }
+}
+
+extension SomaTests {
+    func testFoldedMediaLayoutPreservesCommonAspectRatiosInsideBounds() {
+        XCTAssertEqual(
+            FoldedMediaLayout.cardHeight(forAspectRatio: 3 / 4),
+            FoldedMediaLayout.cardWidth / (3 / 4),
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.cardHeight(forAspectRatio: 3 / 2),
+            FoldedMediaLayout.minimumHeight,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.cardHeight(forAspectRatio: 1 / 4),
+            FoldedMediaLayout.maximumHeight,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(FoldedMediaLayout.scale(forLayer: 0), 1)
+        XCTAssertEqual(
+            FoldedMediaLayout.scale(forLayer: 1),
+            0.90,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.scale(forLayer: 2),
+            0.80,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.foldedFrontSize(forAspectRatio: 3 / 4),
+            FoldedMediaLayout.portraitCardSize
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.foldedFrontSize(forAspectRatio: 1),
+            FoldedMediaLayout.squareCardSize
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.foldedFrontSize(forAspectRatio: 3 / 2),
+            FoldedMediaLayout.landscapeCardSize
+        )
+        let frontSize = FoldedMediaLayout.portraitCardSize
+        let middleSize = FoldedMediaLayout.scaledSize(
+            forLayer: 1,
+            frontSize: frontSize
+        )
+        XCTAssertEqual(
+            middleSize.width,
+            frontSize.width * 0.9,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            middleSize.height,
+            frontSize.height * 0.9,
+            accuracy: 0.001
+        )
+        let backSize = FoldedMediaLayout.scaledSize(
+            forLayer: 2,
+            frontSize: frontSize
+        )
+        XCTAssertEqual(
+            backSize.width,
+            frontSize.width * 0.8,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(FoldedMediaLayout.rotation(forLayer: 0), 0)
+        XCTAssertEqual(
+            FoldedMediaLayout.rotation(forLayer: 2),
+            FoldedMediaLayout.layerRotationStep * 2
+        )
+        XCTAssertGreaterThan(
+            FoldedMediaLayout.rotation(forLayer: 1),
+            0
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.targetExposure(
+                forLayer: 1,
+                frontWidth: frontSize.width
+            ),
+            frontSize.width * 0.10,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.targetExposure(
+                forLayer: 2,
+                frontWidth: frontSize.width
+            ),
+            frontSize.width * 0.165,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.rightEdge(
+                forLayer: 1,
+                size: FoldedMediaLayout.scaledSize(
+                    forLayer: 1,
+                    frontSize: frontSize
+                ),
+                frontSize: frontSize
+            ),
+            frontSize.width +
+                FoldedMediaLayout.targetExposure(
+                    forLayer: 1,
+                    frontWidth: frontSize.width
+                ),
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.rightEdge(
+                forLayer: 2,
+                size: backSize,
+                frontSize: frontSize
+            ),
+            frontSize.width +
+                FoldedMediaLayout.targetExposure(
+                    forLayer: 2,
+                    frontWidth: frontSize.width
+                ),
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            FoldedMediaLayout.stackOverflowWidth(
+                frontWidth: frontSize.width
+            ),
+            FoldedMediaLayout.targetExposure(
+                forLayer: 2,
+                frontWidth: frontSize.width
+            ),
+            accuracy: 0.001
+        )
+    }
+
+    @MainActor
+    func testAgentToolsPersistMixedMediaCollections() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: ExternalSyncCursor.self,
+            UserProfile.self,
+            GymProfile.self,
+            GymEquipment.self,
+            GymMedia.self,
+            MealEntry.self,
+            BodyEntry.self,
+            WorkoutEntry.self,
+            CoachMessage.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let attachments = [
+            MediaAttachmentReference(kind: .image, path: "PrivateMedia/front.jpg"),
+            MediaAttachmentReference(kind: .video, path: "PrivateMedia/set.mov"),
+            MediaAttachmentReference(kind: .image, path: "PrivateMedia/side.jpg")
+        ]
+
+        let result = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .recordWorkout,
+                arguments: AgentToolArguments(
+                    exercise: "杠铃深蹲",
+                    sets: 3,
+                    reps: 5
+                )
+            ),
+            sourceText: "三组动作，从正面和侧面拍了照片与视频",
+            mediaKind: .image,
+            mediaPath: attachments.first?.path,
+            mediaAttachments: attachments,
+            in: context
+        )
+        let workout = try XCTUnwrap(
+            context.fetch(FetchDescriptor<WorkoutEntry>()).first
+        )
+
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(workout.mediaAttachments, attachments)
+        XCTAssertEqual(workout.mediaAttachments.map(\.kind), [.image, .video, .image])
+        XCTAssertEqual(workout.mediaPath, attachments.first?.path)
+    }
+
+    func testCoachMessageKeepsLiveToolAndSkillEventsAfterCompletion() {
+        let message = CoachMessage(
+            isFromCoach: true,
+            text: "",
+            agentTraceID: UUID(),
+            agentStatus: .running
+        )
+        let id = UUID()
+        let startedAt = Date()
+        message.applyAgentEvent(AgentTraceSpan(
+            id: id,
+            step: 1,
+            kind: .skill,
+            title: AgentSkill.gymAnalysis.title,
+            status: .running,
+            startedAt: startedAt,
+            endedAt: startedAt
+        ))
+        message.applyAgentEvent(AgentTraceSpan(
+            id: id,
+            step: 1,
+            kind: .skill,
+            title: AgentSkill.gymAnalysis.title,
+            status: .succeeded,
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(0.1),
+            output: "已加载"
+        ))
+        message.applyAgentEvent(AgentTraceSpan(
+            step: 2,
+            kind: .tool,
+            title: AgentToolName.updateGym.displayTitle,
+            status: .succeeded,
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(0.2),
+            output: AgentTraceText.json(AgentToolResult.success("已更新健身房。"))
+        ))
+        message.agentStatus = .succeeded
+
+        XCTAssertEqual(message.agentEvents.count, 2)
+        XCTAssertEqual(message.agentEvents.first?.status, .succeeded)
+        XCTAssertEqual(message.agentEvents.last?.title, "更新健身房")
+        XCTAssertEqual(message.agentStatus, .succeeded)
     }
 
     @MainActor

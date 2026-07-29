@@ -145,6 +145,7 @@ struct MarkdownText: View {
 
     var body: some View {
         Markdown(markdown)
+            .markdownTheme(.gitHub)
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
     }

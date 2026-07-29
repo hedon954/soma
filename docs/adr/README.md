@@ -15,6 +15,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0009](0009-soma-brand-migration.md) | 已采纳 | 从代码到 Bundle ID 全量迁移为 Soma |
 | [0010](0010-repository-governance-and-xcodegen.md) | 部分已替代 | 统一 Agent 契约、质量门禁与 XcodeGen 事实来源 |
 | [0011](0011-fast-check-full-verify.md) | 已采纳 | `make check` 快速静态检查，`make verify` 完整构建测试 |
+| [0012](0012-ordered-mixed-media-collections.md) | 已采纳 | 有序混合媒体贯穿聊天、Agent、记录和审查 |
+| [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
 
 新决策使用 [ADR 模板](template.md)。
 

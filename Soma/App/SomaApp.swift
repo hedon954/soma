@@ -110,6 +110,7 @@ struct SomaApp: App {
     @State private var aiService = AIService()
     @State private var dataSpace = DataSpaceController()
     @State private var conversationProcessor = ConversationProcessingService()
+    @State private var captureRouter = SomaCaptureRouter.shared
 
     var body: some Scene {
         WindowGroup {
@@ -118,7 +119,11 @@ struct SomaApp: App {
                 .environment(aiService)
                 .environment(dataSpace)
                 .environment(conversationProcessor)
+                .environment(captureRouter)
                 .modelContainer(dataSpace.activeContainer)
+                .onOpenURL { url in
+                    captureRouter.route(url)
+                }
         }
     }
 }

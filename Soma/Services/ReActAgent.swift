@@ -13,6 +13,18 @@ enum AgentToolName: String, Codable, CaseIterable {
     var isMutation: Bool {
         self != .queryUserData && self != .loadSkill
     }
+
+    var displayTitle: String {
+        switch self {
+        case .loadSkill: "加载 Skill"
+        case .queryUserData: "读取用户数据"
+        case .recordWorkout: "记录训练"
+        case .recordMeal: "记录饮食"
+        case .recordBody: "记录身体信息"
+        case .updateGym: "更新健身房"
+        case .switchGym: "切换健身房"
+        }
+    }
 }
 
 struct AgentEquipmentInput: Codable, Equatable {
@@ -434,6 +446,7 @@ enum ReActPromptSection: String, CaseIterable, Identifiable {
             1. 面向用户的内容使用简洁自然的中文，可使用 Markdown；不要输出 JSON 外壳或隐藏思维过程。
             2. 需要确定性读取或写入时使用已注册工具，不要用文字假装操作已经完成。
             3. 可以先简短说明正在做什么再调用工具；工具完成后必须基于真实结果确认成功或说明失败。
+            4. 最终回复只保留结论、必要依据和下一步。简单任务通常用两到五句；复杂任务可用少量自然段或列表。不要复述用户输入、执行过程，不要输出分隔线、冗长表格或多级标题；也不要为了简短而堆砌生硬短句。
             """
         case .policy:
             """
@@ -706,9 +719,18 @@ enum ReActAgentPrompt {
         text: String,
         context: String,
         imageCount: Int,
-        hasVideo: Bool
+        hasVideo: Bool,
+        imageAttachmentCount: Int? = nil,
+        videoAttachmentCount: Int? = nil
     ) -> String {
-        """
+        let attachmentSummary = if let imageAttachmentCount,
+                                   let videoAttachmentCount
+        {
+            "\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频"
+        } else {
+            hasVideo ? "包含视频" : "\(imageCount) 张图片"
+        }
+        return """
         当前本地摘要：
         \(context)
 
@@ -716,7 +738,7 @@ enum ReActAgentPrompt {
         \(text.isEmpty ? "无文字，请根据媒体判断意图。" : text)
 
         媒体：
-        图片或视频关键帧 \(imageCount) 张；原始输入是视频：\(hasVideo ? "是" : "否")。
+        用户共上传 \(attachmentSummary)；提供给模型分析的图片或视频关键帧共 \(imageCount) 张。
         """
     }
 }

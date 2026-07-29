@@ -37,6 +37,9 @@ make test
 make format
 make check          # 开发与 commit 前的快速静态门禁
 make verify         # PR、发布与完整交付前
+
+# 连接已开启开发者模式的 iPhone 后
+DEVELOPMENT_TEAM=你的TeamID make install-device
 ```
 
 `make check` 不启动 Simulator，适合高频本地循环和 pre-commit：
@@ -53,6 +56,11 @@ make verify         # PR、发布与完整交付前
 2. 模拟器单元测试。
 
 GitHub CI、发布流程和完整交付验收统一运行 `make verify`。
+
+`make install-device` 不属于 CI 门禁。它使用 Automatic Signing 为主 App 与 Widget
+Extension 签名，把 Debug 构建安装到已连接的 iPhone，并在安装后启动 Soma。设备自动选择
+失败时可通过 `SOMA_DEVICE_ID` 显式指定 UDID；证书、Team 和设备注册仍由本机 Xcode
+账号管理。
 
 ## 生成物与密钥
 

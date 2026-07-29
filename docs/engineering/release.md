@@ -2,6 +2,20 @@
 
 Soma 将源码发布和 iOS 分发分开处理。
 
+## 连线真机安装
+
+免费 Personal Team 或付费 Developer Team 都可以完成本机连线安装。先在 Xcode 登录 Apple
+ID，连接已信任且开启开发者模式的 iPhone，然后运行：
+
+```bash
+DEVELOPMENT_TEAM=你的TeamID make install-device
+```
+
+可以用 `SOMA_DEVICE_ID=设备UDID` 指定设备；未指定时脚本选择第一个可用的物理 iPhone。
+脚本为 Soma App 和 Widget Extension 使用同一个 Team 自动签名，安装后直接启动 Soma。
+同一 Bundle ID 的覆盖安装保留 App 沙盒数据。Personal Team 的签名会定期过期，需要重新
+连线安装。
+
 ## GitHub Release
 
 1. 在 `project.yml` 更新 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`。

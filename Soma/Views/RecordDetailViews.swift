@@ -65,6 +65,43 @@ private struct RecordImage: View {
     }
 }
 
+private struct RecordMediaGallery: View {
+    let attachments: [MediaAttachmentReference]
+
+    var body: some View {
+        TabView {
+            ForEach(attachments) { attachment in
+                Group {
+                    switch attachment.kind {
+                    case .image:
+                        RecordImage(path: attachment.path)
+                    case .video:
+                        LocalVideoPlayer(path: attachment.path)
+                    case .none:
+                        EmptyView()
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if attachments.count > 1 {
+                        Text("\(position(of: attachment) + 1)/\(attachments.count)")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .padding(9)
+                    }
+                }
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .automatic : .never))
+        .frame(height: 270)
+    }
+
+    private func position(of attachment: MediaAttachmentReference) -> Int {
+        attachments.firstIndex(where: { $0.id == attachment.id }) ?? 0
+    }
+}
+
 struct WorkoutRecordDetailView: View {
     let workout: WorkoutEntry
 
@@ -130,13 +167,9 @@ private struct WorkoutRecordEditor: View {
 
     var body: some View {
         Form {
-            if let path = workout.mediaPath {
+            if !workout.mediaAttachments.isEmpty {
                 Section("记录媒体") {
-                    if workout.mediaKind == .video {
-                        LocalVideoPlayer(path: path)
-                    } else if workout.mediaKind == .image {
-                        RecordImage(path: path)
-                    }
+                    RecordMediaGallery(attachments: workout.mediaAttachments)
                 }
             }
 
@@ -308,9 +341,9 @@ private struct MealRecordEditor: View {
 
     var body: some View {
         Form {
-            if let path = meal.imagePath {
-                Section("饮食照片") {
-                    RecordImage(path: path)
+            if !meal.mediaAttachments.isEmpty {
+                Section("饮食媒体") {
+                    RecordMediaGallery(attachments: meal.mediaAttachments)
                 }
             }
 
@@ -444,9 +477,9 @@ private struct BodyRecordEditor: View {
 
     var body: some View {
         Form {
-            if let path = entry.imagePath {
-                Section("体型照片") {
-                    RecordImage(path: path)
+            if !entry.mediaAttachments.isEmpty {
+                Section("体态媒体") {
+                    RecordMediaGallery(attachments: entry.mediaAttachments)
                 }
             }
 

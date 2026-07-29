@@ -133,8 +133,8 @@ private struct WorkoutHistoryRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             MediaThumbnail(
-                kind: workout.mediaKind,
-                path: workout.mediaPath,
+                kind: workout.mediaAttachments.first?.kind ?? .none,
+                path: workout.mediaAttachments.first?.path,
                 fallbackIcon: "figure.strengthtraining.traditional"
             )
 
@@ -202,8 +202,8 @@ private struct MealHistoryRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             MediaThumbnail(
-                kind: meal.imagePath == nil ? .none : .image,
-                path: meal.imagePath,
+                kind: meal.mediaAttachments.first?.kind ?? .none,
+                path: meal.mediaAttachments.first?.path,
                 fallbackIcon: meal.mealType.icon
             )
 
@@ -238,8 +238,8 @@ private struct BodyHistoryRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             MediaThumbnail(
-                kind: entry.imagePath == nil ? .none : .image,
-                path: entry.imagePath,
+                kind: entry.mediaAttachments.first?.kind ?? .none,
+                path: entry.mediaAttachments.first?.path,
                 fallbackIcon: "scalemass"
             )
 

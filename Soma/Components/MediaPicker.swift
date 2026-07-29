@@ -9,12 +9,27 @@ enum PickedMedia {
 }
 
 struct MediaPicker: UIViewControllerRepresentable {
-    enum Source { case camera, library }
+    static let maximumSelectionCount = 10
+
+    enum Source: Equatable { case camera, library }
 
     let source: Source
     let allowsVideo: Bool
-    let onPick: (PickedMedia) -> Void
+    let selectionLimit: Int
+    let onPick: ([PickedMedia]) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    init(
+        source: Source,
+        allowsVideo: Bool,
+        selectionLimit: Int = Self.maximumSelectionCount,
+        onPick: @escaping ([PickedMedia]) -> Void
+    ) {
+        self.source = source
+        self.allowsVideo = allowsVideo
+        self.selectionLimit = max(1, min(selectionLimit, Self.maximumSelectionCount))
+        self.onPick = onPick
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onPick: onPick, dismiss: dismiss)
@@ -44,18 +59,19 @@ struct MediaPicker: UIViewControllerRepresentable {
 
     private func makeLibrary(context: Context) -> UIViewController {
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
-        configuration.selectionLimit = 1
+        configuration.selectionLimit = selectionLimit
         configuration.filter = allowsVideo ? .any(of: [.images, .videos]) : .images
+        configuration.selection = .ordered
         let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = context.coordinator
         return picker
     }
 
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate, PHPickerViewControllerDelegate {
-        let onPick: (PickedMedia) -> Void
+        let onPick: ([PickedMedia]) -> Void
         let dismissAction: DismissAction
 
-        init(onPick: @escaping (PickedMedia) -> Void, dismiss: DismissAction) {
+        init(onPick: @escaping ([PickedMedia]) -> Void, dismiss: DismissAction) {
             self.onPick = onPick
             dismissAction = dismiss
         }
@@ -71,46 +87,85 @@ struct MediaPicker: UIViewControllerRepresentable {
             if let image = info[.originalImage] as? UIImage,
                let data = image.jpegData(compressionQuality: 0.84)
             {
-                onPick(.image(data))
+                onPick([.image(data)])
             } else if let url = info[.mediaURL] as? URL {
-                onPick(.video(url))
+                onPick([.video(url)])
             }
             dismissAction()
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            guard let provider = results.first?.itemProvider else {
+            guard !results.isEmpty else {
                 dismissAction()
                 return
             }
-            if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
-                provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, _ in
-                    guard let self, let url else { return }
-                    let temp = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(UUID().uuidString)
-                        .appendingPathExtension(url.pathExtension.isEmpty ? "mov" : url.pathExtension)
-                    try? FileManager.default.copyItem(at: url, to: temp)
-                    DispatchQueue.main.async {
-                        self.onPick(.video(temp))
-                        self.dismissAction()
+
+            let accumulator = MediaResultAccumulator(count: results.count)
+            let group = DispatchGroup()
+            for (index, result) in results.enumerated() {
+                let provider = result.itemProvider
+                group.enter()
+                if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                    provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, _ in
+                        defer { group.leave() }
+                        guard let url else { return }
+                        let temp = FileManager.default.temporaryDirectory
+                            .appendingPathComponent(UUID().uuidString)
+                            .appendingPathExtension(url.pathExtension.isEmpty ? "mov" : url.pathExtension)
+                        do {
+                            try FileManager.default.copyItem(at: url, to: temp)
+                            accumulator.store(.video(temp), at: index)
+                        } catch {
+                            return
+                        }
+                    }
+                } else {
+                    provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                        defer { group.leave() }
+                        guard let data else { return }
+                        accumulator.store(.image(data), at: index)
                     }
                 }
-            } else {
-                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] data, _ in
-                    guard let self, let data else { return }
-                    DispatchQueue.main.async {
-                        self.onPick(.image(data))
-                        self.dismissAction()
-                    }
+            }
+
+            group.notify(queue: .main) { [weak self] in
+                guard let self else { return }
+                let media = accumulator.values
+                if !media.isEmpty {
+                    onPick(media)
                 }
+                dismissAction()
             }
         }
     }
 }
 
+private final class MediaResultAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [PickedMedia?]
+
+    init(count: Int) {
+        storage = Array(repeating: nil, count: count)
+    }
+
+    func store(_ media: PickedMedia, at index: Int) {
+        lock.lock()
+        storage[index] = media
+        lock.unlock()
+    }
+
+    var values: [PickedMedia] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage.compactMap { $0 }
+    }
+}
+
 struct MediaSourceDialog: View {
     let allowsVideo: Bool
-    let onPick: (PickedMedia) -> Void
+    let selectionLimit: Int
+    let initialSource: MediaPicker.Source?
+    let onPick: ([PickedMedia]) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var destination: PickerDestination?
 
@@ -119,6 +174,18 @@ struct MediaSourceDialog: View {
         var id: String {
             rawValue
         }
+    }
+
+    init(
+        allowsVideo: Bool,
+        selectionLimit: Int = MediaPicker.maximumSelectionCount,
+        initialSource: MediaPicker.Source? = nil,
+        onPick: @escaping ([PickedMedia]) -> Void
+    ) {
+        self.allowsVideo = allowsVideo
+        self.selectionLimit = max(1, min(selectionLimit, MediaPicker.maximumSelectionCount))
+        self.initialSource = initialSource
+        self.onPick = onPick
     }
 
     var body: some View {
@@ -131,8 +198,10 @@ struct MediaSourceDialog: View {
                     destination: .camera
                 )
                 sourceButton(
-                    title: "从照片选择",
-                    subtitle: allowsVideo ? "支持图片和视频" : "支持图片",
+                    title: "从照片与视频中选择",
+                    subtitle: allowsVideo
+                        ? "最多 \(selectionLimit) 项，可混合选择"
+                        : "最多 \(selectionLimit) 张图片",
                     icon: "photo.on.rectangle.angled",
                     destination: .library
                 )
@@ -153,12 +222,18 @@ struct MediaSourceDialog: View {
             .sheet(item: $destination) { destination in
                 MediaPicker(
                     source: destination == .camera ? .camera : .library,
-                    allowsVideo: allowsVideo
+                    allowsVideo: allowsVideo,
+                    selectionLimit: selectionLimit
                 ) { media in
                     onPick(media)
                     dismiss()
                 }
                 .ignoresSafeArea()
+            }
+            .task {
+                guard destination == nil, let initialSource else { return }
+                await Task.yield()
+                destination = initialSource == .camera ? .camera : .library
             }
         }
         .presentationDetents([.medium])
