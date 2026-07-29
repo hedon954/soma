@@ -1,0 +1,17 @@
+---
+description: Soma product, architecture, and source-of-truth documents
+alwaysApply: true
+---
+
+# Soma
+
+- Read `CLAUDE.md` before implementation.
+- Current product source: `docs/prd/004-soma-current-product.md`.
+- Architecture source: `docs/adr/README.md`.
+- Acceptance source: `docs/acceptance.md`.
+- Build source: `Makefile`; Xcode source: `project.yml`.
+- Use `.claude/skills/soma-development/SKILL.md` for product-code changes.
+- Preserve chat-first, local-first, missing-is-nil, fixed Tool Schema, Trace Event, and
+  external-import idempotency invariants.
+- Never use real health data, body photos, API keys, certificates, or private traces as fixtures.
+- Run `make check` before reporting implementation complete.

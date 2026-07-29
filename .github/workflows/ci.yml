@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Build, test, and quality gates
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select newest installed Xcode
+        shell: bash
+        run: |
+          xcode_path="$(find /Applications -maxdepth 1 -type d -name 'Xcode_[0-9]*.app' | sort -V | tail -1)"
+          test -n "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path/Contents/Developer" >> "$GITHUB_ENV"
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      - name: Install development tools
+        run: brew bundle --file Brewfile
+
+      - name: Run complete quality gate
+        run: make check

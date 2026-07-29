@@ -1,0 +1,10 @@
+--swiftversion 5.9
+--indent 4
+--linebreaks lf
+--trimwhitespace always
+--self remove
+--commas inline
+--stripunusedargs closure-only
+--exclude Soma.xcodeproj
+# Keep these choices explicit instead of inheriting formatter default drift.
+--disable preferCountWhere,redundantSendable

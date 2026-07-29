@@ -1,0 +1,56 @@
+# Soma 验收清单
+
+本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。产品的唯一录入入口是教练对话；列表和详情用于审查、纠错与删除 AI 生成的结构化结果。
+
+## 产品闭环
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
+| 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
+| 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；视频本机抽帧；`SpeechInputService` 使用系统语音识别；消息正文支持原生范围选择与复制。 |
+| 异步对话处理 | `ConversationProcessingService` 由 App 根层持有；只要进程存活，离开聊天页不会中断当前解析。 |
+| 多个健身房和当前场馆 | 聊天可创建、更新、切换；健身房列表可直接选择当前场馆。 |
+| 健身房审查 | 详情展示全部上传照片、AI 环境总结和器械列表；健身房与器械支持编辑、删除。 |
+| 饮食与身体记录 | 聊天或媒体生成本地记录；详情保留原始文字、食物/体型照片和 AI 说明。 |
+| 训练与动作分析 | 记录动作、组次、重量、间歇、时长及媒体；缺失字段保持空；多模态模型可结合关键帧给出动作、负荷和安全反馈。 |
+| CRUD | 训练、饮食、身体详情进入即编辑，修改后显示保存；历史列表左滑红色图标删除。健身房和器械也可修改与删除。 |
+| 统计 | 进展页包含最近记录入口、带月份和星期的连续性热力图、体重趋势和训练容量趋势。 |
+| 时间粒度与拖动 | 体重和容量都支持周、双周、月、季，并允许横向拖动历史窗口。 |
+| 个人身体信息 | 保存出生日期、生理性别、身高、参考体重、目标和备注；年龄动态计算，体态图通过身体记录历史回溯。 |
+| 训练热量 | 使用本地 MET 公式；优先实际时长，无氧推算时长只用于热量且明确标记，不回填实际训练时长。 |
+| 外部健康数据 | HealthKit 只读导入体重、训练和活动能量；转换为 Soma 模型，按空间/来源/数据流保存游标，使用样本 ID 去重并处理来源删除。 |
+
+## Agent 闭环
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 五个平台 | OpenAI、DeepSeek、阿里云百炼、火山引擎和腾讯云均可配置 Base URL、API Key 与模型。 |
+| 动态模型 | 保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以下拉菜单展示；始终保留手动模型 ID。 |
+| 多模态提醒 | 已知不支持的模型上传前阻止；未知能力由服务端验证，失败时把平台原始原因展示到聊天和 Trace。 |
+| 真正 ReAct | 最多八轮的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；相同写入去重，工具失败可回到下一轮修正。 |
+| 渐进式 Skills | 系统只披露目录；`load_skill` 按需加载八项可编辑 Skill，并生成独立 Span。 |
+| 系统协议边界 | 角色和安全策略可编辑；工具与参数 Schema 由 App 通过 API 注册，不进入提示词且不能被旧自定义值覆盖。 |
+| Trace | 一次远程消息生成一条成功或失败 Trace；model、skill、tool、output Span 作为 Event 实时更新 UI，并保存相对耗时、Token、入参与返回。 |
+
+## 可重复验证
+
+```bash
+# 模拟器测试
+xcodebuild test \
+  -project Soma.xcodeproj \
+  -scheme Soma \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+# 已登录免费 Apple 账号时的连线真机构建
+xcodebuild build \
+  -project Soma.xcodeproj \
+  -scheme Soma \
+  -configuration Debug \
+  -destination 'platform=iOS,id=你的设备ID' \
+  DEVELOPMENT_TEAM=你的TeamID \
+  CODE_SIGN_STYLE=Automatic \
+  -allowProvisioningUpdates
+```
+
+TestFlight 需要付费 Apple Developer Program 和 App Store Connect 记录；免费 Personal Team 可以完成连线真机安装，但签名会定期过期。

@@ -1,0 +1,17 @@
+---
+description: SwiftData truth, private media, HealthKit import, and derived metric rules
+globs: "Soma/{Models,Services}/**/*.swift,Soma/Views/{RecordDetailViews,HistoryViews,GymViews,InsightsView,SettingsView}.swift"
+alwaysApply: false
+---
+
+# Data and privacy
+
+- Read ADR-0001, ADR-0006, and ADR-0007.
+- Keep demo and personal containers isolated.
+- Preserve missing values as nil; separate facts, AI observations, and derived metrics.
+- Derive volume from complete records and calories from the deterministic MET service.
+- Normalize external data into Soma models before statistics.
+- Store per-space/source/stream cursors, external IDs, and source deletions.
+- Keep original media in the sandbox; tests and screenshots use only `DemoMedia`.
+- Never log or commit real body photos, health history, API keys, certificates, or complete traces.
+- Deletion must remove dependent media/equipment without leaving invalid current-gym state.

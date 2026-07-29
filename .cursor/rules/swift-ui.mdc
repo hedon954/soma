@@ -1,0 +1,16 @@
+---
+description: Swift, concurrency, SwiftUI, and accessibility conventions
+globs: "Soma/**/*.swift,SomaTests/**/*.swift"
+alwaysApply: false
+---
+
+# Swift and SwiftUI
+
+- Keep UI and SwiftData ModelContext mutation on `@MainActor`.
+- Give every Task an owner and cancellation boundary; never repair races with fixed sleeps.
+- Prefer system navigation, text selection, media pickers, Charts, speech, and HealthKit UI.
+- Preserve the two-tab information architecture and move low-frequency controls into settings.
+- Label editable values, expose destructive actions with system semantics, and support Dynamic Type.
+- New files should stay below 500 lines; avoid expanding existing oversized files.
+- Add deterministic tests for business rules and manual device notes for hardware-only behavior.
+- Run `make format` and `make check`.

@@ -1,0 +1,57 @@
+repos:
+  - repo: local
+    hooks:
+      - id: staged-diff-check
+        name: staged whitespace and conflict markers
+        entry: git diff --cached --check
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: secret-check
+        name: private keys and provider tokens
+        entry: ./scripts/check-secrets.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: swiftformat
+        name: SwiftFormat
+        entry: swiftformat --lint
+        language: system
+        types: [swift]
+
+      - id: swiftlint
+        name: SwiftLint
+        entry: swiftlint lint --strict --config .swiftlint.yml
+        language: system
+        pass_filenames: false
+        types: [swift]
+
+      - id: repository-contract
+        name: repository and agent contract
+        entry: ./scripts/validate-repository.sh
+        language: system
+        pass_filenames: false
+        files: '^(AGENTS\.md|CLAUDE\.md|README\.md|CHANGELOG\.md|SECURITY\.md|CONTRIBUTING\.md|docs/|Soma/|SomaTests/|project\.yml|\.claude/|\.cursor/|\.codex/|scripts/)'
+
+      - id: actionlint
+        name: GitHub Actions
+        entry: actionlint
+        language: system
+        pass_filenames: false
+        files: '^\.github/workflows/.*\.ya?ml$'
+
+      - id: shellcheck
+        name: Shell scripts
+        entry: bash -c 'shellcheck scripts/*.sh'
+        language: system
+        pass_filenames: false
+        files: '^scripts/.*\.sh$'
+
+      - id: make-check
+        name: make check
+        entry: make check
+        language: system
+        pass_filenames: false
+        files: '^(Soma/|SomaTests/|project\.yml|\.swiftformat|\.swiftlint\.yml|\.github/workflows/|Makefile|Brewfile|scripts/)'

@@ -1,0 +1,16 @@
+---
+description: Streaming ReAct, Tool Calling, Skills, and Trace safety
+globs: "Soma/Services/{AppServices,ConversationRecorder,ReActAgent}.swift,Soma/Models/Models.swift,Soma/Views/{CoachView,SettingsView}.swift"
+alwaysApply: false
+---
+
+# Agent runtime
+
+- Read ADR-0003, ADR-0004, ADR-0005, and `docs/react-agent.md`.
+- Use native streaming `tool_calls`; do not add a custom decision JSON protocol.
+- Keep Tool names, descriptions, schemas, and outputs fixed in App code.
+- Skills may be user-edited but only load through `load_skill`.
+- A user message owns one Trace; model, skill, tool, and output Span changes stream as Events.
+- Do not store thinking, API keys, Authorization headers, media Base64, or local file paths.
+- Missing record fields remain nil; successful Tool writes are not hidden by a later reply error.
+- Add tests when changing Tool schema, idempotency, Trace transitions, or provider compatibility.

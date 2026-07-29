@@ -1,0 +1,40 @@
+name: Feature request
+description: 提议符合 Soma 产品原则的新能力
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题
+      description: 请先描述问题，不要先给页面或技术方案。
+    validations:
+      required: true
+  - type: textarea
+    id: flow
+    attributes:
+      label: 期望闭环
+      description: 它如何进入“自然表达 → Agent → 记录 → 审查 → 趋势”？
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: 数据与隐私影响
+      description: 会读取、发送、保存或删除什么数据？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 更简单的替代方案
+      description: 能否不增加新顶层页面、远程服务或数据类型？
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: 产品原则
+      options:
+        - label: 该提议保持聊天优先、本地优先和可审查
+          required: true
+        - label: 该提议不会要求上传真实个人数据到 Issue
+          required: true

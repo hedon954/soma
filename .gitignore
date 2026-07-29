@@ -1,0 +1,44 @@
+.DS_Store
+
+# Xcode / XcodeGen
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcresult/
+DerivedData/
+.derivedData*/
+.xcodebuildmcp/
+build/
+*.xcarchive/
+*.ipa
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Signing and App Store credentials
+*.cer
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+*.key
+
+# Local application data and exported private media
+local-data/
+personal-data/
+recordings/
+exports/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+.cursor/plans/
+.codex/plans/
+.codex/tmp/

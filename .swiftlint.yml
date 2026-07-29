@@ -1,0 +1,57 @@
+included:
+  - Soma
+  - SomaTests
+
+excluded:
+  - Soma.xcodeproj
+
+strict: true
+
+disabled_rules:
+  - control_statement
+  - implicit_optional_initialization
+  - multiple_closures_with_trailing_closure
+  - opening_brace
+  - todo
+
+line_length:
+  warning: 180
+  error: 220
+  ignores_comments: true
+  ignores_urls: true
+
+# Existing files predate the repository gate. New files use the 500-line soft limit
+# defined in CLAUDE.md; these ceilings prevent new unbounded growth while the current
+# large views/services are split incrementally.
+file_length:
+  warning: 1900
+  error: 2100
+
+type_body_length:
+  warning: 900
+  error: 1100
+
+function_body_length:
+  warning: 300
+  error: 400
+
+function_parameter_count:
+  warning: 9
+  error: 12
+
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+large_tuple:
+  warning: 4
+  error: 6
+
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - ai
+    - at
+    - id
+    - ok

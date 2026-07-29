@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Verify and publish source release
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select newest installed Xcode
+        shell: bash
+        run: |
+          xcode_path="$(find /Applications -maxdepth 1 -type d -name 'Xcode_[0-9]*.app' | sort -V | tail -1)"
+          test -n "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path/Contents/Developer" >> "$GITHUB_ENV"
+
+      - name: Install development tools
+        run: brew bundle --file Brewfile
+
+      - name: Run complete quality gate
+        run: make check
+
+      - name: Verify release metadata
+        run: ./scripts/verify-release.sh "$GITHUB_REF_NAME"
+
+      - name: Extract reviewed release notes
+        run: ./scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > build/RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "Soma $GITHUB_REF_NAME" \
+            --notes-file build/RELEASE_NOTES.md
