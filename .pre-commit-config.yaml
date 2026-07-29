@@ -50,7 +50,7 @@ repos:
         files: '^scripts/.*\.sh$'
 
       - id: make-check
-        name: make check
+        name: make check (fast static gate)
         entry: make check
         language: system
         pass_filenames: false

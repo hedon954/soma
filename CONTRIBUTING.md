@@ -14,6 +14,7 @@
 ```bash
 make setup
 make check
+make verify
 ```
 
 `make setup` 安装 Brewfile 工具、pre-commit hooks，并从 `project.yml` 生成
@@ -25,7 +26,7 @@ make check
 2. 只实现当前 PRD 内最小的可验证闭环。
 3. 长期改变 Agent 协议、数据模型、同步、隐私或分发方式时先提交 ADR。
 4. 行为变更补充确定性测试；硬件能力补充手工验收说明。
-5. 运行 `make format` 和 `make check`。
+5. 开发中运行 `make format` 和 `make check`；提交 PR 前运行 `make verify`。
 6. 使用中文 Conventional Commit，并通过 PR 模板提交。
 
 ## 隐私要求

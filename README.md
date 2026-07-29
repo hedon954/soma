@@ -66,9 +66,13 @@ App 只保留两个界面：
 ```bash
 make setup
 make check
+make verify
 ```
 
-`make check` 是本地、pre-commit 和 GitHub Actions 共用的质量门禁，包含格式、lint、仓库与隐私契约、无签名模拟器构建和单元测试。项目的 coding agent 统一遵循 [CLAUDE.md](CLAUDE.md)，Codex 和 Cursor 通过同一组项目 Skills 获取日常 SOP。
+`make check` 是本地和 pre-commit 使用的快速静态门禁，包含格式、lint、仓库与隐私契约，
+不启动 Simulator。`make verify` 在此基础上增加无签名构建和模拟器单元测试，供 GitHub
+Actions、发布和完整交付验收使用。项目的 coding agent 统一遵循
+[CLAUDE.md](CLAUDE.md)，Codex 和 Cursor 通过同一组项目 Skills 获取日常 SOP。
 
 ## 真机与 TestFlight
 

@@ -14,7 +14,7 @@ description: Prepares and verifies a Soma GitHub or TestFlight release. Use when
 
 ## 2. Verify
 
-1. Run `make check`.
+1. Run `make verify`.
 2. Run `scripts/verify-release.sh vMAJOR.MINOR.PATCH`.
 3. For TestFlight, select the real Apple Team locally and run
    `DEVELOPMENT_TEAM=... make archive`.

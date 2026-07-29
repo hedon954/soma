@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env generate build test format format-check lint check archive clean
+.PHONY: help setup env generate build test format format-check lint check verify archive clean
 
 help:
 	@echo "Soma development commands:"
@@ -10,7 +10,8 @@ help:
 	@echo "  make test          Run unit tests on an available iOS Simulator"
 	@echo "  make format        Format Swift sources"
 	@echo "  make lint          Run SwiftLint, actionlint, shellcheck, and repo validation"
-	@echo "  make check         Run the complete local/CI quality gate"
+	@echo "  make check         Run fast static checks without a Simulator"
+	@echo "  make verify        Run static checks, build, and Simulator tests"
 	@echo "  make archive       Export a signed App Store Connect archive"
 	@echo "  make clean         Remove generated project and build artifacts"
 
@@ -49,6 +50,9 @@ check:
 	@$(MAKE) env
 	@$(MAKE) format-check
 	@$(MAKE) lint
+
+verify:
+	@$(MAKE) check
 	@$(MAKE) build
 	@$(MAKE) test
 

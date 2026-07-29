@@ -33,9 +33,4 @@ if [[ ! -d "$developer_dir" ]]; then
   exit 1
 fi
 
-if ! xcrun simctl list devices available | grep -q "iPhone"; then
-  echo "No available iPhone Simulator is installed." >&2
-  exit 1
-fi
-
 echo "Environment is ready."

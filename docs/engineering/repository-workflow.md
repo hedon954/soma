@@ -35,18 +35,24 @@ make generate       # 依赖或 target 变化后
 make build
 make test
 make format
-make check          # 提交/PR 前
+make check          # 开发与 commit 前的快速静态门禁
+make verify         # PR、发布与完整交付前
 ```
 
-`make check` 与 GitHub CI 使用同一条路径：
+`make check` 不启动 Simulator，适合高频本地循环和 pre-commit：
 
 1. 环境检查；
 2. SwiftFormat lint；
 3. SwiftLint；
 4. GitHub Actions 和 shell 脚本静态检查；
-5. Agent/ADR/隐私/文档链接/secret 仓库契约；
-6. 无签名模拟器构建；
-7. 模拟器单元测试。
+5. Agent/ADR/隐私/文档链接/secret 仓库契约。
+
+`make verify` 先执行 `make check`，再执行：
+
+1. 无签名 iOS Simulator 构建；
+2. 模拟器单元测试。
+
+GitHub CI、发布流程和完整交付验收统一运行 `make verify`。
 
 ## 生成物与密钥
 
@@ -58,7 +64,7 @@ make check          # 提交/PR 前
 - Xcode/Simulator/Codex 本地状态。
 
 如果 CI 与本机结果不同，先比较 `xcodebuild -version`、`project.yml` 和
-`make check` 输出，不要提交生成工程来“修复”漂移。
+`make verify` 输出，不要提交生成工程来“修复”漂移。
 
 ## 已知技术债
 

@@ -13,4 +13,4 @@ alwaysApply: false
 - Label editable values, expose destructive actions with system semantics, and support Dynamic Type.
 - New files should stay below 500 lines; avoid expanding existing oversized files.
 - Add deterministic tests for business rules and manual device notes for hardware-only behavior.
-- Run `make format` and `make check`.
+- Run `make format` and `make verify` before completion.

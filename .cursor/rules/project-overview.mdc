@@ -14,4 +14,4 @@ alwaysApply: true
 - Preserve chat-first, local-first, missing-is-nil, fixed Tool Schema, Trace Event, and
   external-import idempotency invariants.
 - Never use real health data, body photos, API keys, certificates, or private traces as fixtures.
-- Run `make check` before reporting implementation complete.
+- Use `make check` while iterating and run `make verify` before reporting implementation complete.

@@ -48,11 +48,12 @@ cohesive type when that can be done without mixing unrelated behavior.
 
 1. Run the narrowest test or build while iterating.
 2. Run `make format` for intentional source changes.
-3. Run `make check` before declaring completion.
-4. For UI changes, launch an iPhone simulator and inspect the affected flow.
-5. For media, speech, HealthKit, signing, or TestFlight changes, document the applicable manual
+3. Run `make check` as the fast static gate while iterating.
+4. Run `make verify` before declaring completion.
+5. For UI changes, launch an iPhone simulator and inspect the affected flow.
+6. For media, speech, HealthKit, signing, or TestFlight changes, document the applicable manual
    device scenario.
-6. Update PRD for product scope, ADR for durable decisions, and Changelog for shipped behavior;
+7. Update PRD for product scope, ADR for durable decisions, and Changelog for shipped behavior;
    do not turn those files into implementation diaries.
 
 ## Definition of done
@@ -63,4 +64,4 @@ cohesive type when that can be done without mixing unrelated behavior.
 - Failure and cancellation are visible and recoverable.
 - Tests cover deterministic behavior.
 - No secret, real health data, generated Xcode project, archive, or local config enters Git.
-- `make check` passes.
+- `make verify` passes.

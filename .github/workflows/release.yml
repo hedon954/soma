@@ -30,7 +30,7 @@ jobs:
         run: brew bundle --file Brewfile
 
       - name: Run complete quality gate
-        run: make check
+        run: make verify
 
       - name: Verify release metadata
         run: ./scripts/verify-release.sh "$GITHUB_REF_NAME"

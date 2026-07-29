@@ -135,7 +135,8 @@ App → Views → Services → Models
 - SwiftData 变更验证演示/个人空间隔离、旧数据兼容或明确的数据重建策略。
 - HealthKit 与真机权限无法完全自动化时，补充手工验收步骤。
 - 警告、格式、lint、脚本、文档链接、构建和测试都是质量门禁。
-- 完成代码或基础设施变更前运行 `make check`。
+- 开发与提交钩子使用快速静态门禁 `make check`。
+- 完成代码或基础设施变更前运行包含构建和模拟器测试的 `make verify`。
 
 ## Git and pull requests
 
@@ -180,7 +181,8 @@ make build          # 无签名模拟器构建
 make test           # 运行模拟器单元测试
 make format         # 格式化 Swift
 make lint           # SwiftLint、Actions、shell、文档和仓库契约
-make check          # 完整本地/CI 质量门禁
+make check          # 快速静态门禁，不启动 Simulator
+make verify         # 静态门禁、构建和模拟器测试
 make archive        # 使用本机 Team 导出 TestFlight 归档
 make clean
 ```

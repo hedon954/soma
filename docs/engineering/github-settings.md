@@ -39,7 +39,7 @@
 - 启用 Private Vulnerability Reporting
 
 私有个人仓库没有 GitHub Advanced Security 时，Dependency Review/CodeQL job 会跳过，
-本地 secret、lint、build 和 test 门禁仍然执行。
+本地 `make check` 静态门禁和 CI 的 `make verify` 构建、测试门禁仍然执行。
 
 ## Labels
 

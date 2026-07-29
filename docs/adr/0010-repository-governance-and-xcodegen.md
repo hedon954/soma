@@ -1,6 +1,6 @@
 # ADR 0010：统一仓库契约、质量门禁与 XcodeGen 事实来源
 
-- 状态：已采纳
+- 状态：部分已替代；质量命令分层由 [ADR 0011](0011-fast-check-full-verify.md) 修订
 - 决策日期：2026-07-29
 
 ## 背景
@@ -31,7 +31,7 @@ Soma 即将进入 GitHub，并由多个 coding agent 和人类贡献者持续迭
 ## 结果
 
 - 新环境运行 `make setup` 即可获得一致工程和 hooks。
-- 所有贡献在 PR 前后经过同一 `make check`。
+- 所有贡献在 PR 前后经过同一质量门禁；命令分层后来由 ADR 0011 修订。
 - XcodeGen 和仓库契约成为显式、可验证的开发基础设施。
 - 现有超长文件通过兼容首版的 lint ceiling 进入门禁，后续遵循 500 行软限制逐步拆分。
 - GitHub 远端仍需按 `docs/engineering/github-settings.md` 启用 ruleset 和安全开关。

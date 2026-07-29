@@ -9,7 +9,7 @@ Soma 将源码发布和 iOS 分发分开处理。
 3. 运行：
 
    ```bash
-   make check
+   make verify
    ./scripts/verify-release.sh v1.0.0
    ```
 

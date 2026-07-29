@@ -13,12 +13,14 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0007](0007-health-import-normalization-and-dedup.md) | 已采纳 | 外部健康数据先归一化，并用游标与外部 ID 去重 |
 | [0008](0008-app-scoped-conversation-processing.md) | 已采纳 | 对话处理提升到 App 生命周期，而不是绑定聊天 View |
 | [0009](0009-soma-brand-migration.md) | 已采纳 | 从代码到 Bundle ID 全量迁移为 Soma |
-| [0010](0010-repository-governance-and-xcodegen.md) | 已采纳 | 统一 Agent 契约、质量门禁与 XcodeGen 事实来源 |
+| [0010](0010-repository-governance-and-xcodegen.md) | 部分已替代 | 统一 Agent 契约、质量门禁与 XcodeGen 事实来源 |
+| [0011](0011-fast-check-full-verify.md) | 已采纳 | `make check` 快速静态检查，`make verify` 完整构建测试 |
 
 新决策使用 [ADR 模板](template.md)。
 
 状态定义：
 
 - **已采纳**：当前实现和后续开发都应遵守；
+- **部分已替代**：部分决策由后续 ADR 修订，其余部分仍生效；
 - **已替代**：由后续 ADR 明确取代；
 - **已废弃**：不再适用，但保留历史原因。
