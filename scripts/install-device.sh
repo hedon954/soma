@@ -64,7 +64,17 @@ echo "Installing Soma on physical device: $device_id"
 xcrun devicectl device install app --device "$device_id" "$app_path"
 
 echo "Launching Soma"
-xcrun devicectl device process launch \
-  --device "$device_id" \
-  --terminate-existing \
-  top.hedon.soma
+if ! launch_output="$(
+  xcrun devicectl device process launch \
+    --device "$device_id" \
+    --terminate-existing \
+    top.hedon.soma 2>&1
+)"; then
+  printf '%s\n' "$launch_output" >&2
+  if [[ "$launch_output" == *"reason: Locked"* ]]; then
+    echo "Soma is installed. Unlock the iPhone and open it manually." >&2
+    exit 0
+  fi
+  exit 1
+fi
+printf '%s\n' "$launch_output"
