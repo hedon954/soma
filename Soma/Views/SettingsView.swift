@@ -63,7 +63,7 @@ struct SettingsView: View {
             NavigationLink {
                 PersonalBodyInfoView()
             } label: {
-                Label("个人身体信息", systemImage: "person.text.rectangle")
+                Label("身体信息", systemImage: "person.text.rectangle")
             }
 
             NavigationLink {
@@ -162,7 +162,7 @@ struct SettingsView: View {
             NavigationLink {
                 PersonalBodyInfoView()
             } label: {
-                Label("个人身体信息", systemImage: "person.text.rectangle")
+                Label("身体信息", systemImage: "person.text.rectangle")
             }
         } header: {
             Text("个人")
@@ -722,7 +722,7 @@ private struct PersonalBodyInfoView: View {
                 Text("优先使用最近一次体重记录。无氧训练缺少实际时长时，可由组数、次数、间歇和每次约 4 秒的动作节奏推算，仅用于热量估算且会明确标记。")
             }
         }
-        .navigationTitle("个人身体信息")
+        .navigationTitle("身体信息")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

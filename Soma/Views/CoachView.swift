@@ -456,7 +456,7 @@ struct CoachView: View {
         }
         .joined(separator: "\n")
         return """
-        个人身体信息：\(profile)
+        身体信息：\(profile)
         健身房：\(gym?.name ?? "无")；器械：\(currentEquipment)；最近训练：\(latestWorkout)；今日饮食：\(todayCalories)kcal；体重：\(weight)
         最近对话：
         \(recentConversation)

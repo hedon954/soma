@@ -274,7 +274,7 @@ enum ConversationRecorder {
 
         case "profile":
             let values = fetchProfiles(in: context).prefix(limit).map(profileSummary)
-            return .success(values.isEmpty ? "尚未填写个人身体信息。" : values.joined(separator: "\n"))
+            return .success(values.isEmpty ? "尚未填写身体信息。" : values.joined(separator: "\n"))
 
         case "gyms":
             let gyms = fetchGyms(in: context)

@@ -15,7 +15,7 @@
 | [001：私人 AI 健身教练基础](001-private-ai-fitness-coach.md) | 初始构想 | 多健身房、饮食、身体、训练、多模态、本地隐私和统计 |
 | [002：聊天优先与审查闭环](002-chat-first-review-loop.md) | 产品收敛 | 聊天成为唯一录入入口，GUI 退回审查、纠错与统计 |
 | [003：流式 ReAct Agent 平台](003-streaming-react-agent.md) | 智能化重构 | 原生 Tool Calling、渐进式 Skills、流式 Event、Trace/Span |
-| [004：Soma 当前产品基线](004-soma-current-product.md) | 当前基线 | 个人身体信息、热量估算、健康数据接入、异步处理和品牌统一 |
+| [004：Soma 当前产品基线](004-soma-current-product.md) | 当前基线 | 身体信息、热量估算、健康数据接入、异步处理和品牌统一 |
 
 ## 阅读约定
 

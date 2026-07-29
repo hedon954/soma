@@ -19,7 +19,7 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 - GitHub 风格训练连续性，以及可拖动的体重与训练容量趋势。
 - OpenAI、DeepSeek、阿里云百炼、火山引擎和腾讯云配置与动态模型列表。
 - 原生流式 ReAct Tool Calling、渐进式 Skills 和完整 Trace/Span 执行日志。
-- 个人身体信息、本地 MET 运动热量估算和 Apple 健康增量导入。
+- 身体信息、本地 MET 运动热量估算和 Apple 健康增量导入。
 - 完全隔离的演示与个人数据空间。
 
 ### Privacy
