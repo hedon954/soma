@@ -945,6 +945,11 @@ enum DataIntegrityRepair {
         }
         for response in interruptedMessages {
             response.agentStatus = .failed
+            response.applyAgentEvent(.failed(
+                message: message,
+                cancelled: false,
+                at: endedAt
+            ))
             response.text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 .isEmpty ? message : response.text
             response.replaceAgentEvents(response.agentEvents.map { event in

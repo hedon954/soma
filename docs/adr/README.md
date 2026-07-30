@@ -8,7 +8,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0002](0002-chat-write-path-review-gui.md) | 已采纳 | 聊天是唯一创建路径，GUI 负责审查与统计 |
 | [0003](0003-native-streaming-react-tool-calling.md) | 已采纳 | 使用原生流式 Tool Calling 构建 ReAct |
 | [0004](0004-progressive-skills-fixed-tool-contract.md) | 已采纳 | Skills 渐进披露且可编辑，Tool 协议固定 |
-| [0005](0005-trace-span-event-observability.md) | 已采纳 | 一条消息一条 Trace，Span 通过 Event 流式渲染 |
+| [0005](0005-trace-span-event-observability.md) | 部分已替代 | 一条消息一条 Trace，Span 通过 Event 流式渲染 |
 | [0006](0006-data-truth-and-derived-metrics.md) | 已采纳 | 缺失值为空，统计和热量采用可追溯确定性规则 |
 | [0007](0007-health-import-normalization-and-dedup.md) | 已采纳 | 外部健康数据先归一化，并用游标与外部 ID 去重 |
 | [0008](0008-app-scoped-conversation-processing.md) | 已采纳 | 对话处理提升到 App 生命周期，而不是绑定聊天 View |
@@ -17,6 +17,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0011](0011-fast-check-full-verify.md) | 已采纳 | `make check` 快速静态检查，`make verify` 完整构建测试 |
 | [0012](0012-ordered-mixed-media-collections.md) | 已采纳 | 有序混合媒体贯穿聊天、Agent、记录和审查 |
 | [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
+| [0014](0014-agent-turn-ordered-event-cards.md) | 已采纳 | 一次 Agent Turn 由有序异构 Event Cards 组成 |
 
 新决策使用 [ADR 模板](template.md)。
 

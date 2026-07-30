@@ -1,7 +1,8 @@
 # ADR 0005：一条消息一条 Trace，Span 通过 Event 流式渲染
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-28
+- 替代说明：[ADR 0014](0014-agent-turn-ordered-event-cards.md) 取代“最终回复下挂 Skill/Tool 时间线”的聊天呈现方案；一条消息一条 Trace、Span 诊断与事件落盘仍然有效。
 
 ## 背景
 
@@ -12,7 +13,7 @@ Agent 会经历多轮模型调用、Skill 加载、数据查询和写入。只�
 - 一条用户消息对应一条完整 Trace。
 - `model`、`skill`、`tool` 和 `output` 是四类 Span。
 - Span 的开始、增量、结束和错误都表现为 Event，执行期间实时传递给 UI。
-- 面向普通用户，`skill` 与 `tool` Event 以紧凑时间线挂在对应教练回复下方，执行后继续保留；模型输入、Token 与原始参数等完整诊断信息仍只在开发者 Trace 详情中展示。
+- 面向普通用户的原方案是把 `skill` 与 `tool` Event 以紧凑时间线挂在对应教练回复下方；该呈现方式已由 ADR 0014 的有序异构 Event Cards 替代。模型输入、Token 与原始参数等完整诊断信息仍只在开发者 Trace 详情中展示。
 - Trace 无论成功、失败或取消都落盘。
 - 持久化层按 Span ID 更新同一条记录，不按 token 新建对象。
 - 记录输入预览、结果/错误、相对时间、耗时、模型与 Token；不记录密钥、Authorization 头或媒体 Base64。

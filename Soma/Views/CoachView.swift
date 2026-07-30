@@ -72,6 +72,7 @@ final class ConversationProcessingService {
     private(set) var dataSpace: DataSpace?
     private(set) var liveAssistantText = ""
     private(set) var liveAgentActivity: String?
+    private(set) var liveEventRevision = 0
 
     @ObservationIgnored
     private var processingTask: Task<Void, Never>?
@@ -179,22 +180,19 @@ final class ConversationProcessingService {
                     trace: { [weak self] event in
                         self?.applyLiveAgentEvent(event)
                         trace.apply(event)
+                        message.applyAgentEvent(event)
                         switch event {
-                        case let .assistantTextDelta(delta):
+                        case let .assistantTextDelta(_, delta):
                             message.text += delta
-                        case let .span(span):
-                            if span.kind == .skill || span.kind == .tool,
-                               span.status == .running
-                            {
-                                message.text = ""
-                            }
-                            message.applyAgentEvent(span)
+                        case .assistantTextCompleted, .span:
+                            break
                         case .completed:
                             message.agentStatus = .succeeded
                         case let .failed(_, cancelled, _):
                             message.agentStatus = cancelled ? .cancelled : .failed
                         }
-                        if case .assistantTextDelta = event {} else {
+                        if case .assistantTextDelta = event {
+                        } else {
                             try? modelContext.save()
                         }
                     }
@@ -338,10 +336,13 @@ final class ConversationProcessingService {
     }
 
     private func applyLiveAgentEvent(_ event: AgentTraceEvent) {
+        liveEventRevision += 1
         switch event {
-        case let .assistantTextDelta(delta):
+        case let .assistantTextDelta(_, delta):
             liveAssistantText += delta
             liveAgentActivity = "正在生成回复…"
+        case .assistantTextCompleted:
+            liveAgentActivity = nil
         case let .span(span):
             guard span.status == .running else { return }
             switch span.kind {
@@ -451,6 +452,9 @@ struct CoachView: View {
                 scrollToBottom(proxy)
             }
             .onChange(of: processor.liveAgentActivity) {
+                scrollToBottom(proxy)
+            }
+            .onChange(of: processor.liveEventRevision) {
                 scrollToBottom(proxy)
             }
             .onChange(of: speechInput.transcript) {
@@ -827,7 +831,14 @@ private struct CoachBubble: View {
                     StoredMediaStrip(attachments: message.mediaAttachments)
                 }
 
-                if !message.text.isEmpty, !message.isAutomaticMediaSummary {
+                if message.isFromCoach,
+                   !message.agentTurnItems.isEmpty || isLive
+                {
+                    AgentTurnTranscript(
+                        items: message.agentTurnItems,
+                        isLive: isLive
+                    )
+                } else if !message.text.isEmpty, !message.isAutomaticMediaSummary {
                     Group {
                         if message.isFromCoach {
                             MarkdownText(message.text)
@@ -844,16 +855,6 @@ private struct CoachBubble: View {
                         in: RoundedRectangle(cornerRadius: 17, style: .continuous)
                     )
                     .foregroundStyle(message.isFromCoach ? Color.primary : Color.white)
-                }
-
-                if message.isFromCoach,
-                   !message.agentEvents.isEmpty || isLive
-                {
-                    AgentEventTimeline(
-                        events: message.agentEvents,
-                        status: message.agentStatus,
-                        isLive: isLive
-                    )
                 }
             }
 
@@ -1239,82 +1240,6 @@ private struct StoredMediaTile: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         )
         .accessibilityLabel(attachment.kind == .image ? "图片附件" : "视频附件")
-    }
-}
-
-private struct AgentEventTimeline: View {
-    let events: [AgentTraceSpan]
-    let status: AgentTraceStatus?
-    let isLive: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(events) { event in
-                HStack(alignment: .top, spacing: 8) {
-                    eventIcon(event)
-                        .frame(width: 18, height: 18)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(event.title)
-                            .font(.caption.weight(.semibold))
-                        if let detail = detail(for: event) {
-                            Text(detail)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                }
-            }
-
-            if isLive, events.isEmpty {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini)
-                    Text("Agent 正在分析…")
-                        .font(.caption.weight(.medium))
-                }
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
-        )
-        .foregroundStyle(status == .failed ? Color.red : Color.primary)
-    }
-
-    @ViewBuilder
-    private func eventIcon(_ event: AgentTraceSpan) -> some View {
-        switch event.status {
-        case .running:
-            ProgressView().controlSize(.mini)
-        case .succeeded:
-            Image(systemName: event.kind == .skill ? "sparkles" : "checkmark.circle.fill")
-                .foregroundStyle(AppTheme.tint)
-        case .failed, .cancelled:
-            Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.red)
-        }
-    }
-
-    private func detail(for event: AgentTraceSpan) -> String? {
-        if event.status == .running {
-            return event.kind == .skill ? "正在加载 Skill" : "正在调用工具"
-        }
-        if let error = event.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !error.isEmpty
-        {
-            return error
-        }
-        guard event.kind == .tool,
-              let output = event.output,
-              let data = output.data(using: .utf8),
-              let result = try? JSONDecoder().decode(AgentToolResult.self, from: data)
-        else {
-            return event.status == .succeeded ? "已完成" : nil
-        }
-        return result.observation
     }
 }
 

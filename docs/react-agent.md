@@ -61,7 +61,15 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 - `tool`：工具入参、执行结果、写入类型和去重状态。
 - `output`：最终回复、失败或取消。
 
-UI 收到 Event 后立即更新当前回复和执行状态；持久化层按 Span ID 更新同一条记录，不为每个 token 新建数据库对象。日志不会保存 API Key、Authorization 头或媒体 Base64。
+UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有序 Event Cards：
+
+- 同一 Item ID 的文字 delta 合并到同一张文字卡；
+- Skill/Tool 按 Span ID 更新同一张操作卡；
+- 操作卡之后的新文字创建新卡，不能回填到此前文字；
+- 失败保留已经完成的卡片，并追加错误卡；
+- 重新进入聊天时按持久化顺序完整重放。
+
+聊天卡片与开发者 Trace 是同一事件流的两种投影：聊天强调发生了什么，Trace 保留完整参数、输出、耗时和 Token。日志不会保存 API Key、Authorization 头或媒体 Base64。
 
 ## 关键实现
 
@@ -69,4 +77,6 @@ UI 收到 Event 后立即更新当前回复和执行状态；持久化层按 Spa
 - 流式 ReAct 编排与供应商适配：`Soma/Services/AppServices.swift`
 - 本地工具执行：`Soma/Services/ConversationRecorder.swift`
 - 流式聊天 UI：`Soma/Views/CoachView.swift`
+- Event Card UI：`Soma/Views/AgentTurnTranscript.swift`
+- Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/Models.swift`
 - Trace 数据结构：`Soma/Models/Models.swift`

@@ -463,6 +463,7 @@ final class CoachMessage {
     var agentTraceID: UUID?
     var agentStatusRaw: String?
     var agentEventsData: Data = Data()
+    var agentTurnItemsData: Data = Data()
 
     init(
         date: Date = .now,
@@ -474,7 +475,8 @@ final class CoachMessage {
         recordType: ConversationIntent? = nil,
         agentTraceID: UUID? = nil,
         agentStatus: AgentTraceStatus? = nil,
-        agentEvents: [AgentTraceSpan] = []
+        agentEvents: [AgentTraceSpan] = [],
+        agentTurnItems: [AgentTurnItem] = []
     ) {
         id = UUID()
         self.date = date
@@ -487,6 +489,7 @@ final class CoachMessage {
         self.agentTraceID = agentTraceID
         agentStatusRaw = agentStatus?.rawValue
         agentEventsData = (try? JSONEncoder().encode(agentEvents)) ?? Data()
+        agentTurnItemsData = (try? JSONEncoder().encode(agentTurnItems)) ?? Data()
     }
 
     var mediaKind: MediaKind {
@@ -522,8 +525,80 @@ final class CoachMessage {
         (try? JSONDecoder().decode([AgentTraceSpan].self, from: agentEventsData)) ?? []
     }
 
+    var agentTurnItems: [AgentTurnItem] {
+        (
+            try? JSONDecoder().decode(
+                [AgentTurnItem].self,
+                from: agentTurnItemsData
+            )
+        ) ?? []
+    }
+
+    func applyAgentEvent(_ event: AgentTraceEvent) {
+        var items = agentTurnItems
+
+        switch event {
+        case let .assistantTextDelta(itemID, delta):
+            if let index = items.firstIndex(where: { $0.id == itemID }) {
+                items[index].appendTextDelta(delta)
+            } else {
+                items.append(AgentTurnItem(
+                    id: itemID,
+                    sequence: items.count + 1,
+                    kind: .text,
+                    status: .running,
+                    text: delta
+                ))
+            }
+        case let .assistantTextCompleted(itemID, date):
+            if let index = items.firstIndex(where: { $0.id == itemID }) {
+                items[index].finishText(at: date)
+            }
+        case let .span(span):
+            guard span.kind == .skill || span.kind == .tool else { break }
+            if let index = items.firstIndex(where: { $0.id == span.id }) {
+                items[index] = AgentTurnItem(
+                    span: span,
+                    sequence: items[index].sequence
+                )
+            } else {
+                items.append(AgentTurnItem(span: span, sequence: items.count + 1))
+            }
+            applyLegacyAgentEvent(span)
+        case let .completed(_, date):
+            for index in items.indices
+                where items[index].kind == .text && items[index].status == .running
+            {
+                items[index].finishText(at: date)
+            }
+        case let .failed(message, _, date):
+            for index in items.indices where items[index].status == .running {
+                items[index].fail(message: message, at: date)
+            }
+            if !items.contains(where: {
+                $0.kind == .error && $0.errorMessage == message
+            }) {
+                items.append(AgentTurnItem(
+                    sequence: items.count + 1,
+                    kind: .error,
+                    status: .failed,
+                    title: "执行失败",
+                    text: message,
+                    startedAt: date,
+                    endedAt: date,
+                    errorMessage: message
+                ))
+            }
+        }
+
+        agentTurnItemsData = (try? JSONEncoder().encode(items)) ?? agentTurnItemsData
+    }
+
     func applyAgentEvent(_ span: AgentTraceSpan) {
-        guard span.kind == .skill || span.kind == .tool else { return }
+        applyAgentEvent(.span(span))
+    }
+
+    private func applyLegacyAgentEvent(_ span: AgentTraceSpan) {
         var current = agentEvents
         if let index = current.firstIndex(where: { $0.id == span.id }) {
             current[index] = span
@@ -535,6 +610,14 @@ final class CoachMessage {
 
     func replaceAgentEvents(_ events: [AgentTraceSpan]) {
         agentEventsData = (try? JSONEncoder().encode(events)) ?? agentEventsData
+    }
+
+    func replaceAgentTurnItems(_ items: [AgentTurnItem]) {
+        var normalized = items
+        for index in normalized.indices {
+            normalized[index].sequence = index + 1
+        }
+        agentTurnItemsData = (try? JSONEncoder().encode(normalized)) ?? agentTurnItemsData
     }
 }
 
@@ -627,7 +710,8 @@ struct AgentTraceSpan: Codable, Identifiable, Equatable, Sendable {
 
 enum AgentTraceEvent: Equatable, Sendable {
     case span(AgentTraceSpan)
-    case assistantTextDelta(String)
+    case assistantTextDelta(itemID: UUID, delta: String)
+    case assistantTextCompleted(itemID: UUID, at: Date)
     case completed(answer: String, at: Date)
     case failed(message: String, cancelled: Bool, at: Date)
 }
@@ -713,7 +797,7 @@ final class AgentTrace {
                 current.append(span)
             }
             spansData = (try? JSONEncoder().encode(current)) ?? spansData
-        case .assistantTextDelta:
+        case .assistantTextDelta, .assistantTextCompleted:
             break
         case let .completed(answer, date):
             status = .succeeded

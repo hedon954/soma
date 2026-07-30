@@ -521,6 +521,7 @@ final class AIService {
             for step in 1 ... 8 {
                 try Task.checkCancellation()
                 let modelSpanID = UUID()
+                let textItemID = UUID()
                 let modelStartedAt = Date()
                 trace?(.span(AgentTraceSpan(
                     id: modelSpanID,
@@ -572,7 +573,10 @@ final class AIService {
                             guard let delta = choice.delta else { continue }
                             if let content = delta.content, !content.isEmpty {
                                 passage += content
-                                trace?(.assistantTextDelta(content))
+                                trace?(.assistantTextDelta(
+                                    itemID: textItemID,
+                                    delta: content
+                                ))
                             }
                             if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
                                 ignoredReasoning = true
@@ -613,6 +617,12 @@ final class AIService {
                 }
 
                 let modelEndedAt = Date()
+                if !passage.isEmpty {
+                    trace?(.assistantTextCompleted(
+                        itemID: textItemID,
+                        at: modelEndedAt
+                    ))
+                }
                 let orderedDeltas = toolCallDeltas.keys.sorted().compactMap { toolCallDeltas[$0] }
                 trace?(.span(AgentTraceSpan(
                     id: modelSpanID,
@@ -1255,6 +1265,7 @@ enum DemoSeeder {
     static func seedIfNeeded(_ context: ModelContext) {
         seedTraceLogsIfNeeded(in: context)
         backfillDemoProfileAndCaloriesIfNeeded(in: context)
+        backfillDemoAgentTurnIfNeeded(in: context)
         let descriptor = FetchDescriptor<GymProfile>()
         let existingGyms = (try? context.fetch(descriptor)) ?? []
         guard existingGyms.isEmpty else {
@@ -1400,6 +1411,71 @@ enum DemoSeeder {
             workout.calorieDurationMinutes = estimate?.durationMinutes
             workout.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         }
+        try? context.save()
+    }
+
+    private static func backfillDemoAgentTurnIfNeeded(in context: ModelContext) {
+        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
+        guard !messages.contains(where: { !$0.agentTurnItems.isEmpty }) else { return }
+
+        let startedAt = Date().addingTimeInterval(-120)
+        let firstTextID = UUID()
+        let skillID = UUID()
+        let toolID = UUID()
+        let finalTextID = UUID()
+        context.insert(CoachMessage(
+            date: startedAt,
+            isFromCoach: false,
+            text: "帮我看看这周的训练情况"
+        ))
+        context.insert(CoachMessage(
+            date: startedAt.addingTimeInterval(1),
+            isFromCoach: true,
+            text: "我先读取本周训练记录。本周已经训练 3 次，训练容量保持稳定，今天适合轻强度恢复。",
+            agentStatus: .succeeded,
+            agentTurnItems: [
+                AgentTurnItem(
+                    id: firstTextID,
+                    sequence: 1,
+                    kind: .text,
+                    status: .succeeded,
+                    text: "我先读取本周训练记录。",
+                    startedAt: startedAt,
+                    endedAt: startedAt.addingTimeInterval(0.3)
+                ),
+                AgentTurnItem(
+                    id: skillID,
+                    sequence: 2,
+                    kind: .skill,
+                    status: .succeeded,
+                    title: AgentSkill.trendAnalysis.title,
+                    startedAt: startedAt.addingTimeInterval(0.3),
+                    endedAt: startedAt.addingTimeInterval(0.5),
+                    output: AgentSkill.trendAnalysis.defaultText
+                ),
+                AgentTurnItem(
+                    id: toolID,
+                    sequence: 3,
+                    kind: .tool,
+                    status: .succeeded,
+                    title: AgentToolName.queryUserData.displayTitle,
+                    startedAt: startedAt.addingTimeInterval(0.5),
+                    endedAt: startedAt.addingTimeInterval(0.8),
+                    output: AgentTraceText.json(AgentToolResult.success(
+                        "最近 7 天训练 3 次，训练容量保持稳定。"
+                    ))
+                ),
+                AgentTurnItem(
+                    id: finalTextID,
+                    sequence: 4,
+                    kind: .text,
+                    status: .succeeded,
+                    text: "本周已经训练 3 次，训练容量保持稳定，今天适合轻强度恢复。",
+                    startedAt: startedAt.addingTimeInterval(0.8),
+                    endedAt: startedAt.addingTimeInterval(1)
+                )
+            ]
+        ))
         try? context.save()
     }
 
