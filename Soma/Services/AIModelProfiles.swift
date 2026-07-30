@@ -138,9 +138,10 @@ extension AIService {
         )
     }
 
-    var isRemoteEnabled: Bool {
-        defaults.bool(forKey: "ai.remoteEnabled")
-            && !apiKey(for: provider).isEmpty
+    var hasRequiredAPIKey: Bool {
+        !apiKey(for: provider(for: .standard), tier: .standard)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 
     func resolvedRoute(
@@ -154,9 +155,6 @@ extension AIService {
             hasMedia: hasMedia,
             hasVideo: hasVideo
         )
-        guard defaults.bool(forKey: "ai.remoteEnabled") else {
-            throw AIServiceError.missingAPIKey(selected.provider.displayName)
-        }
         let key = apiKey(for: selected.provider, tier: selected.tier)
         guard !key.isEmpty else {
             throw AIServiceError.missingAPIKey(selected.provider.displayName)

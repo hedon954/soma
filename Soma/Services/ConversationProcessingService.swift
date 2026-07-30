@@ -75,10 +75,10 @@ final class ConversationProcessingService {
         includeLocation: Bool,
         locationService: LocationContextService
     ) -> Bool {
+        guard context.ai.hasRequiredAPIKey else { return false }
         guard beginProcessing(
             dataSpace: context.dataSpace,
-            sessionID: context.session.id,
-            ai: context.ai
+            sessionID: context.session.id
         ) else {
             return false
         }
@@ -101,12 +101,12 @@ final class ConversationProcessingService {
         userMessage: CoachMessage,
         context: ConversationProcessingContext
     ) -> Bool {
-        guard !userMessage.isFromCoach,
+        guard context.ai.hasRequiredAPIKey,
+              !userMessage.isFromCoach,
               userMessage.turnID != nil,
               beginProcessing(
                   dataSpace: context.dataSpace,
-                  sessionID: context.session.id,
-                  ai: context.ai
+                  sessionID: context.session.id
               )
         else {
             return false
@@ -129,17 +129,14 @@ final class ConversationProcessingService {
 
     private func beginProcessing(
         dataSpace: DataSpace,
-        sessionID: UUID,
-        ai: AIService
+        sessionID: UUID
     ) -> Bool {
         guard !isProcessing else { return false }
         isProcessing = true
         self.dataSpace = dataSpace
         self.sessionID = sessionID
         liveAssistantText = ""
-        liveAgentActivity = ai.isRemoteEnabled
-            ? "正在启动 Agent…"
-            : "正在理解并整理…"
+        liveAgentActivity = "正在启动 Agent…"
         return true
     }
 
@@ -211,17 +208,13 @@ final class ConversationProcessingService {
             sessionID: context.session.id,
             excludingTurnID: turnID
         )
-        let history = if context.ai.isRemoteEnabled {
-            await prepareAgentHistory(
-                projection.exchanges,
-                frameLimit: max(
-                    0,
-                    Self.maximumAnalysisImageCount - media.frames.count
-                )
+        let history = await prepareAgentHistory(
+            projection.exchanges,
+            frameLimit: max(
+                0,
+                Self.maximumAnalysisImageCount - media.frames.count
             )
-        } else {
-            [AgentConversationExchange]()
-        }
+        )
         let historicalFrameCount = history.reduce(0) { $0 + $1.images.count }
         let persistentContext = context.structuredContext + turnContext(
             location: userMessage.location,
@@ -255,136 +248,107 @@ final class ConversationProcessingService {
         try? context.modelContext.save()
 
         do {
-            let reply: String
-            if context.ai.isRemoteEnabled {
-                let route = context.ai.route(
-                    text: userMessage.text,
-                    hasMedia: !media.attachments.isEmpty,
-                    hasVideo: media.hasVideo
-                )
-                let directVideos = ModelCapability.supportsDirectVideo(
-                    provider: route.provider,
-                    model: route.model
-                ) ? media.videos : []
-                if media.failedVideoCount > 0,
-                   directVideos.count != media.videoCount
-                {
-                    throw ConversationMediaPreparationError.videoFramesUnavailable
-                }
-                let provider = route.provider
-                let trace = AgentTrace(
-                    provider: provider.displayName,
-                    model: route.model,
-                    endpoint: provider.endpoint(
-                        baseURL: route.baseURL,
-                        path: "chat/completions"
-                    )?.absoluteString ?? route.baseURL,
-                    dataSpaceRaw: context.dataSpace.rawValue,
-                    userInput: displayText,
-                    contextSnapshot: """
-                    \(persistentContext)
-                    Session 上下文投影：最近 \(history.count) 个来回；重新提供历史视觉帧 \(historicalFrameCount) 张。
-                    """,
-                    mediaKind: media.primaryKind,
-                    imageCount: media.frames.count + historicalFrameCount,
-                    imageAttachmentCount: media.imageCount,
-                    videoAttachmentCount: media.videoCount,
-                    turnID: turnID,
-                    attemptNumber: attemptNumber
-                )
-                activeTrace = trace
-                responseMessage.agentTraceID = trace.id
-                context.modelContext.insert(trace)
-                try? context.modelContext.save()
+            let route = context.ai.route(
+                text: userMessage.text,
+                hasMedia: !media.attachments.isEmpty,
+                hasVideo: media.hasVideo
+            )
+            let directVideos = ModelCapability.supportsDirectVideo(
+                provider: route.provider,
+                model: route.model
+            ) ? media.videos : []
+            if media.failedVideoCount > 0,
+               directVideos.count != media.videoCount
+            {
+                throw ConversationMediaPreparationError.videoFramesUnavailable
+            }
+            let provider = route.provider
+            let trace = AgentTrace(
+                provider: provider.displayName,
+                model: route.model,
+                endpoint: provider.endpoint(
+                    baseURL: route.baseURL,
+                    path: "chat/completions"
+                )?.absoluteString ?? route.baseURL,
+                dataSpaceRaw: context.dataSpace.rawValue,
+                userInput: displayText,
+                contextSnapshot: """
+                \(persistentContext)
+                Session 上下文投影：最近 \(history.count) 个来回；重新提供历史视觉帧 \(historicalFrameCount) 张。
+                """,
+                mediaKind: media.primaryKind,
+                imageCount: media.frames.count + historicalFrameCount,
+                imageAttachmentCount: media.imageCount,
+                videoAttachmentCount: media.videoCount,
+                turnID: turnID,
+                attemptNumber: attemptNumber
+            )
+            activeTrace = trace
+            responseMessage.agentTraceID = trace.id
+            context.modelContext.insert(trace)
+            try? context.modelContext.save()
 
-                let outcome = try await context.ai.runAgent(
-                    text: userMessage.text,
-                    images: media.frames,
-                    videos: directVideos,
-                    hasVideo: media.hasVideo,
-                    imageAttachmentCount: media.imageCount,
-                    videoAttachmentCount: media.videoCount,
-                    history: history,
-                    context: agentContext,
-                    route: route,
-                    trace: { [weak self] event in
-                        self?.applyLiveAgentEvent(event)
-                        trace.apply(event)
-                        responseMessage.applyAgentEvent(event)
-                        switch event {
-                        case let .assistantTextDelta(_, delta):
-                            responseMessage.text += delta
-                        case .assistantTextCompleted, .span:
-                            break
-                        case .completed:
-                            responseMessage.agentStatus = .succeeded
-                        case let .failed(_, cancelled, _):
-                            responseMessage.agentStatus = cancelled ? .cancelled : .failed
-                        }
-                        if case .assistantTextDelta = event {
-                        } else {
-                            try? context.modelContext.save()
-                        }
+            let outcome = try await context.ai.runAgent(
+                text: userMessage.text,
+                images: media.frames,
+                videos: directVideos,
+                hasVideo: media.hasVideo,
+                imageAttachmentCount: media.imageCount,
+                videoAttachmentCount: media.videoCount,
+                history: history,
+                context: agentContext,
+                route: route,
+                trace: { [weak self] event in
+                    self?.applyLiveAgentEvent(event)
+                    trace.apply(event)
+                    responseMessage.applyAgentEvent(event)
+                    switch event {
+                    case let .assistantTextDelta(_, delta):
+                        responseMessage.text += delta
+                    case .assistantTextCompleted, .span:
+                        break
+                    case .completed:
+                        responseMessage.agentStatus = .succeeded
+                    case let .failed(_, cancelled, _):
+                        responseMessage.agentStatus = cancelled ? .cancelled : .failed
                     }
-                ) { call in
-                    let attributedMedia = AgentToolMediaAttribution.attachments(
-                        for: call,
-                        current: media.attachments,
-                        history: projection
-                    )
-                    let result = AgentMutationStore.execute(
-                        call,
-                        turnID: turnID,
-                        in: context.modelContext
-                    ) {
-                        ConversationRecorder.executeAgentTool(
-                            call,
-                            sourceText: userMessage.text,
-                            sourceDate: userMessage.date,
-                            sourceSessionID: context.session.id,
-                            sourceTurnID: turnID,
-                            mediaKind: media.primaryKind,
-                            mediaPath: media.primaryPath,
-                            mediaAttachments: attributedMedia,
-                            preferredGymID: resolution.gymID,
-                            in: context.modelContext
-                        )
+                    if case .assistantTextDelta = event {
+                    } else {
+                        try? context.modelContext.save()
                     }
-                    if let recordType = result.recordType {
-                        performedRecordType = recordType
-                    }
-                    return result
                 }
-                reply = outcome.finalAnswer
-                performedRecordType = outcome.primaryRecordType ?? performedRecordType
-            } else {
-                if media.failedVideoCount > 0 {
-                    throw ConversationMediaPreparationError.videoFramesUnavailable
-                }
-                let result = try await context.ai.interpretConversation(
-                    text: userMessage.text,
-                    images: media.frames,
-                    hasVideo: media.hasVideo,
-                    context: agentContext,
-                    allowDemoFallback: context.dataSpace == .demo
+            ) { call in
+                let attributedMedia = AgentToolMediaAttribution.attachments(
+                    for: call,
+                    current: media.attachments,
+                    history: projection
                 )
-                reply = ConversationRecorder.apply(
-                    result,
-                    sourceText: userMessage.text,
-                    sourceDate: userMessage.date,
-                    sourceSessionID: context.session.id,
-                    sourceTurnID: turnID,
-                    mediaKind: media.primaryKind,
-                    mediaPath: media.primaryPath,
-                    mediaAttachments: media.attachments,
-                    gyms: context.gyms,
-                    equipment: context.equipment,
+                let result = AgentMutationStore.execute(
+                    call,
+                    turnID: turnID,
                     in: context.modelContext
-                )
-                performedRecordType = result.intent
+                ) {
+                    ConversationRecorder.executeAgentTool(
+                        call,
+                        sourceText: userMessage.text,
+                        sourceDate: userMessage.date,
+                        sourceSessionID: context.session.id,
+                        sourceTurnID: turnID,
+                        mediaKind: media.primaryKind,
+                        mediaPath: media.primaryPath,
+                        mediaAttachments: attributedMedia,
+                        preferredGymID: resolution.gymID,
+                        in: context.modelContext
+                    )
+                }
+                if let recordType = result.recordType {
+                    performedRecordType = recordType
+                }
+                return result
             }
 
-            responseMessage.text = reply
+            responseMessage.text = outcome.finalAnswer
+            performedRecordType = outcome.primaryRecordType ?? performedRecordType
             responseMessage.recordType = performedRecordType
             responseMessage.agentStatus = .succeeded
         } catch {

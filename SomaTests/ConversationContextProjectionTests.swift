@@ -99,8 +99,6 @@ final class ConversationContextProjectionTests: XCTestCase {
             baseURL: "https://example.com/v1",
             model: "gpt-4.1-mini"
         )
-        defaults.set(true, forKey: "ai.remoteEnabled")
-
         let imageData = UIGraphicsImageRenderer(
             size: CGSize(width: 8, height: 8)
         ).jpegData(withCompressionQuality: 0.8) { context in

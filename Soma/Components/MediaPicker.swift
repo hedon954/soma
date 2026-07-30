@@ -206,7 +206,7 @@ struct MediaSourceDialog: View {
                     destination: .library
                 )
                 Spacer()
-                Label("媒体只保存在此设备；启用远程 AI 时，仅分析内容会发送给已配置的模型服务。", systemImage: "lock.shield")
+                Label("媒体原件保存在此设备；只有点击发送后，分析所需内容才会交给已配置的模型服务。", systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding()

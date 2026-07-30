@@ -7,7 +7,10 @@ enum AppTab: Hashable {
 }
 
 private enum RootSheet: Identifiable {
-    case settings
+    case settings(
+        initialRoute: SettingsRoute?,
+        showsAIConfigurationReminder: Bool
+    )
 
     var id: String {
         "settings"
@@ -27,8 +30,13 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                CoachView()
-                    .toolbar { settingsToolbar }
+                CoachView {
+                    sheet = .settings(
+                        initialRoute: .aiService,
+                        showsAIConfigurationReminder: true
+                    )
+                }
+                .toolbar { settingsToolbar }
             }
             .tabItem { Label("教练", systemImage: "bubble.left.and.bubble.right.fill") }
             .tag(AppTab.coach)
@@ -43,8 +51,11 @@ struct RootView: View {
         .tint(AppTheme.tint)
         .sheet(item: $sheet) { destination in
             switch destination {
-            case .settings:
-                SettingsView()
+            case let .settings(initialRoute, showsAIConfigurationReminder):
+                SettingsView(
+                    initialRoute: initialRoute,
+                    showsAIConfigurationReminder: showsAIConfigurationReminder
+                )
             }
         }
         .onChange(of: captureRouter.pendingRequest, initial: true) {
@@ -95,7 +106,10 @@ struct RootView: View {
     private var settingsToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                sheet = .settings
+                sheet = .settings(
+                    initialRoute: nil,
+                    showsAIConfigurationReminder: false
+                )
             } label: {
                 Image(systemName: "gearshape")
             }

@@ -1,11 +1,6 @@
 import SwiftData
 import SwiftUI
 
-private struct GymPhotoItem: Identifiable {
-    let id: String
-    let path: String
-}
-
 struct GymLibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
@@ -127,21 +122,23 @@ struct GymDetailView: View {
     @State private var editingGym: GymProfile?
     @State private var editingEquipment: GymEquipment?
     @State private var deletingEquipment: GymEquipment?
-    @State private var deletingPhoto: GymPhotoItem?
+    @State private var presentedPhoto: MediaAttachmentReference?
     @State private var confirmsGymDeletion = false
 
     private var equipment: [GymEquipment] {
         allEquipment.filter { $0.gymID == gym.id }
     }
 
-    private var photos: [GymPhotoItem] {
+    private var photos: [MediaAttachmentReference] {
         let recorded = allMedia
             .filter { $0.gymID == gym.id }
-            .map { GymPhotoItem(id: $0.id.uuidString, path: $0.path) }
+            .map { MediaAttachmentReference(kind: .image, path: $0.path) }
         if !recorded.isEmpty {
             return recorded
         }
-        return gym.coverImagePath.map { [GymPhotoItem(id: $0, path: $0)] } ?? []
+        return gym.coverImagePath.map {
+            [MediaAttachmentReference(kind: .image, path: $0)]
+        } ?? []
     }
 
     var body: some View {
@@ -242,6 +239,23 @@ struct GymDetailView: View {
         .sheet(item: $editingEquipment) { item in
             GymEquipmentEditor(item: item)
         }
+        .fullScreenCover(item: $presentedPhoto) { selected in
+            MediaViewer(
+                attachments: photos,
+                initialAttachmentID: selected.id,
+                deletionTitle: "从健身房中移除这张照片？",
+                deletionMessage: "只会从健身房档案解除关联；聊天中的原始照片和系统相册不会删除。",
+                onDelete: {
+                    MediaAssociationStore.detachGymPhoto(
+                        at: $0.path,
+                        from: gym,
+                        equipment: allEquipment,
+                        media: allMedia,
+                        in: modelContext
+                    )
+                }
+            )
+        }
         .alert("删除这个健身房？", isPresented: $confirmsGymDeletion) {
             Button("删除", role: .destructive) {
                 StructuredDataStore.deleteGym(
@@ -280,34 +294,6 @@ struct GymDetailView: View {
         } message: { item in
             Text("“\(item.name)”会从这个健身房的支持器械中移除。")
         }
-        .alert(
-            "从健身房中移除这张照片？",
-            isPresented: Binding(
-                get: { deletingPhoto != nil },
-                set: {
-                    if !$0 {
-                        deletingPhoto = nil
-                    }
-                }
-            ),
-            presenting: deletingPhoto
-        ) { photo in
-            Button("移除", role: .destructive) {
-                MediaAssociationStore.detachGymPhoto(
-                    at: photo.path,
-                    from: gym,
-                    equipment: allEquipment,
-                    media: allMedia,
-                    in: modelContext
-                )
-                deletingPhoto = nil
-            }
-            Button("取消", role: .cancel) {
-                deletingPhoto = nil
-            }
-        } message: { _ in
-            Text("只会从健身房档案解除关联；聊天中的原始照片和系统相册不会删除。")
-        }
     }
 
     @ViewBuilder
@@ -327,23 +313,13 @@ struct GymDetailView: View {
                     ScrollView(.horizontal) {
                         LazyHStack(spacing: 10) {
                             ForEach(photos) { photo in
-                                ZStack {
+                                Button {
+                                    presentedPhoto = photo
+                                } label: {
                                     LocalImageView(path: photo.path)
                                 }
-                                .overlay(alignment: .topTrailing) {
-                                    Button(role: .destructive) {
-                                        deletingPhoto = photo
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .font(.subheadline.weight(.semibold))
-                                            .frame(width: 36, height: 36)
-                                            .background(.ultraThinMaterial, in: Circle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.red)
-                                    .padding(9)
-                                    .accessibilityLabel("删除这张健身房照片")
-                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("放大查看这张健身房照片")
                                 .containerRelativeFrame(.horizontal, count: 1, spacing: 10)
                                 .frame(height: 176)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))

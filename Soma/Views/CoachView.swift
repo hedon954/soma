@@ -69,6 +69,12 @@ struct CoachView: View {
     @State private var sessionDrawerPresented = false
     @State private var showsLocationPrompt = false
 
+    let onRequireAIConfiguration: () -> Void
+
+    init(onRequireAIConfiguration: @escaping () -> Void = {}) {
+        self.onRequireAIConfiguration = onRequireAIConfiguration
+    }
+
     private var messages: [CoachMessage] {
         guard let activeSessionID = conversationSessions.activeSessionID else {
             return []
@@ -114,15 +120,6 @@ struct CoachView: View {
                                     onRetry: { retry(message) }
                                 )
                                 .id(message.id)
-                            }
-
-                            if isProcessingHere, !ai.isRemoteEnabled {
-                                LiveAgentResponse(
-                                    text: processor.liveAssistantText,
-                                    activity: processor.liveAgentActivity,
-                                    isAgent: ai.isRemoteEnabled
-                                )
-                                .id("live-response")
                             }
 
                             Color.clear.frame(height: 1).id("bottom")
@@ -376,6 +373,7 @@ struct CoachView: View {
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
+        guard ensureAIConfigured() else { return }
         guard locationPreference != .unasked else {
             speechInput.stop()
             showsLocationPrompt = true
@@ -387,6 +385,7 @@ struct CoachView: View {
     private func submitCurrentDraft() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
+        guard ensureAIConfigured() else { return }
         speechInput.stop()
         let pending = attachments
         let session = conversationSessions.ensureActiveSession(
@@ -417,6 +416,7 @@ struct CoachView: View {
     }
 
     private func retry(_ responseMessage: CoachMessage) {
+        guard ensureAIConfigured() else { return }
         guard let turnID = responseMessage.turnID,
               let userMessage = ConversationTurnProjection.userMessage(
                   for: turnID,
@@ -444,6 +444,15 @@ struct CoachView: View {
             composerDismissRequest = UUID()
             scrollRequest = UUID()
         }
+    }
+
+    private func ensureAIConfigured() -> Bool {
+        guard ai.hasRequiredAPIKey else {
+            speechInput.stop()
+            onRequireAIConfiguration()
+            return false
+        }
+        return true
     }
 
     private func toggleVoice() {

@@ -5,7 +5,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
     @Environment(DataSpaceController.self) private var dataSpace
-    @AppStorage("ai.remoteEnabled") private var remoteEnabled = false
     @AppStorage(ConversationLocationPreference.defaultsKey)
     private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
@@ -21,6 +20,16 @@ struct SettingsView: View {
     @State private var modelError: String?
     @State private var keySaved = false
     @State private var showKey = false
+    @State private var path: [SettingsRoute]
+    private let showsAIConfigurationReminder: Bool
+
+    init(
+        initialRoute: SettingsRoute? = nil,
+        showsAIConfigurationReminder: Bool = false
+    ) {
+        _path = State(initialValue: initialRoute.map { [$0] } ?? [])
+        self.showsAIConfigurationReminder = showsAIConfigurationReminder
+    }
 
     private var selectedCapability: MultimodalSupport {
         models.first(where: { $0.id == model })?.multimodalSupport
@@ -43,7 +52,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Form {
                 profileAndTrainingSection
                 serviceSection
@@ -63,6 +72,19 @@ struct SettingsView: View {
             .onAppear(perform: loadInitialConfiguration)
             .onChange(of: smallModelEnabled) {
                 ai.setTierEnabled(smallModelEnabled, tier: .small)
+            }
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .aiService:
+                    Form {
+                        if showsAIConfigurationReminder {
+                            AIConfigurationReminder()
+                        }
+                        aiSection
+                    }
+                    .navigationTitle("AI 服务")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
             }
             .task(id: "\(modelTier.rawValue).\(provider.rawValue)") {
                 guard !apiKey.isEmpty else { return }
@@ -89,19 +111,13 @@ struct SettingsView: View {
 
     private var serviceSection: some View {
         Section("服务") {
-            NavigationLink {
-                Form {
-                    aiSection
-                }
-                .navigationTitle("AI 服务")
-                .navigationBarTitleDisplayMode(.inline)
-            } label: {
+            NavigationLink(value: SettingsRoute.aiService) {
                 SettingsSummaryRow(
                     icon: "sparkles",
                     title: "AI 教练",
-                    detail: remoteEnabled
+                    detail: ai.hasRequiredAPIKey
                         ? "\(ai.provider.displayName) · \(ai.model(for: ai.provider).isEmpty ? "未选择模型" : ai.model(for: ai.provider))"
-                        : "完全本地"
+                        : "需要配置 API Key"
                 )
             }
 
@@ -158,7 +174,6 @@ struct SettingsView: View {
             Text("Your body, understood.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            LabeledContent("当前模式", value: ai.isRemoteEnabled ? "ReAct Agent" : "完全本地")
             if let attributionURL = URL(string: "https://open-meteo.com/") {
                 LabeledContent("天气数据") {
                     Link("Open-Meteo", destination: attributionURL)
@@ -235,8 +250,6 @@ struct SettingsView: View {
 
     private var aiSection: some View {
         Section {
-            Toggle("启用远程 ReAct Agent", isOn: $remoteEnabled)
-
             Picker("模型档位", selection: modelTierBinding) {
                 ForEach(AIModelTier.allCases) { tier in
                     Text(tier.title).tag(tier)
@@ -486,27 +499,6 @@ struct SettingsView: View {
             guard !Task.isCancelled, provider == requestedProvider else { return }
             models = []
             modelError = error.localizedDescription
-        }
-    }
-}
-
-private struct SettingsSummaryRow: View {
-    let icon: String
-    let title: String
-    let detail: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(AppTheme.tint)
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
         }
     }
 }
@@ -1307,7 +1299,7 @@ private struct AgentExecutionLogView: View {
                 ContentUnavailableView(
                     filter == .all ? "暂无执行日志" : "没有\(filter.rawValue)日志",
                     systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text("启用远程 ReAct Agent 并发送消息后，每个完整 Loop 会在这里生成一条 Trace。")
+                    description: Text("发送消息并完成一次 Agent Loop 后，这里会生成对应 Trace。")
                 )
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)

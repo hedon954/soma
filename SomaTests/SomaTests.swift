@@ -48,7 +48,27 @@ final class SomaTests: XCTestCase {
         )
         let context = ModelContext(spaces.demoContainer)
         let service = ConversationProcessingService()
-        let ai = AIService(defaults: defaults)
+        let transport = MockAgentStreamTransport(responses: [
+            .toolCall(
+                name: "record_workout",
+                argumentsFragments: [
+                    #"{"exercise":"深蹲","set_entries":["#,
+                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60},"#,
+                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60}]}"#
+                ]
+            ),
+            .text(["已记录这次深蹲。"])
+        ])
+        let ai = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key",
+            agentStreamLoader: transport.load
+        )
+        ai.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
         let session = ConversationSession()
         context.insert(session)
 
@@ -81,6 +101,71 @@ final class SomaTests: XCTestCase {
         let messages = try context.fetch(FetchDescriptor<CoachMessage>())
         XCTAssertEqual(messages.count, 2)
         XCTAssertTrue(messages.allSatisfy { $0.sessionID == session.id })
+    }
+
+    @MainActor
+    func testStandardAPIKeyIsRequiredWithoutFeatureToggle() throws {
+        let suiteName = "SomaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let missingKeyService = AIService(defaults: defaults)
+        XCTAssertFalse(missingKeyService.hasRequiredAPIKey)
+
+        let configuredService = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key"
+        )
+        configuredService.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
+        XCTAssertTrue(configuredService.hasRequiredAPIKey)
+        XCTAssertNoThrow(try configuredService.resolvedRoute(
+            requested: nil,
+            text: "你好",
+            hasMedia: false,
+            hasVideo: false
+        ))
+    }
+
+    @MainActor
+    func testConversationProcessingRejectsMissingKeyBeforeCreatingTurn() throws {
+        let suiteName = "SomaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(
+            defaults: defaults,
+            isStoredInMemoryOnly: true
+        )
+        let context = ModelContext(spaces.demoContainer)
+        let session = ConversationSession()
+        context.insert(session)
+        let service = ConversationProcessingService()
+
+        XCTAssertFalse(service.submit(
+            text: "记录今天的训练",
+            attachments: [],
+            context: ConversationProcessingContext(
+                structuredContext: "",
+                session: session,
+                dataSpace: .demo,
+                gyms: [],
+                equipment: [],
+                ai: AIService(defaults: defaults),
+                modelContext: context
+            ),
+            includeLocation: false,
+            locationService: LocationContextService()
+        ))
+        XCTAssertFalse(service.isProcessing)
+        XCTAssertTrue(
+            try context.fetch(FetchDescriptor<CoachMessage>()).isEmpty
+        )
+        XCTAssertTrue(
+            try context.fetch(FetchDescriptor<AgentTrace>()).isEmpty
+        )
     }
 
     @MainActor
@@ -1295,7 +1380,6 @@ extension SomaTests {
             baseURL: "https://example.com/v1",
             model: "gpt-4.1-mini"
         )
-        defaults.set(true, forKey: "ai.remoteEnabled")
         var toolExecutions = 0
 
         let outcome = try await service.runAgent(
@@ -1352,7 +1436,6 @@ extension SomaTests {
             baseURL: "https://example.com/v1",
             model: "gpt-4.1-mini"
         )
-        defaults.set(true, forKey: "ai.remoteEnabled")
         var externalToolExecutions = 0
         var events: [AgentTraceEvent] = []
 
@@ -1458,91 +1541,6 @@ extension SomaTests {
         XCTAssertEqual(trace.spans.first?.kind, .skill)
         XCTAssertEqual(trace.spans.last?.status, .failed)
         XCTAssertEqual(trace.errorMessage, "模型不支持视频关键帧")
-    }
-
-    @MainActor
-    func testConversationRecognizesAndExtractsWorkout() async throws {
-        let suiteName = "SomaTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let service = AIService(defaults: defaults)
-
-        let result = try await service.interpretConversation(
-            text: "刚做完深蹲 4组8次 60kg",
-            images: [],
-            hasVideo: false,
-            context: "当前健身房：我的健身房"
-        )
-
-        XCTAssertEqual(result.intent, .workout)
-        XCTAssertEqual(result.workout?.exercise, "深蹲")
-        XCTAssertEqual(result.workout?.sets, 4)
-        XCTAssertEqual(result.workout?.reps, 8)
-        XCTAssertEqual(result.workout?.weight, 60)
-    }
-
-    @MainActor
-    func testLocalConversationDoesNotInventWorkoutMetrics() async throws {
-        let suiteName = "SomaTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let service = AIService(defaults: defaults)
-
-        let result = try await service.interpretConversation(
-            text: "俯卧撑 12x4",
-            images: [],
-            hasVideo: false,
-            context: ""
-        )
-
-        XCTAssertEqual(result.intent, .workout)
-        XCTAssertEqual(result.workout?.exercise, "俯卧撑")
-        XCTAssertEqual(result.workout?.sets, 4)
-        XCTAssertEqual(result.workout?.reps, 12)
-        XCTAssertNil(result.workout?.weight)
-        XCTAssertNil(result.workout?.restSeconds)
-        XCTAssertNil(result.workout?.durationMinutes)
-        XCTAssertNil(result.workout?.formScore)
-        XCTAssertNil(result.workout?.intensity)
-        XCTAssertNil(result.workout?.feedback)
-    }
-
-    @MainActor
-    func testPersonalDataModeRejectsDemoMealEstimates() async throws {
-        let suiteName = "SomaTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let service = AIService(defaults: defaults)
-
-        let result = try await service.interpretConversation(
-            text: "午餐吃了一碗饭",
-            images: [],
-            hasVideo: false,
-            context: "",
-            allowDemoFallback: false
-        )
-
-        XCTAssertEqual(result.intent, .coach)
-        XCTAssertNil(result.meal)
-        XCTAssertTrue(result.reply.contains("不会写入演示估算"))
-    }
-
-    @MainActor
-    func testConversationRecognizesGymSwitch() async throws {
-        let suiteName = "SomaTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let service = AIService(defaults: defaults)
-
-        let result = try await service.interpretConversation(
-            text: "切换到公司健身房",
-            images: [],
-            hasVideo: false,
-            context: "当前健身房：我的健身房"
-        )
-
-        XCTAssertEqual(result.intent, .switchGym)
-        XCTAssertEqual(result.gymName, "公司健身房")
     }
 }
 

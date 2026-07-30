@@ -1,4 +1,3 @@
-import AVKit
 import SwiftData
 import SwiftUI
 
@@ -32,28 +31,6 @@ struct MediaThumbnail: View {
     }
 }
 
-private struct LocalVideoPlayer: View {
-    @State private var player: AVPlayer?
-
-    init(path: String) {
-        _player = State(initialValue: MediaStore.url(at: path).map { AVPlayer(url: $0) })
-    }
-
-    var body: some View {
-        Group {
-            if let player {
-                VideoPlayer(player: player)
-                    .onDisappear { player.pause() }
-            } else {
-                ContentUnavailableView("视频不可用", systemImage: "video.slash")
-            }
-        }
-        .frame(height: 240)
-        .background(.black, in: RoundedRectangle(cornerRadius: 18))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-    }
-}
-
 private struct RecordImage: View {
     let path: String
 
@@ -65,24 +42,49 @@ private struct RecordImage: View {
     }
 }
 
+private struct RecordVideoPreview: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.9)
+            Image(systemName: "play.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 270)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
 private struct RecordMediaGallery: View {
     let attachments: [MediaAttachmentReference]
-    let onDeleteRequest: (MediaAttachmentReference) -> Void
+    let onDelete: (MediaAttachmentReference) -> Void
     @State private var selectedAttachmentID = ""
+    @State private var presentedAttachment: MediaAttachmentReference?
 
     var body: some View {
         TabView(selection: $selectedAttachmentID) {
             ForEach(attachments) { attachment in
-                Group {
-                    switch attachment.kind {
-                    case .image:
-                        RecordImage(path: attachment.path)
-                    case .video:
-                        LocalVideoPlayer(path: attachment.path)
-                    case .none:
-                        EmptyView()
+                Button {
+                    presentedAttachment = attachment
+                } label: {
+                    Group {
+                        switch attachment.kind {
+                        case .image:
+                            RecordImage(path: attachment.path)
+                        case .video:
+                            RecordVideoPreview()
+                        case .none:
+                            EmptyView()
+                        }
                     }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    attachment.kind == .video
+                        ? "放大查看这个视频"
+                        : "放大查看这张照片"
+                )
                 .overlay(alignment: .bottomTrailing) {
                     if attachments.count > 1 {
                         Text("\(position(of: attachment) + 1)/\(attachments.count)")
@@ -98,25 +100,14 @@ private struct RecordMediaGallery: View {
         }
         .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .automatic : .never))
         .frame(height: 270)
-        .overlay(alignment: .topTrailing) {
-            if let selectedAttachment {
-                Button(role: .destructive) {
-                    onDeleteRequest(selectedAttachment)
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: 36, height: 36)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
-                .padding(9)
-                .accessibilityLabel(
-                    selectedAttachment.kind == .video
-                        ? "删除这个视频"
-                        : "删除这张照片"
-                )
-            }
+        .fullScreenCover(item: $presentedAttachment) { selected in
+            MediaViewer(
+                attachments: attachments,
+                initialAttachmentID: selected.id,
+                deletionTitle: "从记录中移除此媒体？",
+                deletionMessage: "只会从这条记录解除关联；聊天中的原始附件和系统相册不会删除。",
+                onDelete: onDelete
+            )
         }
         .onAppear {
             normalizeSelection()
@@ -124,11 +115,6 @@ private struct RecordMediaGallery: View {
         .onChange(of: attachments) {
             normalizeSelection()
         }
-    }
-
-    private var selectedAttachment: MediaAttachmentReference? {
-        attachments.first { $0.id == selectedAttachmentID }
-            ?? attachments.first
     }
 
     private func position(of attachment: MediaAttachmentReference) -> Int {
@@ -140,48 +126,6 @@ private struct RecordMediaGallery: View {
             return
         }
         selectedAttachmentID = attachments.first?.id ?? ""
-    }
-}
-
-private struct RecordMediaDeletionAlert: ViewModifier {
-    @Binding var attachment: MediaAttachmentReference?
-    let onDelete: (MediaAttachmentReference) -> Void
-
-    func body(content: Content) -> some View {
-        content.alert(
-            "从记录中移除此媒体？",
-            isPresented: Binding(
-                get: { attachment != nil },
-                set: {
-                    if !$0 {
-                        attachment = nil
-                    }
-                }
-            ),
-            presenting: attachment
-        ) { item in
-            Button("移除", role: .destructive) {
-                onDelete(item)
-                attachment = nil
-            }
-            Button("取消", role: .cancel) {
-                attachment = nil
-            }
-        } message: { _ in
-            Text("只会从这条记录解除关联；聊天中的原始附件和系统相册不会删除。")
-        }
-    }
-}
-
-private extension View {
-    func recordMediaDeletionAlert(
-        attachment: Binding<MediaAttachmentReference?>,
-        onDelete: @escaping (MediaAttachmentReference) -> Void
-    ) -> some View {
-        modifier(RecordMediaDeletionAlert(
-            attachment: attachment,
-            onDelete: onDelete
-        ))
     }
 }
 
@@ -244,8 +188,6 @@ private struct WorkoutRecordEditor: View {
     @State private var intensity: String
     @State private var feedback: String
     @State private var notes: String
-    @State private var mediaPendingDeletion: MediaAttachmentReference?
-
     init(workout: WorkoutEntry) {
         self.workout = workout
         _date = State(initialValue: workout.date)
@@ -269,7 +211,13 @@ private struct WorkoutRecordEditor: View {
                 Section("记录媒体") {
                     RecordMediaGallery(
                         attachments: workout.mediaAttachments,
-                        onDeleteRequest: { mediaPendingDeletion = $0 }
+                        onDelete: {
+                            MediaAssociationStore.detach(
+                                $0,
+                                from: workout,
+                                in: modelContext
+                            )
+                        }
                     )
                 }
             }
@@ -372,16 +320,6 @@ private struct WorkoutRecordEditor: View {
                 }
             }
         }
-        .recordMediaDeletionAlert(
-            attachment: $mediaPendingDeletion,
-            onDelete: {
-                MediaAssociationStore.detach(
-                    $0,
-                    from: workout,
-                    in: modelContext
-                )
-            }
-        )
     }
 
     private var isValid: Bool {
@@ -464,8 +402,6 @@ private struct MealRecordEditor: View {
     @State private var carbs: String
     @State private var fat: String
     @State private var notes: String
-    @State private var mediaPendingDeletion: MediaAttachmentReference?
-
     init(meal: MealEntry) {
         self.meal = meal
         _date = State(initialValue: meal.date)
@@ -484,7 +420,13 @@ private struct MealRecordEditor: View {
                 Section("饮食媒体") {
                     RecordMediaGallery(
                         attachments: meal.mediaAttachments,
-                        onDeleteRequest: { mediaPendingDeletion = $0 }
+                        onDelete: {
+                            MediaAssociationStore.detach(
+                                $0,
+                                from: meal,
+                                in: modelContext
+                            )
+                        }
                     )
                 }
             }
@@ -551,16 +493,6 @@ private struct MealRecordEditor: View {
                 }
             }
         }
-        .recordMediaDeletionAlert(
-            attachment: $mediaPendingDeletion,
-            onDelete: {
-                MediaAssociationStore.detach(
-                    $0,
-                    from: meal,
-                    in: modelContext
-                )
-            }
-        )
     }
 
     private var isValid: Bool {
@@ -616,8 +548,6 @@ private struct BodyRecordEditor: View {
     @State private var waist: String
     @State private var analysis: String
     @State private var notes: String
-    @State private var mediaPendingDeletion: MediaAttachmentReference?
-
     init(entry: BodyEntry) {
         self.entry = entry
         _date = State(initialValue: entry.date)
@@ -634,7 +564,13 @@ private struct BodyRecordEditor: View {
                 Section("体态媒体") {
                     RecordMediaGallery(
                         attachments: entry.mediaAttachments,
-                        onDeleteRequest: { mediaPendingDeletion = $0 }
+                        onDelete: {
+                            MediaAssociationStore.detach(
+                                $0,
+                                from: entry,
+                                in: modelContext
+                            )
+                        }
                     )
                 }
             }
@@ -694,16 +630,6 @@ private struct BodyRecordEditor: View {
                 }
             }
         }
-        .recordMediaDeletionAlert(
-            attachment: $mediaPendingDeletion,
-            onDelete: {
-                MediaAssociationStore.detach(
-                    $0,
-                    from: entry,
-                    in: modelContext
-                )
-            }
-        )
     }
 
     private var isValid: Bool {

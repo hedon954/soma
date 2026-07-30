@@ -1,11 +1,12 @@
 # ADR 0016：Turn、Attempt 与足迹成功投影
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-07-30
 - 部分替代：
   - [ADR 0005](0005-trace-span-event-observability.md) 的“一条消息一条 Trace”和“不支持重试”
   - [ADR 0014](0014-agent-turn-ordered-event-cards.md) 的“一条用户消息仍对应一条 Trace”
   - [ADR 0015](0015-daily-conversation-session-lifecycle.md) 的同名约束
+  - [ADR 0027](0027-required-ai-configuration-and-send-gate.md) 替代本地分析器 Attempt
 
 ## 背景
 
@@ -24,7 +25,8 @@ Tool 写入还可能在新 ReAct Loop 中再次执行。
 - 每个 Attempt 继续使用 ADR 0014 的有序 Event Cards，不覆盖此前 Attempt。
 - Turn 的足迹资格由“存在至少一个成功 Attempt”确定，不新增另一份 Feed 数据和媒体所有权。
 - 失败、取消和运行中的 Turn 留在聊天，但不进入足迹。
-- 本地分析器也创建带状态的 Attempt 消息，以同一规则参与足迹判断。
+- 标准档未配置 API Key 时由 ADR 0027 在发送前阻止，不创建本地分析器 Attempt；已经进入
+  处理的远程 Attempt 继续以同一状态规则参与足迹判断。
 
 ## 跨 Attempt 幂等
 

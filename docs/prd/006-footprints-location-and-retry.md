@@ -7,6 +7,7 @@
   - [ADR 0016](../adr/0016-conversation-turn-attempt-and-footprint-projection.md)
   - [ADR 0017](../adr/0017-location-and-weather-context.md)
   - [ADR 0018](../adr/0018-provenance-aware-record-merge.md)
+  - [ADR 0027](../adr/0027-required-ai-configuration-and-send-gate.md)
 
 ## 背景
 
@@ -45,7 +46,8 @@ Session 对话中，不适合快速回顾。用户还需要在 Agent 失败后�
 - `update_workout`、`update_meal` 和 `update_body` 必须按查询得到的 ID 原位更新；当前
   Turn 的新媒体并入原记录。`delete_record` 只删除指定业务记录，不删除聊天 Turn 或共享媒体。
 - Agent 误用 `record_*` 表达纠错时，本地多维合并仍作为安全网；歧义候选不得自动更新。
-- 本地分析器也必须明确保存成功或失败状态，足迹不能依赖是否存在一条教练文本来猜测。
+- 标准档没有 API Key 时在发送前阻止，不创建 Turn；已创建 Turn 的足迹资格仍只由持久化
+  Attempt 状态决定，不能依赖是否存在一条教练文本来猜测。
 
 ## 足迹信息架构
 

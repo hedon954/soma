@@ -91,7 +91,8 @@ App → Views → Services → Models
   写入日志、测试、文档和 Git。
 - 测试与截图只使用虚构数据和 `Soma/Resources/DemoMedia`。
 - GitHub Issue/PR 中不得附真实身体照片、体重历史、健康备注或完整 Agent Trace。
-- Keychain 使用 ThisDeviceOnly 可访问级别；远程 AI 默认关闭。
+- Keychain 使用 ThisDeviceOnly 可访问级别；标准模型未配置 API Key 时在发送前引导配置，
+  只有用户明确发送内容才触发远程数据流。
 - 新增远程数据流时必须在 PR 中写明发送内容、触发条件、保留策略和失败行为。
 
 ## Agent runtime

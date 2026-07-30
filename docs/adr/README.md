@@ -19,7 +19,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
 | [0014](0014-agent-turn-ordered-event-cards.md) | 已采纳 | 一次 Agent Turn 由有序异构 Event Cards 组成 |
 | [0015](0015-daily-conversation-session-lifecycle.md) | 已采纳 | 进入前台时按自然日解析并持久化当前对话 Session |
-| [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 已采纳 | Turn 可包含多次 Attempt，成功后投影到足迹并跨重试幂等 |
+| [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 部分已替代 | Turn 可包含多次 Attempt，成功后投影到足迹并跨重试幂等 |
 | [0017](0017-location-and-weather-context.md) | 部分已替代 | 位置作为最小、受控、非阻塞的 Turn 上下文；天气 Provider 由 ADR 0020 替代 |
 | [0018](0018-provenance-aware-record-merge.md) | 已采纳 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并 |
 | [0019](0019-cost-aware-github-actions-gates.md) | 已采纳 | 日常 Actions 只跑快速门禁，完整验证与 CodeQL 收敛到 release tag |
@@ -30,6 +30,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0024](0024-session-context-projection-and-compaction.md) | 部分已替代 | 投影 Session 最近十个来回并在视觉额度内恢复历史媒体 |
 | [0025](0025-tiered-model-profiles-and-routing.md) | 已采纳 | 使用小模型/标准双档配置与本地保守路由 |
 | [0026](0026-bounded-gym-media-attribution.md) | 已采纳 | 只在紧邻命名确认时把上一轮健身房照片归入档案 |
+| [0027](0027-required-ai-configuration-and-send-gate.md) | 已采纳 | 聊天始终使用 AI，并在发送前引导补齐标准档 API Key |
 
 新决策使用 [ADR 模板](template.md)。
 

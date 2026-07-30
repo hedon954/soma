@@ -1,6 +1,6 @@
 # ReAct Agent
 
-Soma 的远程模式采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE 解析由 `SwiftOpenAI 4.5.0` 提供，App 只负责编排 ReAct 循环、执行本地工具和记录事件，不维护自定义 Chat Completions 客户端。
+Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE 解析由 `SwiftOpenAI 4.5.0` 提供，App 只负责编排 ReAct 循环、执行本地工具和记录事件，不维护自定义 Chat Completions 客户端。
 
 ## 运行方式
 
@@ -13,7 +13,8 @@ Soma 的远程模式采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE
 
 每轮模型调用都使用流式接口。文本增量和 Span 生命周期会立刻作为 Event 发送给 UI；模型返回的 `reasoning_content` 当前不展示、不持久化，也不参与工具执行。
 
-图片和视频关键帧只在用户主动发送并启用远程 Agent 时进入请求。SwiftData 数据库、原始媒体和工具执行始终留在设备上。
+图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库、原始媒体和工具执行
+始终留在设备上；标准档没有 API Key 时，发送会在落盘前打开 AI 服务设置。
 
 ## 渐进式 Skills
 
@@ -55,7 +56,7 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 - 工具错误作为 `role: tool` 结果返回，让模型解释或修正，不静默写入异常数据。
 - 删除工具只处理用户明确指定的单条业务记录；Agent 仍没有账户、云同步或任意代码执行工具。
 - 已成功写入的数据不会因为后续最终回复失败而回滚。
-- 未配置远程服务时，演示空间可使用本地演示解析；个人空间只提取明确数字，不写入演示估算。
+- 标准档未配置 API Key 时不创建 Turn、Trace 或业务记录，而是保留草稿与附件并引导配置。
 - 多模态能力能预判时在上传前提醒；无法预判时把供应商错误以用户可理解的方式展示。
 
 ## Trace、Span 与 Event

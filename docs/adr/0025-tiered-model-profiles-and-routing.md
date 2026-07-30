@@ -17,7 +17,8 @@ Tool Calling、安全边界和失败升级上保持可测试。
 
 - 定义“小模型”和“标准”两个独立 `ModelProfile`。每档保存平台、Base URL、模型 ID 和能力
   快照；凭据以档位和端点身份存入 ThisDeviceOnly Keychain。
-- 标准档在启用远程 Agent 时必填，小模型可不配置。旧单模型配置确定性迁移到标准档。
+- 标准档是聊天发送的必配档，小模型可不配置。未配置标准档 API Key 时的发送前门禁见
+  [ADR 0027](0027-required-ai-configuration-and-send-gate.md)；旧单模型配置确定性迁移到标准档。
 - 平台增加“其他（OpenAI-compatible）”。它要求用户输入有效 HTTPS Base URL，并继续使用
   Chat Completions、流式 SSE 和原生 Tool Calling 子集。
 - `/models` 返回非空可用列表时只使用 Picker；只有列表为空或获取失败时显示手动模型 ID。
@@ -66,3 +67,4 @@ Tool Calling、安全边界和失败升级上保持可测试。
 - [ADR 0003](0003-native-streaming-react-tool-calling.md)
 - [ADR 0005](0005-trace-span-event-observability.md)
 - [ADR 0024](0024-session-context-projection-and-compaction.md)
+- [ADR 0027](0027-required-ai-configuration-and-send-gate.md)
