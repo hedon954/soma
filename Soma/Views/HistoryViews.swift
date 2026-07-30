@@ -166,7 +166,9 @@ private struct WorkoutHistoryRow: View {
 
     private var metricsText: String {
         var metrics: [String] = []
-        if let sets = workout.sets, let reps = workout.reps {
+        if let setEvidenceSummary = workout.setEvidenceSummary {
+            metrics.append(setEvidenceSummary)
+        } else if let sets = workout.sets, let reps = workout.reps {
             metrics.append("\(sets) 组 × \(reps) 次")
         } else {
             if let sets = workout.sets {
@@ -176,7 +178,7 @@ private struct WorkoutHistoryRow: View {
                 metrics.append("\(reps) 次")
             }
         }
-        if let weight = workout.weight {
+        if workout.setEntries.isEmpty, let weight = workout.weight {
             metrics.append(
                 weight == 0
                     ? "自重"

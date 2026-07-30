@@ -3,6 +3,38 @@ import Foundation
 import MapKit
 import Observation
 
+enum ConversationLocationPreference: String {
+    case unasked
+    case enabled
+    case disabled
+
+    static let defaultsKey = "conversation.locationPreference"
+    private static let legacyEnabledKey = "conversation.locationEnabled"
+
+    static func current(in defaults: UserDefaults = .standard) -> Self {
+        if let value = defaults.string(forKey: defaultsKey),
+           let preference = Self(rawValue: value)
+        {
+            return preference
+        }
+        guard defaults.object(forKey: legacyEnabledKey) != nil else {
+            return .unasked
+        }
+        let migrated: Self = defaults.bool(forKey: legacyEnabledKey)
+            ? .enabled
+            : .disabled
+        defaults.set(migrated.rawValue, forKey: defaultsKey)
+        return migrated
+    }
+
+    static func set(
+        _ preference: Self,
+        in defaults: UserDefaults = .standard
+    ) {
+        defaults.set(preference.rawValue, forKey: defaultsKey)
+    }
+}
+
 struct LocationSnapshot: Codable, Equatable, Sendable {
     var latitude: Double
     var longitude: Double

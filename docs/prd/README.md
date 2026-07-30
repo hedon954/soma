@@ -19,6 +19,7 @@
 | [005：对话 Session 与发送反馈](005-conversation-sessions-and-send-feedback.md) | 对话收敛 | 跨天 Session、发送后收起输入并滚到底部、开发者日志入口 |
 | [006：足迹、位置上下文与失败重试](006-footprints-location-and-retry.md) | 个人回顾 | 成功消息足迹、一次性位置、场馆上下文、按需天气和可幂等重试 |
 | [007：数据导出、自动备份与主动清除](007-data-export-backup-and-erasure.md) | 数据主权 | 开放年月日导出、外部加密自动备份、恢复与个人数据清除 |
+| [008：连续对话、逐组训练与自适应模型](008-coach-continuity-and-adaptive-models.md) | 体验精化 | 隐藏式可继续 Session、一次性位置确认、逐组训练、媒体上下文、长会话压缩与双档模型 |
 
 ## 阅读约定
 

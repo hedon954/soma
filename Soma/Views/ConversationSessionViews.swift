@@ -1,10 +1,13 @@
 import SwiftData
 import SwiftUI
 
-struct ConversationSessionListView: View {
+struct ConversationSessionDrawer: View {
     let currentSessionID: UUID?
+    let isProcessing: Bool
+    let onNewSession: () -> Void
+    let onSelectSession: (ConversationSession) -> Void
 
-    @Query(sort: \ConversationSession.startedAt, order: .reverse)
+    @Query(sort: \ConversationSession.updatedAt, order: .reverse)
     private var sessions: [ConversationSession]
     @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
 
@@ -16,93 +19,87 @@ struct ConversationSessionListView: View {
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("对话")
+                    .font(.title2.bold())
+                Spacer()
+                Button(action: onNewSession) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.title3.weight(.semibold))
+                }
+                .accessibilityLabel("新建对话")
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
+
             if visibleSessions.isEmpty {
                 ContentUnavailableView(
-                    "暂无历史对话",
-                    systemImage: "clock.arrow.circlepath",
-                    description: Text("发送第一条消息后，对话会按 Session 保存在本机。")
+                    "暂无对话",
+                    systemImage: "bubble.left.and.bubble.right",
+                    description: Text("点击右上角开始新对话。")
                 )
+                .frame(maxHeight: .infinity)
             } else {
-                List(visibleSessions) { session in
-                    NavigationLink {
-                        ConversationSessionTranscriptView(session: session)
-                    } label: {
-                        sessionRow(session)
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(visibleSessions) { session in
+                            Button {
+                                onSelectSession(session)
+                            } label: {
+                                sessionRow(session)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint(
+                                session.id == currentSessionID
+                                    ? "当前对话"
+                                    : "切换后可继续对话"
+                            )
+                        }
                     }
+                    .padding(.horizontal, 10)
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+            }
+
+            if isProcessing {
+                Label("Agent 正在原对话中处理", systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 8)
             }
         }
-        .appPageBackground()
-        .navigationTitle("历史对话")
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     private func sessionRow(_ session: ConversationSession) -> some View {
         let messageCount = messages.count { $0.sessionID == session.id }
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(session.title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
                 if session.id == currentSessionID {
-                    Text("当前")
-                        .font(.caption.weight(.semibold))
+                    Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(AppTheme.tint)
+                        .accessibilityHidden(true)
                 }
             }
             Text(
-                "\(session.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(messageCount) 条消息"
+                "\(session.updatedAt.formatted(date: .abbreviated, time: .shortened)) · \(messageCount) 条"
             )
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 3)
-    }
-}
-
-struct ConversationSessionTranscriptView: View {
-    let session: ConversationSession
-
-    @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
-
-    private var messages: [CoachMessage] {
-        allMessages.filter { $0.sessionID == session.id }
-    }
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                if messages.isEmpty {
-                    ContentUnavailableView(
-                        "这段对话还没有消息",
-                        systemImage: "bubble.left.and.bubble.right"
-                    )
-                    .padding(.top, 80)
-                } else {
-                    LazyVStack(spacing: 14) {
-                        ForEach(messages) { message in
-                            CoachBubble(message: message, isLive: false)
-                                .id(message.id)
-                        }
-                        Color.clear
-                            .frame(height: 1)
-                            .id("session-bottom")
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                }
-            }
-            .scrollDismissesKeyboard(.immediately)
-            .appPageBackground()
-            .onAppear {
-                proxy.scrollTo("session-bottom", anchor: .bottom)
-            }
-        }
-        .navigationTitle(session.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            session.id == currentSessionID
+                ? AppTheme.softTint
+                : Color.clear,
+            in: RoundedRectangle(cornerRadius: 12)
+        )
     }
 }

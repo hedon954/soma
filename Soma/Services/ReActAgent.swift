@@ -42,6 +42,16 @@ struct AgentEquipmentInput: Codable, Equatable {
     var confidence: Double?
 }
 
+struct AgentWorkoutSetInput: Codable, Equatable {
+    var reps: Int?
+    var externalWeightKG: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case reps
+        case externalWeightKG = "external_weight_kg"
+    }
+}
+
 struct AgentToolArguments: Codable, Equatable {
     var skillID: String?
     var scope: String?
@@ -52,6 +62,7 @@ struct AgentToolArguments: Codable, Equatable {
     var equipment: [AgentEquipmentInput]?
 
     var exercise: String?
+    var setEntries: [AgentWorkoutSetInput]?
     var sets: Int?
     var reps: Int?
     var weight: Double?
@@ -79,6 +90,7 @@ struct AgentToolArguments: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case scope, limit, summary, equipment, exercise, sets, reps, weight, intensity
         case feedback, title, calories, protein, carbs, fat, note, waist
+        case setEntries = "set_entries"
         case skillID = "skill_id"
         case gymName = "gym_name"
         case restSeconds = "rest_seconds"
@@ -100,6 +112,7 @@ struct AgentToolArguments: Codable, Equatable {
         summary: String? = nil,
         equipment: [AgentEquipmentInput]? = nil,
         exercise: String? = nil,
+        setEntries: [AgentWorkoutSetInput]? = nil,
         sets: Int? = nil,
         reps: Int? = nil,
         weight: Double? = nil,
@@ -129,6 +142,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.summary = summary
         self.equipment = equipment
         self.exercise = exercise
+        self.setEntries = setEntries
         self.sets = sets
         self.reps = reps
         self.weight = weight
@@ -198,6 +212,32 @@ struct AgentOutcome: Equatable {
 
     var primaryRecordType: ConversationIntent? {
         observations.compactMap(\.result.recordType).last
+    }
+}
+
+struct AgentConversationExchange: Sendable {
+    var userText: String
+    var assistantText: String?
+    var images: [Data]
+    var imageAttachmentCount: Int
+    var videoAttachmentCount: Int
+
+    var traceSummary: String {
+        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAssistant = assistantText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistant = if let trimmedAssistant, !trimmedAssistant.isEmpty {
+            trimmedAssistant
+        } else {
+            "无"
+        }
+        return """
+        [HISTORY USER]
+        \(user.isEmpty ? "无文字" : user)
+        原始附件：\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频；本次重新提供 \(images.count) 张图片或视频关键帧。
+        [HISTORY ASSISTANT]
+        \(assistant)
+        """
     }
 }
 
@@ -307,9 +347,9 @@ extension AgentToolName {
         case .recordWorkout:
             object([
                 "exercise": string("动作名称"),
-                "sets": integer("组数"),
-                "reps": integer("每组次数"),
-                "weight": number("外部负重 kg；自重动作可填 0"),
+                "set_entries": workoutSetEntries(
+                    "按实际顺序保存每组事实；次数或重量未知时省略对应字段"
+                ),
                 "rest_seconds": integer("用户明确提供的组间休息秒数"),
                 "duration_minutes": integer("用户明确提供的训练时长分钟数"),
                 "form_score": integer("有充分视频证据时的动作评分"),
@@ -338,9 +378,9 @@ extension AgentToolName {
             object([
                 "record_id": string("query_user_data 返回的训练记录 UUID"),
                 "exercise": string("修正后的动作名称"),
-                "sets": integer("修正后的组数"),
-                "reps": integer("修正后的每组次数"),
-                "weight": number("修正后的外部负重 kg；自重可填 0"),
+                "set_entries": workoutSetEntries(
+                    "替换后的完整有序组；不修改组数据时省略"
+                ),
                 "rest_seconds": integer("修正后的组间休息秒数"),
                 "duration_minutes": integer("修正后的训练时长分钟数"),
                 "form_score": integer("有充分视频证据时的动作评分"),
@@ -421,6 +461,16 @@ extension AgentToolName {
     private func array(_ items: JSONSchema, description: String) -> JSONSchema {
         JSONSchema(type: .array, description: description, items: items)
     }
+
+    private func workoutSetEntries(_ description: String) -> JSONSchema {
+        array(
+            object([
+                "reps": integer("该组明确完成的次数"),
+                "external_weight_kg": number("该组外部负重 kg；明确自重时填 0")
+            ]),
+            description: description
+        )
+    }
 }
 
 enum AgentTraceText {
@@ -448,11 +498,21 @@ enum AgentTraceText {
         return text
     }
 
-    static func modelInput(systemPrompt: String, userPrompt: String) -> String {
-        """
+    static func modelInput(
+        systemPrompt: String,
+        history: [AgentConversationExchange] = [],
+        userPrompt: String
+    ) -> String {
+        let historyText = history
+            .map(\.traceSummary)
+            .joined(separator: "\n\n")
+        let historySection = historyText.isEmpty
+            ? ""
+            : "\n\n[RECENT SESSION HISTORY]\n\(historyText)"
+        return """
         [SYSTEM]
         \(systemPrompt)
-
+        \(historySection)
         [USER]
         \(userPrompt)
         """
@@ -779,6 +839,22 @@ enum ReActAgentPrompt {
 
         媒体：
         用户共上传 \(attachmentSummary)；提供给模型分析的图片或视频关键帧共 \(imageCount) 张。
+        """
+    }
+
+    static func historicalUser(
+        text: String,
+        imageCount: Int,
+        imageAttachmentCount: Int,
+        videoAttachmentCount: Int
+    ) -> String {
+        """
+        历史用户输入：
+        \(text.isEmpty ? "无文字。" : text)
+
+        该轮原始附件：\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频；
+        本次随 Session 上下文重新提供的图片或视频关键帧共 \(imageCount) 张。
+        没有重新提供的历史画面不可凭文字提示臆测。
         """
     }
 }

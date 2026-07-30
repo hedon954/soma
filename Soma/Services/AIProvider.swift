@@ -6,6 +6,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case bailian
     case volcano
     case tencent
+    case other
 
     var id: String {
         rawValue
@@ -18,6 +19,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .bailian: "阿里云百炼"
         case .volcano: "火山引擎"
         case .tencent: "腾讯云"
+        case .other: "其他"
         }
     }
 
@@ -28,6 +30,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .bailian: "https://dashscope.aliyuncs.com/compatible-mode/v1"
         case .volcano: "https://ark.cn-beijing.volces.com/api/v3"
         case .tencent: "https://tokenhub.tencentmaas.com/v1"
+        case .other: ""
         }
     }
 
@@ -38,6 +41,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .bailian: "qwen3.5-plus"
         case .volcano: "doubao-seed-1-6-vision-250815"
         case .tencent: "hy-vision-2.0-instruct"
+        case .other: ""
         }
     }
 
@@ -62,8 +66,43 @@ enum AIProvider: String, CaseIterable, Identifiable {
             root.removeLast(suffix.count)
             break
         }
-        return URL(string: "\(root)/\(path)")
+        guard let url = URL(string: "\(root)/\(path)"),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host != nil
+        else {
+            return nil
+        }
+        return url
     }
+}
+
+enum AIModelTier: String, CaseIterable, Identifiable {
+    case small
+    case standard
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .small: "小模型"
+        case .standard: "标准"
+        }
+    }
+}
+
+struct AIModelRoute: Equatable {
+    var tier: AIModelTier
+    var provider: AIProvider
+    var baseURL: String
+    var model: String
+    var reason: String
+}
+
+struct AgentVideoInput: Equatable {
+    var data: Data
+    var mimeType: String
 }
 
 enum MultimodalSupport: String {
@@ -125,8 +164,25 @@ enum ModelCapability {
             if containsAny(value, ["image-generation", "video-generation", "3d"]) {
                 return .unsupported
             }
+        case .other:
+            return .unknown
         }
         return .unknown
+    }
+
+    static func supportsDirectVideo(
+        provider: AIProvider,
+        model: String
+    ) -> Bool {
+        guard provider == .bailian else { return false }
+        let value = model.lowercased()
+        return containsAny(
+            value,
+            [
+                "qwen-vl", "qwen3-vl", "qwen-omni", "qwen3.5",
+                "qwen3.6", "qwen3.7", "qvq"
+            ]
+        )
     }
 
     private static func containsAny(_ value: String, _ candidates: [String]) -> Bool {

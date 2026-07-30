@@ -50,6 +50,11 @@ struct RootView: View {
         .onChange(of: captureRouter.pendingRequest, initial: true) {
             handleCaptureRequest()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .openCoachConversation)
+        ) { _ in
+            selectedTab = .coach
+        }
         .task {
             if dataSpace.activeSpace == .demo {
                 DemoSeeder.seedIfNeeded(modelContext)
@@ -58,6 +63,7 @@ struct RootView: View {
             DataIntegrityRepair.backfillConversationTurns(in: modelContext)
             DataIntegrityRepair.mergeObviousDuplicateRecords(in: modelContext)
             DataIntegrityRepair.removeUnsupportedInferences(in: modelContext)
+            DataIntegrityRepair.migrateLegacyWorkoutSets(in: modelContext)
             conversationSessions.resolveForEntry(
                 dataSpace: dataSpace.activeSpace,
                 in: modelContext

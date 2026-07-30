@@ -25,6 +25,11 @@ enum PortableExportText {
             "记录类型：训练",
             "记录时间：\(displayDate(workout.date))",
             "项目：\(workout.exercise)",
+            workout.setEntries?.enumerated().map { index, entry in
+                let reps = entry.reps.map { "\($0)次" } ?? "次数未记录"
+                let weight = entry.externalWeightKG.map { "\($0.formatted())kg" } ?? "重量未记录"
+                return "第\(index + 1)组：\(reps)，\(weight)"
+            }.joined(separator: "\n").nilIfBlank.map { "逐组数据：\n\($0)" },
             sourceText.map { "原始文字：\n\($0)" },
             workout.notes.nilIfBlank.map { "记录备注：\n\($0)" },
             workout.feedback?.nilIfBlank.map { "动作反馈：\n\($0)" },

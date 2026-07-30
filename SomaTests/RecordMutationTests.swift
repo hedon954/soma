@@ -293,7 +293,7 @@ final class RecordMutationTests: XCTestCase {
 
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
         XCTAssertEqual(
-            try context.fetch(FetchDescriptor<WorkoutEntry>()).first?.weight,
+            try context.fetch(FetchDescriptor<WorkoutEntry>()).first?.representativeWeight,
             62.5
         )
         XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 1)

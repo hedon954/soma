@@ -127,14 +127,30 @@ struct BodyRecordDetailView: View {
 }
 
 private struct WorkoutRecordEditor: View {
+    private struct EditableSet: Identifiable, Equatable {
+        let id = UUID()
+        var reps: String
+        var weight: String
+
+        init(_ evidence: WorkoutSetEvidence) {
+            reps = EditorValue.string(evidence.reps)
+            weight = EditorValue.string(evidence.externalWeightKG)
+        }
+
+        var evidence: WorkoutSetEvidence {
+            WorkoutSetEvidence(
+                reps: EditorValue.int(reps),
+                externalWeightKG: EditorValue.double(weight)
+            )
+        }
+    }
+
     @Environment(\.modelContext) private var modelContext
     let workout: WorkoutEntry
 
     @State private var date: Date
     @State private var exercise: String
-    @State private var sets: String
-    @State private var reps: String
-    @State private var weight: String
+    @State private var setRows: [EditableSet]
     @State private var restSeconds: String
     @State private var durationMinutes: String
     @State private var estimatedCalories: String
@@ -150,9 +166,7 @@ private struct WorkoutRecordEditor: View {
         self.workout = workout
         _date = State(initialValue: workout.date)
         _exercise = State(initialValue: workout.exercise)
-        _sets = State(initialValue: EditorValue.string(workout.sets))
-        _reps = State(initialValue: EditorValue.string(workout.reps))
-        _weight = State(initialValue: EditorValue.string(workout.weight))
+        _setRows = State(initialValue: workout.setEntries.map(EditableSet.init))
         _restSeconds = State(initialValue: EditorValue.string(workout.restSeconds))
         _durationMinutes = State(initialValue: EditorValue.string(workout.durationMinutes))
         _estimatedCalories = State(initialValue: EditorValue.string(workout.estimatedCalories))
@@ -183,15 +197,44 @@ private struct WorkoutRecordEditor: View {
             }
 
             Section {
-                numericField("组数", text: $sets, keyboard: .numberPad)
-                numericField("次数", text: $reps, keyboard: .numberPad)
-                numericField("重量", unit: "kg", text: $weight, keyboard: .decimalPad)
+                ForEach(setRows.indices, id: \.self) { index in
+                    HStack(spacing: 8) {
+                        Text("第 \(index + 1) 组")
+                            .font(.subheadline.weight(.medium))
+                            .frame(minWidth: 52, alignment: .leading)
+                        TextField("次数", text: $setRows[index].reps)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityLabel("第 \(index + 1) 组次数")
+                        Text("次")
+                            .foregroundStyle(.secondary)
+                        TextField("重量", text: $setRows[index].weight)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityLabel("第 \(index + 1) 组外部重量")
+                        Text("kg")
+                            .foregroundStyle(.secondary)
+                        Button(role: .destructive) {
+                            setRows.remove(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除第 \(index + 1) 组")
+                    }
+                }
+                Button {
+                    guard setRows.count < 100 else { return }
+                    setRows.append(EditableSet(WorkoutSetEvidence()))
+                } label: {
+                    Label("添加一组", systemImage: "plus.circle")
+                }
                 numericField("间歇", unit: "秒", text: $restSeconds, keyboard: .numberPad)
                 numericField("训练时长", unit: "分钟", text: $durationMinutes, keyboard: .numberPad)
             } header: {
                 Text("训练数据")
             } footer: {
-                Text("留空代表没有数据，不会自动补默认值。")
+                Text("组数由上方数组自动计算；每一组的次数和外部重量都可不同，留空代表没有数据。")
             }
 
             Section {
@@ -246,9 +289,11 @@ private struct WorkoutRecordEditor: View {
 
     private var isValid: Bool {
         !exercise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && EditorValue.validInt(sets, range: 1 ... 100)
-            && EditorValue.validInt(reps, range: 1 ... 1000)
-            && EditorValue.validDouble(weight, range: 0 ... 1000)
+            && setRows.count <= 100
+            && setRows.allSatisfy {
+                EditorValue.validInt($0.reps, range: 1 ... 1000)
+                    && EditorValue.validDouble($0.weight, range: 0 ... 1000)
+            }
             && EditorValue.validInt(restSeconds, range: 0 ... 3600)
             && EditorValue.validInt(durationMinutes, range: 0 ... 1440)
             && EditorValue.validInt(estimatedCalories, range: 0 ... 10000)
@@ -260,9 +305,7 @@ private struct WorkoutRecordEditor: View {
     private var isDirty: Bool {
         date != workout.date
             || EditorValue.optionalText(exercise) != workout.exercise
-            || EditorValue.int(sets) != workout.sets
-            || EditorValue.int(reps) != workout.reps
-            || EditorValue.double(weight) != workout.weight
+            || setRows.map(\.evidence) != workout.setEntries
             || EditorValue.int(restSeconds) != workout.restSeconds
             || EditorValue.int(durationMinutes) != workout.durationMinutes
             || EditorValue.int(estimatedCalories) != workout.estimatedCalories
@@ -297,9 +340,7 @@ private struct WorkoutRecordEditor: View {
         notes = normalizedNotes
         workout.date = date
         workout.exercise = normalizedExercise
-        workout.sets = EditorValue.int(sets)
-        workout.reps = EditorValue.int(reps)
-        workout.weight = EditorValue.double(weight)
+        workout.setEntries = setRows.map(\.evidence)
         workout.restSeconds = EditorValue.int(restSeconds)
         workout.durationMinutes = EditorValue.int(durationMinutes)
         workout.estimatedCalories = EditorValue.int(estimatedCalories)

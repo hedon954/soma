@@ -341,9 +341,9 @@ enum AIServiceError: LocalizedError {
 @Observable
 final class AIService {
     @ObservationIgnored
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
     @ObservationIgnored
-    private let apiKeyOverride: String?
+    let apiKeyOverride: String?
     @ObservationIgnored
     private let requestLoader: AIRequestLoader
     @ObservationIgnored
@@ -361,53 +361,6 @@ final class AIService {
         self.apiKeyOverride = apiKeyOverride
         self.requestLoader = requestLoader
         self.agentStreamLoader = agentStreamLoader
-    }
-
-    var provider: AIProvider {
-        get {
-            guard let value = defaults.string(forKey: "ai.provider"),
-                  let provider = AIProvider(rawValue: value) else { return .openAI }
-            return provider
-        }
-        set { defaults.set(newValue.rawValue, forKey: "ai.provider") }
-    }
-
-    func baseURL(for provider: AIProvider) -> String {
-        defaults.string(forKey: provider.baseURLDefaultsKey) ?? provider.defaultBaseURL
-    }
-
-    func model(for provider: AIProvider) -> String {
-        defaults.string(forKey: provider.modelDefaultsKey) ?? provider.fallbackModel
-    }
-
-    func configure(provider: AIProvider, baseURL: String, model: String) {
-        self.provider = provider
-        let normalizedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        defaults.set(
-            normalizedBaseURL.isEmpty ? provider.defaultBaseURL : normalizedBaseURL,
-            forKey: provider.baseURLDefaultsKey
-        )
-        defaults.set(
-            normalizedModel.isEmpty ? provider.fallbackModel : normalizedModel,
-            forKey: provider.modelDefaultsKey
-        )
-    }
-
-    func saveAPIKey(_ key: String, for provider: AIProvider) {
-        KeychainStore.save(key.trimmingCharacters(in: .whitespacesAndNewlines), for: provider.keychainAccount)
-    }
-
-    func apiKey(for provider: AIProvider) -> String {
-        apiKeyOverride ?? KeychainStore.read(provider.keychainAccount) ?? ""
-    }
-
-    var selectedModelMultimodalSupport: MultimodalSupport {
-        ModelCapability.multimodalSupport(provider: provider, model: model(for: provider))
-    }
-
-    var isRemoteEnabled: Bool {
-        defaults.bool(forKey: "ai.remoteEnabled") && !apiKey(for: provider).isEmpty
     }
 
     func fetchAvailableModels(
@@ -472,23 +425,33 @@ final class AIService {
     func runAgent(
         text: String,
         images: [Data],
+        videos: [AgentVideoInput] = [],
         hasVideo: Bool,
         imageAttachmentCount: Int? = nil,
         videoAttachmentCount: Int? = nil,
+        history: [AgentConversationExchange] = [],
         context: String,
+        route requestedRoute: AIModelRoute? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) -> AgentToolResult
     ) async throws -> AgentOutcome {
-        guard isRemoteEnabled else {
-            throw AIServiceError.missingAPIKey(provider.displayName)
-        }
-
-        let provider = provider
-        let model = model(for: provider)
-        let baseURL = baseURL(for: provider)
-        let key = apiKey(for: provider)
+        let routing = try resolvedRoute(
+            requested: requestedRoute,
+            text: text,
+            hasMedia: !images.isEmpty,
+            hasVideo: hasVideo
+        )
+        let selectedRoute = routing.route
+        let provider = selectedRoute.provider
+        let model = selectedRoute.model
+        let baseURL = selectedRoute.baseURL
+        let key = routing.apiKey
         let support = ModelCapability.multimodalSupport(provider: provider, model: model)
-        if !images.isEmpty, support == .unsupported {
+        let historicalImageCount = history.reduce(0) { $0 + $1.images.count }
+        let hasVisualInput = !images.isEmpty
+            || !videos.isEmpty
+            || historicalImageCount > 0
+        if hasVisualInput, support == .unsupported {
             throw AIServiceError.multimodalUnsupported(provider: provider.displayName, model: model)
         }
 
@@ -501,17 +464,17 @@ final class AIService {
             imageAttachmentCount: imageAttachmentCount,
             videoAttachmentCount: videoAttachmentCount
         )
-        var messages = [
-            ChatCompletionParameters.Message(role: .system, content: .text(systemPrompt)),
-            ChatCompletionParameters.Message(
-                role: .user,
-                content: agentUserContent(
-                    prompt: userPrompt,
-                    images: images,
-                    maximumImageCount: 12
-                )
-            )
-        ]
+        var messages = agentInitialMessages(
+            systemPrompt: systemPrompt,
+            history: history,
+            userPrompt: userPrompt,
+            currentImages: images
+        )
+        let traceInput = AgentTraceText.modelInput(
+            systemPrompt: systemPrompt,
+            history: history,
+            userPrompt: userPrompt
+        )
         let tools = AgentToolName.allCases.map(\.chatTool)
         var observations: [AgentObservation] = []
         var executedMutations = Set<String>()
@@ -532,11 +495,16 @@ final class AIService {
                     startedAt: modelStartedAt,
                     endedAt: modelStartedAt,
                     input: step == 1
-                        ? AgentTraceText.modelInput(systemPrompt: systemPrompt, userPrompt: userPrompt)
+                        ? traceInput
                         : "继续处理上一轮 assistant.tool_calls 与 role=tool 结果。",
                     metadata: AgentTraceText.jsonObject([
+                        "history_exchange_count": history.count,
+                        "history_image_count": historicalImageCount,
+                        "direct_video_count": videos.count,
                         "provider": provider.displayName,
                         "model": model,
+                        "model_tier": selectedRoute.tier.title,
+                        "routing_reason": selectedRoute.reason,
                         "message_count": messages.count,
                         "stream": true,
                         "thinking": false
@@ -560,6 +528,7 @@ final class AIService {
                     )
                     let stream = try await agentStream(
                         parameters: parameters,
+                        videos: videos,
                         provider: provider,
                         baseURL: baseURL,
                         apiKey: key
@@ -601,12 +570,12 @@ final class AIService {
                         startedAt: modelStartedAt,
                         endedAt: endedAt,
                         input: step == 1
-                            ? AgentTraceText.modelInput(systemPrompt: systemPrompt, userPrompt: userPrompt)
+                            ? traceInput
                             : "继续处理上一轮工具结果。",
                         output: passage.nilIfEmpty,
                         errorMessage: reason
                     )))
-                    if !images.isEmpty, support == .unknown, error is APIError {
+                    if hasVisualInput, support == .unknown, error is APIError {
                         throw AIServiceError.multimodalRequestFailed(
                             provider: provider.displayName,
                             model: model,
@@ -633,7 +602,7 @@ final class AIService {
                     startedAt: modelStartedAt,
                     endedAt: modelEndedAt,
                     input: step == 1
-                        ? AgentTraceText.modelInput(systemPrompt: systemPrompt, userPrompt: userPrompt)
+                        ? traceInput
                         : "继续处理上一轮工具结果。",
                     output: passage.nilIfEmpty ?? (
                         orderedDeltas.isEmpty
@@ -641,8 +610,12 @@ final class AIService {
                             : "生成 \(orderedDeltas.count) 个原生 tool_call。"
                     ),
                     metadata: AgentTraceText.jsonObject([
+                        "history_exchange_count": history.count,
+                        "history_image_count": historicalImageCount,
+                        "direct_video_count": videos.count,
                         "provider": provider.displayName,
                         "model": model,
+                        "model_tier": selectedRoute.tier.title,
                         "stream": true,
                         "thinking_ignored": ignoredReasoning,
                         "prompt_tokens": usage?.promptTokens.map { $0 as Any } ?? NSNull(),
@@ -789,8 +762,55 @@ final class AIService {
         return .contentArray(parts)
     }
 
+    private func agentInitialMessages(
+        systemPrompt: String,
+        history: [AgentConversationExchange],
+        userPrompt: String,
+        currentImages: [Data]
+    ) -> [ChatCompletionParameters.Message] {
+        var messages = [
+            ChatCompletionParameters.Message(role: .system, content: .text(systemPrompt))
+        ]
+        for exchange in history {
+            let historicalPrompt = ReActAgentPrompt.historicalUser(
+                text: exchange.userText,
+                imageCount: exchange.images.count,
+                imageAttachmentCount: exchange.imageAttachmentCount,
+                videoAttachmentCount: exchange.videoAttachmentCount
+            )
+            messages.append(ChatCompletionParameters.Message(
+                role: .user,
+                content: agentUserContent(
+                    prompt: historicalPrompt,
+                    images: exchange.images,
+                    maximumImageCount: exchange.images.count
+                )
+            ))
+            guard let assistantText = exchange.assistantText?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+            else {
+                continue
+            }
+            messages.append(ChatCompletionParameters.Message(
+                role: .assistant,
+                content: .text(assistantText)
+            ))
+        }
+        messages.append(ChatCompletionParameters.Message(
+            role: .user,
+            content: agentUserContent(
+                prompt: userPrompt,
+                images: currentImages,
+                maximumImageCount: 12
+            )
+        ))
+        return messages
+    }
+
     private func agentStream(
         parameters: ChatCompletionParameters,
+        videos: [AgentVideoInput],
         provider: AIProvider,
         baseURL: String,
         apiKey: String
@@ -805,6 +825,43 @@ final class AIService {
             proxyPath: configuration.proxyPath,
             overrideVersion: configuration.version
         )
+        if !videos.isEmpty {
+            let direct = try await directVideoStream(
+                parameters: parameters,
+                videos: videos,
+                provider: provider,
+                baseURL: baseURL,
+                apiKey: apiKey
+            )
+            return AsyncThrowingStream { continuation in
+                Task {
+                    var emittedChunk = false
+                    do {
+                        for try await chunk in direct {
+                            emittedChunk = true
+                            continuation.yield(chunk)
+                        }
+                        continuation.finish()
+                    } catch {
+                        guard !emittedChunk else {
+                            continuation.finish(throwing: error)
+                            return
+                        }
+                        do {
+                            let fallback = try await service.startStreamedChat(
+                                parameters: parameters
+                            )
+                            for try await chunk in fallback {
+                                continuation.yield(chunk)
+                            }
+                            continuation.finish()
+                        } catch {
+                            continuation.finish(throwing: error)
+                        }
+                    }
+                }
+            }
+        }
         return try await service.startStreamedChat(parameters: parameters)
     }
 
@@ -899,11 +956,18 @@ final class AIService {
             let reps = integer(before: "次", in: text) ?? compact?.reps
             let statedWeight = number(beforeAny: ["kg", "公斤"], in: normalized)
             let weight = statedWeight ?? (normalized.contains("自重") ? 0 : nil)
+            let explicitSetEntries = LocalWorkoutParser.setEntries(in: normalized)
+            let setEntries = explicitSetEntries ?? sets.map { count in
+                (0 ..< count).map { _ in
+                    WorkoutSetEvidence(reps: reps, externalWeightKG: weight)
+                }
+            }
             let restSeconds = containsAny(normalized, ["间歇", "休息"])
                 ? integer(before: "秒", in: normalized)
                 : nil
             let workout = ConversationWorkout(
                 exercise: exercise,
+                setEntries: setEntries,
                 sets: sets,
                 reps: reps,
                 weight: weight,
@@ -913,7 +977,7 @@ final class AIService {
                 intensity: nil,
                 feedback: nil
             )
-            let prescription = workoutDescription(workout)
+            let prescription = LocalWorkoutParser.description(workout)
             return ConversationResult(
                 intent: .workout,
                 reply: "已记录：\(prescription)。没有提供的训练数据保持为空。",
@@ -1000,6 +1064,7 @@ final class AIService {
         case .workout:
             guard let workout = parsed.workout,
                   workout.exercise != "训练"
+                  || workout.setEntries?.isEmpty == false
                   || workout.sets != nil
                   || workout.reps != nil
                   || workout.weight != nil
@@ -1063,27 +1128,6 @@ final class AIService {
             .compactMap { Int($0) }
         guard values.count == 2 else { return nil }
         return (sets: values[1], reps: values[0])
-    }
-
-    private func workoutDescription(_ workout: ConversationWorkout) -> String {
-        var parts = [workout.exercise]
-        if let sets = workout.sets, let reps = workout.reps {
-            parts.append("\(sets)×\(reps)")
-        } else {
-            if let sets = workout.sets {
-                parts.append("\(sets) 组")
-            }
-            if let reps = workout.reps {
-                parts.append("\(reps) 次")
-            }
-        }
-        if let weight = workout.weight {
-            parts.append(weight == 0 ? "自重" : "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg")
-        }
-        if let rest = workout.restSeconds {
-            parts.append("间歇 \(rest) 秒")
-        }
-        return parts.joined(separator: "，")
     }
 
     private func simulate() async throws {
@@ -1487,8 +1531,8 @@ enum DemoSeeder {
                 exercise: workout.exercise,
                 intensity: workout.intensity,
                 durationMinutes: workout.durationMinutes,
-                sets: workout.sets,
-                reps: workout.reps,
+                sets: workout.setCount,
+                reps: workout.representativeReps,
                 restSeconds: workout.restSeconds,
                 weightKG: 74
             )

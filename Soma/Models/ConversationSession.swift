@@ -47,6 +47,7 @@ enum ConversationSessionStore {
     static func resolveForEntry(
         messages: [CoachMessage],
         sessions: [ConversationSession],
+        preferredSessionID: UUID? = nil,
         now: Date = .now,
         calendar: Calendar = .current,
         in context: ModelContext
@@ -59,11 +60,15 @@ enum ConversationSessionStore {
             in: context
         )
 
-        let startOfToday = calendar.startOfDay(for: now)
-        let latestMessage = messages.max { $0.date < $1.date }
+        if let preferredSessionID,
+           let preferred = availableSessions.first(where: { $0.id == preferredSessionID })
+        {
+            try? context.save()
+            return preferred
+        }
 
+        let latestMessage = messages.max { $0.date < $1.date }
         if let latestMessage,
-           latestMessage.date >= startOfToday,
            let sessionID = latestMessage.sessionID
         {
             if let existing = availableSessions.first(where: { $0.id == sessionID }) {
@@ -82,14 +87,11 @@ enum ConversationSessionStore {
             return recovered
         }
 
-        let sessionsStartedToday = availableSessions.filter { session in
-            calendar.isDate(session.startedAt, inSameDayAs: now)
-        }
-        if let existingToday = sessionsStartedToday.max(by: {
+        if let latestSession = availableSessions.max(by: {
             $0.updatedAt < $1.updatedAt
         }) {
             try? context.save()
-            return existingToday
+            return latestSession
         }
 
         let session = ConversationSession(startedAt: now)
@@ -187,8 +189,15 @@ enum ConversationSessionStore {
 @MainActor
 @Observable
 final class ConversationSessionController {
+    @ObservationIgnored
+    private let defaults: UserDefaults
+
     private(set) var activeSessionID: UUID?
     private(set) var dataSpace: DataSpace?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     @discardableResult
     func resolveForEntry(
@@ -214,12 +223,12 @@ final class ConversationSessionController {
         let session = ConversationSessionStore.resolveForEntry(
             messages: messages,
             sessions: sessions,
+            preferredSessionID: storedSessionID(for: dataSpace),
             now: now,
             calendar: calendar,
             in: context
         )
-        activeSessionID = session.id
-        self.dataSpace = dataSpace
+        activate(session, dataSpace: dataSpace)
         return session
     }
 
@@ -242,5 +251,57 @@ final class ConversationSessionController {
             return activeSession
         }
         return resolveForEntry(dataSpace: dataSpace, in: context)
+    }
+
+    @discardableResult
+    func createSession(
+        dataSpace: DataSpace,
+        in context: ModelContext
+    ) -> ConversationSession {
+        if self.dataSpace == dataSpace,
+           let active = activeSession(in: context)
+        {
+            let messages = (
+                try? context.fetch(FetchDescriptor<CoachMessage>())
+            ) ?? []
+            if !messages.contains(where: { $0.sessionID == active.id }) {
+                return active
+            }
+        }
+
+        let session = ConversationSession()
+        context.insert(session)
+        try? context.save()
+        activate(session, dataSpace: dataSpace)
+        return session
+    }
+
+    func select(
+        _ session: ConversationSession,
+        dataSpace: DataSpace
+    ) {
+        activate(session, dataSpace: dataSpace)
+    }
+
+    private func activate(
+        _ session: ConversationSession,
+        dataSpace: DataSpace
+    ) {
+        activeSessionID = session.id
+        self.dataSpace = dataSpace
+        defaults.set(
+            session.id.uuidString,
+            forKey: Self.activeSessionDefaultsKey(for: dataSpace)
+        )
+    }
+
+    private func storedSessionID(for dataSpace: DataSpace) -> UUID? {
+        defaults.string(
+            forKey: Self.activeSessionDefaultsKey(for: dataSpace)
+        ).flatMap(UUID.init(uuidString:))
+    }
+
+    private static func activeSessionDefaultsKey(for dataSpace: DataSpace) -> String {
+        "conversation.activeSessionID.\(dataSpace.rawValue)"
     }
 }

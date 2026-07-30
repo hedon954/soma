@@ -46,7 +46,8 @@ struct CoachView: View {
     @Environment(ConversationSessionController.self) private var conversationSessions
     @Environment(SomaCaptureRouter.self) private var captureRouter
     @Environment(LocationContextService.self) private var locationContext
-    @AppStorage("conversation.locationEnabled") private var locationEnabled = false
+    @AppStorage(ConversationLocationPreference.defaultsKey)
+    private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
 
     @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
@@ -65,6 +66,8 @@ struct CoachView: View {
     @State private var composerFocusRequest = UUID()
     @State private var composerDismissRequest = UUID()
     @State private var scrollRequest = UUID()
+    @State private var sessionDrawerPresented = false
+    @State private var showsLocationPrompt = false
 
     private var messages: [CoachMessage] {
         guard let activeSessionID = conversationSessions.activeSessionID else {
@@ -77,105 +80,141 @@ struct CoachView: View {
         GymSelection.current(in: gyms)
     }
 
+    private var locationPreference: ConversationLocationPreference {
+        ConversationLocationPreference(rawValue: locationPreferenceRaw) ?? .unasked
+    }
+
     private var isProcessingHere: Bool {
-        processor.isProcessing && processor.dataSpace == dataSpace.activeSpace
+        processor.isProcessing
+            && processor.dataSpace == dataSpace.activeSpace
+            && processor.sessionID == conversationSessions.activeSessionID
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    if messages.count <= 1 {
-                        ConversationStarter(onSelect: sendPrompt)
-                    }
+        GeometryReader { geometry in
+            let drawerWidth = min(340, geometry.size.width * 0.84)
+            ZStack(alignment: .leading) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            if messages.count <= 1 {
+                                ConversationStarter(onSelect: sendPrompt)
+                            }
 
-                    ForEach(messages) { message in
-                        CoachBubble(
-                            message: message,
-                            isLive: isProcessingHere
-                                && message.agentStatus == .running,
-                            canRetry: !processor.isProcessing
-                                && ConversationTurnProjection.canRetry(
-                                    message,
-                                    in: messages
-                                ),
-                            onRetry: { retry(message) }
+                            ForEach(messages) { message in
+                                CoachBubble(
+                                    message: message,
+                                    isLive: isProcessingHere
+                                        && message.agentStatus == .running,
+                                    canRetry: !processor.isProcessing
+                                        && ConversationTurnProjection.canRetry(
+                                            message,
+                                            in: messages
+                                        ),
+                                    onRetry: { retry(message) }
+                                )
+                                .id(message.id)
+                            }
+
+                            if isProcessingHere, !ai.isRemoteEnabled {
+                                LiveAgentResponse(
+                                    text: processor.liveAssistantText,
+                                    activity: processor.liveAgentActivity,
+                                    isAgent: ai.isRemoteEnabled
+                                )
+                                .id("live-response")
+                            }
+
+                            Color.clear.frame(height: 1).id("bottom")
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .appPageBackground()
+                    .safeAreaInset(edge: .bottom) {
+                        CoachComposer(
+                            draft: $draft,
+                            attachments: $attachments,
+                            gyms: gyms,
+                            currentGym: currentGym,
+                            isSending: processor.isProcessing,
+                            isListening: speechInput.isListening,
+                            speechMessage: speechInput.errorMessage,
+                            focusRequest: composerFocusRequest,
+                            dismissRequest: composerDismissRequest,
+                            onAddMedia: showMedia,
+                            onSelectGym: selectGym,
+                            onManageGyms: { showsGyms = true },
+                            onToggleVoice: toggleVoice,
+                            onSend: send
                         )
-                        .id(message.id)
                     }
-
-                    if isProcessingHere, !ai.isRemoteEnabled {
-                        LiveAgentResponse(
-                            text: processor.liveAssistantText,
-                            activity: processor.liveAgentActivity,
-                            isAgent: ai.isRemoteEnabled
-                        )
-                        .id("live-response")
+                    .onChange(of: messages.last?.id, initial: true) {
+                        scrollToBottomAfterLayout(proxy)
                     }
-
-                    Color.clear.frame(height: 1).id("bottom")
+                    .onChange(of: processor.isProcessing) {
+                        scrollToBottom(proxy)
+                    }
+                    .onChange(of: processor.liveAssistantText) {
+                        scrollToBottom(proxy)
+                    }
+                    .onChange(of: processor.liveAgentActivity) {
+                        scrollToBottom(proxy)
+                    }
+                    .onChange(of: processor.liveEventRevision) {
+                        scrollToBottom(proxy)
+                    }
+                    .onChange(of: scrollRequest) {
+                        scrollToBottomAfterLayout(proxy)
+                    }
+                    .onChange(of: speechInput.transcript) {
+                        updateDraftFromSpeech()
+                    }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .appPageBackground()
-            .safeAreaInset(edge: .bottom) {
-                CoachComposer(
-                    draft: $draft,
-                    attachments: $attachments,
-                    gyms: gyms,
-                    currentGym: currentGym,
-                    locationEnabled: locationEnabled,
-                    isRequestingLocation: locationContext.isRequesting,
-                    isSending: processor.isProcessing,
-                    isListening: speechInput.isListening,
-                    speechMessage: speechInput.errorMessage,
-                    focusRequest: composerFocusRequest,
-                    dismissRequest: composerDismissRequest,
-                    onAddMedia: showMedia,
-                    onSelectGym: selectGym,
-                    onManageGyms: { showsGyms = true },
-                    onToggleLocation: { locationEnabled.toggle() },
-                    onToggleVoice: toggleVoice,
-                    onSend: send
+                .offset(x: sessionDrawerPresented ? drawerWidth : 0)
+
+                if sessionDrawerPresented {
+                    HStack(spacing: 0) {
+                        Color.clear
+                            .frame(width: drawerWidth)
+                            .allowsHitTesting(false)
+                        Color.black.opacity(0.16)
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: closeSessionDrawer)
+                    }
+                    .ignoresSafeArea()
+                }
+
+                ConversationSessionDrawer(
+                    currentSessionID: conversationSessions.activeSessionID,
+                    isProcessing: processor.isProcessing,
+                    onNewSession: createSession,
+                    onSelectSession: selectSession
                 )
+                .frame(width: drawerWidth)
+                .offset(x: sessionDrawerPresented ? 0 : -drawerWidth)
             }
-            .onChange(of: messages.last?.id, initial: true) {
-                scrollToBottomAfterLayout(proxy)
-            }
-            .onChange(of: processor.isProcessing) {
-                scrollToBottom(proxy)
-            }
-            .onChange(of: processor.liveAssistantText) {
-                scrollToBottom(proxy)
-            }
-            .onChange(of: processor.liveAgentActivity) {
-                scrollToBottom(proxy)
-            }
-            .onChange(of: processor.liveEventRevision) {
-                scrollToBottom(proxy)
-            }
-            .onChange(of: scrollRequest) {
-                scrollToBottomAfterLayout(proxy)
-            }
-            .onChange(of: speechInput.transcript) {
-                updateDraftFromSpeech()
-            }
+            .clipped()
+            .animation(.snappy(duration: 0.24), value: sessionDrawerPresented)
+            .simultaneousGesture(sessionDrawerGesture)
         }
         .navigationTitle("Soma")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                NavigationLink {
-                    ConversationSessionListView(
-                        currentSessionID: conversationSessions.activeSessionID
-                    )
-                } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                }
-                .accessibilityLabel("历史对话")
+        .accessibilityAction(named: "打开历史对话") {
+            openSessionDrawer()
+        }
+        .alert("允许随消息记录位置？", isPresented: $showsLocationPrompt) {
+            Button("不允许", role: .cancel) {
+                locationPreferenceRaw = ConversationLocationPreference.disabled.rawValue
+                submitCurrentDraft()
             }
+            Button("允许") {
+                locationPreferenceRaw = ConversationLocationPreference.enabled.rawValue
+                submitCurrentDraft()
+            }
+        } message: {
+            Text("Soma 只在发送消息时获取一次位置，用于识别训练场馆和相关天气；不会持续或后台定位。之后可在设置中更改。")
         }
         .navigationDestination(isPresented: $showsGyms) {
             GymLibraryView()
@@ -214,6 +253,9 @@ struct CoachView: View {
         .task(id: captureRouter.mediaDelivery?.id) {
             handleMediaDelivery()
         }
+        .onAppear {
+            locationPreferenceRaw = ConversationLocationPreference.current().rawValue
+        }
         .onDisappear {
             speechInput.stop()
         }
@@ -221,6 +263,58 @@ struct CoachView: View {
 
     private func showMedia() {
         sheet = .media
+    }
+
+    private var sessionDrawerGesture: some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .global)
+            .onEnded { value in
+                let horizontal = value.translation.width
+                guard abs(horizontal) > abs(value.translation.height) else {
+                    return
+                }
+                if sessionDrawerPresented, horizontal < -60 {
+                    closeSessionDrawer()
+                } else if !sessionDrawerPresented,
+                          value.startLocation.x <= 28,
+                          horizontal > 60
+                {
+                    openSessionDrawer()
+                }
+            }
+    }
+
+    private func openSessionDrawer() {
+        speechInput.stop()
+        sessionDrawerPresented = true
+    }
+
+    private func closeSessionDrawer() {
+        sessionDrawerPresented = false
+    }
+
+    private func createSession() {
+        let session = conversationSessions.createSession(
+            dataSpace: dataSpace.activeSpace,
+            in: modelContext
+        )
+        switchToSession(session)
+    }
+
+    private func selectSession(_ session: ConversationSession) {
+        conversationSessions.select(
+            session,
+            dataSpace: dataSpace.activeSpace
+        )
+        switchToSession(session)
+    }
+
+    private func switchToSession(_: ConversationSession) {
+        draft = ""
+        attachments = []
+        speechInput.stop()
+        composerDismissRequest = UUID()
+        scrollRequest = UUID()
+        closeSessionDrawer()
     }
 
     private func appendPickedMedia(_ media: [PickedMedia]) {
@@ -280,6 +374,17 @@ struct CoachView: View {
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
+        guard locationPreference != .unasked else {
+            speechInput.stop()
+            showsLocationPrompt = true
+            return
+        }
+        submitCurrentDraft()
+    }
+
+    private func submitCurrentDraft() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
         speechInput.stop()
         let pending = attachments
         let session = conversationSessions.ensureActiveSession(
@@ -290,7 +395,7 @@ struct CoachView: View {
             text: text,
             attachments: pending,
             context: ConversationProcessingContext(
-                contextSummary: contextSummary,
+                structuredContext: structuredContext,
                 session: session,
                 dataSpace: dataSpace.activeSpace,
                 gyms: gyms,
@@ -298,7 +403,7 @@ struct CoachView: View {
                 ai: ai,
                 modelContext: modelContext
             ),
-            includeLocation: locationEnabled,
+            includeLocation: locationPreference == .enabled,
             locationService: locationContext
         )
         if accepted {
@@ -325,7 +430,7 @@ struct CoachView: View {
         if processor.retry(
             userMessage: userMessage,
             context: ConversationProcessingContext(
-                contextSummary: contextSummary,
+                structuredContext: structuredContext,
                 session: session,
                 dataSpace: dataSpace.activeSpace,
                 gyms: gyms,
@@ -380,17 +485,19 @@ struct CoachView: View {
         }
     }
 
-    private var contextSummary: String {
+    private var structuredContext: String {
         let gym = currentGym
         let currentEquipment = gym.map { target in
             equipment.filter { $0.gymID == target.id }.map(\.name).joined(separator: "、")
         } ?? "无"
         let latestWorkout = workouts.first.map {
             var parts = [$0.exercise]
-            if let sets = $0.sets, let reps = $0.reps {
+            if let setEvidenceSummary = $0.setEvidenceSummary {
+                parts.append(setEvidenceSummary)
+            } else if let sets = $0.sets, let reps = $0.reps {
                 parts.append("\(sets)×\(reps)")
             }
-            if let weight = $0.weight {
+            if $0.setEntries.isEmpty, let weight = $0.weight {
                 parts.append(weight == 0 ? "自重" : String(format: "%.1fkg", weight))
             }
             return parts.joined(separator: " ")
@@ -423,19 +530,9 @@ struct CoachView: View {
             }
             return parts.isEmpty ? "未填写" : parts.joined(separator: "；")
         } ?? "未填写"
-        let recentConversation = messages.suffix(8).map {
-            let role = $0.isFromCoach ? "教练" : "用户"
-            let text = $0.text
-                .replacingOccurrences(of: "\n", with: " ")
-                .prefix(160)
-            return "\(role)：\(text)"
-        }
-        .joined(separator: "\n")
         return """
         身体信息：\(profile)
         健身房：\(gym?.name ?? "无")；器械：\(currentEquipment)；最近训练：\(latestWorkout)；今日饮食：\(todayCalories)kcal；体重：\(weight)
-        最近对话：
-        \(recentConversation)
         """
     }
 }
@@ -1070,8 +1167,6 @@ private struct CoachComposer: View {
     @Binding var attachments: [PendingAttachment]
     let gyms: [GymProfile]
     let currentGym: GymProfile?
-    let locationEnabled: Bool
-    let isRequestingLocation: Bool
     let isSending: Bool
     let isListening: Bool
     let speechMessage: String?
@@ -1080,27 +1175,22 @@ private struct CoachComposer: View {
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
-    let onToggleLocation: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack {
+            if gyms.count >= 2 {
                 Menu {
-                    if gyms.isEmpty {
-                        Text("暂无健身房")
-                    } else {
-                        ForEach(gyms) { gym in
-                            Button {
-                                onSelectGym(gym)
-                            } label: {
-                                if gym.id == currentGym?.id {
-                                    Label(gym.name, systemImage: "checkmark")
-                                } else {
-                                    Text(gym.name)
-                                }
+                    ForEach(gyms) { gym in
+                        Button {
+                            onSelectGym(gym)
+                        } label: {
+                            if gym.id == currentGym?.id {
+                                Label(gym.name, systemImage: "checkmark")
+                            } else {
+                                Text(gym.name)
                             }
                         }
                     }
@@ -1131,37 +1221,7 @@ private struct CoachComposer: View {
                     )
                 }
                 .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
-
-                Spacer()
-
-                Button(action: onToggleLocation) {
-                    HStack(spacing: 5) {
-                        if isRequestingLocation {
-                            ProgressView()
-                                .controlSize(.mini)
-                        } else {
-                            Image(
-                                systemName: locationEnabled
-                                    ? "location.fill"
-                                    : "location.slash"
-                            )
-                        }
-                        Text(locationEnabled ? "位置开启" : "位置关闭")
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(locationEnabled ? AppTheme.tint : .secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        locationEnabled
-                            ? AppTheme.softTint
-                            : Color(uiColor: .secondarySystemGroupedBackground),
-                        in: Capsule()
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(isSending)
-                .accessibilityLabel(locationEnabled ? "关闭随消息记录位置" : "开启随消息记录位置")
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if !attachments.isEmpty {

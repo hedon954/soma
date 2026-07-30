@@ -54,6 +54,7 @@ struct PortableWorkoutAnalysis: Codable, Equatable, Sendable {
     var id: UUID
     var date: Date
     var exercise: String
+    var setEntries: [WorkoutSetEvidence]?
     var sets: Int?
     var reps: Int?
     var weight: Double?

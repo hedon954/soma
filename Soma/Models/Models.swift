@@ -33,6 +33,27 @@ struct MediaAttachmentReference: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+struct WorkoutSetEvidence: Codable, Equatable, Hashable, Sendable {
+    var reps: Int?
+    var externalWeightKG: Double?
+
+    init(reps: Int? = nil, externalWeightKG: Double? = nil) {
+        self.reps = reps
+        self.externalWeightKG = externalWeightKG
+    }
+}
+
+private enum WorkoutSetStorage {
+    static func encode(_ entries: [WorkoutSetEvidence]) -> Data {
+        (try? JSONEncoder().encode(entries)) ?? Data()
+    }
+
+    static func decode(_ data: Data) -> [WorkoutSetEvidence]? {
+        guard !data.isEmpty else { return nil }
+        return try? JSONDecoder().decode([WorkoutSetEvidence].self, from: data)
+    }
+}
+
 private enum MediaAttachmentStorage {
     static func encode(_ attachments: [MediaAttachmentReference]) -> Data {
         (try? JSONEncoder().encode(attachments)) ?? Data()
@@ -399,6 +420,7 @@ final class WorkoutEntry {
     var sets: Int?
     var reps: Int?
     var weight: Double?
+    var setEntriesData: Data = Data()
     var restSeconds: Int?
     var durationMinutes: Int?
     var notes: String
@@ -416,9 +438,105 @@ final class WorkoutEntry {
     var externalID: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
+
+    var setEntries: [WorkoutSetEvidence] {
+        get {
+            if let stored = WorkoutSetStorage.decode(setEntriesData) {
+                return stored
+            }
+            guard let sets, sets > 0 else { return [] }
+            return (0 ..< sets).map { _ in
+                WorkoutSetEvidence(reps: reps, externalWeightKG: weight)
+            }
+        }
+        set {
+            setEntriesData = WorkoutSetStorage.encode(newValue)
+            sets = nil
+            reps = nil
+            weight = nil
+        }
+    }
+
+    var setCount: Int? {
+        let entries = setEntries
+        return entries.isEmpty ? sets : entries.count
+    }
+
+    var representativeReps: Int? {
+        let entries = setEntries
+        guard !entries.isEmpty else { return reps }
+        let values = entries.compactMap(\.reps)
+        guard values.count == entries.count, Set(values).count == 1 else {
+            return nil
+        }
+        return values.first
+    }
+
+    var representativeWeight: Double? {
+        let entries = setEntries
+        guard !entries.isEmpty else { return weight }
+        let values = entries.compactMap(\.externalWeightKG)
+        guard values.count == entries.count, Set(values).count == 1 else {
+            return nil
+        }
+        return values.first
+    }
+
     var estimatedVolume: Double? {
-        guard let sets, let reps, let weight else { return nil }
+        let entries = setEntries
+        if !entries.isEmpty {
+            let complete = entries.compactMap { entry -> Double? in
+                guard let reps = entry.reps,
+                      let weight = entry.externalWeightKG,
+                      reps > 0,
+                      weight > 0
+                else {
+                    return nil
+                }
+                return Double(reps) * weight
+            }
+            return complete.isEmpty ? nil : complete.reduce(0, +)
+        }
+        guard setEntriesData.isEmpty,
+              let sets,
+              let reps,
+              let weight
+        else {
+            return nil
+        }
         return Double(sets * reps) * weight
+    }
+
+    var volumeIsPartial: Bool {
+        let entries = setEntries
+        return !entries.isEmpty && entries.contains {
+            guard let reps = $0.reps, let weight = $0.externalWeightKG else {
+                return true
+            }
+            return reps <= 0 || weight <= 0
+        }
+    }
+
+    var setEvidenceSummary: String? {
+        let entries = setEntries
+        guard !entries.isEmpty else { return nil }
+        if let reps = representativeReps,
+           let weight = representativeWeight
+        {
+            return "\(entries.count)组 × \(reps)次 · \(weight.formatted())kg"
+        }
+        return entries.enumerated().map { index, entry in
+            switch (entry.externalWeightKG, entry.reps) {
+            case let (.some(weight), .some(reps)):
+                "\(weight.formatted())kg × \(reps)次"
+            case let (.some(weight), .none):
+                "第\(index + 1)组 \(weight.formatted())kg"
+            case let (.none, .some(reps)):
+                "第\(index + 1)组 \(reps)次"
+            case (.none, .none):
+                "第\(index + 1)组"
+            }
+        }.joined(separator: "，")
     }
 
     var mediaKind: MediaKind {
@@ -447,6 +565,7 @@ final class WorkoutEntry {
         sets: Int? = nil,
         reps: Int? = nil,
         weight: Double? = nil,
+        setEntries: [WorkoutSetEvidence]? = nil,
         restSeconds: Int? = nil,
         durationMinutes: Int? = nil,
         notes: String = "",
@@ -468,9 +587,16 @@ final class WorkoutEntry {
         id = UUID()
         self.date = date
         self.exercise = exercise
-        self.sets = sets
-        self.reps = reps
-        self.weight = weight
+        if let setEntries {
+            self.sets = nil
+            self.reps = nil
+            self.weight = nil
+            setEntriesData = WorkoutSetStorage.encode(setEntries)
+        } else {
+            self.sets = sets
+            self.reps = reps
+            self.weight = weight
+        }
         self.restSeconds = restSeconds
         self.durationMinutes = durationMinutes
         self.notes = notes
@@ -968,6 +1094,7 @@ enum ConversationIntent: String, Codable {
 
 struct ConversationWorkout: Codable {
     var exercise: String
+    var setEntries: [WorkoutSetEvidence]?
     var sets: Int?
     var reps: Int?
     var weight: Double?

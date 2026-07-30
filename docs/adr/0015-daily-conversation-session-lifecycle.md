@@ -1,6 +1,6 @@
 # ADR 0015：在进入前台时按自然日解析当前对话 Session
 
-- 状态：已采纳
+- 状态：已被 [ADR 0022](0022-user-controlled-conversation-sessions.md) 替代
 - 日期：2026-07-30
 - 维护者：Soma maintainers
 

@@ -6,9 +6,12 @@ struct SettingsView: View {
     @Environment(AIService.self) private var ai
     @Environment(DataSpaceController.self) private var dataSpace
     @AppStorage("ai.remoteEnabled") private var remoteEnabled = false
-    @AppStorage("conversation.locationEnabled") private var locationEnabled = false
+    @AppStorage(ConversationLocationPreference.defaultsKey)
+    private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
 
+    @State private var modelTier: AIModelTier = .standard
+    @State private var smallModelEnabled = false
     @State private var provider: AIProvider = .openAI
     @State private var baseURL = ""
     @State private var model = ""
@@ -22,6 +25,21 @@ struct SettingsView: View {
     private var selectedCapability: MultimodalSupport {
         models.first(where: { $0.id == model })?.multimodalSupport
             ?? ModelCapability.multimodalSupport(provider: provider, model: model)
+    }
+
+    private var locationEnabledBinding: Binding<Bool> {
+        Binding(
+            get: {
+                locationPreferenceRaw == ConversationLocationPreference.enabled.rawValue
+            },
+            set: { enabled in
+                locationPreferenceRaw = (
+                    enabled
+                        ? ConversationLocationPreference.enabled
+                        : ConversationLocationPreference.disabled
+                ).rawValue
+            }
+        )
     }
 
     var body: some View {
@@ -43,16 +61,10 @@ struct SettingsView: View {
                 }
             }
             .onAppear(perform: loadInitialConfiguration)
-            .onChange(of: provider) {
-                loadProviderConfiguration()
+            .onChange(of: smallModelEnabled) {
+                ai.setTierEnabled(smallModelEnabled, tier: .small)
             }
-            .onChange(of: baseURL) {
-                persistConfiguration()
-            }
-            .onChange(of: model) {
-                persistConfiguration()
-            }
-            .task(id: provider.rawValue) {
+            .task(id: "\(modelTier.rawValue).\(provider.rawValue)") {
                 guard !apiKey.isEmpty else { return }
                 await refreshModels()
             }
@@ -88,7 +100,7 @@ struct SettingsView: View {
                     icon: "sparkles",
                     title: "AI 教练",
                     detail: remoteEnabled
-                        ? "\(provider.displayName) · \(model.isEmpty ? "未选择模型" : model)"
+                        ? "\(ai.provider.displayName) · \(ai.model(for: ai.provider).isEmpty ? "未选择模型" : ai.model(for: ai.provider))"
                         : "完全本地"
                 )
             }
@@ -210,14 +222,14 @@ struct SettingsView: View {
             Label("无账户系统", systemImage: "person.crop.circle.badge.xmark")
             Label("数据库与媒体保存在 App 沙盒", systemImage: "internaldrive.fill")
             Label("每个平台的 API Key 仅存入本机 Keychain", systemImage: "key.fill")
-            Toggle(isOn: $locationEnabled) {
+            Toggle(isOn: locationEnabledBinding) {
                 Label("随消息记录位置", systemImage: "location")
             }
             Label("天气仅在相关消息中按需获取", systemImage: "cloud.sun")
         } header: {
             Text("隐私")
         } footer: {
-            Text("位置默认关闭；开启后仅在发送时获取一次并保存在本机，不持续或后台跟踪。天气或户外消息会向 Open-Meteo 发送约 1 公里精度的位置，服务方同时可见设备 IP，故障排查日志可能保留坐标最多 90 天；远程 Agent 不接收原始坐标。卸载 App 会移除沙盒数据，可先在“数据与备份”中导出或设置自动备份。")
+            Text("首次发送时 Soma 会询问是否随消息记录位置；无论允许或拒绝都不再自动询问，可在这里修改。开启后仅在发送时获取一次并保存在本机，不持续或后台跟踪。天气或户外消息会向 Open-Meteo 发送约 1 公里精度的位置，服务方同时可见设备 IP；远程 Agent 不接收原始坐标。")
         }
     }
 
@@ -225,101 +237,116 @@ struct SettingsView: View {
         Section {
             Toggle("启用远程 ReAct Agent", isOn: $remoteEnabled)
 
-            Picker("平台", selection: $provider) {
-                ForEach(AIProvider.allCases) { option in
-                    Text(option.displayName).tag(option)
+            Picker("模型档位", selection: modelTierBinding) {
+                ForEach(AIModelTier.allCases) { tier in
+                    Text(tier.title).tag(tier)
                 }
             }
+            .pickerStyle(.segmented)
 
-            TextField("兼容 API Base URL", text: $baseURL)
+            if modelTier == .small {
+                Toggle("配置小模型", isOn: $smallModelEnabled)
+            }
+
+            if modelTier == .standard || smallModelEnabled {
+                Picker("平台", selection: providerBinding) {
+                    ForEach(AIProvider.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+
+                TextField(
+                    provider == .other ? "自定义 OpenAI-compatible URL" : "兼容 API Base URL",
+                    text: $baseURL
+                )
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
 
-            if isLoadingModels {
-                LabeledContent("可用模型") {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            } else if models.isEmpty {
-                LabeledContent("可用模型") {
-                    Text(apiKey.isEmpty ? "保存 API Key 后自动获取" : "暂无列表，可手动输入")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Picker("可用模型", selection: $model) {
-                    if !models.contains(where: { $0.id == model }) {
-                        Text("自定义：\(model)").tag(model)
+                if isLoadingModels {
+                    LabeledContent("可用模型") {
+                        ProgressView()
+                            .controlSize(.small)
                     }
-                    ForEach(models) { option in
-                        Text(option.id).tag(option.id)
+                } else if models.isEmpty {
+                    LabeledContent("可用模型") {
+                        Text(apiKey.isEmpty ? "保存 API Key 后自动获取" : "暂无列表，可手动输入")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    LabeledContent("手动模型 ID") {
+                        TextField("输入模型 ID", text: $model)
+                            .multilineTextAlignment(.trailing)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                } else {
+                    Picker("可用模型", selection: $model) {
+                        if !models.contains(where: { $0.id == model }) {
+                            Text("当前：\(model)").tag(model)
+                        }
+                        ForEach(models) { option in
+                            Text(option.id).tag(option.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
-                .pickerStyle(.menu)
-            }
 
-            LabeledContent("手动模型 ID") {
-                TextField("输入模型 ID", text: $model)
-                    .multilineTextAlignment(.trailing)
+                capabilityRow
+
+                HStack {
+                    Group {
+                        if showKey {
+                            TextField("API Key", text: $apiKey)
+                        } else {
+                            SecureField("API Key", text: $apiKey)
+                        }
+                    }
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-            }
 
-            capabilityRow
-
-            HStack {
-                Group {
-                    if showKey {
-                        TextField("API Key", text: $apiKey)
-                    } else {
-                        SecureField("API Key", text: $apiKey)
+                    Button {
+                        showKey.toggle()
+                    } label: {
+                        Image(systemName: showKey ? "eye.slash" : "eye")
                     }
+                    .accessibilityLabel(showKey ? "隐藏 API Key" : "显示 API Key")
                 }
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
 
-                Button {
-                    showKey.toggle()
-                } label: {
-                    Image(systemName: showKey ? "eye.slash" : "eye")
-                }
-                .accessibilityLabel(showKey ? "隐藏 API Key" : "显示 API Key")
-            }
-
-            HStack {
-                Button(keySaved ? "API Key 已保存" : "保存并获取模型") {
-                    saveKeyAndRefresh()
-                }
-                .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Spacer()
-
-                Button {
-                    Task { await refreshModels() }
-                } label: {
-                    if isLoadingModels {
-                        ProgressView()
-                    } else {
-                        Label("刷新模型", systemImage: "arrow.clockwise")
+                HStack {
+                    Button(keySaved ? "API Key 已保存" : "保存并获取模型") {
+                        saveKeyAndRefresh()
                     }
-                }
-                .disabled(apiKey.isEmpty || isLoadingModels)
-            }
+                    .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-            if let modelError {
-                Label(modelError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.warning)
-            } else if !models.isEmpty {
-                Text("已从 \(provider.displayName) 获取 \(models.count) 个可用模型。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Spacer()
+
+                    Button {
+                        Task { await refreshModels() }
+                    } label: {
+                        if isLoadingModels {
+                            ProgressView()
+                        } else {
+                            Label("刷新模型", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(apiKey.isEmpty || isLoadingModels)
+                }
+
+                if let modelError {
+                    Label(modelError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.warning)
+                } else if !models.isEmpty {
+                    Text("已从 \(provider.displayName) 获取 \(models.count) 个可用模型。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         } header: {
             Text("AI 服务")
         } footer: {
-            Text("演示空间关闭远程 AI 时可使用本地演示分析器；个人空间不会把演示识别结果写入真实数据。启用后，Agent 使用流式回复与原生 Tool Calling，最多进行 8 轮模型和本地工具交互；仅把你主动发送的文字、压缩图片或视频关键帧传给当前平台，原始媒体继续留在本机。")
+            Text("小模型可不配置；配置后，Agent 只把短文本、无媒体且无业务写入意图的简单任务交给小模型，其余使用标准模型。当前输入、同一对话最近 10 个来回，以及视觉额度内的压缩图片或视频关键帧会发送给所选平台，原始媒体继续留在本机。")
         }
     }
 
@@ -365,27 +392,64 @@ struct SettingsView: View {
     }
 
     private func loadInitialConfiguration() {
-        provider = ai.provider
+        locationPreferenceRaw = ConversationLocationPreference.current().rawValue
+        smallModelEnabled = ai.isTierEnabled(.small)
+        loadTierConfiguration(.standard)
+    }
+
+    private var modelTierBinding: Binding<AIModelTier> {
+        Binding(
+            get: { modelTier },
+            set: { newTier in
+                guard newTier != modelTier else { return }
+                persistConfiguration()
+                modelTier = newTier
+                loadTierConfiguration(newTier)
+            }
+        )
+    }
+
+    private var providerBinding: Binding<AIProvider> {
+        Binding(
+            get: { provider },
+            set: { newProvider in
+                guard newProvider != provider else { return }
+                persistConfiguration()
+                provider = newProvider
+                loadProviderConfiguration()
+            }
+        )
+    }
+
+    private func loadTierConfiguration(_ tier: AIModelTier) {
+        provider = ai.provider(for: tier)
         loadProviderConfiguration()
     }
 
     private func loadProviderConfiguration() {
-        baseURL = ai.baseURL(for: provider)
-        model = ai.model(for: provider)
-        apiKey = ai.apiKey(for: provider)
+        baseURL = ai.baseURL(for: provider, tier: modelTier)
+        model = ai.model(for: provider, tier: modelTier)
+        apiKey = ai.apiKey(for: provider, tier: modelTier)
         models = []
         modelError = nil
         keySaved = !apiKey.isEmpty
-        ai.provider = provider
     }
 
-    private func persistConfiguration() {
-        ai.configure(provider: provider, baseURL: baseURL, model: model)
+    private func persistConfiguration(
+        tier: AIModelTier? = nil,
+        provider configuredProvider: AIProvider? = nil
+    ) {
+        ai.configure(
+            tier: tier ?? modelTier,
+            provider: configuredProvider ?? provider,
+            baseURL: baseURL,
+            model: model
+        )
     }
 
     private func saveKeyAndRefresh() {
         persistConfiguration()
-        ai.saveAPIKey(apiKey, for: provider)
+        ai.saveAPIKey(apiKey, for: provider, tier: modelTier)
         keySaved = true
         Task { await refreshModels() }
     }

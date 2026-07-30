@@ -12,5 +12,6 @@
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
 | [0001](0001-widget-configuration-metadata-crash.md) | 已修复，待真机界面确认 | 动态 Widget 配置文本导致扩展崩溃并从组件库消失 | `make check` 禁止 Widget 配置元数据使用 `Text` 重载 |
+| [0002](0002-video-frame-extraction-silent-fallback.md) | 已修复，待真机媒体验收 | 视频抽帧失败后仍以无画面的纯文本请求调用模型 | 稳定副本抽帧、零帧阻断、直接视频降级与首次/重试媒体一致性 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。

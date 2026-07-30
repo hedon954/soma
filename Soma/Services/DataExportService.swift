@@ -232,6 +232,7 @@ enum DataExportService {
             id: workout.id,
             date: workout.date,
             exercise: workout.exercise,
+            setEntries: workout.setEntries,
             sets: workout.sets,
             reps: workout.reps,
             weight: workout.weight,

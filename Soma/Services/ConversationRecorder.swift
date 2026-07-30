@@ -415,14 +415,9 @@ enum ConversationRecorder {
         guard let exercise = arguments.exercise?.trimmed.nilIfEmpty else {
             return .failure("record_workout 缺少 exercise。")
         }
-        if let sets = arguments.sets, !(1 ... 100).contains(sets) {
-            return .failure("sets 必须在 1 到 100 之间。")
-        }
-        if let reps = arguments.reps, !(1 ... 1000).contains(reps) {
-            return .failure("reps 必须在 1 到 1000 之间。")
-        }
-        if let weight = arguments.weight, !(0 ... 1000).contains(weight) {
-            return .failure("weight 必须在 0 到 1000kg 之间。")
+        let setEntries = workoutSetEntries(from: arguments)
+        if let error = workoutSetValidationError(setEntries) {
+            return .failure(error)
         }
         if let rest = arguments.restSeconds, !(0 ... 3600).contains(rest) {
             return .failure("rest_seconds 必须在 0 到 3600 之间。")
@@ -438,8 +433,8 @@ enum ConversationRecorder {
             exercise: exercise,
             intensity: arguments.intensity,
             durationMinutes: arguments.durationMinutes,
-            sets: arguments.sets,
-            reps: arguments.reps,
+            sets: setEntries?.count ?? arguments.sets,
+            reps: representativeReps(in: setEntries) ?? arguments.reps,
             restSeconds: arguments.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
@@ -453,6 +448,7 @@ enum ConversationRecorder {
             sessionID: sourceSessionID,
             turnID: sourceTurnID,
             exercise: exercise,
+            setEntries: setEntries,
             sets: arguments.sets,
             reps: arguments.reps,
             weight: arguments.weight,
@@ -482,6 +478,7 @@ enum ConversationRecorder {
                 sets: arguments.sets,
                 reps: arguments.reps,
                 weight: arguments.weight,
+                setEntries: setEntries,
                 restSeconds: arguments.restSeconds,
                 durationMinutes: arguments.durationMinutes,
                 notes: sourceText,
@@ -501,8 +498,8 @@ enum ConversationRecorder {
         }
         try? context.save()
         var summary = [exercise]
-        if let sets = arguments.sets, let reps = arguments.reps {
-            summary.append("\(sets)×\(reps)")
+        if let setEntries, !setEntries.isEmpty {
+            summary.append(workoutSetSummary(setEntries))
         } else {
             if let sets = arguments.sets {
                 summary.append("\(sets) 组")
@@ -510,9 +507,9 @@ enum ConversationRecorder {
             if let reps = arguments.reps {
                 summary.append("\(reps) 次")
             }
-        }
-        if let weight = formatWeight(arguments.weight) {
-            summary.append(weight)
+            if let weight = formatWeight(arguments.weight) {
+                summary.append(weight)
+            }
         }
         if let rest = arguments.restSeconds {
             summary.append("间歇 \(rest) 秒")
@@ -697,14 +694,9 @@ extension ConversationRecorder {
         guard let entry = fetchWorkouts(in: context).first(where: { $0.id == id }) else {
             return .failure("没有找到指定训练记录，请重新查询。")
         }
-        if let sets = arguments.sets, !(1 ... 100).contains(sets) {
-            return .failure("sets 必须在 1 到 100 之间。")
-        }
-        if let reps = arguments.reps, !(1 ... 1000).contains(reps) {
-            return .failure("reps 必须在 1 到 1000 之间。")
-        }
-        if let weight = arguments.weight, !(0 ... 1000).contains(weight) {
-            return .failure("weight 必须在 0 到 1000kg 之间。")
+        let setEntries = workoutSetEntries(from: arguments)
+        if let error = workoutSetValidationError(setEntries) {
+            return .failure(error)
         }
         if let rest = arguments.restSeconds, !(0 ... 3600).contains(rest) {
             return .failure("rest_seconds 必须在 0 到 3600 之间。")
@@ -714,9 +706,9 @@ extension ConversationRecorder {
         }
 
         entry.exercise = arguments.exercise?.trimmed.nilIfEmpty ?? entry.exercise
-        entry.sets = arguments.sets ?? entry.sets
-        entry.reps = arguments.reps ?? entry.reps
-        entry.weight = arguments.weight ?? entry.weight
+        if let setEntries {
+            entry.setEntries = setEntries
+        }
         entry.restSeconds = arguments.restSeconds ?? entry.restSeconds
         entry.durationMinutes = arguments.durationMinutes ?? entry.durationMinutes
         entry.formScore = arguments.formScore ?? entry.formScore
@@ -735,8 +727,8 @@ extension ConversationRecorder {
             exercise: entry.exercise,
             intensity: entry.intensity,
             durationMinutes: entry.durationMinutes,
-            sets: entry.sets,
-            reps: entry.reps,
+            sets: entry.setCount,
+            reps: entry.representativeReps,
             restSeconds: entry.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
@@ -1051,9 +1043,86 @@ extension ConversationRecorder {
             : "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
     }
 
+    private static func workoutSetEntries(
+        from arguments: AgentToolArguments
+    ) -> [WorkoutSetEvidence]? {
+        if let entries = arguments.setEntries {
+            return entries.map {
+                WorkoutSetEvidence(
+                    reps: $0.reps,
+                    externalWeightKG: $0.externalWeightKG
+                )
+            }
+        }
+        return legacyWorkoutSetEntries(
+            sets: arguments.sets,
+            reps: arguments.reps,
+            weight: arguments.weight
+        )
+    }
+
+    private static func legacyWorkoutSetEntries(
+        sets: Int?,
+        reps: Int?,
+        weight: Double?
+    ) -> [WorkoutSetEvidence]? {
+        guard let sets else { return nil }
+        return (0 ..< max(sets, 0)).map { _ in
+            WorkoutSetEvidence(reps: reps, externalWeightKG: weight)
+        }
+    }
+
+    private static func workoutSetValidationError(
+        _ entries: [WorkoutSetEvidence]?
+    ) -> String? {
+        guard let entries else { return nil }
+        guard entries.count <= 100 else {
+            return "set_entries 最多包含 100 组。"
+        }
+        for (index, entry) in entries.enumerated() {
+            if let reps = entry.reps, !(1 ... 1000).contains(reps) {
+                return "第 \(index + 1) 组 reps 必须在 1 到 1000 之间。"
+            }
+            if let weight = entry.externalWeightKG, !(0 ... 1000).contains(weight) {
+                return "第 \(index + 1) 组 external_weight_kg 必须在 0 到 1000kg 之间。"
+            }
+        }
+        return nil
+    }
+
+    private static func representativeReps(
+        in entries: [WorkoutSetEvidence]?
+    ) -> Int? {
+        guard let entries, !entries.isEmpty else { return nil }
+        let values = entries.compactMap(\.reps)
+        guard values.count == entries.count, Set(values).count == 1 else {
+            return nil
+        }
+        return values.first
+    }
+
+    private static func workoutSetSummary(
+        _ entries: [WorkoutSetEvidence]
+    ) -> String {
+        entries.enumerated().map { index, entry in
+            switch (entry.externalWeightKG, entry.reps) {
+            case let (.some(weight), .some(reps)):
+                "\(formatWeight(weight) ?? "\(weight)kg") × \(reps)次"
+            case let (.some(weight), .none):
+                "第\(index + 1)组 \(formatWeight(weight) ?? "\(weight)kg")"
+            case let (.none, .some(reps)):
+                "第\(index + 1)组 \(reps)次"
+            case (.none, .none):
+                "第\(index + 1)组"
+            }
+        }.joined(separator: "，")
+    }
+
     private static func workoutSummary(_ workout: WorkoutEntry) -> String {
         var parts = [workout.exercise]
-        if let sets = workout.sets, let reps = workout.reps {
+        if let setEvidenceSummary = workout.setEvidenceSummary {
+            parts.append(setEvidenceSummary)
+        } else if let sets = workout.sets, let reps = workout.reps {
             parts.append("\(sets)×\(reps)")
         } else {
             if let sets = workout.sets {
@@ -1304,12 +1373,17 @@ extension ConversationRecorder {
         in context: ModelContext
     ) {
         guard let workout = result.workout else { return }
+        let setEntries = workout.setEntries ?? legacyWorkoutSetEntries(
+            sets: workout.sets,
+            reps: workout.reps,
+            weight: workout.weight
+        )
         let calorieEstimate = WorkoutCalorieCalculator.estimate(
             exercise: workout.exercise,
             intensity: workout.intensity,
             durationMinutes: workout.durationMinutes,
-            sets: workout.sets,
-            reps: workout.reps,
+            sets: setEntries?.count ?? workout.sets,
+            reps: representativeReps(in: setEntries) ?? workout.reps,
             restSeconds: workout.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
@@ -1323,6 +1397,7 @@ extension ConversationRecorder {
             sessionID: sourceSessionID,
             turnID: sourceTurnID,
             exercise: workout.exercise,
+            setEntries: setEntries,
             sets: workout.sets,
             reps: workout.reps,
             weight: workout.weight,
@@ -1351,6 +1426,7 @@ extension ConversationRecorder {
                 sets: workout.sets,
                 reps: workout.reps,
                 weight: workout.weight,
+                setEntries: setEntries,
                 restSeconds: workout.restSeconds,
                 durationMinutes: workout.durationMinutes,
                 notes: sourceText,
@@ -1517,6 +1593,25 @@ enum DataIntegrityRepair {
             }
         }
 
+        if changed {
+            try? context.save()
+        }
+    }
+
+    static func migrateLegacyWorkoutSets(in context: ModelContext) {
+        let workouts = (try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? []
+        var changed = false
+        for workout in workouts
+            where workout.setEntriesData.isEmpty && workout.sets != nil
+        {
+            guard let count = workout.sets, count > 0 else { continue }
+            let reps = workout.reps
+            let weight = workout.weight
+            workout.setEntries = (0 ..< count).map { _ in
+                WorkoutSetEvidence(reps: reps, externalWeightKG: weight)
+            }
+            changed = true
+        }
         if changed {
             try? context.save()
         }

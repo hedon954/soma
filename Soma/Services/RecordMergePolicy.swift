@@ -178,9 +178,13 @@ enum RecordMergePolicy {
     ) {
         if input.isCorrection {
             entry.exercise = input.exercise
-            entry.sets = input.sets ?? entry.sets
-            entry.reps = input.reps ?? entry.reps
-            entry.weight = input.weight ?? entry.weight
+            if let setEntries = input.setEntries {
+                entry.setEntries = setEntries
+            } else {
+                entry.sets = input.sets ?? entry.sets
+                entry.reps = input.reps ?? entry.reps
+                entry.weight = input.weight ?? entry.weight
+            }
             entry.restSeconds = input.restSeconds ?? entry.restSeconds
             entry.durationMinutes = input.durationMinutes ?? entry.durationMinutes
             entry.formScore = formScore ?? entry.formScore
@@ -190,9 +194,13 @@ enum RecordMergePolicy {
                 entry.notes = input.sourceText
             }
         } else {
-            entry.sets = entry.sets ?? input.sets
-            entry.reps = entry.reps ?? input.reps
-            entry.weight = entry.weight ?? input.weight
+            if entry.setEntriesData.isEmpty, let setEntries = input.setEntries {
+                entry.setEntries = setEntries
+            } else if entry.setEntriesData.isEmpty {
+                entry.sets = entry.sets ?? input.sets
+                entry.reps = entry.reps ?? input.reps
+                entry.weight = entry.weight ?? input.weight
+            }
             entry.restSeconds = entry.restSeconds ?? input.restSeconds
             entry.durationMinutes = entry.durationMinutes ?? input.durationMinutes
             entry.formScore = entry.formScore ?? formScore
@@ -275,6 +283,7 @@ enum RecordMergePolicy {
             sessionID: rhs.sourceSessionID,
             turnID: rhs.sourceTurnID,
             exercise: rhs.exercise,
+            setEntries: rhs.setEntriesData.isEmpty ? nil : rhs.setEntries,
             sets: rhs.sets,
             reps: rhs.reps,
             weight: rhs.weight,
@@ -352,9 +361,13 @@ enum RecordMergePolicy {
         var score = timeScore(interval)
         score += sessionScore(entry.sourceSessionID, input.sessionID)
         score += similarity >= 0.8 ? 4 : similarity >= 0.55 ? 3 : 1
-        score += optionalEquality(entry.sets, input.sets)
-        score += optionalEquality(entry.reps, input.reps)
-        score += optionalCloseness(entry.weight, input.weight, tolerance: 0.5)
+        if let setEntries = input.setEntries {
+            score += entry.setEntries == setEntries ? 3 : 0
+        } else {
+            score += optionalEquality(entry.sets, input.sets)
+            score += optionalEquality(entry.reps, input.reps)
+            score += optionalCloseness(entry.weight, input.weight, tolerance: 0.5)
+        }
         score += optionalEquality(entry.restSeconds, input.restSeconds)
         score += optionalEquality(entry.durationMinutes, input.durationMinutes)
         score += mediaScore(entry.mediaAttachments, input.media)
@@ -505,6 +518,7 @@ struct WorkoutMergeInput {
     var sessionID: UUID?
     var turnID: UUID?
     var exercise: String
+    var setEntries: [WorkoutSetEvidence]?
     var sets: Int?
     var reps: Int?
     var weight: Double?
@@ -615,6 +629,7 @@ extension DataIntegrityRepair {
                     sessionID: entry.sourceSessionID,
                     turnID: entry.sourceTurnID,
                     exercise: entry.exercise,
+                    setEntries: entry.setEntriesData.isEmpty ? nil : entry.setEntries,
                     sets: entry.sets,
                     reps: entry.reps,
                     weight: entry.weight,

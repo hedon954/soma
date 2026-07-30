@@ -398,6 +398,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var id: UUID
     var date: Date
     var exercise: String
+    var setEntries: [WorkoutSetEvidence]?
     var sets: Int?
     var reps: Int?
     var weight: Double?
@@ -421,6 +422,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         id = model.id
         date = model.date
         exercise = model.exercise
+        setEntries = model.setEntries.isEmpty ? nil : model.setEntries
         sets = model.sets
         reps = model.reps
         weight = model.weight
@@ -449,6 +451,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
             sets: sets,
             reps: reps,
             weight: weight,
+            setEntries: setEntries,
             restSeconds: restSeconds,
             durationMinutes: durationMinutes,
             notes: notes,

@@ -56,7 +56,7 @@ final class SomaTests: XCTestCase {
             text: "刚做完深蹲 4组8次 60kg",
             attachments: [],
             context: ConversationProcessingContext(
-                contextSummary: "测试上下文",
+                structuredContext: "测试上下文",
                 session: session,
                 dataSpace: .demo,
                 gyms: [],
@@ -84,7 +84,7 @@ final class SomaTests: XCTestCase {
     }
 
     @MainActor
-    func testConversationSessionCreatesNewDayAndReusesEmptyTodaySession() throws {
+    func testConversationSessionKeepsLatestConversationAcrossDays() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
         let today = try XCTUnwrap(
@@ -116,11 +116,11 @@ final class SomaTests: XCTestCase {
         )
 
         XCTAssertNotNil(legacyMessage.sessionID)
-        XCTAssertNotEqual(legacyMessage.sessionID, current.id)
-        XCTAssertTrue(calendar.isDate(current.startedAt, inSameDayAs: today))
+        XCTAssertEqual(legacyMessage.sessionID, current.id)
+        XCTAssertTrue(calendar.isDate(current.startedAt, inSameDayAs: yesterday))
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<ConversationSession>()).count,
-            2
+            1
         )
 
         let resolvedAgain = try ConversationSessionStore.resolveForEntry(
@@ -134,12 +134,12 @@ final class SomaTests: XCTestCase {
         XCTAssertEqual(resolvedAgain.id, current.id)
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<ConversationSession>()).count,
-            2
+            1
         )
     }
 
     @MainActor
-    func testConversationSessionReusesLatestMessageFromToday() throws {
+    func testConversationSessionHonorsPreferredConversationAcrossDays() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
         let today = try XCTUnwrap(
@@ -151,30 +151,78 @@ final class SomaTests: XCTestCase {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
-        let session = ConversationSession(startedAt: today)
+        let preferred = ConversationSession(
+            startedAt: today.addingTimeInterval(-86400)
+        )
+        let latest = ConversationSession(startedAt: today)
         let message = CoachMessage(
             date: today,
-            sessionID: session.id,
+            sessionID: latest.id,
             isFromCoach: false,
             text: "今天继续训练"
         )
-        context.insert(session)
+        context.insert(preferred)
+        context.insert(latest)
         context.insert(message)
         try context.save()
 
         let resolved = ConversationSessionStore.resolveForEntry(
             messages: [message],
-            sessions: [session],
+            sessions: [preferred, latest],
+            preferredSessionID: preferred.id,
             now: today.addingTimeInterval(3600),
             calendar: calendar,
             in: context
         )
 
-        XCTAssertEqual(resolved.id, session.id)
+        XCTAssertEqual(resolved.id, preferred.id)
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<ConversationSession>()).count,
-            1
+            2
         )
+    }
+
+    @MainActor
+    func testConversationSessionControllerReusesEmptyAndPersistsNewSession() throws {
+        let suiteName = "SomaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let container = try ModelContainer(
+            for: ConversationSession.self,
+            CoachMessage.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let controller = ConversationSessionController(defaults: defaults)
+
+        let initial = controller.resolveForEntry(
+            dataSpace: .personal,
+            in: context
+        )
+        XCTAssertEqual(
+            controller.createSession(dataSpace: .personal, in: context).id,
+            initial.id
+        )
+
+        context.insert(CoachMessage(
+            sessionID: initial.id,
+            isFromCoach: false,
+            text: "第一段对话",
+            turnID: UUID()
+        ))
+        try context.save()
+        let created = controller.createSession(
+            dataSpace: .personal,
+            in: context
+        )
+        XCTAssertNotEqual(created.id, initial.id)
+
+        let restoredController = ConversationSessionController(defaults: defaults)
+        let restored = restoredController.resolveForEntry(
+            dataSpace: .personal,
+            in: context
+        )
+        XCTAssertEqual(restored.id, created.id)
     }
 
     func testMealTypeRoundTrip() {
@@ -250,6 +298,22 @@ final class SomaTests: XCTestCase {
     func testWorkoutVolume() {
         let workout = WorkoutEntry(exercise: "深蹲", sets: 4, reps: 8, weight: 60, restSeconds: 90)
         XCTAssertEqual(workout.estimatedVolume, 1920)
+    }
+
+    func testWorkoutVolumeUsesOrderedPerSetEvidence() {
+        let workout = WorkoutEntry(
+            exercise: "深蹲",
+            setEntries: [
+                WorkoutSetEvidence(reps: 10, externalWeightKG: 10),
+                WorkoutSetEvidence(reps: 10, externalWeightKG: 20),
+                WorkoutSetEvidence(reps: 12, externalWeightKG: 14)
+            ]
+        )
+
+        XCTAssertEqual(workout.setCount, 3)
+        XCTAssertEqual(workout.estimatedVolume, 468)
+        XCTAssertNil(workout.representativeReps)
+        XCTAssertNil(workout.representativeWeight)
     }
 
     func testWorkoutCalorieUsesExplicitDurationAndMET() throws {
@@ -403,6 +467,19 @@ final class SomaTests: XCTestCase {
             AIProvider.tencent.endpoint(baseURL: "https://tokenhub.tencentmaas.com/v1/", path: "chat/completions")?.absoluteString,
             "https://tokenhub.tencentmaas.com/v1/chat/completions"
         )
+        XCTAssertNil(
+            AIProvider.other.endpoint(
+                baseURL: "",
+                path: "chat/completions"
+            )
+        )
+        XCTAssertEqual(
+            AIProvider.other.endpoint(
+                baseURL: "https://example.com/custom/v1",
+                path: "models"
+            )?.absoluteString,
+            "https://example.com/custom/v1/models"
+        )
     }
 
     func testKnownMultimodalModelsAreRecognized() {
@@ -414,6 +491,60 @@ final class SomaTests: XCTestCase {
             ModelCapability.multimodalSupport(provider: .tencent, model: "hy-vision-2.0-instruct"),
             .supported
         )
+        XCTAssertTrue(
+            ModelCapability.supportsDirectVideo(
+                provider: .bailian,
+                model: "qwen3-vl-plus"
+            )
+        )
+        XCTAssertFalse(
+            ModelCapability.supportsDirectVideo(
+                provider: .openAI,
+                model: "gpt-5"
+            )
+        )
+    }
+
+    @MainActor
+    func testModelRouterUsesOptionalSmallProfileOnlyForSimpleText() throws {
+        let suiteName = "SomaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = AIService(defaults: defaults, apiKeyOverride: "test-key")
+        service.configure(
+            tier: .standard,
+            provider: .openAI,
+            baseURL: "https://standard.example.com/v1",
+            model: "gpt-standard"
+        )
+        service.configure(
+            tier: .small,
+            provider: .other,
+            baseURL: "https://small.example.com/v1",
+            model: "small-chat"
+        )
+        service.setTierEnabled(true, tier: .small)
+
+        let simple = service.route(
+            text: "你好",
+            hasMedia: false,
+            hasVideo: false
+        )
+        let complex = service.route(
+            text: "帮我记录今天的训练",
+            hasMedia: false,
+            hasVideo: false
+        )
+        let visual = service.route(
+            text: "看看动作",
+            hasMedia: true,
+            hasVideo: true
+        )
+
+        XCTAssertEqual(simple.tier, .small)
+        XCTAssertEqual(simple.provider, .other)
+        XCTAssertEqual(complex.tier, .standard)
+        XCTAssertEqual(visual.tier, .standard)
     }
 
     @MainActor
@@ -512,6 +643,9 @@ final class SomaTests: XCTestCase {
         XCTAssertTrue(names.contains("update_body"))
         XCTAssertTrue(names.contains("delete_record"))
         XCTAssertTrue(names.contains("load_skill"))
+        let encoded = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(encoded.contains("set_entries"))
+        XCTAssertTrue(encoded.contains("external_weight_kg"))
     }
 
     @MainActor
@@ -535,9 +669,9 @@ final class SomaTests: XCTestCase {
             name: .recordWorkout,
             arguments: AgentToolArguments(
                 exercise: "杠铃深蹲",
-                sets: 4,
-                reps: 8,
-                weight: 62.5,
+                setEntries: (0 ..< 4).map { _ in
+                    AgentWorkoutSetInput(reps: 8, externalWeightKG: 62.5)
+                },
                 restSeconds: 90,
                 durationMinutes: 48,
                 formScore: 86,
@@ -559,7 +693,8 @@ final class SomaTests: XCTestCase {
         XCTAssertEqual(result.recordType, .workout)
         XCTAssertEqual(records.count, 1)
         XCTAssertEqual(records.first?.exercise, "杠铃深蹲")
-        XCTAssertEqual(records.first?.weight, 62.5)
+        XCTAssertEqual(records.first?.setCount, 4)
+        XCTAssertEqual(records.first?.representativeWeight, 62.5)
         XCTAssertEqual(records.first?.estimatedCalories, 280)
         XCTAssertEqual(records.first?.calorieMET, 5.0)
         XCTAssertFalse(records.first?.calorieDurationEstimated ?? true)
@@ -585,8 +720,9 @@ final class SomaTests: XCTestCase {
             name: .recordWorkout,
             arguments: AgentToolArguments(
                 exercise: "俯卧撑",
-                sets: 4,
-                reps: 12
+                setEntries: (0 ..< 4).map { _ in
+                    AgentWorkoutSetInput(reps: 12, externalWeightKG: nil)
+                }
             )
         )
 
@@ -600,8 +736,8 @@ final class SomaTests: XCTestCase {
         let record = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutEntry>()).first)
 
         XCTAssertTrue(result.ok)
-        XCTAssertEqual(record.sets, 4)
-        XCTAssertEqual(record.reps, 12)
+        XCTAssertEqual(record.setCount, 4)
+        XCTAssertEqual(record.representativeReps, 12)
         XCTAssertNil(record.weight)
         XCTAssertNil(record.restSeconds)
         XCTAssertNil(record.durationMinutes)
@@ -1126,6 +1262,14 @@ extension SomaTests {
         XCTAssertNil(workout.formScore)
         XCTAssertNil(workout.intensity)
         XCTAssertNil(workout.feedback)
+
+        DataIntegrityRepair.migrateLegacyWorkoutSets(in: context)
+
+        XCTAssertEqual(workout.setCount, 4)
+        XCTAssertEqual(workout.representativeReps, 12)
+        XCTAssertNil(workout.representativeWeight)
+        XCTAssertNil(workout.sets)
+        XCTAssertFalse(workout.setEntriesData.isEmpty)
     }
 
     @MainActor

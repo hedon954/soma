@@ -5,8 +5,10 @@ import SwiftData
 private struct PreparedConversationMedia {
     var attachments: [MediaAttachmentReference]
     var frames: [Data]
+    var videos: [AgentVideoInput] = []
     var imageCount: Int
     var videoCount: Int
+    var failedVideoCount: Int = 0
 
     var hasVideo: Bool {
         videoCount > 0
@@ -29,8 +31,19 @@ private struct PreparedConversationMedia {
     }
 }
 
+private enum ConversationMediaPreparationError: LocalizedError {
+    case videoFramesUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .videoFramesUnavailable:
+            "视频已保存在本机，但未能提取任何可供模型分析的画面，请换一个可播放的视频后重试"
+        }
+    }
+}
+
 struct ConversationProcessingContext {
-    var contextSummary: String
+    var structuredContext: String
     var session: ConversationSession
     var dataSpace: DataSpace
     var gyms: [GymProfile]
@@ -42,8 +55,11 @@ struct ConversationProcessingContext {
 @MainActor
 @Observable
 final class ConversationProcessingService {
+    private static let maximumAnalysisImageCount = 12
+
     private(set) var isProcessing = false
     private(set) var dataSpace: DataSpace?
+    private(set) var sessionID: UUID?
     private(set) var liveAssistantText = ""
     private(set) var liveAgentActivity: String?
     private(set) var liveEventRevision = 0
@@ -59,7 +75,11 @@ final class ConversationProcessingService {
         includeLocation: Bool,
         locationService: LocationContextService
     ) -> Bool {
-        guard beginProcessing(dataSpace: context.dataSpace, ai: context.ai) else {
+        guard beginProcessing(
+            dataSpace: context.dataSpace,
+            sessionID: context.session.id,
+            ai: context.ai
+        ) else {
             return false
         }
 
@@ -83,14 +103,21 @@ final class ConversationProcessingService {
     ) -> Bool {
         guard !userMessage.isFromCoach,
               userMessage.turnID != nil,
-              beginProcessing(dataSpace: context.dataSpace, ai: context.ai)
+              beginProcessing(
+                  dataSpace: context.dataSpace,
+                  sessionID: context.session.id,
+                  ai: context.ai
+              )
         else {
             return false
         }
 
         processingTask = Task { [weak self] in
             guard let self else { return }
-            let media = await prepareStoredMedia(userMessage.mediaAttachments)
+            let media = await prepareStoredMedia(
+                userMessage.mediaAttachments,
+                frameLimit: Self.maximumAnalysisImageCount
+            )
             await runAttempt(
                 userMessage: userMessage,
                 media: media,
@@ -100,10 +127,15 @@ final class ConversationProcessingService {
         return true
     }
 
-    private func beginProcessing(dataSpace: DataSpace, ai: AIService) -> Bool {
+    private func beginProcessing(
+        dataSpace: DataSpace,
+        sessionID: UUID,
+        ai: AIService
+    ) -> Bool {
         guard !isProcessing else { return false }
         isProcessing = true
         self.dataSpace = dataSpace
+        self.sessionID = sessionID
         liveAssistantText = ""
         liveAgentActivity = ai.isRemoteEnabled
             ? "正在启动 Agent…"
@@ -174,7 +206,24 @@ final class ConversationProcessingService {
         let effectiveGym = resolution.gymID.flatMap { id in
             context.gyms.first { $0.id == id }
         }
-        let persistentContext = context.contextSummary + turnContext(
+        let projection = ConversationContextProjection.make(
+            messages: allMessages(in: context.modelContext),
+            sessionID: context.session.id,
+            excludingTurnID: turnID
+        )
+        let history = if context.ai.isRemoteEnabled {
+            await prepareAgentHistory(
+                projection.exchanges,
+                frameLimit: max(
+                    0,
+                    Self.maximumAnalysisImageCount - media.frames.count
+                )
+            )
+        } else {
+            [AgentConversationExchange]()
+        }
+        let historicalFrameCount = history.reduce(0) { $0 + $1.images.count }
+        let persistentContext = context.structuredContext + turnContext(
             location: userMessage.location,
             gym: effectiveGym,
             source: resolution.source
@@ -208,19 +257,36 @@ final class ConversationProcessingService {
         do {
             let reply: String
             if context.ai.isRemoteEnabled {
-                let provider = context.ai.provider
+                let route = context.ai.route(
+                    text: userMessage.text,
+                    hasMedia: !media.attachments.isEmpty,
+                    hasVideo: media.hasVideo
+                )
+                let directVideos = ModelCapability.supportsDirectVideo(
+                    provider: route.provider,
+                    model: route.model
+                ) ? media.videos : []
+                if media.failedVideoCount > 0,
+                   directVideos.count != media.videoCount
+                {
+                    throw ConversationMediaPreparationError.videoFramesUnavailable
+                }
+                let provider = route.provider
                 let trace = AgentTrace(
                     provider: provider.displayName,
-                    model: context.ai.model(for: provider),
+                    model: route.model,
                     endpoint: provider.endpoint(
-                        baseURL: context.ai.baseURL(for: provider),
+                        baseURL: route.baseURL,
                         path: "chat/completions"
-                    )?.absoluteString ?? context.ai.baseURL(for: provider),
+                    )?.absoluteString ?? route.baseURL,
                     dataSpaceRaw: context.dataSpace.rawValue,
                     userInput: displayText,
-                    contextSnapshot: persistentContext,
+                    contextSnapshot: """
+                    \(persistentContext)
+                    Session 上下文投影：最近 \(history.count) 个来回；重新提供历史视觉帧 \(historicalFrameCount) 张。
+                    """,
                     mediaKind: media.primaryKind,
-                    imageCount: media.frames.count,
+                    imageCount: media.frames.count + historicalFrameCount,
                     imageAttachmentCount: media.imageCount,
                     videoAttachmentCount: media.videoCount,
                     turnID: turnID,
@@ -234,10 +300,13 @@ final class ConversationProcessingService {
                 let outcome = try await context.ai.runAgent(
                     text: userMessage.text,
                     images: media.frames,
+                    videos: directVideos,
                     hasVideo: media.hasVideo,
                     imageAttachmentCount: media.imageCount,
                     videoAttachmentCount: media.videoCount,
+                    history: history,
                     context: agentContext,
+                    route: route,
                     trace: { [weak self] event in
                         self?.applyLiveAgentEvent(event)
                         trace.apply(event)
@@ -284,6 +353,9 @@ final class ConversationProcessingService {
                 reply = outcome.finalAnswer
                 performedRecordType = outcome.primaryRecordType ?? performedRecordType
             } else {
+                if media.failedVideoCount > 0 {
+                    throw ConversationMediaPreparationError.videoFramesUnavailable
+                }
                 let result = try await context.ai.interpretConversation(
                     text: userMessage.text,
                     images: media.frames,
@@ -358,6 +430,16 @@ final class ConversationProcessingService {
             ?? 1
     }
 
+    private func allMessages(in context: ModelContext) -> [CoachMessage] {
+        (
+            try? context.fetch(
+                FetchDescriptor<CoachMessage>(
+                    sortBy: [SortDescriptor(\.date)]
+                )
+            )
+        ) ?? []
+    }
+
     private func turnContext(
         location: LocationSnapshot?,
         gym: GymProfile?,
@@ -381,6 +463,7 @@ final class ConversationProcessingService {
         liveAgentActivity = nil
         isProcessing = false
         dataSpace = nil
+        sessionID = nil
         processingTask = nil
     }
 
@@ -389,8 +472,10 @@ final class ConversationProcessingService {
     ) async -> PreparedConversationMedia {
         var references: [MediaAttachmentReference] = []
         var frameGroups: [[Data]] = []
+        var videos: [AgentVideoInput] = []
         var imageCount = 0
         var videoCount = 0
+        var failedVideoCount = 0
 
         for attachment in attachments {
             switch attachment.kind {
@@ -404,7 +489,9 @@ final class ConversationProcessingService {
                     continue
                 }
                 references.append(MediaAttachmentReference(kind: .image, path: path))
-                frameGroups.append([data])
+                let stableData = MediaStore.url(at: path)
+                    .flatMap { try? Data(contentsOf: $0) }
+                frameGroups.append(stableData.map { [$0] } ?? [])
                 imageCount += 1
             case .video:
                 guard
@@ -414,46 +501,117 @@ final class ConversationProcessingService {
                     continue
                 }
                 references.append(MediaAttachmentReference(kind: .video, path: path))
-                await frameGroups.append(VideoFrameExtractor.frames(from: url))
                 videoCount += 1
+                guard let stableURL = MediaStore.url(at: path) else {
+                    failedVideoCount += 1
+                    frameGroups.append([])
+                    continue
+                }
+                let frames = await VideoFrameExtractor.frames(from: stableURL)
+                frameGroups.append(frames)
+                if let data = try? Data(contentsOf: stableURL),
+                   data.count <= 24 * 1024 * 1024
+                {
+                    videos.append(AgentVideoInput(
+                        data: data,
+                        mimeType: videoMIMEType(for: stableURL)
+                    ))
+                }
+                if frames.isEmpty {
+                    failedVideoCount += 1
+                }
             }
         }
 
         return PreparedConversationMedia(
             attachments: references,
-            frames: Self.balancedFrames(from: frameGroups, limit: 12),
+            frames: Self.balancedFrames(
+                from: frameGroups,
+                limit: Self.maximumAnalysisImageCount
+            ),
+            videos: videos,
             imageCount: imageCount,
-            videoCount: videoCount
+            videoCount: videoCount,
+            failedVideoCount: failedVideoCount
         )
     }
 
     private func prepareStoredMedia(
-        _ attachments: [MediaAttachmentReference]
+        _ attachments: [MediaAttachmentReference],
+        frameLimit: Int
     ) async -> PreparedConversationMedia {
+        guard frameLimit > 0 else {
+            return PreparedConversationMedia(
+                attachments: attachments,
+                frames: [],
+                imageCount: attachments.count { $0.kind == .image },
+                videoCount: attachments.count { $0.kind == .video },
+                failedVideoCount: 0
+            )
+        }
         var frameGroups: [[Data]] = []
         var imageCount = 0
         var videoCount = 0
+        var failedVideoCount = 0
         for attachment in attachments {
-            guard let url = MediaStore.url(at: attachment.path) else { continue }
             switch attachment.kind {
             case .none:
                 continue
             case .image:
+                guard let url = MediaStore.url(at: attachment.path) else {
+                    continue
+                }
                 if let data = try? Data(contentsOf: url) {
                     frameGroups.append([data])
                     imageCount += 1
                 }
             case .video:
-                await frameGroups.append(VideoFrameExtractor.frames(from: url))
                 videoCount += 1
+                guard let url = MediaStore.url(at: attachment.path) else {
+                    failedVideoCount += 1
+                    continue
+                }
+                let frames = await VideoFrameExtractor.frames(from: url)
+                frameGroups.append(frames)
+                if frames.isEmpty {
+                    failedVideoCount += 1
+                }
             }
         }
         return PreparedConversationMedia(
             attachments: attachments,
-            frames: Self.balancedFrames(from: frameGroups, limit: 12),
+            frames: Self.balancedFrames(from: frameGroups, limit: frameLimit),
             imageCount: imageCount,
-            videoCount: videoCount
+            videoCount: videoCount,
+            failedVideoCount: failedVideoCount
         )
+    }
+
+    private func prepareAgentHistory(
+        _ exchanges: [ConversationContextProjection.Exchange],
+        frameLimit: Int
+    ) async -> [AgentConversationExchange] {
+        var remainingFrameCount = max(0, frameLimit)
+        var framesByTurnID: [UUID: [Data]] = [:]
+
+        for exchange in exchanges.reversed() where remainingFrameCount > 0 {
+            let media = await prepareStoredMedia(
+                exchange.mediaAttachments,
+                frameLimit: remainingFrameCount
+            )
+            framesByTurnID[exchange.turnID] = media.frames
+            remainingFrameCount -= media.frames.count
+        }
+
+        return exchanges.map { exchange in
+            AgentConversationExchange(
+                userText: exchange.userText,
+                assistantText: exchange.assistantText,
+                images: framesByTurnID[exchange.turnID] ?? [],
+                imageAttachmentCount: exchange.imageAttachmentCount,
+                videoAttachmentCount: exchange.videoAttachmentCount
+            )
+        }
     }
 
     private static func balancedFrames(
@@ -476,6 +634,15 @@ final class ConversationProcessingService {
             index += 1
         }
         return result
+    }
+
+    private func videoMIMEType(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "mp4", "m4v": "video/mp4"
+        case "avi": "video/x-msvideo"
+        case "webm": "video/webm"
+        default: "video/quicktime"
+        }
     }
 
     private func applyLiveAgentEvent(_ event: AgentTraceEvent) {

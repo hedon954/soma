@@ -1,5 +1,5 @@
-import MarkdownUI
 import SwiftUI
+import UIKit
 
 enum AppTheme {
     static let tint = Color(red: 0.12, green: 0.70, blue: 0.37)
@@ -136,18 +136,84 @@ struct LocalImageView: View {
     }
 }
 
-struct MarkdownText: View {
+struct MarkdownText: UIViewRepresentable {
     private let markdown: String
 
     init(_ markdown: String) {
         self.markdown = markdown
     }
 
-    var body: some View {
-        Markdown(markdown)
-            .markdownTheme(.gitHub)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.backgroundColor = .clear
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = false
+        textView.adjustsFontForContentSizeCategory = true
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.linkTextAttributes = [
+            .foregroundColor: UIColor(AppTheme.tint)
+        ]
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.required, for: .vertical)
+        textView.accessibilityTraits = .staticText
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        guard textView.attributedText?.string != markdown else { return }
+        textView.attributedText = attributedMarkdown
+        textView.accessibilityLabel = markdown
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: UITextView,
+        context: Context
+    ) -> CGSize? {
+        let width = max(proposal.width ?? 320, 1)
+        let height = ceil(uiView.sizeThatFits(
+            CGSize(width: width, height: .greatestFiniteMagnitude)
+        ).height)
+        return CGSize(width: width, height: height)
+    }
+
+    private var attributedMarkdown: NSAttributedString {
+        var attributed = (
+            try? AttributedString(
+                markdown: markdown,
+                options: .init(interpretedSyntax: .full)
+            )
+        ) ?? AttributedString(markdown)
+        let runs = attributed.runs.map {
+            ($0.range, $0.inlinePresentationIntent)
+        }
+        for (range, intent) in runs {
+            let baseFont = UIFont.preferredFont(forTextStyle: .body)
+            let font: UIFont
+            if intent?.contains(.code) == true {
+                font = UIFont.monospacedSystemFont(
+                    ofSize: baseFont.pointSize,
+                    weight: .regular
+                )
+            } else {
+                var traits: UIFontDescriptor.SymbolicTraits = []
+                if intent?.contains(.stronglyEmphasized) == true {
+                    traits.insert(.traitBold)
+                }
+                if intent?.contains(.emphasized) == true {
+                    traits.insert(.traitItalic)
+                }
+                let descriptor = baseFont.fontDescriptor
+                    .withSymbolicTraits(traits)
+                    ?? baseFont.fontDescriptor
+                font = UIFont(descriptor: descriptor, size: baseFont.pointSize)
+            }
+            attributed[range].font = font
+            attributed[range].foregroundColor = UIColor.label
+        }
+        return NSAttributedString(attributed)
     }
 }
 

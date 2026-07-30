@@ -3,6 +3,8 @@ import SwiftUI
 
 struct FootprintsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(DataSpaceController.self) private var dataSpace
+    @Environment(ConversationSessionController.self) private var conversationSessions
     @Query(sort: \CoachMessage.date, order: .reverse)
     private var messages: [CoachMessage]
     @Query(sort: \ConversationSession.startedAt, order: .reverse)
@@ -54,8 +56,15 @@ struct FootprintsView: View {
         if let session = message.sessionID.flatMap({ id in
             sessions.first { $0.id == id }
         }) {
-            NavigationLink {
-                ConversationSessionTranscriptView(session: session)
+            Button {
+                conversationSessions.select(
+                    session,
+                    dataSpace: dataSpace.activeSpace
+                )
+                NotificationCenter.default.post(
+                    name: .openCoachConversation,
+                    object: nil
+                )
             } label: {
                 FootprintRow(
                     message: message,
@@ -101,6 +110,12 @@ struct FootprintsView: View {
             .recordType?
             .recordedLabel
     }
+}
+
+extension Notification.Name {
+    static let openCoachConversation = Notification.Name(
+        "Soma.openCoachConversation"
+    )
 }
 
 private struct FootprintRow: View {
