@@ -5,13 +5,16 @@
 
 ## 背景
 
-Soma 的价值来自低摩擦记录。用户希望从主屏幕直接开始文字、拍照或媒体输入，但 Widget
-不能承载任意文本编辑，也不能在扩展进程中直接呈现系统相机和照片选择器。让扩展直接写
-SwiftData 还会引入 App Group、并发写入和新的隐私边界。
+Soma 的价值来自低摩擦记录。用户希望从主屏幕和锁屏直接开始文字、拍照或媒体输入，但
+Widget 不能承载任意文本编辑，也不能在扩展进程中直接呈现系统相机和照片选择器。让扩展
+直接写 SwiftData 还会引入 App Group、并发写入和新的隐私边界。
 
 ## 决策
 
 - 提供中尺寸 `SomaWidget`，包含“文字”“拍照”“照片/视频”三个入口。
+- 提供文字、拍照、照片/视频三个独立锁屏 Widget；每个入口同时支持
+  `accessoryInline`、`accessoryCircular` 和 `accessoryRectangular`，用户可按锁屏位置
+  选择系统允许的样式。
 - Widget 使用 `soma://capture/{mode}` 深链接打开主 App；系统快捷指令通过
   `StartSomaCaptureIntent` 暴露相同三种意图。
 - `SomaCaptureRouter` 由 App 根生命周期持有，只传递短生命周期的录入意图。
@@ -19,6 +22,8 @@ SwiftData 还会引入 App Group、并发写入和新的隐私边界。
   教练输入区。
 - Widget 和 App Intent 不直接写业务记录、不运行 Agent、不读取本地健康数据，也不引入
   App Group。所有事实仍从聊天进入固定 Tool Call 闭环。
+- 锁屏入口在设备锁定时由系统先完成身份验证；Widget 不尝试绕过解锁直接访问相机、媒体或
+  私人身体数据。
 - App 未运行时允许系统启动 App；App 被终止后不承诺扩展内后台解析。
 
 ## 未选择的方案
@@ -30,5 +35,6 @@ SwiftData 还会引入 App Group、并发写入和新的隐私边界。
 
 ## 结果
 
-Widget 和系统快捷指令只是聊天的低摩擦入口，不形成第二条写入路径。后续若增加 Share
-Extension、App Group 或后台处理，必须新增 ADR 说明数据一致性、隐私和失败恢复。
+主屏幕 Widget、锁屏 Widget 和系统快捷指令只是聊天的低摩擦入口，不形成第二条写入路径。
+后续若增加 Share Extension、App Group 或后台处理，必须新增 ADR 说明数据一致性、隐私和
+失败恢复。

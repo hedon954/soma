@@ -1,6 +1,89 @@
 import SwiftUI
 import WidgetKit
 
+private enum SomaCaptureAction {
+    case text
+    case camera
+    case media
+
+    var homeTitle: String {
+        switch self {
+        case .text:
+            "文字"
+        case .camera:
+            "拍照"
+        case .media:
+            "照片/视频"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .text:
+            "文字记录"
+        case .camera:
+            "拍照记录"
+        case .media:
+            "照片/视频"
+        }
+    }
+
+    var inlineTitle: String {
+        switch self {
+        case .text:
+            "Soma 文字记录"
+        case .camera:
+            "Soma 拍照"
+        case .media:
+            "Soma 照片/视频"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .text:
+            "打开教练输入"
+        case .camera:
+            "直接打开相机"
+        case .media:
+            "选择照片与视频"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .text:
+            "text.bubble.fill"
+        case .camera:
+            "camera.fill"
+        case .media:
+            "photo.stack.fill"
+        }
+    }
+
+    var routeURL: URL {
+        switch self {
+        case .text:
+            URL(string: "soma://capture/text")!
+        case .camera:
+            URL(string: "soma://capture/camera")!
+        case .media:
+            URL(string: "soma://capture/media")!
+        }
+    }
+
+    var widgetKind: String {
+        switch self {
+        case .text:
+            "SomaLockScreenTextCaptureWidget"
+        case .camera:
+            "SomaLockScreenCameraCaptureWidget"
+        case .media:
+            "SomaLockScreenMediaCaptureWidget"
+        }
+    }
+}
+
 private struct SomaQuickCaptureEntry: TimelineEntry {
     let date: Date
 }
@@ -48,21 +131,9 @@ private struct SomaQuickCaptureEntryView: View {
             }
 
             HStack(spacing: 10) {
-                captureLink(
-                    title: "文字",
-                    icon: "text.bubble.fill",
-                    route: "soma://capture/text"
-                )
-                captureLink(
-                    title: "拍照",
-                    icon: "camera.fill",
-                    route: "soma://capture/camera"
-                )
-                captureLink(
-                    title: "照片/视频",
-                    icon: "photo.stack.fill",
-                    route: "soma://capture/media"
-                )
+                captureLink(action: .text)
+                captureLink(action: .camera)
+                captureLink(action: .media)
             }
         }
         .containerBackground(for: .widget) {
@@ -77,17 +148,13 @@ private struct SomaQuickCaptureEntryView: View {
         }
     }
 
-    private func captureLink(
-        title: String,
-        icon: String,
-        route: String
-    ) -> some View {
-        Link(destination: URL(string: route)!) {
+    private func captureLink(action: SomaCaptureAction) -> some View {
+        Link(destination: action.routeURL) {
             VStack(spacing: 7) {
-                Image(systemName: icon)
+                Image(systemName: action.systemImage)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(tint)
-                Text(title)
+                Text(action.homeTitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -100,7 +167,7 @@ private struct SomaQuickCaptureEntryView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("用 Soma \(title)记录")
+        .accessibilityLabel("用 Soma \(action.title)")
     }
 }
 
@@ -120,9 +187,93 @@ struct SomaQuickCaptureWidget: Widget {
     }
 }
 
+private struct SomaLockScreenCaptureEntryView: View {
+    let action: SomaCaptureAction
+
+    @Environment(\.widgetFamily) private var family
+
+    var body: some View {
+        Group {
+            switch family {
+            case .accessoryInline:
+                Label(action.inlineTitle, systemImage: action.systemImage)
+            case .accessoryCircular:
+                ZStack {
+                    AccessoryWidgetBackground()
+                    Image(systemName: action.systemImage)
+                        .font(.title3.weight(.semibold))
+                        .widgetAccentable()
+                }
+            case .accessoryRectangular:
+                HStack(spacing: 8) {
+                    Image(systemName: action.systemImage)
+                        .font(.title3.weight(.semibold))
+                        .widgetAccentable()
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(action.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        Text(action.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            default:
+                EmptyView()
+            }
+        }
+        .containerBackground(for: .widget) {
+            Color.clear
+        }
+        .widgetURL(action.routeURL)
+        .accessibilityLabel("用 Soma \(action.title)")
+    }
+}
+
+private func lockScreenConfiguration(
+    for action: SomaCaptureAction
+) -> some WidgetConfiguration {
+    StaticConfiguration(
+        kind: action.widgetKind,
+        provider: SomaQuickCaptureProvider()
+    ) { _ in
+        SomaLockScreenCaptureEntryView(action: action)
+    }
+    .configurationDisplayName(Text("Soma \(action.title)"))
+    .description(Text(action.detail))
+    .supportedFamilies([
+        .accessoryInline,
+        .accessoryCircular,
+        .accessoryRectangular
+    ])
+}
+
+private struct SomaLockScreenTextCaptureWidget: Widget {
+    var body: some WidgetConfiguration {
+        lockScreenConfiguration(for: .text)
+    }
+}
+
+private struct SomaLockScreenCameraCaptureWidget: Widget {
+    var body: some WidgetConfiguration {
+        lockScreenConfiguration(for: .camera)
+    }
+}
+
+private struct SomaLockScreenMediaCaptureWidget: Widget {
+    var body: some WidgetConfiguration {
+        lockScreenConfiguration(for: .media)
+    }
+}
+
 @main
 struct SomaWidgetBundle: WidgetBundle {
     var body: some Widget {
         SomaQuickCaptureWidget()
+        SomaLockScreenTextCaptureWidget()
+        SomaLockScreenCameraCaptureWidget()
+        SomaLockScreenMediaCaptureWidget()
     }
 }

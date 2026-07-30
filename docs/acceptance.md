@@ -9,7 +9,7 @@
 | 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
 | 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
 | 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；点击后展开为保留各自比例的竖直列表并可收起，不支持横向滑动；视频本机抽帧；`SpeechInputService` 使用系统语音识别；消息正文支持完整 Markdown、原生范围选择与复制。 |
-| Widget 与系统快捷入口 | 中尺寸 `SomaWidget` 和 App Shortcuts 提供文字、拍照、照片/视频入口；打开 App 后直接聚焦文字输入或呈现系统选择器，不在扩展内写记录或运行 Agent。 |
+| Widget 与系统快捷入口 | 中尺寸主屏幕 `SomaWidget`、三种锁屏快捷组件和 App Shortcuts 均提供文字、拍照、照片/视频入口；锁屏组件支持行内、圆形、矩形位置；打开 App 后直接聚焦文字输入或呈现系统选择器，不在扩展内写记录或运行 Agent。 |
 | 异步对话处理 | `ConversationProcessingService` 由 App 根层持有；只要进程存活，离开聊天页不会中断当前解析。 |
 | 多个健身房和当前场馆 | 聊天可创建、更新、切换；健身房列表可直接选择当前场馆。 |
 | 健身房审查 | 详情展示全部上传照片、AI 环境总结和器械列表；健身房与器械支持编辑、删除。 |
@@ -44,3 +44,7 @@ DEVELOPMENT_TEAM=你的TeamID make install-device
 ```
 
 TestFlight 需要付费 Apple Developer Program 和 App Store Connect 记录；免费 Personal Team 可以完成连线真机安装，但签名会定期过期。
+
+锁屏组件需要真机手工验收：长按锁屏进入“自定”→“锁定屏幕”→“添加小组件”，确认 Soma
+下出现文字、拍照、照片/视频入口；分别添加行内、圆形或矩形样式，点击后应先遵循系统解锁，
+再进入对应的教练输入流程。
