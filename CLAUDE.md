@@ -7,9 +7,10 @@
 
 1. `docs/prd/` 定义产品为什么存在、当前要做什么和验收边界。
 2. `docs/adr/` 记录长期技术或交互决策，以及未采用方案。
-3. `CLAUDE.md` 定义所有开发活动必须遵循的原则。
-4. `.claude/skills/` 定义可执行的日常开发与发布 SOP。
-5. 代码、测试、Makefile 和 scripts 是可执行事实。
+3. `docs/bugs/` 记录关键故障的机制、修复与可执行回归门禁。
+4. `CLAUDE.md` 定义所有开发活动必须遵循的原则。
+5. `.claude/skills/` 定义可执行的日常开发与发布 SOP。
+6. 代码、测试、Makefile 和 scripts 是可执行事实。
 
 发生冲突时，不要静默绕过约束。先确认当前 PRD 和 Accepted ADR；需要改变长期边界时，
 新增 ADR supersede 旧决策。
@@ -132,6 +133,8 @@ App → Views → Services → Models
 
 - 数据真值、去重、容量、热量和 Agent Tool Schema 使用确定性单元测试。
 - bug 修复先补能复现问题的测试，再修复。
+- 关键 Bug 在 `docs/bugs/` 单独复盘；能自动化的防复发规则必须进入测试或
+  `make check`，不能只依赖文档提醒。
 - SwiftData 变更验证演示/个人空间隔离、旧数据兼容或明确的数据重建策略。
 - HealthKit 与真机权限无法完全自动化时，补充手工验收步骤。
 - 警告、格式、lint、脚本、文档链接、构建和测试都是质量门禁。

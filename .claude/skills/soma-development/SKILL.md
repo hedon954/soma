@@ -12,10 +12,11 @@ the current PRD defines scope, and Accepted ADRs define durable boundaries.
 
 1. Read `docs/prd/004-soma-current-product.md` and the relevant acceptance rows.
 2. Read `docs/adr/README.md` and every ADR touched by the change.
-3. Write down the user-visible success path, empty state, failure state, privacy impact, and
+3. Search `docs/bugs/README.md` for known failure mechanisms in the touched area.
+4. Write down the user-visible success path, empty state, failure state, privacy impact, and
    data that must survive navigation or restart.
-4. Identify whether the change belongs to App, Models, Services, Views, or Components.
-5. If it contradicts an Accepted ADR or adds a durable dependency/data flow, create a new ADR
+5. Identify whether the change belongs to App, Models, Services, Views, or Components.
+6. If it contradicts an Accepted ADR or adds a durable dependency/data flow, create a new ADR
    before implementation.
 
 Do not add a top-level GUI, account system, background server, unapproved external API, custom
@@ -63,5 +64,7 @@ cohesive type when that can be done without mixing unrelated behavior.
   correct.
 - Failure and cancellation are visible and recoverable.
 - Tests cover deterministic behavior.
+- Critical regressions have a `docs/bugs/` record and an executable prevention rule where
+  automation is possible.
 - No secret, real health data, generated Xcode project, archive, or local config enters Git.
 - `make verify` passes.

@@ -50,6 +50,28 @@ private enum SomaCaptureAction {
         }
     }
 
+    var configurationDisplayName: LocalizedStringKey {
+        switch self {
+        case .text:
+            "Soma 文字记录"
+        case .camera:
+            "Soma 拍照记录"
+        case .media:
+            "Soma 照片/视频"
+        }
+    }
+
+    var configurationDescription: LocalizedStringKey {
+        switch self {
+        case .text:
+            "打开教练输入"
+        case .camera:
+            "直接打开相机"
+        case .media:
+            "选择照片与视频"
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .text:
@@ -241,8 +263,8 @@ private func lockScreenConfiguration(
     ) { _ in
         SomaLockScreenCaptureEntryView(action: action)
     }
-    .configurationDisplayName(Text("Soma \(action.title)"))
-    .description(Text(action.detail))
+    .configurationDisplayName(action.configurationDisplayName)
+    .description(action.configurationDescription)
     .supportedFamilies([
         .accessoryInline,
         .accessoryCircular,

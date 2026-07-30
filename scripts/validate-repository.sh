@@ -30,6 +30,7 @@ required_files=(
   docs/acceptance.md
   docs/prd/004-soma-current-product.md
   docs/adr/README.md
+  docs/bugs/README.md
   docs/changelog/README.md
   Soma/Resources/Info.plist
   Soma/Soma.entitlements
@@ -49,6 +50,15 @@ for adr in "${adr_files[@]}"; do
   for heading in 背景 决策 结果; do
     grep -q "^## $heading$" "$adr" ||
       fail "$adr is missing the '$heading' section"
+  done
+done
+
+bug_files=(docs/bugs/[0-9][0-9][0-9][0-9]-*.md)
+[[ ${#bug_files[@]} -gt 0 ]] || fail "no critical bug records found"
+for bug in "${bug_files[@]}"; do
+  for heading in 症状 根因 修复 回归门禁; do
+    grep -q "^## $heading$" "$bug" ||
+      fail "$bug is missing the '$heading' section"
   done
 done
 
@@ -73,6 +83,12 @@ grep -q "PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma" project.yml ||
   fail "project.yml must define the Soma bundle identifier"
 grep -q "exactVersion:" project.yml ||
   fail "Swift package versions must be pinned"
+
+if grep -R -nE \
+  '\.(configurationDisplayName|description)\(Text\(' \
+  SomaWidget >/dev/null 2>&1; then
+  fail "Widget configuration metadata must use static String or LocalizedStringKey values"
+fi
 
 for privacy_key in \
   NSCameraUsageDescription \

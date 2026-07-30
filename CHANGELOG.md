@@ -24,6 +24,10 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 - 同一现实事件的补图和纠错按来源、时间、类型、文本、结构化数值与媒体综合合并，避免重复
   记录，并自动修复证据充分的旧重复数据。
 
+### Fixed
+
+- 修复 Widget 配置元数据触发扩展崩溃、导致 Soma 无法出现在桌面和锁屏组件库的问题。
+
 ### Planned
 
 - 在真实设备完成 HealthKit、语音、照片、视频和 TestFlight 签名验收。

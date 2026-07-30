@@ -61,6 +61,7 @@ App 只保留两个界面：
 
 - [PRD：产品需求与演进](docs/prd/README.md)
 - [ADR：架构与交互决策](docs/adr/README.md)
+- [关键 Bug：根因复盘与回归门禁](docs/bugs/README.md)
 - [Changelog：按阶段重建的迭代日志](docs/changelog/README.md)
 - [工程与 GitHub 工作流](docs/engineering/README.md)
 - [贡献指南](CONTRIBUTING.md)

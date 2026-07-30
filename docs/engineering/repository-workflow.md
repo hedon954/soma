@@ -6,6 +6,7 @@
 | --- | --- |
 | 产品当前范围 | `docs/prd/004-soma-current-product.md` |
 | 长期决策 | `docs/adr/README.md` |
+| 关键 Bug 与回归门禁 | `docs/bugs/README.md` |
 | 工程规则 | `CLAUDE.md` |
 | Agent 日常 SOP | `.claude/skills/soma-development/SKILL.md` |
 | Xcode 工程 | `project.yml` |
