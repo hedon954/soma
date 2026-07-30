@@ -64,7 +64,7 @@ struct ConversationSessionListView: View {
     }
 }
 
-private struct ConversationSessionTranscriptView: View {
+struct ConversationSessionTranscriptView: View {
     let session: ConversationSession
 
     @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]

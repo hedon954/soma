@@ -38,340 +38,6 @@ struct PendingAttachment: Identifiable {
     }
 }
 
-private struct PreparedConversationMedia {
-    var attachments: [MediaAttachmentReference]
-    var frames: [Data]
-    var imageCount: Int
-    var videoCount: Int
-
-    var hasVideo: Bool {
-        videoCount > 0
-    }
-
-    var primaryKind: MediaKind {
-        attachments.first?.kind ?? .none
-    }
-
-    var primaryPath: String? {
-        attachments.first?.path
-    }
-
-    var displaySummary: String {
-        let parts = [
-            imageCount > 0 ? "\(imageCount) 张图片" : nil,
-            videoCount > 0 ? "\(videoCount) 个视频" : nil
-        ].compactMap { $0 }
-        return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
-    }
-}
-
-@MainActor
-@Observable
-final class ConversationProcessingService {
-    private(set) var isProcessing = false
-    private(set) var dataSpace: DataSpace?
-    private(set) var liveAssistantText = ""
-    private(set) var liveAgentActivity: String?
-    private(set) var liveEventRevision = 0
-
-    @ObservationIgnored
-    private var processingTask: Task<Void, Never>?
-
-    @discardableResult
-    func submit(
-        text: String,
-        attachments: [PendingAttachment],
-        contextSummary: String,
-        session: ConversationSession,
-        dataSpace: DataSpace,
-        gyms: [GymProfile],
-        equipment: [GymEquipment],
-        ai: AIService,
-        modelContext: ModelContext
-    ) -> Bool {
-        guard !isProcessing else { return false }
-
-        isProcessing = true
-        self.dataSpace = dataSpace
-        liveAssistantText = ""
-        liveAgentActivity = ai.isRemoteEnabled
-            ? "正在启动 Agent…"
-            : "正在理解并整理…"
-
-        processingTask = Task { [weak self] in
-            guard let self else { return }
-            await process(
-                text: text,
-                attachments: attachments,
-                contextSummary: contextSummary,
-                session: session,
-                dataSpace: dataSpace,
-                gyms: gyms,
-                equipment: equipment,
-                ai: ai,
-                modelContext: modelContext
-            )
-        }
-        return true
-    }
-
-    private func process(
-        text: String,
-        attachments: [PendingAttachment],
-        contextSummary: String,
-        session: ConversationSession,
-        dataSpace: DataSpace,
-        gyms: [GymProfile],
-        equipment: [GymEquipment],
-        ai: AIService,
-        modelContext: ModelContext
-    ) async {
-        let media = await prepareMedia(attachments)
-        let displayText = text.isEmpty
-            ? media.displaySummary
-            : text
-        let userMessageDate = Date.now
-        session.recordUserMessage(displayText, at: userMessageDate)
-        modelContext.insert(CoachMessage(
-            date: userMessageDate,
-            sessionID: session.id,
-            isFromCoach: false,
-            text: text,
-            mediaKind: media.primaryKind,
-            mediaPath: media.primaryPath,
-            mediaAttachments: media.attachments
-        ))
-        try? modelContext.save()
-
-        var performedRecordType: ConversationIntent?
-        var responseMessage: CoachMessage?
-        var activeTrace: AgentTrace?
-        do {
-            let reply: String
-            if ai.isRemoteEnabled {
-                let provider = ai.provider
-                let trace = AgentTrace(
-                    provider: provider.displayName,
-                    model: ai.model(for: provider),
-                    endpoint: provider.endpoint(
-                        baseURL: ai.baseURL(for: provider),
-                        path: "chat/completions"
-                    )?.absoluteString ?? ai.baseURL(for: provider),
-                    dataSpaceRaw: dataSpace.rawValue,
-                    userInput: displayText,
-                    contextSnapshot: contextSummary,
-                    mediaKind: media.primaryKind,
-                    imageCount: media.frames.count,
-                    imageAttachmentCount: media.imageCount,
-                    videoAttachmentCount: media.videoCount
-                )
-                activeTrace = trace
-                modelContext.insert(trace)
-                let message = CoachMessage(
-                    sessionID: session.id,
-                    isFromCoach: true,
-                    text: "",
-                    agentTraceID: trace.id,
-                    agentStatus: .running
-                )
-                responseMessage = message
-                modelContext.insert(message)
-                try? modelContext.save()
-
-                let outcome = try await ai.runAgent(
-                    text: text,
-                    images: media.frames,
-                    hasVideo: media.hasVideo,
-                    imageAttachmentCount: media.imageCount,
-                    videoAttachmentCount: media.videoCount,
-                    context: contextSummary,
-                    trace: { [weak self] event in
-                        self?.applyLiveAgentEvent(event)
-                        trace.apply(event)
-                        message.applyAgentEvent(event)
-                        switch event {
-                        case let .assistantTextDelta(_, delta):
-                            message.text += delta
-                        case .assistantTextCompleted, .span:
-                            break
-                        case .completed:
-                            message.agentStatus = .succeeded
-                        case let .failed(_, cancelled, _):
-                            message.agentStatus = cancelled ? .cancelled : .failed
-                        }
-                        if case .assistantTextDelta = event {
-                        } else {
-                            try? modelContext.save()
-                        }
-                    }
-                ) { call in
-                    let result = ConversationRecorder.executeAgentTool(
-                        call,
-                        sourceText: text,
-                        mediaKind: media.primaryKind,
-                        mediaPath: media.primaryPath,
-                        mediaAttachments: media.attachments,
-                        in: modelContext
-                    )
-                    if let recordType = result.recordType {
-                        performedRecordType = recordType
-                    }
-                    return result
-                }
-                reply = outcome.finalAnswer
-                performedRecordType = outcome.primaryRecordType ?? performedRecordType
-                message.text = reply
-                message.recordType = performedRecordType
-                message.agentStatus = .succeeded
-            } else {
-                let result = try await ai.interpretConversation(
-                    text: text,
-                    images: media.frames,
-                    hasVideo: media.hasVideo,
-                    context: contextSummary,
-                    allowDemoFallback: dataSpace == .demo
-                )
-                reply = ConversationRecorder.apply(
-                    result,
-                    sourceText: text,
-                    mediaKind: media.primaryKind,
-                    mediaPath: media.primaryPath,
-                    mediaAttachments: media.attachments,
-                    gyms: gyms,
-                    equipment: equipment,
-                    in: modelContext
-                )
-                performedRecordType = result.intent
-            }
-            if responseMessage == nil {
-                modelContext.insert(CoachMessage(
-                    sessionID: session.id,
-                    isFromCoach: true,
-                    text: reply,
-                    recordType: performedRecordType
-                ))
-            }
-        } catch {
-            let reason = error.localizedDescription
-            let recovery = if performedRecordType != nil {
-                "\n\nAgent 已完成的本地记录仍然保留，但生成最终回复时中断。"
-            } else if !attachments.isEmpty {
-                "\n\n附件已保存在本机对话中，但这次没有自动生成统计记录。请检查模型的多模态能力后重试。"
-            } else {
-                ""
-            }
-            let failureText = "这次没有处理成功：\(reason)。\(recovery)"
-            if let responseMessage {
-                responseMessage.text = failureText
-                responseMessage.agentStatus = .failed
-                if let activeTrace, activeTrace.status == .running {
-                    activeTrace.apply(.failed(message: reason, cancelled: false, at: .now))
-                }
-            } else {
-                modelContext.insert(CoachMessage(
-                    sessionID: session.id,
-                    isFromCoach: true,
-                    text: failureText
-                ))
-            }
-        }
-
-        session.touch(at: .now)
-        try? modelContext.save()
-        liveAssistantText = ""
-        liveAgentActivity = nil
-        isProcessing = false
-        self.dataSpace = nil
-        processingTask = nil
-    }
-
-    private func prepareMedia(
-        _ attachments: [PendingAttachment]
-    ) async -> PreparedConversationMedia {
-        var references: [MediaAttachmentReference] = []
-        var frameGroups: [[Data]] = []
-        var imageCount = 0
-        var videoCount = 0
-
-        for attachment in attachments {
-            switch attachment.kind {
-            case .none:
-                continue
-            case .image:
-                guard
-                    let data = attachment.imageData,
-                    let path = try? MediaStore.saveImage(data)
-                else { continue }
-                references.append(MediaAttachmentReference(kind: .image, path: path))
-                frameGroups.append([data])
-                imageCount += 1
-            case .video:
-                guard
-                    let url = attachment.videoURL,
-                    let path = try? MediaStore.saveVideo(from: url)
-                else { continue }
-                references.append(MediaAttachmentReference(kind: .video, path: path))
-                await frameGroups.append(VideoFrameExtractor.frames(from: url))
-                videoCount += 1
-            }
-        }
-
-        return PreparedConversationMedia(
-            attachments: references,
-            frames: Self.balancedFrames(from: frameGroups, limit: 12),
-            imageCount: imageCount,
-            videoCount: videoCount
-        )
-    }
-
-    private static func balancedFrames(
-        from groups: [[Data]],
-        limit: Int
-    ) -> [Data] {
-        guard limit > 0 else { return [] }
-        var result: [Data] = []
-        var index = 0
-        while result.count < limit {
-            var appended = false
-            for group in groups where index < group.count {
-                result.append(group[index])
-                appended = true
-                if result.count == limit {
-                    return result
-                }
-            }
-            guard appended else { break }
-            index += 1
-        }
-        return result
-    }
-
-    private func applyLiveAgentEvent(_ event: AgentTraceEvent) {
-        liveEventRevision += 1
-        switch event {
-        case let .assistantTextDelta(_, delta):
-            liveAssistantText += delta
-            liveAgentActivity = "正在生成回复…"
-        case .assistantTextCompleted:
-            liveAgentActivity = nil
-        case let .span(span):
-            guard span.status == .running else { return }
-            switch span.kind {
-            case .model:
-                liveAgentActivity = "模型正在响应…"
-            case .skill:
-                liveAgentActivity = "正在加载 Skill：\(span.title)"
-            case .tool:
-                liveAgentActivity = "正在执行：\(span.title)"
-            case .output:
-                liveAgentActivity = "正在整理结果…"
-            }
-        case .completed, .failed:
-            liveAgentActivity = nil
-        }
-    }
-}
-
 struct CoachView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AIService.self) private var ai
@@ -379,6 +45,8 @@ struct CoachView: View {
     @Environment(ConversationProcessingService.self) private var processor
     @Environment(ConversationSessionController.self) private var conversationSessions
     @Environment(SomaCaptureRouter.self) private var captureRouter
+    @Environment(LocationContextService.self) private var locationContext
+    @AppStorage("conversation.locationEnabled") private var locationEnabled = false
 
     @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
@@ -425,7 +93,13 @@ struct CoachView: View {
                         CoachBubble(
                             message: message,
                             isLive: isProcessingHere
-                                && message.agentStatus == .running
+                                && message.agentStatus == .running,
+                            canRetry: !processor.isProcessing
+                                && ConversationTurnProjection.canRetry(
+                                    message,
+                                    in: messages
+                                ),
+                            onRetry: { retry(message) }
                         )
                         .id(message.id)
                     }
@@ -452,6 +126,8 @@ struct CoachView: View {
                     attachments: $attachments,
                     gyms: gyms,
                     currentGym: currentGym,
+                    locationEnabled: locationEnabled,
+                    isRequestingLocation: locationContext.isRequesting,
                     isSending: processor.isProcessing,
                     isListening: speechInput.isListening,
                     speechMessage: speechInput.errorMessage,
@@ -460,6 +136,7 @@ struct CoachView: View {
                     onAddMedia: showMedia,
                     onSelectGym: selectGym,
                     onManageGyms: { showsGyms = true },
+                    onToggleLocation: { locationEnabled.toggle() },
                     onToggleVoice: toggleVoice,
                     onSend: send
                 )
@@ -612,17 +289,51 @@ struct CoachView: View {
         let accepted = processor.submit(
             text: text,
             attachments: pending,
-            contextSummary: contextSummary,
-            session: session,
-            dataSpace: dataSpace.activeSpace,
-            gyms: gyms,
-            equipment: equipment,
-            ai: ai,
-            modelContext: modelContext
+            context: ConversationProcessingContext(
+                contextSummary: contextSummary,
+                session: session,
+                dataSpace: dataSpace.activeSpace,
+                gyms: gyms,
+                equipment: equipment,
+                ai: ai,
+                modelContext: modelContext
+            ),
+            includeLocation: locationEnabled,
+            locationService: locationContext
         )
         if accepted {
             draft = ""
             attachments = []
+            composerDismissRequest = UUID()
+            scrollRequest = UUID()
+        }
+    }
+
+    private func retry(_ responseMessage: CoachMessage) {
+        guard let turnID = responseMessage.turnID,
+              let userMessage = ConversationTurnProjection.userMessage(
+                  for: turnID,
+                  in: messages
+              )
+        else {
+            return
+        }
+        let session = conversationSessions.ensureActiveSession(
+            dataSpace: dataSpace.activeSpace,
+            in: modelContext
+        )
+        if processor.retry(
+            userMessage: userMessage,
+            context: ConversationProcessingContext(
+                contextSummary: contextSummary,
+                session: session,
+                dataSpace: dataSpace.activeSpace,
+                gyms: gyms,
+                equipment: equipment,
+                ai: ai,
+                modelContext: modelContext
+            )
+        ) {
             composerDismissRequest = UUID()
             scrollRequest = UUID()
         }
@@ -856,6 +567,8 @@ private struct SelectableChatText: UIViewRepresentable {
 struct CoachBubble: View {
     let message: CoachMessage
     var isLive = false
+    var canRetry = false
+    var onRetry: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -868,6 +581,16 @@ struct CoachBubble: View {
                     Label(label, systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(AppTheme.tint)
+                }
+
+                if !message.isFromCoach, let location = message.location {
+                    Label(location.displayName, systemImage: "location.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.tint.opacity(0.88), in: Capsule())
+                        .accessibilityLabel("发送位置 \(location.displayName)")
                 }
 
                 if !message.mediaAttachments.isEmpty {
@@ -898,6 +621,16 @@ struct CoachBubble: View {
                         in: RoundedRectangle(cornerRadius: 17, style: .continuous)
                     )
                     .foregroundStyle(message.isFromCoach ? Color.primary : Color.white)
+                }
+
+                if canRetry {
+                    Button(action: onRetry) {
+                        Label("重试", systemImage: "arrow.clockwise")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.tint)
+                    .accessibilityHint("复用原始文字、媒体和发送时的位置再次处理")
                 }
             }
 
@@ -1033,7 +766,7 @@ private extension CoachMessage {
     }
 }
 
-private struct StoredMediaStrip: View {
+struct StoredMediaStrip: View {
     let attachments: [MediaAttachmentReference]
     @State private var isExpanded = false
 
@@ -1337,6 +1070,8 @@ private struct CoachComposer: View {
     @Binding var attachments: [PendingAttachment]
     let gyms: [GymProfile]
     let currentGym: GymProfile?
+    let locationEnabled: Bool
+    let isRequestingLocation: Bool
     let isSending: Bool
     let isListening: Bool
     let speechMessage: String?
@@ -1345,6 +1080,7 @@ private struct CoachComposer: View {
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
+    let onToggleLocation: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
     @FocusState private var focused: Bool
@@ -1397,6 +1133,35 @@ private struct CoachComposer: View {
                 .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
 
                 Spacer()
+
+                Button(action: onToggleLocation) {
+                    HStack(spacing: 5) {
+                        if isRequestingLocation {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(
+                                systemName: locationEnabled
+                                    ? "location.fill"
+                                    : "location.slash"
+                            )
+                        }
+                        Text(locationEnabled ? "位置开启" : "位置关闭")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(locationEnabled ? AppTheme.tint : .secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        locationEnabled
+                            ? AppTheme.softTint
+                            : Color(uiColor: .secondarySystemGroupedBackground),
+                        in: Capsule()
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isSending)
+                .accessibilityLabel(locationEnabled ? "关闭随消息记录位置" : "开启随消息记录位置")
             }
 
             if !attachments.isEmpty {

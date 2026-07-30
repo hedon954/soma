@@ -19,6 +19,9 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
 | [0014](0014-agent-turn-ordered-event-cards.md) | 已采纳 | 一次 Agent Turn 由有序异构 Event Cards 组成 |
 | [0015](0015-daily-conversation-session-lifecycle.md) | 已采纳 | 进入前台时按自然日解析并持久化当前对话 Session |
+| [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 已采纳 | Turn 可包含多次 Attempt，成功后投影到足迹并跨重试幂等 |
+| [0017](0017-location-and-weather-context.md) | 已采纳 | 位置与天气作为最小、受控、非阻塞的 Turn 上下文 |
+| [0018](0018-provenance-aware-record-merge.md) | 已采纳 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并 |
 
 新决策使用 [ADR 模板](template.md)。
 

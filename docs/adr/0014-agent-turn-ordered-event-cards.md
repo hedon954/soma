@@ -16,7 +16,8 @@
 
 ## 决策
 
-- 一条用户消息仍对应一条 Trace，但聊天中的一条 Agent Turn 由多个有序 `AgentTurnItem` 组成。
+- 一条 Agent Attempt 对应一条 Trace；同一用户 Turn 可按 ADR 0016 拥有多次 Attempt。每次
+  Attempt 仍由多个有序 `AgentTurnItem` 组成。
 - Item 类型至少包括 `text`、`skill`、`tool` 和 `error`，它们在聊天中是同级 Event Card。
 - 原始流式 Event 进入确定性 reducer，再更新持久化 Turn Item：
   - 同一 `itemID` 的文字 delta 合并进同一张文字卡；

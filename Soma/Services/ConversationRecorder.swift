@@ -148,6 +148,9 @@ enum ConversationRecorder {
     static func apply(
         _ result: ConversationResult,
         sourceText: String,
+        sourceDate: Date = .now,
+        sourceSessionID: UUID? = nil,
+        sourceTurnID: UUID? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference] = [],
@@ -170,6 +173,9 @@ enum ConversationRecorder {
             recordMeal(
                 result,
                 sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
                 in: context
@@ -178,6 +184,9 @@ enum ConversationRecorder {
             recordBody(
                 result,
                 sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
                 in: context
@@ -186,6 +195,9 @@ enum ConversationRecorder {
             recordWorkout(
                 result,
                 sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
@@ -203,20 +215,31 @@ enum ConversationRecorder {
     static func executeAgentTool(
         _ call: AgentToolCall,
         sourceText: String,
+        sourceDate: Date = .now,
+        sourceSessionID: UUID? = nil,
+        sourceTurnID: UUID? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference] = [],
+        preferredGymID: UUID? = nil,
         in context: ModelContext
     ) -> AgentToolResult {
         switch call.name {
         case .loadSkill:
             .failure("load_skill 应由 Agent 运行时处理。")
         case .queryUserData:
-            queryUserData(call.arguments, in: context)
+            queryUserData(
+                call.arguments,
+                preferredGymID: preferredGymID,
+                in: context
+            )
         case .recordWorkout:
             recordWorkout(
                 call.arguments,
                 sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
@@ -226,6 +249,9 @@ enum ConversationRecorder {
             recordMeal(
                 call.arguments,
                 sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
@@ -235,9 +261,45 @@ enum ConversationRecorder {
             recordBody(
                 call.arguments,
                 sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
+                in: context
+            )
+        case .updateWorkout:
+            updateWorkout(
+                call.arguments,
+                sourceText: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
+        case .updateMeal:
+            updateMeal(
+                call.arguments,
+                sourceText: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
+        case .updateBody:
+            updateBody(
+                call.arguments,
+                sourceText: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
+        case .deleteRecord:
+            deleteRecord(
+                call.arguments,
+                sourceText: sourceText,
                 in: context
             )
         case .updateGym:
@@ -255,6 +317,7 @@ enum ConversationRecorder {
 
     private static func queryUserData(
         _ arguments: AgentToolArguments,
+        preferredGymID: UUID?,
         in context: ModelContext
     ) -> AgentToolResult {
         let scope = arguments.scope?.lowercased() ?? "overview"
@@ -267,29 +330,39 @@ enum ConversationRecorder {
             let workouts = fetchWorkouts(in: context)
             let meals = fetchMeals(in: context)
             let body = fetchBodyEntries(in: context)
-            let gym = GymSelection.current(in: gyms)
+            let gym = preferredGymID
+                .flatMap { id in gyms.first(where: { $0.id == id }) }
+                ?? GymSelection.current(in: gyms)
             let equipmentNames = gym.map { target in
                 equipment.filter { $0.gymID == target.id }.map(\.name).joined(separator: "、")
             }.flatMap(\.nilIfEmpty) ?? "无"
-            let workout = workouts.first.map(workoutSummary) ?? "暂无"
+            let workout = workouts.first.map {
+                "[id:\($0.id.uuidString)] \(workoutSummary($0))"
+            } ?? "暂无"
             let todayCalories = meals
                 .filter { Calendar.current.isDateInToday($0.date) }
                 .reduce(0) { $0 + $1.calories }
-            let weight = body.first?.weight.map { String(format: "%.1fkg", $0) } ?? "暂无"
+            let weight = body.first.map {
+                let value = $0.weight.map { String(format: "%.1fkg", $0) } ?? "仅体态资料"
+                return "[id:\($0.id.uuidString)] \(value)"
+            } ?? "暂无"
             let profile = fetchProfiles(in: context).first.map(profileSummary) ?? "暂无"
+            let latestMeal = meals.first.map {
+                "[id:\($0.id.uuidString)] \($0.mealType.rawValue) \($0.title)"
+            } ?? "暂无"
             return .success(
-                "个人信息：\(profile)；当前健身房：\(gym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；今日摄入：\(todayCalories)kcal；最近体重：\(weight)。"
+                "个人信息：\(profile)；当前健身房：\(gym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)kcal；最近体重：\(weight)。"
             )
 
         case "workouts":
             let values = fetchWorkouts(in: context).prefix(limit).map {
-                "\($0.date.formatted(date: .abbreviated, time: .omitted)) \(workoutSummary($0))"
+                "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \(workoutSummary($0))"
             }
             return .success(values.isEmpty ? "暂无训练记录。" : values.joined(separator: "\n"))
 
         case "meals":
             let values = fetchMeals(in: context).prefix(limit).map {
-                "\($0.date.formatted(date: .abbreviated, time: .omitted)) \($0.mealType.rawValue) \($0.title) \($0.calories)kcal"
+                "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \($0.mealType.rawValue) \($0.title) \($0.calories)kcal"
             }
             return .success(values.isEmpty ? "暂无饮食记录。" : values.joined(separator: "\n"))
 
@@ -306,7 +379,7 @@ enum ConversationRecorder {
                     metrics.append(String(format: "腰围 %.1fcm", waist))
                 }
                 let values = metrics.isEmpty ? "仅记录了体型资料" : metrics.joined(separator: "，")
-                return "\($0.date.formatted(date: .abbreviated, time: .omitted)) \(values)"
+                return "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \(values)"
             }
             return .success(values.isEmpty ? "暂无身体记录。" : values.joined(separator: "\n"))
 
@@ -319,7 +392,7 @@ enum ConversationRecorder {
             let equipment = fetchEquipment(in: context)
             let values = gyms.prefix(limit).map { gym in
                 let names = equipment.filter { $0.gymID == gym.id }.map(\.name).joined(separator: "、")
-                return "\(gym.isCurrent ? "当前：" : "")\(gym.name)；器械：\(names.nilIfEmpty ?? "暂无")"
+                return "[id:\(gym.id.uuidString)] \(gym.isCurrent ? "当前：" : "")\(gym.name)；器械：\(names.nilIfEmpty ?? "暂无")"
             }
             return .success(values.isEmpty ? "还没有健身房。" : values.joined(separator: "\n"))
 
@@ -331,6 +404,9 @@ enum ConversationRecorder {
     private static func recordWorkout(
         _ arguments: AgentToolArguments,
         sourceText: String,
+        sourceDate: Date,
+        sourceSessionID: UUID?,
+        sourceTurnID: UUID?,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -367,29 +443,62 @@ enum ConversationRecorder {
             restSeconds: arguments.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
-        context.insert(WorkoutEntry(
+        let resolvedMedia = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        )
+        let input = WorkoutMergeInput(
+            date: sourceDate,
+            sessionID: sourceSessionID,
+            turnID: sourceTurnID,
             exercise: exercise,
             sets: arguments.sets,
             reps: arguments.reps,
             weight: arguments.weight,
             restSeconds: arguments.restSeconds,
             durationMinutes: arguments.durationMinutes,
-            notes: sourceText,
-            mediaKind: mediaKind,
-            mediaPath: mediaPath,
-            mediaAttachments: resolvedMediaAttachments(
-                mediaAttachments,
-                legacyKind: mediaKind,
-                legacyPath: mediaPath
-            ),
-            formScore: arguments.formScore,
-            intensity: arguments.intensity?.trimmed.nilIfEmpty,
-            feedback: arguments.feedback?.trimmed.nilIfEmpty,
-            estimatedCalories: calorieEstimate?.calories,
-            calorieMET: calorieEstimate?.met,
-            calorieDurationMinutes: calorieEstimate?.durationMinutes,
-            calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false
-        ))
+            sourceText: sourceText,
+            media: resolvedMedia,
+            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
+        )
+        let existing = RecordMergePolicy.workoutCandidate(
+            for: input,
+            entries: fetchWorkouts(in: context)
+        )
+        if let existing {
+            RecordMergePolicy.mergeWorkout(
+                existing,
+                input: input,
+                formScore: arguments.formScore,
+                intensity: arguments.intensity?.trimmed.nilIfEmpty,
+                feedback: arguments.feedback?.trimmed.nilIfEmpty,
+                calorieEstimate: calorieEstimate
+            )
+        } else {
+            context.insert(WorkoutEntry(
+                date: sourceDate,
+                exercise: exercise,
+                sets: arguments.sets,
+                reps: arguments.reps,
+                weight: arguments.weight,
+                restSeconds: arguments.restSeconds,
+                durationMinutes: arguments.durationMinutes,
+                notes: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: resolvedMedia,
+                formScore: arguments.formScore,
+                intensity: arguments.intensity?.trimmed.nilIfEmpty,
+                feedback: arguments.feedback?.trimmed.nilIfEmpty,
+                estimatedCalories: calorieEstimate?.calories,
+                calorieMET: calorieEstimate?.met,
+                calorieDurationMinutes: calorieEstimate?.durationMinutes,
+                calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
+                sourceTurnID: sourceTurnID,
+                sourceSessionID: sourceSessionID
+            ))
+        }
         try? context.save()
         var summary = [exercise]
         if let sets = arguments.sets, let reps = arguments.reps {
@@ -424,7 +533,7 @@ enum ConversationRecorder {
             return "；未估算热量（需要最近体重或个人信息中的参考体重）"
         }()
         return .success(
-            "已记录训练：\(summary.joined(separator: "，"))\(calorieSummary)。",
+            "\(existing == nil ? "已记录" : "已合并更新")训练：\(summary.joined(separator: "，"))\(calorieSummary)。",
             recordType: .workout
         )
     }
@@ -432,6 +541,9 @@ enum ConversationRecorder {
     private static func recordMeal(
         _ arguments: AgentToolArguments,
         sourceText: String,
+        sourceDate: Date,
+        sourceSessionID: UUID?,
+        sourceTurnID: UUID?,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -450,24 +562,53 @@ enum ConversationRecorder {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
         }
         let mealType = MealType(rawValue: arguments.mealType ?? "") ?? inferredMealType()
-        context.insert(MealEntry(
+        let resolvedMedia = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        )
+        let input = MealMergeInput(
+            date: sourceDate,
+            sessionID: sourceSessionID,
+            turnID: sourceTurnID,
             mealType: mealType,
             title: title,
             calories: calories,
             protein: protein,
             carbs: carbs,
             fat: fat,
-            notes: recordedText(sourceText, analysis: arguments.note?.trimmed ?? ""),
-            imagePath: mediaKind == .image ? mediaPath : nil,
-            mediaAttachments: resolvedMediaAttachments(
-                mediaAttachments,
-                legacyKind: mediaKind,
-                legacyPath: mediaPath
-            )
-        ))
+            sourceText: recordedText(
+                sourceText,
+                analysis: arguments.note?.trimmed ?? ""
+            ),
+            media: resolvedMedia,
+            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
+        )
+        let existing = RecordMergePolicy.mealCandidate(
+            for: input,
+            entries: fetchMeals(in: context)
+        )
+        if let existing {
+            RecordMergePolicy.mergeMeal(existing, input: input)
+        } else {
+            context.insert(MealEntry(
+                date: sourceDate,
+                mealType: mealType,
+                title: title,
+                calories: calories,
+                protein: protein,
+                carbs: carbs,
+                fat: fat,
+                notes: input.sourceText,
+                imagePath: mediaKind == .image ? mediaPath : nil,
+                mediaAttachments: resolvedMedia,
+                sourceTurnID: sourceTurnID,
+                sourceSessionID: sourceSessionID
+            ))
+        }
         try? context.save()
         return .success(
-            "已记录\(mealType.rawValue)：\(title)，约 \(calories)kcal。",
+            "\(existing == nil ? "已记录" : "已合并更新")\(mealType.rawValue)：\(title)，约 \(calories)kcal。",
             recordType: .meal
         )
     }
@@ -475,6 +616,9 @@ enum ConversationRecorder {
     private static func recordBody(
         _ arguments: AgentToolArguments,
         sourceText: String,
+        sourceDate: Date,
+        sourceSessionID: UUID?,
+        sourceTurnID: UUID?,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -495,22 +639,258 @@ enum ConversationRecorder {
         ]
         .compactMap { $0 }
         .joined(separator: "\n")
-        context.insert(BodyEntry(
+        let resolvedMedia = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        )
+        let input = BodyMergeInput(
+            date: sourceDate,
+            sessionID: sourceSessionID,
+            turnID: sourceTurnID,
             weight: arguments.weight,
             bodyFat: arguments.bodyFat,
             waist: arguments.waist,
-            notes: sourceText,
-            imagePath: mediaKind == .image ? mediaPath : nil,
-            mediaAttachments: resolvedMediaAttachments(
+            sourceText: sourceText,
+            media: resolvedMedia,
+            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
+        )
+        let existing = RecordMergePolicy.bodyCandidate(
+            for: input,
+            entries: fetchBodyEntries(in: context)
+        )
+        if let existing {
+            RecordMergePolicy.mergeBody(existing, input: input, analysis: analysis)
+        } else {
+            context.insert(BodyEntry(
+                date: sourceDate,
+                weight: arguments.weight,
+                bodyFat: arguments.bodyFat,
+                waist: arguments.waist,
+                notes: sourceText,
+                imagePath: mediaKind == .image ? mediaPath : nil,
+                mediaAttachments: resolvedMedia,
+                analysis: analysis,
+                sourceTurnID: sourceTurnID,
+                sourceSessionID: sourceSessionID
+            ))
+        }
+        try? context.save()
+        let weightSummary = arguments.weight.map { String(format: "%.1fkg", $0) } ?? "未提供体重"
+        let action = existing == nil ? "已记录" : "已合并更新"
+        return .success("\(action)身体数据：\(weightSummary)。", recordType: .body)
+    }
+}
+
+extension ConversationRecorder {
+    private static func updateWorkout(
+        _ arguments: AgentToolArguments,
+        sourceText: String,
+        mediaKind: MediaKind,
+        mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard let id = recordID(from: arguments) else {
+            return .failure("update_workout 需要有效的 record_id。")
+        }
+        guard let entry = fetchWorkouts(in: context).first(where: { $0.id == id }) else {
+            return .failure("没有找到指定训练记录，请重新查询。")
+        }
+        if let sets = arguments.sets, !(1 ... 100).contains(sets) {
+            return .failure("sets 必须在 1 到 100 之间。")
+        }
+        if let reps = arguments.reps, !(1 ... 1000).contains(reps) {
+            return .failure("reps 必须在 1 到 1000 之间。")
+        }
+        if let weight = arguments.weight, !(0 ... 1000).contains(weight) {
+            return .failure("weight 必须在 0 到 1000kg 之间。")
+        }
+        if let rest = arguments.restSeconds, !(0 ... 3600).contains(rest) {
+            return .failure("rest_seconds 必须在 0 到 3600 之间。")
+        }
+        if let duration = arguments.durationMinutes, !(0 ... 1440).contains(duration) {
+            return .failure("duration_minutes 必须在 0 到 1440 之间。")
+        }
+
+        entry.exercise = arguments.exercise?.trimmed.nilIfEmpty ?? entry.exercise
+        entry.sets = arguments.sets ?? entry.sets
+        entry.reps = arguments.reps ?? entry.reps
+        entry.weight = arguments.weight ?? entry.weight
+        entry.restSeconds = arguments.restSeconds ?? entry.restSeconds
+        entry.durationMinutes = arguments.durationMinutes ?? entry.durationMinutes
+        entry.formScore = arguments.formScore ?? entry.formScore
+        entry.intensity = arguments.intensity?.trimmed.nilIfEmpty ?? entry.intensity
+        entry.feedback = arguments.feedback?.trimmed.nilIfEmpty ?? entry.feedback
+        entry.notes = RecordMergePolicy.mergedText(entry.notes, sourceText)
+        entry.mediaAttachments = RecordMergePolicy.mergedMedia(
+            entry.mediaAttachments,
+            resolvedMediaAttachments(
                 mediaAttachments,
                 legacyKind: mediaKind,
                 legacyPath: mediaPath
-            ),
-            analysis: analysis
-        ))
+            )
+        )
+        let estimate = WorkoutCalorieCalculator.estimate(
+            exercise: entry.exercise,
+            intensity: entry.intensity,
+            durationMinutes: entry.durationMinutes,
+            sets: entry.sets,
+            reps: entry.reps,
+            restSeconds: entry.restSeconds,
+            weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
+        )
+        entry.estimatedCalories = estimate?.calories
+        entry.calorieMET = estimate?.met
+        entry.calorieDurationMinutes = estimate?.durationMinutes
+        entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         try? context.save()
-        let weightSummary = arguments.weight.map { String(format: "%.1fkg", $0) } ?? "未提供体重"
-        return .success("已记录身体数据：\(weightSummary)。", recordType: .body)
+        return .success(
+            "已更新训练 [id:\(entry.id.uuidString)]：\(workoutSummary(entry))。",
+            recordType: .workout
+        )
+    }
+
+    private static func updateMeal(
+        _ arguments: AgentToolArguments,
+        sourceText: String,
+        mediaKind: MediaKind,
+        mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard let id = recordID(from: arguments) else {
+            return .failure("update_meal 需要有效的 record_id。")
+        }
+        guard let entry = fetchMeals(in: context).first(where: { $0.id == id }) else {
+            return .failure("没有找到指定饮食记录，请重新查询。")
+        }
+        if let calories = arguments.calories, !(0 ... 10000).contains(calories) {
+            return .failure("calories 必须在 0 到 10000 之间。")
+        }
+        let macros = [arguments.protein, arguments.carbs, arguments.fat].compactMap { $0 }
+        guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
+            return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
+        }
+        if let rawType = arguments.mealType {
+            guard let type = MealType(rawValue: rawType) else {
+                return .failure("meal_type 必须是早餐、午餐、晚餐或加餐。")
+            }
+            entry.mealType = type
+        }
+        entry.title = arguments.title?.trimmed.nilIfEmpty ?? entry.title
+        entry.calories = arguments.calories ?? entry.calories
+        entry.protein = arguments.protein ?? entry.protein
+        entry.carbs = arguments.carbs ?? entry.carbs
+        entry.fat = arguments.fat ?? entry.fat
+        let note = recordedText(
+            sourceText,
+            analysis: arguments.note?.trimmed ?? ""
+        )
+        if !note.isEmpty {
+            entry.notes = note
+        }
+        entry.mediaAttachments = RecordMergePolicy.mergedMedia(
+            entry.mediaAttachments,
+            resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            )
+        )
+        try? context.save()
+        return .success(
+            "已更新\(entry.mealType.rawValue) [id:\(entry.id.uuidString)]：\(entry.title)，约 \(entry.calories)kcal。",
+            recordType: .meal
+        )
+    }
+
+    private static func updateBody(
+        _ arguments: AgentToolArguments,
+        sourceText: String,
+        mediaKind: MediaKind,
+        mediaPath: String?,
+        mediaAttachments: [MediaAttachmentReference],
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard let id = recordID(from: arguments) else {
+            return .failure("update_body 需要有效的 record_id。")
+        }
+        guard let entry = fetchBodyEntries(in: context).first(where: { $0.id == id }) else {
+            return .failure("没有找到指定身体记录，请重新查询。")
+        }
+        if let weight = arguments.weight, !(0 ... 500).contains(weight) {
+            return .failure("weight 必须在 0 到 500kg 之间。")
+        }
+        if let bodyFat = arguments.bodyFat, !(0 ... 100).contains(bodyFat) {
+            return .failure("body_fat 必须在 0 到 100 之间。")
+        }
+        if let waist = arguments.waist, !(0 ... 300).contains(waist) {
+            return .failure("waist 必须在 0 到 300cm 之间。")
+        }
+        entry.weight = arguments.weight ?? entry.weight
+        entry.bodyFat = arguments.bodyFat ?? entry.bodyFat
+        entry.waist = arguments.waist ?? entry.waist
+        entry.notes = RecordMergePolicy.mergedText(entry.notes, sourceText)
+        let analysis = [
+            arguments.postureNote?.trimmed.nilIfEmpty,
+            arguments.safetyNote?.trimmed.nilIfEmpty
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+        if !analysis.isEmpty {
+            entry.analysis = analysis
+        }
+        entry.mediaAttachments = RecordMergePolicy.mergedMedia(
+            entry.mediaAttachments,
+            resolvedMediaAttachments(
+                mediaAttachments,
+                legacyKind: mediaKind,
+                legacyPath: mediaPath
+            )
+        )
+        try? context.save()
+        return .success(
+            "已更新身体记录 [id:\(entry.id.uuidString)]。",
+            recordType: .body
+        )
+    }
+
+    private static func deleteRecord(
+        _ arguments: AgentToolArguments,
+        sourceText: String,
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard RecordDeletionPolicy.hasExplicitIntent(sourceText) else {
+            return .failure("只有用户在当前消息明确要求删除时才能删除记录。")
+        }
+        guard let id = recordID(from: arguments),
+              let type = arguments.recordType
+        else {
+            return .failure("delete_record 需要 record_type 和有效的 record_id。")
+        }
+
+        switch type {
+        case "workout":
+            guard let entry = fetchWorkouts(in: context).first(where: { $0.id == id }) else {
+                return .failure("没有找到指定训练记录，请重新查询。")
+            }
+            context.delete(entry)
+        case "meal":
+            guard let entry = fetchMeals(in: context).first(where: { $0.id == id }) else {
+                return .failure("没有找到指定饮食记录，请重新查询。")
+            }
+            context.delete(entry)
+        case "body":
+            guard let entry = fetchBodyEntries(in: context).first(where: { $0.id == id }) else {
+                return .failure("没有找到指定身体记录，请重新查询。")
+            }
+            context.delete(entry)
+        default:
+            return .failure("record_type 只支持 workout、meal 或 body。")
+        }
+        try? context.save()
+        return .success("已删除指定\(type)记录；聊天原文与共享媒体仍然保留。")
     }
 
     private static func updateGym(
@@ -658,6 +1038,12 @@ enum ConversationRecorder {
         }
     }
 
+    private static func recordID(
+        from arguments: AgentToolArguments
+    ) -> UUID? {
+        arguments.recordID.flatMap(UUID.init(uuidString:))
+    }
+
     private static func formatWeight(_ weight: Double?) -> String? {
         guard let weight else { return nil }
         return weight == 0
@@ -734,7 +1120,14 @@ enum ConversationRecorder {
         ).filter { $0.kind == .image }
         if let coverPath = imageAttachments.first?.path {
             target.coverImagePath = coverPath
-            for imageAttachment in imageAttachments {
+            let existingMedia = (
+                try? context.fetch(FetchDescriptor<GymMedia>())
+            ) ?? []
+            for imageAttachment in imageAttachments where
+                !existingMedia.contains(where: {
+                    $0.gymID == target.id && $0.path == imageAttachment.path
+                })
+            {
                 context.insert(GymMedia(gymID: target.id, path: imageAttachment.path))
             }
         }
@@ -789,61 +1182,122 @@ enum ConversationRecorder {
     private static func recordMeal(
         _ result: ConversationResult,
         sourceText: String,
+        sourceDate: Date,
+        sourceSessionID: UUID?,
+        sourceTurnID: UUID?,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) {
         guard let meal = result.meal else { return }
-        let hour = Calendar.current.component(.hour, from: .now)
+        let hour = Calendar.current.component(.hour, from: sourceDate)
         let type: MealType = switch hour {
         case 5 ..< 11: .breakfast
         case 11 ..< 16: .lunch
         case 16 ..< 22: .dinner
         default: .snack
         }
-        context.insert(MealEntry(
+        let resolvedMedia = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaPath == nil ? .none : .image,
+            legacyPath: mediaPath
+        )
+        let input = MealMergeInput(
+            date: sourceDate,
+            sessionID: sourceSessionID,
+            turnID: sourceTurnID,
             mealType: type,
             title: meal.title,
             calories: meal.calories,
             protein: meal.protein,
             carbs: meal.carbs,
             fat: meal.fat,
-            notes: recordedText(sourceText, analysis: meal.note),
-            imagePath: mediaPath,
-            mediaAttachments: resolvedMediaAttachments(
-                mediaAttachments,
-                legacyKind: mediaPath == nil ? .none : .image,
-                legacyPath: mediaPath
-            ),
-            confidence: meal.confidence
-        ))
+            sourceText: recordedText(sourceText, analysis: meal.note),
+            media: resolvedMedia,
+            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
+        )
+        if let existing = RecordMergePolicy.mealCandidate(
+            for: input,
+            entries: fetchMeals(in: context)
+        ) {
+            RecordMergePolicy.mergeMeal(
+                existing,
+                input: input,
+                confidence: meal.confidence
+            )
+        } else {
+            context.insert(MealEntry(
+                date: sourceDate,
+                mealType: type,
+                title: meal.title,
+                calories: meal.calories,
+                protein: meal.protein,
+                carbs: meal.carbs,
+                fat: meal.fat,
+                notes: input.sourceText,
+                imagePath: mediaPath,
+                mediaAttachments: resolvedMedia,
+                confidence: meal.confidence,
+                sourceTurnID: sourceTurnID,
+                sourceSessionID: sourceSessionID
+            ))
+        }
     }
 
     private static func recordBody(
         _ result: ConversationResult,
         sourceText: String,
+        sourceDate: Date,
+        sourceSessionID: UUID?,
+        sourceTurnID: UUID?,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) {
         guard let body = result.body else { return }
-        context.insert(BodyEntry(
+        let resolvedMedia = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaPath == nil ? .none : .image,
+            legacyPath: mediaPath
+        )
+        let input = BodyMergeInput(
+            date: sourceDate,
+            sessionID: sourceSessionID,
+            turnID: sourceTurnID,
             weight: body.estimatedWeight,
             bodyFat: body.estimatedBodyFat,
-            notes: sourceText,
-            imagePath: mediaPath,
-            mediaAttachments: resolvedMediaAttachments(
-                mediaAttachments,
-                legacyKind: mediaPath == nil ? .none : .image,
-                legacyPath: mediaPath
-            ),
-            analysis: "\(body.postureNote)\n\(body.safetyNote)"
-        ))
+            waist: nil,
+            sourceText: sourceText,
+            media: resolvedMedia,
+            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
+        )
+        let analysis = "\(body.postureNote)\n\(body.safetyNote)"
+        if let existing = RecordMergePolicy.bodyCandidate(
+            for: input,
+            entries: fetchBodyEntries(in: context)
+        ) {
+            RecordMergePolicy.mergeBody(existing, input: input, analysis: analysis)
+        } else {
+            context.insert(BodyEntry(
+                date: sourceDate,
+                weight: body.estimatedWeight,
+                bodyFat: body.estimatedBodyFat,
+                notes: sourceText,
+                imagePath: mediaPath,
+                mediaAttachments: resolvedMedia,
+                analysis: analysis,
+                sourceTurnID: sourceTurnID,
+                sourceSessionID: sourceSessionID
+            ))
+        }
     }
 
     private static func recordWorkout(
         _ result: ConversationResult,
         sourceText: String,
+        sourceDate: Date,
+        sourceSessionID: UUID?,
+        sourceTurnID: UUID?,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -859,29 +1313,61 @@ enum ConversationRecorder {
             restSeconds: workout.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
-        context.insert(WorkoutEntry(
+        let resolvedMedia = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        )
+        let input = WorkoutMergeInput(
+            date: sourceDate,
+            sessionID: sourceSessionID,
+            turnID: sourceTurnID,
             exercise: workout.exercise,
             sets: workout.sets,
             reps: workout.reps,
             weight: workout.weight,
             restSeconds: workout.restSeconds,
             durationMinutes: workout.durationMinutes,
-            notes: sourceText,
-            mediaKind: mediaKind,
-            mediaPath: mediaPath,
-            mediaAttachments: resolvedMediaAttachments(
-                mediaAttachments,
-                legacyKind: mediaKind,
-                legacyPath: mediaPath
-            ),
-            formScore: workout.formScore,
-            intensity: workout.intensity,
-            feedback: workout.feedback,
-            estimatedCalories: calorieEstimate?.calories,
-            calorieMET: calorieEstimate?.met,
-            calorieDurationMinutes: calorieEstimate?.durationMinutes,
-            calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false
-        ))
+            sourceText: sourceText,
+            media: resolvedMedia,
+            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
+        )
+        if let existing = RecordMergePolicy.workoutCandidate(
+            for: input,
+            entries: fetchWorkouts(in: context)
+        ) {
+            RecordMergePolicy.mergeWorkout(
+                existing,
+                input: input,
+                formScore: workout.formScore,
+                intensity: workout.intensity,
+                feedback: workout.feedback,
+                calorieEstimate: calorieEstimate
+            )
+        } else {
+            context.insert(WorkoutEntry(
+                date: sourceDate,
+                exercise: workout.exercise,
+                sets: workout.sets,
+                reps: workout.reps,
+                weight: workout.weight,
+                restSeconds: workout.restSeconds,
+                durationMinutes: workout.durationMinutes,
+                notes: sourceText,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: resolvedMedia,
+                formScore: workout.formScore,
+                intensity: workout.intensity,
+                feedback: workout.feedback,
+                estimatedCalories: calorieEstimate?.calories,
+                calorieMET: calorieEstimate?.met,
+                calorieDurationMinutes: calorieEstimate?.durationMinutes,
+                calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
+                sourceTurnID: sourceTurnID,
+                sourceSessionID: sourceSessionID
+            ))
+        }
     }
 
     private static func switchGym(

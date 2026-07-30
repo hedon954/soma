@@ -2,7 +2,7 @@
 
 - 状态：部分已替代
 - 决策阶段：2026-07-28
-- 替代说明：[ADR 0014](0014-agent-turn-ordered-event-cards.md) 取代“最终回复下挂 Skill/Tool 时间线”的聊天呈现方案；一条消息一条 Trace、Span 诊断与事件落盘仍然有效。
+- 替代说明：[ADR 0014](0014-agent-turn-ordered-event-cards.md) 取代“最终回复下挂 Skill/Tool 时间线”的聊天呈现方案；[ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 又把“一条消息一条 Trace”调整为“一次远程 Attempt 一条 Trace”，并支持失败重试。Span 诊断与事件落盘仍然有效。
 
 ## 背景
 

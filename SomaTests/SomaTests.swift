@@ -55,13 +55,17 @@ final class SomaTests: XCTestCase {
         XCTAssertTrue(service.submit(
             text: "刚做完深蹲 4组8次 60kg",
             attachments: [],
-            contextSummary: "测试上下文",
-            session: session,
-            dataSpace: .demo,
-            gyms: [],
-            equipment: [],
-            ai: ai,
-            modelContext: context
+            context: ConversationProcessingContext(
+                contextSummary: "测试上下文",
+                session: session,
+                dataSpace: .demo,
+                gyms: [],
+                equipment: [],
+                ai: ai,
+                modelContext: context
+            ),
+            includeLocation: false,
+            locationService: LocationContextService()
         ))
         XCTAssertTrue(service.isProcessing)
 
@@ -502,6 +506,10 @@ final class SomaTests: XCTestCase {
 
         XCTAssertEqual(Set(names), Set(AgentToolName.allCases.map(\.rawValue)))
         XCTAssertTrue(names.contains("record_workout"))
+        XCTAssertTrue(names.contains("update_workout"))
+        XCTAssertTrue(names.contains("update_meal"))
+        XCTAssertTrue(names.contains("update_body"))
+        XCTAssertTrue(names.contains("delete_record"))
         XCTAssertTrue(names.contains("load_skill"))
     }
 

@@ -62,7 +62,8 @@ final class DataSpaceController {
             WorkoutEntry.self,
             ConversationSession.self,
             CoachMessage.self,
-            AgentTrace.self
+            AgentTrace.self,
+            AgentMutationReceipt.self
         ])
         let demoConfiguration = ModelConfiguration(
             nil,
@@ -112,6 +113,7 @@ struct SomaApp: App {
     @State private var dataSpace = DataSpaceController()
     @State private var conversationProcessor = ConversationProcessingService()
     @State private var conversationSessions = ConversationSessionController()
+    @State private var locationContext = LocationContextService()
     @State private var captureRouter = SomaCaptureRouter.shared
 
     var body: some Scene {
@@ -122,6 +124,7 @@ struct SomaApp: App {
                 .environment(dataSpace)
                 .environment(conversationProcessor)
                 .environment(conversationSessions)
+                .environment(locationContext)
                 .environment(captureRouter)
                 .modelContainer(dataSpace.activeContainer)
                 .onOpenURL { url in

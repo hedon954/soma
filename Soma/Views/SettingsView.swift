@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(AIService.self) private var ai
     @Environment(DataSpaceController.self) private var dataSpace
     @AppStorage("ai.remoteEnabled") private var remoteEnabled = false
+    @AppStorage("conversation.locationEnabled") private var locationEnabled = false
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
 
     @State private var provider: AIProvider = .openAI
@@ -198,10 +199,13 @@ struct SettingsView: View {
             Label("无账户系统", systemImage: "person.crop.circle.badge.xmark")
             Label("数据库与媒体保存在 App 沙盒", systemImage: "internaldrive.fill")
             Label("每个平台的 API Key 仅存入本机 Keychain", systemImage: "key.fill")
+            Toggle(isOn: $locationEnabled) {
+                Label("随消息记录位置", systemImage: "location")
+            }
         } header: {
             Text("隐私")
         } footer: {
-            Text("删除 App 会移除本地记录。当前版本不启用 iCloud；Apple 健康只在你主动授权并同步时读取所选数据。")
+            Text("位置默认关闭；开启后仅在发送时获取一次并保存在本机，不持续或后台跟踪，也不向远程 Agent 发送原始坐标。删除 App 会移除本地记录。")
         }
     }
 

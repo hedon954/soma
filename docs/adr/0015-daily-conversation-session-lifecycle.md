@@ -40,7 +40,7 @@ Agent 上下文，也无法表达“重新进入 App 后开始今天的新谈话
   3. 否则复用今天已存在的空 Session；
   4. 仍不存在时创建今天的新 Session。
 - `ConversationProcessingService` 接收已解析的 Session，并给同一次提交产生的用户消息与
-  Agent 回复写入相同 `sessionID`。
+  Agent Attempt 写入相同 `sessionID`；Turn/Attempt 关系由 ADR 0016 定义。
 - 当前聊天、对话引导和 Agent 最近消息摘要只读取当前 Session；历史 Session 通过独立的
   只读入口查看。
 - 发送被处理服务接受后立即撤销输入焦点、清空草稿和附件，并触发一次布局后的底部滚动。

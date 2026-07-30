@@ -8,6 +8,7 @@ struct InsightsView: View {
     @Query(sort: \BodyEntry.date) private var bodyEntries: [BodyEntry]
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
     @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
+    @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
 
     private var weekStart: Date {
         Calendar.current.date(byAdding: .day, value: -6, to: .now) ?? .distantPast
@@ -48,6 +49,7 @@ struct InsightsView: View {
                 )
 
                 RecentRecordsCard(
+                    footprintCount: successfulFootprintCount,
                     workoutCount: workouts.count,
                     mealCount: meals.count,
                     bodyCount: bodyEntries.count,
@@ -85,9 +87,19 @@ struct InsightsView: View {
         .appPageBackground()
         .navigationTitle("进展")
     }
+
+    private var successfulFootprintCount: Int {
+        let successful = ConversationTurnProjection.successfulTurnIDs(
+            in: messages
+        )
+        return messages.count {
+            !$0.isFromCoach && $0.turnID.map(successful.contains) == true
+        }
+    }
 }
 
 private struct RecentRecordsCard: View {
+    let footprintCount: Int
     let workoutCount: Int
     let mealCount: Int
     let bodyCount: Int
@@ -102,6 +114,22 @@ private struct RecentRecordsCard: View {
 
             AppCard {
                 VStack(spacing: 0) {
+                    NavigationLink {
+                        FootprintsView()
+                    } label: {
+                        RecordIndexRow(
+                            icon: "shoeprints.fill",
+                            title: "足迹",
+                            count: footprintCount,
+                            latest: footprintCount == 0
+                                ? "Agent 成功后自动收录"
+                                : "回顾你的文字与影像"
+                        )
+                    }
+
+                    Divider()
+                        .padding(.leading, 44)
+
                     NavigationLink {
                         WorkoutHistoryView()
                     } label: {

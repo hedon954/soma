@@ -144,14 +144,37 @@ final class GymProfile {
     var notes: String
     var coverImagePath: String?
     var isCurrent: Bool = false
+    var latitude: Double?
+    var longitude: Double?
+    var locationLabel: String?
+    var locationAccuracy: Double?
+    var locationUpdatedAt: Date?
+    var matchRadiusMeters: Double = 180
 
-    init(name: String, notes: String = "", coverImagePath: String? = nil, isCurrent: Bool = false) {
+    init(
+        name: String,
+        notes: String = "",
+        coverImagePath: String? = nil,
+        isCurrent: Bool = false,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        locationLabel: String? = nil,
+        locationAccuracy: Double? = nil,
+        locationUpdatedAt: Date? = nil,
+        matchRadiusMeters: Double = 180
+    ) {
         id = UUID()
         self.name = name
         createdAt = .now
         self.notes = notes
         self.coverImagePath = coverImagePath
         self.isCurrent = isCurrent
+        self.latitude = latitude
+        self.longitude = longitude
+        self.locationLabel = locationLabel
+        self.locationAccuracy = locationAccuracy
+        self.locationUpdatedAt = locationUpdatedAt
+        self.matchRadiusMeters = matchRadiusMeters
     }
 }
 
@@ -254,6 +277,8 @@ final class MealEntry {
     var imagePath: String?
     var mediaAttachmentsData: Data = Data()
     var confidence: Double
+    var sourceTurnID: UUID?
+    var sourceSessionID: UUID?
 
     var mealType: MealType {
         get { MealType(rawValue: mealTypeRaw) ?? .lunch }
@@ -271,7 +296,9 @@ final class MealEntry {
         notes: String = "",
         imagePath: String? = nil,
         mediaAttachments: [MediaAttachmentReference] = [],
-        confidence: Double = 0.9
+        confidence: Double = 0.9,
+        sourceTurnID: UUID? = nil,
+        sourceSessionID: UUID? = nil
     ) {
         id = UUID()
         self.date = date
@@ -285,6 +312,8 @@ final class MealEntry {
         self.imagePath = imagePath
         mediaAttachmentsData = MediaAttachmentStorage.encode(mediaAttachments)
         self.confidence = confidence
+        self.sourceTurnID = sourceTurnID
+        self.sourceSessionID = sourceSessionID
     }
 
     var mediaAttachments: [MediaAttachmentReference] {
@@ -315,6 +344,8 @@ final class BodyEntry {
     var analysis: String
     var externalSource: String?
     var externalID: String?
+    var sourceTurnID: UUID?
+    var sourceSessionID: UUID?
 
     init(
         date: Date = .now,
@@ -326,7 +357,9 @@ final class BodyEntry {
         mediaAttachments: [MediaAttachmentReference] = [],
         analysis: String = "",
         externalSource: String? = nil,
-        externalID: String? = nil
+        externalID: String? = nil,
+        sourceTurnID: UUID? = nil,
+        sourceSessionID: UUID? = nil
     ) {
         id = UUID()
         self.date = date
@@ -339,6 +372,8 @@ final class BodyEntry {
         self.analysis = analysis
         self.externalSource = externalSource
         self.externalID = externalID
+        self.sourceTurnID = sourceTurnID
+        self.sourceSessionID = sourceSessionID
     }
 
     var mediaAttachments: [MediaAttachmentReference] {
@@ -379,6 +414,8 @@ final class WorkoutEntry {
     var calorieDurationEstimated: Bool = false
     var externalSource: String?
     var externalID: String?
+    var sourceTurnID: UUID?
+    var sourceSessionID: UUID?
     var estimatedVolume: Double? {
         guard let sets, let reps, let weight else { return nil }
         return Double(sets * reps) * weight
@@ -424,7 +461,9 @@ final class WorkoutEntry {
         calorieDurationMinutes: Double? = nil,
         calorieDurationEstimated: Bool = false,
         externalSource: String? = nil,
-        externalID: String? = nil
+        externalID: String? = nil,
+        sourceTurnID: UUID? = nil,
+        sourceSessionID: UUID? = nil
     ) {
         id = UUID()
         self.date = date
@@ -447,6 +486,8 @@ final class WorkoutEntry {
         self.calorieDurationEstimated = calorieDurationEstimated
         self.externalSource = externalSource
         self.externalID = externalID
+        self.sourceTurnID = sourceTurnID
+        self.sourceSessionID = sourceSessionID
     }
 }
 
@@ -465,6 +506,10 @@ final class CoachMessage {
     var agentStatusRaw: String?
     var agentEventsData: Data = Data()
     var agentTurnItemsData: Data = Data()
+    var turnID: UUID?
+    var attemptNumber: Int = 0
+    var locationData: Data = Data()
+    var effectiveGymID: UUID?
 
     init(
         date: Date = .now,
@@ -478,7 +523,11 @@ final class CoachMessage {
         agentTraceID: UUID? = nil,
         agentStatus: AgentTraceStatus? = nil,
         agentEvents: [AgentTraceSpan] = [],
-        agentTurnItems: [AgentTurnItem] = []
+        agentTurnItems: [AgentTurnItem] = [],
+        turnID: UUID? = nil,
+        attemptNumber: Int = 0,
+        location: LocationSnapshot? = nil,
+        effectiveGymID: UUID? = nil
     ) {
         id = UUID()
         self.date = date
@@ -493,6 +542,10 @@ final class CoachMessage {
         agentStatusRaw = agentStatus?.rawValue
         agentEventsData = (try? JSONEncoder().encode(agentEvents)) ?? Data()
         agentTurnItemsData = (try? JSONEncoder().encode(agentTurnItems)) ?? Data()
+        self.turnID = turnID
+        self.attemptNumber = attemptNumber
+        locationData = (try? location.map { try JSONEncoder().encode($0) }) ?? Data()
+        self.effectiveGymID = effectiveGymID
     }
 
     var mediaKind: MediaKind {
@@ -502,6 +555,16 @@ final class CoachMessage {
     var recordType: ConversationIntent? {
         get { recordTypeRaw.flatMap(ConversationIntent.init(rawValue:)) }
         set { recordTypeRaw = newValue?.rawValue }
+    }
+
+    var location: LocationSnapshot? {
+        get {
+            guard !locationData.isEmpty else { return nil }
+            return try? JSONDecoder().decode(LocationSnapshot.self, from: locationData)
+        }
+        set {
+            locationData = (try? newValue.map { try JSONEncoder().encode($0) }) ?? Data()
+        }
     }
 
     var mediaAttachments: [MediaAttachmentReference] {
@@ -738,6 +801,8 @@ final class AgentTrace {
     var finalAnswer: String?
     var errorMessage: String?
     var spansData: Data
+    var turnID: UUID?
+    var attemptNumber: Int = 1
 
     init(
         id: UUID = UUID(),
@@ -751,7 +816,9 @@ final class AgentTrace {
         mediaKind: MediaKind,
         imageCount: Int,
         imageAttachmentCount: Int? = nil,
-        videoAttachmentCount: Int? = nil
+        videoAttachmentCount: Int? = nil,
+        turnID: UUID? = nil,
+        attemptNumber: Int = 1
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -768,6 +835,8 @@ final class AgentTrace {
             ?? (mediaKind == .image ? 1 : 0)
         self.videoAttachmentCount = videoAttachmentCount
             ?? (mediaKind == .video ? 1 : 0)
+        self.turnID = turnID
+        self.attemptNumber = attemptNumber
         spansData = (try? JSONEncoder().encode([AgentTraceSpan]())) ?? Data()
     }
 

@@ -54,6 +54,8 @@ struct RootView: View {
                 DemoSeeder.seedIfNeeded(modelContext)
             }
             DataIntegrityRepair.finalizeInterruptedAgentTraces(in: modelContext)
+            DataIntegrityRepair.backfillConversationTurns(in: modelContext)
+            DataIntegrityRepair.mergeObviousDuplicateRecords(in: modelContext)
             DataIntegrityRepair.removeUnsupportedInferences(in: modelContext)
             conversationSessions.resolveForEntry(
                 dataSpace: dataSpace.activeSpace,

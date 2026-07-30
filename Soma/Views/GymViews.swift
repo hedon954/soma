@@ -326,14 +326,28 @@ struct GymDetailView: View {
 private struct GymProfileEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(LocationContextService.self) private var locationContext
     let gym: GymProfile
     @State private var name: String
     @State private var notes: String
+    @State private var latitude: Double?
+    @State private var longitude: Double?
+    @State private var locationLabel: String?
+    @State private var locationAccuracy: Double?
+    @State private var locationUpdatedAt: Date?
+    @State private var matchRadiusMeters: Double
+    @State private var locationMessage: String?
 
     init(gym: GymProfile) {
         self.gym = gym
         _name = State(initialValue: gym.name)
         _notes = State(initialValue: gym.notes)
+        _latitude = State(initialValue: gym.latitude)
+        _longitude = State(initialValue: gym.longitude)
+        _locationLabel = State(initialValue: gym.locationLabel)
+        _locationAccuracy = State(initialValue: gym.locationAccuracy)
+        _locationUpdatedAt = State(initialValue: gym.locationUpdatedAt)
+        _matchRadiusMeters = State(initialValue: gym.matchRadiusMeters)
     }
 
     var body: some View {
@@ -343,6 +357,56 @@ private struct GymProfileEditor: View {
                     TextField("名称", text: $name)
                     TextField("AI 环境解析（可空）", text: $notes, axis: .vertical)
                         .lineLimit(2 ... 8)
+                }
+
+                Section {
+                    if latitude != nil, longitude != nil {
+                        LabeledContent(
+                            "已绑定",
+                            value: locationLabel?.nilIfEmpty ?? "当前位置"
+                        )
+                        Stepper(
+                            "匹配范围 \(Int(matchRadiusMeters)) 米",
+                            value: $matchRadiusMeters,
+                            in: 50 ... 500,
+                            step: 50
+                        )
+                        Button("移除场馆位置", systemImage: "location.slash", role: .destructive) {
+                            latitude = nil
+                            longitude = nil
+                            locationLabel = nil
+                            locationAccuracy = nil
+                            locationUpdatedAt = nil
+                            locationMessage = nil
+                        }
+                    }
+
+                    Button {
+                        captureLocation()
+                    } label: {
+                        if locationContext.isRequesting {
+                            HStack {
+                                ProgressView()
+                                Text("正在获取当前位置…")
+                            }
+                        } else {
+                            Label(
+                                latitude == nil ? "绑定当前位置" : "更新当前位置",
+                                systemImage: "location.fill"
+                            )
+                        }
+                    }
+                    .disabled(locationContext.isRequesting)
+
+                    if let locationMessage {
+                        Text(locationMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("场馆位置")
+                } footer: {
+                    Text("只用于发送时识别本次健身房，不会持续跟踪，也不会自动改变全局当前健身房。")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -357,12 +421,33 @@ private struct GymProfileEditor: View {
                     Button("保存") {
                         gym.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         gym.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                        gym.latitude = latitude
+                        gym.longitude = longitude
+                        gym.locationLabel = locationLabel
+                        gym.locationAccuracy = locationAccuracy
+                        gym.locationUpdatedAt = locationUpdatedAt
+                        gym.matchRadiusMeters = matchRadiusMeters
                         try? modelContext.save()
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+        }
+    }
+
+    private func captureLocation() {
+        Task {
+            guard let snapshot = await locationContext.requestSnapshot() else {
+                locationMessage = "未能获取位置；请检查系统定位权限后重试。"
+                return
+            }
+            latitude = snapshot.latitude
+            longitude = snapshot.longitude
+            locationLabel = snapshot.displayName
+            locationAccuracy = snapshot.horizontalAccuracy
+            locationUpdatedAt = snapshot.capturedAt
+            locationMessage = "已获取 \(snapshot.displayName)，保存后生效。"
         }
     }
 }
@@ -445,5 +530,11 @@ private struct EquipmentReviewRow: View {
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
