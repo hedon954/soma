@@ -60,6 +60,7 @@ final class DataSpaceController {
             MealEntry.self,
             BodyEntry.self,
             WorkoutEntry.self,
+            ConversationSession.self,
             CoachMessage.self,
             AgentTrace.self
         ])
@@ -110,6 +111,7 @@ struct SomaApp: App {
     @State private var aiService = AIService()
     @State private var dataSpace = DataSpaceController()
     @State private var conversationProcessor = ConversationProcessingService()
+    @State private var conversationSessions = ConversationSessionController()
     @State private var captureRouter = SomaCaptureRouter.shared
 
     var body: some Scene {
@@ -119,6 +121,7 @@ struct SomaApp: App {
                 .environment(aiService)
                 .environment(dataSpace)
                 .environment(conversationProcessor)
+                .environment(conversationSessions)
                 .environment(captureRouter)
                 .modelContainer(dataSpace.activeContainer)
                 .onOpenURL { url in

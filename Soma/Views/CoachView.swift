@@ -82,6 +82,7 @@ final class ConversationProcessingService {
         text: String,
         attachments: [PendingAttachment],
         contextSummary: String,
+        session: ConversationSession,
         dataSpace: DataSpace,
         gyms: [GymProfile],
         equipment: [GymEquipment],
@@ -103,6 +104,7 @@ final class ConversationProcessingService {
                 text: text,
                 attachments: attachments,
                 contextSummary: contextSummary,
+                session: session,
                 dataSpace: dataSpace,
                 gyms: gyms,
                 equipment: equipment,
@@ -117,6 +119,7 @@ final class ConversationProcessingService {
         text: String,
         attachments: [PendingAttachment],
         contextSummary: String,
+        session: ConversationSession,
         dataSpace: DataSpace,
         gyms: [GymProfile],
         equipment: [GymEquipment],
@@ -127,7 +130,11 @@ final class ConversationProcessingService {
         let displayText = text.isEmpty
             ? media.displaySummary
             : text
+        let userMessageDate = Date.now
+        session.recordUserMessage(displayText, at: userMessageDate)
         modelContext.insert(CoachMessage(
+            date: userMessageDate,
+            sessionID: session.id,
             isFromCoach: false,
             text: text,
             mediaKind: media.primaryKind,
@@ -161,6 +168,7 @@ final class ConversationProcessingService {
                 activeTrace = trace
                 modelContext.insert(trace)
                 let message = CoachMessage(
+                    sessionID: session.id,
                     isFromCoach: true,
                     text: "",
                     agentTraceID: trace.id,
@@ -237,6 +245,7 @@ final class ConversationProcessingService {
             }
             if responseMessage == nil {
                 modelContext.insert(CoachMessage(
+                    sessionID: session.id,
                     isFromCoach: true,
                     text: reply,
                     recordType: performedRecordType
@@ -260,12 +269,14 @@ final class ConversationProcessingService {
                 }
             } else {
                 modelContext.insert(CoachMessage(
+                    sessionID: session.id,
                     isFromCoach: true,
                     text: failureText
                 ))
             }
         }
 
+        session.touch(at: .now)
         try? modelContext.save()
         liveAssistantText = ""
         liveAgentActivity = nil
@@ -366,9 +377,10 @@ struct CoachView: View {
     @Environment(AIService.self) private var ai
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationProcessingService.self) private var processor
+    @Environment(ConversationSessionController.self) private var conversationSessions
     @Environment(SomaCaptureRouter.self) private var captureRouter
 
-    @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
+    @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
     @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
     @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
@@ -383,6 +395,15 @@ struct CoachView: View {
     @State private var draftBeforeSpeech = ""
     @State private var showsGyms = false
     @State private var composerFocusRequest = UUID()
+    @State private var composerDismissRequest = UUID()
+    @State private var scrollRequest = UUID()
+
+    private var messages: [CoachMessage] {
+        guard let activeSessionID = conversationSessions.activeSessionID else {
+            return []
+        }
+        return allMessages.filter { $0.sessionID == activeSessionID }
+    }
 
     private var currentGym: GymProfile? {
         GymSelection.current(in: gyms)
@@ -435,6 +456,7 @@ struct CoachView: View {
                     isListening: speechInput.isListening,
                     speechMessage: speechInput.errorMessage,
                     focusRequest: composerFocusRequest,
+                    dismissRequest: composerDismissRequest,
                     onAddMedia: showMedia,
                     onSelectGym: selectGym,
                     onManageGyms: { showsGyms = true },
@@ -457,12 +479,27 @@ struct CoachView: View {
             .onChange(of: processor.liveEventRevision) {
                 scrollToBottom(proxy)
             }
+            .onChange(of: scrollRequest) {
+                scrollToBottomAfterLayout(proxy)
+            }
             .onChange(of: speechInput.transcript) {
                 updateDraftFromSpeech()
             }
         }
         .navigationTitle("Soma")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink {
+                    ConversationSessionListView(
+                        currentSessionID: conversationSessions.activeSessionID
+                    )
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .accessibilityLabel("历史对话")
+            }
+        }
         .navigationDestination(isPresented: $showsGyms) {
             GymLibraryView()
         }
@@ -568,10 +605,15 @@ struct CoachView: View {
         guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
         speechInput.stop()
         let pending = attachments
+        let session = conversationSessions.ensureActiveSession(
+            dataSpace: dataSpace.activeSpace,
+            in: modelContext
+        )
         let accepted = processor.submit(
             text: text,
             attachments: pending,
             contextSummary: contextSummary,
+            session: session,
             dataSpace: dataSpace.activeSpace,
             gyms: gyms,
             equipment: equipment,
@@ -581,6 +623,8 @@ struct CoachView: View {
         if accepted {
             draft = ""
             attachments = []
+            composerDismissRequest = UUID()
+            scrollRequest = UUID()
         }
     }
 
@@ -608,13 +652,12 @@ struct CoachView: View {
         _ proxy: ScrollViewProxy,
         animated: Bool = true
     ) {
-        let target = isProcessingHere ? "live-response" : "bottom"
         if animated {
             withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo(target, anchor: .bottom)
+                proxy.scrollTo("bottom", anchor: .bottom)
             }
         } else {
-            proxy.scrollTo(target, anchor: .bottom)
+            proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
 
@@ -810,7 +853,7 @@ private struct SelectableChatText: UIViewRepresentable {
     }
 }
 
-private struct CoachBubble: View {
+struct CoachBubble: View {
     let message: CoachMessage
     var isLive = false
 
@@ -1298,6 +1341,7 @@ private struct CoachComposer: View {
     let isListening: Bool
     let speechMessage: String?
     let focusRequest: UUID
+    let dismissRequest: UUID
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
@@ -1432,6 +1476,14 @@ private struct CoachComposer: View {
         .background(.bar)
         .onChange(of: focusRequest) {
             focused = true
+        }
+        .onChange(of: dismissRequest) {
+            focused = false
+        }
+        .onChange(of: isSending) {
+            if isSending {
+                focused = false
+            }
         }
     }
 }

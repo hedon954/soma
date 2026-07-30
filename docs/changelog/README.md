@@ -17,6 +17,7 @@
 | [2026-07-29](2026-07-29-soma-health-and-polish.md) | Soma 当前基线 | 身体信息、热量估算、HealthKit、有序混合媒体、Widget、异步处理和交互打磨 |
 | [2026-07-30](2026-07-30-agent-turn-event-cards.md) | Agent 聊天模型修正 | 文字、Skill、Tool 和错误按真实顺序流式追加为 Event Cards |
 | [2026-07-30](2026-07-30-lock-screen-widgets.md) | 锁屏快速记录 | 文字、拍照和照片/视频入口扩展到三种锁屏组件位置 |
+| [2026-07-30](2026-07-30-conversation-sessions-and-send-feedback.md) | 对话边界与反馈 | 跨天 Session、发送后收起输入并滚到底部、开发者日志入口 |
 
 相关文档：
 

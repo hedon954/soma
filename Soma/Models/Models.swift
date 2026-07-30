@@ -454,6 +454,7 @@ final class WorkoutEntry {
 final class CoachMessage {
     var id: UUID
     var date: Date
+    var sessionID: UUID?
     var isFromCoach: Bool
     var text: String
     var mediaKindRaw: String = MediaKind.none.rawValue
@@ -467,6 +468,7 @@ final class CoachMessage {
 
     init(
         date: Date = .now,
+        sessionID: UUID? = nil,
         isFromCoach: Bool,
         text: String,
         mediaKind: MediaKind = .none,
@@ -480,6 +482,7 @@ final class CoachMessage {
     ) {
         id = UUID()
         self.date = date
+        self.sessionID = sessionID
         self.isFromCoach = isFromCoach
         self.text = text
         mediaKindRaw = mediaKind.rawValue

@@ -16,7 +16,9 @@ private enum RootSheet: Identifiable {
 
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(DataSpaceController.self) private var dataSpace
+    @Environment(ConversationSessionController.self) private var conversationSessions
     @Environment(SomaCaptureRouter.self) private var captureRouter
     @State private var selectedTab: AppTab = .coach
     @State private var sheet: RootSheet?
@@ -53,6 +55,17 @@ struct RootView: View {
             }
             DataIntegrityRepair.finalizeInterruptedAgentTraces(in: modelContext)
             DataIntegrityRepair.removeUnsupportedInferences(in: modelContext)
+            conversationSessions.resolveForEntry(
+                dataSpace: dataSpace.activeSpace,
+                in: modelContext
+            )
+        }
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active else { return }
+            conversationSessions.resolveForEntry(
+                dataSpace: dataSpace.activeSpace,
+                in: modelContext
+            )
         }
     }
 

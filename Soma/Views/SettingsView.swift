@@ -348,31 +348,6 @@ struct SettingsView: View {
         }
     }
 
-    private var developerSection: some View {
-        Section {
-            NavigationLink {
-                DeveloperSettingsView()
-            } label: {
-                Label("ReAct Agent 提示词", systemImage: "terminal")
-            }
-
-            NavigationLink {
-                AgentExecutionLogView()
-            } label: {
-                HStack {
-                    Label("执行日志", systemImage: "point.3.connected.trianglepath.dotted")
-                    Spacer()
-                    Text("\(agentTraces.count)")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } header: {
-            Text("开发者设置")
-        } footer: {
-            Text("面向高阶用户。可自定义系统提示词，并审查每次 ReAct Loop 的完整本地 Trace。")
-        }
-    }
-
     private func loadInitialConfiguration() {
         provider = ai.provider
         loadProviderConfiguration()
@@ -880,6 +855,7 @@ private struct ProfileFieldRow: View {
 
 private struct DeveloperSettingsView: View {
     @Environment(DataSpaceController.self) private var dataSpace
+    @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
     @State private var customizedSections = Set<ReActPromptSection>()
     @State private var customizedSkills = Set<AgentSkill>()
     @State private var confirmsResetAllPrompts = false
@@ -887,6 +863,23 @@ private struct DeveloperSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                NavigationLink {
+                    AgentExecutionLogView()
+                } label: {
+                    HStack {
+                        Label("执行日志", systemImage: "point.3.connected.trianglepath.dotted")
+                        Spacer()
+                        Text("\(agentTraces.count)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("诊断")
+            } footer: {
+                Text("审查当前数据空间内每次 ReAct Loop 的完整本地 Trace。")
+            }
+
             Section {
                 ForEach(ReActPromptSection.userEditableCases) { section in
                     NavigationLink {
@@ -909,31 +902,10 @@ private struct DeveloperSettingsView: View {
                         .padding(.vertical, 4)
                     }
                 }
-
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "lock.fill")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22)
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text(ReActPromptSection.tools.title)
-                                .font(.headline)
-                            Spacer()
-                            Text("系统内置")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(ReActPromptSection.tools.summary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
-                .accessibilityElement(children: .combine)
             } header: {
                 Text("系统提示词")
             } footer: {
-                Text("角色与安全策略可自定义；工具通过 API 原生注册，名称与参数 JSON Schema 由系统固定，不会拼接进提示词。")
+                Text("角色与安全策略可以分别自定义和恢复默认。")
             }
 
             Section {
@@ -1009,7 +981,7 @@ private struct DeveloperSettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("你保存的角色与安全策略自定义内容会被移除；系统内置工具协议不会改变。")
+            Text("你保存的角色与安全策略自定义内容会被移除。")
         }
         .alert("恢复全部默认 Skills？", isPresented: $confirmsResetAllSkills) {
             Button("恢复默认", role: .destructive) {

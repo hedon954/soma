@@ -9,6 +9,8 @@
 | 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
 | 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
 | 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；点击后展开为保留各自比例的竖直列表并可收起，不支持横向滑动；视频本机抽帧；`SpeechInputService` 使用系统语音识别；消息正文支持完整 Markdown、原生范围选择与复制。 |
+| 对话 Session | `ConversationSessionController` 在根层首次加载和 Scene 重新进入前台时解析当前 Session；今天有最后消息则复用，否则新建当天 Session；旧消息按自然日归档，历史会话可回看。 |
+| 发送反馈 | 提交被接受后清空草稿与附件、撤销文本焦点并滚到稳定底部锚点；用户消息和 Agent Event 更新继续保持在底部等待回复。 |
 | Widget 与系统快捷入口 | 中尺寸主屏幕 `SomaWidget`、三种锁屏快捷组件和 App Shortcuts 均提供文字、拍照、照片/视频入口；锁屏组件支持行内、圆形、矩形位置；打开 App 后直接聚焦文字输入或呈现系统选择器，不在扩展内写记录或运行 Agent。 |
 | 异步对话处理 | `ConversationProcessingService` 由 App 根层持有；只要进程存活，离开聊天页不会中断当前解析。 |
 | 多个健身房和当前场馆 | 聊天可创建、更新、切换；健身房列表可直接选择当前场馆。 |
@@ -33,6 +35,7 @@
 | 渐进式 Skills | 系统只披露目录；`load_skill` 按需加载八项可编辑 Skill，并生成独立 Span。 |
 | 系统协议边界 | 角色和安全策略可编辑；工具与参数 Schema 由 App 通过 API 注册，不进入提示词且不能被旧自定义值覆盖。 |
 | Trace | 一次远程消息生成一条成功或失败 Trace；model、skill、tool、output Span 作为 Event 实时更新 UI，并保存相对耗时、Token、入参与返回。 |
+| 开发者设置 | 直接提供执行日志入口和数量；固定 Tool 协议不作为不可操作的设置项或说明展示。 |
 
 ## 可重复验证
 

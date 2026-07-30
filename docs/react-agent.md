@@ -28,7 +28,7 @@ Soma 的远程模式采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE
 - 运动量分析
 - 运动热量估算
 
-Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地只读工具，加载过程形成独立 Skill Span。
+Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地只读工具，加载过程形成独立 Skill Span。开发者设置同时直接提供执行日志入口；固定 Tool 协议不作为设置项展示。
 
 ## 本地工具
 

@@ -18,6 +18,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0012](0012-ordered-mixed-media-collections.md) | 已采纳 | 有序混合媒体贯穿聊天、Agent、记录和审查 |
 | [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
 | [0014](0014-agent-turn-ordered-event-cards.md) | 已采纳 | 一次 Agent Turn 由有序异构 Event Cards 组成 |
+| [0015](0015-daily-conversation-session-lifecycle.md) | 已采纳 | 进入前台时按自然日解析并持久化当前对话 Session |
 
 新决策使用 [ADR 模板](template.md)。
 
