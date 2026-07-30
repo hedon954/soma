@@ -1,6 +1,15 @@
-# 第三方开源软件声明
+# 第三方软件与数据声明
 
-Soma 使用以下 MIT License 开源组件。版本由 Swift Package Manager 锁定。
+Soma 使用以下第三方软件与数据。软件版本由 Swift Package Manager 锁定。
+
+## Open-Meteo weather data
+
+Weather data by [Open-Meteo.com](https://open-meteo.com/).
+
+Open-Meteo API data is provided under the
+[Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/).
+Soma transforms transient current conditions into general exercise risk guidance and does not
+persist the original weather response.
 
 ## SwiftOpenAI 4.5.0
 

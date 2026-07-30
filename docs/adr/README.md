@@ -20,9 +20,10 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0014](0014-agent-turn-ordered-event-cards.md) | 已采纳 | 一次 Agent Turn 由有序异构 Event Cards 组成 |
 | [0015](0015-daily-conversation-session-lifecycle.md) | 已采纳 | 进入前台时按自然日解析并持久化当前对话 Session |
 | [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 已采纳 | Turn 可包含多次 Attempt，成功后投影到足迹并跨重试幂等 |
-| [0017](0017-location-and-weather-context.md) | 已采纳 | 位置与天气作为最小、受控、非阻塞的 Turn 上下文 |
+| [0017](0017-location-and-weather-context.md) | 部分已替代 | 位置作为最小、受控、非阻塞的 Turn 上下文；天气 Provider 由 ADR 0020 替代 |
 | [0018](0018-provenance-aware-record-merge.md) | 已采纳 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并 |
 | [0019](0019-cost-aware-github-actions-gates.md) | 已采纳 | 日常 Actions 只跑快速门禁，完整验证与 CodeQL 收敛到 release tag |
+| [0020](0020-open-meteo-transient-weather-provider.md) | 已采纳 | 使用 Open-Meteo 获取公里级、临时、非阻塞的天气上下文 |
 
 新决策使用 [ADR 模板](template.md)。
 

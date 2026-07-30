@@ -2,7 +2,6 @@ import CoreLocation
 import Foundation
 import MapKit
 import Observation
-import WeatherKit
 
 struct LocationSnapshot: Codable, Equatable, Sendable {
     var latitude: Double
@@ -243,61 +242,6 @@ final class LocationContextService: NSObject, @preconcurrency CLLocationManagerD
         .prefix(2)
         .joined(separator: " · ")
         .nilIfEmpty
-    }
-}
-
-enum WeatherContextProvider {
-    static func isRelevant(to text: String) -> Bool {
-        let normalized = text.lowercased()
-        return [
-            "天气", "气温", "温度", "下雨", "降雨", "紫外线", "炎热", "太热", "寒冷",
-            "太冷", "户外", "室外", "跑步", "骑行", "徒步", "爬山", "散步", "步行",
-            "weather", "outdoor", "running", "cycling", "hiking"
-        ].contains(where: normalized.contains)
-    }
-
-    static func transientGuidance(
-        for snapshot: LocationSnapshot,
-        text: String
-    ) async -> String? {
-        guard isRelevant(to: text) else { return nil }
-        let location = CLLocation(
-            latitude: snapshot.latitude,
-            longitude: snapshot.longitude
-        )
-        guard let current = try? await WeatherService.shared.weather(
-            for: location,
-            including: .current
-        ) else {
-            return nil
-        }
-
-        let apparent = current.apparentTemperature.converted(to: .celsius).value
-        let humidity = current.humidity
-        let uvIndex = current.uvIndex.value
-        let precipitation = current.precipitationIntensity.value
-        var risks: [String] = []
-
-        if apparent >= 32 || apparent >= 28 && humidity >= 0.75 {
-            risks.append("存在高温或高湿负担，户外运动应保守控制强度并注意补水")
-        }
-        if apparent <= 0 {
-            risks.append("存在低温负担，户外运动应充分热身并注意保暖")
-        }
-        if uvIndex >= 8 {
-            risks.append("紫外线风险较高，户外活动应注意防晒和暴露时长")
-        }
-        if precipitation > 0 {
-            risks.append("存在降水，户外运动应关注路面与能见度")
-        }
-        if risks.isEmpty {
-            risks.append("当前未触发明显的高温、严寒、高紫外线或降水风险")
-        }
-
-        return """
-        临时天气风险（仅在户外活动相关时使用；不要复述或保存原始天气值）：
-        \(risks.joined(separator: "；"))。这是一般建议，不是应急或医疗判断。
-        """
     }
 }
 

@@ -1,7 +1,7 @@
 # 足迹、位置、天气与 Agent 重试技术调研
 
 - 日期：2026-07-30
-- 结论：采用聊天事实投影、一次性前台定位、按需 WeatherKit 和持久化跨 Attempt 幂等。
+- 结论：采用聊天事实投影、一次性前台定位、按需 Open-Meteo 和持久化跨 Attempt 幂等。
 
 ## 现状
 
@@ -28,15 +28,16 @@ Apple 的 `requestLocation()` 只运行到返回一次位置或错误，符合�
 自动作为本次 Turn 的有效场馆；多个候选或精度差时使用手动当前场馆。匹配不写
 `GymProfile.isCurrent`，避免定位误差制造隐藏状态。
 
-## WeatherKit
+## Open-Meteo
 
-WeatherKit 当前条件包含体感温度、湿度、紫外线和降水等信息，但调用需要 WeatherKit
-capability。Apple 要求展示原始天气时提供归属，并限制把 Apple Weather Data 建成二级
-数据库或长期缓存。
+Open-Meteo Forecast API 无需 API Key，可返回体感温度、相对湿度、紫外线和降水等当前
+条件。非商业免费端点限制每天 10,000 次调用、没有 SLA，并要求按 CC BY 4.0 提供归属；
+商业使用需要切换到付费端点。
 
-Soma 不展示或保存原始天气。只有文本命中户外/天气语义时才调用，并在内存中转换为高温、
-严寒、高湿、高紫外线或降水等一般风险提示。提示被注入本次 Agent 请求，但不进入 Trace
-上下文快照；服务失败时返回空上下文。
+直接从移动端调用时，服务方会看到 IP 和请求坐标，故障排查日志可能保留坐标最多 90 天。
+因此 Soma 把坐标降到小数点后两位，只在文本命中户外/天气语义时调用，并在内存中转换为
+高温、严寒、高湿、高紫外线或降水等一般风险提示。提示被注入本次 Agent 请求，但不进入
+Trace 上下文快照；服务失败时返回空上下文。
 
 ## 重试与幂等
 
@@ -82,6 +83,7 @@ JSON 编码的 Tool Call 组成；相同调用返回首次 `AgentToolResult`。
 - [Core Location](https://developer.apple.com/documentation/corelocation)
 - [CLLocationManager.requestLocation](https://developer.apple.com/documentation/corelocation/cllocationmanager/requestlocation())
 - [MapKit reverse geocoding](https://developer.apple.com/documentation/mapkit/mkreversegeocodingrequest)
-- [WeatherService.weather(for:including:)](https://developer.apple.com/documentation/weatherkit/weatherservice/weather(for:including:)-3cg1d)
-- [WeatherKit Entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.weatherkit)
-- [Apple Developer Program License Agreement](https://developer.apple.com/support/terms/apple-developer-program-license-agreement/)
+- [Open-Meteo Forecast API](https://open-meteo.com/en/docs)
+- [Open-Meteo Pricing](https://open-meteo.com/en/pricing)
+- [Open-Meteo Terms & Privacy](https://open-meteo.com/en/terms)
+- [Open-Meteo Licence](https://open-meteo.com/en/licence)
