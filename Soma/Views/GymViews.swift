@@ -127,6 +127,7 @@ struct GymDetailView: View {
     @State private var editingGym: GymProfile?
     @State private var editingEquipment: GymEquipment?
     @State private var deletingEquipment: GymEquipment?
+    @State private var deletingPhoto: GymPhotoItem?
     @State private var confirmsGymDeletion = false
 
     private var equipment: [GymEquipment] {
@@ -279,6 +280,34 @@ struct GymDetailView: View {
         } message: { item in
             Text("“\(item.name)”会从这个健身房的支持器械中移除。")
         }
+        .alert(
+            "从健身房中移除这张照片？",
+            isPresented: Binding(
+                get: { deletingPhoto != nil },
+                set: {
+                    if !$0 {
+                        deletingPhoto = nil
+                    }
+                }
+            ),
+            presenting: deletingPhoto
+        ) { photo in
+            Button("移除", role: .destructive) {
+                MediaAssociationStore.detachGymPhoto(
+                    at: photo.path,
+                    from: gym,
+                    equipment: allEquipment,
+                    media: allMedia,
+                    in: modelContext
+                )
+                deletingPhoto = nil
+            }
+            Button("取消", role: .cancel) {
+                deletingPhoto = nil
+            }
+        } message: { _ in
+            Text("只会从健身房档案解除关联；聊天中的原始照片和系统相册不会删除。")
+        }
     }
 
     @ViewBuilder
@@ -300,6 +329,20 @@ struct GymDetailView: View {
                             ForEach(photos) { photo in
                                 ZStack {
                                     LocalImageView(path: photo.path)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    Button(role: .destructive) {
+                                        deletingPhoto = photo
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.subheadline.weight(.semibold))
+                                            .frame(width: 36, height: 36)
+                                            .background(.ultraThinMaterial, in: Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.red)
+                                    .padding(9)
+                                    .accessibilityLabel("删除这张健身房照片")
                                 }
                                 .containerRelativeFrame(.horizontal, count: 1, spacing: 10)
                                 .frame(height: 176)

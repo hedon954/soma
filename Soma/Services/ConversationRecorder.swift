@@ -892,6 +892,17 @@ extension ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
+        let imageAttachments = resolvedMediaAttachments(
+            mediaAttachments,
+            legacyKind: mediaKind,
+            legacyPath: mediaPath
+        ).filter { $0.kind == .image }
+        if arguments.mediaSource == AgentToolMediaAttribution.recentGymTurn,
+           imageAttachments.isEmpty
+        {
+            return .failure("没有找到紧邻上一轮的健身房照片，请重新附加照片后再试。")
+        }
+
         let gyms = fetchGyms(in: context)
         let requestedName = arguments.gymName?.trimmed.nilIfEmpty
         let target: GymProfile
@@ -917,11 +928,6 @@ extension ConversationRecorder {
         if let summary = arguments.summary?.trimmed.nilIfEmpty {
             target.notes = summary
         }
-        let imageAttachments = resolvedMediaAttachments(
-            mediaAttachments,
-            legacyKind: mediaKind,
-            legacyPath: mediaPath
-        ).filter { $0.kind == .image }
         if let coverPath = imageAttachments.first?.path {
             target.coverImagePath = coverPath
             let existingMedia = (try? context.fetch(FetchDescriptor<GymMedia>())) ?? []
@@ -962,7 +968,13 @@ extension ConversationRecorder {
         try? context.save()
         let names = (arguments.equipment ?? []).map(\.name).filter { !$0.isEmpty }
         let detail = names.isEmpty ? "环境信息" : names.joined(separator: "、")
-        return .success("已更新健身房「\(target.name)」：\(detail)。", recordType: .gym)
+        let photoDetail = imageAttachments.isEmpty
+            ? ""
+            : "，并保存 \(imageAttachments.count) 张照片"
+        return .success(
+            "已更新健身房「\(target.name)」：\(detail)\(photoDetail)。",
+            recordType: .gym
+        )
     }
 
     private static func switchGym(

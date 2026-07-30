@@ -60,6 +60,7 @@ struct AgentToolArguments: Codable, Equatable {
     var gymName: String?
     var summary: String?
     var equipment: [AgentEquipmentInput]?
+    var mediaSource: String?
 
     var exercise: String?
     var setEntries: [AgentWorkoutSetInput]?
@@ -93,6 +94,7 @@ struct AgentToolArguments: Codable, Equatable {
         case setEntries = "set_entries"
         case skillID = "skill_id"
         case gymName = "gym_name"
+        case mediaSource = "media_source"
         case restSeconds = "rest_seconds"
         case durationMinutes = "duration_minutes"
         case formScore = "form_score"
@@ -111,6 +113,7 @@ struct AgentToolArguments: Codable, Equatable {
         gymName: String? = nil,
         summary: String? = nil,
         equipment: [AgentEquipmentInput]? = nil,
+        mediaSource: String? = nil,
         exercise: String? = nil,
         setEntries: [AgentWorkoutSetInput]? = nil,
         sets: Int? = nil,
@@ -141,6 +144,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.gymName = gymName
         self.summary = summary
         self.equipment = equipment
+        self.mediaSource = mediaSource
         self.exercise = exercise
         self.setEntries = setEntries
         self.sets = sets
@@ -326,7 +330,11 @@ extension AgentToolName {
         case .deleteRecord:
             "删除一条训练、饮食或身体记录。只有用户在当前消息明确要求删除时才能调用；先查询并使用准确 record_id。聊天原文和共享媒体不会删除。"
         case .updateGym:
-            "新建或更新电子健身房及其可见器械。未指定 gym_name 时更新当前健身房。"
+            """
+            新建或更新电子健身房及其可见器械，并把本次用于识别的照片保存到健身房档案。\
+            未指定 gym_name 时更新当前健身房。若当前消息只是在回答紧邻上一轮健身房照片的\
+            名称或确认问题，media_source 传 recent_gym_turn；不得引用更早或无关媒体。
+            """
         case .switchGym:
             "把一个已经存在或明确命名的健身房设为当前健身房。"
         }
@@ -419,6 +427,10 @@ extension AgentToolName {
             object([
                 "gym_name": string("场馆名称；省略则使用当前健身房"),
                 "summary": string("与训练有关的环境总结"),
+                "media_source": string(
+                    "照片来源；继续紧邻上一轮的健身房照片时选 recent_gym_turn",
+                    values: ["current_turn", "recent_gym_turn"]
+                ),
                 "equipment": array(
                     object([
                         "name": string("器械名称"),

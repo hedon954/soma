@@ -327,6 +327,11 @@ final class ConversationProcessingService {
                         }
                     }
                 ) { call in
+                    let attributedMedia = AgentToolMediaAttribution.attachments(
+                        for: call,
+                        current: media.attachments,
+                        history: projection
+                    )
                     let result = AgentMutationStore.execute(
                         call,
                         turnID: turnID,
@@ -340,7 +345,7 @@ final class ConversationProcessingService {
                             sourceTurnID: turnID,
                             mediaKind: media.primaryKind,
                             mediaPath: media.primaryPath,
-                            mediaAttachments: media.attachments,
+                            mediaAttachments: attributedMedia,
                             preferredGymID: resolution.gymID,
                             in: context.modelContext
                         )

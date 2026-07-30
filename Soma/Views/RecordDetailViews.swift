@@ -67,9 +67,11 @@ private struct RecordImage: View {
 
 private struct RecordMediaGallery: View {
     let attachments: [MediaAttachmentReference]
+    let onDeleteRequest: (MediaAttachmentReference) -> Void
+    @State private var selectedAttachmentID = ""
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedAttachmentID) {
             ForEach(attachments) { attachment in
                 Group {
                     switch attachment.kind {
@@ -91,14 +93,95 @@ private struct RecordMediaGallery: View {
                             .padding(9)
                     }
                 }
+                .tag(attachment.id)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .automatic : .never))
         .frame(height: 270)
+        .overlay(alignment: .topTrailing) {
+            if let selectedAttachment {
+                Button(role: .destructive) {
+                    onDeleteRequest(selectedAttachment)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .padding(9)
+                .accessibilityLabel(
+                    selectedAttachment.kind == .video
+                        ? "删除这个视频"
+                        : "删除这张照片"
+                )
+            }
+        }
+        .onAppear {
+            normalizeSelection()
+        }
+        .onChange(of: attachments) {
+            normalizeSelection()
+        }
+    }
+
+    private var selectedAttachment: MediaAttachmentReference? {
+        attachments.first { $0.id == selectedAttachmentID }
+            ?? attachments.first
     }
 
     private func position(of attachment: MediaAttachmentReference) -> Int {
         attachments.firstIndex(where: { $0.id == attachment.id }) ?? 0
+    }
+
+    private func normalizeSelection() {
+        guard !attachments.contains(where: { $0.id == selectedAttachmentID }) else {
+            return
+        }
+        selectedAttachmentID = attachments.first?.id ?? ""
+    }
+}
+
+private struct RecordMediaDeletionAlert: ViewModifier {
+    @Binding var attachment: MediaAttachmentReference?
+    let onDelete: (MediaAttachmentReference) -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(
+            "从记录中移除此媒体？",
+            isPresented: Binding(
+                get: { attachment != nil },
+                set: {
+                    if !$0 {
+                        attachment = nil
+                    }
+                }
+            ),
+            presenting: attachment
+        ) { item in
+            Button("移除", role: .destructive) {
+                onDelete(item)
+                attachment = nil
+            }
+            Button("取消", role: .cancel) {
+                attachment = nil
+            }
+        } message: { _ in
+            Text("只会从这条记录解除关联；聊天中的原始附件和系统相册不会删除。")
+        }
+    }
+}
+
+private extension View {
+    func recordMediaDeletionAlert(
+        attachment: Binding<MediaAttachmentReference?>,
+        onDelete: @escaping (MediaAttachmentReference) -> Void
+    ) -> some View {
+        modifier(RecordMediaDeletionAlert(
+            attachment: attachment,
+            onDelete: onDelete
+        ))
     }
 }
 
@@ -161,6 +244,7 @@ private struct WorkoutRecordEditor: View {
     @State private var intensity: String
     @State private var feedback: String
     @State private var notes: String
+    @State private var mediaPendingDeletion: MediaAttachmentReference?
 
     init(workout: WorkoutEntry) {
         self.workout = workout
@@ -183,7 +267,10 @@ private struct WorkoutRecordEditor: View {
         Form {
             if !workout.mediaAttachments.isEmpty {
                 Section("记录媒体") {
-                    RecordMediaGallery(attachments: workout.mediaAttachments)
+                    RecordMediaGallery(
+                        attachments: workout.mediaAttachments,
+                        onDeleteRequest: { mediaPendingDeletion = $0 }
+                    )
                 }
             }
 
@@ -285,6 +372,16 @@ private struct WorkoutRecordEditor: View {
                 }
             }
         }
+        .recordMediaDeletionAlert(
+            attachment: $mediaPendingDeletion,
+            onDelete: {
+                MediaAssociationStore.detach(
+                    $0,
+                    from: workout,
+                    in: modelContext
+                )
+            }
+        )
     }
 
     private var isValid: Bool {
@@ -367,6 +464,7 @@ private struct MealRecordEditor: View {
     @State private var carbs: String
     @State private var fat: String
     @State private var notes: String
+    @State private var mediaPendingDeletion: MediaAttachmentReference?
 
     init(meal: MealEntry) {
         self.meal = meal
@@ -384,7 +482,10 @@ private struct MealRecordEditor: View {
         Form {
             if !meal.mediaAttachments.isEmpty {
                 Section("饮食媒体") {
-                    RecordMediaGallery(attachments: meal.mediaAttachments)
+                    RecordMediaGallery(
+                        attachments: meal.mediaAttachments,
+                        onDeleteRequest: { mediaPendingDeletion = $0 }
+                    )
                 }
             }
 
@@ -450,6 +551,16 @@ private struct MealRecordEditor: View {
                 }
             }
         }
+        .recordMediaDeletionAlert(
+            attachment: $mediaPendingDeletion,
+            onDelete: {
+                MediaAssociationStore.detach(
+                    $0,
+                    from: meal,
+                    in: modelContext
+                )
+            }
+        )
     }
 
     private var isValid: Bool {
@@ -505,6 +616,7 @@ private struct BodyRecordEditor: View {
     @State private var waist: String
     @State private var analysis: String
     @State private var notes: String
+    @State private var mediaPendingDeletion: MediaAttachmentReference?
 
     init(entry: BodyEntry) {
         self.entry = entry
@@ -520,7 +632,10 @@ private struct BodyRecordEditor: View {
         Form {
             if !entry.mediaAttachments.isEmpty {
                 Section("体态媒体") {
-                    RecordMediaGallery(attachments: entry.mediaAttachments)
+                    RecordMediaGallery(
+                        attachments: entry.mediaAttachments,
+                        onDeleteRequest: { mediaPendingDeletion = $0 }
+                    )
                 }
             }
 
@@ -579,6 +694,16 @@ private struct BodyRecordEditor: View {
                 }
             }
         }
+        .recordMediaDeletionAlert(
+            attachment: $mediaPendingDeletion,
+            onDelete: {
+                MediaAssociationStore.detach(
+                    $0,
+                    from: entry,
+                    in: modelContext
+                )
+            }
+        )
     }
 
     private var isValid: Bool {

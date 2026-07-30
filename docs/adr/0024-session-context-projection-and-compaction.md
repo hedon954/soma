@@ -1,6 +1,6 @@
 # ADR 0024：投影最近十个 Session 来回并恢复历史媒体
 
-- 状态：已接受
+- 状态：部分已替代（健身房紧邻跨轮媒体归档由 ADR 0026 补充）
 - 日期：2026-07-30
 - 维护者：Soma maintainers
 
@@ -23,8 +23,9 @@
   单次请求沿用十二张视觉帧总额度：当前 Turn 优先，剩余额度按历史 Turn 从近到远分配。
 - 原始附件存在但没有进入额度或准备失败时，历史提示明确写出实际重新提供的帧数；模型不能
   把“曾有媒体”当成“本次看到了画面”。
-- 历史媒体仅是推理上下文。`ConversationRecorder` 和 Tool 写入继续只接收当前 Turn 的
-  `MediaAttachmentReference`，不能把历史附件复制到新业务记录。
+- 历史媒体默认仅是推理上下文，`ConversationRecorder` 和 Tool 写入只接收当前 Turn 的
+  `MediaAttachmentReference`。唯一例外由 [ADR 0026](0026-bounded-gym-media-attribution.md)
+  定义：`update_gym` 可在严格条件下归档紧邻上一轮的健身房照片。
 - 视频先由模型能力矩阵选择输入方式：百炼中确认支持且稳定副本不超过 24MB 时发送视频
   Data URL；其他平台、能力未知、超限或直接请求在首个响应前被拒绝时使用关键帧。
 - 附有视频时必须存在有效的直接视频内容或大于零的关键帧；否则 Attempt 失败，不能把

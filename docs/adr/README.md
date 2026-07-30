@@ -27,8 +27,9 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0021](0021-portable-export-encrypted-backup-and-erasure.md) | 已采纳 | 分离开放年月日导出、外部加密备份恢复与个人数据清除 |
 | [0022](0022-user-controlled-conversation-sessions.md) | 已采纳 | Session 由用户新建、选择并继续，不再按自然日强制切换 |
 | [0023](0023-ordered-workout-set-evidence.md) | 已采纳 | 训练使用有序逐组次数与重量，组数和容量由逐组事实派生 |
-| [0024](0024-session-context-projection-and-compaction.md) | 已采纳 | 投影 Session 最近十个来回并在视觉额度内恢复历史媒体 |
+| [0024](0024-session-context-projection-and-compaction.md) | 部分已替代 | 投影 Session 最近十个来回并在视觉额度内恢复历史媒体 |
 | [0025](0025-tiered-model-profiles-and-routing.md) | 已采纳 | 使用小模型/标准双档配置与本地保守路由 |
+| [0026](0026-bounded-gym-media-attribution.md) | 已采纳 | 只在紧邻命名确认时把上一轮健身房照片归入档案 |
 
 新决策使用 [ADR 模板](template.md)。
 
