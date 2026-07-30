@@ -20,6 +20,7 @@ struct RootView: View {
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationSessionController.self) private var conversationSessions
     @Environment(SomaCaptureRouter.self) private var captureRouter
+    @Environment(DataManagementCoordinator.self) private var dataManagement
     @State private var selectedTab: AppTab = .coach
     @State private var sheet: RootSheet?
 
@@ -63,11 +64,16 @@ struct RootView: View {
             )
         }
         .onChange(of: scenePhase) {
-            guard scenePhase == .active else { return }
-            conversationSessions.resolveForEntry(
-                dataSpace: dataSpace.activeSpace,
-                in: modelContext
-            )
+            if scenePhase == .active {
+                conversationSessions.resolveForEntry(
+                    dataSpace: dataSpace.activeSpace,
+                    in: modelContext
+                )
+            } else if scenePhase == .background {
+                dataManagement.backupWhenEnteringBackground(
+                    personalContainer: dataSpace.personalContainer
+                )
+            }
         }
     }
 

@@ -469,6 +469,7 @@ final class SomaTests: XCTestCase {
         let data = try XCTUnwrap(image.pngData())
 
         let path = try MediaStore.saveImage(data)
+        defer { MediaStore.removeStoredFile(at: path) }
 
         XCTAssertTrue(path.hasPrefix("PrivateMedia/"))
         XCTAssertFalse(path.hasPrefix("/"))

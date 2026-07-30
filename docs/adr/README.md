@@ -24,6 +24,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0018](0018-provenance-aware-record-merge.md) | 已采纳 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并 |
 | [0019](0019-cost-aware-github-actions-gates.md) | 已采纳 | 日常 Actions 只跑快速门禁，完整验证与 CodeQL 收敛到 release tag |
 | [0020](0020-open-meteo-transient-weather-provider.md) | 已采纳 | 使用 Open-Meteo 获取公里级、临时、非阻塞的天气上下文 |
+| [0021](0021-portable-export-encrypted-backup-and-erasure.md) | 已采纳 | 分离开放年月日导出、外部加密备份恢复与个人数据清除 |
 
 新决策使用 [ADR 模板](template.md)。
 

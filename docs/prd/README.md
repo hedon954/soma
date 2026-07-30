@@ -18,6 +18,7 @@
 | [004：Soma 当前产品基线](004-soma-current-product.md) | 当前基线 | 身体信息、热量估算、有序混合媒体、Widget/系统快捷入口、健康数据接入和异步处理 |
 | [005：对话 Session 与发送反馈](005-conversation-sessions-and-send-feedback.md) | 对话收敛 | 跨天 Session、发送后收起输入并滚到底部、开发者日志入口 |
 | [006：足迹、位置上下文与失败重试](006-footprints-location-and-retry.md) | 个人回顾 | 成功消息足迹、一次性位置、场馆上下文、按需天气和可幂等重试 |
+| [007：数据导出、自动备份与主动清除](007-data-export-backup-and-erasure.md) | 数据主权 | 开放年月日导出、外部加密自动备份、恢复与个人数据清除 |
 
 ## 阅读约定
 

@@ -115,6 +115,7 @@ struct SomaApp: App {
     @State private var conversationSessions = ConversationSessionController()
     @State private var locationContext = LocationContextService()
     @State private var captureRouter = SomaCaptureRouter.shared
+    @State private var dataManagement = DataManagementCoordinator()
 
     var body: some Scene {
         WindowGroup {
@@ -126,6 +127,7 @@ struct SomaApp: App {
                 .environment(conversationSessions)
                 .environment(locationContext)
                 .environment(captureRouter)
+                .environment(dataManagement)
                 .modelContainer(dataSpace.activeContainer)
                 .onOpenURL { url in
                     captureRouter.route(url)

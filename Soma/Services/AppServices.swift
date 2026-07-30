@@ -1171,6 +1171,43 @@ enum KeychainStore {
               let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
+
+    static func saveData(_ data: Data, for key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Soma",
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
+        var insert = query
+        insert[kSecValueData as String] = data
+        insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        SecItemAdd(insert as CFDictionary, nil)
+    }
+
+    static func readData(_ key: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Soma",
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else {
+            return nil
+        }
+        return result as? Data
+    }
+
+    static func delete(_ key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Soma",
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
 }
 
 enum MediaStore {
@@ -1203,6 +1240,55 @@ enum MediaStore {
         let filename = original.lastPathComponent
         let relocated = media.appendingPathComponent(filename)
         return FileManager.default.fileExists(atPath: relocated.path) ? relocated : nil
+    }
+
+    static func saveRestoredMedia(
+        _ data: Data,
+        fileExtension: String
+    ) throws -> String {
+        let sanitized = fileExtension
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+        return try save(
+            data: data,
+            extension: String((sanitized.isEmpty ? "bin" : sanitized).prefix(10))
+        )
+    }
+
+    @discardableResult
+    static func removeStoredFile(at path: String) -> Bool {
+        guard let media = try? mediaDirectory() else { return false }
+        let filename = URL(fileURLWithPath: path).lastPathComponent
+        guard !filename.isEmpty else { return false }
+        let target = media.appending(path: filename)
+        guard target.deletingLastPathComponent().standardizedFileURL
+            == media.standardizedFileURL,
+            FileManager.default.fileExists(atPath: target.path)
+        else {
+            return false
+        }
+        do {
+            try FileManager.default.removeItem(at: target)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    static func allStoredPaths() -> Set<String> {
+        guard let media = try? mediaDirectory(),
+              let urls = try? FileManager.default.contentsOfDirectory(
+                  at: media,
+                  includingPropertiesForKeys: [.isRegularFileKey],
+                  options: [.skipsHiddenFiles]
+              )
+        else {
+            return []
+        }
+        return Set(urls.compactMap { url in
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            return values?.isRegularFile == true ? storedPath(for: url) : nil
+        })
     }
 
     private static func save(data: Data, extension ext: String) throws -> String {

@@ -108,6 +108,12 @@ struct SettingsView: View {
     private var privacyAndAdvancedSection: some View {
         Section("更多") {
             NavigationLink {
+                DataManagementView()
+            } label: {
+                Label("数据与备份", systemImage: "externaldrive")
+            }
+
+            NavigationLink {
                 Form {
                     privacySection
                     safetySection
@@ -211,7 +217,7 @@ struct SettingsView: View {
         } header: {
             Text("隐私")
         } footer: {
-            Text("位置默认关闭；开启后仅在发送时获取一次并保存在本机，不持续或后台跟踪。天气或户外消息会向 Open-Meteo 发送约 1 公里精度的位置，服务方同时可见设备 IP，故障排查日志可能保留坐标最多 90 天；远程 Agent 不接收原始坐标。删除 App 会移除本地记录。")
+            Text("位置默认关闭；开启后仅在发送时获取一次并保存在本机，不持续或后台跟踪。天气或户外消息会向 Open-Meteo 发送约 1 公里精度的位置，服务方同时可见设备 IP，故障排查日志可能保留坐标最多 90 天；远程 Agent 不接收原始坐标。卸载 App 会移除沙盒数据，可先在“数据与备份”中导出或设置自动备份。")
         }
     }
 
