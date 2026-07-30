@@ -332,8 +332,8 @@ extension AgentToolName {
         case .updateGym:
             """
             新建或更新电子健身房及其可见器械，并把本次用于识别的照片保存到健身房档案。\
-            未指定 gym_name 时更新当前健身房。若当前消息只是在回答紧邻上一轮健身房照片的\
-            名称或确认问题，media_source 传 recent_gym_turn；不得引用更早或无关媒体。
+            未指定 gym_name 时更新当前健身房。若历史消息明确标记可引用紧邻上一轮的健身房\
+            图片，必须传 media_source=recent_gym_turn；不得引用更早或无关媒体。
             """
         case .switchGym:
             "把一个已经存在或明确命名的健身房设为当前健身房。"
@@ -428,7 +428,7 @@ extension AgentToolName {
                 "gym_name": string("场馆名称；省略则使用当前健身房"),
                 "summary": string("与训练有关的环境总结"),
                 "media_source": string(
-                    "照片来源；继续紧邻上一轮的健身房照片时选 recent_gym_turn",
+                    "可选的照片来源声明；明确继续紧邻上一轮图片时选 recent_gym_turn",
                     values: ["current_turn", "recent_gym_turn"]
                 ),
                 "equipment": array(
@@ -858,15 +858,27 @@ enum ReActAgentPrompt {
         text: String,
         imageCount: Int,
         imageAttachmentCount: Int,
-        videoAttachmentCount: Int
+        videoAttachmentCount: Int,
+        canReferenceImagesAsRecentGymTurn: Bool = false
     ) -> String {
-        """
+        let mediaReference = if canReferenceImagesAsRecentGymTurn {
+            """
+
+            这条是当前输入紧邻的上一轮，原始图片可供本轮健身房写入引用。若用户要求根据这些
+            图片新建或更新健身房，调用 update_gym 时传 media_source=recent_gym_turn；
+            不要传递或编造本机文件路径。
+            """
+        } else {
+            ""
+        }
+        return """
         历史用户输入：
         \(text.isEmpty ? "无文字。" : text)
 
         该轮原始附件：\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频；
         本次随 Session 上下文重新提供的图片或视频关键帧共 \(imageCount) 张。
         没有重新提供的历史画面不可凭文字提示臆测。
+        \(mediaReference)
         """
     }
 }

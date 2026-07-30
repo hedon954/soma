@@ -199,8 +199,10 @@ struct CoachView: View {
             .animation(.snappy(duration: 0.24), value: sessionDrawerPresented)
             .simultaneousGesture(sessionDrawerGesture)
         }
+        .appPageBackground()
         .navigationTitle("Soma")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .accessibilityAction(named: "打开历史对话") {
             openSessionDrawer()
         }

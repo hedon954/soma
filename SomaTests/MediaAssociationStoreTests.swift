@@ -3,7 +3,7 @@ import SwiftData
 import XCTest
 
 final class MediaAssociationStoreTests: XCTestCase {
-    func testGymToolAttributesImmediatePreviousImagesToNameFollowup() {
+    func testGymToolAttributesImmediatePreviousImagesSelectedByModel() {
         let olderImage = MediaAttachmentReference(
             kind: .image,
             path: "PrivateMedia/older.jpg"
@@ -30,14 +30,7 @@ final class MediaAssociationStoreTests: XCTestCase {
             name: .updateGym,
             arguments: AgentToolArguments(
                 gymName: "趣极运动",
-                equipment: [
-                    AgentEquipmentInput(
-                        name: "跑步机",
-                        category: "有氧",
-                        capabilities: "跑步",
-                        confidence: 0.9
-                    )
-                ]
+                mediaSource: AgentToolMediaAttribution.recentGymTurn
             )
         )
 
@@ -48,6 +41,33 @@ final class MediaAssociationStoreTests: XCTestCase {
                 history: history
             ),
             [gymImage]
+        )
+    }
+
+    func testGymToolDoesNotAttributePreviousImagesWithoutModelSelection() {
+        let gymImage = MediaAttachmentReference(
+            kind: .image,
+            path: "PrivateMedia/gym.jpg"
+        )
+        let history = ConversationContextProjection(exchanges: [
+            .init(
+                turnID: UUID(),
+                userText: "这是新健身房",
+                assistantText: "这个健身房叫什么？",
+                mediaAttachments: [gymImage]
+            )
+        ])
+        let call = AgentToolCall(
+            name: .updateGym,
+            arguments: AgentToolArguments(gymName: "趣极运动")
+        )
+
+        XCTAssertTrue(
+            AgentToolMediaAttribution.attachments(
+                for: call,
+                current: [],
+                history: history
+            ).isEmpty
         )
     }
 

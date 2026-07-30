@@ -176,6 +176,10 @@ final class ConversationContextProjectionTests: XCTestCase {
             (historicalContent.first?["text"] as? String)?
                 .contains("看看这张深蹲照片") == true
         )
+        XCTAssertTrue(
+            (historicalContent.first?["text"] as? String)?
+                .contains("media_source=recent_gym_turn") == true
+        )
 
         let trace = try XCTUnwrap(
             try context.fetch(FetchDescriptor<AgentTrace>()).first

@@ -17,11 +17,7 @@ enum AgentToolMediaAttribution {
             return currentImages
         }
 
-        let explicitlyReferencesRecentGymTurn =
-            call.arguments.mediaSource == recentGymTurn
-        let carriesVisualEquipmentEvidence =
-            call.arguments.equipment?.isEmpty == false
-        guard explicitlyReferencesRecentGymTurn || carriesVisualEquipmentEvidence,
+        guard call.arguments.mediaSource == recentGymTurn,
               let immediatelyPreviousExchange = history.exchanges.last
         else {
             return []

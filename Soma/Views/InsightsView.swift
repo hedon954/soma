@@ -42,6 +42,17 @@ struct InsightsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
+                NavigationLink {
+                    GymLibraryView()
+                } label: {
+                    CurrentContextCard(
+                        gymName: currentGym?.name ?? "尚未建立",
+                        equipmentCount: currentEquipmentCount,
+                        lastWorkout: workouts.last?.exercise ?? "暂无训练"
+                    )
+                }
+                .buttonStyle(.plain)
+
                 ProgressSummary(
                     workoutCount: weekWorkouts.count,
                     calories: averageCalories,
@@ -69,17 +80,6 @@ struct InsightsView: View {
                 }
 
                 TrainingVolumeTrendCard(workouts: workouts)
-
-                NavigationLink {
-                    GymLibraryView()
-                } label: {
-                    CurrentContextCard(
-                        gymName: currentGym?.name ?? "尚未建立",
-                        equipmentCount: currentEquipmentCount,
-                        lastWorkout: workouts.last?.exercise ?? "暂无训练"
-                    )
-                }
-                .buttonStyle(.plain)
             }
             .padding(16)
             .padding(.bottom, 72)

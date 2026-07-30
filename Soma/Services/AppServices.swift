@@ -771,12 +771,14 @@ final class AIService {
         var messages = [
             ChatCompletionParameters.Message(role: .system, content: .text(systemPrompt))
         ]
-        for exchange in history {
+        for (index, exchange) in history.enumerated() {
             let historicalPrompt = ReActAgentPrompt.historicalUser(
                 text: exchange.userText,
                 imageCount: exchange.images.count,
                 imageAttachmentCount: exchange.imageAttachmentCount,
-                videoAttachmentCount: exchange.videoAttachmentCount
+                videoAttachmentCount: exchange.videoAttachmentCount,
+                canReferenceImagesAsRecentGymTurn: index == history.count - 1
+                    && exchange.imageAttachmentCount > 0
             )
             messages.append(ChatCompletionParameters.Message(
                 role: .user,

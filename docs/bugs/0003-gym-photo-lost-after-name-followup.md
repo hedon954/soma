@@ -19,17 +19,17 @@ Tool Card 显示健身房和器械已更新，但健身房详情没有照片。A
 ## 修复
 
 - 新增 `AgentToolMediaAttribution`，只允许 `update_gym` 解析同一 Session 紧邻上一轮图片。
-- Tool Schema 增加 `media_source=recent_gym_turn`，并以非空器械识别作为兼容证据。
+- App 在发给模型的紧邻历史消息中明确提供 `media_source=recent_gym_turn` 语义引用；模型
+  选择该来源后，App 再从 Session 上下文投影解析媒体位置，不暴露本机路径。
 - Tool 明确引用上一轮但找不到图片时失败，不再静默创建无图档案。
 - Tool 结果包含实际保存照片数量。
 - 关联边界由 [ADR 0026](../adr/0026-bounded-gym-media-attribution.md) 固化。
 
 ## 回归门禁
 
-- 自动化测试：紧邻图片能归档；隔过一个 Turn 后不能回捞；当前图片优先。
+- 自动化测试：请求包含模型可用的媒体引用；模型选择后紧邻图片能归档，未选择时不归档；
+  隔过一个 Turn 后不能回捞；当前图片优先。
 - 手工验收：真机先发两张虚构健身房照片，再只回复名称，详情中应出现两张照片。
-- 仍无法自动化的风险：不同供应商是否稳定填写 `media_source`；非空器械兼容证据提供本地
-  安全网。
 
 ## 验证
 
