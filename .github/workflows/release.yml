@@ -19,6 +19,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify release metadata
+        run: ./scripts/verify-release.sh "$GITHUB_REF_NAME"
+
       - name: Select newest installed Xcode
         shell: bash
         run: |
@@ -31,9 +34,6 @@ jobs:
 
       - name: Run complete quality gate
         run: make verify
-
-      - name: Verify release metadata
-        run: ./scripts/verify-release.sh "$GITHUB_REF_NAME"
 
       - name: Extract reviewed release notes
         run: ./scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > build/RELEASE_NOTES.md

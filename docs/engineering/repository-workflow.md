@@ -36,7 +36,7 @@ make build
 make test
 make format
 make check          # 开发与 commit 前的快速静态门禁
-make verify         # PR、发布与完整交付前
+make verify         # 本地 PR 前、发布与完整交付前
 
 # 连接已开启开发者模式的 iPhone 后
 DEVELOPMENT_TEAM=你的TeamID make install-device
@@ -55,7 +55,9 @@ DEVELOPMENT_TEAM=你的TeamID make install-device
 1. 无签名 iOS Simulator 构建；
 2. 模拟器单元测试。
 
-GitHub CI、发布流程和完整交付验收统一运行 `make verify`。
+GitHub 日常 CI 在 PR 和 `main` 推送时运行 `make check`，避免高频占用 macOS 构建与
+Simulator 额度。贡献者和 coding agent 在本地交付前仍运行 `make verify`；`v*` release tag
+由 GitHub Release 流程再次运行完整 `make verify`。
 
 `make install-device` 不属于 CI 门禁。它使用 Automatic Signing 为主 App 与 Widget
 Extension 签名，把 Debug 构建安装到已连接的 iPhone，并在安装后启动 Soma。设备自动选择

@@ -1,8 +1,10 @@
 # ADR 0011：分离快速静态检查与完整模拟器验证
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策日期：2026-07-29
 - 修订：[ADR 0010](0010-repository-governance-and-xcodegen.md) 的质量命令分层
+- 部分替代：[ADR 0019](0019-cost-aware-github-actions-gates.md) 调整 GitHub 自动触发层级，
+  本地命令语义保持不变
 
 ## 背景
 
@@ -19,6 +21,7 @@
 2. pre-commit 只执行 `make check`，不启动 Simulator。
 3. `make verify` 先执行 `make check`，再执行无签名构建和模拟器单元测试。
 4. GitHub CI、GitHub Release、PR 前验收和交付完成条件执行 `make verify`。
+   GitHub 自动执行范围后由 ADR 0019 调整；本地 PR 前验收和完整交付仍执行该命令。
 5. `make build` 与 `make test` 保留为可独立调用的窄命令。
 
 ## 未选择的方案

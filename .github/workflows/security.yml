@@ -1,12 +1,12 @@
 name: Security
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
-  schedule:
-    - cron: "23 3 * * 1"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,7 +30,9 @@ jobs:
 
   codeql:
     name: CodeQL Swift
-    if: github.event.repository.visibility == 'public'
+    if: >-
+      github.event.repository.visibility == 'public' &&
+      github.event_name != 'pull_request'
     runs-on: macos-15
     timeout-minutes: 45
     permissions:

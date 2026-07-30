@@ -75,9 +75,9 @@ make verify
 DEVELOPMENT_TEAM=你的TeamID make install-device
 ```
 
-`make check` 是本地和 pre-commit 使用的快速静态门禁，包含格式、lint、仓库与隐私契约，
-不启动 Simulator。`make verify` 在此基础上增加无签名构建和模拟器单元测试，供 GitHub
-Actions、发布和完整交付验收使用。项目的 coding agent 统一遵循
+`make check` 是本地、pre-commit 和日常 GitHub CI 使用的快速静态门禁，包含格式、lint、
+仓库与隐私契约，不启动 Simulator。`make verify` 在此基础上增加无签名构建和模拟器单元
+测试，供本地完整交付和 `v*` release tag 使用。项目的 coding agent 统一遵循
 [CLAUDE.md](CLAUDE.md)，Codex 和 Cursor 通过同一组项目 Skills 获取日常 SOP。
 
 ## 真机与 TestFlight

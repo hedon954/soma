@@ -39,8 +39,9 @@ DEVELOPMENT_TEAM=你的TeamID make install-device
    完整变更见 CHANGELOG.md。"
    ```
 
-6. 推送 commit 和 tag。`release.yml` 会重新运行质量门禁，并使用对应 Changelog
-   section 创建 GitHub Release。
+6. 推送 commit 和 tag。`release.yml` 会先验证 tag、版本和 Changelog，再运行包含构建和
+   模拟器测试的完整质量门禁，并使用对应 Changelog section 创建 GitHub Release；公开仓库
+   同时由 `security.yml` 执行 Swift CodeQL。
 
 GitHub Release 不附未签名 IPA。
 

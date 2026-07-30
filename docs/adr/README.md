@@ -14,7 +14,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0008](0008-app-scoped-conversation-processing.md) | 已采纳 | 对话处理提升到 App 生命周期，而不是绑定聊天 View |
 | [0009](0009-soma-brand-migration.md) | 已采纳 | 从代码到 Bundle ID 全量迁移为 Soma |
 | [0010](0010-repository-governance-and-xcodegen.md) | 部分已替代 | 统一 Agent 契约、质量门禁与 XcodeGen 事实来源 |
-| [0011](0011-fast-check-full-verify.md) | 已采纳 | `make check` 快速静态检查，`make verify` 完整构建测试 |
+| [0011](0011-fast-check-full-verify.md) | 部分已替代 | `make check` 快速静态检查，`make verify` 完整构建测试 |
 | [0012](0012-ordered-mixed-media-collections.md) | 已采纳 | 有序混合媒体贯穿聊天、Agent、记录和审查 |
 | [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
 | [0014](0014-agent-turn-ordered-event-cards.md) | 已采纳 | 一次 Agent Turn 由有序异构 Event Cards 组成 |
@@ -22,6 +22,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 已采纳 | Turn 可包含多次 Attempt，成功后投影到足迹并跨重试幂等 |
 | [0017](0017-location-and-weather-context.md) | 已采纳 | 位置与天气作为最小、受控、非阻塞的 Turn 上下文 |
 | [0018](0018-provenance-aware-record-merge.md) | 已采纳 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并 |
+| [0019](0019-cost-aware-github-actions-gates.md) | 已采纳 | 日常 Actions 只跑快速门禁，完整验证与 CodeQL 收敛到 release tag |
 
 新决策使用 [ADR 模板](template.md)。
 
