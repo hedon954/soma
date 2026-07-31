@@ -59,11 +59,23 @@ final class DataSpaceController {
             GymMedia.self,
             MealEntry.self,
             BodyEntry.self,
+            ExerciseDefinition.self,
+            ExerciseMergeRecord.self,
             WorkoutEntry.self,
+            TrainingProgram.self,
+            WorkoutTemplateVersion.self,
+            TemplateExercise.self,
+            WorkoutSession.self,
+            ExercisePerformance.self,
+            WorkoutSet.self,
+            RecommendationSnapshot.self,
+            PerformanceAnalysis.self,
             ConversationSession.self,
             CoachMessage.self,
             AgentTrace.self,
-            AgentMutationReceipt.self
+            AgentMutationReceipt.self,
+            AgentJob.self,
+            PersistentAgentEvent.self
         ])
         let demoConfiguration = ModelConfiguration(
             nil,
@@ -109,6 +121,8 @@ final class DataSpaceController {
 
 @main
 struct SomaApp: App {
+    @UIApplicationDelegateAdaptor(SomaAppDelegate.self)
+    private var appDelegate
     @State private var aiService = AIService()
     @State private var dataSpace = DataSpaceController()
     @State private var conversationProcessor = ConversationProcessingService()
@@ -116,6 +130,9 @@ struct SomaApp: App {
     @State private var locationContext = LocationContextService()
     @State private var captureRouter = SomaCaptureRouter.shared
     @State private var dataManagement = DataManagementCoordinator()
+    @State private var workoutRuntime = WorkoutRuntime()
+    @State private var agentSystemProjection =
+        AgentSystemProjectionCoordinator()
 
     var body: some Scene {
         WindowGroup {
@@ -128,6 +145,10 @@ struct SomaApp: App {
                 .environment(locationContext)
                 .environment(captureRouter)
                 .environment(dataManagement)
+                .environment(workoutRuntime)
+                .environment(workoutRuntime.coordinator)
+                .environment(workoutRuntime.camera)
+                .environment(agentSystemProjection)
                 .modelContainer(dataSpace.activeContainer)
                 .onOpenURL { url in
                     captureRouter.route(url)

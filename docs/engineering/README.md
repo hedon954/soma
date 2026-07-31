@@ -7,6 +7,7 @@
 - [Agent Job 与远程执行协议](agent-job-protocol.md)
 - [训练智能与可靠 Agent 实施次序](implementation-sequence.md)
 - [训练智能与可靠 Agent 全量 Todo](implementation-todo.md)
+- [可选 Agent Server 部署与运维](../../Server/README.md)
 - [仓库与开发工作流](repository-workflow.md)
 - [GitHub 仓库设置](github-settings.md)
 - [版本、GitHub Release 与 TestFlight](release.md)

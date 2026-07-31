@@ -116,6 +116,9 @@ extension Notification.Name {
     static let openCoachConversation = Notification.Name(
         "Soma.openCoachConversation"
     )
+    static let prefillCoachDraft = Notification.Name(
+        "Soma.prefillCoachDraft"
+    )
 }
 
 private struct FootprintRow: View {

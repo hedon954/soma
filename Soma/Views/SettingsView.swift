@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var provider: AIProvider = .openAI
     @State private var baseURL = ""
     @State private var model = ""
+    @State private var imageModel = ""
     @State private var apiKey = ""
     @State private var models: [AIModelInfo] = []
     @State private var isLoadingModels = false
@@ -128,6 +129,28 @@ struct SettingsView: View {
                     icon: "heart.text.square",
                     title: "健康数据与设备",
                     detail: "Apple 健康、Keep、COROS"
+                )
+            }
+
+            NavigationLink {
+                AgentSystemSettingsView()
+            } label: {
+                SettingsSummaryRow(
+                    icon: "waveform.path.ecg",
+                    title: "任务进度与通知",
+                    detail: "锁屏、灵动岛与完成提醒"
+                )
+            }
+
+            NavigationLink {
+                RemoteAgentSettingsView()
+            } label: {
+                SettingsSummaryRow(
+                    icon: "server.rack",
+                    title: "后台持续处理",
+                    detail: RemoteAgentPreference.isEnabled()
+                        ? "已开启 · Soma 管理模型"
+                        : "默认关闭"
                 )
             }
         }
@@ -307,6 +330,18 @@ struct SettingsView: View {
 
                 capabilityRow
 
+                if modelTier == .standard {
+                    LabeledContent("图片生成模型") {
+                        TextField("例如 gpt-image-2", text: $imageModel)
+                            .multilineTextAlignment(.trailing)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                    Text("动作图片只会在你从动作详情主动点击生成时请求；不会在打开页面或记录训练时自动生成。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 HStack {
                     Group {
                         if showKey {
@@ -442,6 +477,7 @@ struct SettingsView: View {
     private func loadProviderConfiguration() {
         baseURL = ai.baseURL(for: provider, tier: modelTier)
         model = ai.model(for: provider, tier: modelTier)
+        imageModel = ai.imageModel(for: provider)
         apiKey = ai.apiKey(for: provider, tier: modelTier)
         models = []
         modelError = nil
@@ -458,6 +494,12 @@ struct SettingsView: View {
             baseURL: baseURL,
             model: model
         )
+        if (tier ?? modelTier) == .standard {
+            ai.configureImageModel(
+                imageModel,
+                for: configuredProvider ?? provider
+            )
+        }
     }
 
     private func saveKeyAndRefresh() {
@@ -1802,79 +1844,5 @@ private struct TraceSpanMetadata {
             return "tokens \(totalText)"
         }
         return "\(totalText) tokens · 入 \(input.formatted()) / 出 \(output.formatted())"
-    }
-}
-
-private enum TraceStyle {
-    static func color(for status: AgentTraceStatus) -> Color {
-        switch status {
-        case .running: AppTheme.warning
-        case .succeeded: AppTheme.tint
-        case .failed: .red
-        case .cancelled: .secondary
-        }
-    }
-
-    static func color(for kind: AgentTraceSpanKind) -> Color {
-        switch kind {
-        case .model: .purple
-        case .skill: .blue
-        case .tool: AppTheme.tint
-        case .output: .cyan
-        }
-    }
-
-    static func icon(for status: AgentTraceStatus) -> String {
-        switch status {
-        case .running: "hourglass"
-        case .succeeded: "checkmark.circle.fill"
-        case .failed: "xmark.circle.fill"
-        case .cancelled: "minus.circle.fill"
-        }
-    }
-
-    static func icon(for kind: AgentTraceSpanKind) -> String {
-        switch kind {
-        case .model: "brain.head.profile"
-        case .skill: "books.vertical.fill"
-        case .tool: "wrench.and.screwdriver.fill"
-        case .output: "arrow.turn.down.right"
-        }
-    }
-
-    static func detailTitle(for status: AgentTraceStatus) -> String {
-        switch status {
-        case .running: "正在执行"
-        case .succeeded: "执行成功"
-        case .failed: "执行失败"
-        case .cancelled: "执行已取消"
-        }
-    }
-
-    static func displayTitle(for span: AgentTraceSpan, ordinal: Int) -> String {
-        switch span.kind {
-        case .model:
-            "LLM 推理 #\(ordinal)"
-        case .skill:
-            "Skill: \(span.title)"
-        case .tool:
-            "工具: \(span.title)"
-        case .output:
-            span.title
-        }
-    }
-
-    static func duration(_ milliseconds: Double) -> String {
-        if milliseconds < 1000 {
-            return "\(Int(milliseconds.rounded()))ms"
-        }
-        return "\((milliseconds / 1000).formatted(.number.precision(.fractionLength(2))))s"
-    }
-
-    static func relative(_ milliseconds: Double) -> String {
-        if milliseconds < 1000 {
-            return "+\(Int(milliseconds.rounded()))ms"
-        }
-        return "+\((milliseconds / 1000).formatted(.number.precision(.fractionLength(1))))s"
     }
 }

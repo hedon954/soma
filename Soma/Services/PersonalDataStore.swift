@@ -16,11 +16,23 @@ enum PersonalDataStore {
         try context.delete(model: GymMedia.self)
         try context.delete(model: MealEntry.self)
         try context.delete(model: BodyEntry.self)
+        try context.delete(model: ExerciseMergeRecord.self)
+        try context.delete(model: ExerciseDefinition.self)
         try context.delete(model: WorkoutEntry.self)
+        try context.delete(model: TrainingProgram.self)
+        try context.delete(model: WorkoutTemplateVersion.self)
+        try context.delete(model: TemplateExercise.self)
+        try context.delete(model: WorkoutSession.self)
+        try context.delete(model: ExercisePerformance.self)
+        try context.delete(model: WorkoutSet.self)
+        try context.delete(model: RecommendationSnapshot.self)
+        try context.delete(model: PerformanceAnalysis.self)
         try context.delete(model: ConversationSession.self)
         try context.delete(model: CoachMessage.self)
         try context.delete(model: AgentTrace.self)
         try context.delete(model: AgentMutationReceipt.self)
+        try context.delete(model: PersistentAgentEvent.self)
+        try context.delete(model: AgentJob.self)
     }
 
     static func clear(
@@ -77,10 +89,22 @@ extension PersonalDataSnapshot {
             + gymMedia.count
             + meals.count
             + bodyEntries.count
+            + (exerciseDefinitions?.count ?? 0)
+            + (exerciseMergeRecords?.count ?? 0)
             + workouts.count
+            + (trainingPrograms?.count ?? 0)
+            + (workoutTemplateVersions?.count ?? 0)
+            + (templateExercises?.count ?? 0)
+            + (workoutSessions?.count ?? 0)
+            + (exercisePerformances?.count ?? 0)
+            + (workoutSets?.count ?? 0)
+            + (recommendationSnapshots?.count ?? 0)
+            + (performanceAnalyses?.count ?? 0)
             + sessions.count
             + messages.count
             + traces.count
             + mutationReceipts.count
+            + (agentJobs?.count ?? 0)
+            + (agentEvents?.count ?? 0)
     }
 }

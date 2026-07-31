@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct PortableExportPayload: Sendable {
@@ -7,6 +8,7 @@ struct PortableExportPayload: Sendable {
     var workouts: [WorkoutEntryDTO]
     var messages: [CoachMessageDTO]
     var traces: [AgentTraceDTO]
+    var snapshot: PersonalDataSnapshot
 
     init(
         snapshot: PersonalDataSnapshot,
@@ -18,6 +20,7 @@ struct PortableExportPayload: Sendable {
         workouts = snapshot.workouts
         messages = snapshot.messages
         traces = snapshot.traces
+        self.snapshot = snapshot
     }
 }
 
@@ -30,7 +33,7 @@ struct PortableExportResult: Equatable, Sendable {
 }
 
 enum DataExportService {
-    static let formatVersion = 1
+    static let formatVersion = 2
 
     static func export(
         _ payload: PortableExportPayload,
@@ -56,6 +59,7 @@ enum DataExportService {
             var manifestRecords: [PortableExportManifestRecord] = []
             var missingMedia: [PortableExportMissingMedia] = []
             var copiedMediaCount = 0
+            var recordMediaPaths = Set<String>()
 
             for meal in payload.meals.sorted(by: recordSort) {
                 let outcome = try writeMeal(
@@ -67,6 +71,7 @@ enum DataExportService {
                 manifestRecords.append(outcome.record)
                 missingMedia.append(contentsOf: outcome.missingMedia)
                 copiedMediaCount += outcome.copiedMediaCount
+                recordMediaPaths.formUnion(outcome.sourcePaths)
             }
             for workout in payload.workouts.sorted(by: recordSort) {
                 let outcome = try writeWorkout(
@@ -78,7 +83,26 @@ enum DataExportService {
                 manifestRecords.append(outcome.record)
                 missingMedia.append(contentsOf: outcome.missingMedia)
                 copiedMediaCount += outcome.copiedMediaCount
+                recordMediaPaths.formUnion(outcome.sourcePaths)
             }
+
+            let supplemental = try copySupplementalMedia(
+                payload.snapshot.referencedMediaPaths.subtracting(
+                    recordMediaPaths
+                ),
+                root: partialURL,
+                mediaURL: mediaURL
+            )
+            copiedMediaCount += supplemental.copiedCount
+            missingMedia.append(contentsOf: supplemental.missing)
+            try writeJSON(
+                supplemental.index,
+                to: partialURL.appending(path: "结构化媒体索引.json")
+            )
+            try writeJSON(
+                payload.snapshot,
+                to: partialURL.appending(path: "结构化数据.json")
+            )
 
             let manifest = PortableExportManifest(
                 formatVersion: formatVersion,
@@ -194,7 +218,9 @@ enum DataExportService {
                 mediaCount: mediaOutcome.descriptors.count
             ),
             copiedMediaCount: mediaOutcome.descriptors.count,
-            missingMedia: mediaOutcome.missing
+            missingMedia: mediaOutcome.missing,
+
+            sourcePaths: Set(attachments.map(\.path))
         )
     }
 
@@ -273,7 +299,9 @@ enum DataExportService {
                 mediaCount: mediaOutcome.descriptors.count
             ),
             copiedMediaCount: mediaOutcome.descriptors.count,
-            missingMedia: mediaOutcome.missing
+            missingMedia: mediaOutcome.missing,
+
+            sourcePaths: Set(attachments.map(\.path))
         )
     }
 
@@ -350,6 +378,93 @@ enum DataExportService {
             ))
         }
         return MediaCopyOutcome(descriptors: descriptors, missing: missing)
+    }
+
+    private static func copySupplementalMedia(
+        _ paths: Set<String>,
+        root: URL,
+        mediaURL: (String) -> URL?
+    ) throws -> SupplementalMediaOutcome {
+        guard !paths.isEmpty else {
+            return SupplementalMediaOutcome(
+                copiedCount: 0,
+                missing: [],
+                index: []
+            )
+        }
+        let directory = root.appending(
+            path: "其他媒体",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        var copiedCount = 0
+        var missing: [PortableExportMissingMedia] = []
+        var index: [PortableExportMediaIndex] = []
+        for (offset, path) in paths.sorted().enumerated() {
+            let identifier = pathIdentifier(path)
+            guard let sourceURL = mediaURL(path),
+                  FileManager.default.fileExists(atPath: sourceURL.path)
+            else {
+                missing.append(PortableExportMissingMedia(
+                    recordID: stableUUID(identifier),
+                    index: offset + 1,
+                    kind: mediaKind(path).rawValue
+                ))
+                continue
+            }
+            let ext = sourceURL.pathExtension.nilIfBlank
+                ?? defaultExtension(for: mediaKind(path))
+            let filename = String(
+                format: "%03d-%@.%@",
+                offset + 1,
+                String(identifier.prefix(12)),
+                ext.lowercased()
+            )
+            try FileManager.default.copyItem(
+                at: sourceURL,
+                to: directory.appending(path: filename)
+            )
+            copiedCount += 1
+            index.append(PortableExportMediaIndex(
+                sourceIdentifier: identifier,
+                filename: "其他媒体/\(filename)"
+            ))
+        }
+        return SupplementalMediaOutcome(
+            copiedCount: copiedCount,
+            missing: missing,
+            index: index
+        )
+    }
+
+    private static func pathIdentifier(_ path: String) -> String {
+        SHA256.hash(data: Data(path.utf8)).map {
+            String(format: "%02x", $0)
+        }.joined()
+    }
+
+    private static func stableUUID(_ digest: String) -> UUID {
+        let bytes = stride(from: 0, to: 32, by: 2).compactMap { offset -> UInt8? in
+            let start = digest.index(digest.startIndex, offsetBy: offset)
+            let end = digest.index(start, offsetBy: 2)
+            return UInt8(digest[start ..< end], radix: 16)
+        }
+        let value = bytes + Array(repeating: 0, count: max(0, 16 - bytes.count))
+        return UUID(uuid: (
+            value[0], value[1], value[2], value[3],
+            value[4], value[5], value[6], value[7],
+            value[8], value[9], value[10], value[11],
+            value[12], value[13], value[14], value[15]
+        ))
+    }
+
+    private static func mediaKind(_ path: String) -> MediaKind {
+        ["mov", "mp4", "m4v", "avi", "webm"].contains(
+            URL(fileURLWithPath: path).pathExtension.lowercased()
+        ) ? .video : .image
     }
 
     private static func sourceContext(
@@ -452,11 +567,18 @@ private struct RecordWriteOutcome {
     var record: PortableExportManifestRecord
     var copiedMediaCount: Int
     var missingMedia: [PortableExportMissingMedia]
+    var sourcePaths: Set<String>
 }
 
 private struct MediaCopyOutcome {
     var descriptors: [PortableExportMedia]
     var missing: [PortableExportMissingMedia]
+}
+
+private struct SupplementalMediaOutcome {
+    var copiedCount: Int
+    var missing: [PortableExportMissingMedia]
+    var index: [PortableExportMediaIndex]
 }
 
 private struct SourceContext {

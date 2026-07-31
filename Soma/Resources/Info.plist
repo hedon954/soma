@@ -35,10 +35,12 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
     <key>NSCameraUsageDescription</key>
     <string>拍摄器械、饮食、体型和训练动作，用于生成你的私人健身记录与建议。</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>使用系统语音输入或录制训练视频时需要访问麦克风。</string>
+	<string>使用系统语音输入把训练、饮食或身体记录转成文字。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>选择器械、饮食、体型或训练媒体进行本地记录与分析。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

@@ -31,6 +31,11 @@ struct PortableExportMedia: Codable, Equatable, Sendable {
     var filename: String
 }
 
+struct PortableExportMediaIndex: Codable, Equatable, Sendable {
+    var sourceIdentifier: String
+    var filename: String
+}
+
 struct PortableMealAnalysis: Codable, Equatable, Sendable {
     var formatVersion: Int
     var id: UUID

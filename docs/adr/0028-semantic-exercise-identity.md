@@ -1,4 +1,4 @@
-# ADR 0034：动作使用稳定 ID，大模型基于完整名称列表完成语义归一
+# ADR 0028：动作使用稳定 ID，大模型基于完整名称列表完成语义归一
 
 - 状态：已采纳
 - 日期：2026-07-31
@@ -7,7 +7,9 @@
 - 后续替代：暂无
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
-- 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
+- 关联：
+  - [PRD 010](../prd/010-exercise-library-plans-guided-training.md)
+  - [ADR 0035](0035-silent-bundled-exercise-content-and-on-demand-images.md)
 
 ## 背景
 

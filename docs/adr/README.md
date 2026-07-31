@@ -38,6 +38,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0032](0032-optional-remote-agent-execution.md) | 已采纳 | 以匿名设备身份提供可选远程持续执行与本地 Tool handoff |
 | [0033](0033-live-activity-agent-job-projection.md) | 已采纳 | Live Activity 只投影隐私安全的 Agent Job 状态 |
 | [0034](0034-bidirectional-document-lifecycle-links.md) | 已采纳 | 文档修订、替代与研究落地关系使用双向生命周期索引 |
+| [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 已采纳 | 内置动作内容保持静默，用户使用动作后才关联素材，长尾图片按需生成 |
 
 新决策使用 [ADR 模板](template.md)。
 

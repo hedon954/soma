@@ -371,10 +371,15 @@ private struct WorkoutRecordEditor: View {
     private func save() {
         let normalizedExercise = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let definition = try? ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: normalizedExercise,
+            in: modelContext
+        )
         exercise = normalizedExercise
         notes = normalizedNotes
         workout.date = date
-        workout.exercise = normalizedExercise
+        workout.exerciseID = definition?.id
+        workout.exercise = definition?.canonicalName ?? normalizedExercise
         workout.setEntries = setRows.map(\.evidence)
         workout.restSeconds = EditorValue.int(restSeconds)
         workout.durationMinutes = EditorValue.int(durationMinutes)

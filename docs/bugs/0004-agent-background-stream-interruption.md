@@ -1,6 +1,6 @@
 # BUG 0004：App 进入后台后 Agent 流式执行中断
 
-- 状态：已定位，修复方案已采纳，待实现
+- 状态：已修复；真机生命周期与部署后远端路径持续验收
 - 发现日期：2026-07-31
 - 影响范围：远程 Agent 的 SSE、ReAct 多轮调用、本地 Tool 执行和最终回复
 - 下游落地：
@@ -9,7 +9,7 @@
 
 ## 症状
 
-用户发送消息后，如果按 Home、锁屏或切换到其他 App，远程 Agent 的流式输出停止，后续 Tool
+修复前，用户发送消息后如果按 Home、锁屏或切换到其他 App，远程 Agent 的流式输出停止，后续 Tool
 和最终回复可能不再执行。重新进入 Soma 后，当前 Attempt 可能仍显示执行中，也可能在网络
 超时后显示失败。
 
@@ -18,7 +18,7 @@
 
 ## 根因
 
-当前链路是：
+修复前链路是：
 
 ```text
 CoachView
@@ -59,7 +59,7 @@ iOS 允许普通 App 在退到后台后运行很短的收尾代码，随后会�
 完整的持久任务、事件投影、类似系统与 Live Activity 评估见
 [持久化 Agent 任务、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)。
 
-### 1. 有限后台续跑
+### 1. 有限后台续跑（已实现）
 
 在 `ConversationProcessingService` 接受 `submit` 或 `retry` 时、创建长任务之前，申请一个
 名为 `SomaAgentTurn` 的后台执行租约：
@@ -78,7 +78,7 @@ UIKit 调用应隔离成可注入的 `BackgroundExecutionLease`，生产环境�
 这个闭环可以让普通短消息在用户切后台后继续完成，但不能保证任意八轮 Agent 都在系统给定
 窗口内结束。
 
-### 2. 回前台自动恢复
+### 2. 回前台自动恢复（已实现）
 
 不能把后台租约到期当成普通失败，也不能尝试续接已经断开的 SSE。第一版恢复使用现有
 Turn/Attempt 与幂等能力：
@@ -101,7 +101,7 @@ AI 配置和 `ModelContext` 的构建上移到 App/Services 边界，使 `RootVi
 如果 App 在后台被系统终止，本地模式不会继续执行 Agent；但用户下次主动打开 Soma 后，可以
 根据持久化状态创建新 Attempt。
 
-### 3. 可选远程持续执行
+### 3. 可选远程持续执行（已实现）
 
 [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md) 已授权通过统一
 `AgentExecutionBackend` 增加可选服务器队列：
@@ -115,6 +115,15 @@ AI 配置和 `ModelContext` 的构建上移到 App/Services 边界，使 `RootVi
 
 这不是有限后台续跑的替代品。尚未到达服务器的请求仍依赖本地 Outbox，设备 Tool 仍依赖
 本地恢复。
+
+实现入口：
+
+- `AgentJob`、`PersistentAgentEvent`、独立投影 cursor 与原子领取；
+- `BackgroundExecutionLease` 到期转入 `waitingForForeground`；
+- `ConversationProcessingContextFactory` 与 App 根层恢复；
+- Local/Remote `AgentExecutionBackend`、匿名设备签名、事件补拉和设备 Tool handoff；
+- `Server/` 的 PostgreSQL Job/Event/Outbox、Worker lease、临时媒体、APNs 与清理；
+- 通用状态 Live Activity、完成通知和稳定 Turn 深链。
 
 ### 不采用
 
@@ -155,13 +164,17 @@ Apple 依据：
 
 ## 验证
 
-本轮完成机制调查、正式 PRD/ADR 与协议设计，尚未修改运行时代码：
+自动化证据：
 
-- 确认 `ConversationProcessingService` 为 App 根层对象，普通页面切换不会销毁 Task；
-- 确认 `RootView` 进入后台时没有通知 Agent 处理服务；
-- 确认现有 `beginBackgroundTask` 只用于自动备份；
-- 确认 SwiftOpenAI 4.5.0 在 Apple 平台默认以 `URLSession.shared.bytes(for:)` 读取流；
-- 确认当前启动修复只会把运行中 Trace 标记失败，不存在自动恢复队列；
-- 固定本地 Outbox、远程 Job/Event、`waitingForDevice` 与 Live Activity 的验收边界；
-- 具体 Provider 返回的 `URLError`、进入后台到中断的时间和系统剩余后台时间，待真机加入
-  虚构请求诊断日志后记录。
+- `AgentJobTests` 覆盖提交持久化失败、后台租约到期、跨空间领取、Event cursor 与终态；
+- `RemoteAgentExecutionTests` 覆盖设备签名、幂等提交、远程状态恢复和固定 Tool 解码；
+- `AgentSystemProjectionTests` 覆盖隐私安全 ContentState、独立 cursor、Turn 深链和 token/Job
+  建立竞态；
+- Server 单元测试覆盖 nonce 重放、并发提交、Event 补拉、Worker 替换、Tool Result、终态竞态、
+  APNs 退避、内容清理与无正文日志；
+- 独立 PostgreSQL 集成测试在真实 migration 上覆盖唯一约束、租约、Event、Tool、Outbox、
+  终态与清理。
+
+真机仍需使用虚构输入覆盖 Home、锁屏、切 App、Wi-Fi/蜂窝切换和系统分配后台时间差异。
+Force Quit 后只有已经由部署中的 Server 接受的纯远程步骤会继续；本地 Job 会在下次打开
+Soma 时恢复，这是平台边界而不是回归。

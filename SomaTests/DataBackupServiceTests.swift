@@ -46,11 +46,14 @@ final class DataBackupServiceTests: XCTestCase {
         let root = try DataArchiveTestSupport.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let image = root.appending(path: "source.jpg")
+        let exerciseImage = root.appending(path: "exercise.jpg")
         let video = root.appending(path: "source.mov")
         try Data("image-content".utf8).write(to: image)
+        try Data("exercise-image-content".utf8).write(to: exerciseImage)
         try Data("video-content".utf8).write(to: video)
         let sources = [
             DataArchiveTestSupport.mealMediaPath: image,
+            DataArchiveTestSupport.exerciseImagePath: exerciseImage,
             DataArchiveTestSupport.workoutMediaPath: video
         ]
         let credential = try makeCredential()
@@ -82,8 +85,9 @@ final class DataBackupServiceTests: XCTestCase {
             }
         )
         XCTAssertEqual(prepared.snapshot, snapshot)
-        XCTAssertEqual(prepared.mediaPathMapping.count, 2)
+        XCTAssertEqual(prepared.mediaPathMapping.count, 3)
         XCTAssertEqual(savedMedia.map(\.0), [
+            Data("exercise-image-content".utf8),
             Data("image-content".utf8),
             Data("video-content".utf8)
         ])
@@ -139,6 +143,8 @@ final class DataBackupServiceTests: XCTestCase {
         try context.save()
         let mapping = [
             DataArchiveTestSupport.mealMediaPath: "PrivateMedia/restored.jpg",
+            DataArchiveTestSupport.exerciseImagePath:
+                "PrivateMedia/restored-exercise.jpg",
             DataArchiveTestSupport.workoutMediaPath: "PrivateMedia/restored.mov"
         ]
 
@@ -156,6 +162,38 @@ final class DataBackupServiceTests: XCTestCase {
         )
         XCTAssertEqual(restored.mutationReceipts, snapshot.mutationReceipts)
         XCTAssertEqual(restored.traces, snapshot.traces)
+        XCTAssertEqual(restored.trainingPrograms, snapshot.trainingPrograms)
+        XCTAssertEqual(
+            restored.exerciseMergeRecords?.first?.affectedPerformanceIDs,
+            snapshot.exerciseMergeRecords?.first?.affectedPerformanceIDs
+        )
+        XCTAssertEqual(
+            restored.exerciseMergeRecords?.first?
+                .transferredUserDemoVideos?.first?.path,
+            "PrivateMedia/restored.mov"
+        )
+        XCTAssertEqual(
+            restored.exerciseDefinitions?.first(where: {
+                $0.canonicalName == "杠铃前蹲"
+            })?.imageReferences?.first(where: {
+                $0.source == .generated
+            })?.localPath,
+            "PrivateMedia/restored-exercise.jpg"
+        )
+        XCTAssertEqual(
+            restored.exerciseDefinitions?.first(where: {
+                $0.canonicalName == "杠铃前蹲"
+            })?.imageReferences?.first(where: {
+                $0.source == .bundled
+            })?.resourceName,
+            "soma_muscle_squat.png"
+        )
+        XCTAssertEqual(restored.workoutSessions, snapshot.workoutSessions)
+        XCTAssertEqual(restored.workoutSets, snapshot.workoutSets)
+        XCTAssertEqual(
+            restored.exercisePerformances?.first?.activeVideoPath,
+            "PrivateMedia/restored.mov"
+        )
     }
 
     @MainActor

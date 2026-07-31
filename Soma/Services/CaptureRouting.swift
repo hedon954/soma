@@ -35,6 +35,16 @@ struct CaptureMediaDelivery {
     let media: [PickedMedia]
 }
 
+struct AgentTurnRoute: Equatable, Identifiable, Sendable {
+    var id: UUID
+    var turnID: UUID
+
+    init(turnID: UUID) {
+        id = UUID()
+        self.turnID = turnID
+    }
+}
+
 @MainActor
 @Observable
 final class SomaCaptureRouter {
@@ -42,6 +52,7 @@ final class SomaCaptureRouter {
 
     private(set) var pendingRequest: CaptureEntryRequest?
     private(set) var mediaDelivery: CaptureMediaDelivery?
+    private(set) var pendingAgentTurn: AgentTurnRoute?
 
     private init() {}
 
@@ -51,15 +62,24 @@ final class SomaCaptureRouter {
     }
 
     func route(_ url: URL) {
-        guard url.scheme?.lowercased() == "soma",
-              url.host?.lowercased() == "capture",
-              let rawMode = url.pathComponents.dropFirst().first,
-              let mode = CaptureEntryMode(rawValue: rawMode)
-        else {
+        guard url.scheme?.lowercased() == "soma" else {
             somaCaptureLogger.error("Ignored unsupported capture URL")
             return
         }
-        request(mode)
+        if url.host?.lowercased() == "capture",
+           let rawMode = url.pathComponents.dropFirst().first,
+           let mode = CaptureEntryMode(rawValue: rawMode)
+        {
+            request(mode)
+        } else if url.host?.lowercased() == "agent",
+                  url.pathComponents.dropFirst().first == "turn",
+                  let rawID = url.pathComponents.dropFirst(2).first,
+                  let turnID = UUID(uuidString: rawID)
+        {
+            requestAgentTurn(turnID)
+        } else {
+            somaCaptureLogger.error("Ignored unsupported Soma URL")
+        }
     }
 
     func clear(_ requestID: UUID) {
@@ -75,6 +95,15 @@ final class SomaCaptureRouter {
     func clearDelivery(_ deliveryID: UUID) {
         guard mediaDelivery?.id == deliveryID else { return }
         mediaDelivery = nil
+    }
+
+    func requestAgentTurn(_ turnID: UUID) {
+        pendingAgentTurn = AgentTurnRoute(turnID: turnID)
+    }
+
+    func clearAgentTurn(_ routeID: UUID) {
+        guard pendingAgentTurn?.id == routeID else { return }
+        pendingAgentTurn = nil
     }
 }
 

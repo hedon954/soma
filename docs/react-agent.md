@@ -1,15 +1,15 @@
 # ReAct Agent
 
-本文先描述当前已实现运行时，再固定已采纳但待实现的持久 Job 与远程 Backend 演进。产品范围
+本文描述当前持久 Job、本地 ReAct 与可选远程 Backend 运行时。产品范围
 见 [PRD 003](prd/003-streaming-react-agent.md) 和
 [PRD 011](prd/011-durable-agent-jobs-remote-continuity.md)，详细协议见
 [Agent Job 与远程执行协议](engineering/agent-job-protocol.md)。
 
 ## 当前运行时
 
-Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE 解析由
-`SwiftOpenAI 4.5.0` 提供，App 负责编排 ReAct 循环、执行本地工具和记录事件，不维护自定义
-Chat Completions 客户端。
+Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的网络与 SSE 解析由
+`SwiftOpenAI 4.5.0` 提供；可选远程 Backend 由 `Server/` 的持久 Worker 编排。两种模式的
+业务 Tool 都在设备执行，结果进入同一 Turn、Job、Event 与 Trace 投影。
 
 ## 运行方式
 
@@ -22,8 +22,9 @@ Chat Completions 客户端。
 
 每轮模型调用都使用流式接口。文本增量和 Span 生命周期会立刻作为 Event 发送给 UI；模型返回的 `reasoning_content` 当前不展示、不持久化，也不参与工具执行。
 
-图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库、原始媒体和工具执行
-始终留在设备上；标准档没有 API Key 时，发送会在落盘前打开 AI 服务设置。
+图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库和业务 Tool 始终留在
+设备上；本地模式标准档没有 API Key 时，发送会在落盘前打开 AI 服务设置。用户明确启用
+远程持续模式后，当前图片或视频关键帧可作为短期任务素材上传，原始视频和用户 BYOK 不上传。
 
 ## 渐进式 Skills
 
@@ -44,6 +45,7 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 
 - `load_skill`：按需读取一项专业 Skill。
 - `query_user_data`：查询概览、训练、饮食、身体或健身房记录。
+- `list_exercise_names`：返回当前数据空间全部 active 动作 `{id,name}`，由模型完成语义选择。
 - `record_workout`：记录动作及用户明确提供或可靠识别的训练字段。
 - `record_meal`：记录餐次、食物、大卡与宏量营养。
 - `record_body`：记录体重、体脂、腰围、体型图片和中性观察。
@@ -53,6 +55,10 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
   聊天原文和共享媒体不级联删除。
 - `update_gym`：创建或更新健身房、照片及器械解析结果。
 - `switch_gym`：切换已存在的当前健身房。
+- `create_training_program`、`create_workout_template_version`、
+  `update_workout_template`、`archive_training_program`：维护版本化计划。
+- `record_performance_analysis`：把用户主动视频复盘产生的证据、局限、输入指纹和建议绑定到
+  指定 Performance。
 
 工具名称、描述和参数 Schema 由 Runtime 固定，通过 API 原生注册，不拼接进系统提示词，也不允许用户修改。工具不会向模型暴露数据库句柄、API Key 或本地文件路径。
 
@@ -97,8 +103,13 @@ UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有�
 - Event Card UI：`Soma/Views/AgentTurnTranscript.swift`
 - Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/Models.swift`
 - Trace 数据结构：`Soma/Models/Models.swift`
+- 持久 Job、Event 与投影：`Soma/Models/AgentJob.swift`、
+  `Soma/Services/ConversationProcessingService.swift`
+- 可选远程 Backend：`Soma/Services/RemoteAgentClient.swift`、`Server/`
+- 动作与训练计划：`Soma/Models/ExerciseDefinition.swift`、
+  `Soma/Models/TrainingPlan.swift`
 
-## 已采纳的运行时演进
+## 持久运行时
 
 ### 持久 Job
 
@@ -118,9 +129,9 @@ Live Activity 和通知是独立投影。token delta 继续实时显示，但不
 `waitingForDevice`；设备恢复后验证固定 Schema、执行 Tool 并幂等返回 `tool_result`。
 训练、饮食、身体和健身房记录仍以设备为事实来源。
 
-### 待实现固定 Tool
+### 训练固定 Tool
 
-训练动作身份阶段新增：
+训练动作身份已经使用：
 
 - `list_exercise_names`：无参数，返回当前数据空间全部动作 `{id,name}`；
 - `record_workout` / `update_workout`：使用 `exercise_id` 引用已有动作；只有创建新动作时使用

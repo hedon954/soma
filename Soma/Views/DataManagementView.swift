@@ -341,15 +341,19 @@ struct DataManagementView: View {
     }
 
     private func performClear() {
-        do {
-            let result = try coordinator.clearPersonalData(dataSpace: dataSpace)
-            resolvePersonalSessionIfActive()
-            notice = DataManagementNotice(
-                title: "个人数据已清除",
-                message: "已删除 \(result.deletedModelCount) 条本机数据和 \(result.deletedMediaCount) 个专属媒体；外部备份仍然保留。"
-            )
-        } catch {
-            showError(error)
+        Task {
+            do {
+                let result = try await coordinator.clearPersonalData(
+                    dataSpace: dataSpace
+                )
+                resolvePersonalSessionIfActive()
+                notice = DataManagementNotice(
+                    title: "个人数据已清除",
+                    message: "已删除 \(result.deletedModelCount) 条本机数据和 \(result.deletedMediaCount) 个专属媒体；外部备份仍然保留。"
+                )
+            } catch {
+                showError(error)
+            }
         }
     }
 

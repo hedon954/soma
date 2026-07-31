@@ -18,26 +18,6 @@ private enum CoachSheet: Identifiable {
     }
 }
 
-struct PendingAttachment: Identifiable {
-    let id = UUID()
-    let kind: MediaKind
-    let imageData: Data?
-    let videoURL: URL?
-
-    init(_ media: PickedMedia) {
-        switch media {
-        case let .image(data):
-            kind = .image
-            imageData = data
-            videoURL = nil
-        case let .video(url):
-            kind = .video
-            imageData = nil
-            videoURL = url
-        }
-    }
-}
-
 struct CoachView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AIService.self) private var ai
@@ -48,14 +28,22 @@ struct CoachView: View {
     @Environment(LocationContextService.self) private var locationContext
     @AppStorage(ConversationLocationPreference.defaultsKey)
     private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
+    @AppStorage(RemoteAgentPreference.enabledKey)
+    private var remoteExecutionEnabled = false
 
     @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
     @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
-    @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
-    @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
-    @Query(sort: \BodyEntry.date, order: .reverse) private var bodyEntries: [BodyEntry]
-    @Query(sort: \UserProfile.updatedAt, order: .reverse) private var profiles: [UserProfile]
+    @Query(sort: \ExerciseDefinition.canonicalName)
+    private var exerciseDefinitions: [ExerciseDefinition]
+    @Query(sort: \WorkoutEntry.date, order: .reverse)
+    private var workouts: [WorkoutEntry]
+    @Query(sort: \ExercisePerformance.order)
+    private var exercisePerformances: [ExercisePerformance]
+    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
+    private var workoutSessions: [WorkoutSession]
+    @Query(sort: \WorkoutSet.order)
+    private var workoutSets: [WorkoutSet]
 
     @State private var draft = ""
     @State private var attachments: [PendingAttachment] = []
@@ -68,6 +56,8 @@ struct CoachView: View {
     @State private var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
     @State private var showsLocationPrompt = false
+    @State private var selectedExerciseID: UUID?
+    @State private var useLocalForNextMessage = false
 
     let onRequireAIConfiguration: () -> Void
 
@@ -135,6 +125,12 @@ struct CoachView: View {
                             attachments: $attachments,
                             gyms: gyms,
                             currentGym: currentGym,
+                            exerciseCandidates: exerciseCandidates,
+                            selectedExercise: selectedExercise,
+                            latestExerciseCapacity: latestExerciseCapacity,
+                            showsExecutionChoice: remoteExecutionEnabled
+                                && RemoteAgentPreference.baseURL() != nil,
+                            useLocalForNextMessage: $useLocalForNextMessage,
                             isSending: processor.isProcessing,
                             isListening: speechInput.isListening,
                             speechMessage: speechInput.errorMessage,
@@ -143,6 +139,8 @@ struct CoachView: View {
                             onAddMedia: showMedia,
                             onSelectGym: selectGym,
                             onManageGyms: { showsGyms = true },
+                            onSelectExercise: selectExercise,
+                            onApplyRecentWorkout: applyRecentWorkout,
                             onToggleVoice: toggleVoice,
                             onSend: send
                         )
@@ -167,6 +165,12 @@ struct CoachView: View {
                     }
                     .onChange(of: speechInput.transcript) {
                         updateDraftFromSpeech()
+                    }
+                    .onChange(of: draft) {
+                        guard let selectedExercise else { return }
+                        if !draft.hasPrefix(selectedExercise.canonicalName) {
+                            selectedExerciseID = nil
+                        }
                     }
                 }
                 .offset(x: sessionDrawerPresented ? drawerWidth : 0)
@@ -249,6 +253,14 @@ struct CoachView: View {
         .onChange(of: captureRouter.pendingRequest, initial: true) {
             handleCaptureRequest()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .prefillCoachDraft)
+        ) { notification in
+            guard let text = notification.object as? String else { return }
+            draft = text
+            selectedExerciseID = nil
+            composerFocusRequest = UUID()
+        }
         .task(id: captureRouter.mediaDelivery?.id) {
             handleMediaDelivery()
         }
@@ -310,6 +322,8 @@ struct CoachView: View {
     private func switchToSession(_: ConversationSession) {
         draft = ""
         attachments = []
+        selectedExerciseID = nil
+        useLocalForNextMessage = false
         speechInput.stop()
         composerDismissRequest = UUID()
         scrollRequest = UUID()
@@ -367,13 +381,80 @@ struct CoachView: View {
 
     private func sendPrompt(_ prompt: String) {
         draft = prompt
+        selectedExerciseID = nil
         send()
+    }
+
+    private var selectedExercise: ExerciseDefinition? {
+        guard let selectedExerciseID else { return nil }
+        return exerciseDefinitions.first {
+            $0.id == selectedExerciseID && !$0.isArchived
+        }
+    }
+
+    private var exerciseCandidates: [ExerciseDefinition] {
+        guard selectedExerciseID == nil else { return [] }
+        let query = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+        return Array(exerciseDefinitions.lazy.filter {
+            !$0.isArchived
+                && $0.canonicalName.localizedCaseInsensitiveContains(query)
+        }.prefix(5))
+    }
+
+    private var latestExerciseCapacity: ExerciseCapacitySuggestion? {
+        guard let selectedExerciseID else { return nil }
+        let legacy = workouts
+            .filter { $0.exerciseID == selectedExerciseID }
+            .map {
+                ExerciseCapacitySuggestion(
+                    date: $0.date,
+                    text: ExerciseQuickFill.text(for: $0)
+                )
+            }
+        let guided: [ExerciseCapacitySuggestion] = exercisePerformances
+            .compactMap { performance in
+                guard performance.exerciseID == selectedExerciseID,
+                      let session = workoutSessions.first(where: {
+                          $0.id == performance.sessionID
+                      })
+                else {
+                    return nil
+                }
+                let text = ExerciseQuickFill.text(for: workoutSets.filter {
+                    $0.performanceID == performance.id
+                })
+                guard !text.isEmpty else { return nil }
+                return ExerciseCapacitySuggestion(
+                    date: session.startedAt,
+                    text: text
+                )
+            }
+        return (legacy + guided)
+            .filter { !$0.text.isEmpty }
+            .max { $0.date < $1.date }
+    }
+
+    private func selectExercise(_ exercise: ExerciseDefinition) {
+        selectedExerciseID = exercise.id
+        draft = exercise.canonicalName
+        composerFocusRequest = UUID()
+    }
+
+    private func applyRecentWorkout() {
+        guard let selectedExercise, let latestExerciseCapacity else { return }
+        draft = latestExerciseCapacity.text.isEmpty
+            ? selectedExercise.canonicalName
+            : "\(selectedExercise.canonicalName)：\(latestExerciseCapacity.text)"
+        composerFocusRequest = UUID()
     }
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
-        guard ensureAIConfigured() else { return }
+        guard ensureAIConfigured(forceLocal: useLocalForNextMessage) else {
+            return
+        }
         guard locationPreference != .unasked else {
             speechInput.stop()
             showsLocationPrompt = true
@@ -385,38 +466,43 @@ struct CoachView: View {
     private func submitCurrentDraft() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
-        guard ensureAIConfigured() else { return }
+        guard ensureAIConfigured(forceLocal: useLocalForNextMessage) else {
+            return
+        }
         speechInput.stop()
         let pending = attachments
         let session = conversationSessions.ensureActiveSession(
             dataSpace: dataSpace.activeSpace,
             in: modelContext
         )
+        guard let processingContext = ConversationProcessingContextFactory.make(
+            sessionID: session.id,
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            in: modelContext
+        ) else {
+            return
+        }
         let accepted = processor.submit(
             text: text,
             attachments: pending,
-            context: ConversationProcessingContext(
-                structuredContext: structuredContext,
-                session: session,
-                dataSpace: dataSpace.activeSpace,
-                gyms: gyms,
-                equipment: equipment,
-                ai: ai,
-                modelContext: modelContext
-            ),
+            context: processingContext,
             includeLocation: locationPreference == .enabled,
-            locationService: locationContext
+            locationService: locationContext,
+            forceLocal: useLocalForNextMessage
         )
         if accepted {
             draft = ""
             attachments = []
+            selectedExerciseID = nil
+            useLocalForNextMessage = false
             composerDismissRequest = UUID()
             scrollRequest = UUID()
         }
     }
 
     private func retry(_ responseMessage: CoachMessage) {
-        guard ensureAIConfigured() else { return }
+        guard ensureAIConfigured(forceLocal: false) else { return }
         guard let turnID = responseMessage.turnID,
               let userMessage = ConversationTurnProjection.userMessage(
                   for: turnID,
@@ -429,24 +515,28 @@ struct CoachView: View {
             dataSpace: dataSpace.activeSpace,
             in: modelContext
         )
+        guard let processingContext = ConversationProcessingContextFactory.make(
+            sessionID: session.id,
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            in: modelContext
+        ) else {
+            return
+        }
         if processor.retry(
             userMessage: userMessage,
-            context: ConversationProcessingContext(
-                structuredContext: structuredContext,
-                session: session,
-                dataSpace: dataSpace.activeSpace,
-                gyms: gyms,
-                equipment: equipment,
-                ai: ai,
-                modelContext: modelContext
-            )
+            context: processingContext,
+            locationService: locationContext
         ) {
             composerDismissRequest = UUID()
             scrollRequest = UUID()
         }
     }
 
-    private func ensureAIConfigured() -> Bool {
+    private func ensureAIConfigured(forceLocal: Bool) -> Bool {
+        if !forceLocal, RemoteAgentPreference.isEnabled() {
+            return true
+        }
         guard ai.hasRequiredAPIKey else {
             speechInput.stop()
             onRequireAIConfiguration()
@@ -494,57 +584,6 @@ struct CoachView: View {
             guard !Task.isCancelled else { return }
             scrollToBottom(proxy, animated: false)
         }
-    }
-
-    private var structuredContext: String {
-        let gym = currentGym
-        let currentEquipment = gym.map { target in
-            equipment.filter { $0.gymID == target.id }.map(\.name).joined(separator: "、")
-        } ?? "无"
-        let latestWorkout = workouts.first.map {
-            var parts = [$0.exercise]
-            if let setEvidenceSummary = $0.setEvidenceSummary {
-                parts.append(setEvidenceSummary)
-            } else if let sets = $0.sets, let reps = $0.reps {
-                parts.append("\(sets)×\(reps)")
-            }
-            if $0.setEntries.isEmpty, let weight = $0.weight {
-                parts.append(weight == 0 ? "自重" : String(format: "%.1fkg", weight))
-            }
-            return parts.joined(separator: " ")
-        } ?? "暂无"
-        let todayCalories = meals
-            .filter { Calendar.current.isDateInToday($0.date) }
-            .reduce(0) { $0 + $1.calories }
-        let weight = bodyEntries.compactMap(\.weight).first.map {
-            String(format: "%.1fkg", $0)
-        } ?? "暂无"
-        let profile = profiles.first.map {
-            var parts: [String] = []
-            if !$0.displayName.isEmpty {
-                parts.append("称呼 \($0.displayName)")
-            }
-            if let birthDate = $0.birthDate {
-                parts.append("出生日期 \(birthDate.formatted(date: .numeric, time: .omitted))")
-            }
-            if let currentAge = $0.currentAge {
-                parts.append("当前 \(currentAge) 岁")
-            }
-            if let height = $0.height {
-                parts.append(String(format: "%.1fcm", height))
-            }
-            if !$0.fitnessGoal.isEmpty {
-                parts.append("目标 \($0.fitnessGoal)")
-            }
-            if !$0.healthNotes.isEmpty {
-                parts.append("限制 \($0.healthNotes)")
-            }
-            return parts.isEmpty ? "未填写" : parts.joined(separator: "；")
-        } ?? "未填写"
-        return """
-        身体信息：\(profile)
-        健身房：\(gym?.name ?? "无")；器械：\(currentEquipment)；最近训练：\(latestWorkout)；今日饮食：\(todayCalories)kcal；体重：\(weight)
-        """
     }
 }
 
@@ -812,11 +851,21 @@ private struct LiveAgentResponse: View {
     }
 }
 
+private struct ExerciseCapacitySuggestion {
+    var date: Date
+    var text: String
+}
+
 private struct CoachComposer: View {
     @Binding var draft: String
     @Binding var attachments: [PendingAttachment]
     let gyms: [GymProfile]
     let currentGym: GymProfile?
+    let exerciseCandidates: [ExerciseDefinition]
+    let selectedExercise: ExerciseDefinition?
+    let latestExerciseCapacity: ExerciseCapacitySuggestion?
+    let showsExecutionChoice: Bool
+    @Binding var useLocalForNextMessage: Bool
     let isSending: Bool
     let isListening: Bool
     let speechMessage: String?
@@ -825,12 +874,26 @@ private struct CoachComposer: View {
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
+    let onSelectExercise: (ExerciseDefinition) -> Void
+    let onApplyRecentWorkout: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 8) {
+            if !exerciseCandidates.isEmpty
+                || (selectedExercise != nil && latestExerciseCapacity != nil)
+            {
+                ExerciseComposerSuggestions(
+                    candidates: exerciseCandidates,
+                    selectedExercise: selectedExercise,
+                    latestCapacity: latestExerciseCapacity,
+                    onSelectExercise: onSelectExercise,
+                    onApplyRecentWorkout: onApplyRecentWorkout
+                )
+            }
+
             if gyms.count >= 2 {
                 Menu {
                     ForEach(gyms) { gym in
@@ -872,6 +935,31 @@ private struct CoachComposer: View {
                 }
                 .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if showsExecutionChoice {
+                Button {
+                    useLocalForNextMessage.toggle()
+                } label: {
+                    Label(
+                        useLocalForNextMessage
+                            ? "本次仅本机"
+                            : "本次可后台继续",
+                        systemImage: useLocalForNextMessage
+                            ? "iphone"
+                            : "server.rack"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(
+                        useLocalForNextMessage
+                            ? AppTheme.warning
+                            : .secondary
+                    )
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+                .accessibilityHint("切换这条消息是在本机执行还是投递为后台持续任务")
             }
 
             if !attachments.isEmpty {
@@ -960,6 +1048,57 @@ private struct CoachComposer: View {
                 focused = false
             }
         }
+    }
+}
+
+private struct ExerciseComposerSuggestions: View {
+    let candidates: [ExerciseDefinition]
+    let selectedExercise: ExerciseDefinition?
+    let latestCapacity: ExerciseCapacitySuggestion?
+    let onSelectExercise: (ExerciseDefinition) -> Void
+    let onApplyRecentWorkout: () -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(candidates) { exercise in
+                    Button {
+                        onSelectExercise(exercise)
+                    } label: {
+                        Label(
+                            exercise.canonicalName,
+                            systemImage: "figure.strengthtraining.traditional"
+                        )
+                        .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("把标准动作名称填入输入框")
+                }
+
+                if let selectedExercise, let latestCapacity {
+                    Button {
+                        onApplyRecentWorkout()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("上次训练")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text([
+                                selectedExercise.canonicalName,
+                                latestCapacity.text
+                            ].filter { !$0.isEmpty }.joined(separator: "："))
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint("把最近一次非空训练数值填入输入框")
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
     }
 }
 

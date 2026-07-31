@@ -1,6 +1,8 @@
 # Soma 验收清单
 
-本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。产品的唯一录入入口是教练对话；列表和详情用于审查、纠错与删除 AI 生成的结构化结果。
+本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。自然语言与媒体事实由
+教练对话创建；用户从计划启动带练后，逐组确认是唯一受控的非聊天写入路径。列表和详情用于
+审查、纠错与删除结构化结果。
 
 ## 产品闭环
 
@@ -12,11 +14,14 @@
 | 对话 Session | `ConversationSessionController` 在根层首次加载和 Scene 重新进入前台时解析当前 Session；今天有最后消息则复用，否则新建当天 Session；旧消息按自然日归档，历史会话可回看。 |
 | 发送反馈 | 提交被接受后清空草稿与附件、撤销文本焦点并滚到稳定底部锚点；用户消息和 Agent Event 更新继续保持在底部等待回复。 |
 | Widget 与系统快捷入口 | 中尺寸主屏幕 `SomaWidget`、三种锁屏快捷组件和 App Shortcuts 均提供文字、拍照、照片/视频入口；锁屏组件支持行内、圆形、矩形位置；打开 App 后直接聚焦文字输入或呈现系统选择器，不在扩展内写记录或运行 Agent。 |
-| 异步对话处理 | `ConversationProcessingService` 由 App 根层持有；只要进程存活，离开聊天页不会中断当前解析。进入系统后台后的已知缺口见 BUG 0004。 |
+| 异步对话处理 | 发送先原子保存 Turn、媒体、上下文与 `AgentJob`；App 根层 runner 串行领取，有限后台租约到期进入 `waitingForForeground`，回前台或重启恢复为同一 Turn 的新 Attempt。 |
 | 多个健身房和当前场馆 | 聊天可创建、更新、切换；健身房列表可直接选择当前场馆。 |
 | 健身房审查 | 详情展示全部上传照片、AI 环境总结和器械列表；健身房与器械支持编辑、删除。 |
 | 饮食与身体记录 | 聊天或媒体生成本地记录；详情保留原始文字、食物/体型照片和 AI 说明。 |
-| 训练与动作分析 | 记录动作、组次、重量、间歇、时长及媒体；缺失字段保持空；多模态模型可结合关键帧给出动作、负荷和安全反馈。 |
+| 训练与动作分析 | 训练动作使用稳定 ID；旧聚合与新逐组 Session 统一进入动作历史。包内动作内容保持静默，仅在用户形成动作后关联；列表展示动作图，详情展示多张动作图与前后肌群图。缺失字段保持空；图片生成和视频复盘都只由用户主动触发。 |
+| 动作快捷输入 | 输入框只在本地 active 标准名称中匹配；点击动作后可选择最近一条旧训练或带练容量，只修改草稿且仍由用户主动发送。 |
+| 训练计划与带练 | Program、不可变模板版本、Session、Performance 与 Set 分层；开始时冻结处方。本地状态机处理倒计时、确认、休息、暂停、跳过、替换与恢复。 |
+| 自动录像 | Session 显式开启；首组非热身录第 1 组，首组热身录第 2 组。使用前置摄像头、无麦克风，每动作默认一段；相机失败不阻断 Set 事实。 |
 | CRUD | 训练、饮食、身体详情进入即编辑，修改后显示保存；历史列表左滑红色图标删除。健身房和器械也可修改与删除。 |
 | 统计 | 进展页把“AI 当前上下文”置顶，随后展示最近记录入口、带月份和星期的连续性热力图、体重趋势和训练容量趋势。 |
 | 时间粒度与拖动 | 体重和容量都支持周、双周、月、季，并允许横向拖动历史窗口。 |
@@ -52,47 +57,53 @@
 | 系统协议边界 | 角色和安全策略可编辑；工具与参数 Schema 由 App 通过 API 注册，不进入提示词且不能被旧自定义值覆盖。 |
 | Trace | 一次远程消息生成一条成功或失败 Trace；model、skill、tool、output Span 作为 Event 实时更新 UI，并保存相对耗时、Token、入参与返回。 |
 | 开发者设置 | 直接提供执行日志入口和数量；固定 Tool 协议不作为不可操作的设置项或说明展示。 |
+| 持久 Job/Event | 每条消息拥有稳定 `AgentJob` 与单调语义 Event；Chat、Trace、通知和 Live Activity 维护独立 cursor，UI 读取不删除事件。 |
+| 可选远程执行 | 设置默认关闭并披露数据流；单次可选仅本机。匿名设备签名、幂等 Job、Event 补拉、Worker lease 和设备 Tool handoff 由 `Server/` 提供，BYOK 不上传。 |
+| 系统进度 | Live Activity 只显示通用阶段、操作数和队列数，不含健康文本或虚假百分比；完成通知和系统表面深链到稳定 Turn。 |
 
-## 已采纳待实现：训练智能
+## 已实现：训练智能
 
-以下是 [PRD 010](prd/010-exercise-library-plans-guided-training.md) 的交付门禁，不是当前
-实现证据。
+以下是 [PRD 010](prd/010-exercise-library-plans-guided-training.md) 的当前实现证据。
 
 | 要求 | 目标验收 |
 | --- | --- |
-| 动作身份 | `list_exercise_names` 只返回当前空间全部 `{id,name}`；Agent 复用已有 ID 或创建标准动作。 |
-| 动作历史 | 改名不改变历史；合并事务迁移训练、计划、媒体和分析引用，并可安全撤销。 |
-| 快捷输入 | 本地动作候选和最近一条训练值不请求网络，只修改草稿，发送后才写训练。 |
-| 计划真值 | Program、TemplateVersion、Session 和 Set 分层；开始训练时冻结处方快照。 |
-| 统计兼容 | 旧聚合训练不拆成虚构 Set；新实际 Set 与旧记录合并统计且不重复。 |
-| 带练 | 倒计时、确认、休息、暂停、跳过和恢复由本地状态机完成，断网不阻止训练。 |
-| 自动录像 | Session 显式开启；首组非热身录第 1 组，首组热身录第 2 组；每动作默认一段。 |
-| 视频复盘 | 用户主动选择视频后才分析；反馈绑定 Performance、可编辑删除并声明局限。 |
-| 内容版权 | 不抓取或下载未授权第三方视频；肌群图只表达主要/辅助肌群和动作模式。 |
-| 数据主权 | 新模型和媒体覆盖双空间、开放导出评估、加密备份恢复、清除与引用回收。 |
+| 动作身份 | `ExerciseDefinition`、`list_exercise_names`、record/update Tool 与失效 ID 恢复错误；语义选择由模型基于完整 `{id,name}` 列表完成。 |
+| 动作历史 | 动作详情按 ID 合并 `WorkoutEntry` 与 Session/Set；合并记录迁移训练、模板、Performance/分析链和媒体，并只撤销本次引用。 |
+| 静默动作内容 | `BundledExerciseCatalog` 提供 40+ 常见动作内容与授权/项目素材；空数据库不产生动作，已知动作创建后只 fill-only 激活自身内容，未使用目录条目不进入列表或 Tool。 |
+| 动作图片 | 列表左侧加载动作示意图；详情支持多张动作图、前后人体主要/辅助肌群图、用户上传和显式 AI 生成。generated/user 图片进入合并、备份、恢复、清除与媒体回收。 |
+| 快捷输入 | `CoachView` 本地候选读取 active 名称；最近容量同时读取旧记录与已完成 Set，不请求网络、不写业务数据。 |
+| 计划真值 | `TrainingProgram`、`WorkoutTemplateVersion`、`TemplateExercise`、Session、Performance、Set 和 Recommendation 分层；开始训练冻结快照。 |
+| 统计兼容 | `TrainingStatistics` 只合并旧聚合与新 completed actual Set，不把计划或建议计入容量。 |
+| 带练 | `GuidedWorkoutCoordinator` 持久化倒计时、确认、实际休息、暂停、跳过、替换、恢复和完成摘要。 |
+| 自动录像 | `WorkoutCameraService` 与 Session policy 决定第 1/2 组；前置相机、无音轨、中断/后台/热压力/磁盘错误均不阻断训练。 |
+| 视频复盘 | `PerformanceReviewView` 主动创建 Agent Job；`record_performance_analysis` 校验视频指纹并幂等绑定 source Job。 |
+| 内容版权 | 用户视频、本地自有/授权来源和外部链接分层；不抓取第三方课程；通用肌群图不冒充个人受力。 |
+| 数据主权 | Snapshot/DTO、开放导出、加密备份恢复、主动清除和媒体引用集合覆盖全部新增模型。 |
 
-## 已采纳待实现：可靠 Agent 与远程持续执行
+## 已实现：可靠 Agent 与远程持续执行
 
 以下是 [PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
-[BUG 0004](bugs/0004-agent-background-stream-interruption.md) 的交付门禁。
+[BUG 0004](bugs/0004-agent-background-stream-interruption.md) 的当前实现证据。远端持续
+运行以部署 `Server/` 及配置 Provider、对象存储、App Attest 和 APNs 为前提。
 
 | 要求 | 目标验收 |
 | --- | --- |
-| 持久发送 | Turn、媒体引用、上下文和 AgentJob 原子保存成功后才清空输入。 |
-| 本地 Outbox | 无网时显示等待网络；恢复后使用同一 `clientJobID` 只创建一个远程 Job。 |
-| Event Log | Job 内 sequence 唯一递增；SSE 断线后按 cursor 补齐，不删除其他消费者所需事件。 |
-| 本地恢复 | 后台租约到期进入等待前台；新 Attempt 恢复且 mutation Receipt 防止重复写入。 |
-| 匿名设备 | 无用户名/密码；设备签名、短期 token、重放防护和跨设备授权隔离通过测试。 |
-| 远程执行 | App Force Quit 后纯远程 Job 继续；服务器/Worker 重启不丢 Job、Event 或终态。 |
-| 设备 Tool | 需要 SwiftData/HealthKit/本地媒体时进入 `waitingForDevice`；恢复后只执行一次。 |
-| BYOK | 用户 Provider API Key 不进入服务器；远程模式只使用 Soma 管理凭据。 |
-| Live Activity | 只显示通用状态；不伪造百分比，不泄露动作、体重、饮食或用户原文。 |
-| 远程清除 | 终态确认后 24 小时内清除内容，所有临时内容 7 天硬过期，非内容元数据最多 30 天。 |
-| 降级 | 远程关闭、协议不兼容、Server/Provider/APNs 失败时保留本地事实并给出可恢复状态。 |
+| 持久发送 | `AgentJobStore.enqueue` 在一笔 SwiftData transaction 中保存 Turn、附件引用、上下文、Job 和首个 Event；失败时保留输入并回收副本。 |
+| 本地 Outbox | `clientJobID == AgentJob.id`；等待网络保留 `nextRetryAt`，同一 ID 幂等重投。 |
+| Event Log | 本地与服务端均使用唯一递增 sequence；分页/SSE 从 cursor 补拉，读取不删除。 |
+| 本地恢复 | 注入式后台租约到期保存等待状态；新 Attempt 重跑且 `AgentMutationReceipt` 防止重复写入。 |
+| 匿名设备 | Secure Enclave/Keychain P256 身份、challenge、短期 access/rotation token、nonce 与签名验证。 |
+| 远程执行 | PostgreSQL 保存 Job/Event/Tool/Outbox；Worker lease/epoch 支持进程替换，纯远程步骤不依赖 App 存活。 |
+| 设备 Tool | 服务端固定 schema 生成 `waitingForDevice`；iOS 复核 Tool、Turn、空间、mutation 并按 `toolCallID` 幂等返回。 |
+| BYOK | iOS 提交不包含用户 API Key；Worker 只从部署 secret 读取 Soma 管理凭据。 |
+| Live Activity | Shared ContentState 只含阶段、operation/queue count、sequence/stale；token 竞态、乱序和失效有收敛路径。 |
+| 远程清除 | PostgreSQL cleanup 与对象存储删除覆盖终态确认、7 天硬上限、30 天元数据和设备撤销。 |
+| 降级 | 远程默认关闭；协议、网络、Provider 和 APNs 失败分别映射为等待、可解释失败或本地同步纠正。 |
 
 ## 实施前文档门禁
 
-- PRD 010/009、ADR 0028—0027 和两份工程协议相互一致；ADR 0034 固定文档生命周期。
+- PRD 010/011、ADR 0028—0035 和两份工程协议相互一致；ADR 0034 固定文档生命周期，
+  ADR 0035 固定静默内容目录与按需图片生成边界。
 - 旧文与新文的修订、替代和研究落地关系双向可达。
 - `make check` 执行 Markdown 链接、文档生命周期、隐私与仓库契约检查。
 

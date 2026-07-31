@@ -9,6 +9,15 @@ struct InsightsView: View {
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
     @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
     @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
+    @Query(sort: \ExerciseDefinition.canonicalName)
+    private var exerciseDefinitions: [ExerciseDefinition]
+    @Query(sort: \TrainingProgram.updatedAt, order: .reverse)
+    private var trainingPrograms: [TrainingProgram]
+    @Query(sort: \WorkoutSession.startedAt)
+    private var workoutSessions: [WorkoutSession]
+    @Query(sort: \ExercisePerformance.order)
+    private var exercisePerformances: [ExercisePerformance]
+    @Query(sort: \WorkoutSet.order) private var workoutSets: [WorkoutSet]
 
     private var weekStart: Date {
         Calendar.current.date(byAdding: .day, value: -6, to: .now) ?? .distantPast
@@ -16,6 +25,30 @@ struct InsightsView: View {
 
     private var weekWorkouts: [WorkoutEntry] {
         workouts.filter { $0.date >= weekStart }
+    }
+
+    private var completedSessions: [WorkoutSession] {
+        workoutSessions.filter {
+            $0.status == .completed || $0.status == .abandoned
+        }
+    }
+
+    private var trainingDates: [Date] {
+        workouts.map(\.date) + completedSessions.map(\.startedAt)
+    }
+
+    private var weekTrainingCount: Int {
+        weekWorkouts.count
+            + completedSessions.count { $0.startedAt >= weekStart }
+    }
+
+    private var combinedVolumePoints: [TrainingVolumePoint] {
+        TrainingVolumeAnalytics.dailyPoints(
+            from: workouts,
+            sessions: completedSessions,
+            performances: exercisePerformances,
+            sets: workoutSets
+        )
     }
 
     private var weekMeals: [MealEntry] {
@@ -54,7 +87,7 @@ struct InsightsView: View {
                 .buttonStyle(.plain)
 
                 ProgressSummary(
-                    workoutCount: weekWorkouts.count,
+                    workoutCount: weekTrainingCount,
                     calories: averageCalories,
                     weight: weightedBodyEntries.last?.weight
                 )
@@ -64,6 +97,10 @@ struct InsightsView: View {
                     workoutCount: workouts.count,
                     mealCount: meals.count,
                     bodyCount: bodyEntries.count,
+                    exerciseCount: exerciseDefinitions.count { !$0.isArchived },
+                    programCount: trainingPrograms.count {
+                        $0.status == .active
+                    },
                     latestWorkout: workouts.last?.exercise,
                     latestMeal: meals.last?.title,
                     latestWeight: weightedBodyEntries.last?.weight
@@ -72,14 +109,14 @@ struct InsightsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("连续性")
                         .font(.headline)
-                    ContributionCard(workouts: workouts)
+                    ContributionCard(trainingDates: trainingDates)
                 }
 
                 if weightedBodyEntries.count >= 2 {
                     WeightTrendCard(entries: weightedBodyEntries)
                 }
 
-                TrainingVolumeTrendCard(workouts: workouts)
+                TrainingVolumeTrendCard(points: combinedVolumePoints)
             }
             .padding(16)
             .padding(.bottom, 72)
@@ -103,6 +140,8 @@ private struct RecentRecordsCard: View {
     let workoutCount: Int
     let mealCount: Int
     let bodyCount: Int
+    let exerciseCount: Int
+    let programCount: Int
     let latestWorkout: String?
     let latestMeal: String?
     let latestWeight: Double?
@@ -138,6 +177,38 @@ private struct RecentRecordsCard: View {
                             title: "训练记录",
                             count: workoutCount,
                             latest: latestWorkout ?? "暂无记录"
+                        )
+                    }
+
+                    Divider()
+                        .padding(.leading, 44)
+
+                    NavigationLink {
+                        ExerciseLibraryView()
+                    } label: {
+                        RecordIndexRow(
+                            icon: "figure.strengthtraining.traditional",
+                            title: "动作库",
+                            count: exerciseCount,
+                            latest: exerciseCount == 0
+                                ? "随训练自然形成"
+                                : "查看动作历史与最近训练"
+                        )
+                    }
+
+                    Divider()
+                        .padding(.leading, 44)
+
+                    NavigationLink {
+                        TrainingProgramLibraryView()
+                    } label: {
+                        RecordIndexRow(
+                            icon: "list.bullet.clipboard",
+                            title: "训练计划",
+                            count: programCount,
+                            latest: programCount == 0
+                                ? "在教练中创建计划"
+                                : "审查、调整并开始带练"
                         )
                     }
 
@@ -248,7 +319,7 @@ private struct ProgressSummary: View {
 }
 
 private struct ContributionCard: View {
-    let workouts: [WorkoutEntry]
+    let trainingDates: [Date]
 
     var body: some View {
         AppCard {
@@ -326,7 +397,9 @@ private struct ContributionCard: View {
 
     private func contributionCell(for day: Date) -> some View {
         let isFuture = day > Calendar.current.startOfDay(for: .now)
-        let count = workouts.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }.count
+        let count = trainingDates.count {
+            Calendar.current.isDate($0, inSameDayAs: day)
+        }
 
         return RoundedRectangle(cornerRadius: 3)
             .fill(isFuture ? Color.clear : color(for: count))
@@ -511,6 +584,43 @@ enum TrainingVolumeAnalytics {
             .sorted { $0.date < $1.date }
     }
 
+    static func dailyPoints(
+        from workouts: [WorkoutEntry],
+        sessions: [WorkoutSession],
+        performances: [ExercisePerformance],
+        sets: [WorkoutSet],
+        calendar: Calendar = .current
+    ) -> [TrainingVolumePoint] {
+        var daily = Dictionary(
+            uniqueKeysWithValues: dailyPoints(
+                from: workouts,
+                calendar: calendar
+            ).map { ($0.date, $0.volume) }
+        )
+        let performancesByID = Dictionary(
+            uniqueKeysWithValues: performances.map { ($0.id, $0) }
+        )
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: sessions.map { ($0.id, $0) }
+        )
+        for set in sets where set.status == .completed {
+            guard let volume = set.completedVolume,
+                  volume > 0,
+                  let performance = performancesByID[set.performanceID],
+                  let session = sessionsByID[performance.sessionID]
+            else {
+                continue
+            }
+            daily[
+                calendar.startOfDay(for: session.startedAt),
+                default: 0
+            ] += volume
+        }
+        return daily.map {
+            TrainingVolumePoint(date: $0.key, volume: $0.value)
+        }.sorted { $0.date < $1.date }
+    }
+
     static func total(
         in interval: Range<Date>,
         points: [TrainingVolumePoint]
@@ -530,15 +640,11 @@ enum TrainingVolumeAnalytics {
 }
 
 private struct TrainingVolumeTrendCard: View {
-    let workouts: [WorkoutEntry]
+    let points: [TrainingVolumePoint]
     @State private var range: TrendRange = .month
     @State private var scrollStart = Calendar.current.startOfDay(
         for: Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
     )
-
-    private var points: [TrainingVolumePoint] {
-        TrainingVolumeAnalytics.dailyPoints(from: workouts)
-    }
 
     private var visibleEnd: Date {
         scrollStart.addingTimeInterval(range.duration)

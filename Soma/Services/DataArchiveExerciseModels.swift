@@ -1,0 +1,169 @@
+import Foundation
+
+struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
+    var canonicalNameKey: String
+    var id: UUID
+    var canonicalName: String
+    var createdAt: Date
+    var updatedAt: Date
+    var archivedAt: Date?
+    var mergedIntoID: UUID?
+    var coachingNotes: String
+    var primaryMusclesData: Data
+    var secondaryMusclesData: Data
+    var movementPatternsData: Data
+    var muscleDiagramAssetName: String?
+    var userDemoVideos: [MediaAttachmentReference]
+    var guidanceVideos: [ExerciseVideoSource]
+    var contentRevisionsData: Data?
+    var imageReferences: [ExerciseImageReference]?
+
+    var referencedMediaPaths: [String] {
+        userDemoVideos.map(\.path)
+            + guidanceVideos.compactMap(\.localPath)
+            + (imageReferences ?? []).compactMap(\.localPath)
+    }
+
+    init(_ model: ExerciseDefinition) {
+        canonicalNameKey = model.canonicalNameKey
+        id = model.id
+        canonicalName = model.canonicalName
+        createdAt = model.createdAt
+        updatedAt = model.updatedAt
+        archivedAt = model.archivedAt
+        mergedIntoID = model.mergedIntoID
+        coachingNotes = model.coachingNotes
+        primaryMusclesData = model.primaryMusclesData
+        secondaryMusclesData = model.secondaryMusclesData
+        movementPatternsData = model.movementPatternsData
+        muscleDiagramAssetName = model.muscleDiagramAssetName
+        userDemoVideos = model.userDemoVideos
+        guidanceVideos = model.guidanceVideos
+        contentRevisionsData = model.contentRevisionsData
+        imageReferences = model.imageReferences
+    }
+
+    func makeModel(
+        mediaPathMapping: [String: String]
+    ) -> ExerciseDefinition {
+        let definition = ExerciseDefinition(
+            id: id,
+            canonicalName: canonicalName,
+            createdAt: createdAt,
+            coachingNotes: coachingNotes
+        )
+        definition.canonicalNameKey = canonicalNameKey
+        definition.updatedAt = updatedAt
+        definition.archivedAt = archivedAt
+        definition.mergedIntoID = mergedIntoID
+        definition.primaryMusclesData = primaryMusclesData
+        definition.secondaryMusclesData = secondaryMusclesData
+        definition.movementPatternsData = movementPatternsData
+        definition.muscleDiagramAssetName = muscleDiagramAssetName
+        definition.userDemoVideos = userDemoVideos.map {
+            MediaAttachmentReference(
+                kind: $0.kind,
+                path: mediaPathMapping[$0.path] ?? $0.path
+            )
+        }
+        definition.guidanceVideos = guidanceVideos.map { source in
+            var value = source
+            if let path = source.localPath {
+                value.localPath = mediaPathMapping[path] ?? path
+            }
+            return value
+        }
+        definition.contentRevisionsData = contentRevisionsData ?? Data()
+        definition.imageReferences = (imageReferences ?? []).map { reference in
+            var value = reference
+            if let path = reference.localPath {
+                value.localPath = mediaPathMapping[path] ?? path
+            }
+            return value
+        }
+        definition.updatedAt = updatedAt
+        return definition
+    }
+}
+
+struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
+    var id: UUID
+    var sourceExerciseID: UUID
+    var targetExerciseID: UUID
+    var sourceName: String
+    var affectedWorkoutIDs: [UUID]
+    var affectedTemplateExerciseIDs: [UUID]?
+    var affectedPerformanceIDs: [UUID]?
+    var affectedRecommendationIDs: [UUID]?
+    var transferredContentRevisionIDs: [UUID]?
+    var transferredUserDemoVideos: [MediaAttachmentReference]?
+    var transferredGuidanceVideos: [ExerciseVideoSource]?
+    var transferredImageReferences: [ExerciseImageReference]?
+    var createdAt: Date
+    var undoneAt: Date?
+
+    var referencedMediaPaths: [String] {
+        (transferredUserDemoVideos ?? []).map(\.path)
+            + (transferredGuidanceVideos ?? []).compactMap(\.localPath)
+            + (transferredImageReferences ?? []).compactMap(\.localPath)
+    }
+
+    init(_ model: ExerciseMergeRecord) {
+        id = model.id
+        sourceExerciseID = model.sourceExerciseID
+        targetExerciseID = model.targetExerciseID
+        sourceName = model.sourceName
+        affectedWorkoutIDs = model.affectedWorkoutIDs
+        affectedTemplateExerciseIDs = model.affectedTemplateExerciseIDs
+        affectedPerformanceIDs = model.affectedPerformanceIDs
+        affectedRecommendationIDs = model.affectedRecommendationIDs
+        transferredContentRevisionIDs = model.transferredContentRevisionIDs
+        transferredUserDemoVideos = model.transferredUserDemoVideos
+        transferredGuidanceVideos = model.transferredGuidanceVideos
+        transferredImageReferences = model.transferredImageReferences
+        createdAt = model.createdAt
+        undoneAt = model.undoneAt
+    }
+
+    func makeModel(
+        mediaPathMapping: [String: String]
+    ) -> ExerciseMergeRecord {
+        let mappedUserDemoVideos = (transferredUserDemoVideos ?? []).map {
+            MediaAttachmentReference(
+                kind: $0.kind,
+                path: mediaPathMapping[$0.path] ?? $0.path
+            )
+        }
+        let mappedGuidanceVideos = (transferredGuidanceVideos ?? []).map { source in
+            var value = source
+            if let path = source.localPath {
+                value.localPath = mediaPathMapping[path] ?? path
+            }
+            return value
+        }
+        let mappedImageReferences = (transferredImageReferences ?? []).map { reference in
+            var value = reference
+            if let path = reference.localPath {
+                value.localPath = mediaPathMapping[path] ?? path
+            }
+            return value
+        }
+        let record = ExerciseMergeRecord(
+            sourceExerciseID: sourceExerciseID,
+            targetExerciseID: targetExerciseID,
+            sourceName: sourceName,
+            affectedWorkoutIDs: affectedWorkoutIDs,
+            affectedTemplateExerciseIDs: affectedTemplateExerciseIDs ?? [],
+            affectedPerformanceIDs: affectedPerformanceIDs ?? [],
+            affectedRecommendationIDs: affectedRecommendationIDs ?? [],
+            transferredContentRevisionIDs: transferredContentRevisionIDs ?? [],
+            transferredUserDemoVideos: mappedUserDemoVideos,
+            transferredGuidanceVideos: mappedGuidanceVideos,
+            transferredImageReferences: mappedImageReferences,
+            createdAt: createdAt
+        )
+        record.id = id
+        record.undoneAt = undoneAt
+        return record
+    }
+}

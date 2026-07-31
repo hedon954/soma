@@ -320,6 +320,8 @@ enum AIServiceError: LocalizedError {
     case invalidResponse
     case remote(String)
     case missingAPIKey(String)
+    case imageGenerationUnsupported(String)
+    case imageGenerationBlocked
     case multimodalUnsupported(provider: String, model: String)
     case multimodalRequestFailed(provider: String, model: String, reason: String)
 
@@ -329,6 +331,10 @@ enum AIServiceError: LocalizedError {
         case .invalidResponse: "模型返回了无法识别的响应"
         case let .remote(message): message
         case let .missingAPIKey(provider): "请先在设置中保存 \(provider) 的 API Key"
+        case let .imageGenerationUnsupported(provider):
+            "\(provider) 尚未配置兼容的图片生成模型，请先在 AI 设置中填写图片生成模型 ID。"
+        case .imageGenerationBlocked:
+            "这次图片生成没有通过安全检查。请调整动作名称或肌群描述后重试。"
         case let .multimodalUnsupported(provider, model):
             "\(provider) 的 \(model) 不支持图片或视频分析。请切换到支持视觉的模型，文字对话仍可继续使用。"
         case let .multimodalRequestFailed(provider, model, reason):
@@ -407,6 +413,64 @@ final class AIService {
             throw AIServiceError.remote("\(provider.displayName) 当前没有返回可用模型")
         }
         return availableModels
+    }
+
+    func generateImage(prompt: String) async throws -> Data {
+        let provider = provider(for: .standard)
+        let model = imageModel(for: provider)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else {
+            throw AIServiceError.imageGenerationUnsupported(provider.displayName)
+        }
+        let apiKey = apiKey(for: provider, tier: .standard)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            throw AIServiceError.missingAPIKey(provider.displayName)
+        }
+        guard let url = provider.endpoint(
+            baseURL: baseURL(for: provider, tier: .standard),
+            path: "images/generations"
+        ) else {
+            throw AIServiceError.invalidURL
+        }
+        let body: [String: Any] = [
+            "model": model,
+            "prompt": prompt,
+            "n": 1,
+            "size": "1024x1024",
+            "quality": "medium",
+            "output_format": "jpeg",
+            "output_compression": 82
+        ]
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 180
+
+        let (data, response) = try await requestLoader(request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AIServiceError.invalidResponse
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            if imageGenerationErrorCode(from: data) == "moderation_blocked" {
+                throw AIServiceError.imageGenerationBlocked
+            }
+            throw AIServiceError.remote(
+                serviceErrorMessage(from: data, statusCode: http.statusCode)
+            )
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data)
+            as? [String: Any],
+            let values = root["data"] as? [[String: Any]],
+            let base64 = values.first?["b64_json"] as? String,
+            let image = Data(base64Encoded: base64),
+            !image.isEmpty
+        else {
+            throw AIServiceError.invalidResponse
+        }
+        return image
     }
 
     func runAgent(
@@ -960,6 +1024,16 @@ final class AIService {
             return String(text.prefix(240))
         }
         return "模型服务错误（\(statusCode)）"
+    }
+
+    private func imageGenerationErrorCode(from data: Data) -> String? {
+        guard let root = try? JSONSerialization.jsonObject(with: data)
+            as? [String: Any],
+            let error = root["error"] as? [String: Any]
+        else {
+            return nil
+        }
+        return error["code"] as? String
     }
 }
 

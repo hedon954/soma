@@ -21,8 +21,8 @@
 | [007：数据导出、自动备份与主动清除](007-data-export-backup-and-erasure.md) | 数据主权 | 开放年月日导出、外部加密自动备份、恢复与个人数据清除 |
 | [008：连续对话、逐组训练与自适应模型](008-coach-continuity-and-adaptive-models.md) | 体验精化 | 隐藏式可继续 Session、一次性位置确认、逐组训练、媒体上下文、长会话压缩与双档模型 |
 | [009：记录媒体归档与单张解绑](009-record-media-association-and-detachment.md) | 媒体审查 | 健身房跨轮照片归档，以及健身房、训练、饮食和身体记录的单张媒体解绑 |
-| [010：动作库、训练计划、带练与视频复盘](010-exercise-library-plans-guided-training.md) | 已采纳待实现 | 稳定动作身份、最近值快捷输入、版本化计划、逐组带练和自动录像 |
-| [011：持久 Agent Job 与远程持续执行](011-durable-agent-jobs-remote-continuity.md) | 已采纳待实现 | 本地 Outbox、服务端 Job/Event、设备 Tool handoff、灵动岛和通知 |
+| [010：动作库、训练计划、带练与视频复盘](010-exercise-library-plans-guided-training.md) | 已实现 | 稳定动作身份、最近值快捷输入、版本化计划、逐组带练和自动录像 |
+| [011：持久 Agent Job 与远程持续执行](011-durable-agent-jobs-remote-continuity.md) | 已实现 | 本地 Outbox、服务端 Job/Event、设备 Tool handoff、灵动岛和通知 |
 
 ## 阅读约定
 

@@ -4,6 +4,8 @@ set -euo pipefail
 
 required_commands=(
   actionlint
+  node
+  npm
   pre-commit
   ruby
   shellcheck

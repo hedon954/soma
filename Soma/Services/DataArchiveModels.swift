@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 struct PersonalDataSnapshot: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 3
 
     var schemaVersion = Self.currentSchemaVersion
     var createdAt: Date
@@ -13,11 +13,23 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
     var gymMedia: [GymMediaDTO]
     var meals: [MealEntryDTO]
     var bodyEntries: [BodyEntryDTO]
+    var exerciseDefinitions: [ExerciseDefinitionDTO]?
+    var exerciseMergeRecords: [ExerciseMergeRecordDTO]?
     var workouts: [WorkoutEntryDTO]
+    var trainingPrograms: [TrainingProgramDTO]?
+    var workoutTemplateVersions: [WorkoutTemplateVersionDTO]?
+    var templateExercises: [TemplateExerciseDTO]?
+    var workoutSessions: [WorkoutSessionDTO]?
+    var exercisePerformances: [ExercisePerformanceDTO]?
+    var workoutSets: [WorkoutSetDTO]?
+    var recommendationSnapshots: [RecommendationSnapshotDTO]?
+    var performanceAnalyses: [PerformanceAnalysisDTO]?
     var sessions: [ConversationSessionDTO]
     var messages: [CoachMessageDTO]
     var traces: [AgentTraceDTO]
     var mutationReceipts: [AgentMutationReceiptDTO]
+    var agentJobs: [AgentJobDTO]?
+    var agentEvents: [PersistentAgentEventDTO]?
 
     var referencedMediaPaths: Set<String> {
         var paths = Set<String>()
@@ -26,13 +38,27 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         gymMedia.map(\.path).forEach { paths.insert($0) }
         meals.flatMap(\.mediaAttachments).map(\.path).forEach { paths.insert($0) }
         bodyEntries.flatMap(\.mediaAttachments).map(\.path).forEach { paths.insert($0) }
+        for item in (exerciseDefinitions ?? []).flatMap(\.referencedMediaPaths) {
+            paths.insert(item)
+        }
+        for item in (exerciseMergeRecords ?? []).flatMap(\.referencedMediaPaths) {
+            paths.insert(item)
+        }
         workouts.flatMap(\.mediaAttachments).map(\.path).forEach { paths.insert($0) }
+        (exercisePerformances ?? []).compactMap(\.activeVideoPath)
+            .forEach { paths.insert($0) }
+        (performanceAnalyses ?? []).map(\.sourceMediaPath)
+            .filter { !$0.isEmpty }
+            .forEach { paths.insert($0) }
         messages.flatMap(\.mediaAttachments).map(\.path).forEach { paths.insert($0) }
+        for item in (agentJobs ?? []).flatMap(\.mediaAttachments).map(\.path) {
+            paths.insert(item)
+        }
         return paths.filter { !$0.isEmpty }
     }
 
     func validate() throws {
-        guard schemaVersion == Self.currentSchemaVersion else {
+        guard (1 ... Self.currentSchemaVersion).contains(schemaVersion) else {
             throw DataArchiveError.unsupportedSchema(schemaVersion)
         }
         guard mutationReceipts.allSatisfy(\.hasDecodableResult) else {
@@ -61,8 +87,32 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
                 .map(MealEntryDTO.init),
             bodyEntries: context.fetch(FetchDescriptor<BodyEntry>())
                 .map(BodyEntryDTO.init),
+            exerciseDefinitions: context.fetch(FetchDescriptor<ExerciseDefinition>())
+                .map(ExerciseDefinitionDTO.init),
+            exerciseMergeRecords: context.fetch(FetchDescriptor<ExerciseMergeRecord>())
+                .map(ExerciseMergeRecordDTO.init),
             workouts: context.fetch(FetchDescriptor<WorkoutEntry>())
                 .map(WorkoutEntryDTO.init),
+            trainingPrograms: context.fetch(FetchDescriptor<TrainingProgram>())
+                .map(TrainingProgramDTO.init),
+            workoutTemplateVersions: context.fetch(
+                FetchDescriptor<WorkoutTemplateVersion>()
+            ).map(WorkoutTemplateVersionDTO.init),
+            templateExercises: context.fetch(FetchDescriptor<TemplateExercise>())
+                .map(TemplateExerciseDTO.init),
+            workoutSessions: context.fetch(FetchDescriptor<WorkoutSession>())
+                .map(WorkoutSessionDTO.init),
+            exercisePerformances: context.fetch(
+                FetchDescriptor<ExercisePerformance>()
+            ).map(ExercisePerformanceDTO.init),
+            workoutSets: context.fetch(FetchDescriptor<WorkoutSet>())
+                .map(WorkoutSetDTO.init),
+            recommendationSnapshots: context.fetch(
+                FetchDescriptor<RecommendationSnapshot>()
+            ).map(RecommendationSnapshotDTO.init),
+            performanceAnalyses: context.fetch(
+                FetchDescriptor<PerformanceAnalysis>()
+            ).map(PerformanceAnalysisDTO.init),
             sessions: context.fetch(FetchDescriptor<ConversationSession>())
                 .map(ConversationSessionDTO.init),
             messages: context.fetch(FetchDescriptor<CoachMessage>())
@@ -70,7 +120,11 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             traces: context.fetch(FetchDescriptor<AgentTrace>())
                 .map(AgentTraceDTO.init),
             mutationReceipts: context.fetch(FetchDescriptor<AgentMutationReceipt>())
-                .map(AgentMutationReceiptDTO.init)
+                .map(AgentMutationReceiptDTO.init),
+            agentJobs: context.fetch(FetchDescriptor<AgentJob>())
+                .map(AgentJobDTO.init),
+            agentEvents: context.fetch(FetchDescriptor<PersistentAgentEvent>())
+                .map(PersistentAgentEventDTO.init)
         )
     }
 
@@ -99,8 +153,46 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             for bodyEntry in bodyEntries {
                 context.insert(bodyEntry.makeModel(mediaPathMapping: mediaPathMapping))
             }
+            for definition in exerciseDefinitions ?? [] {
+                context.insert(definition.makeModel(
+                    mediaPathMapping: mediaPathMapping
+                ))
+            }
+            for mergeRecord in exerciseMergeRecords ?? [] {
+                context.insert(mergeRecord.makeModel(
+                    mediaPathMapping: mediaPathMapping
+                ))
+            }
             for workout in workouts {
                 context.insert(workout.makeModel(mediaPathMapping: mediaPathMapping))
+            }
+            for program in trainingPrograms ?? [] {
+                context.insert(program.makeModel())
+            }
+            for version in workoutTemplateVersions ?? [] {
+                context.insert(version.makeModel())
+            }
+            for item in templateExercises ?? [] {
+                context.insert(item.makeModel())
+            }
+            for session in workoutSessions ?? [] {
+                context.insert(session.makeModel())
+            }
+            for performance in exercisePerformances ?? [] {
+                context.insert(performance.makeModel(
+                    mediaPathMapping: mediaPathMapping
+                ))
+            }
+            for set in workoutSets ?? [] {
+                context.insert(set.makeModel())
+            }
+            for recommendation in recommendationSnapshots ?? [] {
+                context.insert(recommendation.makeModel())
+            }
+            for analysis in performanceAnalyses ?? [] {
+                context.insert(analysis.makeModel(
+                    mediaPathMapping: mediaPathMapping
+                ))
             }
             sessions.forEach { context.insert($0.makeModel()) }
             for message in messages {
@@ -109,6 +201,12 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             traces.forEach { context.insert($0.makeModel()) }
             for receipt in mutationReceipts {
                 try context.insert(receipt.makeModel())
+            }
+            for job in agentJobs ?? [] {
+                context.insert(job.makeModel(mediaPathMapping: mediaPathMapping))
+            }
+            for event in agentEvents ?? [] {
+                context.insert(event.makeModel())
             }
             try context.save()
         }
@@ -398,6 +496,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var id: UUID
     var date: Date
     var exercise: String
+    var exerciseID: UUID?
     var setEntries: [WorkoutSetEvidence]?
     var sets: Int?
     var reps: Int?
@@ -422,6 +521,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         id = model.id
         date = model.date
         exercise = model.exercise
+        exerciseID = model.exerciseID
         setEntries = model.setEntries.isEmpty ? nil : model.setEntries
         sets = model.sets
         reps = model.reps
@@ -448,6 +548,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         let model = WorkoutEntry(
             date: date,
             exercise: exercise,
+            exerciseID: exerciseID,
             sets: sets,
             reps: reps,
             weight: weight,
@@ -473,14 +574,14 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     }
 }
 
-private func mapped(
+func mapped(
     _ path: String?,
     with mapping: [String: String]
 ) -> String? {
     path.map { mapping[$0] ?? $0 }
 }
 
-private func mapped(
+func mapped(
     _ attachments: [MediaAttachmentReference],
     with mapping: [String: String]
 ) -> [MediaAttachmentReference] {

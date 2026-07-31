@@ -278,10 +278,11 @@ final class DataManagementCoordinator {
 
     func clearPersonalData(
         dataSpace: DataSpaceController
-    ) throws -> PersonalDataClearResult {
+    ) async throws -> PersonalDataClearResult {
         guard activity == nil else { throw DataArchiveError.backupAlreadyRunning }
         activity = .clearing
         defer { activity = nil }
+        await RemoteAgentStatus().revokeAndDisable()
         let result = try PersonalDataStore.clear(
             personalContext: dataSpace.personalContainer.mainContext,
             demoContext: dataSpace.demoContainer.mainContext

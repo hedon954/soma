@@ -417,6 +417,7 @@ final class WorkoutEntry {
     var id: UUID
     var date: Date
     var exercise: String
+    var exerciseID: UUID?
     var sets: Int?
     var reps: Int?
     var weight: Double?
@@ -562,6 +563,7 @@ final class WorkoutEntry {
     init(
         date: Date = .now,
         exercise: String,
+        exerciseID: UUID? = nil,
         sets: Int? = nil,
         reps: Int? = nil,
         weight: Double? = nil,
@@ -587,6 +589,7 @@ final class WorkoutEntry {
         id = UUID()
         self.date = date
         self.exercise = exercise
+        self.exerciseID = exerciseID
         if let setEntries {
             self.sets = nil
             self.reps = nil

@@ -5,6 +5,7 @@ import SwiftData
 enum DataArchiveTestSupport {
     static let mealMediaPath = "PrivateMedia/test-meal.jpg"
     static let workoutMediaPath = "PrivateMedia/test-workout.mov"
+    static let exerciseImagePath = "PrivateMedia/test-exercise.jpg"
     static let fixedDate = Date(timeIntervalSince1970: 1_785_390_240)
 
     @MainActor
@@ -59,6 +60,33 @@ enum DataArchiveTestSupport {
             weight: 65,
             notes: "晨起"
         ))
+        let exercise = ExerciseDefinition(
+            canonicalName: "杠铃前蹲",
+            createdAt: fixedDate
+        )
+        exercise.userDemoVideos = [
+            MediaAttachmentReference(
+                kind: .video,
+                path: workoutMediaPath
+            )
+        ]
+        exercise.imageReferences = [
+            ExerciseImageReference(
+                kind: .actionIllustration,
+                source: .generated,
+                title: "测试动作图",
+                localPath: exerciseImagePath,
+                createdAt: fixedDate
+            ),
+            ExerciseImageReference(
+                kind: .muscleMap,
+                source: .bundled,
+                title: "测试内置肌群图",
+                resourceName: "soma_muscle_squat.png",
+                createdAt: fixedDate
+            )
+        ]
+        context.insert(exercise)
         context.insert(MealEntry(
             date: fixedDate,
             mealType: .lunch,
@@ -74,9 +102,10 @@ enum DataArchiveTestSupport {
             sourceTurnID: turnID,
             sourceSessionID: sessionID
         ))
-        context.insert(WorkoutEntry(
+        let workout = WorkoutEntry(
             date: fixedDate.addingTimeInterval(3600),
-            exercise: "深蹲",
+            exercise: exercise.canonicalName,
+            exerciseID: exercise.id,
             sets: 4,
             reps: 8,
             weight: 60,
@@ -88,6 +117,115 @@ enum DataArchiveTestSupport {
             feedback: "保持核心稳定",
             sourceTurnID: turnID,
             sourceSessionID: sessionID
+        )
+        context.insert(workout)
+        let program = TrainingProgram(
+            name: "测试计划",
+            goal: "稳定训练",
+            createdAt: fixedDate
+        )
+        let template = WorkoutTemplateVersion(
+            programID: program.id,
+            version: 1,
+            name: "训练 A",
+            createdAt: fixedDate
+        )
+        program.currentTemplateVersionID = template.id
+        let prescription = TemplateExercisePrescription(
+            exerciseID: exercise.id,
+            exerciseName: exercise.canonicalName,
+            order: 1,
+            targetSets: 1,
+            targetReps: 8,
+            targetWeightKG: 60,
+            targetRestSeconds: 90
+        )
+        let templateExercise = TemplateExercise(
+            id: prescription.id,
+            templateVersionID: template.id,
+            exerciseID: exercise.id,
+            order: 1,
+            targetSets: 1,
+            targetReps: 8,
+            targetWeightKG: 60,
+            targetRestSeconds: 90
+        )
+        let workoutSession = WorkoutSession(
+            startedAt: fixedDate.addingTimeInterval(3600),
+            sourceTemplateFamilyID: template.familyID,
+            sourceTemplateVersion: 1,
+            prescriptionSnapshot: [prescription],
+            status: .completed,
+            guidedPhase: .completed,
+            autoRecordingPolicy: .enabled
+        )
+        let performance = ExercisePerformance(
+            sessionID: workoutSession.id,
+            exerciseID: exercise.id,
+            exerciseName: exercise.canonicalName,
+            order: 1,
+            prescriptionSnapshot: prescription,
+            status: .completed,
+            activeVideoPath: workoutMediaPath
+        )
+        let workoutSet = WorkoutSet(
+            performanceID: performance.id,
+            order: 1,
+            plannedReps: 8,
+            plannedWeightKG: 60,
+            plannedRestSeconds: 90,
+            actualReps: 8,
+            actualWeightKG: 60,
+            actualRestSeconds: 90,
+            status: .completed,
+            startedAt: fixedDate.addingTimeInterval(3600),
+            completedAt: fixedDate.addingTimeInterval(3660)
+        )
+        context.insert(program)
+        context.insert(template)
+        context.insert(templateExercise)
+        context.insert(workoutSession)
+        context.insert(performance)
+        context.insert(workoutSet)
+        context.insert(RecommendationSnapshot(
+            targetKind: "template",
+            targetID: template.id,
+            inputFingerprint: "test-plan-fingerprint",
+            advice: "测试建议",
+            createdAt: fixedDate
+        ))
+        context.insert(PerformanceAnalysis(
+            performanceID: performance.id,
+            sourceMediaPath: workoutMediaPath,
+            inputFingerprint: "test-video-fingerprint",
+            evidence: "躯干角度稳定",
+            limitations: "仅分析一个视角",
+            feedback: "继续保持",
+            createdAt: fixedDate
+        ))
+        let mergedSource = ExerciseDefinition(
+            canonicalName: "杠铃蹲",
+            createdAt: fixedDate
+        )
+        mergedSource.archivedAt = fixedDate
+        mergedSource.mergedIntoID = exercise.id
+        context.insert(mergedSource)
+        context.insert(ExerciseMergeRecord(
+            sourceExerciseID: mergedSource.id,
+            targetExerciseID: exercise.id,
+            sourceName: mergedSource.canonicalName,
+            affectedWorkoutIDs: [workout.id],
+            affectedTemplateExerciseIDs: [templateExercise.id],
+            affectedPerformanceIDs: [performance.id],
+            affectedRecommendationIDs: [],
+            transferredContentRevisionIDs: [UUID()],
+            transferredUserDemoVideos: [
+                MediaAttachmentReference(
+                    kind: .video,
+                    path: workoutMediaPath
+                )
+            ],
+            createdAt: fixedDate
         ))
         context.insert(ConversationSession(
             id: sessionID,

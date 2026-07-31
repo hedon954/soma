@@ -233,6 +233,8 @@ enum ConversationRecorder {
                 preferredGymID: preferredGymID,
                 in: context
             )
+        case .listExerciseNames:
+            listExerciseNames(in: context)
         case .recordWorkout:
             recordWorkout(
                 call.arguments,
@@ -312,7 +314,27 @@ enum ConversationRecorder {
             )
         case .switchGym:
             switchGym(call.arguments, in: context)
+        case .createTrainingProgram:
+            createTrainingProgram(call.arguments, in: context)
+        case .createWorkoutTemplateVersion, .updateWorkoutTemplate:
+            createWorkoutTemplateVersion(call.arguments, in: context)
+        case .archiveTrainingProgram:
+            archiveTrainingProgram(call.arguments, in: context)
+        case .recordPerformanceAnalysis:
+            recordPerformanceAnalysis(
+                call.arguments,
+                sourceTurnID: sourceTurnID,
+                in: context
+            )
         }
+    }
+
+    private static func listExerciseNames(
+        in context: ModelContext
+    ) -> AgentToolResult {
+        .success(AgentTraceText.json(
+            ExerciseLibraryStore.nameReferences(in: context)
+        ))
     }
 
     private static func queryUserData(
@@ -396,8 +418,128 @@ enum ConversationRecorder {
             }
             return .success(values.isEmpty ? "还没有健身房。" : values.joined(separator: "\n"))
 
+        case "exercises":
+            return listExerciseNames(in: context)
+
+        case "exercise_history":
+            guard let rawID = arguments.exerciseID,
+                  let exerciseID = UUID(uuidString: rawID)
+            else {
+                return .failure("exercise_history 需要有效的 exercise_id。")
+            }
+            let values = fetchWorkouts(in: context)
+                .filter { $0.exerciseID == exerciseID }
+                .prefix(limit)
+                .map {
+                    "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \(workoutSummary($0))"
+                }
+            return .success(
+                values.isEmpty
+                    ? "该动作暂无训练历史。"
+                    : values.joined(separator: "\n")
+            )
+
+        case "programs":
+            let programs = (
+                try? context.fetch(FetchDescriptor<TrainingProgram>())
+            ) ?? []
+            let values = programs
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(limit)
+                .map {
+                    "[id:\($0.id.uuidString)] \($0.name)；目标：\($0.goal.nilIfEmpty ?? "未记录")；状态：\($0.status.rawValue)"
+                }
+            return .success(
+                values.isEmpty ? "暂无训练计划。" : values.joined(separator: "\n")
+            )
+
+        case "templates":
+            let versions = (
+                try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
+            ) ?? []
+            let filtered: [WorkoutTemplateVersion] = if let rawID = arguments.programID,
+                                                        let programID = UUID(uuidString: rawID)
+            {
+                versions.filter { $0.programID == programID }
+            } else {
+                versions
+            }
+            let values = filtered
+                .sorted { lhs, rhs in
+                    lhs.createdAt == rhs.createdAt
+                        ? lhs.version > rhs.version
+                        : lhs.createdAt > rhs.createdAt
+                }
+                .prefix(limit)
+                .map {
+                    "[id:\($0.id.uuidString)] program_id:\($0.programID.uuidString) \($0.name) v\($0.version)"
+                }
+            return .success(
+                values.isEmpty ? "暂无训练模板。" : values.joined(separator: "\n")
+            )
+
+        case "sessions":
+            let sessions = (
+                try? context.fetch(FetchDescriptor<WorkoutSession>())
+            ) ?? []
+            let filtered: [WorkoutSession] = if let rawID = arguments.sessionID,
+                                                let sessionID = UUID(
+                                                    uuidString: rawID
+                                                )
+            {
+                sessions.filter { $0.id == sessionID }
+            } else {
+                sessions
+            }
+            let performances = (
+                try? context.fetch(FetchDescriptor<ExercisePerformance>())
+            ) ?? []
+            let sets = (
+                try? context.fetch(FetchDescriptor<WorkoutSet>())
+            ) ?? []
+            let values = filtered
+                .sorted { $0.startedAt > $1.startedAt }
+                .prefix(limit)
+                .map { session in
+                    let summary = TrainingPlanStore.summary(
+                        for: session.id,
+                        in: context
+                    )
+                    let details = performances
+                        .filter { $0.sessionID == session.id }
+                        .sorted { $0.order < $1.order }
+                        .map { performance in
+                            let completed = sets.filter {
+                                $0.performanceID == performance.id
+                                    && $0.status == .completed
+                            }
+                            let setText = completed.map { set in
+                                [
+                                    set.actualWeightKG.map {
+                                        "\($0.formatted())kg"
+                                    },
+                                    set.actualReps.map { "\($0)次" }
+                                ]
+                                .compactMap { $0 }
+                                .joined(separator: "×")
+                            }
+                            .filter { !$0.isEmpty }
+                            .joined(separator: "、")
+                            return "\(performance.exerciseName)：\(completed.count)组"
+                                + (setText.isEmpty ? "" : "（\(setText)）")
+                        }
+                        .joined(separator: "；")
+                    return "[id:\(session.id.uuidString)] \(session.startedAt.formatted(date: .abbreviated, time: .shortened))；\(session.status.rawValue)；\(summary.text)"
+                        + (details.isEmpty ? "" : "；动作：\(details)")
+                }
+            return .success(
+                values.isEmpty ? "暂无计划训练历史。" : values.joined(separator: "\n")
+            )
+
         default:
-            return .failure("scope 不支持。可选值：overview、profile、workouts、meals、body、gyms。")
+            return .failure(
+                "scope 不支持。可选值：overview、profile、workouts、meals、body、gyms、exercises、exercise_history、programs、templates、sessions。"
+            )
         }
     }
 
@@ -412,9 +554,17 @@ enum ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let exercise = arguments.exercise?.trimmed.nilIfEmpty else {
-            return .failure("record_workout 缺少 exercise。")
+        let definition: ExerciseDefinition
+        do {
+            definition = try resolveExercise(
+                from: arguments,
+                allowCreate: true,
+                in: context
+            )
+        } catch {
+            return .failure(error.localizedDescription)
         }
+        let exercise = definition.canonicalName
         let setEntries = workoutSetEntries(from: arguments)
         if let error = workoutSetValidationError(setEntries) {
             return .failure(error)
@@ -448,6 +598,7 @@ enum ConversationRecorder {
             sessionID: sourceSessionID,
             turnID: sourceTurnID,
             exercise: exercise,
+            exerciseID: definition.id,
             setEntries: setEntries,
             sets: arguments.sets,
             reps: arguments.reps,
@@ -471,10 +622,13 @@ enum ConversationRecorder {
                 feedback: arguments.feedback?.trimmed.nilIfEmpty,
                 calorieEstimate: calorieEstimate
             )
+            existing.exerciseID = definition.id
+            existing.exercise = definition.canonicalName
         } else {
             context.insert(WorkoutEntry(
                 date: sourceDate,
                 exercise: exercise,
+                exerciseID: definition.id,
                 sets: arguments.sets,
                 reps: arguments.reps,
                 weight: arguments.weight,
@@ -705,7 +859,22 @@ extension ConversationRecorder {
             return .failure("duration_minutes 必须在 0 到 1440 之间。")
         }
 
-        entry.exercise = arguments.exercise?.trimmed.nilIfEmpty ?? entry.exercise
+        if arguments.exerciseID != nil
+            || arguments.exerciseName != nil
+            || arguments.exercise != nil
+        {
+            do {
+                let definition = try resolveExercise(
+                    from: arguments,
+                    allowCreate: arguments.exerciseID == nil,
+                    in: context
+                )
+                entry.exerciseID = definition.id
+                entry.exercise = definition.canonicalName
+            } catch {
+                return .failure(error.localizedDescription)
+            }
+        }
         if let setEntries {
             entry.setEntries = setEntries
         }
@@ -1048,6 +1217,34 @@ extension ConversationRecorder {
         arguments.recordID.flatMap(UUID.init(uuidString:))
     }
 
+    private static func resolveExercise(
+        from arguments: AgentToolArguments,
+        allowCreate: Bool,
+        in context: ModelContext
+    ) throws -> ExerciseDefinition {
+        let rawID = arguments.exerciseID?.trimmed.nilIfEmpty
+        let rawName = (
+            arguments.exerciseName
+                ?? arguments.exercise
+        )?.trimmed.nilIfEmpty
+        guard rawID == nil || rawName == nil else {
+            throw ExerciseLibraryError.ambiguousReference
+        }
+        if let rawID {
+            guard let id = UUID(uuidString: rawID) else {
+                throw ExerciseLibraryError.invalidReference
+            }
+            return try ExerciseLibraryStore.definition(id: id, in: context)
+        }
+        guard allowCreate, let rawName else {
+            throw ExerciseLibraryError.emptyName
+        }
+        return try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: rawName,
+            in: context
+        )
+    }
+
     private static func formatWeight(_ weight: Double?) -> String? {
         guard let weight else { return nil }
         return weight == 0
@@ -1385,6 +1582,10 @@ extension ConversationRecorder {
         in context: ModelContext
     ) {
         guard let workout = result.workout else { return }
+        let definition = try? ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: workout.exercise,
+            in: context
+        )
         let setEntries = workout.setEntries ?? legacyWorkoutSetEntries(
             sets: workout.sets,
             reps: workout.reps,
@@ -1408,7 +1609,8 @@ extension ConversationRecorder {
             date: sourceDate,
             sessionID: sourceSessionID,
             turnID: sourceTurnID,
-            exercise: workout.exercise,
+            exercise: definition?.canonicalName ?? workout.exercise,
+            exerciseID: definition?.id,
             setEntries: setEntries,
             sets: workout.sets,
             reps: workout.reps,
@@ -1434,7 +1636,8 @@ extension ConversationRecorder {
         } else {
             context.insert(WorkoutEntry(
                 date: sourceDate,
-                exercise: workout.exercise,
+                exercise: definition?.canonicalName ?? workout.exercise,
+                exerciseID: definition?.id,
                 sets: workout.sets,
                 reps: workout.reps,
                 weight: workout.weight,
@@ -1499,9 +1702,21 @@ private extension String {
 enum DataIntegrityRepair {
     static func finalizeInterruptedAgentTraces(in context: ModelContext) {
         let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
-        let interrupted = traces.filter { $0.status == .running }
+        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        let durableRemoteTurnIDs = Set(jobs.compactMap { job in
+            job.backend == .remote && !job.state.isTerminal
+                ? job.turnID
+                : nil
+        })
+        let interrupted = traces.filter {
+            $0.status == .running
+                && !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
+        }
         let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
-        let interruptedMessages = messages.filter { $0.agentStatus == .running }
+        let interruptedMessages = messages.filter {
+            $0.agentStatus == .running
+                && !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
+        }
         guard !interrupted.isEmpty || !interruptedMessages.isEmpty else { return }
 
         let endedAt = Date()

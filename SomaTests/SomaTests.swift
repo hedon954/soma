@@ -98,6 +98,13 @@ final class SomaTests: XCTestCase {
             try context.fetch(FetchDescriptor<WorkoutEntry>()).count,
             1
         )
+        let jobs = try context.fetch(FetchDescriptor<AgentJob>())
+        XCTAssertEqual(jobs.count, 1)
+        XCTAssertEqual(jobs.first?.state, .succeeded)
+        XCTAssertGreaterThan(jobs.first?.lastEventSequence ?? 0, 3)
+        XCTAssertFalse(
+            try context.fetch(FetchDescriptor<PersistentAgentEvent>()).isEmpty
+        )
         let messages = try context.fetch(FetchDescriptor<CoachMessage>())
         XCTAssertEqual(messages.count, 2)
         XCTAssertTrue(messages.allSatisfy { $0.sessionID == session.id })

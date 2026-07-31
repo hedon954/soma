@@ -72,6 +72,18 @@ extension AIService {
         )
     }
 
+    func imageModel(for provider: AIProvider) -> String {
+        defaults.string(forKey: "ai.image.model.\(provider.rawValue)")
+            ?? (provider == .openAI ? "gpt-image-2" : "")
+    }
+
+    func configureImageModel(_ model: String, for provider: AIProvider) {
+        defaults.set(
+            model.trimmingCharacters(in: .whitespacesAndNewlines),
+            forKey: "ai.image.model.\(provider.rawValue)"
+        )
+    }
+
     func saveAPIKey(_ key: String, for provider: AIProvider) {
         saveAPIKey(key, for: provider, tier: .standard)
     }

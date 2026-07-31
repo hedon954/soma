@@ -1,0 +1,28 @@
+{
+  "name": "soma-agent-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "test:postgres": "node --import tsx --test test/postgres.test.ts",
+    "start": "node dist/main.js",
+    "worker": "node dist/worker-main.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1100.0",
+    "@aws-sdk/s3-request-presigner": "3.1099.0",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.1.0",
+    "@types/pg": "8.15.5",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}

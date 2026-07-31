@@ -9,11 +9,14 @@ final class DataExportServiceTests: XCTestCase {
         let root = try DataArchiveTestSupport.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let image = root.appending(path: "source.jpg")
+        let exerciseImage = root.appending(path: "exercise.jpg")
         let video = root.appending(path: "source.mov")
         try Data("image-content".utf8).write(to: image)
+        try Data("exercise-image-content".utf8).write(to: exerciseImage)
         try Data("video-content".utf8).write(to: video)
         let sources = [
             DataArchiveTestSupport.mealMediaPath: image,
+            DataArchiveTestSupport.exerciseImagePath: exerciseImage,
             DataArchiveTestSupport.workoutMediaPath: video
         ]
         let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
@@ -30,7 +33,7 @@ final class DataExportServiceTests: XCTestCase {
 
         XCTAssertEqual(result.mealCount, 1)
         XCTAssertEqual(result.workoutCount, 1)
-        XCTAssertEqual(result.copiedMediaCount, 2)
+        XCTAssertEqual(result.copiedMediaCount, 3)
         XCTAssertEqual(result.missingMediaCount, 0)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: result.directoryURL.appending(path: "manifest.json").path
@@ -98,7 +101,7 @@ final class DataExportServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(result.copiedMediaCount, 0)
-        XCTAssertEqual(result.missingMediaCount, 2)
+        XCTAssertEqual(result.missingMediaCount, 3)
         let manifestData = try Data(
             contentsOf: result.directoryURL.appending(path: "manifest.json")
         )
@@ -110,6 +113,54 @@ final class DataExportServiceTests: XCTestCase {
             PortableExportManifest.self,
             from: manifestData
         )
-        XCTAssertEqual(manifest.missingMedia.count, 2)
+        XCTAssertEqual(manifest.missingMedia.count, 3)
+    }
+
+    @MainActor
+    func testExportIncludesStructuredTrainingModelsAndSupplementalVideo() throws {
+        var snapshot = try DataArchiveTestSupport.makeSnapshot()
+        let supplementalPath = "PrivateMedia/exercise-demo.mov"
+        snapshot.exerciseDefinitions?[0].userDemoVideos = [
+            MediaAttachmentReference(kind: .video, path: supplementalPath)
+        ]
+        let root = try DataArchiveTestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = root.appending(path: "source.jpg")
+        let exerciseImage = root.appending(path: "exercise.jpg")
+        let workoutVideo = root.appending(path: "source.mov")
+        let demoVideo = root.appending(path: "demo.mov")
+        try Data("image".utf8).write(to: image)
+        try Data("exercise-image".utf8).write(to: exerciseImage)
+        try Data("workout-video".utf8).write(to: workoutVideo)
+        try Data("demo-video".utf8).write(to: demoVideo)
+        let sources = [
+            DataArchiveTestSupport.mealMediaPath: image,
+            DataArchiveTestSupport.exerciseImagePath: exerciseImage,
+            DataArchiveTestSupport.workoutMediaPath: workoutVideo,
+            supplementalPath: demoVideo
+        ]
+
+        let result = try DataExportService.export(
+            PortableExportPayload(snapshot: snapshot),
+            to: root,
+            mediaURL: { sources[$0] }
+        )
+
+        XCTAssertEqual(result.copiedMediaCount, 4)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: result.directoryURL.appending(
+                path: "结构化数据.json"
+            ).path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: result.directoryURL.appending(
+                path: "结构化媒体索引.json"
+            ).path
+        ))
+        let supplemental = try FileManager.default.contentsOfDirectory(
+            at: result.directoryURL.appending(path: "其他媒体"),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(supplemental.count, 2)
     }
 }

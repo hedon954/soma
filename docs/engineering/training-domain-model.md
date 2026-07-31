@@ -1,11 +1,12 @@
 # 训练领域模型与运行时协议
 
-- 状态：已采纳设计，待实现
+- 状态：已实现协议
 - 日期：2026-07-31
 - 上游依据：
   - [ADR 0028](../adr/0028-semantic-exercise-identity.md)
   - [ADR 0029](../adr/0029-versioned-training-plans-and-session-facts.md)
   - [ADR 0030](../adr/0030-deterministic-guided-workout-and-session-recording.md)
+  - [ADR 0035](../adr/0035-silent-bundled-exercise-content-and-on-demand-images.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯
@@ -15,8 +16,8 @@
 
 ```text
 ExerciseDefinition
-  ├─ ExerciseContent
-  ├─ ExerciseMedia
+  ├─ ExerciseContent / BundledExerciseContent（仅缺失字段按需关联）
+  ├─ ExerciseMedia / ExerciseImageReference
   ├─ WorkoutEntry（旧聚合历史）
   ├─ TemplateExercise
   └─ ExercisePerformance
@@ -79,6 +80,30 @@ SwiftData transaction 内迁移：
 
 外部链接不是本地副本；链接失效不删除来源记录。多个内容版本通过显式版本或历史快照恢复，
 不把每次 AI 生成直接覆盖成不可逆文本。
+
+#### 静默内置目录
+
+`BundledExerciseCatalog` 是只读 App 资源，不是 SwiftData 模型，也不是个人动作库：
+
+- 可以预置标准名称、目录别名、基础说明、通用肌群和包内图片资源名；
+- App 启动只遍历已存在的 `ExerciseDefinition` 做 fill-only 激活，绝不按目录创建动作；目录版本
+  可以替换旧 bundled 图片引用，但不得覆盖 generated/user 图片；
+- 新动作创建或改名后可做一次确定性目录查找；目录别名只用于内容关联，不参与 Agent 语义身份；
+- `list_exercise_names`、聊天候选与动作列表只读取 active `ExerciseDefinition`；
+- 包内资源不复制到 `PrivateMedia`，不进入个人备份或开放导出。
+
+`ExerciseImageReference` 保存：
+
+| 字段 | 规则 |
+| --- | --- |
+| `kind` | `actionIllustration` 或 `muscleMap` |
+| `source` | `bundled`、`generated` 或 `user` |
+| `resourceName` | 仅 bundled 使用，指向 App 包资源 |
+| `localPath` | 仅 generated/user 使用，指向 `PrivateMedia` |
+| `title/createdAt` | 可审查展示与排序 |
+
+generated/user 图片参与动作合并与撤销、媒体引用回收、加密备份恢复和个人数据清除。内置图
+不可从个人记录中物理删除，但用户图片和生成图可以删除或替换。
 
 ### 计划
 
@@ -277,6 +302,10 @@ firstSetIsWarmup == true  → order 2
 ## AI 内容与复盘
 
 - 动作说明和建议按用户请求生成，并保存输入指纹。
+- 图片生成是独立的显式用户操作：动作图和肌群图分别调用标准 Provider 的 image model；请求
+  只使用动作标准名称、已保存的通用肌群/动作模式和绘图约束。
+- 图片生成不会因打开详情、记录训练、计划就绪检查或带练启动而发生；成功数据先写入
+  `PrivateMedia` 再原子关联，保存失败时回收文件。
 - 训练完成时先由本地规则生成完成组、容量、偏差、跳过和休息摘要。
 - 用户选择具体 Performance 视频后才创建分析 Job。
 - 远程输入明确列出视频或关键帧、动作身份、相关历史和用户主观反馈。
@@ -299,6 +328,7 @@ firstSetIsWarmup == true  → order 2
 | Tool | ID/name 协议、失效 ID、跨空间、幂等、计划版本 |
 | Migration | 旧记录不丢失、不虚构 Set、统计不重复 |
 | Candidate | 本地搜索、最近值、nil、只修改草稿 |
+| Catalog/Image | 空库静默、按动作激活、fill-only、资源加载、显式生成、上传、删除、合并与备份 |
 | Coordinator | 暂停、恢复、跳过、替换、异常退出 |
 | Camera | 权限、目标组、中断、重录、磁盘、热压力 |
 | Privacy | 远程选择、无麦克风、备份、恢复、清除 |

@@ -1,3 +1,4 @@
+import ActivityKit
 import SwiftUI
 import WidgetKit
 
@@ -209,6 +210,72 @@ struct SomaQuickCaptureWidget: Widget {
     }
 }
 
+private struct SomaAgentJobLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: SomaAgentJobAttributes.self) { context in
+            HStack(spacing: 12) {
+                Image(systemName: context.state.symbolName)
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(context.state.phaseTitle)
+                        .font(.headline)
+                    Text(statusDetail(context.state))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding()
+            .activityBackgroundTint(Color(uiColor: .secondarySystemBackground))
+            .widgetURL(
+                URL(string: "soma://agent/turn/\(context.attributes.turnID.uuidString)")
+            )
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Image(systemName: context.state.symbolName)
+                        .foregroundStyle(.green)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    Text(context.state.phaseTitle)
+                        .font(.headline)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text(statusDetail(context.state))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } compactLeading: {
+                Image(systemName: context.state.symbolName)
+                    .foregroundStyle(.green)
+            } compactTrailing: {
+                Text("\(context.state.operationCount)")
+                    .monospacedDigit()
+            } minimal: {
+                Image(systemName: context.state.symbolName)
+                    .foregroundStyle(.green)
+            }
+            .widgetURL(
+                URL(string: "soma://agent/turn/\(context.attributes.turnID.uuidString)")
+            )
+        }
+    }
+
+    private func statusDetail(
+        _ state: SomaAgentJobAttributes.ContentState
+    ) -> String {
+        if state.isStale {
+            return "状态可能已过期，打开 Soma 同步"
+        }
+        var values = ["已完成 \(state.operationCount) 项操作"]
+        if state.queuedCount > 0 {
+            values.append("另有 \(state.queuedCount) 项等待")
+        }
+        return values.joined(separator: " · ")
+    }
+}
+
 private struct SomaLockScreenCaptureEntryView: View {
     let action: SomaCaptureAction
 
@@ -297,5 +364,6 @@ struct SomaWidgetBundle: WidgetBundle {
         SomaLockScreenTextCaptureWidget()
         SomaLockScreenCameraCaptureWidget()
         SomaLockScreenMediaCaptureWidget()
+        SomaAgentJobLiveActivity()
     }
 }

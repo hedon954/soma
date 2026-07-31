@@ -178,6 +178,7 @@ enum RecordMergePolicy {
     ) {
         if input.isCorrection {
             entry.exercise = input.exercise
+            entry.exerciseID = input.exerciseID ?? entry.exerciseID
             if let setEntries = input.setEntries {
                 entry.setEntries = setEntries
             } else {
@@ -194,6 +195,7 @@ enum RecordMergePolicy {
                 entry.notes = input.sourceText
             }
         } else {
+            entry.exerciseID = entry.exerciseID ?? input.exerciseID
             if entry.setEntriesData.isEmpty, let setEntries = input.setEntries {
                 entry.setEntries = setEntries
             } else if entry.setEntriesData.isEmpty {
@@ -283,6 +285,7 @@ enum RecordMergePolicy {
             sessionID: rhs.sourceSessionID,
             turnID: rhs.sourceTurnID,
             exercise: rhs.exercise,
+            exerciseID: rhs.exerciseID,
             setEntries: rhs.setEntriesData.isEmpty ? nil : rhs.setEntries,
             sets: rhs.sets,
             reps: rhs.reps,
@@ -355,10 +358,20 @@ enum RecordMergePolicy {
         }
         let interval = abs(entry.date.timeIntervalSince(input.date))
         guard interval <= 2 * 60 * 60 else { return 0 }
+        if let entryExerciseID = entry.exerciseID,
+           let inputExerciseID = input.exerciseID,
+           entryExerciseID != inputExerciseID,
+           !input.isCorrection
+        {
+            return 0
+        }
         let similarity = normalizedSimilarity(entry.exercise, input.exercise)
         let minimumSimilarity = input.isCorrection ? 0.15 : 0.35
         guard similarity >= minimumSimilarity else { return 0 }
         var score = timeScore(interval)
+        if let exerciseID = input.exerciseID, entry.exerciseID == exerciseID {
+            score += 5
+        }
         score += sessionScore(entry.sourceSessionID, input.sessionID)
         score += similarity >= 0.8 ? 4 : similarity >= 0.55 ? 3 : 1
         if let setEntries = input.setEntries {
@@ -518,6 +531,7 @@ struct WorkoutMergeInput {
     var sessionID: UUID?
     var turnID: UUID?
     var exercise: String
+    var exerciseID: UUID?
     var setEntries: [WorkoutSetEvidence]?
     var sets: Int?
     var reps: Int?
@@ -629,6 +643,7 @@ extension DataIntegrityRepair {
                     sessionID: entry.sourceSessionID,
                     turnID: entry.sourceTurnID,
                     exercise: entry.exercise,
+                    exerciseID: entry.exerciseID,
                     setEntries: entry.setEntriesData.isEmpty ? nil : entry.setEntries,
                     sets: entry.sets,
                     reps: entry.reps,
