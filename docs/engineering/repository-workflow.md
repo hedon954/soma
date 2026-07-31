@@ -26,8 +26,9 @@ make setup
 
 1. 使用 `brew bundle` 安装 XcodeGen、SwiftFormat、SwiftLint、actionlint、
    shellcheck 和 pre-commit；
-2. 安装 Git hooks；
-3. 从 `project.yml` 生成本地 `Soma.xcodeproj`。
+2. 按 `Server/package-lock.json` 安装 Agent Server 的 Node.js 依赖；
+3. 安装 Git hooks；
+4. 从 `project.yml` 生成本地 `Soma.xcodeproj`。
 
 ## 日常循环
 
@@ -49,16 +50,19 @@ DEVELOPMENT_TEAM=你的TeamID make install-device
 2. SwiftFormat lint；
 3. SwiftLint；
 4. GitHub Actions 和 shell 脚本静态检查；
-5. Agent/ADR/隐私/文档链接/secret 仓库契约。
+5. Agent/ADR/隐私/文档链接/secret 仓库契约；
+6. Agent Server TypeScript 类型检查。
 
 `make verify` 先执行 `make check`，再执行：
 
-1. 无签名 iOS Simulator 构建；
-2. 模拟器单元测试。
+1. Agent Server 单元测试；
+2. 无签名 iOS Simulator 构建；
+3. 模拟器单元测试。
 
 GitHub 日常 CI 在 PR 和 `main` 推送时运行 `make check`，避免高频占用 macOS 构建与
 Simulator 额度。贡献者和 coding agent 在本地交付前仍运行 `make verify`；`v*` release tag
-由 GitHub Release 流程再次运行完整 `make verify`。
+由 GitHub Release 流程再次运行完整 `make verify`。CI 的干净检出会先固定 Node.js 22，
+再用锁文件执行 `npm --prefix Server ci`；不能依赖 runner 全局工具或残留 `node_modules`。
 
 `make install-device` 不属于 CI 门禁。它使用 Automatic Signing 为主 App 与 Widget
 Extension 签名，把 Debug 构建安装到已连接的 iPhone，并在安装后启动 Soma。设备自动选择

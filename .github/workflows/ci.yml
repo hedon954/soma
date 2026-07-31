@@ -22,8 +22,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Server/package-lock.json
+
       - name: Install development tools
         run: brew bundle --file Brewfile
+
+      - name: Install Agent server dependencies
+        run: npm --prefix Server ci
 
       - name: Run fast static quality gate
         run: make check
