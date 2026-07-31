@@ -4,9 +4,9 @@ import SwiftUI
 struct MediaViewer: View {
     @Environment(\.dismiss) private var dismiss
 
-    let deletionTitle: String
-    let deletionMessage: String
-    let onDelete: (MediaAttachmentReference) -> Void
+    let deletionTitle: String?
+    let deletionMessage: String?
+    let onDelete: ((MediaAttachmentReference) -> Void)?
 
     @State private var attachments: [MediaAttachmentReference]
     @State private var selectedAttachmentID: String
@@ -15,9 +15,9 @@ struct MediaViewer: View {
     init(
         attachments: [MediaAttachmentReference],
         initialAttachmentID: String,
-        deletionTitle: String,
-        deletionMessage: String,
-        onDelete: @escaping (MediaAttachmentReference) -> Void
+        deletionTitle: String? = nil,
+        deletionMessage: String? = nil,
+        onDelete: ((MediaAttachmentReference) -> Void)? = nil
     ) {
         self.deletionTitle = deletionTitle
         self.deletionMessage = deletionMessage
@@ -62,20 +62,26 @@ struct MediaViewer: View {
 
                     Spacer()
 
-                    Button(role: .destructive) {
-                        pendingDeletion = selectedAttachment
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.body.weight(.semibold))
+                    if onDelete != nil {
+                        Button(role: .destructive) {
+                            pendingDeletion = selectedAttachment
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.body.weight(.semibold))
+                                .frame(width: 44, height: 44)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .foregroundStyle(.red)
+                        .accessibilityLabel(
+                            selectedAttachment?.kind == .video
+                                ? "删除当前视频"
+                                : "删除当前照片"
+                        )
+                    } else {
+                        Color.clear
                             .frame(width: 44, height: 44)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .accessibilityHidden(true)
                     }
-                    .foregroundStyle(.red)
-                    .accessibilityLabel(
-                        selectedAttachment?.kind == .video
-                            ? "删除当前视频"
-                            : "删除当前照片"
-                    )
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
@@ -87,7 +93,7 @@ struct MediaViewer: View {
         .preferredColorScheme(.dark)
         .statusBarHidden()
         .alert(
-            deletionTitle,
+            deletionTitle ?? "",
             isPresented: Binding(
                 get: { pendingDeletion != nil },
                 set: {
@@ -105,7 +111,7 @@ struct MediaViewer: View {
                 pendingDeletion = nil
             }
         } message: { _ in
-            Text(deletionMessage)
+            Text(deletionMessage ?? "")
         }
     }
 
@@ -121,7 +127,7 @@ struct MediaViewer: View {
 
     private func delete(_ attachment: MediaAttachmentReference) {
         let removedIndex = attachments.firstIndex(of: attachment) ?? 0
-        onDelete(attachment)
+        onDelete?(attachment)
         attachments.removeAll { $0.id == attachment.id }
         pendingDeletion = nil
 
