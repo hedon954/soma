@@ -2,6 +2,9 @@
 
 - 状态：部分已替代
 - 决策阶段：2026-07-27
+- 后续替代：
+  - [ADR 0027](0027-required-ai-configuration-and-send-gate.md) 取消聊天中的远程 AI 开关与本地分析器路径
+  - [ADR 0032](0032-optional-remote-agent-execution.md) 允许无账户、可选、临时的远程 Agent Job；本地业务真值继续有效
 
 ## 背景
 

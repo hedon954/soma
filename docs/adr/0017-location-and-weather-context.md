@@ -3,7 +3,7 @@
 - 状态：部分已替代
 - 日期：2026-07-30
 - 关联：[ADR 0001](0001-local-first-dual-data-spaces.md)
-- 天气 Provider 已由：[ADR 0020](0020-open-meteo-transient-weather-provider.md) 替代
+- 后续替代：[ADR 0020](0020-open-meteo-transient-weather-provider.md) 替代 WeatherKit Provider
 
 ## 背景
 

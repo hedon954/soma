@@ -3,6 +3,7 @@
 - 状态：部分已替代（健身房紧邻跨轮媒体归档由 ADR 0026 补充）
 - 日期：2026-07-30
 - 维护者：Soma maintainers
+- 后续替代：[ADR 0026](0026-bounded-gym-media-attribution.md) 放开受限的健身房紧邻媒体归档
 
 ## 背景
 

@@ -1,8 +1,9 @@
 # ADR 0014：Agent Turn 使用有序异构 Event Cards
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-30
 - 部分替代：[ADR 0005](0005-trace-span-event-observability.md) 中“最终回复下挂 Skill/Tool 时间线”的聊天呈现方案
+- 后续替代：[ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 将一条 Turn 扩展为多次 Attempt
 
 ## 背景
 

@@ -2,8 +2,8 @@
 
 - 状态：当前要求
 - 决策阶段：2026-07-27 至 2026-07-28
-- 前置文档：[PRD 001](001-private-ai-fitness-coach.md)
-- 后续文档：[PRD 003](003-streaming-react-agent.md)
+- 修订自：[PRD 001](001-private-ai-fitness-coach.md)
+- 后续修订：[PRD 003](003-streaming-react-agent.md)
 
 ## 产品收敛
 

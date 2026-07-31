@@ -2,9 +2,11 @@
 
 - 状态：已实现，待真机媒体验收
 - 日期：2026-07-30
-- 关联基线：[PRD 004](004-soma-current-product.md)
-- 关联需求：[PRD 005](005-conversation-sessions-and-send-feedback.md)、
-  [PRD 006](006-footprints-location-and-retry.md)
+- 修订自：
+  - [PRD 004](004-soma-current-product.md) 的对话、训练记录与模型配置范围
+  - [PRD 005](005-conversation-sessions-and-send-feedback.md) 的自然日 Session 边界
+  - [PRD 006](006-footprints-location-and-retry.md) 的位置确认与上下文范围
+- 后续修订：暂无
 - 关联决策：
   - [ADR 0022](../adr/0022-user-controlled-conversation-sessions.md)
   - [ADR 0023](../adr/0023-ordered-workout-set-evidence.md)

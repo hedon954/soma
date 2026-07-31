@@ -3,8 +3,10 @@
 - 状态：已接受
 - 日期：2026-07-31
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0001](0001-local-first-dual-data-spaces.md) 的远程 AI 开关，以及
-  [ADR 0025](0025-tiered-model-profiles-and-routing.md) 的“启用远程 Agent”前提
+- 部分替代：
+  - [ADR 0001](0001-local-first-dual-data-spaces.md) 的远程 AI 开关
+  - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 的本地分析器 Attempt
+  - [ADR 0025](0025-tiered-model-profiles-and-routing.md) 的“启用远程 Agent”前提
 
 ## 背景
 

@@ -53,7 +53,7 @@ App 只保留两个界面：
 - “数据与备份”支持可脱离 Soma 阅读的饮食/训练开放导出、进入后台时尽力更新的外部加密
   备份与恢复，以及不触碰系统相册、Apple 健康和外部备份的个人数据清除。
 - 开发者设置允许自定义角色、安全策略和八项 Skills，并支持 Markdown 编辑与预览；工具清单和参数 Schema 由 App 通过 API 原生注册，不进入提示词且不允许覆盖。
-- 执行日志按一条用户消息保存一条完整 Trace，区分成功和失败，并展示输入、结果或错误、模型 Token、相对耗时、Skill 与工具 Span。
+- 执行日志按一次 Agent Attempt 保存一条完整 Trace，区分成功和失败，并展示输入、结果或错误、模型 Token、相对耗时、Skill 与工具 Span。
 
 完整的需求—证据矩阵与验收命令见 [验收清单](docs/acceptance.md)。
 
@@ -62,6 +62,7 @@ App 只保留两个界面：
 - [PRD：产品需求与演进](docs/prd/README.md)
 - [ADR：架构与交互决策](docs/adr/README.md)
 - [关键 Bug：根因复盘与回归门禁](docs/bugs/README.md)
+- [Research：产品与技术证据](docs/research/README.md)
 - [Changelog：按阶段重建的迭代日志](docs/changelog/README.md)
 - [工程与 GitHub 工作流](docs/engineering/README.md)
 - [贡献指南](CONTRIBUTING.md)

@@ -2,8 +2,9 @@
 
 - 状态：已演进，核心需求保留
 - 决策阶段：2026-07-27
-- 后续文档：[PRD 002](002-chat-first-review-loop.md)、
-  [PRD 004](004-soma-current-product.md)
+- 修订自：无
+- 后续修订：[PRD 002](002-chat-first-review-loop.md)
+- 关联当前基线：[PRD 004](004-soma-current-product.md)
 
 ## 背景
 

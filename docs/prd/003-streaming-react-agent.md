@@ -2,8 +2,11 @@
 
 - 状态：当前要求
 - 决策阶段：2026-07-28
-- 前置文档：[PRD 002](002-chat-first-review-loop.md)
-- 后续文档：[PRD 004](004-soma-current-product.md)
+- 修订自：[PRD 002](002-chat-first-review-loop.md)
+- 后续修订：
+  - [PRD 004](004-soma-current-product.md)
+  - [PRD 006](006-footprints-location-and-retry.md) 将一条消息一条 Trace 修订为一次 Attempt 一条 Trace
+  - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 扩展设备内单一执行位置
 
 ## 问题
 
@@ -11,7 +14,9 @@
 
 ## Agent 行为
 
-每条用户消息启动一条独立 Trace，最多执行八轮：
+本阶段最初定义每条用户消息启动一条独立 Trace，最多执行八轮；后续
+[PRD 006](006-footprints-location-and-retry.md) 已把当前语义修订为“一次远程 Attempt
+一条 Trace”，同一 Turn 可以重试：
 
 1. App 发送系统提示词、上下文、用户消息和必要媒体；
 2. 通过 OpenAI-compatible API 的 `tools` 字段注册固定工具；
@@ -57,7 +62,7 @@ Skills 可以在高级设置中修改、恢复默认并使用 Markdown 编辑/�
 
 ### Trace
 
-一条用户消息从开始到最终回复、失败或取消，构成一条完整 Trace。Trace 至少记录：
+一次远程 Attempt 从开始到最终回复、失败或取消，构成一条完整 Trace。Trace 至少记录：
 
 - 开始/结束时间、总耗时和状态；
 - 输入预览、媒体类型与关键帧数量；

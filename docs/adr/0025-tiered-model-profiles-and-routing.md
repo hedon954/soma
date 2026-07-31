@@ -1,8 +1,9 @@
 # ADR 0025：使用双档模型配置与本地保守路由
 
-- 状态：已接受
+- 状态：部分已替代
 - 日期：2026-07-30
 - 维护者：Soma maintainers
+- 后续替代：[ADR 0027](0027-required-ai-configuration-and-send-gate.md) 取消聊天中的远程启用前提
 
 ## 背景
 

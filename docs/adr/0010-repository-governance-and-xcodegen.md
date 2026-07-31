@@ -1,7 +1,10 @@
 # ADR 0010：统一仓库契约、质量门禁与 XcodeGen 事实来源
 
-- 状态：部分已替代；质量命令分层由 [ADR 0011](0011-fast-check-full-verify.md) 修订
+- 状态：部分已替代
 - 决策日期：2026-07-29
+- 后续替代：
+  - [ADR 0011](0011-fast-check-full-verify.md) 修订质量命令分层
+  - [ADR 0034](0034-bidirectional-document-lifecycle-links.md) 增加双向文档生命周期门禁
 
 ## 背景
 

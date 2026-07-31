@@ -29,9 +29,15 @@ required_files=(
   project.yml
   docs/acceptance.md
   docs/prd/004-soma-current-product.md
+  docs/prd/010-exercise-library-plans-guided-training.md
+  docs/prd/011-durable-agent-jobs-remote-continuity.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md
+  docs/engineering/training-domain-model.md
+  docs/engineering/agent-job-protocol.md
+  docs/engineering/implementation-sequence.md
+  docs/research/README.md
   Soma/Resources/Info.plist
   Soma/Soma.entitlements
 )
@@ -105,6 +111,7 @@ grep -q "<key>com.apple.developer.healthkit</key>" Soma/Soma.entitlements ||
 
 plutil -lint Soma/Resources/Info.plist Soma/Soma.entitlements ExportOptions.plist >/dev/null
 ./scripts/check-markdown-links.rb
+./scripts/check-document-lifecycle-links.rb
 ./scripts/check-secrets.sh
 
 echo "Repository contract passed."

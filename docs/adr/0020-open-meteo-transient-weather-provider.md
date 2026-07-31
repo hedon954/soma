@@ -3,6 +3,7 @@
 - 状态：已采纳
 - 日期：2026-07-30
 - 部分替代：[ADR 0017](0017-location-and-weather-context.md) 的 WeatherKit Provider 决策
+- 后续替代：暂无
 
 ## 背景
 

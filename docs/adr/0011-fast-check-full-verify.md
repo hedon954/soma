@@ -2,9 +2,8 @@
 
 - 状态：部分已替代
 - 决策日期：2026-07-29
-- 修订：[ADR 0010](0010-repository-governance-and-xcodegen.md) 的质量命令分层
-- 部分替代：[ADR 0019](0019-cost-aware-github-actions-gates.md) 调整 GitHub 自动触发层级，
-  本地命令语义保持不变
+- 部分替代：[ADR 0010](0010-repository-governance-and-xcodegen.md) 的质量命令分层
+- 后续替代：[ADR 0019](0019-cost-aware-github-actions-gates.md) 调整 GitHub 自动触发层级，本地命令语义保持不变
 
 ## 背景
 

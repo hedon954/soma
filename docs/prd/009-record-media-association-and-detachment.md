@@ -2,7 +2,8 @@
 
 - 状态：已实现，待真机媒体验收
 - 日期：2026-07-31
-- 关联基线：[PRD 004](004-soma-current-product.md)
+- 修订自：[PRD 004](004-soma-current-product.md) 的记录媒体审查范围
+- 后续修订：暂无
 - 关联决策：[ADR 0026](../adr/0026-bounded-gym-media-attribution.md)
 
 ## 问题

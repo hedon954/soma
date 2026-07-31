@@ -1,7 +1,10 @@
 # ADR 0008：对话处理属于 App 生命周期
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-29
+- 后续替代：
+  - [ADR 0031](0031-durable-agent-jobs-event-log-and-projections.md) 用持久 Job 取代单一内存 Task
+  - [ADR 0032](0032-optional-remote-agent-execution.md) 增加可选远程执行位置
 
 ## 背景
 

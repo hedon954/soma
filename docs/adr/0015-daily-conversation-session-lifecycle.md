@@ -3,6 +3,9 @@
 - 状态：已被 [ADR 0022](0022-user-controlled-conversation-sessions.md) 替代
 - 日期：2026-07-30
 - 维护者：Soma maintainers
+- 后续替代：
+  - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 修订 Turn/Attempt 关系
+  - [ADR 0022](0022-user-controlled-conversation-sessions.md) 替代每日自动切换和只读历史边界
 
 ## 背景
 

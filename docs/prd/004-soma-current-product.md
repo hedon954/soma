@@ -4,6 +4,15 @@
 - 基线日期：2026-07-29
 - 品牌：Soma
 - 主张：Your body, understood.
+- 修订自：[PRD 003](003-streaming-react-agent.md)
+- 后续修订：
+  - [PRD 005](005-conversation-sessions-and-send-feedback.md)
+  - [PRD 006](006-footprints-location-and-retry.md)
+  - [PRD 007](007-data-export-backup-and-erasure.md)
+  - [PRD 008](008-coach-continuity-and-adaptive-models.md)
+  - [PRD 009](009-record-media-association-and-detachment.md)
+  - [PRD 010](010-exercise-library-plans-guided-training.md)
+  - [PRD 011](011-durable-agent-jobs-remote-continuity.md)
 
 ## 产品定义
 
@@ -141,7 +150,8 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 
 ## 隐私与边界
 
-- 无账号、无登录、无 CloudKit。
+- 当前实现无账号、无登录、无 CloudKit；[PRD 011](011-durable-agent-jobs-remote-continuity.md)
+  已采纳匿名设备身份和可选远程 Agent Job，但不引入用户账户或云端业务数据库。
 - 业务数据库和媒体仅保存在 App 沙盒。
 - API Key 使用 ThisDeviceOnly Keychain。
 - 删除 App 会删除本地数据。
@@ -155,14 +165,17 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
   数据；三者不包含或删除系统相册和 Apple 健康源数据。
 - Soma 提供一般健身建议，不做医疗诊断。
 
-## 明确不在当前范围
+## 明确不在当前实现
 
 - 社区、关注、排行榜、课程商城；
-- 后台服务和跨设备云同步；
+- 跨设备业务数据同步；
 - Keep/COROS 未获授权的私有 API；
 - Agent thinking 展示；
 - 用户自定义 Tool、Tool Schema 或输出协议；
-- App 被系统终止后的后台 Agent 继续运行。
+- 动作库、训练计划、带练和自动录像尚未实现，目标范围见
+  [PRD 010](010-exercise-library-plans-guided-training.md)；
+- App 被系统终止后的远程 Agent 持续执行尚未实现，目标范围见
+  [PRD 011](011-durable-agent-jobs-remote-continuity.md)。
 
 ## 当前验收入口
 

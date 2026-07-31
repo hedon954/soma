@@ -25,9 +25,11 @@ make verify
 1. 先描述用户问题、成功路径、失败状态与隐私影响。
 2. 只实现当前 PRD 内最小的可验证闭环。
 3. 长期改变 Agent 协议、数据模型、同步、隐私或分发方式时先提交 ADR。
-4. 行为变更补充确定性测试；硬件能力补充手工验收说明。
-5. 开发中运行 `make format` 和 `make check`；提交 PR 前运行 `make verify`。
-6. 使用中文 Conventional Commit，并通过 PR 模板提交。
+4. 新文修订或替代旧文时，同时在旧文建立“后续修订/替代”链接，并在新文建立反向链接；
+   同步目录 README。
+5. 行为变更补充确定性测试；硬件能力补充手工验收说明。
+6. 开发中运行 `make format` 和 `make check`；提交 PR 前运行 `make verify`。
+7. 使用中文 Conventional Commit，并通过 PR 模板提交。
 
 ## 隐私要求
 
@@ -36,6 +38,7 @@ make verify
 - 真实体态/身体照片或训练视频；
 - 真实体重、体脂、健康备注或 Apple 健康导出；
 - API Key、Authorization 头或完整私有 Agent Trace；
+- 远程 Job payload、Tool arguments/results、APNs 或 ActivityKit token；
 - 证书、私钥、Provisioning Profile 或 App Store Connect 凭据。
 
 只能使用 `Soma/Resources/DemoMedia` 和虚构数据演示问题。

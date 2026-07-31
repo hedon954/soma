@@ -2,7 +2,11 @@
 
 - 状态：已采纳
 - 日期：2026-07-30
-- 关联基线：[PRD 004](004-soma-current-product.md)
+- 修订自：[PRD 004](004-soma-current-product.md)
+- 后续修订：
+  - [PRD 006](006-footprints-location-and-retry.md) 增加 Turn 多 Attempt 与失败重试
+  - [PRD 008](008-coach-continuity-and-adaptive-models.md) 改为用户控制可继续 Session
+  - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 扩展发送持久化与后台恢复
 - 关联决策：[ADR 0015](../adr/0015-daily-conversation-session-lifecycle.md)
 
 ## 背景
@@ -37,7 +41,8 @@
 - Session 是当前数据空间内的本地持久化对象，演示与个人空间继续完全隔离。
 - 日期边界使用设备当前日历与时区的自然日，不使用固定 24 小时窗口。
 - Session 的标题取第一条用户消息的简短单行摘要；只有媒体时使用媒体摘要。
-- 每条用户消息及其 Agent 回复共享同一个 `sessionID`；一条用户消息仍只对应一条 Trace。
+- 每条用户消息及其 Agent 回复共享同一个 `sessionID`；一次远程 Attempt 对应一条 Trace，
+  同一 Turn 的重试关系由 [PRD 006](006-footprints-location-and-retry.md) 定义。
 - 旧版本没有 `sessionID` 的消息首次加载时按自然日归档，不能删除或隐藏。
 - App 一直停留在前台跨过午夜时不强制中断正在进行的谈话；下一次进入前台再执行分流。
 
@@ -45,7 +50,8 @@
 
 - 空 Session 展示现有对话引导，不伪造欢迎消息。
 - 媒体保存或 Agent 失败时，已接受的本地消息、附件和成功 Tool 写入继续保留。
-- App 被系统终止时仍不承诺后台继续运行 Agent；该边界沿用 ADR 0008。
+- 当前本地实现被系统终止时仍不继续运行 Agent；持久 Job、回前台恢复和可选远程持续执行由
+  [PRD 011](011-durable-agent-jobs-remote-continuity.md) 修订。
 - Session 分流失败不得阻止用户进入教练页；发送前再次确保存在当前 Session。
 
 ## 隐私与数据
@@ -53,7 +59,8 @@
 - Session、消息和 Trace 只保存在当前 SwiftData 数据空间。
 - Session 标题只来自用户已发送的本地消息，不额外调用远程模型生成。
 - 历史列表不展示媒体原图、API Key、Authorization 头或完整 Trace 参数。
-- 本需求不引入账户、云同步、后台服务或新的远程数据流。
+- 本需求本身不引入账户、云同步、后台服务或新的远程数据流；后续可选 Agent Job 服务遵守
+  [PRD 011](011-durable-agent-jobs-remote-continuity.md)，不改变 Session 的本地事实。
 
 ## 验收
 

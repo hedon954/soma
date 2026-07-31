@@ -2,7 +2,8 @@
 
 - 状态：已采纳
 - 日期：2026-07-30
-- 关联基线：[PRD 004](004-soma-current-product.md)
+- 修订自：[PRD 004](004-soma-current-product.md)
+- 后续修订：[PRD 011](011-durable-agent-jobs-remote-continuity.md) 增加远程临时数据删除边界
 - 关联决策：[ADR 0021](../adr/0021-portable-export-encrypted-backup-and-erasure.md)
 
 ## 背景
@@ -87,7 +88,8 @@ Soma 后继续持有并阅读自己记录的需求。
 
 ## 明确不在当前范围
 
-- 账户、Soma 云服务、跨设备实时同步或后台定时任务；
+- 账户、跨设备业务数据实时同步或云端身体数据库；[PRD 011](011-durable-agent-jobs-remote-continuity.md)
+  的临时 Agent Job 服务不属于备份或长期同步；
 - 自动上传到固定第三方云盘 API；
 - 增量备份、备份历史浏览、选择性恢复或合并恢复；
 - 导出身体记录、完整聊天记录或开发者 Trace；

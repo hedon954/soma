@@ -1,6 +1,15 @@
 # ReAct Agent
 
-Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE 解析由 `SwiftOpenAI 4.5.0` 提供，App 只负责编排 ReAct 循环、执行本地工具和记录事件，不维护自定义 Chat Completions 客户端。
+本文先描述当前已实现运行时，再固定已采纳但待实现的持久 Job 与远程 Backend 演进。产品范围
+见 [PRD 003](prd/003-streaming-react-agent.md) 和
+[PRD 011](prd/011-durable-agent-jobs-remote-continuity.md)，详细协议见
+[Agent Job 与远程执行协议](engineering/agent-job-protocol.md)。
+
+## 当前运行时
+
+Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。网络与 SSE 解析由
+`SwiftOpenAI 4.5.0` 提供，App 负责编排 ReAct 循环、执行本地工具和记录事件，不维护自定义
+Chat Completions 客户端。
 
 ## 运行方式
 
@@ -61,7 +70,8 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 
 ## Trace、Span 与 Event
 
-每条用户消息对应一条完整 Trace。成功、失败和取消都会落盘。执行中的每一次状态变化都是 Event：
+每次远程 Attempt 对应一条完整 Trace；同一用户 Turn 可以因失败重试拥有多个 Attempt。
+成功、失败和取消都会落盘。执行中的每一次状态变化都是 Event：
 
 - `model`：模型调用开始、流式文本增量、完成或错误、Token 用量。
 - `skill`：Skill 加载开始、完成或失败，以及是否使用自定义文本。
@@ -87,3 +97,35 @@ UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有�
 - Event Card UI：`Soma/Views/AgentTurnTranscript.swift`
 - Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/Models.swift`
 - Trace 数据结构：`Soma/Models/Models.swift`
+
+## 已采纳的运行时演进
+
+### 持久 Job
+
+一次发送必须先原子保存 Turn、媒体引用、上下文快照和 `AgentJob`。App 根层的
+`AgentJobRunner` 领取任务并追加带 sequence 的语义 `AgentEvent`；Chat、Trace、
+Live Activity 和通知是独立投影。token delta 继续实时显示，但不逐 token 写入 SwiftData。
+
+本地执行获得有限后台时间。到期前 Job 进入 `waitingForForeground`；恢复时为同一 Turn
+创建新 Attempt，不续接半条 SSE。成功 mutation 继续由 `AgentMutationReceipt` 去重。
+
+### 可选远程 Backend
+
+`AgentExecutionBackend` 提供 Local 和 Remote 两种实现。远程模式使用匿名设备身份把 Job
+幂等提交到 Soma Server，服务器保存 Event Log 并在 App 被挂起后继续纯远程步骤。
+
+服务器不能访问本地 SwiftData 或 Keychain。遇到设备 Tool 时追加 `tool_request` 并进入
+`waitingForDevice`；设备恢复后验证固定 Schema、执行 Tool 并幂等返回 `tool_result`。
+训练、饮食、身体和健身房记录仍以设备为事实来源。
+
+### 待实现固定 Tool
+
+训练动作身份阶段新增：
+
+- `list_exercise_names`：无参数，返回当前数据空间全部动作 `{id,name}`；
+- `record_workout` / `update_workout`：使用 `exercise_id` 引用已有动作；只有创建新动作时使用
+  `exercise_name`；
+- 计划创建、版本更新和归档 Tool；
+- 带练逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
+
+工具合同见 [训练领域模型与运行时协议](engineering/training-domain-model.md)。

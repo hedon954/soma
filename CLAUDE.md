@@ -15,6 +15,17 @@
 发生冲突时，不要静默绕过约束。先确认当前 PRD 和 Accepted ADR；需要改变长期边界时，
 新增 ADR supersede 旧决策。
 
+### Document lifecycle
+
+- PRD、ADR、Bug、Research 和工程协议发生修订、部分替代或替代时，必须建立双向索引：
+  旧文用“后续修订”“后续替代”或“下游落地”链接新文，新文用“修订自”“替代”
+  “部分替代”或“上游依据”链接旧文。
+- 双向关系必须同时出现在文档头部，并同步对应目录的 README 索引；不能只在正文里单向提及。
+- 一份新文影响多个旧决策时逐项链接；旧文只标记被改变的部分，不因局部修订隐藏仍有效内容。
+- `scripts/check-document-lifecycle-links.rb` 是双向关系的自动门禁。新增生命周期链接时必须让
+  `make check` 验证反向边存在。
+- 长期依据见 [ADR 0034](docs/adr/0034-bidirectional-document-lifecycle-links.md)。
+
 ## Product contract
 
 Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能：
@@ -25,7 +36,8 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能：
 
 - **Chat first**：文字、照片、视频和语音统一进入教练；不重新增加传统新增表单。
 - **Reviewable by design**：AI 写入的业务数据必须能回看、编辑和删除。
-- **Local first**：数据库、原始媒体和 API Key 默认留在设备上。
+- **Local first**：业务数据库、原始媒体和用户自带的 API Key 默认留在设备上；可选远程
+  执行只能由明确 PRD/ADR 授权，且服务器不能成为身体业务数据的默认事实来源。
 - **Truth over completeness**：用户没有提供的数据保持为空，不能用常见值补齐。
 - **Deterministic where possible**：容量、热量、去重等可计算行为由本地规则实现。
 - **Private by default**：日志、Issue、截图、测试夹具不得包含真实身体照片、健康记录或密钥。
@@ -33,14 +45,17 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能：
 - **Non-diagnostic**：动作、体态和饮食反馈是一般建议，不冒充医疗诊断。
 - **Scope discipline**：只实现当前 PRD 或明确需求，不为可能的未来功能预建入口。
 
-当前产品基线见 `docs/prd/004-soma-current-product.md`，验收矩阵见
-`docs/acceptance.md`。
+当前实现基线见 `docs/prd/004-soma-current-product.md`；已采纳待实现的训练智能和可靠 Agent
+分别见 `docs/prd/010-exercise-library-plans-guided-training.md` 与
+`docs/prd/011-durable-agent-jobs-remote-continuity.md`；验收矩阵见 `docs/acceptance.md`。
 
 ## Architecture
 
 当前技术栈和边界：
 
 - SwiftUI + SwiftData，最低 iOS 17。
+- [PRD 011](docs/prd/011-durable-agent-jobs-remote-continuity.md) 实施后，`Server/` 保存独立
+  TypeScript API/Worker；PostgreSQL 是远程 Job/Event 事实来源，服务器不成为身体业务数据库。
 - `project.yml` 是 Xcode 工程唯一事实来源；`Soma.xcodeproj` 由 XcodeGen 生成，
   不进入 Git。
 - `Soma/App` 负责根生命周期和依赖注入。
@@ -67,6 +82,8 @@ App → Views → Services → Models
 - SwiftData 的级联删除、当前健身房唯一性和外部数据去重必须由共享规则维护，
   不能在不同 View 中复制出多套逻辑。
 - 长期改变数据模型、Agent 协议、隐私边界、外部同步或分发方式前新增 ADR。
+- 远程 Agent 必须通过 `AgentExecutionBackend` 边界接入；View、业务 Tool 和本地
+  SwiftData 不感知具体执行位置。
 
 ## Data truth and privacy
 
@@ -94,19 +111,25 @@ App → Views → Services → Models
 - Keychain 使用 ThisDeviceOnly 可访问级别；标准模型未配置 API Key 时在发送前引导配置，
   只有用户明确发送内容才触发远程数据流。
 - 新增远程数据流时必须在 PR 中写明发送内容、触发条件、保留策略和失败行为。
+- 远程持续执行默认关闭并需一次性明确授权；服务器只保留任务完成所需的最小数据，业务记录
+  仍由设备上的确定性 Tool 审查和落地。
 
 ## Agent runtime
 
 - 使用 OpenAI-compatible 原生流式 Tool Calling，不要求自定义决策 JSON。
-- 每条用户消息是一条 Trace；model、skill、tool、output 是 Span。
+- 每次远程 Attempt 是一条 Trace；同一用户 Turn 可以因重试或恢复拥有多条 Trace。
 - 文本增量和 Span 生命周期以 Event 实时更新 UI。
 - thinking/reasoning 当前不展示、不持久化，也不用于工具执行。
 - 同一 Trace 的重复业务写入必须幂等。
 - 工具错误作为 `role: tool` 返回模型；失败 Trace 必须落盘且能解释。
 - 已成功的工具写入不因最终回复失败而伪装为未发生。
 - 不增加删除、任意代码、云同步或账户工具，除非新 PRD/ADR 明确授权。
+- Agent Job、语义 Event 和消费者投影必须持久化；网络投递采用至少一次传输与幂等副作用，
+  不能宣称分布式“恰好一次”。
+- 本地 Tool 无法在设备挂起时被服务器越权执行；远程工作流必须进入可审查的
+  `waitingForDevice`，等待设备执行固定 Tool 并返回结果。
 
-详细协议见 `docs/react-agent.md` 和 ADR-0003 至 ADR-0005。
+详细协议见 `docs/react-agent.md`、`docs/engineering/agent-job-protocol.md` 和相关 ADR。
 
 ## Swift and concurrency
 

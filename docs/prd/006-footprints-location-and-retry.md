@@ -2,7 +2,13 @@
 
 - 状态：已采纳
 - 日期：2026-07-30
-- 关联基线：[PRD 004](004-soma-current-product.md)
+- 修订自：
+  - [PRD 003](003-streaming-react-agent.md) 的一条消息一条 Trace 边界
+  - [PRD 004](004-soma-current-product.md)
+  - [PRD 005](005-conversation-sessions-and-send-feedback.md) 的一条消息一条 Trace 边界
+- 后续修订：
+  - [PRD 008](008-coach-continuity-and-adaptive-models.md) 收敛一次性位置确认与 Session 上下文
+  - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 扩展终止后恢复和远程等待
 - 关联决策：
   - [ADR 0016](../adr/0016-conversation-turn-attempt-and-footprint-projection.md)
   - [ADR 0017](../adr/0017-location-and-weather-context.md)
@@ -97,7 +103,8 @@ Session 对话中，不适合快速回顾。用户还需要在 Agent 失败后�
 - 自动改变全局当前健身房；
 - 把 Open-Meteo 建成历史天气数据库；
 - 跨设备同步、账户或云端足迹；
-- App 被终止后恢复正在执行的 Attempt。
+- 当前本地实现中，App 被终止后不续接同一 Attempt；[PRD 011](011-durable-agent-jobs-remote-continuity.md)
+  改为恢复持久 Job、创建新本地 Attempt，或同步已由服务器继续的远程 Job。
 
 ## 验收
 

@@ -1,7 +1,8 @@
 # ADR 0002：聊天是唯一创建路径，GUI 负责审查
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-27 至 2026-07-28
+- 后续替代：[ADR 0030](0030-deterministic-guided-workout-and-session-recording.md) 允许带练直接保存用户确认的逐组事实
 
 ## 背景
 

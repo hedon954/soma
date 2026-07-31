@@ -1,7 +1,8 @@
 # ADR 0003：使用原生流式 Tool Calling 构建 ReAct
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-28
+- 后续替代：[ADR 0032](0032-optional-remote-agent-execution.md) 增加可选服务器 ReAct 与设备 Tool handoff
 
 ## 背景
 
