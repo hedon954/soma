@@ -23,6 +23,7 @@ import type { CleanupResult, SomaStore } from "./store.js";
 
 export class PostgresSomaStore implements SomaStore {
   private listenerPromise: Promise<PoolClient> | undefined;
+  private releasedListenerClients = new WeakSet<PoolClient>();
   private jobWaiters = new Set<() => void>();
   private eventWaiters = new Map<
     string,
@@ -30,6 +31,20 @@ export class PostgresSomaStore implements SomaStore {
   >();
 
   constructor(readonly pool: Pool) {}
+
+  async closeNotificationListener(): Promise<void> {
+    const listener = this.listenerPromise;
+    this.listenerPromise = undefined;
+    if (listener !== undefined) {
+      try {
+        const client = await listener;
+        this.releaseListenerClient(client);
+      } catch {
+        // Connection setup already failed and released its client.
+      }
+    }
+    this.wakeAllListeners();
+  }
 
   async saveChallenge(challenge: RegistrationChallenge): Promise<void> {
     await this.pool.query(
@@ -1028,12 +1043,6 @@ export class PostgresSomaStore implements SomaStore {
   private async ensureListener(): Promise<PoolClient> {
     if (this.listenerPromise !== undefined) return this.listenerPromise;
     this.listenerPromise = this.pool.connect().then(async (client) => {
-      let released = false;
-      const releaseBrokenClient = () => {
-        if (released) return;
-        released = true;
-        client.release(true);
-      };
       try {
         client.on("notification", (notification: Notification) => {
           this.handleNotification(notification);
@@ -1041,13 +1050,13 @@ export class PostgresSomaStore implements SomaStore {
         client.on("error", () => {
           this.listenerPromise = undefined;
           this.wakeAllListeners();
-          releaseBrokenClient();
+          this.releaseListenerClient(client);
         });
         await client.query("LISTEN soma_agent_job_ready");
         await client.query("LISTEN soma_agent_event");
         return client;
       } catch (error) {
-        releaseBrokenClient();
+        this.releaseListenerClient(client);
         throw error;
       }
     });
@@ -1110,6 +1119,12 @@ export class PostgresSomaStore implements SomaStore {
     for (const waiters of this.eventWaiters.values()) {
       for (const waiter of [...waiters]) waiter.resolve();
     }
+  }
+
+  private releaseListenerClient(client: PoolClient): void {
+    if (this.releasedListenerClients.has(client)) return;
+    this.releasedListenerClients.add(client);
+    client.release(true);
   }
 }
 

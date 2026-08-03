@@ -11,8 +11,10 @@ const databaseURL = process.env.SOMA_TEST_DATABASE_URL;
 const pool = databaseURL === undefined
   ? undefined
   : new Pool({ connectionString: databaseURL, max: 12 });
+const store = pool === undefined ? undefined : new PostgresSomaStore(pool);
 
 after(async () => {
+  await store?.closeNotificationListener();
   await pool?.end();
 });
 
@@ -26,10 +28,33 @@ test(
       "utf8",
     );
     await pool.query(migration);
-    const store = new PostgresSomaStore(pool);
+    assert.ok(store);
     const now = new Date("2026-07-31T00:00:00Z");
     const deviceID = randomUUID();
     await store.saveDevice(deviceID, "test-public-key", undefined, now);
+
+    const signalInput = makeJobInput();
+    const jobSignal = store.waitForJobSignal(1_000);
+    const signalJob = await store.submitJob({
+      deviceID,
+      input: signalInput,
+      bodyDigest: sha256(JSON.stringify(signalInput)),
+      now,
+    });
+    await jobSignal;
+    const signalLease = await store.claimJob("signal-worker", now, 30);
+    assert.ok(signalLease);
+    assert.equal(signalLease.job.id, signalJob.id);
+    const eventSignal = store.waitForEventSignal(signalJob.id, 1, 1_000);
+    await store.appendEvent(signalJob.id, signalLease.epoch, {
+      kind: "text",
+      phase: "updated",
+      payloadVersion: 1,
+      payload: { delta: "即时唤醒" },
+      createdAt: now,
+    });
+    await eventSignal;
+    await store.transition(signalJob.id, "completed", now, signalLease.epoch);
 
     const uploadID = randomUUID();
     const uploadDigest = sha256("temporary-media");

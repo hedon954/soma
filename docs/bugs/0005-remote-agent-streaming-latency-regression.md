@@ -56,6 +56,8 @@
 - 2026-08-03：`make verify` 通过，包括文档生命周期、格式、lint、Server TypeScript、14 项
   可运行 Server 测试、iOS Simulator build 和全量测试；真实 PostgreSQL 集成项因未配置
   `SOMA_TEST_DATABASE_URL` 按约定跳过。
+- 2026-08-03：另行启动隔离的临时 PostgreSQL，`npm run test:postgres` 无跳过通过，并实际
+  覆盖 Job/Event commit 经 `LISTEN/NOTIFY` 唤醒等待者；测试结束后数据库进程已停止。
 - 2026-08-03：通过 XcodeBuildMCP 在 iPhone 17 Pro Simulator 完成 build、install、launch，
   并确认教练主界面可访问；本次没有修改 View 布局。
 - 2026-08-03：使用本机 Apple Development Team 完成连线 iPhone 的签名构建和安装；设备当时
