@@ -39,8 +39,8 @@
 - [x] 新增带稳定 sequence 的语义 `AgentEvent`。
 - [x] token delta 仅走实时流并合并快照，不逐 token 落库。
 - [x] Chat projector 从 Event 生成有序卡片。
-- [x] 长 Tool 执行结果保留全文并支持卡片内展开/收起，短结果直接完整显示。
-- [ ] 维护者真机验证长 Tool 结果的展开/收起、VoiceOver 和 Dynamic Type。
+- [x] Tool 卡片展示人话摘要；多条和长结果逐项展开/收起，UUID、JSON 与内部标记只留在执行日志。
+- [ ] 维护者真机验证友好 Tool 摘要、逐项展开/收起、VoiceOver 和 Dynamic Type。
 - [x] Trace projector 从同一 Event 生成 Span。
 - [x] 通知和 Live Activity 使用独立 cursor。
 - [x] UI 读取事件不删除日志。

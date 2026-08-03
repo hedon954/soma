@@ -1,27 +1,23 @@
 import SwiftUI
 
-enum AgentToolResultDisclosure {
-    static let collapsedLineLimit = 4
-    private static let collapsedCharacterThreshold = 80
-
-    static func shouldCollapse(_ text: String) -> Bool {
-        text.count > collapsedCharacterThreshold
-            || text.components(separatedBy: .newlines).count
-            > collapsedLineLimit
-    }
-}
-
 struct AgentTurnTranscript: View {
     let items: [AgentTurnItem]
     let isLive: Bool
 
+    private var visibleItems: [AgentTurnItem] {
+        items.filter {
+            $0.kind != .text
+                || !AgentVisibleTextSanitizer.sanitize($0.text).isEmpty
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(items) { item in
+            ForEach(visibleItems) { item in
                 AgentTurnItemCard(item: item)
             }
 
-            if isLive, !items.contains(where: { $0.status == .running }) {
+            if isLive, !visibleItems.contains(where: { $0.status == .running }) {
                 AgentTurnWaitingCard()
             }
         }
@@ -44,14 +40,15 @@ private struct AgentTurnItemCard: View {
     }
 
     private var textCard: some View {
-        MarkdownText(item.text)
+        let text = AgentVisibleTextSanitizer.sanitize(item.text)
+        return MarkdownText(text)
             .padding(.horizontal, 13)
             .padding(.vertical, 10)
             .background(
                 Color(uiColor: .secondarySystemGroupedBackground),
                 in: RoundedRectangle(cornerRadius: 17, style: .continuous)
             )
-            .accessibilityLabel(item.text)
+            .accessibilityLabel(text)
     }
 
     private var operationCard: some View {
@@ -59,30 +56,34 @@ private struct AgentTurnItemCard: View {
             statusIcon
                 .frame(width: 22, height: 22)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
-                    Text(item.kind == .skill ? "Skill" : "工具")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(kindColor)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(kindColor.opacity(0.1), in: Capsule())
-
                     Text(item.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
+
+                    if item.kind == .skill {
+                        Text("教练方法")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(kindColor)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(kindColor.opacity(0.1), in: Capsule())
+                    }
                 }
 
-                if let detail {
-                    AgentOperationDetail(
-                        text: detail,
-                        color: item.status == .failed ? .red : .secondary,
-                        allowsExpansion: item.kind == .tool
-                            && item.status == .succeeded
-                            && AgentToolResultDisclosure.shouldCollapse(detail),
+                if let toolPresentation {
+                    AgentOperationResult(
+                        presentation: toolPresentation,
+                        tint: kindColor,
                         accessibilityContext: item.title
                     )
+                } else if let statusDetail {
+                    Text(statusDetail)
+                        .font(.caption)
+                        .foregroundStyle(item.status == .failed ? .red : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -153,7 +154,12 @@ private struct AgentTurnItemCard: View {
         }
     }
 
-    private var detail: String? {
+    private var toolPresentation: AgentToolResultPresentation? {
+        guard item.kind == .tool, item.status == .succeeded else { return nil }
+        return AgentToolResultPresentation.make(for: item)
+    }
+
+    private var statusDetail: String? {
         if let error = item.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
            !error.isEmpty
         {
@@ -169,60 +175,80 @@ private struct AgentTurnItemCard: View {
             return "未完成"
         case .succeeded:
             if item.kind == .skill {
-                return "已加载"
+                return "已采用这项教练方法"
             }
-            guard
-                let output = item.output,
-                let data = output.data(using: .utf8),
-                let result = try? JSONDecoder().decode(AgentToolResult.self, from: data)
-            else {
-                return "已完成"
-            }
-            return result.observation
+            return "已完成"
         }
     }
 }
 
-private struct AgentOperationDetail: View {
-    let text: String
-    let color: Color
-    let allowsExpansion: Bool
+private struct AgentOperationResult: View {
+    let presentation: AgentToolResultPresentation
+    let tint: Color
     let accessibilityContext: String
 
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(text)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(presentation.summary)
                 .font(.caption)
-                .foregroundStyle(color)
-                .lineLimit(
-                    allowsExpansion && !isExpanded
-                        ? AgentToolResultDisclosure.collapsedLineLimit
-                        : nil
-                )
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if allowsExpansion {
+            if isExpanded, !presentation.details.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(presentation.details.indices, id: \.self) { index in
+                        if index > presentation.details.startIndex {
+                            Divider()
+                        }
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: presentation.detailSystemImage)
+                                .font(.caption)
+                                .foregroundStyle(tint)
+                                .frame(width: 16, height: 18)
+                            Text(presentation.details[index])
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                                .lineSpacing(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .background(
+                    Color.primary.opacity(0.035),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
+            }
+
+            if let disclosureLabel = presentation.disclosureLabel {
+                Divider()
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(isExpanded ? "收起" : "展开")
+                    HStack(spacing: 6) {
+                        Text(isExpanded ? "收起结果" : disclosureLabel)
+                        Spacer(minLength: 8)
                         Image(systemName: "chevron.down")
                             .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     }
                     .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(AppTheme.tint)
+                .foregroundStyle(tint)
                 .accessibilityLabel(
-                    "\(isExpanded ? "收起" : "展开")\(accessibilityContext)工具结果"
+                    "\(isExpanded ? "收起" : "查看")\(accessibilityContext)结果"
                 )
                 .accessibilityValue(isExpanded ? "已展开" : "已收起")
-                .accessibilityHint(isExpanded ? "隐藏部分工具结果" : "显示完整工具结果")
+                .accessibilityHint(isExpanded ? "隐藏详细结果" : "显示详细结果")
             }
         }
     }
@@ -247,17 +273,29 @@ private struct AgentTurnWaitingCard: View {
     }
 }
 
-#Preview("长工具结果") {
+#Preview("友好工具结果") {
     ScrollView {
         AgentTurnTranscript(
             items: [
                 AgentTurnItem(
                     kind: .tool,
                     status: .succeeded,
-                    title: "查询训练记录",
+                    title: "读取用户数据",
+                    input: #"{"name":"query_user_data","arguments":{"scope":"workouts"}}"#,
                     output: AgentTraceText.json(AgentToolResult.success(
-                        "已找到最近十二次训练记录。这里保留完整的工具观察结果，默认只展示摘要，"
-                            + "用户可以主动展开查看全部内容，也可以再次收起，后续 Agent 回复不受影响。"
+                        """
+                        [id:00000000-0000-0000-0000-000000000001] 2026年8月3日 引体向上，5组 × 5次 · 0kg，间歇 120 秒
+                        [id:00000000-0000-0000-0000-000000000002] 2026年8月1日 杠铃深蹲，4组 × 5次 · 30kg，间歇 60 秒
+                        """
+                    ))
+                ),
+                AgentTurnItem(
+                    kind: .tool,
+                    status: .succeeded,
+                    title: "创建训练计划",
+                    input: #"{"name":"create_training_program","arguments":{}}"#,
+                    output: AgentTraceText.json(AgentToolResult.success(
+                        "已创建训练计划 [id:00000000-0000-0000-0000-000000000003]：基础力量训练。"
                     ))
                 )
             ],

@@ -722,6 +722,10 @@ struct CoachBubble: View {
     var onRetry: () -> Void = {}
 
     var body: some View {
+        let visibleMessageText = message.isFromCoach
+            ? AgentVisibleTextSanitizer.sanitize(message.text)
+            : message.text
+
         HStack(alignment: .bottom, spacing: 8) {
             if !message.isFromCoach {
                 Spacer(minLength: 52)
@@ -755,12 +759,12 @@ struct CoachBubble: View {
                         items: message.agentTurnItems,
                         isLive: isLive
                     )
-                } else if !message.text.isEmpty, !message.isAutomaticMediaSummary {
+                } else if !visibleMessageText.isEmpty, !message.isAutomaticMediaSummary {
                     Group {
                         if message.isFromCoach {
-                            MarkdownText(message.text)
+                            MarkdownText(visibleMessageText)
                         } else {
-                            SelectableChatText(content: message.text, color: .white)
+                            SelectableChatText(content: visibleMessageText, color: .white)
                         }
                     }
                     .padding(.horizontal, 13)
