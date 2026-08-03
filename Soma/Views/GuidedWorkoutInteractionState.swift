@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum GuidedWorkoutPresentationMode: Equatable {
@@ -30,6 +31,36 @@ struct GuidedWorkoutPresentationState: Equatable {
         if phase != .setInProgress {
             mode = .compact
         }
+    }
+}
+
+enum WorkoutCaptureLayout {
+    static func previewAspectRatio(isLandscape: Bool) -> CGFloat {
+        isLandscape ? 16 / 9 : 9 / 16
+    }
+
+    static func compactPreviewWidth(
+        availableWidth: CGFloat,
+        isLandscape: Bool
+    ) -> CGFloat {
+        let proposed = availableWidth * (isLandscape ? 0.18 : 0.31)
+        let minimum: CGFloat = isLandscape ? 132 : 120
+        let maximum: CGFloat = isLandscape ? 176 : 148
+        return min(max(proposed, minimum), maximum)
+    }
+
+    static func landscapeControlWidth(availableWidth: CGFloat) -> CGFloat {
+        min(max(availableWidth * 0.24, 214), 280)
+    }
+
+    static func landscapeCameraShare(availableWidth: CGFloat) -> CGFloat {
+        let horizontalPadding: CGFloat = 36
+        let columnSpacing: CGFloat = 14
+        let cameraWidth = availableWidth
+            - horizontalPadding
+            - columnSpacing
+            - landscapeControlWidth(availableWidth: availableWidth)
+        return max(cameraWidth / availableWidth, 0)
     }
 }
 

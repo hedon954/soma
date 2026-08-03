@@ -26,6 +26,32 @@ private final class RecordingSpy: WorkoutRecordingControlling {
 }
 
 @MainActor
+private final class SuspendedRecordingSpy: WorkoutRecordingControlling {
+    private(set) var startInvoked = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func prepare() async throws {}
+
+    func startRecording(performanceID _: UUID) async throws {
+        startInvoked = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func stopRecording() async throws -> String? {
+        nil
+    }
+
+    func cancelRecording() async {}
+
+    func resumeStart() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
 private struct SilentCues: WorkoutCueProviding {
     func announce(_: String) {}
     func success() {}
@@ -162,6 +188,38 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
         XCTAssertEqual(fixture.sets[0].status, .completed)
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
         XCTAssertEqual(recorder.stopCount, 1)
+    }
+
+    @MainActor
+    func testSetBecomesVisibleBeforeCameraStartupCompletes() async throws {
+        let fixture = try makeFixture(firstSetIsWarmup: false, setCount: 1)
+        defer {
+            fixture.defaults.removePersistentDomain(
+                forName: fixture.suiteName
+            )
+        }
+        let recorder = SuspendedRecordingSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: recorder,
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+
+        let startTask = Task {
+            try await coordinator.beginCurrentSet(in: fixture.context)
+        }
+        while !recorder.startInvoked {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(fixture.session.guidedPhase, .setInProgress)
+        XCTAssertEqual(fixture.sets[0].status, .inProgress)
+
+        recorder.resumeStart()
+        try await startTask.value
     }
 
     @MainActor

@@ -77,7 +77,7 @@
 | 计划真值 | `TrainingProgram`、`WorkoutTemplateVersion`、`TemplateExercise`、Session、Performance、Set 和 Recommendation 分层；开始训练冻结快照。 |
 | 计划 GUI 创建 | `TrainingProgramCreationView` 与版本编辑器共享处方草稿、动作图片选择器和最近容量解析器；只读取当前 active 动作，以稳定 ID 调用 `TrainingPlanStore` 创建版本 1，空字段保持 `nil`。 |
 | 统计兼容 | `TrainingStatistics` 只合并旧聚合与新 completed actual Set，不把计划或建议计入容量。 |
-| 带练 | `GuidedWorkoutCoordinator` 支持从进行中 Set 一步保存；可见倒计时组件按绝对截止时间自动进入本组；`restTargetEndAt` 持久恢复休息，紧凑/放大 UI、暂停、跳过、替换、中断恢复和完成摘要都读取同一 Session 事实。 |
+| 带练 | `GuidedWorkoutCoordinator` 支持从进行中 Set 一步保存；可见倒计时组件按绝对截止时间自动进入本组，且相机启动不会阻塞状态呈现；`restTargetEndAt` 持久恢复休息，紧凑/放大 UI、暂停、跳过、替换、中断恢复和完成摘要都读取同一 Session 事实。 |
 | 自动录像 | `WorkoutCameraService` 与 Session policy 决定第 1/2 组；`WorkoutCaptureGeometry` 统一预览/文件旋转和镜像，`.resizeAspect` 展示完整画幅；preview layer 入窗后才创建 Rotation Coordinator，录制开始锁定本段方向；手动放大不被预览状态覆盖，前置相机、无音轨、中断/后台/热压力/磁盘错误均不阻断训练。 |
 | 训练系统投影 | 独立 `SomaWorkoutActivityAttributes` 只投影通用阶段、组进度和休息结束时间；本地通知与 `soma://workout/session/{id}` 深链不包含动作、重量或媒体。 |
 | 视频复盘 | `PerformanceReviewView` 主动创建 Agent Job；`record_performance_analysis` 校验视频指纹并幂等绑定 source Job。 |
@@ -156,9 +156,11 @@ JSON 和有序媒体；设置密码备份后让 App 进入后台，再返回确�
 空白；显式点击“使用上次”只复用最近明确值。进入排序模式拖动换序并删除/重新添加，保存后
 确认列表出现计划且空字段没有被补齐。再次编辑产生新版本，确认已开始 Session 的旧快照不变。
 
-计划带练真机验收：开始训练时开启自动录像，确认倒计时 `3、2、1` 后自动进入本组；分别在
-首组热身与非热身计划中确认只录第 2/1 组。非录像组点击整个相机小窗可立即进入完整取景；
-目标组开始后自动放大，收起再放大时红点和同一文件持续。校准页与带练页均可横竖切换，分别
+计划带练真机验收：开始训练时开启自动录像，确认倒计时 `3、2、1、0` 后立即进入本组；相机
+尚未就绪时只显示准备态，页面和完成按钮仍可操作。分别在首组热身与非热身计划中确认只录第
+2/1 组。非录像组点击整个相机小窗可立即进入完整取景；连续收起、再次放大不得黑屏、重启相机
+或明显等待，目标组红点和同一文件持续。紧凑、校准和放大取景都使用当前布局允许的最大区域。
+校准页与带练页均可横竖切换，分别
 录制一段并逐边比较预览
 与保存视频的画幅、方向和镜像；录制中旋转手机，当前片段保持锁定，停止后下一段重新适配。
 完成一组只点击一次并立即进入休息；锁屏后确认 Live Activity/本地通知倒计时正确，点击返回

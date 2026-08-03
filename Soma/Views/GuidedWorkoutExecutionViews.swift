@@ -82,23 +82,27 @@ struct GuidedCompactSetView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        if isLandscape {
-            HStack(spacing: 22) {
-                hero
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                controls
-                    .frame(width: 320)
+        GeometryReader { proxy in
+            if isLandscape {
+                HStack(spacing: 16) {
+                    hero
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    controls
+                        .frame(width: WorkoutCaptureLayout.landscapeControlWidth(
+                            availableWidth: proxy.size.width
+                        ))
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 14) {
+                    hero
+                        .frame(maxHeight: .infinity)
+                    controls
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-        } else {
-            VStack(spacing: 16) {
-                hero
-                    .frame(maxHeight: .infinity)
-                controls
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
         }
     }
 
@@ -116,40 +120,47 @@ struct GuidedCompactSetView: View {
                 }
             }
 
-            ZStack(alignment: .bottomTrailing) {
-                ExerciseArtworkView(
-                    reference: exercise?.preferredActionIllustration
-                        ?? BundledExerciseCatalog.fallbackActionIllustration
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 26))
+            GeometryReader { proxy in
+                ZStack(alignment: .bottomTrailing) {
+                    ExerciseArtworkView(
+                        reference: exercise?.preferredActionIllustration
+                            ?? BundledExerciseCatalog.fallbackActionIllustration
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 26))
 
-                if showsCamera {
-                    Button(action: onExpandCamera) {
-                        WorkoutCameraSurface(
-                            camera: camera,
-                            showsSafeFrame: false,
-                            compact: true
-                        )
-                        .allowsHitTesting(false)
-                        .frame(width: isLandscape ? 120 : 92)
-                        .aspectRatio(
-                            camera.captureGeometry.orientation.aspectRatio,
-                            contentMode: .fit
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(.white.opacity(0.8), lineWidth: 2)
+                    if showsCamera {
+                        Button(action: onExpandCamera) {
+                            WorkoutCameraSurface(
+                                camera: camera,
+                                showsSafeFrame: false,
+                                compact: true
+                            )
+                            .allowsHitTesting(false)
+                            .frame(width: WorkoutCaptureLayout.compactPreviewWidth(
+                                availableWidth: proxy.size.width,
+                                isLandscape: isLandscape
+                            ))
+                            .aspectRatio(
+                                WorkoutCaptureLayout.previewAspectRatio(
+                                    isLandscape: isLandscape
+                                ),
+                                contentMode: .fit
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18)
+                                    .stroke(.white.opacity(0.82), lineWidth: 2)
+                            }
+                            .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
                         }
-                        .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
+                        .buttonStyle(.plain)
+                        .contentShape(RoundedRectangle(cornerRadius: 18))
+                        .padding(12)
+                        .accessibilityLabel(camera.state == .recording
+                            ? "正在录制，放大相机"
+                            : "放大相机预览")
                     }
-                    .buttonStyle(.plain)
-                    .contentShape(RoundedRectangle(cornerRadius: 18))
-                    .padding(14)
-                    .accessibilityLabel(camera.state == .recording
-                        ? "正在录制，放大相机"
-                        : "放大相机预览")
                 }
             }
         }
@@ -220,9 +231,9 @@ struct GuidedExpandedCaptureView: View {
     let onMore: () -> Void
 
     var body: some View {
-        Group {
+        GeometryReader { proxy in
             if isLandscape {
-                landscapeBody
+                landscapeBody(availableWidth: proxy.size.width)
             } else {
                 portraitBody
             }
@@ -231,35 +242,47 @@ struct GuidedExpandedCaptureView: View {
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }
 
-    private var landscapeBody: some View {
-        VStack(spacing: 12) {
+    private func landscapeBody(availableWidth: CGFloat) -> some View {
+        VStack(spacing: 8) {
             captureHeader
-            HStack(spacing: 16) {
+            HStack(spacing: 14) {
                 cameraSurface
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 controlPanel
-                    .frame(width: 320)
+                    .frame(width: WorkoutCaptureLayout.landscapeControlWidth(
+                        availableWidth: availableWidth
+                    ))
             }
         }
     }
 
     private var portraitBody: some View {
-        VStack(spacing: 14) {
-            captureHeader
-            cameraSurface
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            controlPanel
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 14) {
+                captureHeader
+                cameraSurface
+                    .frame(maxWidth: .infinity)
+                controlPanel
+            }
         }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var captureHeader: some View {
         HStack {
             Button(action: onCollapse) {
-                Label("收起", systemImage: "chevron.down")
-                    .font(.subheadline.bold())
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.thinMaterial, in: Capsule())
+                if isLandscape {
+                    Label("收起", systemImage: "chevron.down")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.thinMaterial, in: Capsule())
+                } else {
+                    Image(systemName: "xmark")
+                        .font(.headline.bold())
+                        .frame(width: 44, height: 44)
+                        .background(.thinMaterial, in: Circle())
+                }
             }
             .foregroundStyle(.primary)
             .accessibilityHint("录像会继续")
@@ -267,15 +290,23 @@ struct GuidedExpandedCaptureView: View {
             HStack(spacing: 10) {
                 Button(action: onPause) {
                     Image(systemName: "pause.fill")
+                        .frame(width: 38, height: 38)
+                        .background(.thinMaterial, in: Circle())
                 }
                 .accessibilityLabel("暂停训练")
 
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(elapsedText(at: context.date))
-                        .font(.headline.monospacedDigit())
+                    HStack(spacing: 7) {
+                        if camera.state == .recording {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 9, height: 9)
+                        }
+                        Text(elapsedText(at: context.date))
+                            .font(.headline.monospacedDigit())
+                    }
                 }
             }
-            .buttonStyle(.bordered)
             Spacer()
             Button(action: onMore) {
                 Image(systemName: "ellipsis")
@@ -294,7 +325,9 @@ struct GuidedExpandedCaptureView: View {
             compact: false
         )
         .aspectRatio(
-            camera.captureGeometry.orientation.aspectRatio,
+            WorkoutCaptureLayout.previewAspectRatio(
+                isLandscape: isLandscape
+            ),
             contentMode: .fit
         )
         .clipShape(RoundedRectangle(cornerRadius: 24))
@@ -313,15 +346,12 @@ struct GuidedExpandedCaptureView: View {
     }
 
     private var controlPanel: some View {
-        VStack(alignment: .leading, spacing: isLandscape ? 10 : 14) {
+        VStack(alignment: .leading, spacing: isLandscape ? 12 : 10) {
             HStack(alignment: .lastTextBaseline) {
                 Text(targetText)
                     .font(.system(size: isLandscape ? 34 : 42, weight: .bold))
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
-                Spacer()
-                Button("编辑", systemImage: "pencil", action: onEdit)
-                    .buttonStyle(.bordered)
             }
             GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
             Label(coachingNote, systemImage: "lightbulb.fill")
@@ -330,6 +360,12 @@ struct GuidedExpandedCaptureView: View {
                 .padding(isLandscape ? 10 : 13)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.green.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+            if !isLandscape {
+                Button("编辑本组", systemImage: "pencil", action: onEdit)
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+                    .buttonStyle(.plain)
+            }
             Button(action: onComplete) {
                 Text("完成本组")
                     .font(.headline)
@@ -363,6 +399,20 @@ struct WorkoutCameraSurface: View {
         ZStack {
             Color.black
             WorkoutCameraPreview(camera: camera)
+            switch camera.state {
+            case .idle, .requestingPermission:
+                ProgressView("相机准备中…")
+                    .tint(.white)
+                    .foregroundStyle(.white)
+            case let .unavailable(message):
+                Label(message, systemImage: "camera.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(18)
+            case .previewing, .recording:
+                EmptyView()
+            }
             if showsSafeFrame {
                 RoundedRectangle(cornerRadius: 24)
                     .stroke(

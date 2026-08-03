@@ -1,10 +1,10 @@
 # BUG 0007：带练倒计时、取景切换与方向投影回归
 
-- 状态：已修复；待维护者真机复验
+- 状态：首次修复不足；实时性、预览层复用与界面方向由 BUG 0008 继续修订
 - 发现日期：2026-08-03
 - 影响范围：iPhone 计划带练的组前倒计时、手动完整取景与横竖屏录像
 - 修订自：[BUG 0006](0006-workout-camera-preview-recording-mismatch.md) 的首次画幅修复与真机验收结论
-- 后续修订：暂无
+- 后续修订：[BUG 0008](0008-guided-workout-realtime-camera-projection.md) 修复倒计时归零后的主线程等待、取景层重建和横竖屏布局漂移
 - 关联需求：[PRD 013](../prd/013-guided-workout-experience-and-capture.md)
 - 关联决策：[ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
 

@@ -5,22 +5,29 @@ import XCTest
 
 final class GuidedWorkoutLayoutTests: XCTestCase {
     @MainActor
-    func testPreviewUsesCaptureExactAspectFit() throws {
+    func testPreviewUsesOneSharedCaptureExactLayerAcrossHosts() {
         let camera = WorkoutCameraService()
-        let view = CameraPreviewView(frame: .zero)
-        let layer = try XCTUnwrap(view.previewLayer)
+        let layer = camera.sharedPreviewLayer
+        let compactHost = CameraPreviewView(frame: .zero)
+        let expandedHost = CameraPreviewView(frame: .zero)
 
-        camera.attachPreviewLayer(layer)
+        compactHost.installPreviewLayer(layer)
+        XCTAssertTrue(layer.superlayer === compactHost.layer)
 
+        expandedHost.installPreviewLayer(layer)
+        compactHost.removePreviewLayerIfOwned(layer)
+
+        XCTAssertTrue(layer.superlayer === expandedHost.layer)
         XCTAssertEqual(layer.videoGravity, .resizeAspect)
-        camera.detachPreviewLayer(layer)
     }
 
     @MainActor
     func testPreviewLayerBecomesReadyOnlyAfterEnteringWindow() {
         let view = CameraPreviewView(frame: .zero)
+        let layer = AVCaptureVideoPreviewLayer()
         var readyLayers: [AVCaptureVideoPreviewLayer] = []
         view.onPreviewLayerReady = { readyLayers.append($0) }
+        view.installPreviewLayer(layer)
 
         XCTAssertTrue(readyLayers.isEmpty)
 
@@ -33,8 +40,31 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         view.layoutIfNeeded()
 
         XCTAssertEqual(readyLayers.count, 1)
-        XCTAssertTrue(readyLayers[0] === view.previewLayer)
+        XCTAssertTrue(readyLayers[0] === layer)
         window.isHidden = true
+    }
+
+    func testCameraLayoutFollowsInterfaceInsteadOfLockedCaptureGeometry() {
+        XCTAssertEqual(
+            WorkoutCaptureLayout.previewAspectRatio(isLandscape: false),
+            9.0 / 16.0,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            WorkoutCaptureLayout.previewAspectRatio(isLandscape: true),
+            16.0 / 9.0,
+            accuracy: 0.0001
+        )
+
+        let portraitPIP = WorkoutCaptureLayout.compactPreviewWidth(
+            availableWidth: 390,
+            isLandscape: false
+        )
+        let landscapeCameraShare = WorkoutCaptureLayout.landscapeCameraShare(
+            availableWidth: 844
+        )
+        XCTAssertGreaterThanOrEqual(portraitPIP, 120)
+        XCTAssertGreaterThanOrEqual(landscapeCameraShare, 0.68)
     }
 
     @MainActor
@@ -50,6 +80,29 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
                 isGuidedWorkoutActive: true
             ),
             [.portrait, .landscapeLeft, .landscapeRight]
+        )
+        XCTAssertEqual(
+            WorkoutInterfaceOrientationPolicy.requestedOrientation(
+                for: .portrait
+            ),
+            .portrait
+        )
+        XCTAssertEqual(
+            WorkoutInterfaceOrientationPolicy.requestedOrientation(
+                for: .landscapeLeft
+            ),
+            .landscapeRight
+        )
+        XCTAssertEqual(
+            WorkoutInterfaceOrientationPolicy.requestedOrientation(
+                for: .landscapeRight
+            ),
+            .landscapeLeft
+        )
+        XCTAssertNil(
+            WorkoutInterfaceOrientationPolicy.requestedOrientation(
+                for: .faceUp
+            )
         )
     }
 

@@ -32,7 +32,8 @@
    - 使用 `.resizeAspect` 完整展示输出，不以裁切填满；
    - `AVCaptureDevice.RotationCoordinator` 提供预览与捕获角度；
    - 开始录像时锁定当前角度、方向和镜像，停止后恢复监听。
-6. 紧凑态与放大态共享同一 `AVCaptureSession`。UI 切换不得停止 Session、重建输出或改变文件。
+6. 紧凑态与放大态共享同一 `AVCaptureSession` 和同一 `AVCaptureVideoPreviewLayer`。UI 容器只
+   重新挂载预览层；切换不得停止 Session、重建输出、重建预览层或改变文件。
 7. 目标录像组成功开始后自动进入放大态；用户收起只改变显示，录像继续。
 8. iPhone 声明横竖屏能力；App Delegate 只在带练期间返回 portrait/landscape 左右方向，其他
    页面继续竖屏。退出带练时恢复竖屏策略。
@@ -40,6 +41,8 @@
 10. 训练 Live Activity 使用独立 Attributes，只投影通用阶段、进度和休息时间；点击回到活动
     Session，不与 Agent Job Activity 混用。
 11. 相机失败、系统方向锁定或 ActivityKit 不可用只降级对应体验，不改变 Set 事实。
+12. Session、预览和文件 I/O 在专用串行队列执行。倒计时归零后先提交训练状态，任何相机准备、
+    启动或停止都不得占住 Main Actor；界面横竖布局读取当前 Scene 尺寸，不读取锁定的片段方向。
 
 ## 未选择的方案
 

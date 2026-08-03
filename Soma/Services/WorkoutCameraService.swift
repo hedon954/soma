@@ -84,14 +84,17 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     private(set) var lastSavedPath: String?
     private(set) var captureGeometry = WorkoutCaptureGeometry.portrait
     private(set) var isCaptureGeometryLocked = false
+    @ObservationIgnored let sharedPreviewLayer: AVCaptureVideoPreviewLayer = {
+        let layer = AVCaptureVideoPreviewLayer()
+        layer.videoGravity = .resizeAspect
+        return layer
+    }()
 
     @ObservationIgnored nonisolated(unsafe) let captureSession = AVCaptureSession()
     @ObservationIgnored private nonisolated(unsafe) let movieOutput =
         AVCaptureMovieFileOutput()
     @ObservationIgnored private nonisolated(unsafe) var captureDevice:
         AVCaptureDevice?
-    @ObservationIgnored private nonisolated(unsafe) weak var previewLayer:
-        AVCaptureVideoPreviewLayer?
     @ObservationIgnored private var rotationCoordinator:
         AVCaptureDevice.RotationCoordinator?
     @ObservationIgnored private var previewRotationObservation:
@@ -108,6 +111,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         CheckedContinuation<String?, Error>?
     @ObservationIgnored private var discardCurrentRecording = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var preparationTask: Task<Void, Error>?
 
     override init() {
         super.init()
@@ -124,6 +128,28 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     func prepare() async throws {
+        if state == .previewing || state == .recording {
+            return
+        }
+        if let preparationTask {
+            try await preparationTask.value
+            return
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try await performPreparation()
+        }
+        preparationTask = task
+        do {
+            try await task.value
+            preparationTask = nil
+        } catch {
+            preparationTask = nil
+            throw error
+        }
+    }
+
+    private func performPreparation() async throws {
         state = .requestingPermission
         guard await cameraPermissionGranted() else {
             state = .unavailable(WorkoutCameraError.permissionDenied.localizedDescription)
@@ -141,8 +167,11 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     func startRecording(performanceID: UUID) async throws {
-        guard case .previewing = state else {
-            throw WorkoutCameraError.configurationFailed
+        if state == .recording {
+            return
+        }
+        if state != .previewing {
+            try await prepare()
         }
         guard hasRecordingCapacity else {
             state = .unavailable(
@@ -156,36 +185,58 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         temporaryURL = url
         discardCurrentRecording = false
         lockCaptureGeometry()
-        movieOutput.startRecording(
-            to: url,
-            recordingDelegate: recordingDelegate
-        )
+        await withCheckedContinuation { continuation in
+            sessionQueue.async { [movieOutput, recordingDelegate] in
+                movieOutput.startRecording(
+                    to: url,
+                    recordingDelegate: recordingDelegate
+                )
+                continuation.resume()
+            }
+        }
         state = .recording
     }
 
     func stopRecording() async throws -> String? {
-        guard movieOutput.isRecording else { return nil }
+        let isRecording = await withCheckedContinuation { continuation in
+            sessionQueue.async { [movieOutput] in
+                continuation.resume(returning: movieOutput.isRecording)
+            }
+        }
+        guard isRecording else {
+            unlockCaptureGeometry()
+            return nil
+        }
         return try await withCheckedThrowingContinuation { continuation in
             stopContinuation = continuation
-            movieOutput.stopRecording()
+            sessionQueue.async { [movieOutput] in
+                movieOutput.stopRecording()
+            }
         }
     }
 
     func cancelRecording() async {
         discardCurrentRecording = true
-        if movieOutput.isRecording {
-            movieOutput.stopRecording()
+        let isRecording = await withCheckedContinuation { continuation in
+            sessionQueue.async { [movieOutput] in
+                continuation.resume(returning: movieOutput.isRecording)
+            }
+        }
+        if isRecording {
+            sessionQueue.async { [movieOutput] in
+                movieOutput.stopRecording()
+            }
         } else {
             unlockCaptureGeometry()
         }
     }
 
     func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
-        if previewLayer === layer, rotationCoordinator != nil {
+        guard layer === sharedPreviewLayer else { return }
+        if rotationCoordinator != nil {
             applyCaptureGeometry(captureGeometry)
             return
         }
-        previewLayer = layer
         layer.session = captureSession
         layer.videoGravity = .resizeAspect
         configureRotationCoordinatorIfPossible()
@@ -193,11 +244,10 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     func detachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
-        guard previewLayer === layer else { return }
+        guard layer === sharedPreviewLayer else { return }
         previewRotationObservation = nil
         captureRotationObservation = nil
         rotationCoordinator = nil
-        previewLayer = nil
     }
 
     func stopPreview() async {
@@ -391,12 +441,14 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     private func configureRotationCoordinatorIfPossible() {
-        guard let captureDevice, let previewLayer else { return }
+        guard let captureDevice, sharedPreviewLayer.superlayer != nil else {
+            return
+        }
         previewRotationObservation = nil
         captureRotationObservation = nil
         let coordinator = AVCaptureDevice.RotationCoordinator(
             device: captureDevice,
-            previewLayer: previewLayer
+            previewLayer: sharedPreviewLayer
         )
         rotationCoordinator = coordinator
         previewRotationObservation = coordinator.observe(
@@ -449,7 +501,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     private func applyCaptureGeometry(_ geometry: WorkoutCaptureGeometry) {
-        if let connection = previewLayer?.connection {
+        if let connection = sharedPreviewLayer.connection {
             if connection.isVideoRotationAngleSupported(
                 CGFloat(geometry.previewRotationAngle)
             ) {
@@ -513,6 +565,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
 
 private final class MovieRecordingDelegate:
     NSObject,
+    @unchecked Sendable,
     AVCaptureFileOutputRecordingDelegate
 {
     var completion: ((URL, Error?) -> Void)?

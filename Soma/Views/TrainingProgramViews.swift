@@ -366,17 +366,26 @@ private struct TrainingProgramDetailView: View {
                     }
                     if autoRecording {
                         Section("取景校准") {
-                            WorkoutCameraSurface(
-                                camera: camera,
-                                showsSafeFrame: true,
-                                compact: false
-                            )
-                            .aspectRatio(
-                                camera.captureGeometry.orientation.aspectRatio,
-                                contentMode: .fit
-                            )
-                            .frame(maxHeight: 310)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            GeometryReader { proxy in
+                                let isLandscape = proxy.size.width > proxy.size.height
+                                WorkoutCameraSurface(
+                                    camera: camera,
+                                    showsSafeFrame: true,
+                                    compact: false
+                                )
+                                .aspectRatio(
+                                    WorkoutCaptureLayout.previewAspectRatio(
+                                        isLandscape: isLandscape
+                                    ),
+                                    contentMode: .fit
+                                )
+                                .frame(
+                                    maxWidth: .infinity,
+                                    maxHeight: .infinity
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 20))
+                            }
+                            .frame(height: 520)
                             Text("请横放或竖放设备，确认全身位于虚线框内。这里展示的是最终录像的完整画幅。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)

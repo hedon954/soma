@@ -101,19 +101,17 @@ struct GuidedWorkoutView: View {
                         coachingNote: coachingNote,
                         isLandscape: proxy.size.width > proxy.size.height,
                         onCollapse: {
-                            withAnimation(.snappy) {
-                                presentation.collapse()
-                            }
+                            var next = presentation
+                            next.collapse()
+                            presentation = next
                         },
                         onPause: pauseOrResume,
                         onComplete: completeCurrentSet,
                         onEdit: { showsActualEditor = true },
                         onMore: { showsEndConfirmation = true }
                     )
-                    .transition(.opacity)
                 } else {
                     compactContent(isLandscape: proxy.size.width > proxy.size.height)
-                        .transition(.opacity)
                 }
             }
         }
@@ -150,14 +148,23 @@ struct GuidedWorkoutView: View {
             } ?? ""
         }
         .onChange(of: camera.state) {
-            withAnimation(.snappy) {
-                presentation.cameraStateChanged(camera.state)
-            }
+            var next = presentation
+            next.cameraStateChanged(camera.state)
+            presentation = next
         }
         .onChange(of: session.guidedPhaseRaw) {
-            withAnimation(.snappy) {
-                presentation.phaseChanged(session.guidedPhase)
-            }
+            var next = presentation
+            next.phaseChanged(session.guidedPhase)
+            #if DEBUG
+                if session.guidedPhase == .setInProgress,
+                   ProcessInfo.processInfo.environment[
+                       "SOMA_GUIDED_CAPTURE_PREVIEW"
+                   ] == "1"
+                {
+                    next.expand()
+                }
+            #endif
+            presentation = next
         }
         .sheet(isPresented: $showsActualEditor) {
             GuidedSetActualEditor(
@@ -284,9 +291,9 @@ struct GuidedWorkoutView: View {
                     isLandscape: isLandscape,
                     showsCamera: showsCompactCamera,
                     onExpandCamera: {
-                        withAnimation(.snappy) {
-                            presentation.expand()
-                        }
+                        var next = presentation
+                        next.expand()
+                        presentation = next
                     },
                     onEdit: { showsActualEditor = true },
                     onComplete: completeCurrentSet,

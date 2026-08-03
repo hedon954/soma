@@ -25,8 +25,8 @@ struct WorkoutCameraPreview: UIViewRepresentable {
         coordinator: Coordinator
     ) {
         uiView.onPreviewLayerReady = nil
-        if let layer = uiView.previewLayer {
-            coordinator.camera?.detachPreviewLayer(layer)
+        if let layer = coordinator.camera?.sharedPreviewLayer {
+            uiView.removePreviewLayerIfOwned(layer)
         }
     }
 
@@ -39,10 +39,12 @@ struct WorkoutCameraPreview: UIViewRepresentable {
         }
 
         func configure(_ view: CameraPreviewView) {
+            guard let camera else { return }
+            let layer = camera.sharedPreviewLayer
             view.onPreviewLayerReady = { [weak self] layer in
                 self?.camera?.attachPreviewLayer(layer)
             }
-            view.notifyPreviewLayerIfReady()
+            view.installPreviewLayer(layer)
         }
     }
 }
@@ -50,22 +52,45 @@ struct WorkoutCameraPreview: UIViewRepresentable {
 @MainActor
 final class CameraPreviewView: UIView {
     var onPreviewLayerReady: (@MainActor (AVCaptureVideoPreviewLayer) -> Void)?
-
-    override static var layerClass: AnyClass {
-        AVCaptureVideoPreviewLayer.self
-    }
-
-    var previewLayer: AVCaptureVideoPreviewLayer? {
-        layer as? AVCaptureVideoPreviewLayer
-    }
+    private weak var hostedPreviewLayer: AVCaptureVideoPreviewLayer?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         notifyPreviewLayerIfReady()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        hostedPreviewLayer?.frame = bounds
+    }
+
+    func installPreviewLayer(_ previewLayer: AVCaptureVideoPreviewLayer) {
+        guard hostedPreviewLayer !== previewLayer
+            || previewLayer.superlayer !== layer
+        else {
+            previewLayer.frame = bounds
+            notifyPreviewLayerIfReady()
+            return
+        }
+
+        previewLayer.removeFromSuperlayer()
+        hostedPreviewLayer = previewLayer
+        previewLayer.frame = bounds
+        previewLayer.videoGravity = .resizeAspect
+        layer.addSublayer(previewLayer)
+        notifyPreviewLayerIfReady()
+    }
+
+    func removePreviewLayerIfOwned(_ previewLayer: AVCaptureVideoPreviewLayer) {
+        guard previewLayer.superlayer === layer else { return }
+        previewLayer.removeFromSuperlayer()
+        if hostedPreviewLayer === previewLayer {
+            hostedPreviewLayer = nil
+        }
+    }
+
     func notifyPreviewLayerIfReady() {
-        guard window != nil, let previewLayer else { return }
-        onPreviewLayerReady?(previewLayer)
+        guard window != nil, let hostedPreviewLayer else { return }
+        onPreviewLayerReady?(hostedPreviewLayer)
     }
 }

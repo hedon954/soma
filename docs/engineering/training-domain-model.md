@@ -269,7 +269,8 @@ ready
 
 `preSetCountdown` 的可见组件拥有基于 `phaseStartedAt + 3 秒` 的截止时间任务；它不能依赖外层
 View 是否因 SwiftData 字段变化而重建。截止后只在 Session 仍处于倒计时阶段时进入
-`setInProgress`，因此页面取消和重复回调都不会重复启动同一组。
+`setInProgress`，因此页面取消和重复回调都不会重复启动同一组。`setInProgress` 先保存并投影，
+相机准备和开始在专用队列继续；相机不能成为训练界面出现的前置条件。
 
 所有状态变化都保存 `sessionID + performanceID + setID` 恢复点。系统中断后：
 
@@ -313,9 +314,14 @@ firstSetIsWarmup == true  → order 2
 - 开始录像时锁定本段方向、角度和镜像，停止后再恢复设备方向监听；
 - 带练可使用 portrait、landscape left/right，其他 App 页面保持 portrait；
 - 横竖屏策略从开始前取景校准生效，进入带练时再次请求 Scene 刷新，取消或结束后恢复 portrait；
-- 紧凑小窗和放大取景只切换 SwiftUI 投影，共享同一个 Capture Session 和文件输出。
+- 紧凑小窗和放大取景只切换 SwiftUI 投影，共享同一个 Capture Session、Movie Output 和由相机
+  服务持有的 `AVCaptureVideoPreviewLayer`；旧 Host 清理不能移除已经挂入新 Host 的同一层。
 - 手动放大不会被普通 `previewing` 状态收回，只有用户收起或离开执行阶段才退出；录像开始仍可
   自动放大。
+- 预览容器的横竖比例读取当前 Scene 尺寸，不能读取录像期间锁定的 `Capture Geometry`；设备
+  方向变化向 Scene 请求精确方向。竖屏和横屏都优先扩大相机区域，控制信息只占完成当前组所需空间。
+- `startRunning`、`startRecording`、`stopRecording` 和相机状态读取进入同一串行队列，不占用
+  Main Actor；重复相机准备合并为同一个任务。
 
 默认无音轨。任何失败都产生可理解状态但不改变 Set 事实。
 
