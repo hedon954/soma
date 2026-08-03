@@ -238,10 +238,7 @@ struct GuidedExpandedCaptureView: View {
             if isLandscape {
                 landscapeBody(availableWidth: proxy.size.width)
             } else {
-                portraitBody(
-                    availableWidth: proxy.size.width,
-                    availableHeight: proxy.size.height
-                )
+                portraitBody
             }
         }
         .padding(isLandscape ? 18 : 16)
@@ -262,19 +259,13 @@ struct GuidedExpandedCaptureView: View {
         }
     }
 
-    private func portraitBody(
-        availableWidth: CGFloat,
-        availableHeight: CGFloat
-    ) -> some View {
-        VStack(spacing: 12) {
+    private var portraitBody: some View {
+        PortraitGuidedCaptureLayout(spacing: 12) {
             captureHeader
             cameraSurface
-                .frame(height: WorkoutCaptureLayout.portraitCameraHeight(
-                    availableWidth: availableWidth,
-                    availableHeight: availableHeight
-                ))
             controlPanel
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var captureHeader: some View {
@@ -357,13 +348,12 @@ struct GuidedExpandedCaptureView: View {
 
     private var controlPanel: some View {
         VStack(alignment: .leading, spacing: isLandscape ? 12 : 10) {
-            Text(performance?.exerciseName ?? "当前动作")
-                .font(.title2.bold())
-                .lineLimit(2)
-            Text(targetText)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            Text(GuidedWorkoutDisplayText.expandedActionTitle(
+                exerciseName: performance?.exerciseName,
+                targetText: targetText
+            ))
+            .font(.title3.bold())
+            .lineLimit(2)
             GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
             Label(coachingNote, systemImage: "lightbulb.fill")
                 .font(.subheadline)

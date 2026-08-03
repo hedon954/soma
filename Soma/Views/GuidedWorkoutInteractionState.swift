@@ -1,5 +1,5 @@
-import CoreGraphics
 import Foundation
+import SwiftUI
 
 enum GuidedWorkoutPresentationMode: Equatable {
     case compact
@@ -63,14 +63,93 @@ enum WorkoutCaptureLayout {
         return max(cameraWidth / availableWidth, 0)
     }
 
-    static func portraitCameraHeight(
-        availableWidth: CGFloat,
-        availableHeight: CGFloat
+    static func portraitCameraRegionHeight(
+        availableHeight: CGFloat,
+        headerHeight: CGFloat,
+        controlsHeight: CGFloat,
+        spacing: CGFloat
     ) -> CGFloat {
-        min(
-            availableWidth / previewAspectRatio(isLandscape: false),
-            availableHeight * 0.52
+        max(
+            availableHeight - headerHeight - controlsHeight - spacing * 2,
+            0
         )
+    }
+}
+
+struct PortraitGuidedCaptureLayout: Layout {
+    var spacing: CGFloat = 12
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) -> CGSize {
+        let resolved = proposal.replacingUnspecifiedDimensions()
+        guard subviews.count == 3, proposal.height == nil else {
+            return resolved
+        }
+        let rowProposal = ProposedViewSize(width: resolved.width, height: nil)
+        let headerHeight = subviews[0].sizeThatFits(rowProposal).height
+        let cameraHeight = subviews[1].sizeThatFits(rowProposal).height
+        let controlsHeight = subviews[2].sizeThatFits(rowProposal).height
+        return CGSize(
+            width: resolved.width,
+            height: headerHeight + cameraHeight + controlsHeight + spacing * 2
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal _: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) {
+        guard subviews.count == 3 else { return }
+        let rowProposal = ProposedViewSize(width: bounds.width, height: nil)
+        let headerSize = subviews[0].sizeThatFits(rowProposal)
+        let controlsSize = subviews[2].sizeThatFits(rowProposal)
+        let cameraRegionHeight = WorkoutCaptureLayout.portraitCameraRegionHeight(
+            availableHeight: bounds.height,
+            headerHeight: headerSize.height,
+            controlsHeight: controlsSize.height,
+            spacing: spacing
+        )
+        let cameraProposal = ProposedViewSize(
+            width: bounds.width,
+            height: cameraRegionHeight
+        )
+
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: rowProposal
+        )
+        subviews[1].place(
+            at: CGPoint(
+                x: bounds.midX,
+                y: bounds.minY + headerSize.height + spacing
+                    + cameraRegionHeight / 2
+            ),
+            anchor: .center,
+            proposal: cameraProposal
+        )
+        subviews[2].place(
+            at: CGPoint(x: bounds.minX, y: bounds.maxY),
+            anchor: .bottomLeading,
+            proposal: rowProposal
+        )
+    }
+}
+
+enum GuidedWorkoutDisplayText {
+    static func expandedActionTitle(
+        exerciseName: String?,
+        targetText: String
+    ) -> String {
+        let name = exerciseName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = name.flatMap { $0.isEmpty ? nil : $0 } ?? "当前动作"
+        let inlineTarget = targetText.replacingOccurrences(of: " × ", with: "、")
+        return "\(resolvedName)（\(inlineTarget)）"
     }
 }
 

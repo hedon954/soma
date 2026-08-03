@@ -110,13 +110,34 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         let landscapeCameraShare = WorkoutCaptureLayout.landscapeCameraShare(
             availableWidth: 844
         )
-        let portraitCameraHeight = WorkoutCaptureLayout.portraitCameraHeight(
-            availableWidth: 390,
-            availableHeight: 844
-        )
         XCTAssertGreaterThanOrEqual(portraitPIP, 120)
         XCTAssertGreaterThanOrEqual(landscapeCameraShare, 0.68)
-        XCTAssertLessThanOrEqual(portraitCameraHeight, 844 * 0.52)
+        XCTAssertEqual(
+            WorkoutCaptureLayout.portraitCameraRegionHeight(
+                availableHeight: 844,
+                headerHeight: 44,
+                controlsHeight: 260,
+                spacing: 12
+            ),
+            516
+        )
+    }
+
+    func testExpandedActionTitleCombinesExerciseAndTargetOnOneLine() {
+        XCTAssertEqual(
+            GuidedWorkoutDisplayText.expandedActionTitle(
+                exerciseName: "引体向上",
+                targetText: "自重 × 5 次"
+            ),
+            "引体向上（自重、5 次）"
+        )
+        XCTAssertEqual(
+            GuidedWorkoutDisplayText.expandedActionTitle(
+                exerciseName: "杠铃深蹲",
+                targetText: "60 kg × 5 次"
+            ),
+            "杠铃深蹲（60 kg、5 次）"
+        )
     }
 
     @MainActor
