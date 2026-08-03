@@ -628,6 +628,10 @@ private struct ConversationStarter: View {
     }
 }
 
+enum ChatTextSelectionStyle {
+    static let tintColor = UIColor.label
+}
+
 private struct SelectableChatText: UIViewRepresentable {
     let content: String
     let color: UIColor
@@ -643,7 +647,7 @@ private struct SelectableChatText: UIViewRepresentable {
         textView.textContainer.lineFragmentPadding = 0
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.required, for: .vertical)
-        textView.tintColor = UIColor(AppTheme.tint)
+        textView.tintColor = ChatTextSelectionStyle.tintColor
         textView.accessibilityTraits = .staticText
         return textView
     }
