@@ -1,5 +1,16 @@
 import SwiftUI
 
+enum AgentToolResultDisclosure {
+    static let collapsedLineLimit = 4
+    private static let collapsedCharacterThreshold = 80
+
+    static func shouldCollapse(_ text: String) -> Bool {
+        text.count > collapsedCharacterThreshold
+            || text.components(separatedBy: .newlines).count
+            > collapsedLineLimit
+    }
+}
+
 struct AgentTurnTranscript: View {
     let items: [AgentTurnItem]
     let isLive: Bool
@@ -64,11 +75,14 @@ private struct AgentTurnItemCard: View {
                 }
 
                 if let detail {
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(item.status == .failed ? Color.red : Color.secondary)
-                        .lineLimit(4)
-                        .fixedSize(horizontal: false, vertical: true)
+                    AgentOperationDetail(
+                        text: detail,
+                        color: item.status == .failed ? .red : .secondary,
+                        allowsExpansion: item.kind == .tool
+                            && item.status == .succeeded
+                            && AgentToolResultDisclosure.shouldCollapse(detail),
+                        accessibilityContext: item.title
+                    )
                 }
             }
 
@@ -84,7 +98,7 @@ private struct AgentTurnItemCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(kindColor.opacity(0.12), lineWidth: 1)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     private var errorCard: some View {
@@ -169,6 +183,51 @@ private struct AgentTurnItemCard: View {
     }
 }
 
+private struct AgentOperationDetail: View {
+    let text: String
+    let color: Color
+    let allowsExpansion: Bool
+    let accessibilityContext: String
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(color)
+                .lineLimit(
+                    allowsExpansion && !isExpanded
+                        ? AgentToolResultDisclosure.collapsedLineLimit
+                        : nil
+                )
+                .fixedSize(horizontal: false, vertical: true)
+
+            if allowsExpansion {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(isExpanded ? "收起" : "展开")
+                        Image(systemName: "chevron.down")
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.tint)
+                .accessibilityLabel(
+                    "\(isExpanded ? "收起" : "展开")\(accessibilityContext)工具结果"
+                )
+                .accessibilityValue(isExpanded ? "已展开" : "已收起")
+                .accessibilityHint(isExpanded ? "隐藏部分工具结果" : "显示完整工具结果")
+            }
+        }
+    }
+}
+
 private struct AgentTurnWaitingCard: View {
     var body: some View {
         HStack(spacing: 8) {
@@ -186,4 +245,25 @@ private struct AgentTurnWaitingCard: View {
         )
         .accessibilityLabel("Agent 正在继续处理")
     }
+}
+
+#Preview("长工具结果") {
+    ScrollView {
+        AgentTurnTranscript(
+            items: [
+                AgentTurnItem(
+                    kind: .tool,
+                    status: .succeeded,
+                    title: "查询训练记录",
+                    output: AgentTraceText.json(AgentToolResult.success(
+                        "已找到最近十二次训练记录。这里保留完整的工具观察结果，默认只展示摘要，"
+                            + "用户可以主动展开查看全部内容，也可以再次收起，后续 Agent 回复不受影响。"
+                    ))
+                )
+            ],
+            isLive: false
+        )
+        .padding()
+    }
+    .background(Color(uiColor: .systemGroupedBackground))
 }

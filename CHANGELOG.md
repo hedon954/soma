@@ -49,6 +49,7 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ### Fixed
 
+- 修复较长 Tool 执行结果在聊天事件卡片中直接截断的问题，改为保留全文并支持展开、收起。
 - 修复开启后台持续处理后回复一次性出现、Worker/SSE/iOS 叠加固定轮询等待的问题：远端模型
   改为原生流式，Job/Event/Tool Result 即时唤醒，聊天继续逐段显示且 cursor 可断线恢复。
 - 修复 Widget 配置元数据触发扩展崩溃、导致 Soma 无法出现在桌面和锁屏组件库的问题。
