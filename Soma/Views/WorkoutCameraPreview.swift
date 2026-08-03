@@ -41,8 +41,8 @@ struct WorkoutCameraPreview: UIViewRepresentable {
         func configure(_ view: CameraPreviewView) {
             guard let camera else { return }
             let layer = camera.sharedPreviewLayer
-            view.onPreviewLayerReady = { [weak self] layer in
-                self?.camera?.attachPreviewLayer(layer)
+            view.onPreviewLayerReady = { [weak self] layer, hostID in
+                self?.camera?.attachPreviewLayer(layer, hostID: hostID)
             }
             view.installPreviewLayer(layer)
         }
@@ -51,7 +51,9 @@ struct WorkoutCameraPreview: UIViewRepresentable {
 
 @MainActor
 final class CameraPreviewView: UIView {
-    var onPreviewLayerReady: (@MainActor (AVCaptureVideoPreviewLayer) -> Void)?
+    let previewHostID = UUID()
+    var onPreviewLayerReady:
+        (@MainActor (AVCaptureVideoPreviewLayer, UUID) -> Void)?
     private weak var hostedPreviewLayer: AVCaptureVideoPreviewLayer?
 
     override func didMoveToWindow() {
@@ -65,11 +67,11 @@ final class CameraPreviewView: UIView {
     }
 
     func installPreviewLayer(_ previewLayer: AVCaptureVideoPreviewLayer) {
-        guard hostedPreviewLayer !== previewLayer
-            || previewLayer.superlayer !== layer
-        else {
-            previewLayer.frame = bounds
-            notifyPreviewLayerIfReady()
+        if hostedPreviewLayer === previewLayer {
+            if previewLayer.superlayer === layer {
+                previewLayer.frame = bounds
+                notifyPreviewLayerIfReady()
+            }
             return
         }
 
@@ -91,6 +93,6 @@ final class CameraPreviewView: UIView {
 
     func notifyPreviewLayerIfReady() {
         guard window != nil, let hostedPreviewLayer else { return }
-        onPreviewLayerReady?(hostedPreviewLayer)
+        onPreviewLayerReady?(hostedPreviewLayer, previewHostID)
     }
 }

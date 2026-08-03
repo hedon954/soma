@@ -76,6 +76,7 @@ struct GuidedCompactSetView: View {
     let coachingNote: String
     let isLandscape: Bool
     let showsCamera: Bool
+    let cameraErrorMessage: String?
     let onExpandCamera: () -> Void
     let onEdit: () -> Void
     let onComplete: () -> Void
@@ -134,7 +135,8 @@ struct GuidedCompactSetView: View {
                             WorkoutCameraSurface(
                                 camera: camera,
                                 showsSafeFrame: false,
-                                compact: true
+                                compact: true,
+                                recordingErrorMessage: cameraErrorMessage
                             )
                             .allowsHitTesting(false)
                             .frame(width: WorkoutCaptureLayout.compactPreviewWidth(
@@ -177,7 +179,7 @@ struct GuidedCompactSetView: View {
                         .padding(.vertical, 5)
                         .background(.green.opacity(0.08), in: Capsule())
                     Text(targetText)
-                        .font(.system(size: isLandscape ? 38 : 46, weight: .bold))
+                        .font(.system(size: isLandscape ? 28 : 30, weight: .semibold))
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                 }
@@ -224,6 +226,7 @@ struct GuidedExpandedCaptureView: View {
     let targetText: String
     let coachingNote: String
     let isLandscape: Bool
+    let cameraErrorMessage: String?
     let onCollapse: () -> Void
     let onPause: () -> Void
     let onComplete: () -> Void
@@ -235,7 +238,10 @@ struct GuidedExpandedCaptureView: View {
             if isLandscape {
                 landscapeBody(availableWidth: proxy.size.width)
             } else {
-                portraitBody
+                portraitBody(
+                    availableWidth: proxy.size.width,
+                    availableHeight: proxy.size.height
+                )
             }
         }
         .padding(isLandscape ? 18 : 16)
@@ -256,16 +262,19 @@ struct GuidedExpandedCaptureView: View {
         }
     }
 
-    private var portraitBody: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 14) {
-                captureHeader
-                cameraSurface
-                    .frame(maxWidth: .infinity)
-                controlPanel
-            }
+    private func portraitBody(
+        availableWidth: CGFloat,
+        availableHeight: CGFloat
+    ) -> some View {
+        VStack(spacing: 12) {
+            captureHeader
+            cameraSurface
+                .frame(height: WorkoutCaptureLayout.portraitCameraHeight(
+                    availableWidth: availableWidth,
+                    availableHeight: availableHeight
+                ))
+            controlPanel
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var captureHeader: some View {
@@ -322,7 +331,8 @@ struct GuidedExpandedCaptureView: View {
         WorkoutCameraSurface(
             camera: camera,
             showsSafeFrame: true,
-            compact: false
+            compact: false,
+            recordingErrorMessage: cameraErrorMessage
         )
         .aspectRatio(
             WorkoutCaptureLayout.previewAspectRatio(
@@ -347,12 +357,13 @@ struct GuidedExpandedCaptureView: View {
 
     private var controlPanel: some View {
         VStack(alignment: .leading, spacing: isLandscape ? 12 : 10) {
-            HStack(alignment: .lastTextBaseline) {
-                Text(targetText)
-                    .font(.system(size: isLandscape ? 34 : 42, weight: .bold))
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-            }
+            Text(performance?.exerciseName ?? "当前动作")
+                .font(.title2.bold())
+                .lineLimit(2)
+            Text(targetText)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
             Label(coachingNote, systemImage: "lightbulb.fill")
                 .font(.subheadline)
@@ -394,23 +405,31 @@ struct WorkoutCameraSurface: View {
     let camera: WorkoutCameraService
     let showsSafeFrame: Bool
     let compact: Bool
+    let recordingErrorMessage: String?
 
     var body: some View {
         ZStack {
             Color.black
             WorkoutCameraPreview(camera: camera)
-            switch camera.state {
-            case .idle, .requestingPermission:
-                ProgressView("相机准备中…")
+            switch presentation {
+            case let .loading(message):
+                ProgressView(message)
                     .tint(.white)
                     .foregroundStyle(.white)
-            case let .unavailable(message):
-                Label(message, systemImage: "camera.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(18)
-            case .previewing, .recording:
+            case let .failed(message):
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.orange)
+                    Text(message)
+                }
+                .font(.caption)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(18)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 16))
+                .padding(14)
+            case .visible:
                 EmptyView()
             }
             if showsSafeFrame {
@@ -444,6 +463,15 @@ struct WorkoutCameraSurface: View {
             )
             .padding(compact ? 7 : 12)
         }
+    }
+
+    private var presentation: WorkoutCameraSurfacePresentation {
+        WorkoutCameraSurfacePresentation.resolve(
+            cameraState: camera.state,
+            isPreviewReady: camera.isPreviewReady,
+            previewIssueMessage: camera.previewIssueMessage,
+            recordingErrorMessage: recordingErrorMessage
+        )
     }
 }
 

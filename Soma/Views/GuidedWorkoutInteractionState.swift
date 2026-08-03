@@ -62,6 +62,49 @@ enum WorkoutCaptureLayout {
             - landscapeControlWidth(availableWidth: availableWidth)
         return max(cameraWidth / availableWidth, 0)
     }
+
+    static func portraitCameraHeight(
+        availableWidth: CGFloat,
+        availableHeight: CGFloat
+    ) -> CGFloat {
+        min(
+            availableWidth / previewAspectRatio(isLandscape: false),
+            availableHeight * 0.52
+        )
+    }
+}
+
+enum WorkoutCameraSurfacePresentation: Equatable {
+    case loading(String)
+    case visible
+    case failed(String)
+
+    static func resolve(
+        cameraState: WorkoutCameraState,
+        isPreviewReady: Bool,
+        previewIssueMessage: String?,
+        recordingErrorMessage: String?
+    ) -> WorkoutCameraSurfacePresentation {
+        if let recordingErrorMessage {
+            return .failed(recordingErrorMessage)
+        }
+        if let previewIssueMessage {
+            return .failed(previewIssueMessage)
+        }
+        if case let .unavailable(message) = cameraState {
+            return .failed(message)
+        }
+        switch cameraState {
+        case .idle, .requestingPermission:
+            return .loading("相机准备中…")
+        case .previewing, .recording:
+            return isPreviewReady
+                ? .visible
+                : .loading("正在连接相机画面…")
+        case .unavailable:
+            preconditionFailure("已在上方处理")
+        }
+    }
 }
 
 struct GuidedSetCountdownClock: Equatable {

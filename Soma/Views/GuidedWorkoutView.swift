@@ -100,6 +100,7 @@ struct GuidedWorkoutView: View {
                         targetText: targetText,
                         coachingNote: coachingNote,
                         isLandscape: proxy.size.width > proxy.size.height,
+                        cameraErrorMessage: coordinator.recordingErrorMessage,
                         onCollapse: {
                             var next = presentation
                             next.collapse()
@@ -290,6 +291,7 @@ struct GuidedWorkoutView: View {
                     coachingNote: coachingNote,
                     isLandscape: isLandscape,
                     showsCamera: showsCompactCamera,
+                    cameraErrorMessage: coordinator.recordingErrorMessage,
                     onExpandCamera: {
                         var next = presentation
                         next.expand()
@@ -340,7 +342,7 @@ struct GuidedWorkoutView: View {
         let weight = Double(actualWeight)
         switch (weight, reps) {
         case let (.some(weight), .some(reps)):
-            return "\(weight == 0 ? "自重" : "\(weight.formatted()) kg") × \(reps)"
+            return "\(weight == 0 ? "自重" : "\(weight.formatted()) kg") × \(reps) 次"
         case let (.some(weight), .none):
             return weight == 0 ? "自重" : "\(weight.formatted()) kg"
         case let (.none, .some(reps)):

@@ -1,10 +1,10 @@
 # BUG 0008：带练训练状态与相机投影未真正解耦
 
-- 状态：已修复；待维护者真机复验
+- 状态：首次共享层修复不足；Host 所有权与可见性由 BUG 0009 继续修订
 - 发现日期：2026-08-03
 - 影响范围：iPhone 计划带练的倒计时结束、完整取景切换、横竖屏布局与相机可视面积
 - 修订自：[BUG 0007](0007-guided-workout-countdown-capture-orientation-regression.md) 的首次倒计时、取景切换与方向修复
-- 后续修订：暂无
+- 后续修订：[BUG 0009](0009-guided-workout-preview-host-ownership-and-visible-state.md) 修复旧 Host 抢回共享层、静默黑屏和放大态信息缺失
 - 关联需求：[PRD 013](../prd/013-guided-workout-experience-and-capture.md)
 - 关联决策：[ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
 

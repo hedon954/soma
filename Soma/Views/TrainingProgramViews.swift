@@ -371,7 +371,8 @@ private struct TrainingProgramDetailView: View {
                                 WorkoutCameraSurface(
                                     camera: camera,
                                     showsSafeFrame: true,
-                                    compact: false
+                                    compact: false,
+                                    recordingErrorMessage: errorMessage
                                 )
                                 .aspectRatio(
                                     WorkoutCaptureLayout.previewAspectRatio(

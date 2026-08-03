@@ -84,6 +84,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     private(set) var lastSavedPath: String?
     private(set) var captureGeometry = WorkoutCaptureGeometry.portrait
     private(set) var isCaptureGeometryLocked = false
+    private(set) var isPreviewReady = false
+    private(set) var previewIssueMessage: String?
     @ObservationIgnored let sharedPreviewLayer: AVCaptureVideoPreviewLayer = {
         let layer = AVCaptureVideoPreviewLayer()
         layer.videoGravity = .resizeAspect
@@ -101,6 +103,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         NSKeyValueObservation?
     @ObservationIgnored private var captureRotationObservation:
         NSKeyValueObservation?
+    @ObservationIgnored private var previewReadinessObservation:
+        NSKeyValueObservation?
     @ObservationIgnored private let recordingDelegate = MovieRecordingDelegate()
     @ObservationIgnored private let sessionQueue = DispatchQueue(
         label: "top.hedon.soma.workout-camera"
@@ -112,6 +116,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     @ObservationIgnored private var discardCurrentRecording = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var preparationTask: Task<Void, Error>?
+    @ObservationIgnored private var previewStartupTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var activePreviewHostID: UUID?
 
     override init() {
         super.init()
@@ -157,9 +163,11 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
         do {
             try await configureIfNeeded()
-            await startSession()
+            try await startSession()
             configureRotationCoordinatorIfPossible()
             state = .previewing
+            refreshPreviewConnectionState()
+            armPreviewStartupTimeout()
         } catch {
             state = .unavailable(error.localizedDescription)
             throw error
@@ -195,6 +203,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             }
         }
         state = .recording
+        refreshPreviewConnectionState()
+        armPreviewStartupTimeout()
     }
 
     func stopRecording() async throws -> String? {
@@ -231,16 +241,36 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
     }
 
-    func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+    func attachPreviewLayer(
+        _ layer: AVCaptureVideoPreviewLayer,
+        hostID: UUID
+    ) {
         guard layer === sharedPreviewLayer else { return }
-        if rotationCoordinator != nil {
+        guard activePreviewHostID != hostID else {
             applyCaptureGeometry(captureGeometry)
+            refreshPreviewConnectionState()
             return
         }
+
+        activePreviewHostID = hostID
+        previewRotationObservation = nil
+        captureRotationObservation = nil
+        rotationCoordinator = nil
+        previewReadinessObservation = nil
+        previewStartupTimeoutTask?.cancel()
+        isPreviewReady = false
+        previewIssueMessage = nil
+
+        // Rebuild only the lightweight preview connection after a host handoff.
+        // The capture session and movie output continue running unchanged.
+        layer.session = nil
         layer.session = captureSession
         layer.videoGravity = .resizeAspect
         configureRotationCoordinatorIfPossible()
         applyCaptureGeometry(captureGeometry)
+        observePreviewReadiness(on: layer, hostID: hostID)
+        refreshPreviewConnectionState()
+        armPreviewStartupTimeout()
     }
 
     func detachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
@@ -263,6 +293,12 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         if case .unavailable = state {
             return
         }
+        previewStartupTimeoutTask?.cancel()
+        previewStartupTimeoutTask = nil
+        previewReadinessObservation = nil
+        activePreviewHostID = nil
+        isPreviewReady = false
+        previewIssueMessage = nil
         state = .idle
     }
 
@@ -379,14 +415,17 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
     }
 
-    private func startSession() async {
-        await withCheckedContinuation { continuation in
+    private func startSession() async throws {
+        let didStart = await withCheckedContinuation { continuation in
             sessionQueue.async { [captureSession] in
                 if !captureSession.isRunning {
                     captureSession.startRunning()
                 }
-                continuation.resume()
+                continuation.resume(returning: captureSession.isRunning)
             }
+        }
+        guard didStart else {
+            throw WorkoutCameraError.configurationFailed
         }
     }
 
@@ -419,6 +458,17 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             Task { @MainActor in
                 await self?.interrupt(
                     message: "相机被系统中断；训练进度不受影响。"
+                )
+            }
+        })
+        observers.append(center.addObserver(
+            forName: .AVCaptureSessionRuntimeError,
+            object: captureSession,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.interrupt(
+                    message: "相机运行异常，录像已停止；请退出本次取景后重试。"
                 )
             }
         })
@@ -468,6 +518,64 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             }
         }
         refreshCaptureGeometry()
+    }
+
+    private func refreshPreviewConnectionState() {
+        guard activePreviewHostID != nil else {
+            isPreviewReady = false
+            previewIssueMessage = nil
+            return
+        }
+
+        isPreviewReady = sharedPreviewLayer.isPreviewing
+        if isPreviewReady {
+            previewIssueMessage = nil
+            previewStartupTimeoutTask?.cancel()
+            previewStartupTimeoutTask = nil
+        }
+    }
+
+    private func observePreviewReadiness(
+        on layer: AVCaptureVideoPreviewLayer,
+        hostID: UUID
+    ) {
+        previewReadinessObservation = layer.observe(
+            \.isPreviewing,
+            options: [.initial, .new]
+        ) { [weak self] layer, _ in
+            Task { @MainActor [weak self] in
+                guard let self, activePreviewHostID == hostID else { return }
+                isPreviewReady = layer.isPreviewing
+                if isPreviewReady {
+                    previewIssueMessage = nil
+                    previewStartupTimeoutTask?.cancel()
+                    previewStartupTimeoutTask = nil
+                }
+            }
+        }
+    }
+
+    private func armPreviewStartupTimeout() {
+        guard let hostID = activePreviewHostID,
+              state == .previewing || state == .recording,
+              !isPreviewReady
+        else {
+            return
+        }
+        previewStartupTimeoutTask?.cancel()
+        previewStartupTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self,
+                  !Task.isCancelled,
+                  activePreviewHostID == hostID,
+                  !sharedPreviewLayer.isPreviewing,
+                  state == .previewing || state == .recording
+            else {
+                return
+            }
+            isPreviewReady = false
+            previewIssueMessage = "相机画面未能显示；训练可以继续，请收起后重新进入取景。"
+        }
     }
 
     private func refreshCaptureGeometry() {
