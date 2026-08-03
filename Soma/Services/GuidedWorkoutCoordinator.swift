@@ -6,7 +6,7 @@ import UIKit
 @MainActor
 protocol WorkoutRecordingControlling: AnyObject {
     func prepare() async throws
-    func startRecording(performanceID: UUID) async throws
+    func startRecording(performanceID: UUID, setID: UUID) async throws
     func stopRecording() async throws -> String?
     func cancelRecording() async
 }
@@ -14,7 +14,7 @@ protocol WorkoutRecordingControlling: AnyObject {
 @MainActor
 final class NoopWorkoutRecordingController: WorkoutRecordingControlling {
     func prepare() async throws {}
-    func startRecording(performanceID _: UUID) async throws {}
+    func startRecording(performanceID _: UUID, setID _: UUID) async throws {}
     func stopRecording() async throws -> String? {
         nil
     }
@@ -42,8 +42,10 @@ final class SystemWorkoutCueProvider: WorkoutCueProviding {
             forKey: "workout.voiceCuesEnabled"
         ) as? Bool ?? true
         guard isEnabled else { return }
+        synthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        utterance.rate = 0.5
         synthesizer.speak(utterance)
     }
 
@@ -58,10 +60,14 @@ final class GuidedWorkoutCoordinator {
     private(set) var activeSessionID: UUID?
     private(set) var lastErrorMessage: String?
     private(set) var recordingErrorMessage: String?
+    private(set) var recordingSetID: UUID?
+    private(set) var isStartingRecording = false
 
     @ObservationIgnored private let recorder: WorkoutRecordingControlling
     @ObservationIgnored private let cues: WorkoutCueProviding
     @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private var recordingRequestID: UUID?
+    @ObservationIgnored private var announcedCountdownValues = Set<Int>()
 
     init(
         recorder: WorkoutRecordingControlling,
@@ -85,26 +91,25 @@ final class GuidedWorkoutCoordinator {
         in context: ModelContext
     ) async {
         activeSessionID = session.id
+        recordingSetID = nil
+        isStartingRecording = false
+        recordingRequestID = nil
+        recordingErrorMessage = nil
+        announcedCountdownValues = []
         recover(session, in: context)
-        if session.autoRecordingPolicy == .enabled {
-            do {
-                try await recorder.prepare()
-            } catch {
-                recordingErrorMessage = error.localizedDescription
-            }
-        }
     }
 
     func introduceCurrentExercise(
         in context: ModelContext
     ) throws {
         let session = try activeSession(in: context)
-        guard currentPerformance(for: session, in: context) != nil else {
+        guard let performance = currentPerformance(for: session, in: context) else {
             session.guidedPhase = .sessionReview
             try context.save()
             return
         }
         setPhase(.exerciseIntroduction, for: session)
+        cues.announce("接下来，\(performance.exerciseName)")
         try context.save()
     }
 
@@ -124,8 +129,16 @@ final class GuidedWorkoutCoordinator {
         performance.status = .active
         session.currentSetID = set.id
         setPhase(.preSetCountdown, for: session)
+        announcedCountdownValues = []
         cues.announce("准备第 \(set.order) 组")
         try context.save()
+    }
+
+    func announceCountdown(_ value: Int) {
+        guard (1 ... 3).contains(value),
+              announcedCountdownValues.insert(value).inserted
+        else { return }
+        cues.announce("\(value)")
     }
 
     func beginCurrentSet(
@@ -140,6 +153,7 @@ final class GuidedWorkoutCoordinator {
         set.status = .inProgress
         set.startedAt = now()
         setPhase(.setInProgress, for: session)
+        cues.announce("开始第 \(set.order) 组")
         try context.save()
 
         if shouldRecord(
@@ -147,13 +161,20 @@ final class GuidedWorkoutCoordinator {
             performance: performance,
             session: session
         ) {
-            do {
-                try await recorder.startRecording(performanceID: performance.id)
-                recordingErrorMessage = nil
-            } catch {
-                recordingErrorMessage = error.localizedDescription
-            }
+            await startRecording(for: performance, set: set)
         }
+    }
+
+    func startManualRecording(in context: ModelContext) async throws {
+        let session = try activeSession(in: context)
+        guard session.guidedPhase == .setInProgress,
+              let performance = currentPerformance(for: session, in: context),
+              let set = currentSet(for: session, in: context)
+        else {
+            throw GuidedWorkoutError.missingSet
+        }
+        guard recordingSetID == nil, !isStartingRecording else { return }
+        await startRecording(for: performance, set: set)
     }
 
     func requestSetConfirmation(
@@ -178,20 +199,23 @@ final class GuidedWorkoutCoordinator {
         else {
             throw GuidedWorkoutError.missingSet
         }
-        let wasRecording = shouldRecord(
-            set: set,
-            performance: performance,
-            session: session
-        )
-        if wasRecording {
+        if isStartingRecording {
+            clearRecordingState()
+            await recorder.cancelRecording()
+        }
+        if recordingSetID == set.id {
             do {
                 if let path = try await recorder.stopRecording() {
-                    performance.activeVideoPath = path
+                    set.recordedVideoPath = path
+                    if performance.activeVideoPath == nil {
+                        performance.activeVideoPath = path
+                    }
                 }
                 recordingErrorMessage = nil
             } catch {
                 recordingErrorMessage = error.localizedDescription
             }
+            recordingSetID = nil
         }
         set.actualReps = actualReps
         set.actualWeightKG = actualWeightKG
@@ -215,6 +239,7 @@ final class GuidedWorkoutCoordinator {
             throw GuidedWorkoutError.missingSet
         }
         await recorder.cancelRecording()
+        clearRecordingState()
         set.status = .skipped
         set.completedAt = now()
         try advanceAfterSet(
@@ -232,6 +257,7 @@ final class GuidedWorkoutCoordinator {
             throw GuidedWorkoutError.missingSet
         }
         await recorder.cancelRecording()
+        clearRecordingState()
         set.status = .pending
         set.startedAt = nil
         set.completedAt = nil
@@ -249,6 +275,7 @@ final class GuidedWorkoutCoordinator {
             throw GuidedWorkoutError.missingPerformance
         }
         await recorder.cancelRecording()
+        clearRecordingState()
         for set in sets(for: performance, in: context)
             where set.status == .pending || set.status == .inProgress
         {
@@ -294,6 +321,10 @@ final class GuidedWorkoutCoordinator {
         session.restStartedAt = nil
         session.restTargetEndAt = nil
         setPhase(.preSetCountdown, for: session)
+        announcedCountdownValues = []
+        if let set = currentSet(for: session, in: context) {
+            cues.announce("准备第 \(set.order) 组")
+        }
         try context.save()
     }
 
@@ -311,6 +342,7 @@ final class GuidedWorkoutCoordinator {
             currentTarget.addingTimeInterval(TimeInterval(seconds)),
             now()
         )
+        announcedCountdownValues = []
         try context.save()
     }
 
@@ -332,7 +364,9 @@ final class GuidedWorkoutCoordinator {
     func pause(in context: ModelContext) async throws {
         let session = try activeSession(in: context)
         await recorder.cancelRecording()
+        clearRecordingState()
         session.status = .paused
+        cues.announce("训练已暂停")
         try context.save()
     }
 
@@ -340,16 +374,19 @@ final class GuidedWorkoutCoordinator {
         let session = try activeSession(in: context)
         session.status = .active
         recover(session, in: context)
+        cues.announce("继续训练")
     }
 
     func endEarly(in context: ModelContext) async throws {
         let session = try activeSession(in: context)
         await recorder.cancelRecording()
+        clearRecordingState()
         session.status = .abandoned
         session.endedAt = now()
         session.restTargetEndAt = nil
         session.autoRecordingPolicy = .cancelled
         activeSessionID = nil
+        cues.announce("训练已提前结束")
         try context.save()
     }
 
@@ -369,8 +406,9 @@ final class GuidedWorkoutCoordinator {
     ) async throws {
         let session = try activeSession(in: context)
         session.autoRecordingPolicy = policy
-        if policy != .enabled {
+        if !policy.usesAutomaticRecording {
             await recorder.cancelRecording()
+            clearRecordingState()
         }
         try context.save()
     }
@@ -405,6 +443,12 @@ final class GuidedWorkoutCoordinator {
                 TimeInterval(pending.plannedRestSeconds ?? 0)
             )
             setPhase(.resting, for: session)
+            announcedCountdownValues = []
+            cues.announce(
+                set.status == .skipped
+                    ? "已跳过第 \(set.order) 组，休息 \(pending.plannedRestSeconds ?? 0) 秒"
+                    : "第 \(set.order) 组完成，休息 \(pending.plannedRestSeconds ?? 0) 秒"
+            )
         } else {
             performance.status = .completed
             try advanceAfterPerformance(session, in: context)
@@ -425,12 +469,16 @@ final class GuidedWorkoutCoordinator {
             session.restStartedAt = nil
             session.restTargetEndAt = nil
             setPhase(.exerciseIntroduction, for: session)
+            cues.announce("接下来，\(next.exerciseName)")
         } else {
             session.currentPerformanceID = nil
             session.currentSetID = nil
             session.restStartedAt = nil
             session.restTargetEndAt = nil
             setPhase(.sessionReview, for: session)
+            let completedCount = allSets(for: session, in: context)
+                .count { $0.status == .completed }
+            cues.announce("训练完成，共完成 \(completedCount) 组")
         }
     }
 
@@ -498,14 +546,65 @@ final class GuidedWorkoutCoordinator {
         performance: ExercisePerformance,
         session: WorkoutSession
     ) -> Bool {
-        guard session.autoRecordingPolicy == .enabled,
-              performance.activeVideoPath == nil,
-              let prescription = performance.prescriptionSnapshot
-        else {
-            return false
+        guard set.recordedVideoPath == nil else { return false }
+        if session.autoRecordingPolicy == .everySet {
+            return true
         }
+        guard session.autoRecordingPolicy == .enabled,
+              let prescription = performance.prescriptionSnapshot
+        else { return false }
         let target = prescription.firstSetIsWarmup ? 2 : 1
         return set.order == target
+    }
+
+    private func startRecording(
+        for performance: ExercisePerformance,
+        set: WorkoutSet
+    ) async {
+        guard recordingSetID == nil, !isStartingRecording else { return }
+        let requestID = UUID()
+        recordingRequestID = requestID
+        isStartingRecording = true
+        do {
+            try await recorder.prepare()
+            guard recordingRequestID == requestID else { return }
+            try await recorder.startRecording(
+                performanceID: performance.id,
+                setID: set.id
+            )
+            guard recordingRequestID == requestID else {
+                await recorder.cancelRecording()
+                return
+            }
+            recordingSetID = set.id
+            recordingErrorMessage = nil
+        } catch {
+            if recordingRequestID == requestID {
+                recordingSetID = nil
+                recordingErrorMessage = error.localizedDescription
+            }
+        }
+        if recordingRequestID == requestID {
+            recordingRequestID = nil
+            isStartingRecording = false
+        }
+    }
+
+    private func clearRecordingState() {
+        recordingSetID = nil
+        isStartingRecording = false
+        recordingRequestID = nil
+    }
+
+    private func allSets(
+        for session: WorkoutSession,
+        in context: ModelContext
+    ) -> [WorkoutSet] {
+        let performanceIDs = Set(
+            performances(for: session, in: context).map(\.id)
+        )
+        return ((try? context.fetch(FetchDescriptor<WorkoutSet>())) ?? [])
+            .filter { performanceIDs.contains($0.performanceID) }
     }
 
     private func resolvedRestTargetEndAt(

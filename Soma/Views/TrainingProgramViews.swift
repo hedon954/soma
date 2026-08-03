@@ -11,6 +11,7 @@ struct TrainingProgramLibraryView: View {
     private var definitions: [ExerciseDefinition]
     @State private var showsCreation = false
     @State private var resumedSession: WorkoutSession?
+    @State private var errorMessage: String?
 
     private var activePrograms: [TrainingProgram] {
         programs.filter { $0.status == .active }
@@ -105,6 +106,13 @@ struct TrainingProgramLibraryView: View {
                                 .lineLimit(2)
                             }
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteSession(session)
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -133,6 +141,21 @@ struct TrainingProgramLibraryView: View {
                 GuidedWorkoutView(session: session)
             }
         }
+        .alert(
+            "无法删除训练记录",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: {
+                    if !$0 {
+                        errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func programRow(_ program: TrainingProgram) -> some View {
@@ -147,12 +170,19 @@ struct TrainingProgramLibraryView: View {
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
     }
+
+    private func deleteSession(_ session: WorkoutSession) {
+        do {
+            try TrainingPlanStore.deleteSession(session, in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 private struct TrainingProgramDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AIService.self) private var ai
-    @Environment(WorkoutCameraService.self) private var camera
     @Query(sort: \WorkoutTemplateVersion.createdAt, order: .reverse)
     private var allVersions: [WorkoutTemplateVersion]
     @Query(sort: \ExerciseDefinition.canonicalName)
@@ -165,7 +195,7 @@ private struct TrainingProgramDetailView: View {
     let program: TrainingProgram
     @State private var showsEditor = false
     @State private var showsStart = false
-    @State private var autoRecording = false
+    @State private var autoRecordingPolicy = AutoRecordingPolicy.disabled
     @State private var startedSession: WorkoutSession?
     @State private var errorMessage: String?
     @State private var isOptimizing = false
@@ -192,7 +222,7 @@ private struct TrainingProgramDetailView: View {
     private var readiness: [TrainingReadinessIssue] {
         TrainingPlanStore.readiness(
             prescriptions: prescriptions,
-            autoRecording: autoRecording,
+            autoRecordingPolicy: autoRecordingPolicy,
             in: modelContext
         )
     }
@@ -329,7 +359,7 @@ private struct TrainingProgramDetailView: View {
         .safeAreaInset(edge: .bottom) {
             if program.status == .active, !prescriptions.isEmpty {
                 Button {
-                    autoRecording = false
+                    autoRecordingPolicy = .disabled
                     WorkoutInterfaceOrientationPolicy.shared
                         .setGuidedWorkoutActive(true)
                     showsStart = true
@@ -360,37 +390,13 @@ private struct TrainingProgramDetailView: View {
                 Form {
                     Section {
                         Toggle("语音提示", isOn: $voiceCuesEnabled)
-                        Toggle("每个动作自动录制一组", isOn: $autoRecording)
-                    } footer: {
-                        Text("首组是热身时录第 2 组，否则录第 1 组。麦克风关闭，视频只保存在 Soma。")
-                    }
-                    if autoRecording {
-                        Section("取景校准") {
-                            GeometryReader { proxy in
-                                let isLandscape = proxy.size.width > proxy.size.height
-                                WorkoutCameraSurface(
-                                    camera: camera,
-                                    showsSafeFrame: true,
-                                    compact: false,
-                                    recordingErrorMessage: errorMessage
-                                )
-                                .aspectRatio(
-                                    WorkoutCaptureLayout.previewAspectRatio(
-                                        isLandscape: isLandscape
-                                    ),
-                                    contentMode: .fit
-                                )
-                                .frame(
-                                    maxWidth: .infinity,
-                                    maxHeight: .infinity
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 20))
-                            }
-                            .frame(height: 520)
-                            Text("请横放或竖放设备，确认全身位于虚线框内。这里展示的是最终录像的完整画幅。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        Picker("自动录像", selection: $autoRecordingPolicy) {
+                            Text("关闭").tag(AutoRecordingPolicy.disabled)
+                            Text("每个动作录一组").tag(AutoRecordingPolicy.enabled)
+                            Text("每一组都录").tag(AutoRecordingPolicy.everySet)
                         }
+                    } footer: {
+                        Text("只在实际开始录像时调用相机。单组模式在首组为热身时录第 2 组，否则录第 1 组；训练中也可随时手动录制当前组。")
                     }
                     if !readiness.isEmpty {
                         Section("开始前检查") {
@@ -411,18 +417,6 @@ private struct TrainingProgramDetailView: View {
                     }
                 }
                 .navigationTitle("准备训练")
-                .task(id: autoRecording) {
-                    guard autoRecording else {
-                        await camera.stopPreview()
-                        return
-                    }
-                    do {
-                        try await camera.prepare()
-                    } catch {
-                        autoRecording = false
-                        errorMessage = error.localizedDescription
-                    }
-                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("取消") { showsStart = false }
@@ -443,9 +437,6 @@ private struct TrainingProgramDetailView: View {
             guard !showsStart, startedSession == nil else { return }
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(false)
-            Task {
-                await camera.stopPreview()
-            }
         }
         .onChange(of: startedSession?.id) {
             guard startedSession == nil, !showsStart else { return }
@@ -478,7 +469,7 @@ private struct TrainingProgramDetailView: View {
         do {
             startedSession = try TrainingPlanStore.startSession(
                 program: program,
-                autoRecording: autoRecording,
+                autoRecordingPolicy: autoRecordingPolicy,
                 in: modelContext
             )
             showsStart = false
@@ -583,11 +574,15 @@ private struct WorkoutSessionReviewView: View {
                                 $0.performanceID == performance.id
                                     && $0.status == .completed
                             }
+                            let videoCount = Set(
+                                sets.compactMap(\.recordedVideoPath)
+                                    + [performance.activeVideoPath].compactMap { $0 }
+                            ).count
                             Text(
                                 "\(sets.count) 组已确认"
-                                    + (performance.activeVideoPath == nil
+                                    + (videoCount == 0
                                         ? ""
-                                        : " · 有录像")
+                                        : " · \(videoCount) 段录像")
                             )
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -632,10 +627,37 @@ struct PerformanceReviewView: View {
         }
     }
 
+    private var recordedSets: [WorkoutSet] {
+        allSets.filter {
+            $0.performanceID == performance.id
+                && $0.recordedVideoPath != nil
+        }
+        .sorted { $0.order < $1.order }
+    }
+
     var body: some View {
         Form {
             Section("动作证据") {
-                if let videoAttachment {
+                if !recordedSets.isEmpty {
+                    ForEach(recordedSets) { set in
+                        if let path = set.recordedVideoPath {
+                            Button {
+                                presentedVideo = MediaAttachmentReference(
+                                    kind: .video,
+                                    path: path
+                                )
+                            } label: {
+                                Label(
+                                    "查看第 \(set.order) 组录像",
+                                    systemImage: "play.rectangle.fill"
+                                )
+                            }
+                        }
+                    }
+                    Button("添加或替换分析用录像") {
+                        showsVideoPicker = true
+                    }
+                } else if let videoAttachment {
                     Button {
                         presentedVideo = videoAttachment
                     } label: {

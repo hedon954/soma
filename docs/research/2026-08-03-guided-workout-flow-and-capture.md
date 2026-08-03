@@ -1,8 +1,9 @@
 # 训练计划编排、沉浸式带练与真实取景调研
 
 - 日期：2026-08-03
-- 状态：已转化为正式 PRD、ADR 与 Bug 修复契约
+- 状态：已转化并部分修订；录像触发、语音与完成反馈由后续调研扩展
 - 修订自：[动作库、训练计划、程序化带练与训练视频复盘调研](2026-07-31-exercise-library-plans-guided-training.md) 的计划执行体验与录像部分
+- 后续修订：[带练录像策略、语音节奏、完成反馈与历史管理调研](2026-08-04-guided-workout-recording-cues-and-review.md)
 - 下游落地：
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)

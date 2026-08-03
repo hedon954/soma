@@ -1,12 +1,12 @@
 # ADR 0038：带练使用聚焦投影并锁定录像几何
 
-- 状态：已采纳
+- 状态：部分已替代；聚焦投影与放大画幅保留，按需相机、紧凑填充和事件反馈由 ADR 0039 修订
 - 日期：2026-08-03
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0030](0030-deterministic-guided-workout-and-session-recording.md) 的阶段 UI、两步组确认和未定义录像画幅
   - [ADR 0036](0036-gui-training-program-authoring.md) 的常驻展开处方与不提供历史值快捷入口
-- 后续替代：暂无
+- 后续替代：[ADR 0039](0039-event-driven-guided-recording-cues-and-review.md) 修订开始前相机校准、紧凑预览和录像/语音状态
 - 上游依据：
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [训练计划编排、沉浸式带练与真实取景调研](../research/2026-08-03-guided-workout-flow-and-capture.md)

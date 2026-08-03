@@ -55,6 +55,7 @@ struct GuidedSetCountdownView: View {
     let set: WorkoutSet?
     let targetText: String
     let phaseStartedAt: Date?
+    let onTick: (Int) -> Void
     let onFinished: @MainActor () async -> Void
 
     private var clock: GuidedSetCountdownClock {
@@ -79,12 +80,14 @@ struct GuidedSetCountdownView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: phaseStartedAt) {
-            let delay = clock.delay(at: .now)
             do {
-                if delay > 0 {
-                    try await Task.sleep(for: .milliseconds(
-                        Int((delay * 1000).rounded(.up))
-                    ))
+                var announced: Set<Int> = []
+                while !clock.isDue(at: .now) {
+                    let value = clock.remaining(at: .now)
+                    if (1 ... 3).contains(value), announced.insert(value).inserted {
+                        onTick(value)
+                    }
+                    try await Task.sleep(for: .milliseconds(100))
                 }
                 guard !Task.isCancelled else { return }
                 await onFinished()
@@ -150,6 +153,7 @@ struct GuidedSetRecoveryView: View {
 struct GuidedRestView: View {
     let nextSet: WorkoutSet?
     let remainingSeconds: () -> Int
+    let onTick: (Int) -> Void
     let onAdjust: (Int) -> Void
     let onFinish: () -> Void
 
@@ -183,6 +187,19 @@ struct GuidedRestView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .task(id: nextSet?.id) {
+            var announced: Set<Int> = []
+            while !Task.isCancelled {
+                let value = remainingSeconds()
+                if value == 0 {
+                    return
+                }
+                if (1 ... 3).contains(value), announced.insert(value).inserted {
+                    onTick(value)
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+        }
     }
 
     private func timeText(_ seconds: Int) -> String {
@@ -206,25 +223,94 @@ struct GuidedRestView: View {
 }
 
 struct GuidedSessionReviewView: View {
-    let summary: String
+    let summary: TrainingSessionSummary
     let onFinish: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 70))
-                .foregroundStyle(.green)
-            Text("本次训练已完成")
-                .font(.largeTitle.bold())
-            Text(summary)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            Button("完成训练", action: onFinish)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.green)
+                VStack(spacing: 6) {
+                    Text("本次训练已完成")
+                        .font(.largeTitle.bold())
+                    Text(summary.text)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 10) {
+                    metric("时长", summary.durationText)
+                    metric("完成", "\(summary.completedSets) 组")
+                    metric("录像", "\(summary.recordedVideoCount) 组")
+                }
+
+                if !summary.exercises.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("动作完成情况")
+                            .font(.headline)
+                        ForEach(summary.exercises) { exercise in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(exercise.name)
+                                        .font(.subheadline.bold())
+                                    Text(exerciseDetail(exercise))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: exercise.completedSets > 0
+                                    ? "checkmark.circle.fill"
+                                    : "minus.circle")
+                                    .foregroundStyle(exercise.completedSets > 0
+                                        ? .green
+                                        : .secondary)
+                            }
+                            .padding(14)
+                            .background(
+                                Color(uiColor: .secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 16)
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Button("保存并结束", action: onFinish)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(24)
         }
-        .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func metric(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.headline)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(.green.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func exerciseDetail(_ exercise: TrainingExerciseSummary) -> String {
+        var values = ["完成 \(exercise.completedSets) 组"]
+        if exercise.skippedSets > 0 {
+            values.append("跳过 \(exercise.skippedSets) 组")
+        }
+        if exercise.completedVolume > 0 {
+            values.append(
+                "容量 \(exercise.completedVolume.formatted(.number.precision(.fractionLength(0 ... 1)))) kg"
+            )
+        }
+        return values.joined(separator: " · ")
     }
 }
 

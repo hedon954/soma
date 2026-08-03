@@ -24,7 +24,8 @@
 | [010：动作库、训练计划、带练与视频复盘](010-exercise-library-plans-guided-training.md) | 部分修订 | 稳定动作身份、最近值快捷输入、版本化计划、逐组带练和自动录像；计划与带练体验由 012/013 扩展 |
 | [011：持久 Agent Job 与远程持续执行](011-durable-agent-jobs-remote-continuity.md) | 已实现 | 本地 Outbox、服务端 Job/Event、设备 Tool handoff、灵动岛和通知 |
 | [012：GUI 训练计划编排](012-gui-training-program-authoring.md) | 部分修订 | 从动作库选择、排序并配置处方；折叠处方和最近值由 013 扩展 |
-| [013：低摩擦计划与沉浸式带练](013-guided-workout-experience-and-capture.md) | 已实现，待真机验收 | 动作图编排、显式最近值、聚焦逐组带练和横竖屏真实取景 |
+| [013：低摩擦计划与沉浸式带练](013-guided-workout-experience-and-capture.md) | 部分修订 | 动作图编排、显式最近值、聚焦逐组带练和横竖屏真实取景；相机触发与反馈由 014 修订 |
+| [014：按需录像、完整语音与完成复盘](014-guided-workout-recording-cues-and-review.md) | 已实现，待真机验收 | 单组/每组/手动录像、按需相机、事件语音、本地总结和历史删除 |
 
 ## 阅读约定
 

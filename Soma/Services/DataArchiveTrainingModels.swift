@@ -245,6 +245,7 @@ struct WorkoutSetDTO: Codable, Equatable, Sendable {
     var statusRaw: String
     var startedAt: Date?
     var completedAt: Date?
+    var recordedVideoPath: String?
 
     init(_ model: WorkoutSet) {
         id = model.id
@@ -261,9 +262,10 @@ struct WorkoutSetDTO: Codable, Equatable, Sendable {
         statusRaw = model.statusRaw
         startedAt = model.startedAt
         completedAt = model.completedAt
+        recordedVideoPath = model.recordedVideoPath
     }
 
-    func makeModel() -> WorkoutSet {
+    func makeModel(mediaPathMapping: [String: String]) -> WorkoutSet {
         WorkoutSet(
             id: id,
             performanceID: performanceID,
@@ -278,7 +280,11 @@ struct WorkoutSetDTO: Codable, Equatable, Sendable {
             actualRestSeconds: actualRestSeconds,
             status: WorkoutSetStatus(rawValue: statusRaw) ?? .pending,
             startedAt: startedAt,
-            completedAt: completedAt
+            completedAt: completedAt,
+            recordedVideoPath: mapped(
+                recordedVideoPath,
+                with: mediaPathMapping
+            )
         )
     }
 }

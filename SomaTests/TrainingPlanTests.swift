@@ -229,6 +229,81 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
+    func testSummaryIncludesDurationVideosAndDeleteRemovesSessionGraph() throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let path = try MediaStore.saveRestoredMedia(
+            Data("虚构带练录像".utf8),
+            fileExtension: "mov"
+        )
+        let startedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "引体向上",
+            in: context
+        )
+        let prescription = prescription(
+            exercise: exercise,
+            order: 1,
+            sets: 1
+        )
+        let session = WorkoutSession(
+            startedAt: startedAt,
+            endedAt: startedAt.addingTimeInterval(125),
+            prescriptionSnapshot: [prescription],
+            status: .completed,
+            guidedPhase: .completed
+        )
+        let performance = ExercisePerformance(
+            sessionID: session.id,
+            exerciseID: exercise.id,
+            exerciseName: exercise.canonicalName,
+            order: 1,
+            prescriptionSnapshot: prescription,
+            status: .completed,
+            activeVideoPath: path
+        )
+        let set = WorkoutSet(
+            performanceID: performance.id,
+            order: 1,
+            actualReps: 5,
+            actualWeightKG: 0,
+            status: .completed,
+            completedAt: startedAt.addingTimeInterval(100),
+            recordedVideoPath: path
+        )
+        let analysis = PerformanceAnalysis(
+            performanceID: performance.id,
+            sourceMediaPath: path,
+            inputFingerprint: "fixture",
+            evidence: "虚构证据",
+            limitations: "单一视角",
+            feedback: "保持稳定"
+        )
+        context.insert(session)
+        context.insert(performance)
+        context.insert(set)
+        context.insert(analysis)
+        try context.save()
+
+        let summary = TrainingPlanStore.summary(
+            for: session.id,
+            in: context
+        )
+        XCTAssertEqual(summary.durationSeconds, 125)
+        XCTAssertEqual(summary.recordedVideoCount, 1)
+        XCTAssertEqual(summary.exercises.first?.name, "引体向上")
+        XCTAssertEqual(summary.exercises.first?.completedSets, 1)
+
+        try TrainingPlanStore.deleteSession(session, in: context)
+
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSession>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ExercisePerformance>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSet>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<PerformanceAnalysis>()).isEmpty)
+        XCTAssertNil(MediaStore.url(at: path))
+    }
+
+    @MainActor
     func testValidationDoesNotInventMissingPrescriptionValues() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }

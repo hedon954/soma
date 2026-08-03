@@ -49,6 +49,9 @@ struct TrainingSessionSummary: Equatable, Sendable {
     var skippedSets: Int
     var completedVolume: Double
     var exerciseCount: Int
+    var durationSeconds: Int
+    var recordedVideoCount: Int
+    var exercises: [TrainingExerciseSummary]
 
     var text: String {
         var values = [
@@ -63,8 +66,25 @@ struct TrainingSessionSummary: Equatable, Sendable {
                 "有效容量 \(completedVolume.formatted(.number.precision(.fractionLength(0 ... 1)))) kg"
             )
         }
+        if recordedVideoCount > 0 {
+            values.append("录制 \(recordedVideoCount) 组")
+        }
         return values.joined(separator: "，") + "。"
     }
+
+    var durationText: String {
+        let minutes = durationSeconds / 60
+        let seconds = durationSeconds % 60
+        return minutes > 0 ? "\(minutes) 分 \(seconds) 秒" : "\(seconds) 秒"
+    }
+}
+
+struct TrainingExerciseSummary: Equatable, Identifiable, Sendable {
+    var id: UUID
+    var name: String
+    var completedSets: Int
+    var skippedSets: Int
+    var completedVolume: Double
 }
 
 @MainActor
@@ -163,6 +183,20 @@ enum TrainingPlanStore {
         availableEquipment: Set<String> = [],
         in context: ModelContext
     ) -> [TrainingReadinessIssue] {
+        readiness(
+            prescriptions: prescriptions,
+            autoRecordingPolicy: autoRecording ? .enabled : .disabled,
+            availableEquipment: availableEquipment,
+            in: context
+        )
+    }
+
+    static func readiness(
+        prescriptions: [TemplateExercisePrescription],
+        autoRecordingPolicy: AutoRecordingPolicy,
+        availableEquipment: Set<String> = [],
+        in context: ModelContext
+    ) -> [TrainingReadinessIssue] {
         var issues: [TrainingReadinessIssue] = []
         if prescriptions.isEmpty {
             issues.append(issue(
@@ -183,7 +217,7 @@ enum TrainingPlanStore {
                     "“\(prescription.exerciseName)”已不存在或归档。"
                 ))
             }
-            if autoRecording,
+            if autoRecordingPolicy == .enabled,
                prescription.firstSetIsWarmup,
                (prescription.targetSets ?? 0) < 2
             {
@@ -220,7 +254,7 @@ enum TrainingPlanStore {
     static func startSession(
         program: TrainingProgram,
         gymID: UUID? = nil,
-        autoRecording: Bool = false,
+        autoRecordingPolicy: AutoRecordingPolicy = .disabled,
         in context: ModelContext
     ) throws -> WorkoutSession {
         guard let versionID = program.currentTemplateVersionID,
@@ -233,7 +267,7 @@ enum TrainingPlanStore {
         let values = prescriptions(for: version, in: context)
         let blocking = readiness(
             prescriptions: values,
-            autoRecording: autoRecording,
+            autoRecordingPolicy: autoRecordingPolicy,
             in: context
         ).contains { $0.severity == .blocking }
         guard !blocking else { throw TrainingPlanError.emptyTemplate }
@@ -244,7 +278,7 @@ enum TrainingPlanStore {
             sourceTemplateVersion: version.version,
             prescriptionSnapshot: values,
             status: .active,
-            autoRecordingPolicy: autoRecording ? .enabled : .disabled
+            autoRecordingPolicy: autoRecordingPolicy
         )
         context.insert(session)
 
@@ -281,6 +315,20 @@ enum TrainingPlanStore {
         return session
     }
 
+    static func startSession(
+        program: TrainingProgram,
+        gymID: UUID? = nil,
+        autoRecording: Bool,
+        in context: ModelContext
+    ) throws -> WorkoutSession {
+        try startSession(
+            program: program,
+            gymID: gymID,
+            autoRecordingPolicy: autoRecording ? .enabled : .disabled,
+            in: context
+        )
+    }
+
     static func summary(
         for sessionID: UUID,
         in context: ModelContext
@@ -292,12 +340,75 @@ enum TrainingPlanStore {
         let sets = (
             try? context.fetch(FetchDescriptor<WorkoutSet>())
         )?.filter { performanceIDs.contains($0.performanceID) } ?? []
+        let session = (
+            try? context.fetch(FetchDescriptor<WorkoutSession>())
+        )?.first { $0.id == sessionID }
+        let summaryEnd = session?.endedAt
+            ?? sets.compactMap(\.completedAt).max()
+            ?? session?.startedAt
+            ?? .now
+        let mediaPaths = Set(
+            sets.compactMap(\.recordedVideoPath)
+                + performances.compactMap(\.activeVideoPath)
+        )
+        let exerciseSummaries = performances
+            .sorted { $0.order < $1.order }
+            .map { performance in
+                let performanceSets = sets.filter {
+                    $0.performanceID == performance.id
+                }
+                return TrainingExerciseSummary(
+                    id: performance.id,
+                    name: performance.exerciseName,
+                    completedSets: performanceSets.count {
+                        $0.status == .completed
+                    },
+                    skippedSets: performanceSets.count {
+                        $0.status == .skipped
+                    },
+                    completedVolume: performanceSets
+                        .compactMap(\.completedVolume)
+                        .reduce(0, +)
+                )
+            }
         return TrainingSessionSummary(
             completedSets: sets.count { $0.status == .completed },
             skippedSets: sets.count { $0.status == .skipped },
             completedVolume: sets.compactMap(\.completedVolume).reduce(0, +),
-            exerciseCount: performances.count { $0.status == .completed }
+            exerciseCount: performances.count { $0.status == .completed },
+            durationSeconds: max(
+                Int(summaryEnd.timeIntervalSince(session?.startedAt ?? summaryEnd)),
+                0
+            ),
+            recordedVideoCount: mediaPaths.count,
+            exercises: exerciseSummaries
         )
+    }
+
+    static func deleteSession(
+        _ session: WorkoutSession,
+        in context: ModelContext
+    ) throws {
+        let performances = try context.fetch(
+            FetchDescriptor<ExercisePerformance>()
+        ).filter { $0.sessionID == session.id }
+        let performanceIDs = Set(performances.map(\.id))
+        let sets = try context.fetch(FetchDescriptor<WorkoutSet>())
+            .filter { performanceIDs.contains($0.performanceID) }
+        let analyses = try context.fetch(FetchDescriptor<PerformanceAnalysis>())
+            .filter { performanceIDs.contains($0.performanceID) }
+        let mediaPaths = Set(
+            sets.compactMap(\.recordedVideoPath)
+                + performances.compactMap(\.activeVideoPath)
+                + analyses.map(\.sourceMediaPath).filter { !$0.isEmpty }
+        )
+
+        analyses.forEach(context.delete)
+        sets.forEach(context.delete)
+        performances.forEach(context.delete)
+        context.delete(session)
+        try context.save()
+        mediaPaths.forEach { _ = MediaStore.removeStoredFile(at: $0) }
     }
 
     static func archive(

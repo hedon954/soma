@@ -88,7 +88,8 @@ struct GuidedWorkoutView: View {
 
                 if session.status == .active,
                    presentation.mode == .expandedCapture,
-                   session.guidedPhase == .setInProgress
+                   session.guidedPhase == .setInProgress,
+                   camera.state == .recording
                 {
                     GuidedExpandedCaptureView(
                         camera: camera,
@@ -277,6 +278,7 @@ struct GuidedWorkoutView: View {
                     set: currentSet,
                     targetText: targetText,
                     phaseStartedAt: session.phaseStartedAt,
+                    onTick: coordinator.announceCountdown,
                     onFinished: beginCurrentSetAfterCountdown
                 )
             case .setInProgress:
@@ -291,12 +293,15 @@ struct GuidedWorkoutView: View {
                     coachingNote: coachingNote,
                     isLandscape: isLandscape,
                     showsCamera: showsCompactCamera,
+                    isStartingRecording: coordinator.isStartingRecording,
+                    canStartRecording: coordinator.recordingSetID == nil,
                     cameraErrorMessage: coordinator.recordingErrorMessage,
                     onExpandCamera: {
                         var next = presentation
                         next.expand()
                         presentation = next
                     },
+                    onRecord: startManualRecording,
                     onEdit: { showsActualEditor = true },
                     onComplete: completeCurrentSet,
                     onSkip: skipCurrentSet
@@ -317,6 +322,7 @@ struct GuidedWorkoutView: View {
                             in: modelContext
                         )
                     },
+                    onTick: coordinator.announceCountdown,
                     onAdjust: adjustRest,
                     onFinish: finishRest
                 )
@@ -325,12 +331,15 @@ struct GuidedWorkoutView: View {
                     summary: TrainingPlanStore.summary(
                         for: session.id,
                         in: modelContext
-                    ).text,
+                    ),
                     onFinish: finishSession
                 )
             case .completed:
                 GuidedSessionReviewView(
-                    summary: "训练已经保存。",
+                    summary: TrainingPlanStore.summary(
+                        for: session.id,
+                        in: modelContext
+                    ),
                     onFinish: { dismiss() }
                 )
             }
@@ -365,8 +374,8 @@ struct GuidedWorkoutView: View {
     }
 
     private var showsCompactCamera: Bool {
-        if session.autoRecordingPolicy != .disabled,
-           session.autoRecordingPolicy != .cancelled
+        if camera.state == .recording,
+           coordinator.recordingSetID == currentSet?.id
         {
             return true
         }
@@ -375,6 +384,10 @@ struct GuidedWorkoutView: View {
         #else
             return false
         #endif
+    }
+
+    private func startManualRecording() {
+        run { try await coordinator.startManualRecording(in: modelContext) }
     }
 
     private func pauseOrResume() {

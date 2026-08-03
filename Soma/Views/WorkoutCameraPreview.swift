@@ -5,9 +5,10 @@ import UIKit
 @MainActor
 struct WorkoutCameraPreview: UIViewRepresentable {
     let camera: WorkoutCameraService
+    let videoGravity: AVLayerVideoGravity
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(camera: camera)
+        Coordinator(camera: camera, videoGravity: videoGravity)
     }
 
     func makeUIView(context: Context) -> CameraPreviewView {
@@ -34,17 +35,24 @@ struct WorkoutCameraPreview: UIViewRepresentable {
     final class Coordinator {
         weak var camera: WorkoutCameraService?
 
-        init(camera: WorkoutCameraService) {
-            self.camera = camera
-        }
-
         func configure(_ view: CameraPreviewView) {
             guard let camera else { return }
             let layer = camera.sharedPreviewLayer
             view.onPreviewLayerReady = { [weak self] layer, hostID in
-                self?.camera?.attachPreviewLayer(layer, hostID: hostID)
+                self?.camera?.attachPreviewLayer(
+                    layer,
+                    hostID: hostID,
+                    videoGravity: self?.videoGravity ?? .resizeAspectFill
+                )
             }
-            view.installPreviewLayer(layer)
+            view.installPreviewLayer(layer, videoGravity: videoGravity)
+        }
+
+        private let videoGravity: AVLayerVideoGravity
+
+        init(camera: WorkoutCameraService, videoGravity: AVLayerVideoGravity) {
+            self.camera = camera
+            self.videoGravity = videoGravity
         }
     }
 }
@@ -66,10 +74,14 @@ final class CameraPreviewView: UIView {
         hostedPreviewLayer?.frame = bounds
     }
 
-    func installPreviewLayer(_ previewLayer: AVCaptureVideoPreviewLayer) {
+    func installPreviewLayer(
+        _ previewLayer: AVCaptureVideoPreviewLayer,
+        videoGravity: AVLayerVideoGravity = .resizeAspect
+    ) {
         if hostedPreviewLayer === previewLayer {
             if previewLayer.superlayer === layer {
                 previewLayer.frame = bounds
+                previewLayer.videoGravity = videoGravity
                 notifyPreviewLayerIfReady()
             }
             return
@@ -78,7 +90,7 @@ final class CameraPreviewView: UIView {
         previewLayer.removeFromSuperlayer()
         hostedPreviewLayer = previewLayer
         previewLayer.frame = bounds
-        previewLayer.videoGravity = .resizeAspect
+        previewLayer.videoGravity = videoGravity
         layer.addSublayer(previewLayer)
         notifyPreviewLayerIfReady()
     }

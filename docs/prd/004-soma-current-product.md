@@ -14,6 +14,7 @@
   - [PRD 010](010-exercise-library-plans-guided-training.md)
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md)
   - [PRD 012](012-gui-training-program-authoring.md)
+  - [PRD 014](014-guided-workout-recording-cues-and-review.md)
 
 ## 产品定义
 
@@ -99,8 +100,10 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
   两条路径共用稳定动作 ID、验证和不可变版本，不调用模型补齐空值；
 - 本地带练状态机负责动作说明、倒计时、确认、休息、暂停、跳过、替换、恢复与确定性总结，
   断网和 Provider 失败不阻断已开始训练；
-- 用户可为 Session 显式启用前置摄像头自动录像。首组非热身录第 1 组，首组热身录第 2 组，
-  每个动作默认保留一段且麦克风关闭；
+- 用户可为 Session 显式启用前置摄像头自动录像，选择每动作首个目标工作组或每一组；没有自动
+  录像的组仍可手动开始。相机只在某组真正请求录像时启动，每段绑定具体 Set 且麦克风关闭；
+- 最后一组完成后先展示本地确定性总结；计划执行历史支持左滑删除并清理 Session 关联事实与
+  Soma 私有录像；
 - AI 计划优化、动作内容和视频复盘只在用户主动点击时执行。视频复盘通过持久 Job 保存证据、
   局限、输入指纹和可编辑建议。
 

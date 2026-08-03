@@ -39,9 +39,15 @@ enum WorkoutSetStatus: String, Codable, CaseIterable, Sendable {
 
 enum AutoRecordingPolicy: String, Codable, CaseIterable, Sendable {
     case disabled
+    /// 自动录制每个动作的首个工作组；保留旧值以兼容已有训练记录。
     case enabled
+    case everySet
     case paused
     case cancelled
+
+    var usesAutomaticRecording: Bool {
+        self == .enabled || self == .everySet
+    }
 }
 
 enum GuidedWorkoutPhase: String, Codable, CaseIterable, Sendable {
@@ -364,6 +370,7 @@ final class WorkoutSet {
     var statusRaw: String
     var startedAt: Date?
     var completedAt: Date?
+    var recordedVideoPath: String?
 
     init(
         id: UUID = UUID(),
@@ -379,7 +386,8 @@ final class WorkoutSet {
         actualRestSeconds: Int? = nil,
         status: WorkoutSetStatus = .pending,
         startedAt: Date? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        recordedVideoPath: String? = nil
     ) {
         self.id = id
         self.performanceID = performanceID
@@ -395,6 +403,7 @@ final class WorkoutSet {
         statusRaw = status.rawValue
         self.startedAt = startedAt
         self.completedAt = completedAt
+        self.recordedVideoPath = recordedVideoPath
     }
 
     var kind: WorkoutSetKind {

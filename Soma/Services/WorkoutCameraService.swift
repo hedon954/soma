@@ -88,7 +88,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     private(set) var previewIssueMessage: String?
     @ObservationIgnored let sharedPreviewLayer: AVCaptureVideoPreviewLayer = {
         let layer = AVCaptureVideoPreviewLayer()
-        layer.videoGravity = .resizeAspect
+        layer.videoGravity = .resizeAspectFill
         return layer
     }()
 
@@ -113,6 +113,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     @ObservationIgnored private var temporaryURL: URL?
     @ObservationIgnored private var stopContinuation:
         CheckedContinuation<String?, Error>?
+    @ObservationIgnored private var startContinuation:
+        CheckedContinuation<Void, Error>?
     @ObservationIgnored private var discardCurrentRecording = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var preparationTask: Task<Void, Error>?
@@ -121,6 +123,11 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
 
     override init() {
         super.init()
+        recordingDelegate.started = { [weak self] in
+            Task { @MainActor in
+                self?.recordingDidStart()
+            }
+        }
         recordingDelegate.completion = { [weak self] url, error in
             Task { @MainActor in
                 self?.finishRecording(at: url, error: error)
@@ -164,6 +171,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         do {
             try await configureIfNeeded()
             try await startSession()
+            sharedPreviewLayer.session = captureSession
             configureRotationCoordinatorIfPossible()
             state = .previewing
             refreshPreviewConnectionState()
@@ -174,7 +182,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
     }
 
-    func startRecording(performanceID: UUID) async throws {
+    func startRecording(performanceID: UUID, setID: UUID) async throws {
         if state == .recording {
             return
         }
@@ -188,23 +196,20 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             throw WorkoutCameraError.insufficientStorage
         }
         let url = FileManager.default.temporaryDirectory
-            .appending(path: "soma-set-\(performanceID.uuidString)-\(UUID().uuidString)")
+            .appending(path: "soma-set-\(performanceID.uuidString)-\(setID.uuidString)-\(UUID().uuidString)")
             .appendingPathExtension("mov")
         temporaryURL = url
         discardCurrentRecording = false
         lockCaptureGeometry()
-        await withCheckedContinuation { continuation in
+        try await withCheckedThrowingContinuation { continuation in
+            startContinuation = continuation
             sessionQueue.async { [movieOutput, recordingDelegate] in
                 movieOutput.startRecording(
                     to: url,
                     recordingDelegate: recordingDelegate
                 )
-                continuation.resume()
             }
         }
-        state = .recording
-        refreshPreviewConnectionState()
-        armPreviewStartupTimeout()
     }
 
     func stopRecording() async throws -> String? {
@@ -217,36 +222,48 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             unlockCaptureGeometry()
             return nil
         }
-        return try await withCheckedThrowingContinuation { continuation in
+        let path = try await withCheckedThrowingContinuation { continuation in
             stopContinuation = continuation
             sessionQueue.async { [movieOutput] in
                 movieOutput.stopRecording()
             }
         }
+        await stopCaptureSession()
+        return path
     }
 
     func cancelRecording() async {
         discardCurrentRecording = true
+        startContinuation?.resume(
+            throwing: WorkoutCameraError.recordingFailed("录像已取消")
+        )
+        startContinuation = nil
         let isRecording = await withCheckedContinuation { continuation in
             sessionQueue.async { [movieOutput] in
                 continuation.resume(returning: movieOutput.isRecording)
             }
         }
         if isRecording {
-            sessionQueue.async { [movieOutput] in
-                movieOutput.stopRecording()
+            _ = try? await withCheckedThrowingContinuation { continuation in
+                stopContinuation = continuation
+                sessionQueue.async { [movieOutput] in
+                    movieOutput.stopRecording()
+                }
             }
         } else {
             unlockCaptureGeometry()
         }
+        await stopCaptureSession()
     }
 
     func attachPreviewLayer(
         _ layer: AVCaptureVideoPreviewLayer,
-        hostID: UUID
+        hostID: UUID,
+        videoGravity: AVLayerVideoGravity
     ) {
         guard layer === sharedPreviewLayer else { return }
         guard activePreviewHostID != hostID else {
+            layer.videoGravity = videoGravity
             applyCaptureGeometry(captureGeometry)
             refreshPreviewConnectionState()
             return
@@ -265,7 +282,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         // The capture session and movie output continue running unchanged.
         layer.session = nil
         layer.session = captureSession
-        layer.videoGravity = .resizeAspect
+        layer.videoGravity = videoGravity
         configureRotationCoordinatorIfPossible()
         applyCaptureGeometry(captureGeometry)
         observePreviewReadiness(on: layer, hostID: hostID)
@@ -321,6 +338,10 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
         if discardCurrentRecording {
             try? FileManager.default.removeItem(at: url)
+            startContinuation?.resume(
+                throwing: WorkoutCameraError.recordingFailed("录像已取消")
+            )
+            startContinuation = nil
             stopContinuation?.resume(returning: nil)
             stopContinuation = nil
             return
@@ -330,8 +351,20 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             let resolved = WorkoutCameraError.recordingFailed(
                 error.localizedDescription
             )
+            startContinuation?.resume(throwing: resolved)
+            startContinuation = nil
             stopContinuation?.resume(throwing: resolved)
             stopContinuation = nil
+            state = .unavailable(resolved.localizedDescription)
+            return
+        }
+        if startContinuation != nil {
+            try? FileManager.default.removeItem(at: url)
+            let resolved = WorkoutCameraError.recordingFailed(
+                "系统未确认录像已经开始"
+            )
+            startContinuation?.resume(throwing: resolved)
+            startContinuation = nil
             state = .unavailable(resolved.localizedDescription)
             return
         }
@@ -346,6 +379,22 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             state = .unavailable(error.localizedDescription)
         }
         stopContinuation = nil
+    }
+
+    private func recordingDidStart() {
+        if discardCurrentRecording {
+            sessionQueue.async { [movieOutput] in
+                if movieOutput.isRecording {
+                    movieOutput.stopRecording()
+                }
+            }
+            return
+        }
+        state = .recording
+        refreshPreviewConnectionState()
+        armPreviewStartupTimeout()
+        startContinuation?.resume()
+        startContinuation = nil
     }
 
     static func settledState(
@@ -429,6 +478,24 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
     }
 
+    private func stopCaptureSession() async {
+        await withCheckedContinuation { continuation in
+            sessionQueue.async { [captureSession] in
+                if captureSession.isRunning {
+                    captureSession.stopRunning()
+                }
+                continuation.resume()
+            }
+        }
+        if case .unavailable = state {
+            return
+        }
+        previewStartupTimeoutTask?.cancel()
+        isPreviewReady = false
+        previewIssueMessage = nil
+        state = .idle
+    }
+
     private var hasRecordingCapacity: Bool {
         let values = try? FileManager.default
             .temporaryDirectory
@@ -491,7 +558,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     private func configureRotationCoordinatorIfPossible() {
-        guard let captureDevice, sharedPreviewLayer.superlayer != nil else {
+        guard let captureDevice else {
             return
         }
         previewRotationObservation = nil
@@ -676,7 +743,16 @@ private final class MovieRecordingDelegate:
     @unchecked Sendable,
     AVCaptureFileOutputRecordingDelegate
 {
+    var started: (() -> Void)?
     var completion: ((URL, Error?) -> Void)?
+
+    func fileOutput(
+        _: AVCaptureFileOutput,
+        didStartRecordingTo _: URL,
+        from _: [AVCaptureConnection]
+    ) {
+        started?()
+    }
 
     func fileOutput(
         _: AVCaptureFileOutput,

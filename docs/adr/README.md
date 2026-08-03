@@ -41,7 +41,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 已采纳 | 内置动作内容保持静默，用户使用动作后才关联素材，长尾图片按需生成 |
 | [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 已采纳 | Local/Remote Backend 对 UI 提供等价流式事件，并由 PostgreSQL 通知即时唤醒 |
-| [0038](0038-focused-guided-workout-and-capture-geometry.md) | 已采纳 | 带练使用聚焦投影、单步组确认与横竖屏 capture-exact 录像 |
+| [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订 |
+| [0039](0039-event-driven-guided-recording-cues-and-review.md) | 已采纳 | 录像策略与实际活动分离，按 Set 保存证据，并以事件驱动语音、复盘和删除 |
 
 新决策使用 [ADR 模板](template.md)。
 

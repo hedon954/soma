@@ -284,7 +284,8 @@ View 是否因 SwiftData 字段变化而重建。截止后只在 Session 仍处�
 `AutoRecordingPolicy` 属于当前 Session：
 
 - `disabled`；
-- `enabled`；
+- `enabled`：每个动作录首个工作组，兼容既有持久值；
+- `everySet`：每一组都录；
 - `paused`；
 - `cancelled`。
 
@@ -295,35 +296,40 @@ firstSetIsWarmup == false → order 1
 firstSetIsWarmup == true  → order 2
 ```
 
-相机流程：
+非自动目标组仍可由用户点击“录制本组”。相机流程：
 
-1. 用户开启并完成预览；
-2. 进入目标组倒计时后准备 capture session；
-3. `setInProgress` 时开始写文件；
+1. `setInProgress` 根据 policy 或手动操作发起录像请求，之前不准备相机；
+2. `prepare`、`startRunning` 和 `startRecording` 在专用队列执行，训练事实先保存；
+3. 只有 `didStartRecordingTo` 回调后才把录像标为 active 并展示取景器；
 4. 用户确认、跳过、暂停或相机中断时停止；
-5. 完成文件原子移入 `PrivateMedia` 并建立引用；
-6. 每个动作只有一个 active performance video；重录替换引用后回收未共享旧文件。
+5. 完成文件原子移入 `PrivateMedia`，写入当前 `WorkoutSet.recordedVideoPath`；
+6. `ExercisePerformance.activeVideoPath` 保留第一段作为旧复盘入口，逐组引用保存全部录像。
 
 预览和保存文件共享 `WorkoutCaptureGeometry`：
 
 - `AVCaptureDevice.RotationCoordinator` 分别提供 horizon-level preview/capture 角度；
-- Rotation Coordinator 只能在 preview layer 已进入 UIWindow hierarchy 后创建，不能把 API 在
-  未入窗时返回的 `0°` 当成真实横屏；
-- 预览使用 `.resizeAspect` 展示完整画幅，不以裁切填满；
+- Rotation Coordinator 在 Capture Session 准备后创建，不依赖 SwiftUI 预览先出现；
+- 紧凑小窗使用 `.resizeAspectFill` 贴合窗口并允许边缘裁切，放大取景使用 `.resizeAspect` 展示
+  完整画幅；
 - 预览与 Movie Output 显式采用相同镜像策略；
 - 开始录像时锁定本段方向、角度和镜像，停止后再恢复设备方向监听；
 - 带练可使用 portrait、landscape left/right，其他 App 页面保持 portrait；
-- 横竖屏策略从开始前取景校准生效，进入带练时再次请求 Scene 刷新，取消或结束后恢复 portrait；
+- 进入带练时请求 Scene 刷新，取消或结束后恢复 portrait；
 - 紧凑小窗和放大取景只切换 SwiftUI 投影，共享同一个 Capture Session、Movie Output 和由相机
   服务持有的 `AVCaptureVideoPreviewLayer`；旧 Host 清理不能移除已经挂入新 Host 的同一层。
-- 手动放大不会被普通 `previewing` 状态收回，只有用户收起或离开执行阶段才退出；录像开始仍可
-  自动放大。
+- `previewing` 不是用户可见录像事实；只有 `recording` 可显示和放大相机，停止或失败立即回到
+  普通带练界面。
 - 预览容器的横竖比例读取当前 Scene 尺寸，不能读取录像期间锁定的 `Capture Geometry`；设备
   方向变化向 Scene 请求精确方向。竖屏和横屏都优先扩大相机区域，控制信息只占完成当前组所需空间。
 - `startRunning`、`startRecording`、`stopRecording` 和相机状态读取进入同一串行队列，不占用
   Main Actor；重复相机准备合并为同一个任务。
 
 默认无音轨。任何失败都产生可理解状态但不改变 Set 事实。
+
+语音提示由阶段事件驱动，覆盖动作进入、准备组、`3/2/1`、开始组、完成与休息、后续组和训练
+完成；新阶段会取消过期播报，避免迟到或重复。Session Review 由本地事实生成时长、完成/跳过组、
+有效容量、录像数和动作明细，不自动调用模型。删除 Session 时显式删除 Performance、Set、分析
+和对应私有录像。
 
 训练 Live Activity 与休息通知只保存 Session ID、通用阶段、完成/总组数和可选休息结束时间，
 不展示动作名称、重量、用户文字或媒体；点击后通过 `soma://workout/session/{id}` 回到对应 Session。

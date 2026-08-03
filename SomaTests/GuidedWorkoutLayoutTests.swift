@@ -186,6 +186,7 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             set: nil,
             targetText: "5 次",
             phaseStartedAt: .now.addingTimeInterval(-4),
+            onTick: { _ in },
             onFinished: { completed.fulfill() }
         )
         .frame(width: 390, height: 844)

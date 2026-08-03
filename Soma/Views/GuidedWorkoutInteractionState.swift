@@ -24,6 +24,8 @@ struct GuidedWorkoutPresentationState: Equatable {
     mutating func cameraStateChanged(_ state: WorkoutCameraState) {
         if state == .recording {
             mode = .expandedCapture
+        } else {
+            mode = .compact
         }
     }
 

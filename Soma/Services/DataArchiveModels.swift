@@ -47,6 +47,8 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         workouts.flatMap(\.mediaAttachments).map(\.path).forEach { paths.insert($0) }
         (exercisePerformances ?? []).compactMap(\.activeVideoPath)
             .forEach { paths.insert($0) }
+        (workoutSets ?? []).compactMap(\.recordedVideoPath)
+            .forEach { paths.insert($0) }
         (performanceAnalyses ?? []).map(\.sourceMediaPath)
             .filter { !$0.isEmpty }
             .forEach { paths.insert($0) }
@@ -184,7 +186,9 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
                 ))
             }
             for set in workoutSets ?? [] {
-                context.insert(set.makeModel())
+                context.insert(set.makeModel(
+                    mediaPathMapping: mediaPathMapping
+                ))
             }
             for recommendation in recommendationSnapshots ?? [] {
                 context.insert(recommendation.makeModel())

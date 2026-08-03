@@ -5,14 +5,19 @@ import XCTest
 @MainActor
 private final class RecordingSpy: WorkoutRecordingControlling {
     var startedPerformanceIDs: [UUID] = []
+    var startedSetIDs: [UUID] = []
+    var prepareCount = 0
     var stopCount = 0
     var cancelCount = 0
     var path: String? = "PrivateMedia/test-guided.mov"
 
-    func prepare() async throws {}
+    func prepare() async throws {
+        prepareCount += 1
+    }
 
-    func startRecording(performanceID: UUID) async throws {
+    func startRecording(performanceID: UUID, setID: UUID) async throws {
         startedPerformanceIDs.append(performanceID)
+        startedSetIDs.append(setID)
     }
 
     func stopRecording() async throws -> String? {
@@ -32,7 +37,7 @@ private final class SuspendedRecordingSpy: WorkoutRecordingControlling {
 
     func prepare() async throws {}
 
-    func startRecording(performanceID _: UUID) async throws {
+    func startRecording(performanceID _: UUID, setID _: UUID) async throws {
         startInvoked = true
         await withCheckedContinuation { continuation in
             self.continuation = continuation
@@ -54,6 +59,17 @@ private final class SuspendedRecordingSpy: WorkoutRecordingControlling {
 @MainActor
 private struct SilentCues: WorkoutCueProviding {
     func announce(_: String) {}
+    func success() {}
+}
+
+@MainActor
+private final class CueSpy: WorkoutCueProviding {
+    private(set) var messages: [String] = []
+
+    func announce(_ text: String) {
+        messages.append(text)
+    }
+
     func success() {}
 }
 
@@ -145,12 +161,12 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
         )
     }
 
-    func testManualFullCaptureSurvivesPreviewStateUpdates() {
+    func testFullCaptureOnlyStaysVisibleWhileActuallyRecording() {
         var state = GuidedWorkoutPresentationState()
 
         state.expand()
         state.cameraStateChanged(.previewing)
-        XCTAssertEqual(state.mode, .expandedCapture)
+        XCTAssertEqual(state.mode, .compact)
 
         state.collapse()
         state.cameraStateChanged(.recording)
@@ -188,6 +204,133 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
         XCTAssertEqual(fixture.sets[0].status, .completed)
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
         XCTAssertEqual(recorder.stopCount, 1)
+    }
+
+    @MainActor
+    func testDisabledAutomaticRecordingDoesNotPrepareCameraAndAllowsManualRecording() async throws {
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 1,
+            recordingPolicy: .disabled
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(forName: fixture.suiteName)
+        }
+        let recorder = RecordingSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: recorder,
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+
+        XCTAssertEqual(recorder.prepareCount, 0)
+        XCTAssertTrue(recorder.startedSetIDs.isEmpty)
+
+        try await coordinator.startManualRecording(in: fixture.context)
+        XCTAssertEqual(recorder.prepareCount, 1)
+        XCTAssertEqual(recorder.startedSetIDs, [fixture.sets[0].id])
+
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+        XCTAssertEqual(fixture.sets[0].recordedVideoPath, recorder.path)
+    }
+
+    @MainActor
+    func testEverySetPolicyRecordsAndPersistsEverySet() async throws {
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 2,
+            recordingPolicy: .everySet
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(forName: fixture.suiteName)
+        }
+        let recorder = RecordingSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: recorder,
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+        try coordinator.finishRest(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+
+        XCTAssertEqual(recorder.startedSetIDs, fixture.sets.map(\.id))
+        XCTAssertEqual(recorder.stopCount, 2)
+        XCTAssertTrue(fixture.sets.allSatisfy { $0.recordedVideoPath == recorder.path })
+    }
+
+    @MainActor
+    func testCueSequenceCoversCountdownLaterSetsAndCompletion() async throws {
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 2,
+            recordingPolicy: .disabled
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(forName: fixture.suiteName)
+        }
+        let cues = CueSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: RecordingSpy(),
+            cues: cues,
+            now: { fixture.now }
+        )
+
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        coordinator.announceCountdown(3)
+        coordinator.announceCountdown(2)
+        coordinator.announceCountdown(1)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+        try coordinator.finishRest(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+
+        XCTAssertEqual(cues.messages, [
+            "接下来，测试深蹲",
+            "准备第 1 组",
+            "3",
+            "2",
+            "1",
+            "开始第 1 组",
+            "第 1 组完成，休息 90 秒",
+            "准备第 2 组",
+            "开始第 2 组",
+            "训练完成，共完成 2 组"
+        ])
     }
 
     @MainActor
@@ -435,6 +578,7 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
     private func makeFixture(
         firstSetIsWarmup: Bool,
         setCount: Int,
+        recordingPolicy: AutoRecordingPolicy = .enabled,
         now: Date = Date(timeIntervalSince1970: 2_000_000_000)
     ) throws -> Fixture {
         let suiteName = "GuidedWorkoutTests.\(UUID().uuidString)"
@@ -462,7 +606,7 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
             startedAt: now,
             prescriptionSnapshot: [prescription],
             status: .active,
-            autoRecordingPolicy: .enabled
+            autoRecordingPolicy: recordingPolicy
         )
         let performance = ExercisePerformance(
             sessionID: session.id,

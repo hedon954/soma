@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct GuidedWorkoutChrome: View {
@@ -76,8 +77,11 @@ struct GuidedCompactSetView: View {
     let coachingNote: String
     let isLandscape: Bool
     let showsCamera: Bool
+    let isStartingRecording: Bool
+    let canStartRecording: Bool
     let cameraErrorMessage: String?
     let onExpandCamera: () -> Void
+    let onRecord: () -> Void
     let onEdit: () -> Void
     let onComplete: () -> Void
     let onSkip: () -> Void
@@ -150,10 +154,6 @@ struct GuidedCompactSetView: View {
                                 contentMode: .fit
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 18))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 18)
-                                    .stroke(.white.opacity(0.82), lineWidth: 2)
-                            }
                             .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
                         }
                         .buttonStyle(.plain)
@@ -190,6 +190,19 @@ struct GuidedCompactSetView: View {
             }
 
             GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
+
+            if !showsCamera {
+                Button(action: onRecord) {
+                    if isStartingRecording {
+                        Label("正在开启录像…", systemImage: "camera.fill")
+                    } else {
+                        Label("录制本组", systemImage: "record.circle")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canStartRecording || isStartingRecording)
+                .accessibilityHint("只有开始录像后才会调用相机")
+            }
 
             Label(coachingNote, systemImage: "lightbulb.fill")
                 .font(.subheadline)
@@ -400,7 +413,10 @@ struct WorkoutCameraSurface: View {
     var body: some View {
         ZStack {
             Color.black
-            WorkoutCameraPreview(camera: camera)
+            WorkoutCameraPreview(
+                camera: camera,
+                videoGravity: compact ? .resizeAspectFill : .resizeAspect
+            )
             switch presentation {
             case let .loading(message):
                 ProgressView(message)
