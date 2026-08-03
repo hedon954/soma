@@ -7,6 +7,8 @@
   - [ADR 0029](../adr/0029-versioned-training-plans-and-session-facts.md)
   - [ADR 0030](../adr/0030-deterministic-guided-workout-and-session-recording.md)
   - [ADR 0035](../adr/0035-silent-bundled-exercise-content-and-on-demand-images.md)
+  - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
+  - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯
@@ -136,6 +138,7 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 - 不可变 `prescriptionSnapshot`；
 - `status`: draft/active/paused/completed/abandoned；
 - 当前带练恢复位置；
+- 休息目标结束时间 `restTargetEndAt`，用于前后台和重启后按绝对时间恢复；
 - 来源 Turn/Job。
 
 `ExercisePerformance`：
@@ -258,8 +261,7 @@ ready
   → exerciseIntroduction
   → preSetCountdown
   → setInProgress
-  → setConfirmation
-  → resting
+  → resting | setConfirmation（仅中断恢复或显式纠错）
   → nextSet | nextExercise
   → sessionReview
   → completed
@@ -268,7 +270,7 @@ ready
 所有状态变化都保存 `sessionID + performanceID + setID` 恢复点。系统中断后：
 
 - `inProgress` 且未确认的 Set 回到确认或重新开始，不自动完成；
-- 休息可以根据持久开始时间重算剩余时间；
+- 休息根据持久 `restTargetEndAt` 重算剩余时间，`±15 秒`直接调整目标结束时间；
 - 已确认实际值不丢失；
 - abandoned 与 completed 是终态。
 
@@ -297,7 +299,19 @@ firstSetIsWarmup == true  → order 2
 5. 完成文件原子移入 `PrivateMedia` 并建立引用；
 6. 每个动作只有一个 active performance video；重录替换引用后回收未共享旧文件。
 
+预览和保存文件共享 `WorkoutCaptureGeometry`：
+
+- `AVCaptureDevice.RotationCoordinator` 分别提供 horizon-level preview/capture 角度；
+- 预览使用 `.resizeAspect` 展示完整画幅，不以裁切填满；
+- 预览与 Movie Output 显式采用相同镜像策略；
+- 开始录像时锁定本段方向、角度和镜像，停止后再恢复设备方向监听；
+- 带练可使用 portrait、landscape left/right，其他 App 页面保持 portrait；
+- 紧凑小窗和放大取景只切换 SwiftUI 投影，共享同一个 Capture Session 和文件输出。
+
 默认无音轨。任何失败都产生可理解状态但不改变 Set 事实。
+
+训练 Live Activity 与休息通知只保存 Session ID、通用阶段、完成/总组数和可选休息结束时间，
+不展示动作名称、重量、用户文字或媒体；点击后通过 `soma://workout/session/{id}` 回到对应 Session。
 
 ## AI 内容与复盘
 

@@ -1,0 +1,139 @@
+import Foundation
+import SwiftData
+
+struct RecentExercisePrescription: Equatable, Sendable {
+    var sourceDate: Date
+    var setCount: Int?
+    var reps: Int?
+    var weightKG: Double?
+    var restSeconds: Int?
+    var firstSetIsWarmup: Bool?
+
+    var summary: String {
+        var values: [String] = []
+        if let weightKG, let reps {
+            let weight = weightKG == 0
+                ? "自重"
+                : "\(weightKG.formatted()) kg"
+            values.append("\(weight) × \(reps)")
+        } else {
+            if let weightKG {
+                values.append(weightKG == 0 ? "自重" : "\(weightKG.formatted()) kg")
+            }
+            if let reps {
+                values.append("\(reps) 次")
+            }
+        }
+        if let setCount {
+            values.append("\(setCount) 组")
+        }
+        if let restSeconds {
+            values.append("间歇 \(Self.durationText(restSeconds))")
+        }
+        return values.joined(separator: " · ")
+    }
+
+    private static func durationText(_ seconds: Int) -> String {
+        if seconds > 0, seconds.isMultiple(of: 60) {
+            return "\(seconds / 60) 分钟"
+        }
+        return "\(seconds) 秒"
+    }
+}
+
+enum ExerciseRecentPrescriptionResolver {
+    @MainActor
+    static func latest(
+        exerciseID: UUID,
+        in context: ModelContext
+    ) -> RecentExercisePrescription? {
+        let workouts = (
+            try? context.fetch(FetchDescriptor<WorkoutEntry>())
+        ) ?? []
+        let sessions = (
+            try? context.fetch(FetchDescriptor<WorkoutSession>())
+        ) ?? []
+        let performances = (
+            try? context.fetch(FetchDescriptor<ExercisePerformance>())
+        ) ?? []
+        let sets = (
+            try? context.fetch(FetchDescriptor<WorkoutSet>())
+        ) ?? []
+        return latest(
+            exerciseID: exerciseID,
+            workouts: workouts,
+            sessions: sessions,
+            performances: performances,
+            sets: sets
+        )
+    }
+
+    static func latest(
+        exerciseID: UUID,
+        workouts: [WorkoutEntry],
+        sessions: [WorkoutSession],
+        performances: [ExercisePerformance],
+        sets: [WorkoutSet]
+    ) -> RecentExercisePrescription? {
+        var candidates = workouts.compactMap { workout -> RecentExercisePrescription? in
+            guard workout.exerciseID == exerciseID else { return nil }
+            return RecentExercisePrescription(
+                sourceDate: workout.date,
+                setCount: workout.setCount,
+                reps: workout.representativeReps,
+                weightKG: workout.representativeWeight,
+                restSeconds: workout.restSeconds,
+                firstSetIsWarmup: nil
+            )
+        }
+
+        let sessionsByID = Dictionary(uniqueKeysWithValues: sessions.map {
+            ($0.id, $0)
+        })
+        for performance in performances
+            where performance.exerciseID == exerciseID
+            && performance.status == .completed
+        {
+            guard let session = sessionsByID[performance.sessionID] else {
+                continue
+            }
+            let completed = sets
+                .filter {
+                    $0.performanceID == performance.id
+                        && $0.status == .completed
+                }
+                .sorted { $0.order < $1.order }
+            guard !completed.isEmpty else { continue }
+            let working = completed.filter { $0.kind != .warmup }
+            let capacitySets = working.isEmpty ? completed : working
+            candidates.append(RecentExercisePrescription(
+                sourceDate: session.startedAt,
+                setCount: completed.count,
+                reps: uniform(capacitySets.compactMap(\.actualReps), count: capacitySets.count),
+                weightKG: uniform(
+                    capacitySets.compactMap(\.actualWeightKG),
+                    count: capacitySets.count
+                ),
+                restSeconds: uniform(
+                    completed.compactMap(\.actualRestSeconds),
+                    count: completed.count
+                ),
+                firstSetIsWarmup: completed.first?.kind == .warmup
+            ))
+        }
+
+        return candidates.max { $0.sourceDate < $1.sourceDate }
+    }
+
+    private static func uniform<T: Hashable>(
+        _ values: [T],
+        count: Int
+    ) -> T? {
+        guard values.count == count,
+              Set(values).count == 1
+        else {
+            return nil
+        }
+        return values.first
+    }
+}

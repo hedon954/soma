@@ -31,8 +31,17 @@ protocol WorkoutCueProviding {
 @MainActor
 final class SystemWorkoutCueProvider: WorkoutCueProviding {
     private let synthesizer = AVSpeechSynthesizer()
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     func announce(_ text: String) {
+        let isEnabled = defaults.object(
+            forKey: "workout.voiceCuesEnabled"
+        ) as? Bool ?? true
+        guard isEnabled else { return }
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
         synthesizer.speak(utterance)
@@ -217,6 +226,22 @@ final class GuidedWorkoutCoordinator {
         try context.save()
     }
 
+    func redoCurrentSet(in context: ModelContext) async throws {
+        let session = try activeSession(in: context)
+        guard let set = currentSet(for: session, in: context) else {
+            throw GuidedWorkoutError.missingSet
+        }
+        await recorder.cancelRecording()
+        set.status = .pending
+        set.startedAt = nil
+        set.completedAt = nil
+        set.actualReps = nil
+        set.actualWeightKG = nil
+        set.actualRestSeconds = nil
+        setPhase(.preSetCountdown, for: session)
+        try context.save()
+    }
+
     func skipCurrentExercise(in context: ModelContext) async throws {
         let session = try activeSession(in: context)
         guard let performance = currentPerformance(for: session, in: context)
@@ -267,7 +292,25 @@ final class GuidedWorkoutCoordinator {
             )
         }
         session.restStartedAt = nil
+        session.restTargetEndAt = nil
         setPhase(.preSetCountdown, for: session)
+        try context.save()
+    }
+
+    func adjustRest(
+        by seconds: Int,
+        in context: ModelContext
+    ) throws {
+        let session = try activeSession(in: context)
+        guard session.guidedPhase == .resting else { return }
+        let currentTarget = resolvedRestTargetEndAt(
+            for: session,
+            in: context
+        ) ?? now()
+        session.restTargetEndAt = max(
+            currentTarget.addingTimeInterval(TimeInterval(seconds)),
+            now()
+        )
         try context.save()
     }
 
@@ -276,13 +319,14 @@ final class GuidedWorkoutCoordinator {
         in context: ModelContext
     ) -> Int {
         guard session.guidedPhase == .resting,
-              let started = session.restStartedAt,
-              let set = currentSet(for: session, in: context)
+              let target = resolvedRestTargetEndAt(
+                  for: session,
+                  in: context
+              )
         else {
             return 0
         }
-        let planned = set.plannedRestSeconds ?? 0
-        return max(planned - Int(now().timeIntervalSince(started)), 0)
+        return max(Int(ceil(target.timeIntervalSince(now()))), 0)
     }
 
     func pause(in context: ModelContext) async throws {
@@ -303,6 +347,7 @@ final class GuidedWorkoutCoordinator {
         await recorder.cancelRecording()
         session.status = .abandoned
         session.endedAt = now()
+        session.restTargetEndAt = nil
         session.autoRecordingPolicy = .cancelled
         activeSessionID = nil
         try context.save()
@@ -313,6 +358,7 @@ final class GuidedWorkoutCoordinator {
         session.status = .completed
         session.guidedPhase = .completed
         session.endedAt = now()
+        session.restTargetEndAt = nil
         activeSessionID = nil
         try context.save()
     }
@@ -355,6 +401,9 @@ final class GuidedWorkoutCoordinator {
         if let pending {
             session.currentSetID = pending.id
             session.restStartedAt = now()
+            session.restTargetEndAt = now().addingTimeInterval(
+                TimeInterval(pending.plannedRestSeconds ?? 0)
+            )
             setPhase(.resting, for: session)
         } else {
             performance.status = .completed
@@ -374,10 +423,13 @@ final class GuidedWorkoutCoordinator {
             session.currentPerformanceID = next.id
             session.currentSetID = nil
             session.restStartedAt = nil
+            session.restTargetEndAt = nil
             setPhase(.exerciseIntroduction, for: session)
         } else {
             session.currentPerformanceID = nil
             session.currentSetID = nil
+            session.restStartedAt = nil
+            session.restTargetEndAt = nil
             setPhase(.sessionReview, for: session)
         }
     }
@@ -454,6 +506,23 @@ final class GuidedWorkoutCoordinator {
         }
         let target = prescription.firstSetIsWarmup ? 2 : 1
         return set.order == target
+    }
+
+    private func resolvedRestTargetEndAt(
+        for session: WorkoutSession,
+        in context: ModelContext
+    ) -> Date? {
+        if let target = session.restTargetEndAt {
+            return target
+        }
+        guard let started = session.restStartedAt,
+              let set = currentSet(for: session, in: context)
+        else {
+            return nil
+        }
+        return started.addingTimeInterval(
+            TimeInterval(set.plannedRestSeconds ?? 0)
+        )
     }
 
     private func setPhase(

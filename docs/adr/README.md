@@ -33,14 +33,15 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0027](0027-required-ai-configuration-and-send-gate.md) | 已采纳 | 聊天始终使用 AI，并在发送前引导补齐标准档 API Key |
 | [0028](0028-semantic-exercise-identity.md) | 已采纳 | 动作使用稳定 ID，模型基于完整 ID/名称列表完成语义归一 |
 | [0029](0029-versioned-training-plans-and-session-facts.md) | 已采纳 | 分离计划版本、执行快照、逐组事实与 AI 建议 |
-| [0030](0030-deterministic-guided-workout-and-session-recording.md) | 已采纳 | 带练由确定性状态机执行，并按 Session 自动录制目标组 |
+| [0030](0030-deterministic-guided-workout-and-session-recording.md) | 部分已替代 | 确定性状态机和录像目标保留；UI 与录像几何由 0038 修订 |
 | [0031](0031-durable-agent-jobs-event-log-and-projections.md) | 已采纳 | Agent 使用持久 Job、语义 Event Log 与独立投影 |
 | [0032](0032-optional-remote-agent-execution.md) | 已采纳 | 以匿名设备身份提供可选远程持续执行与本地 Tool handoff |
 | [0033](0033-live-activity-agent-job-projection.md) | 已采纳 | Live Activity 只投影隐私安全的 Agent Job 状态 |
 | [0034](0034-bidirectional-document-lifecycle-links.md) | 已采纳 | 文档修订、替代与研究落地关系使用双向生命周期索引 |
 | [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 已采纳 | 内置动作内容保持静默，用户使用动作后才关联素材，长尾图片按需生成 |
-| [0036](0036-gui-training-program-authoring.md) | 已采纳 | 训练计划可由聊天生成，也可在 GUI 中选择动作并确定性创建 |
+| [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 已采纳 | Local/Remote Backend 对 UI 提供等价流式事件，并由 PostgreSQL 通知即时唤醒 |
+| [0038](0038-focused-guided-workout-and-capture-geometry.md) | 已采纳 | 带练使用聚焦投影、单步组确认与横竖屏 capture-exact 录像 |
 
 新决策使用 [ADR 模板](template.md)。
 

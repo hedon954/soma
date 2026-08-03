@@ -67,6 +67,66 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
             ),
             .idle
         )
+
+        XCTAssertEqual(
+            WorkoutCameraService.captureGeometry(
+                previewRotationAngle: 450,
+                captureRotationAngle: 90,
+                isMirrored: true
+            ),
+            WorkoutCaptureGeometry(
+                orientation: .portrait,
+                previewRotationAngle: 90,
+                captureRotationAngle: 90,
+                isMirrored: true
+            )
+        )
+        XCTAssertEqual(
+            WorkoutCameraService.captureGeometry(
+                previewRotationAngle: 180,
+                captureRotationAngle: 180,
+                isMirrored: true
+            ).orientation,
+            .landscapeLeft
+        )
+        XCTAssertEqual(
+            WorkoutCameraService.captureGeometry(
+                previewRotationAngle: 0,
+                captureRotationAngle: 0,
+                isMirrored: true
+            ).orientation,
+            .landscapeRight
+        )
+    }
+
+    @MainActor
+    func testSetCanCompleteDirectlyFromInProgress() async throws {
+        let fixture = try makeFixture(firstSetIsWarmup: false, setCount: 1)
+        defer {
+            fixture.defaults.removePersistentDomain(
+                forName: fixture.suiteName
+            )
+        }
+        let recorder = RecordingSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: recorder,
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+
+        XCTAssertEqual(fixture.sets[0].status, .completed)
+        XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
+        XCTAssertEqual(recorder.stopCount, 1)
     }
 
     @MainActor
@@ -184,6 +244,74 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
         )
         try coordinator.finishRest(in: fixture.context)
         XCTAssertEqual(fixture.sets[1].actualRestSeconds, 35)
+    }
+
+    @MainActor
+    func testRestAdjustmentPersistsTargetEndTime() async throws {
+        let time = Date(timeIntervalSince1970: 2_000_000_000)
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 2,
+            now: time
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(
+                forName: fixture.suiteName
+            )
+        }
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: RecordingSpy(),
+            cues: SilentCues(),
+            now: { time }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+
+        try coordinator.adjustRest(by: -15, in: fixture.context)
+        XCTAssertEqual(
+            fixture.session.restTargetEndAt,
+            time.addingTimeInterval(75)
+        )
+        XCTAssertEqual(
+            coordinator.remainingRestSeconds(
+                for: fixture.session,
+                in: fixture.context
+            ),
+            75
+        )
+    }
+
+    @MainActor
+    func testRedoResetsInterruptedSetWithoutCompletingIt() async throws {
+        let fixture = try makeFixture(firstSetIsWarmup: false, setCount: 1)
+        defer {
+            fixture.defaults.removePersistentDomain(
+                forName: fixture.suiteName
+            )
+        }
+        let recorder = RecordingSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: recorder,
+            cues: SilentCues()
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+
+        try await coordinator.redoCurrentSet(in: fixture.context)
+
+        XCTAssertEqual(fixture.sets[0].status, .pending)
+        XCTAssertNil(fixture.sets[0].startedAt)
+        XCTAssertEqual(fixture.session.guidedPhase, .preSetCountdown)
+        XCTAssertEqual(recorder.cancelCount, 1)
     }
 
     @MainActor

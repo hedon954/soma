@@ -125,6 +125,7 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
     var currentSetID: UUID?
     var phaseStartedAt: Date?
     var restStartedAt: Date?
+    var restTargetEndAt: Date?
     var autoRecordingPolicyRaw: String
     var sourceTurnID: UUID?
     var sourceJobID: UUID?
@@ -143,6 +144,7 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
         currentSetID = model.currentSetID
         phaseStartedAt = model.phaseStartedAt
         restStartedAt = model.restStartedAt
+        restTargetEndAt = model.restTargetEndAt
         autoRecordingPolicyRaw = model.autoRecordingPolicyRaw
         sourceTurnID = model.sourceTurnID
         sourceJobID = model.sourceJobID
@@ -166,6 +168,7 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
             currentSetID: currentSetID,
             phaseStartedAt: phaseStartedAt,
             restStartedAt: restStartedAt,
+            restTargetEndAt: restTargetEndAt,
             autoRecordingPolicy: AutoRecordingPolicy(
                 rawValue: autoRecordingPolicyRaw
             ) ?? .disabled,

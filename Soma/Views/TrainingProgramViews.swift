@@ -10,6 +10,7 @@ struct TrainingProgramLibraryView: View {
     @Query(sort: \ExerciseDefinition.canonicalName)
     private var definitions: [ExerciseDefinition]
     @State private var showsCreation = false
+    @State private var resumedSession: WorkoutSession?
 
     private var activePrograms: [TrainingProgram] {
         programs.filter { $0.status == .active }
@@ -25,8 +26,8 @@ struct TrainingProgramLibraryView: View {
         List {
             if let resumableSession {
                 Section("进行中") {
-                    NavigationLink {
-                        GuidedWorkoutView(session: resumableSession)
+                    Button {
+                        resumedSession = resumableSession
                     } label: {
                         Label(
                             "继续 \(resumableSession.startedAt.formatted(date: .omitted, time: .shortened)) 的训练",
@@ -125,6 +126,11 @@ struct TrainingProgramLibraryView: View {
                 TrainingProgramCreationView(definitions: definitions)
             }
         }
+        .fullScreenCover(item: $resumedSession) { session in
+            NavigationStack {
+                GuidedWorkoutView(session: session)
+            }
+        }
     }
 
     private func programRow(_ program: TrainingProgram) -> some View {
@@ -144,6 +150,7 @@ struct TrainingProgramLibraryView: View {
 private struct TrainingProgramDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AIService.self) private var ai
+    @Environment(WorkoutCameraService.self) private var camera
     @Query(sort: \WorkoutTemplateVersion.createdAt, order: .reverse)
     private var allVersions: [WorkoutTemplateVersion]
     @Query(sort: \ExerciseDefinition.canonicalName)
@@ -160,6 +167,8 @@ private struct TrainingProgramDetailView: View {
     @State private var startedSession: WorkoutSession?
     @State private var errorMessage: String?
     @State private var isOptimizing = false
+    @AppStorage("workout.voiceCuesEnabled")
+    private var voiceCuesEnabled = true
 
     private var versions: [WorkoutTemplateVersion] {
         allVersions.filter { $0.programID == program.id }
@@ -224,12 +233,22 @@ private struct TrainingProgramDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(prescriptions.sorted(by: { $0.order < $1.order })) { item in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("\(item.order). \(item.exerciseName)")
-                            .font(.headline)
-                        Text(prescriptionSummary(item))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        ExerciseArtworkView(
+                            reference: definition(for: item.exerciseID)?
+                                .preferredActionIllustration
+                                ?? BundledExerciseCatalog.fallbackActionIllustration
+                        )
+                        .frame(width: 68, height: 68)
+                        .clipShape(RoundedRectangle(cornerRadius: 15))
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("\(item.order). \(item.exerciseName)")
+                                .font(.headline)
+                            Text(prescriptionSummary(item))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -286,14 +305,6 @@ private struct TrainingProgramDetailView: View {
             if program.status == .active {
                 Section {
                     Button {
-                        autoRecording = false
-                        showsStart = true
-                    } label: {
-                        Label("开始训练", systemImage: "play.fill")
-                    }
-                    .disabled(prescriptions.isEmpty)
-
-                    Button {
                         showsEditor = true
                     } label: {
                         Label("编辑并创建新版本", systemImage: "slider.horizontal.3")
@@ -313,6 +324,23 @@ private struct TrainingProgramDetailView: View {
             }
         }
         .navigationTitle(program.name)
+        .safeAreaInset(edge: .bottom) {
+            if program.status == .active, !prescriptions.isEmpty {
+                Button {
+                    autoRecording = false
+                    showsStart = true
+                } label: {
+                    Label("开始训练", systemImage: "play.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .background(.bar)
+            }
+        }
         .sheet(isPresented: $showsEditor) {
             NavigationStack {
                 TrainingTemplateEditor(
@@ -327,9 +355,28 @@ private struct TrainingProgramDetailView: View {
             NavigationStack {
                 Form {
                     Section {
+                        Toggle("语音提示", isOn: $voiceCuesEnabled)
                         Toggle("每个动作自动录制一组", isOn: $autoRecording)
                     } footer: {
                         Text("首组是热身时录第 2 组，否则录第 1 组。麦克风关闭，视频只保存在 Soma。")
+                    }
+                    if autoRecording {
+                        Section("取景校准") {
+                            WorkoutCameraSurface(
+                                camera: camera,
+                                showsSafeFrame: true,
+                                compact: false
+                            )
+                            .aspectRatio(
+                                camera.captureGeometry.orientation.aspectRatio,
+                                contentMode: .fit
+                            )
+                            .frame(maxHeight: 310)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            Text("请横放或竖放设备，确认全身位于虚线框内。这里展示的是最终录像的完整画幅。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     if !readiness.isEmpty {
                         Section("开始前检查") {
@@ -350,6 +397,18 @@ private struct TrainingProgramDetailView: View {
                     }
                 }
                 .navigationTitle("准备训练")
+                .task(id: autoRecording) {
+                    guard autoRecording else {
+                        await camera.stopPreview()
+                        return
+                    }
+                    do {
+                        try await camera.prepare()
+                    } catch {
+                        autoRecording = false
+                        errorMessage = error.localizedDescription
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("取消") { showsStart = false }
@@ -365,6 +424,12 @@ private struct TrainingProgramDetailView: View {
                 }
             }
             .presentationDetents([.medium, .large])
+        }
+        .onChange(of: showsStart) {
+            guard !showsStart, startedSession == nil else { return }
+            Task {
+                await camera.stopPreview()
+            }
         }
         .fullScreenCover(item: $startedSession) { session in
             NavigationStack {
@@ -442,6 +507,10 @@ private struct TrainingProgramDetailView: View {
             values.append("首组热身")
         }
         return values.isEmpty ? "处方值未记录" : values.joined(separator: " · ")
+    }
+
+    private func definition(for id: UUID) -> ExerciseDefinition? {
+        definitions.first { $0.id == id }
     }
 }
 

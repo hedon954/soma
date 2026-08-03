@@ -1,6 +1,11 @@
 import SwiftData
 import SwiftUI
 
+enum GuidedWorkoutPresentationMode: Equatable {
+    case compact
+    case expandedCapture
+}
+
 struct GuidedWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -16,12 +21,25 @@ struct GuidedWorkoutView: View {
     let session: WorkoutSession
     @State private var actualReps = ""
     @State private var actualWeight = ""
+    @State private var presentationMode = GuidedWorkoutPresentationMode.compact
+    @State private var showsActualEditor = false
     @State private var showsEndConfirmation = false
     @State private var showsReplacement = false
     @State private var errorMessage: String?
 
+    init(session: WorkoutSession) {
+        self.session = session
+        #if DEBUG
+            if ProcessInfo.processInfo.environment["SOMA_GUIDED_CAPTURE_PREVIEW"] == "1" {
+                _presentationMode = State(initialValue: .expandedCapture)
+            }
+        #endif
+    }
+
     private var performances: [ExercisePerformance] {
-        allPerformances.filter { $0.sessionID == session.id }
+        allPerformances
+            .filter { $0.sessionID == session.id }
+            .sorted { $0.order < $1.order }
     }
 
     private var currentPerformance: ExercisePerformance? {
@@ -34,52 +52,78 @@ struct GuidedWorkoutView: View {
         return allSets.first { $0.id == id }
     }
 
+    private var currentPerformanceSets: [WorkoutSet] {
+        guard let id = currentPerformance?.id else { return [] }
+        return allSets
+            .filter { $0.performanceID == id }
+            .sorted { $0.order < $1.order }
+    }
+
+    private var sessionSets: [WorkoutSet] {
+        let performanceIDs = Set(performances.map(\.id))
+        return allSets.filter { performanceIDs.contains($0.performanceID) }
+    }
+
+    private var completedSetCount: Int {
+        sessionSets.count { $0.status == .completed }
+    }
+
+    private var projectionKey: String {
+        [
+            session.statusRaw,
+            session.guidedPhaseRaw,
+            session.currentSetID?.uuidString ?? "none",
+            session.restTargetEndAt?.timeIntervalSince1970.formatted() ?? "none",
+            String(completedSetCount)
+        ].joined(separator: ":")
+    }
+
+    private var currentExerciseDefinition: ExerciseDefinition? {
+        guard let id = currentPerformance?.exerciseID else { return nil }
+        return definitions.first { $0.id == id }
+    }
+
     var body: some View {
-        VStack(spacing: 18) {
-            header
+        GeometryReader { proxy in
+            ZStack {
+                Color(uiColor: .systemGroupedBackground)
+                    .ignoresSafeArea()
 
-            if session.autoRecordingPolicy != .disabled,
-               session.autoRecordingPolicy != .cancelled
-            {
-                cameraCard
-            }
-
-            Spacer(minLength: 0)
-            phaseContent
-            Spacer(minLength: 0)
-
-            if let message = coordinator.recordingErrorMessage {
-                Label(message, systemImage: "camera.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
+                if presentationMode == .expandedCapture,
+                   session.guidedPhase == .setInProgress
+                {
+                    GuidedExpandedCaptureView(
+                        camera: camera,
+                        sessionStartedAt: session.startedAt,
+                        performance: currentPerformance,
+                        performanceCount: performances.count,
+                        set: currentSet,
+                        sets: currentPerformanceSets,
+                        targetText: targetText,
+                        coachingNote: coachingNote,
+                        isLandscape: proxy.size.width > proxy.size.height,
+                        onCollapse: {
+                            withAnimation(.snappy) {
+                                presentationMode = .compact
+                            }
+                        },
+                        onPause: pauseOrResume,
+                        onComplete: completeCurrentSet,
+                        onEdit: { showsActualEditor = true },
+                        onMore: { showsEndConfirmation = true }
+                    )
+                    .transition(.opacity)
+                } else {
+                    compactContent(isLandscape: proxy.size.width > proxy.size.height)
+                        .transition(.opacity)
+                }
             }
         }
-        .padding()
-        .background(Color(uiColor: .systemGroupedBackground))
         .navigationBarBackButtonHidden(session.status == .active)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if session.status == .active {
-                    Button("暂停") {
-                        run { try await coordinator.pause(in: modelContext) }
-                    }
-                } else if session.status == .paused {
-                    Button("继续") {
-                        do {
-                            try coordinator.resume(in: modelContext)
-                        } catch {
-                            errorMessage = error.localizedDescription
-                        }
-                    }
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("结束", role: .destructive) {
-                    showsEndConfirmation = true
-                }
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .task {
+            WorkoutInterfaceOrientationPolicy.shared
+                .setGuidedWorkoutActive(true)
             await coordinator.activate(session, in: modelContext)
             if session.guidedPhase == .ready {
                 do {
@@ -99,11 +143,41 @@ struct GuidedWorkoutView: View {
             }
             run { try await coordinator.beginCurrentSet(in: modelContext) }
         }
+        .task(id: projectionKey) {
+            await WorkoutSystemProjectionCoordinator.shared.update(
+                session: session,
+                completedSetCount: completedSetCount,
+                totalSetCount: sessionSets.count
+            )
+        }
+        .onDisappear {
+            WorkoutInterfaceOrientationPolicy.shared
+                .setGuidedWorkoutActive(false)
+            Task { await camera.stopPreview() }
+        }
         .onChange(of: session.currentSetID, initial: true) {
             actualReps = currentSet?.plannedReps.map(String.init) ?? ""
             actualWeight = currentSet?.plannedWeightKG.map {
                 $0.formatted()
             } ?? ""
+        }
+        .onChange(of: camera.state) {
+            if camera.state == .recording {
+                withAnimation(.snappy) {
+                    presentationMode = .expandedCapture
+                }
+            } else if presentationMode == .expandedCapture {
+                withAnimation(.snappy) {
+                    presentationMode = .compact
+                }
+            }
+        }
+        .sheet(isPresented: $showsActualEditor) {
+            GuidedSetActualEditor(
+                reps: $actualReps,
+                weight: $actualWeight,
+                targetText: targetText
+            )
         }
         .confirmationDialog(
             "提前结束本次训练？",
@@ -112,6 +186,11 @@ struct GuidedWorkoutView: View {
             Button("结束并保留已完成组", role: .destructive) {
                 run {
                     try await coordinator.endEarly(in: modelContext)
+                    await WorkoutSystemProjectionCoordinator.shared.end(
+                        session: session,
+                        completedSetCount: completedSetCount,
+                        totalSetCount: sessionSets.count
+                    )
                     dismiss()
                 }
             }
@@ -120,19 +199,22 @@ struct GuidedWorkoutView: View {
         .sheet(isPresented: $showsReplacement) {
             NavigationStack {
                 List(definitions.filter { !$0.isArchived }) { exercise in
-                    Button(exercise.canonicalName) {
-                        do {
-                            try coordinator.replaceCurrentExercise(
-                                with: exercise,
-                                in: modelContext
+                    Button {
+                        replaceCurrentExercise(with: exercise)
+                    } label: {
+                        HStack(spacing: 12) {
+                            ExerciseArtworkView(
+                                reference: exercise.preferredActionIllustration
                             )
-                            showsReplacement = false
-                        } catch {
-                            errorMessage = error.localizedDescription
+                            .frame(width: 54, height: 54)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            Text(exercise.canonicalName)
                         }
                     }
+                    .foregroundStyle(.primary)
                 }
                 .navigationTitle("替换当前动作")
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
         .alert(
@@ -152,216 +234,236 @@ struct GuidedWorkoutView: View {
         }
     }
 
-    private var header: some View {
-        VStack(spacing: 8) {
-            ProgressView(
-                value: Double(
-                    performances.count {
-                        $0.status == .completed || $0.status == .skipped
-                    }
-                ),
-                total: Double(max(performances.count, 1))
+    private func compactContent(isLandscape: Bool) -> some View {
+        VStack(spacing: 0) {
+            GuidedWorkoutChrome(
+                session: session,
+                completedExerciseCount: performances.count {
+                    $0.status == .completed || $0.status == .skipped
+                },
+                exerciseCount: performances.count,
+                onPause: pauseOrResume,
+                onEnd: { showsEndConfirmation = true }
             )
-            HStack {
-                Text(currentPerformance?.exerciseName ?? "训练总结")
-                    .font(.title2.bold())
-                Spacer()
-                Text("\(performances.count { $0.status == .completed })/\(performances.count)")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
 
-    private var cameraCard: some View {
-        VStack(spacing: 8) {
-            WorkoutCameraPreview(session: camera.captureSession)
-                .frame(height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(alignment: .topLeading) {
-                    Label(
-                        camera.state == .recording ? "录制中" : "前置相机",
-                        systemImage: camera.state == .recording
-                            ? "record.circle.fill"
-                            : "person.crop.rectangle"
-                    )
-                    .font(.caption.bold())
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .padding(8)
-                }
-            HStack {
-                Text(camera.state.message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Menu {
-                    if session.autoRecordingPolicy == .enabled {
-                        Button("暂停后续自动录像") {
-                            setRecordingPolicy(.paused)
-                        }
-                    } else if session.autoRecordingPolicy == .paused {
-                        Button("恢复自动录像") {
-                            setRecordingPolicy(.enabled)
-                        }
-                    }
-                    Button("取消本次自动录像", role: .destructive) {
-                        setRecordingPolicy(.cancelled)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("自动录像设置")
+            if let recordingError = coordinator.recordingErrorMessage {
+                Label(recordingError, systemImage: "camera.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
             }
+
+            phaseContent(isLandscape: isLandscape)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
     @ViewBuilder
-    private var phaseContent: some View {
-        switch session.guidedPhase {
-        case .ready:
-            ProgressView("准备训练…")
-        case .exerciseIntroduction:
-            VStack(spacing: 16) {
-                Text(currentExerciseDefinition?.coachingNotes.nilIfBlank
-                    ?? "确认器械和动作空间，准备后开始第一组。")
-                    .font(.body)
-                Button("准备本动作") {
-                    do {
-                        try coordinator.prepareCurrentSet(in: modelContext)
-                    } catch {
-                        errorMessage = error.localizedDescription
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                HStack {
-                    Button("替换动作") { showsReplacement = true }
-                    Button("跳过动作") {
-                        run {
-                            try await coordinator.skipCurrentExercise(
-                                in: modelContext
-                            )
-                        }
-                    }
-                }
-            }
-        case .preSetCountdown:
-            VStack(spacing: 12) {
-                Image(systemName: "timer")
-                    .font(.system(size: 56))
-                Text("3 秒后开始第 \(currentSet?.order ?? 1) 组")
-                    .font(.title3.bold())
-            }
-        case .setInProgress:
-            VStack(spacing: 18) {
-                Text("第 \(currentSet?.order ?? 1) 组")
-                    .font(.largeTitle.bold())
-                Text(plannedSetText)
-                    .foregroundStyle(.secondary)
-                Button("完成本组") {
-                    do {
-                        try coordinator.requestSetConfirmation(
-                            in: modelContext
-                        )
-                    } catch {
-                        errorMessage = error.localizedDescription
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                Button("跳过本组") {
-                    run {
-                        try await coordinator.skipCurrentSet(in: modelContext)
-                    }
-                }
-            }
-        case .setConfirmation:
-            VStack(spacing: 16) {
-                Text("确认实际完成")
-                    .font(.title3.bold())
-                HStack {
-                    TextField("次数", text: $actualReps)
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("重量 kg", text: $actualWeight)
-                        .keyboardType(.decimalPad)
-                        .textFieldStyle(.roundedBorder)
-                }
-                Button("保存本组") {
-                    run {
-                        try await coordinator.confirmCurrentSet(
-                            actualReps: Int(actualReps),
-                            actualWeightKG: Double(actualWeight),
-                            in: modelContext
-                        )
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        case .resting:
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                let remaining = coordinator.remainingRestSeconds(
-                    for: session,
-                    in: modelContext
+    private func phaseContent(isLandscape: Bool) -> some View {
+        if session.status == .paused {
+            GuidedPausedView(onResume: pauseOrResume)
+        } else {
+            switch session.guidedPhase {
+            case .ready:
+                ProgressView("准备训练…")
+            case .exerciseIntroduction:
+                GuidedExerciseIntroductionView(
+                    exercise: currentExerciseDefinition,
+                    performance: currentPerformance,
+                    onPrepare: prepareCurrentSet,
+                    onReplace: { showsReplacement = true },
+                    onSkip: skipCurrentExercise
                 )
-                VStack(spacing: 16) {
-                    Text("休息")
-                        .font(.headline)
-                    Text("\(remaining)")
-                        .font(.system(size: 64, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Button(remaining == 0 ? "开始下一组" : "结束休息") {
-                        do {
-                            try coordinator.finishRest(in: modelContext)
-                        } catch {
-                            errorMessage = error.localizedDescription
+            case .preSetCountdown:
+                GuidedSetCountdownView(
+                    set: currentSet,
+                    targetText: targetText,
+                    phaseStartedAt: session.phaseStartedAt
+                )
+            case .setInProgress:
+                GuidedCompactSetView(
+                    camera: camera,
+                    exercise: currentExerciseDefinition,
+                    performance: currentPerformance,
+                    performanceCount: performances.count,
+                    set: currentSet,
+                    sets: currentPerformanceSets,
+                    targetText: targetText,
+                    coachingNote: coachingNote,
+                    isLandscape: isLandscape,
+                    showsCamera: showsCompactCamera,
+                    onExpandCamera: {
+                        withAnimation(.snappy) {
+                            presentationMode = .expandedCapture
                         }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-        case .sessionReview:
-            VStack(spacing: 16) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.green)
-                Text("本次训练已完成")
-                    .font(.title2.bold())
-                Text(
-                    TrainingPlanStore.summary(
+                    },
+                    onEdit: { showsActualEditor = true },
+                    onComplete: completeCurrentSet,
+                    onSkip: skipCurrentSet
+                )
+            case .setConfirmation:
+                GuidedSetRecoveryView(
+                    targetText: targetText,
+                    onCompleted: completeCurrentSet,
+                    onRedo: redoCurrentSet,
+                    onSkip: skipCurrentSet
+                )
+            case .resting:
+                GuidedRestView(
+                    nextSet: currentSet,
+                    remainingSeconds: {
+                        coordinator.remainingRestSeconds(
+                            for: session,
+                            in: modelContext
+                        )
+                    },
+                    onAdjust: adjustRest,
+                    onFinish: finishRest
+                )
+            case .sessionReview:
+                GuidedSessionReviewView(
+                    summary: TrainingPlanStore.summary(
                         for: session.id,
                         in: modelContext
-                    ).text
+                    ).text,
+                    onFinish: finishSession
                 )
-                .multilineTextAlignment(.center)
-                Button("保存并结束") {
-                    do {
-                        try coordinator.complete(in: modelContext)
-                        dismiss()
-                    } catch {
-                        errorMessage = error.localizedDescription
-                    }
-                }
-                .buttonStyle(.borderedProminent)
+            case .completed:
+                GuidedSessionReviewView(
+                    summary: "训练已经保存。",
+                    onFinish: { dismiss() }
+                )
             }
-        case .completed:
-            Text("训练已保存")
         }
     }
 
-    private var currentExerciseDefinition: ExerciseDefinition? {
-        guard let id = currentPerformance?.exerciseID else { return nil }
-        return definitions.first { $0.id == id }
+    private var targetText: String {
+        let reps = Int(actualReps)
+        let weight = Double(actualWeight)
+        switch (weight, reps) {
+        case let (.some(weight), .some(reps)):
+            return "\(weight == 0 ? "自重" : "\(weight.formatted()) kg") × \(reps)"
+        case let (.some(weight), .none):
+            return weight == 0 ? "自重" : "\(weight.formatted()) kg"
+        case let (.none, .some(reps)):
+            return "\(reps) 次"
+        case (.none, .none):
+            return "按状态完成"
+        }
     }
 
-    private var plannedSetText: String {
-        var values: [String] = []
-        if let reps = currentSet?.plannedReps {
-            values.append("\(reps) 次")
+    private var coachingNote: String {
+        let note = currentExerciseDefinition?.coachingNotes
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfBlank
+            ?? "保持动作稳定，在可控范围内完成本组。"
+        let boundaries = ["；", "。"].compactMap {
+            note.firstIndex(of: Character($0))
         }
-        if let weight = currentSet?.plannedWeightKG {
-            values.append("\(weight.formatted()) kg")
+        guard let boundary = boundaries.min() else { return note }
+        return String(note[..<boundary]) + "。"
+    }
+
+    private var showsCompactCamera: Bool {
+        if session.autoRecordingPolicy != .disabled,
+           session.autoRecordingPolicy != .cancelled
+        {
+            return true
         }
-        return values.isEmpty ? "按身体状态完成" : values.joined(separator: " · ")
+        #if DEBUG
+            return ProcessInfo.processInfo.environment["SOMA_GUIDED_CAPTURE_PREVIEW"] == "1"
+        #else
+            return false
+        #endif
+    }
+
+    private func pauseOrResume() {
+        if session.status == .paused {
+            do {
+                try coordinator.resume(in: modelContext)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        } else {
+            run { try await coordinator.pause(in: modelContext) }
+        }
+    }
+
+    private func prepareCurrentSet() {
+        do {
+            try coordinator.prepareCurrentSet(in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func completeCurrentSet() {
+        run {
+            try await coordinator.confirmCurrentSet(
+                actualReps: Int(actualReps),
+                actualWeightKG: Double(actualWeight),
+                in: modelContext
+            )
+        }
+    }
+
+    private func redoCurrentSet() {
+        run { try await coordinator.redoCurrentSet(in: modelContext) }
+    }
+
+    private func skipCurrentSet() {
+        run { try await coordinator.skipCurrentSet(in: modelContext) }
+    }
+
+    private func skipCurrentExercise() {
+        run { try await coordinator.skipCurrentExercise(in: modelContext) }
+    }
+
+    private func adjustRest(_ seconds: Int) {
+        do {
+            try coordinator.adjustRest(by: seconds, in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func finishRest() {
+        do {
+            try coordinator.finishRest(in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func finishSession() {
+        do {
+            try coordinator.complete(in: modelContext)
+            Task {
+                await WorkoutSystemProjectionCoordinator.shared.end(
+                    session: session,
+                    completedSetCount: completedSetCount,
+                    totalSetCount: sessionSets.count
+                )
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func replaceCurrentExercise(with exercise: ExerciseDefinition) {
+        do {
+            try coordinator.replaceCurrentExercise(
+                with: exercise,
+                in: modelContext
+            )
+            showsReplacement = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func run(
@@ -375,20 +477,10 @@ struct GuidedWorkoutView: View {
             }
         }
     }
-
-    private func setRecordingPolicy(_ policy: AutoRecordingPolicy) {
-        run {
-            try await coordinator.setRecordingPolicy(
-                policy,
-                in: modelContext
-            )
-        }
-    }
 }
 
 private extension String {
     var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
+        isEmpty ? nil : self
     }
 }

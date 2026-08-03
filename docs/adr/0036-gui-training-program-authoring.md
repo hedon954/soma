@@ -1,12 +1,12 @@
 # ADR 0036：训练计划允许 GUI 确定性创建与编排
 
-- 状态：已采纳
+- 状态：部分已替代；GUI 创建边界保留，交互由 ADR 0038 扩展
 - 日期：2026-08-03
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0002](0002-chat-write-path-review-gui.md) 的“聊天是所有业务对象唯一创建路径”
   - [ADR 0030](0030-deterministic-guided-workout-and-session-recording.md) 中计划只经聊天创建的范围
-- 后续替代：暂无
+- 后续替代：[ADR 0038](0038-focused-guided-workout-and-capture-geometry.md) 增加折叠处方、显式最近值与带练衔接
 - 上游依据：[PRD 012](../prd/012-gui-training-program-authoring.md)
 - 关联：[ADR 0029](0029-versioned-training-plans-and-session-facts.md)
 

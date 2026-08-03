@@ -7,7 +7,8 @@
 
 | 调研 | 状态 | 下游落地 |
 | --- | --- | --- |
-| [动作库、训练计划、带练与视频复盘](2026-07-31-exercise-library-plans-guided-training.md) | 已转化 | PRD 010、ADR 0028—0024、训练领域架构 |
+| [动作库、训练计划、带练与视频复盘](2026-07-31-exercise-library-plans-guided-training.md) | 已转化并部分修订 | PRD 010、ADR 0028—0035、训练领域架构；带练体验由后续调研深化 |
+| [训练计划编排、沉浸式带练与真实取景](2026-08-03-guided-workout-flow-and-capture.md) | 已转化 | PRD 013、ADR 0038、BUG 0006 |
 | [持久 Agent Job、事件流与 Live Activities](2026-07-31-durable-agent-jobs-live-activities.md) | 已转化 | PRD 011、ADR 0031—0027、Agent Job 协议 |
 
 ## 生命周期规则

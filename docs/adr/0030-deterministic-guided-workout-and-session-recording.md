@@ -1,10 +1,12 @@
 # ADR 0030：带练使用确定性状态机，并按 Session 自动录制目标组
 
-- 状态：已采纳
+- 状态：部分已替代；确定性状态机与录像目标保留，UI 投影和录像几何由 ADR 0038 修订
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0002](0002-chat-write-path-review-gui.md) 的“所有业务事实只能由聊天创建”
-- 后续替代：[ADR 0036](0036-gui-training-program-authoring.md) 扩展训练计划的创建入口，带练事实边界不变
+- 后续替代：
+  - [ADR 0036](0036-gui-training-program-authoring.md) 扩展训练计划的创建入口，带练事实边界不变
+  - [ADR 0038](0038-focused-guided-workout-and-capture-geometry.md) 修订阶段 UI、单步完成和录像画幅方向
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)

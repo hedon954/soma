@@ -276,6 +276,72 @@ private struct SomaAgentJobLiveActivity: Widget {
     }
 }
 
+private struct SomaWorkoutLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: SomaWorkoutActivityAttributes.self) { context in
+            HStack(spacing: 12) {
+                Image(systemName: context.state.symbolName)
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(context.state.phaseTitle)
+                        .font(.headline)
+                    workoutStatus(context.state)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding()
+            .activityBackgroundTint(Color(uiColor: .secondarySystemBackground))
+            .widgetURL(
+                URL(string: "soma://workout/session/\(context.attributes.sessionID.uuidString)")
+            )
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Image(systemName: context.state.symbolName)
+                        .foregroundStyle(.green)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    Text(context.state.phaseTitle)
+                        .font(.headline)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    workoutStatus(context.state)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } compactLeading: {
+                Image(systemName: context.state.symbolName)
+                    .foregroundStyle(.green)
+            } compactTrailing: {
+                Text("\(context.state.completedSetCount)/\(context.state.totalSetCount)")
+                    .font(.caption2.monospacedDigit())
+            } minimal: {
+                Image(systemName: context.state.symbolName)
+                    .foregroundStyle(.green)
+            }
+            .widgetURL(
+                URL(string: "soma://workout/session/\(context.attributes.sessionID.uuidString)")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func workoutStatus(
+        _ state: SomaWorkoutActivityAttributes.ContentState
+    ) -> some View {
+        if let restEndAt = state.restEndAt, restEndAt > .now {
+            Text(timerInterval: .now ... restEndAt, countsDown: true)
+                .monospacedDigit()
+        } else {
+            Text("已完成 \(state.completedSetCount)/\(state.totalSetCount) 组")
+                .monospacedDigit()
+        }
+    }
+}
+
 private struct SomaLockScreenCaptureEntryView: View {
     let action: SomaCaptureAction
 
@@ -365,5 +431,6 @@ struct SomaWidgetBundle: WidgetBundle {
         SomaLockScreenCameraCaptureWidget()
         SomaLockScreenMediaCaptureWidget()
         SomaAgentJobLiveActivity()
+        SomaWorkoutLiveActivity()
     }
 }

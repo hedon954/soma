@@ -1,37 +1,37 @@
-# Soma 多媒体折叠卡片 Design QA
+# 计划带练视觉 QA
 
-- Source visual truth: 2026-07-29 产品验收对话中提供的微信折叠/展开参考图。
-- Implementation evidence: 2026-07-29 在 iPhone 17 Pro Simulator 上分别截取折叠态与展开态，
-  并按相同视口高度进行并排比较；运行时截图属于本地验收产物，不进入 Git。
-- Runtime viewport: iPhone 17 Pro simulator, 368 × 800 optimized capture
-- State: three mixed-aspect-ratio images, collapsed and expanded
-- Density normalization: the reference and simulator captures were proportionally resized to a common 1000 px comparison height; device chrome was excluded from fidelity findings.
+- 日期：2026-08-03
+- 视觉来源：`.codex/plans/assets/guided-workout-compact.png`、
+  `guided-workout-expanded-portrait.png`、`guided-workout-expanded-landscape.png`
+- 实现范围：计划 GUI、紧凑带练、竖屏放大录像、横屏分栏录像、休息与恢复
 
-## Full-view comparison
+## 对照结果
 
-The collapsed state follows the reference composition: the first image stays upright on a stable portrait, square, or landscape canvas; the second and third images use that same canvas at 0.9 and 0.8 scale, rotate clockwise, and expose progressively on the right. The full stack reserves its overflow width and remains right-aligned rather than clipping against the screen.
+| 状态 | 对照证据 | 结论 |
+| --- | --- | --- |
+| 紧凑态 | 参考图与 iPhone 17 Pro 模拟器实装截图并排检查 | 动作示意为主视觉，相机小窗、目标、组进度、教练提示和单一完成按钮层级一致。 |
+| 竖屏放大态 | 参考图与 iPhone 17 Pro 模拟器实装截图并排检查 | 完整取景、安全框、录制控制、计时、实际值编辑和完成按钮均在一屏内。 |
+| 横屏放大态 | 参考图与 844×390 的生产 SwiftUI 组件固定画布并排检查 | 相机约占 2/3，右侧控制栏约占 1/3；组进度、提示和主按钮无需纵向滚动。 |
 
-The expanded state removes rotation and renders a right-aligned vertical list. The control changes from “展开 3” to “收起”; there is no horizontal paging gesture.
+模拟器没有真实前置摄像头，因此 QA 截图中的相机内容为黑色；这只限制素材验证，不改变实际
+`AVCaptureVideoPreviewLayer`、安全框、画幅比例和控制布局。真实画面、镜像、旋转和编码结果
+继续由维护者按 `docs/acceptance.md` 做真机验收。
 
-## Focused component comparison
+## 发现并修复
 
-- Layout and spacing: passed. The rear layers expose 10% and 16.5% of the front-card width, and the expand/collapse control is centered against the first card.
-- Typography: passed for the scoped component. The compact secondary capsule treatment matches the reference hierarchy.
-- Colors and tokens: passed. The capsule uses a low-emphasis neutral fill and the media cards do not add a background surface.
-- Image quality and asset fidelity: passed. Soma uses the real user media; different subjects from the reference are expected. The folded state crops into a stable canvas, while the expanded state keeps each item’s own aspect ratio.
-- Copy and content: passed. “展开 3” and “收起” match the reference behavior.
-- Interaction and accessibility: passed. The stack and capsule expose a button label, expand vertically, collapse again, and do not introduce horizontal scrolling.
+- 恢复训练原先通过普通导航进入，底部 Tab 会露出；改为全屏恢复入口。
+- 计划编辑器原先常驻排序模式，使动作选择入口不可点击；改为显式进入/退出排序模式。
+- 紧凑相机小窗过大并遮挡动作主体；缩小为辅助画面，并为窄小窗使用短状态文案。
+- 放大录像头部缺少已训练时长；加入单调秒表并保留暂停和更多操作。
+- 动作序号只显示当前序号；统一显示“当前/总数”，录像浮层同时显示组进度。
+- 完整教练说明在紧凑页会出现省略号；提炼到第一条完整关键 cue，完整说明仍保留在动作详情。
 
-## Comparison history
+## 质量边界
 
-1. Earlier implementation: blocked by P1 clipping. Rear images were clipped before receiving their final frame, so their pixels overflowed and appeared as a black column.
-2. Fix: each rear image now receives its real scaled frame first and is independently rounded/clipped; the outer stack no longer clips away the fan.
-3. Earlier implementation: blocked by P1 geometry drift. Rotation direction and layer exposure did not match the reference.
-4. Fix: clockwise rotations are 1.8° and 3.6°, with cumulative right exposure of 10% and 16.5%.
-5. Mixed-orientation verification: rear images share the first card’s stable canvas before layer scaling and rotation, so a portrait first image no longer makes the whole message excessively tall.
-
-## Residual notes
-
-The source and implementation contain different user images, so subject colors and crops are intentionally not compared. No actionable P0, P1, or P2 mismatch remains in the folded-media component.
+- P0、P1、P2 视觉或交互问题：无未解决项。
+- P3/设备验证项：真实相机画幅、前置镜像、系统方向锁定、录制中旋转、来电/后台中断和
+  Live Activity 由维护者真机验收，不以模拟器截图冒充通过。
+- 自动化：`GuidedWorkoutLayoutTests` 固定完整适配策略，并渲染 844×390 横屏生产组件；
+  `GuidedWorkoutCoordinatorTests` 覆盖方向映射、单步完成、休息目标和中断重做。
 
 final result: passed

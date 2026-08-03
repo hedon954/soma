@@ -30,6 +30,7 @@ struct RootView: View {
     @Query(sort: \AgentJob.createdAt) private var agentJobs: [AgentJob]
     @State private var selectedTab: AppTab = .coach
     @State private var sheet: RootSheet?
+    @State private var routedWorkoutSession: WorkoutSession?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -71,6 +72,14 @@ struct RootView: View {
         .onChange(of: captureRouter.pendingAgentTurn, initial: true) {
             handleAgentTurnRoute()
         }
+        .onChange(of: captureRouter.pendingWorkoutSession, initial: true) {
+            handleWorkoutSessionRoute()
+        }
+        .fullScreenCover(item: $routedWorkoutSession) { session in
+            NavigationStack {
+                GuidedWorkoutView(session: session)
+            }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: .openCoachConversation)
         ) { _ in
@@ -93,6 +102,9 @@ struct RootView: View {
             DataIntegrityRepair.migrateLegacyWorkoutSets(in: modelContext)
             ExerciseLibraryStore.migrateLegacyWorkoutNames(in: modelContext)
             ExerciseLibraryStore.activateBundledContent(in: modelContext)
+            if dataSpace.activeSpace == .demo {
+                DemoTrainingPlanSeeder.seedIfNeeded(in: modelContext)
+            }
             conversationSessions.resolveForEntry(
                 dataSpace: dataSpace.activeSpace,
                 in: modelContext
@@ -154,6 +166,18 @@ struct RootView: View {
         )
         selectedTab = .coach
         captureRouter.clearAgentTurn(route.id)
+    }
+
+    private func handleWorkoutSessionRoute() {
+        guard let route = captureRouter.pendingWorkoutSession,
+              let session = (
+                  try? modelContext.fetch(FetchDescriptor<WorkoutSession>())
+              )?.first(where: { $0.id == route.sessionID })
+        else {
+            return
+        }
+        routedWorkoutSession = session
+        captureRouter.clearWorkoutSession(route.id)
     }
 
     @ToolbarContentBuilder

@@ -3,6 +3,7 @@
 - 日期：2026-07-31
 - 状态：已转化为正式 PRD、ADR 与工程协议
 - 适用范围：Soma 个人空间中的力量训练记录、计划执行与动作视频
+- 后续修订：[训练计划编排、沉浸式带练与真实取景调研](2026-08-03-guided-workout-flow-and-capture.md) 深化计划执行 UI 与真实取景规则
 - 下游落地：
   - [PRD 010](../prd/010-exercise-library-plans-guided-training.md)
   - [ADR 0028](../adr/0028-semantic-exercise-identity.md)

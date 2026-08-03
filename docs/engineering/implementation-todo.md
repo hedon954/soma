@@ -7,6 +7,7 @@
 - 关联：
   - [PRD 010](../prd/010-exercise-library-plans-guided-training.md)
   - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
+  - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [实施次序](implementation-sequence.md)
 
 本文件是本轮“一次性完成所有任务”的持久跟踪面。复选框只能在证据充分时勾选；已有相近代码
@@ -217,6 +218,21 @@
 - [x] 视频默认留在 `PrivateMedia`，不自动写系统相册。
 - [x] 导出、备份、恢复、清除和媒体引用回收覆盖视频。
 - [ ] 维护者手工验证实际相机与长训练状态。
+
+## 10.1 低摩擦计划与沉浸式带练修订
+
+- [x] 新增调研、PRD 013、ADR 0038、BUG 0006，并建立新旧文档双向索引。
+- [x] Plan 与紧凑、竖屏放大、横屏放大三张选定实现图落入 `.codex/plans/`。
+- [x] 动作图片多选器、折叠处方、显式最近值、排序、替换和删除共用稳定动作 ID。
+- [x] 普通进行中 Set 一次点击保存；中断恢复继续保留已完成、重做和跳过选择。
+- [x] `restTargetEndAt` 进入 SwiftData、备份/恢复 DTO 与休息增减逻辑。
+- [x] 紧凑/放大态共享 Capture Session；录像成功自动放大，收起不停止文件。
+- [x] 预览改为完整适配；预览/文件共享镜像与旋转，录像期间锁定 Capture Geometry。
+- [x] 带练开放横竖屏，退出后恢复 App 其他页面竖屏；横屏使用相机/控制栏分栏。
+- [x] 新增隐私最小化训练 Live Activity、休息通知和当前 Session 深链。
+- [x] 自动化覆盖最近容量、单步完成、休息目标、恢复和方向映射。
+- [x] 模拟器验证 GUI 多选、紧凑态、放大竖屏态、恢复全屏与单步完成。
+- [ ] 维护者真机验证横竖屏真实画幅、镜像、录制中旋转、相机中断和 Live Activity。
 
 ## 11. 动作内容、建议与视频复盘
 

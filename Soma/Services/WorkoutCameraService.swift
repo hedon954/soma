@@ -26,6 +26,35 @@ enum WorkoutCameraState: Equatable {
     }
 }
 
+enum WorkoutCaptureOrientation: String, Equatable, Sendable {
+    case portrait
+    case landscapeLeft
+    case landscapeRight
+
+    var aspectRatio: CGFloat {
+        switch self {
+        case .portrait:
+            9 / 16
+        case .landscapeLeft, .landscapeRight:
+            16 / 9
+        }
+    }
+}
+
+struct WorkoutCaptureGeometry: Equatable, Sendable {
+    var orientation: WorkoutCaptureOrientation
+    var previewRotationAngle: Double
+    var captureRotationAngle: Double
+    var isMirrored: Bool
+
+    static let portrait = WorkoutCaptureGeometry(
+        orientation: .portrait,
+        previewRotationAngle: 90,
+        captureRotationAngle: 90,
+        isMirrored: true
+    )
+}
+
 enum WorkoutCameraError: LocalizedError {
     case permissionDenied
     case frontCameraUnavailable
@@ -54,10 +83,22 @@ enum WorkoutCameraError: LocalizedError {
 final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     private(set) var state: WorkoutCameraState = .idle
     private(set) var lastSavedPath: String?
+    private(set) var captureGeometry = WorkoutCaptureGeometry.portrait
+    private(set) var isCaptureGeometryLocked = false
 
     @ObservationIgnored nonisolated(unsafe) let captureSession = AVCaptureSession()
     @ObservationIgnored private nonisolated(unsafe) let movieOutput =
         AVCaptureMovieFileOutput()
+    @ObservationIgnored private nonisolated(unsafe) var captureDevice:
+        AVCaptureDevice?
+    @ObservationIgnored private nonisolated(unsafe) weak var previewLayer:
+        AVCaptureVideoPreviewLayer?
+    @ObservationIgnored private var rotationCoordinator:
+        AVCaptureDevice.RotationCoordinator?
+    @ObservationIgnored private var previewRotationObservation:
+        NSKeyValueObservation?
+    @ObservationIgnored private var captureRotationObservation:
+        NSKeyValueObservation?
     @ObservationIgnored private let recordingDelegate = MovieRecordingDelegate()
     @ObservationIgnored private let sessionQueue = DispatchQueue(
         label: "top.hedon.soma.workout-camera"
@@ -92,6 +133,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         do {
             try await configureIfNeeded()
             await startSession()
+            configureRotationCoordinatorIfPossible()
             state = .previewing
         } catch {
             state = .unavailable(error.localizedDescription)
@@ -114,6 +156,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             .appendingPathExtension("mov")
         temporaryURL = url
         discardCurrentRecording = false
+        lockCaptureGeometry()
         movieOutput.startRecording(
             to: url,
             recordingDelegate: recordingDelegate
@@ -133,7 +176,29 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         discardCurrentRecording = true
         if movieOutput.isRecording {
             movieOutput.stopRecording()
+        } else {
+            unlockCaptureGeometry()
         }
+    }
+
+    func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+        if previewLayer === layer, rotationCoordinator != nil {
+            applyCaptureGeometry(captureGeometry)
+            return
+        }
+        previewLayer = layer
+        layer.session = captureSession
+        layer.videoGravity = .resizeAspect
+        configureRotationCoordinatorIfPossible()
+        applyCaptureGeometry(captureGeometry)
+    }
+
+    func detachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+        guard previewLayer === layer else { return }
+        previewRotationObservation = nil
+        captureRotationObservation = nil
+        rotationCoordinator = nil
+        previewLayer = nil
     }
 
     func stopPreview() async {
@@ -152,6 +217,13 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         state = .idle
     }
 
+    #if DEBUG
+        func useCaptureGeometryForTesting(_ geometry: WorkoutCaptureGeometry) {
+            captureGeometry = geometry
+            applyCaptureGeometry(geometry)
+        }
+    #endif
+
     private func finishRecording(at url: URL, error: Error?) {
         defer {
             temporaryURL = nil
@@ -160,6 +232,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                 after: state,
                 sessionIsRunning: captureSession.isRunning
             )
+            unlockCaptureGeometry()
         }
         if discardCurrentRecording {
             try? FileManager.default.removeItem(at: url)
@@ -242,6 +315,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                     }
                     captureSession.addInput(input)
                     captureSession.addOutput(movieOutput)
+                    captureDevice = camera
                     if let connection = movieOutput.connection(with: .video),
                        connection.isVideoMirroringSupported
                     {
@@ -317,6 +391,121 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         })
     }
 
+    private func configureRotationCoordinatorIfPossible() {
+        guard let captureDevice, let previewLayer else { return }
+        previewRotationObservation = nil
+        captureRotationObservation = nil
+        let coordinator = AVCaptureDevice.RotationCoordinator(
+            device: captureDevice,
+            previewLayer: previewLayer
+        )
+        rotationCoordinator = coordinator
+        previewRotationObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelPreview,
+            options: [.initial, .new]
+        ) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                self?.refreshCaptureGeometry()
+            }
+        }
+        captureRotationObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelCapture,
+            options: [.initial, .new]
+        ) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                self?.refreshCaptureGeometry()
+            }
+        }
+        refreshCaptureGeometry()
+    }
+
+    private func refreshCaptureGeometry() {
+        guard !isCaptureGeometryLocked,
+              let rotationCoordinator
+        else {
+            return
+        }
+        let geometry = Self.captureGeometry(
+            previewRotationAngle: Double(
+                rotationCoordinator.videoRotationAngleForHorizonLevelPreview
+            ),
+            captureRotationAngle: Double(
+                rotationCoordinator.videoRotationAngleForHorizonLevelCapture
+            ),
+            isMirrored: true
+        )
+        captureGeometry = geometry
+        applyCaptureGeometry(geometry)
+    }
+
+    private func lockCaptureGeometry() {
+        refreshCaptureGeometry()
+        isCaptureGeometryLocked = true
+        applyCaptureGeometry(captureGeometry)
+    }
+
+    private func unlockCaptureGeometry() {
+        isCaptureGeometryLocked = false
+        refreshCaptureGeometry()
+    }
+
+    private func applyCaptureGeometry(_ geometry: WorkoutCaptureGeometry) {
+        if let connection = previewLayer?.connection {
+            if connection.isVideoRotationAngleSupported(
+                CGFloat(geometry.previewRotationAngle)
+            ) {
+                connection.videoRotationAngle = CGFloat(
+                    geometry.previewRotationAngle
+                )
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = geometry.isMirrored
+            }
+        }
+        if let connection = movieOutput.connection(with: .video) {
+            if connection.isVideoRotationAngleSupported(
+                CGFloat(geometry.captureRotationAngle)
+            ) {
+                connection.videoRotationAngle = CGFloat(
+                    geometry.captureRotationAngle
+                )
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = geometry.isMirrored
+            }
+        }
+    }
+
+    static func captureGeometry(
+        previewRotationAngle: Double,
+        captureRotationAngle: Double,
+        isMirrored: Bool
+    ) -> WorkoutCaptureGeometry {
+        let normalized = normalizedAngle(captureRotationAngle)
+        let orientation: WorkoutCaptureOrientation = switch normalized {
+        case 0:
+            .landscapeRight
+        case 180:
+            .landscapeLeft
+        default:
+            .portrait
+        }
+        return WorkoutCaptureGeometry(
+            orientation: orientation,
+            previewRotationAngle: normalizedAngle(previewRotationAngle),
+            captureRotationAngle: normalized,
+            isMirrored: isMirrored
+        )
+    }
+
+    private static func normalizedAngle(_ value: Double) -> Double {
+        let normalized = value.truncatingRemainder(dividingBy: 360)
+        let positive = normalized < 0 ? normalized + 360 : normalized
+        return (positive / 90).rounded() * 90
+    }
+
     private func interrupt(message: String) async {
         await cancelRecording()
         state = .unavailable(message)
@@ -340,17 +529,41 @@ private final class MovieRecordingDelegate:
 }
 
 struct WorkoutCameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
+    let camera: WorkoutCameraService
 
-    func makeUIView(context _: Context) -> CameraPreviewView {
+    func makeCoordinator() -> Coordinator {
+        Coordinator(camera: camera)
+    }
+
+    func makeUIView(context: Context) -> CameraPreviewView {
         let view = CameraPreviewView()
-        view.previewLayer?.session = session
-        view.previewLayer?.videoGravity = .resizeAspectFill
+        if let layer = view.previewLayer {
+            context.coordinator.camera?.attachPreviewLayer(layer)
+        }
         return view
     }
 
-    func updateUIView(_ uiView: CameraPreviewView, context _: Context) {
-        uiView.previewLayer?.session = session
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        if let layer = uiView.previewLayer {
+            context.coordinator.camera?.attachPreviewLayer(layer)
+        }
+    }
+
+    static func dismantleUIView(
+        _ uiView: CameraPreviewView,
+        coordinator: Coordinator
+    ) {
+        if let layer = uiView.previewLayer {
+            coordinator.camera?.detachPreviewLayer(layer)
+        }
+    }
+
+    final class Coordinator {
+        weak var camera: WorkoutCameraService?
+
+        init(camera: WorkoutCameraService) {
+            self.camera = camera
+        }
     }
 }
 

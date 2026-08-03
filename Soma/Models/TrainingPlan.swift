@@ -231,6 +231,7 @@ final class WorkoutSession {
     var currentSetID: UUID?
     var phaseStartedAt: Date?
     var restStartedAt: Date?
+    var restTargetEndAt: Date?
     var autoRecordingPolicyRaw: String
     var sourceTurnID: UUID?
     var sourceJobID: UUID?
@@ -249,6 +250,7 @@ final class WorkoutSession {
         currentSetID: UUID? = nil,
         phaseStartedAt: Date? = nil,
         restStartedAt: Date? = nil,
+        restTargetEndAt: Date? = nil,
         autoRecordingPolicy: AutoRecordingPolicy = .disabled,
         sourceTurnID: UUID? = nil,
         sourceJobID: UUID? = nil
@@ -266,6 +268,7 @@ final class WorkoutSession {
         self.currentSetID = currentSetID
         self.phaseStartedAt = phaseStartedAt
         self.restStartedAt = restStartedAt
+        self.restTargetEndAt = restTargetEndAt
         autoRecordingPolicyRaw = autoRecordingPolicy.rawValue
         self.sourceTurnID = sourceTurnID
         self.sourceJobID = sourceJobID

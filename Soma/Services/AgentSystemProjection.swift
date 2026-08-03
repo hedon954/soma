@@ -254,6 +254,13 @@ final class SomaAppDelegate: NSObject, UIApplicationDelegate,
 {
     func application(
         _: UIApplication,
+        supportedInterfaceOrientationsFor _: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        WorkoutInterfaceOrientationPolicy.shared.supportedOrientations
+    }
+
+    func application(
+        _: UIApplication,
         didFinishLaunchingWithOptions _: [
             UIApplication.LaunchOptionsKey: Any
         ]? = nil
@@ -283,12 +290,15 @@ final class SomaAppDelegate: NSObject, UIApplicationDelegate,
         _: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard let rawID = response.notification.request.content
-            .userInfo["turn_id"] as? String,
-            let turnID = UUID(uuidString: rawID)
-        else {
-            return
+        let userInfo = response.notification.request.content.userInfo
+        if let rawID = userInfo["turn_id"] as? String,
+           let turnID = UUID(uuidString: rawID)
+        {
+            SomaCaptureRouter.shared.requestAgentTurn(turnID)
+        } else if let rawID = userInfo["workout_session_id"] as? String,
+                  let sessionID = UUID(uuidString: rawID)
+        {
+            SomaCaptureRouter.shared.requestWorkoutSession(sessionID)
         }
-        SomaCaptureRouter.shared.requestAgentTurn(turnID)
     }
 }
