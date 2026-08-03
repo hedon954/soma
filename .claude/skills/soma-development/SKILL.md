@@ -26,7 +26,9 @@ Agent Tool, or model thinking display as a speculative convenience.
 
 ## 2. Protect Soma's invariants
 
-- Chat is the create path; lists and details are the review/correction path.
+- Chat is the default create path for unstructured facts. A specialized structured GUI is allowed
+  only when an Accepted PRD/ADR authorizes it; current exceptions are training-plan authoring
+  (ADR 0036) and guided set confirmation (ADR 0030).
 - Missing facts remain `nil`; never make a record look complete by guessing.
 - Agent writes happen through fixed Tool Calls, not by parsing final prose.
 - Tool Schema is system-owned; Skills are progressively disclosed and user-editable.

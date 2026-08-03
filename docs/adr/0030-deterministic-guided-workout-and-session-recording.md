@@ -4,7 +4,7 @@
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0002](0002-chat-write-path-review-gui.md) 的“所有业务事实只能由聊天创建”
-- 后续替代：暂无
+- 后续替代：[ADR 0036](0036-gui-training-program-authoring.md) 扩展训练计划的创建入口，带练事实边界不变
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)

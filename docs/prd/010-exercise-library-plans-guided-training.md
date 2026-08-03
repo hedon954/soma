@@ -1,9 +1,9 @@
 # PRD 010：动作库、训练计划、程序化带练与视频复盘
 
-- 状态：已实现，真机相机路径持续验收
+- 状态：部分修订；训练计划 GUI 创建入口由 PRD 012 扩展
 - 日期：2026-07-31
 - 修订自：[PRD 004](004-soma-current-product.md) 的训练记录与动作分析范围
-- 后续修订：暂无
+- 后续修订：[PRD 012](012-gui-training-program-authoring.md) 增加从零选择动作并创建计划的 GUI 路径
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 关联决策：
   - [ADR 0028](../adr/0028-semantic-exercise-identity.md)

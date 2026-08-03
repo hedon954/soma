@@ -4,6 +4,65 @@ import XCTest
 
 final class TrainingPlanTests: XCTestCase {
     @MainActor
+    func testGUIProgramCreationUsesStableIDsAndKeepsMissingValuesEmpty() throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let squat = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "杠铃深蹲",
+            in: context
+        )
+        let row = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "坐姿划船",
+            in: context
+        )
+
+        let program = try TrainingPlanStore.createProgram(
+            name: "全身训练",
+            goal: "保持规律训练",
+            templateName: "全身训练",
+            scheduleHint: "周末",
+            prescriptions: [
+                TemplateExercisePrescription(
+                    exerciseID: row.id,
+                    exerciseName: row.canonicalName,
+                    order: 1,
+                    targetSets: 3,
+                    targetReps: 10,
+                    targetRestSeconds: 90
+                ),
+                TemplateExercisePrescription(
+                    exerciseID: squat.id,
+                    exerciseName: squat.canonicalName,
+                    order: 2,
+                    firstSetIsWarmup: true
+                )
+            ],
+            source: "gui",
+            in: context
+        )
+
+        let version = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
+                .first { $0.id == program.currentTemplateVersionID }
+        )
+        let values = TrainingPlanStore.prescriptions(
+            for: version,
+            in: context
+        )
+
+        XCTAssertEqual(program.goal, "保持规律训练")
+        XCTAssertEqual(version.source, "gui")
+        XCTAssertEqual(values.map(\.exerciseID), [row.id, squat.id])
+        XCTAssertEqual(values.map(\.order), [1, 2])
+        XCTAssertEqual(values.first?.targetSets, 3)
+        XCTAssertNil(values.last?.targetSets)
+        XCTAssertNil(values.last?.targetReps)
+        XCTAssertNil(values.last?.targetWeightKG)
+        XCTAssertNil(values.last?.targetRestSeconds)
+        XCTAssertTrue(values.last?.firstSetIsWarmup == true)
+    }
+
+    @MainActor
     func testStartingSessionFreezesVersionAndCreatesOrderedSets() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }

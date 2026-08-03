@@ -7,6 +7,13 @@ struct TrainingProgramLibraryView: View {
     private var programs: [TrainingProgram]
     @Query(sort: \WorkoutSession.startedAt, order: .reverse)
     private var sessions: [WorkoutSession]
+    @Query(sort: \ExerciseDefinition.canonicalName)
+    private var definitions: [ExerciseDefinition]
+    @State private var showsCreation = false
+
+    private var activePrograms: [TrainingProgram] {
+        programs.filter { $0.status == .active }
+    }
 
     private var resumableSession: WorkoutSession? {
         sessions.first {
@@ -30,15 +37,24 @@ struct TrainingProgramLibraryView: View {
             }
 
             Section("训练计划") {
-                if programs.isEmpty {
-                    ContentUnavailableView(
-                        "还没有训练计划",
-                        systemImage: "list.bullet.clipboard",
-                        description: Text("在教练里描述你的目标与动作，Soma 会创建可审查的训练计划。")
-                    )
+                if activePrograms.isEmpty {
+                    VStack(spacing: 14) {
+                        ContentUnavailableView(
+                            "还没有训练计划",
+                            systemImage: "list.bullet.clipboard",
+                            description: Text("可以自己选择动作组合，也可以在教练中描述目标，让 Soma 帮你生成。")
+                        )
+                        Button {
+                            showsCreation = true
+                        } label: {
+                            Label("新建训练计划", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                 } else {
-                    ForEach(programs.filter { $0.status == .active }) { program in
+                    ForEach(activePrograms) { program in
                         NavigationLink {
                             TrainingProgramDetailView(program: program)
                         } label: {
@@ -94,6 +110,21 @@ struct TrainingProgramLibraryView: View {
         .scrollContentBackground(.hidden)
         .appPageBackground()
         .navigationTitle("训练计划")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showsCreation = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("新建训练计划")
+            }
+        }
+        .sheet(isPresented: $showsCreation) {
+            NavigationStack {
+                TrainingProgramCreationView(definitions: definitions)
+            }
+        }
     }
 
     private func programRow(_ program: TrainingProgram) -> some View {
@@ -411,174 +442,6 @@ private struct TrainingProgramDetailView: View {
             values.append("首组热身")
         }
         return values.isEmpty ? "处方值未记录" : values.joined(separator: " · ")
-    }
-}
-
-private struct TrainingTemplateEditor: View {
-    struct Row: Identifiable {
-        var id: UUID
-        var exerciseID: UUID
-        var sets: String
-        var reps: String
-        var weight: String
-        var rest: String
-        var firstSetIsWarmup: Bool
-    }
-
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    let program: TrainingProgram
-    let currentVersion: WorkoutTemplateVersion?
-    let definitions: [ExerciseDefinition]
-
-    @State private var name: String
-    @State private var scheduleHint: String
-    @State private var rows: [Row]
-    @State private var errorMessage: String?
-
-    init(
-        program: TrainingProgram,
-        currentVersion: WorkoutTemplateVersion?,
-        initialPrescriptions: [TemplateExercisePrescription],
-        definitions: [ExerciseDefinition]
-    ) {
-        self.program = program
-        self.currentVersion = currentVersion
-        self.definitions = definitions
-        _name = State(initialValue: currentVersion?.name ?? program.name)
-        _scheduleHint = State(initialValue: currentVersion?.scheduleHint ?? "")
-        _rows = State(initialValue: initialPrescriptions.map {
-            Row(
-                id: UUID(),
-                exerciseID: $0.exerciseID,
-                sets: $0.targetSets.map(String.init) ?? "",
-                reps: $0.targetReps.map(String.init) ?? "",
-                weight: $0.targetWeightKG.map { $0.formatted() } ?? "",
-                rest: $0.targetRestSeconds.map(String.init) ?? "",
-                firstSetIsWarmup: $0.firstSetIsWarmup
-            )
-        })
-    }
-
-    private var activeDefinitions: [ExerciseDefinition] {
-        definitions.filter { !$0.isArchived }
-    }
-
-    var body: some View {
-        Form {
-            Section("模板") {
-                TextField("模板名称", text: $name)
-                TextField("安排提示", text: $scheduleHint)
-            }
-            Section("动作顺序") {
-                ForEach($rows) { $row in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Picker("动作", selection: $row.exerciseID) {
-                            ForEach(activeDefinitions) { exercise in
-                                Text(exercise.canonicalName)
-                                    .tag(exercise.id)
-                            }
-                        }
-                        HStack {
-                            metric("组", text: $row.sets)
-                            metric("次", text: $row.reps)
-                            metric("kg", text: $row.weight)
-                            metric("休息秒", text: $row.rest)
-                        }
-                        Toggle("第 1 组是热身组", isOn: $row.firstSetIsWarmup)
-                    }
-                    .padding(.vertical, 5)
-                }
-                .onDelete { rows.remove(atOffsets: $0) }
-                .onMove { rows.move(fromOffsets: $0, toOffset: $1) }
-
-                if let first = activeDefinitions.first {
-                    Button {
-                        rows.append(Row(
-                            id: UUID(),
-                            exerciseID: first.id,
-                            sets: "",
-                            reps: "",
-                            weight: "",
-                            rest: "",
-                            firstSetIsWarmup: false
-                        ))
-                    } label: {
-                        Label("添加动作", systemImage: "plus.circle")
-                    }
-                }
-            }
-        }
-        .navigationTitle("新建模板版本")
-        .environment(\.editMode, .constant(.active))
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存", action: save)
-                    .disabled(name.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    ).isEmpty || rows.isEmpty)
-            }
-        }
-        .alert(
-            "无法保存",
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: {
-                    if !$0 {
-                        errorMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
-    }
-
-    private func metric(
-        _ label: String,
-        text: Binding<String>
-    ) -> some View {
-        TextField(label, text: text)
-            .keyboardType(.decimalPad)
-            .textFieldStyle(.roundedBorder)
-            .accessibilityLabel(label)
-    }
-
-    private func save() {
-        let names = Dictionary(uniqueKeysWithValues: activeDefinitions.map {
-            ($0.id, $0.canonicalName)
-        })
-        let values = rows.enumerated().map { index, row in
-            TemplateExercisePrescription(
-                exerciseID: row.exerciseID,
-                exerciseName: names[row.exerciseID] ?? "已删除动作",
-                order: index + 1,
-                targetSets: Int(row.sets),
-                targetReps: Int(row.reps),
-                targetWeightKG: Double(row.weight),
-                targetRestSeconds: Int(row.rest),
-                firstSetIsWarmup: row.firstSetIsWarmup
-            )
-        }
-        do {
-            _ = try TrainingPlanStore.createNextVersion(
-                for: program,
-                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                scheduleHint: scheduleHint.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                ),
-                prescriptions: values,
-                in: modelContext
-            )
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 }
 
