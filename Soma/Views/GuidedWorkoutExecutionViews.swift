@@ -131,6 +131,7 @@ struct GuidedCompactSetView: View {
                             showsSafeFrame: false,
                             compact: true
                         )
+                        .allowsHitTesting(false)
                         .frame(width: isLandscape ? 120 : 92)
                         .aspectRatio(
                             camera.captureGeometry.orientation.aspectRatio,
@@ -144,6 +145,7 @@ struct GuidedCompactSetView: View {
                         .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
                     }
                     .buttonStyle(.plain)
+                    .contentShape(RoundedRectangle(cornerRadius: 18))
                     .padding(14)
                     .accessibilityLabel(camera.state == .recording
                         ? "正在录制，放大相机"

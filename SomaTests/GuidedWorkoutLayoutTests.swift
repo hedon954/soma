@@ -17,6 +17,63 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testPreviewLayerBecomesReadyOnlyAfterEnteringWindow() {
+        let view = CameraPreviewView(frame: .zero)
+        var readyLayers: [AVCaptureVideoPreviewLayer] = []
+        view.onPreviewLayerReady = { readyLayers.append($0) }
+
+        XCTAssertTrue(readyLayers.isEmpty)
+
+        let controller = UIViewController()
+        controller.view.addSubview(view)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = controller
+        window.isHidden = false
+        view.frame = controller.view.bounds
+        view.layoutIfNeeded()
+
+        XCTAssertEqual(readyLayers.count, 1)
+        XCTAssertTrue(readyLayers[0] === view.previewLayer)
+        window.isHidden = true
+    }
+
+    @MainActor
+    func testGuidedWorkoutOrientationPolicyIncludesBothLandscapeDirections() {
+        XCTAssertEqual(
+            WorkoutInterfaceOrientationPolicy.supportedOrientations(
+                isGuidedWorkoutActive: false
+            ),
+            .portrait
+        )
+        XCTAssertEqual(
+            WorkoutInterfaceOrientationPolicy.supportedOrientations(
+                isGuidedWorkoutActive: true
+            ),
+            [.portrait, .landscapeLeft, .landscapeRight]
+        )
+    }
+
+    @MainActor
+    func testVisibleCountdownPublishesCompletionAtDeadline() async {
+        let completed = expectation(description: "倒计时结束")
+        let view = GuidedSetCountdownView(
+            set: nil,
+            targetText: "5 次",
+            phaseStartedAt: .now.addingTimeInterval(-4),
+            onFinished: { completed.fulfill() }
+        )
+        .frame(width: 390, height: 844)
+
+        let controller = UIHostingController(rootView: view)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = controller
+        window.isHidden = false
+
+        await fulfillment(of: [completed], timeout: 1)
+        window.isHidden = true
+    }
+
+    @MainActor
     func testExpandedCaptureLandscapeRendersAtPhoneAspectRatio() throws {
         let size = CGSize(width: 844, height: 390)
         let camera = WorkoutCameraService()

@@ -1,6 +1,6 @@
 # BUG 0006：带练预览与保存录像画幅不一致
 
-- 状态：已修复；待维护者真机画幅确认
+- 状态：基础画幅合同已修复；真机交互回归由 BUG 0007 继续修订
 - 发现日期：2026-08-03
 - 影响范围：iPhone 计划带练的自动录像、全身取景和横竖屏使用
 - 上游依据：
@@ -8,6 +8,7 @@
 - 下游落地：
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
+- 后续修订：[BUG 0007](0007-guided-workout-countdown-capture-orientation-regression.md) 修复倒计时、手动放大和方向协调器初始化时机
 
 ## 症状
 
@@ -46,3 +47,5 @@
 - `make check` 与 `make verify` 是合并门禁，最终命令证据随本次提交记录。
 - 真实前置相机的画幅、镜像、横竖屏、录制中旋转和系统中断仍由维护者真机验收；完成前不把
   这些设备体验标记为已通过。
+- 首轮真机验收随后发现倒计时驱动、手动取景切换和方向协调器进入窗口前初始化的问题；该批
+  后续回归的机制、修复与二次验收见 [BUG 0007](0007-guided-workout-countdown-capture-orientation-regression.md)。

@@ -1,6 +1,5 @@
 @preconcurrency import AVFoundation
 import Observation
-import SwiftUI
 import UIKit
 
 enum WorkoutCameraState: Equatable {
@@ -525,55 +524,6 @@ private final class MovieRecordingDelegate:
         error: Error?
     ) {
         completion?(outputFileURL, error)
-    }
-}
-
-struct WorkoutCameraPreview: UIViewRepresentable {
-    let camera: WorkoutCameraService
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(camera: camera)
-    }
-
-    func makeUIView(context: Context) -> CameraPreviewView {
-        let view = CameraPreviewView()
-        if let layer = view.previewLayer {
-            context.coordinator.camera?.attachPreviewLayer(layer)
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
-        if let layer = uiView.previewLayer {
-            context.coordinator.camera?.attachPreviewLayer(layer)
-        }
-    }
-
-    static func dismantleUIView(
-        _ uiView: CameraPreviewView,
-        coordinator: Coordinator
-    ) {
-        if let layer = uiView.previewLayer {
-            coordinator.camera?.detachPreviewLayer(layer)
-        }
-    }
-
-    final class Coordinator {
-        weak var camera: WorkoutCameraService?
-
-        init(camera: WorkoutCameraService) {
-            self.camera = camera
-        }
-    }
-}
-
-final class CameraPreviewView: UIView {
-    override static var layerClass: AnyClass {
-        AVCaptureVideoPreviewLayer.self
-    }
-
-    var previewLayer: AVCaptureVideoPreviewLayer? {
-        layer as? AVCaptureVideoPreviewLayer
     }
 }
 

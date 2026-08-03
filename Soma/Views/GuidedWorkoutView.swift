@@ -1,11 +1,6 @@
 import SwiftData
 import SwiftUI
 
-enum GuidedWorkoutPresentationMode: Equatable {
-    case compact
-    case expandedCapture
-}
-
 struct GuidedWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -21,7 +16,7 @@ struct GuidedWorkoutView: View {
     let session: WorkoutSession
     @State private var actualReps = ""
     @State private var actualWeight = ""
-    @State private var presentationMode = GuidedWorkoutPresentationMode.compact
+    @State private var presentation = GuidedWorkoutPresentationState()
     @State private var showsActualEditor = false
     @State private var showsEndConfirmation = false
     @State private var showsReplacement = false
@@ -31,7 +26,9 @@ struct GuidedWorkoutView: View {
         self.session = session
         #if DEBUG
             if ProcessInfo.processInfo.environment["SOMA_GUIDED_CAPTURE_PREVIEW"] == "1" {
-                _presentationMode = State(initialValue: .expandedCapture)
+                _presentation = State(initialValue: GuidedWorkoutPresentationState(
+                    mode: .expandedCapture
+                ))
             }
         #endif
     }
@@ -89,7 +86,8 @@ struct GuidedWorkoutView: View {
                 Color(uiColor: .systemGroupedBackground)
                     .ignoresSafeArea()
 
-                if presentationMode == .expandedCapture,
+                if session.status == .active,
+                   presentation.mode == .expandedCapture,
                    session.guidedPhase == .setInProgress
                 {
                     GuidedExpandedCaptureView(
@@ -104,7 +102,7 @@ struct GuidedWorkoutView: View {
                         isLandscape: proxy.size.width > proxy.size.height,
                         onCollapse: {
                             withAnimation(.snappy) {
-                                presentationMode = .compact
+                                presentation.collapse()
                             }
                         },
                         onPause: pauseOrResume,
@@ -133,16 +131,6 @@ struct GuidedWorkoutView: View {
                 }
             }
         }
-        .task(id: session.guidedPhaseRaw) {
-            guard session.guidedPhase == .preSetCountdown else { return }
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled,
-                  session.guidedPhase == .preSetCountdown
-            else {
-                return
-            }
-            run { try await coordinator.beginCurrentSet(in: modelContext) }
-        }
         .task(id: projectionKey) {
             await WorkoutSystemProjectionCoordinator.shared.update(
                 session: session,
@@ -162,14 +150,13 @@ struct GuidedWorkoutView: View {
             } ?? ""
         }
         .onChange(of: camera.state) {
-            if camera.state == .recording {
-                withAnimation(.snappy) {
-                    presentationMode = .expandedCapture
-                }
-            } else if presentationMode == .expandedCapture {
-                withAnimation(.snappy) {
-                    presentationMode = .compact
-                }
+            withAnimation(.snappy) {
+                presentation.cameraStateChanged(camera.state)
+            }
+        }
+        .onChange(of: session.guidedPhaseRaw) {
+            withAnimation(.snappy) {
+                presentation.phaseChanged(session.guidedPhase)
             }
         }
         .sheet(isPresented: $showsActualEditor) {
@@ -281,7 +268,8 @@ struct GuidedWorkoutView: View {
                 GuidedSetCountdownView(
                     set: currentSet,
                     targetText: targetText,
-                    phaseStartedAt: session.phaseStartedAt
+                    phaseStartedAt: session.phaseStartedAt,
+                    onFinished: beginCurrentSetAfterCountdown
                 )
             case .setInProgress:
                 GuidedCompactSetView(
@@ -297,7 +285,7 @@ struct GuidedWorkoutView: View {
                     showsCamera: showsCompactCamera,
                     onExpandCamera: {
                         withAnimation(.snappy) {
-                            presentationMode = .expandedCapture
+                            presentation.expand()
                         }
                     },
                     onEdit: { showsActualEditor = true },
@@ -395,6 +383,16 @@ struct GuidedWorkoutView: View {
     private func prepareCurrentSet() {
         do {
             try coordinator.prepareCurrentSet(in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func beginCurrentSetAfterCountdown() async {
+        guard session.guidedPhase == .preSetCountdown else { return }
+        do {
+            try await coordinator.beginCurrentSet(in: modelContext)
         } catch {
             errorMessage = error.localizedDescription
         }

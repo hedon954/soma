@@ -7,14 +7,23 @@ final class WorkoutInterfaceOrientationPolicy {
     private(set) var isGuidedWorkoutActive = false
 
     var supportedOrientations: UIInterfaceOrientationMask {
+        Self.supportedOrientations(
+            isGuidedWorkoutActive: isGuidedWorkoutActive
+        )
+    }
+
+    static func supportedOrientations(
+        isGuidedWorkoutActive: Bool
+    ) -> UIInterfaceOrientationMask {
         isGuidedWorkoutActive
             ? [.portrait, .landscapeLeft, .landscapeRight]
             : .portrait
     }
 
     func setGuidedWorkoutActive(_ isActive: Bool) {
-        guard isGuidedWorkoutActive != isActive else { return }
+        let didChange = isGuidedWorkoutActive != isActive
         isGuidedWorkoutActive = isActive
+        guard didChange || isActive else { return }
         var requestedOrientations = supportedOrientations
         #if DEBUG
             if isActive,

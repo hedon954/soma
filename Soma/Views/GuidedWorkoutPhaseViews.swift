@@ -55,13 +55,18 @@ struct GuidedSetCountdownView: View {
     let set: WorkoutSet?
     let targetText: String
     let phaseStartedAt: Date?
+    let onFinished: @MainActor () async -> Void
+
+    private var clock: GuidedSetCountdownClock {
+        GuidedSetCountdownClock(startedAt: phaseStartedAt ?? .now)
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.2)) { context in
             VStack(spacing: 16) {
                 Text("第 \(set?.order ?? 1) 组")
                     .font(.title2.bold())
-                Text("\(remaining(at: context.date))")
+                Text("\(clock.remaining(at: context.date))")
                     .font(.system(size: 108, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.green)
@@ -73,11 +78,22 @@ struct GuidedSetCountdownView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    private func remaining(at date: Date) -> Int {
-        guard let phaseStartedAt else { return 3 }
-        return max(3 - Int(date.timeIntervalSince(phaseStartedAt)), 1)
+        .task(id: phaseStartedAt) {
+            let delay = clock.delay(at: .now)
+            do {
+                if delay > 0 {
+                    try await Task.sleep(for: .milliseconds(
+                        Int((delay * 1000).rounded(.up))
+                    ))
+                }
+                guard !Task.isCancelled else { return }
+                await onFinished()
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
     }
 }
 

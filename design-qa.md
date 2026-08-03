@@ -28,10 +28,12 @@
 
 ## 质量边界
 
-- P0、P1、P2 视觉或交互问题：无未解决项。
-- P3/设备验证项：真实相机画幅、前置镜像、系统方向锁定、录制中旋转、来电/后台中断和
-  Live Activity 由维护者真机验收，不以模拟器截图冒充通过。
+- 首轮真机验收暴露三个 P1 交互问题：倒计时停在 `1`、手动完整取景不稳定、横竖屏误判；
+  根因与修复记录在 `docs/bugs/0007-guided-workout-countdown-capture-orientation-regression.md`。
+- 修复后的 P0/P1/P2 自动化问题：无未解决项。
+- 设备复验项：真实相机画幅、前置镜像、横竖屏、录制中旋转、来电/后台中断和 Live Activity
+  仍由维护者真机复验，不以模拟器截图冒充通过。
 - 自动化：`GuidedWorkoutLayoutTests` 固定完整适配策略，并渲染 844×390 横屏生产组件；
   `GuidedWorkoutCoordinatorTests` 覆盖方向映射、单步完成、休息目标和中断重做。
 
-final result: passed
+final result: pending device recheck

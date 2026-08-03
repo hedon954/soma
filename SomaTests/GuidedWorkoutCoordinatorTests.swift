@@ -99,6 +99,41 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
         )
     }
 
+    func testCountdownClockReachesZeroAndBecomesDue() {
+        let startedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let clock = GuidedSetCountdownClock(startedAt: startedAt)
+
+        XCTAssertEqual(clock.remaining(at: startedAt), 3)
+        XCTAssertEqual(
+            clock.remaining(at: startedAt.addingTimeInterval(2.01)),
+            1
+        )
+        XCTAssertEqual(
+            clock.remaining(at: startedAt.addingTimeInterval(3)),
+            0
+        )
+        XCTAssertTrue(clock.isDue(at: startedAt.addingTimeInterval(3)))
+        XCTAssertEqual(
+            clock.delay(at: startedAt.addingTimeInterval(4)),
+            0
+        )
+    }
+
+    func testManualFullCaptureSurvivesPreviewStateUpdates() {
+        var state = GuidedWorkoutPresentationState()
+
+        state.expand()
+        state.cameraStateChanged(.previewing)
+        XCTAssertEqual(state.mode, .expandedCapture)
+
+        state.collapse()
+        state.cameraStateChanged(.recording)
+        XCTAssertEqual(state.mode, .expandedCapture)
+
+        state.phaseChanged(.resting)
+        XCTAssertEqual(state.mode, .compact)
+    }
+
     @MainActor
     func testSetCanCompleteDirectlyFromInProgress() async throws {
         let fixture = try makeFixture(firstSetIsWarmup: false, setCount: 1)

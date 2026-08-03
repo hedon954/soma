@@ -27,6 +27,8 @@ struct TrainingProgramLibraryView: View {
             if let resumableSession {
                 Section("进行中") {
                     Button {
+                        WorkoutInterfaceOrientationPolicy.shared
+                            .setGuidedWorkoutActive(true)
                         resumedSession = resumableSession
                     } label: {
                         Label(
@@ -328,6 +330,8 @@ private struct TrainingProgramDetailView: View {
             if program.status == .active, !prescriptions.isEmpty {
                 Button {
                     autoRecording = false
+                    WorkoutInterfaceOrientationPolicy.shared
+                        .setGuidedWorkoutActive(true)
                     showsStart = true
                 } label: {
                     Label("开始训练", systemImage: "play.fill")
@@ -427,9 +431,16 @@ private struct TrainingProgramDetailView: View {
         }
         .onChange(of: showsStart) {
             guard !showsStart, startedSession == nil else { return }
+            WorkoutInterfaceOrientationPolicy.shared
+                .setGuidedWorkoutActive(false)
             Task {
                 await camera.stopPreview()
             }
+        }
+        .onChange(of: startedSession?.id) {
+            guard startedSession == nil, !showsStart else { return }
+            WorkoutInterfaceOrientationPolicy.shared
+                .setGuidedWorkoutActive(false)
         }
         .fullScreenCover(item: $startedSession) { session in
             NavigationStack {
