@@ -58,5 +58,7 @@
   `SOMA_TEST_DATABASE_URL` 按约定跳过。
 - 2026-08-03：通过 XcodeBuildMCP 在 iPhone 17 Pro Simulator 完成 build、install、launch，
   并确认教练主界面可访问；本次没有修改 View 布局。
-- 真机安装、Local/Remote 首段时间、Tool 往返、Home/锁屏和网络切换仍由维护者使用虚构输入
-  确认，不能由构建或模拟器结果替代。
+- 2026-08-03：使用本机 Apple Development Team 完成连线 iPhone 的签名构建和安装；设备当时
+  处于锁定状态，因此系统拒绝自动启动，需解锁后手工打开 Soma。
+- Local/Remote 首段时间、Tool 往返、Home/锁屏和网络切换仍由维护者使用虚构输入确认，不能
+  由构建、安装或模拟器结果替代。
