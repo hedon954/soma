@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { canonicalJSON } from "./canonical-json.js";
 import {
   Pool,
+  type Notification,
   type PoolClient,
   type QueryResultRow,
 } from "pg";
@@ -21,6 +22,13 @@ import { isTerminal, ProtocolError } from "./domain.js";
 import type { CleanupResult, SomaStore } from "./store.js";
 
 export class PostgresSomaStore implements SomaStore {
+  private listenerPromise: Promise<PoolClient> | undefined;
+  private jobWaiters = new Set<() => void>();
+  private eventWaiters = new Map<
+    string,
+    Set<{ afterSequence: number; resolve: () => void }>
+  >();
+
   constructor(readonly pool: Pool) {}
 
   async saveChallenge(challenge: RegistrationChallenge): Promise<void> {
@@ -185,6 +193,12 @@ export class PostgresSomaStore implements SomaStore {
          VALUES ($1, 'job', $2, $3, $4)`,
         [outboxID, jobID, { state: "queued" }, submission.now],
       );
+      await client.query("SELECT pg_notify('soma_agent_event', $1)", [
+        JSON.stringify({ jobID, sequence: 1 }),
+      ]);
+      await client.query("SELECT pg_notify('soma_agent_job_ready', $1)", [
+        jobID,
+      ]);
       return mapJob(requiredRow(inserted.rows[0]));
     });
   }
@@ -213,6 +227,58 @@ export class PostgresSomaStore implements SomaStore {
       [jobID, after, limit],
     );
     return result.rows.map(mapEvent);
+  }
+
+  async waitForJobSignal(timeoutMilliseconds: number): Promise<void> {
+    if (await this.hasReadyJob()) return;
+    await this.ensureListener();
+    await new Promise<void>(async (resolve) => {
+      let timeout: ReturnType<typeof setTimeout>;
+      const wake = () => {
+        clearTimeout(timeout);
+        this.jobWaiters.delete(wake);
+        resolve();
+      };
+      this.jobWaiters.add(wake);
+      timeout = setTimeout(wake, Math.max(0, timeoutMilliseconds));
+      try {
+        if (await this.hasReadyJob()) wake();
+      } catch {
+        wake();
+      }
+    });
+  }
+
+  async waitForEventSignal(
+    jobID: string,
+    afterSequence: number,
+    timeoutMilliseconds: number,
+  ): Promise<void> {
+    if ((await this.currentSequence(jobID)) > afterSequence) return;
+    await this.ensureListener();
+    await new Promise<void>(async (resolve) => {
+      const waiters = this.eventWaiters.get(jobID) ?? new Set();
+      let timeout: ReturnType<typeof setTimeout>;
+      const waiter = {
+        afterSequence,
+        resolve: () => {
+          clearTimeout(timeout);
+          waiters.delete(waiter);
+          if (waiters.size === 0) this.eventWaiters.delete(jobID);
+          resolve();
+        },
+      };
+      waiters.add(waiter);
+      this.eventWaiters.set(jobID, waiters);
+      timeout = setTimeout(waiter.resolve, Math.max(0, timeoutMilliseconds));
+      try {
+        if ((await this.currentSequence(jobID)) > afterSequence) {
+          waiter.resolve();
+        }
+      } catch {
+        waiter.resolve();
+      }
+    });
   }
 
   async claimJob(
@@ -246,6 +312,25 @@ export class PostgresSomaStore implements SomaStore {
       const job = mapJob(requiredRow(updated.rows[0]));
       return { job, owner, epoch: job.leaseEpoch };
     });
+  }
+
+  async renewLease(
+    jobID: string,
+    owner: string,
+    epoch: number,
+    now: Date,
+    leaseSeconds: number,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE agent_jobs SET
+         lease_expires_at =
+           $4::timestamptz + ($5::double precision * interval '1 second'),
+         updated_at = $4
+       WHERE id = $1 AND lease_owner = $2 AND lease_epoch = $3
+         AND state = 'running'`,
+      [jobID, owner, epoch, now, leaseSeconds],
+    );
+    return result.rowCount === 1;
   }
 
   async appendEvent(
@@ -300,6 +385,9 @@ export class PostgresSomaStore implements SomaStore {
           event.createdAt,
         ],
       );
+      await client.query("SELECT pg_notify('soma_agent_event', $1)", [
+        JSON.stringify({ jobID, sequence }),
+      ]);
       return mapEvent(requiredRow(inserted.rows[0]));
     });
   }
@@ -441,6 +529,9 @@ export class PostgresSomaStore implements SomaStore {
           now,
         ],
       );
+      await client.query("SELECT pg_notify('soma_agent_event', $1)", [
+        JSON.stringify({ jobID: request.jobID, sequence }),
+      ]);
       return mapTool(requiredRow(inserted.rows[0]));
     });
   }
@@ -552,6 +643,12 @@ export class PostgresSomaStore implements SomaStore {
           now,
         ],
       );
+      await client.query("SELECT pg_notify('soma_agent_event', $1)", [
+        JSON.stringify({ jobID, sequence }),
+      ]);
+      await client.query("SELECT pg_notify('soma_agent_job_ready', $1)", [
+        jobID,
+      ]);
       return mapTool(requiredRow(updated.rows[0]));
     });
   }
@@ -604,6 +701,9 @@ export class PostgresSomaStore implements SomaStore {
           now,
         ],
       );
+      await client.query("SELECT pg_notify('soma_agent_event', $1)", [
+        JSON.stringify({ jobID, sequence: row.last_sequence }),
+      ]);
       return mapJob(row);
     });
   }
@@ -922,6 +1022,93 @@ export class PostgresSomaStore implements SomaStore {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  private async ensureListener(): Promise<PoolClient> {
+    if (this.listenerPromise !== undefined) return this.listenerPromise;
+    this.listenerPromise = this.pool.connect().then(async (client) => {
+      let released = false;
+      const releaseBrokenClient = () => {
+        if (released) return;
+        released = true;
+        client.release(true);
+      };
+      try {
+        client.on("notification", (notification: Notification) => {
+          this.handleNotification(notification);
+        });
+        client.on("error", () => {
+          this.listenerPromise = undefined;
+          this.wakeAllListeners();
+          releaseBrokenClient();
+        });
+        await client.query("LISTEN soma_agent_job_ready");
+        await client.query("LISTEN soma_agent_event");
+        return client;
+      } catch (error) {
+        releaseBrokenClient();
+        throw error;
+      }
+    });
+    try {
+      return await this.listenerPromise;
+    } catch (error) {
+      this.listenerPromise = undefined;
+      this.wakeAllListeners();
+      throw error;
+    }
+  }
+
+  private async hasReadyJob(): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT 1 FROM agent_jobs
+       WHERE state = 'queued'
+          OR (state = 'running' AND lease_expires_at <= now())
+       LIMIT 1`,
+    );
+    return result.rowCount === 1;
+  }
+
+  private async currentSequence(jobID: string): Promise<number> {
+    const result = await this.pool.query<{ last_sequence: number }>(
+      "SELECT last_sequence FROM agent_jobs WHERE id = $1",
+      [jobID],
+    );
+    return result.rows[0]?.last_sequence ?? 0;
+  }
+
+  private handleNotification(notification: Notification): void {
+    if (notification.channel === "soma_agent_job_ready") {
+      for (const wake of [...this.jobWaiters]) wake();
+      return;
+    }
+    if (notification.channel !== "soma_agent_event") return;
+    try {
+      const payload = JSON.parse(notification.payload ?? "{}") as {
+        jobID?: unknown;
+        sequence?: unknown;
+      };
+      if (
+        typeof payload.jobID !== "string" ||
+        typeof payload.sequence !== "number"
+      ) {
+        return;
+      }
+      const waiters = this.eventWaiters.get(payload.jobID);
+      if (waiters === undefined) return;
+      for (const waiter of [...waiters]) {
+        if (payload.sequence > waiter.afterSequence) waiter.resolve();
+      }
+    } catch {
+      // NOTIFY is only a wake-up hint; timeout and cursor replay remain valid.
+    }
+  }
+
+  private wakeAllListeners(): void {
+    for (const wake of [...this.jobWaiters]) wake();
+    for (const waiters of this.eventWaiters.values()) {
+      for (const waiter of [...waiters]) waiter.resolve();
     }
   }
 }

@@ -29,6 +29,26 @@ interface ChatCompletionResponse {
   };
 }
 
+interface ChatCompletionStreamChunk {
+  choices?: {
+    delta?: {
+      content?: string | null;
+      tool_calls?: {
+        index?: number;
+        id?: string;
+        function?: {
+          name?: string;
+          arguments?: string;
+        };
+      }[];
+    };
+  }[];
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
+}
+
 export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
   constructor(
     private readonly baseURL: string,
@@ -41,6 +61,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     job: AgentJob,
     events: AgentEvent[],
     media: ProviderMedia[],
+    onTextDelta?: (delta: string) => Promise<void>,
   ): Promise<ProviderStep> {
     if (job.input === undefined) {
       throw new ProtocolError("job_expired", "任务内容已清理。", 410);
@@ -113,7 +134,8 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           messages,
           tools,
           tool_choice: "auto",
-          stream: false,
+          stream: true,
+          stream_options: { include_usage: true },
         }),
       },
     );
@@ -123,6 +145,9 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         "模型服务暂时不可用。",
         503,
       );
+    }
+    if (response.headers.get("content-type")?.includes("text/event-stream")) {
+      return this.consumeStream(response, onTextDelta);
     }
     const payload = (await response.json()) as ChatCompletionResponse;
     const message = payload.choices?.[0]?.message;
@@ -160,6 +185,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         502,
       );
     }
+    if (onTextDelta !== undefined) await onTextDelta(answer);
     return {
       kind: "completed",
       answer,
@@ -168,6 +194,155 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         output: payload.usage?.completion_tokens ?? 0,
       },
     };
+  }
+
+  private async consumeStream(
+    response: Response,
+    onTextDelta?: (delta: string) => Promise<void>,
+  ): Promise<ProviderStep> {
+    if (response.body === null) {
+      throw new ProtocolError(
+        "provider_unavailable",
+        "模型流没有返回内容。",
+        502,
+      );
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let answer = "";
+    let usage = { input: 0, output: 0 };
+    let firstTextEmitted = false;
+    let bufferedText = "";
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    let emission = Promise.resolve();
+    const toolCalls = new Map<
+      number,
+      { id?: string; name: string; arguments: string }
+    >();
+
+    const deliver = (text: string): Promise<void> => {
+      if (onTextDelta === undefined || text.length === 0) return emission;
+      emission = emission.then(() => onTextDelta(text));
+      return emission;
+    };
+    const flushBufferedText = async (): Promise<void> => {
+      if (flushTimer !== undefined) clearTimeout(flushTimer);
+      flushTimer = undefined;
+      const text = bufferedText;
+      bufferedText = "";
+      await deliver(text);
+    };
+    const projectText = async (text: string): Promise<void> => {
+      if (!firstTextEmitted) {
+        firstTextEmitted = true;
+        await deliver(text);
+        return;
+      }
+      bufferedText += text;
+      if (
+        bufferedText.length >= 48 ||
+        /[\n。！？!?；;：:]$/.test(bufferedText)
+      ) {
+        await flushBufferedText();
+      } else if (flushTimer === undefined) {
+        flushTimer = setTimeout(() => {
+          void flushBufferedText();
+        }, 80);
+      }
+    };
+
+    const consumeBlock = async (block: string): Promise<void> => {
+      const data = block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      if (data.length === 0 || data === "[DONE]") return;
+      let chunk: ChatCompletionStreamChunk;
+      try {
+        chunk = JSON.parse(data) as ChatCompletionStreamChunk;
+      } catch {
+        throw new ProtocolError(
+          "provider_unavailable",
+          "模型返回了无效流事件。",
+          502,
+        );
+      }
+      const delta = chunk.choices?.[0]?.delta;
+      const content = delta?.content;
+      if (typeof content === "string" && content.length > 0) {
+        answer += content;
+        await projectText(content);
+      }
+      for (const toolDelta of delta?.tool_calls ?? []) {
+        const index = toolDelta.index ?? 0;
+        const existing = toolCalls.get(index) ?? { name: "", arguments: "" };
+        toolCalls.set(index, {
+          ...(existing.id === undefined && toolDelta.id === undefined
+            ? {}
+            : { id: toolDelta.id ?? existing.id }),
+          name: existing.name + (toolDelta.function?.name ?? ""),
+          arguments:
+            existing.arguments + (toolDelta.function?.arguments ?? ""),
+        });
+      }
+      if (chunk.usage !== undefined) {
+        usage = {
+          input: chunk.usage.prompt_tokens ?? usage.input,
+          output: chunk.usage.completion_tokens ?? usage.output,
+        };
+      }
+    };
+
+    for (;;) {
+      const read = await reader.read();
+      buffer += decoder.decode(read.value, { stream: !read.done });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() ?? "";
+      for (const block of blocks) await consumeBlock(block);
+      if (read.done) break;
+    }
+    if (buffer.trim().length > 0) await consumeBlock(buffer);
+    await flushBufferedText();
+    await emission;
+
+    const tool = [...toolCalls.entries()]
+      .sort(([lhs], [rhs]) => lhs - rhs)
+      .map(([, value]) => value)[0];
+    if (tool !== undefined && tool.name.length > 0) {
+      let argumentsValue: Record<string, unknown>;
+      try {
+        argumentsValue = JSON.parse(tool.arguments || "{}") as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        throw new ProtocolError(
+          "invalid_request",
+          "Provider 返回了无效 Tool 参数。",
+          502,
+        );
+      }
+      return {
+        kind: "deviceTool",
+        ...(tool.id === undefined ? {} : { toolCallID: tool.id }),
+        toolName: tool.name,
+        schemaVersion: 1,
+        arguments: argumentsValue,
+        mutation: true,
+      };
+    }
+
+    const trimmedAnswer = answer.trim();
+    if (trimmedAnswer.length === 0) {
+      throw new ProtocolError(
+        "provider_unavailable",
+        "模型没有返回结果。",
+        502,
+      );
+    }
+    return { kind: "completed", answer: trimmedAnswer, usage };
   }
 }
 

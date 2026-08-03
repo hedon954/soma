@@ -52,6 +52,50 @@ final class AgentJobTests: XCTestCase {
     }
 
     @MainActor
+    func testRemoteTextDeltasReplayWithoutWaitingForCompletion() {
+        let jobID = UUID()
+        let turnID = UUID()
+        let itemID = UUID()
+        let message = CoachMessage(isFromCoach: true, text: "")
+        let events = [
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 1,
+                attemptNumber: 1,
+                kind: .assistantTextDelta,
+                payload: .init(itemID: itemID, text: "第一段")
+            ),
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 2,
+                attemptNumber: 1,
+                kind: .assistantTextDelta,
+                payload: .init(itemID: itemID, text: "完成。")
+            ),
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 3,
+                attemptNumber: 1,
+                kind: .assistantTextCompleted,
+                payload: .init(itemID: itemID)
+            )
+        ]
+
+        PersistentAgentEventProjection.replayChat(
+            events: events,
+            onto: message
+        )
+
+        XCTAssertEqual(message.text, "第一段完成。")
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(message.agentTurnItems.first?.text, "第一段完成。")
+        XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
+    }
+
+    @MainActor
     func testClaimAndExpiredLeaseRecoveryStayInsideDataSpace() throws {
         let container = try makeContainer()
         let context = ModelContext(container)

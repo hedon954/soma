@@ -116,6 +116,57 @@ struct RemoteAgentEventPage: Codable, Equatable, Sendable {
     var terminal: Bool
 }
 
+enum RemoteAgentSSEDecoder {
+    static func decode(block: String) throws -> RemoteAgentEvent? {
+        let lines = block.components(separatedBy: .newlines)
+        let eventName = lines.first(where: { $0.hasPrefix("event:") })?
+            .dropFirst("event:".count)
+            .trimmingCharacters(in: .whitespaces)
+        guard eventName == nil || eventName == "agent_event" else { return nil }
+        let data = lines
+            .filter { $0.hasPrefix("data:") }
+            .map {
+                $0.dropFirst("data:".count)
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .joined(separator: "\n")
+        guard !data.isEmpty else { return nil }
+        do {
+            return try remoteAgentJSONDecoder().decode(
+                RemoteAgentEvent.self,
+                from: Data(data.utf8)
+            )
+        } catch {
+            throw RemoteAgentError.invalidResponse
+        }
+    }
+}
+
+func remoteAgentJSONDecoder() -> JSONDecoder {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .custom { decoder in
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds
+        ]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+        let regular = ISO8601DateFormatter()
+        guard let date = regular.date(from: value) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO-8601 date"
+            )
+        }
+        return date
+    }
+    return decoder
+}
+
 struct RemoteDeviceToolRequest: Equatable, Sendable {
     var toolCallID: String
     var name: String
@@ -154,6 +205,11 @@ protocol AgentExecutionBackend: Sendable {
         after sequence: Int
     ) async throws -> RemoteAgentEventPage
 
+    func eventStream(
+        remoteJobID: String,
+        after sequence: Int
+    ) -> AsyncThrowingStream<RemoteAgentEvent, Error>
+
     func cancel(remoteJobID: String) async throws
 
     func acknowledge(
@@ -190,6 +246,19 @@ struct LocalAgentExecutionBackend: AgentExecutionBackend {
         after _: Int
     ) async throws -> RemoteAgentEventPage {
         throw RemoteAgentError.toolRejected("本机 Backend 不使用远端 Event。")
+    }
+
+    func eventStream(
+        remoteJobID _: String,
+        after _: Int
+    ) -> AsyncThrowingStream<RemoteAgentEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(
+                throwing: RemoteAgentError.toolRejected(
+                    "本机 Backend 不使用远端 Event。"
+                )
+            )
+        }
     }
 
     func cancel(remoteJobID _: String) async throws {}

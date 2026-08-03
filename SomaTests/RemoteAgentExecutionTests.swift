@@ -71,6 +71,30 @@ struct RemoteAgentExecutionTests {
     }
 
     @Test
+    func remoteSSEDecoderPreservesOrderedTextAndTerminalEvents() throws {
+        let firstJSON = "{\"id\":\"event-2\",\"jobID\":\"job-1\"," +
+            "\"sequence\":2,\"kind\":\"text\",\"phase\":\"updated\"," +
+            "\"payloadVersion\":1,\"payload\":{\"delta\":\"第一段\"," +
+            "\"itemID\":\"00000000-0000-0000-0000-000000000001\"}," +
+            "\"createdAt\":\"2026-08-03T00:00:00Z\"}"
+        let finalJSON = "{\"id\":\"event-3\",\"jobID\":\"job-1\"," +
+            "\"sequence\":3,\"kind\":\"output\",\"phase\":\"completed\"," +
+            "\"payloadVersion\":1,\"payload\":{\"answer\":\"第一段完成\"}," +
+            "\"createdAt\":\"2026-08-03T00:00:01Z\"}"
+        let first = try #require(try RemoteAgentSSEDecoder.decode(
+            block: "id: 2\nevent: agent_event\ndata: \(firstJSON)"
+        ))
+        let final = try #require(try RemoteAgentSSEDecoder.decode(
+            block: "id: 3\nevent: agent_event\ndata: \(finalJSON)"
+        ))
+
+        #expect(first.sequence == 2)
+        #expect(first.payload["delta"]?.stringValue == "第一段")
+        #expect(final.sequence == 3)
+        #expect(final.payload["answer"]?.stringValue == "第一段完成")
+    }
+
+    @Test
     func clientRegistersSignsAndSubmitsIdempotently() async throws {
         let identity = RemoteDeviceIdentity(usesEphemeralStorage: true)
         let server = MockRemoteAgentServer()

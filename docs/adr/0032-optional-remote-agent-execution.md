@@ -7,7 +7,7 @@
   - [ADR 0001](0001-local-first-dual-data-spaces.md) 的“不建设后端”绝对边界
   - [ADR 0003](0003-native-streaming-react-tool-calling.md) 的 ReAct 只由 App 编排
   - [ADR 0008](0008-app-scoped-conversation-processing.md) 的 App 进程是唯一执行位置
-- 后续替代：暂无
+- 后续替代：[ADR 0037](0037-backend-transparent-streaming-and-notification-wake.md) 将前台正常路径改为通知驱动流式事件，分页补拉仅用于恢复
 - 上游依据：[持久 Agent Job、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)
 - 下游落地：[Agent Job 与远程执行协议](../engineering/agent-job-protocol.md)
 - 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)

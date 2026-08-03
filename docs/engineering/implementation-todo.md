@@ -15,7 +15,7 @@
 ## 0. 契约与基线
 
 - [x] 完成 PRD 010/011。
-- [x] 完成 ADR 0028—0035。
+- [x] 完成 ADR 0028—0035，并以 ADR 0037 修订远端流式与唤醒边界。
 - [x] 完成训练领域模型与 Agent Job 协议。
 - [x] 建立双向文档生命周期规则和自动检查。
 - [x] 同步最新 `origin/main` 并解决现有文档编号与实现冲突。
@@ -135,6 +135,19 @@
 - [x] mutation 继续由本地 Receipt 防重。
 - [x] Server/Provider/协议错误可解释并可降级。
 - [x] 主动清除和关闭远程执行撤销 Job 与设备 token。
+
+## 6.1 Backend 透明流式与即时唤醒
+
+- [x] 新增 ADR 0037、BUG 0005，并建立 ADR/PRD/Bug/工程协议双向生命周期索引。
+- [x] Remote Provider 改为原生流式 Tool Calling，并把文本合并为可恢复的语义 chunk。
+- [x] Job 创建、Event 追加和 Tool Result 使用 PostgreSQL `LISTEN/NOTIFY` 即时唤醒。
+- [x] Worker 在长模型流中续租，失效 epoch 拒绝迟到写入。
+- [x] Server SSE 由 Event 通知唤醒，固定等待只保留为通知丢失恢复兜底。
+- [x] iOS Remote Backend 持续消费 SSE，并用分页 cursor 做初始补齐与断线恢复。
+- [x] Remote text chunk 归一为 `AgentTraceEvent`，复用现有聊天卡片与 Trace 投影。
+- [x] ACK 异步提交，不再阻塞 UI；正常路径移除一秒和两秒固定轮询。
+- [x] 自动化覆盖 Provider 流、Worker Event 顺序、通知唤醒、SSE 解码和文本重放。
+- [ ] 维护者真机对比 Local/Remote 首段文本、Tool 往返、Home、锁屏和网络切换。
 
 ## 7. Live Activity、APNs 与通知
 

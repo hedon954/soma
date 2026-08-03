@@ -109,7 +109,7 @@ async function run(): Promise<void> {
       logOperationalError("outbox_dispatch_failed", error);
     }
     if (job === undefined && dispatched === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await store.waitForJobSignal(30_000);
     }
     if (Date.now() >= nextCleanupAt) {
       try {

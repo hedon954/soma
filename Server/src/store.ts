@@ -37,7 +37,20 @@ export interface SomaStore {
   submitJob(submission: JobSubmission): Promise<AgentJob>;
   getJob(deviceID: string, jobID: string): Promise<AgentJob | undefined>;
   events(jobID: string, after: number, limit: number): Promise<AgentEvent[]>;
+  waitForJobSignal(timeoutMilliseconds: number): Promise<void>;
+  waitForEventSignal(
+    jobID: string,
+    afterSequence: number,
+    timeoutMilliseconds: number,
+  ): Promise<void>;
   claimJob(owner: string, now: Date, leaseSeconds: number): Promise<JobLease | undefined>;
+  renewLease(
+    jobID: string,
+    owner: string,
+    epoch: number,
+    now: Date,
+    leaseSeconds: number,
+  ): Promise<boolean>;
   appendEvent(
     jobID: string,
     leaseEpoch: number | undefined,
@@ -106,6 +119,11 @@ export class InMemorySomaStore implements SomaStore {
   private uploads = new Map<string, Upload>();
   private activityTokens = new Map<string, ActivityToken>();
   private outbox = new Map<string, OutboxMessage>();
+  private jobWaiters = new Set<() => void>();
+  private eventWaiters = new Map<
+    string,
+    Set<{ afterSequence: number; resolve: () => void }>
+  >();
 
   async saveChallenge(challenge: RegistrationChallenge): Promise<void> {
     this.challenges.set(challenge.id, structuredClone(challenge));
@@ -227,6 +245,8 @@ export class InMemorySomaStore implements SomaStore {
       },
     ]);
     this.insertOutbox("job", job.id, { state: "queued" }, submission.now);
+    this.emitEventSignal(job.id, 1);
+    this.emitJobSignal();
     return structuredClone(job);
   }
 
@@ -247,6 +267,38 @@ export class InMemorySomaStore implements SomaStore {
       .filter((event) => event.sequence > after)
       .slice(0, limit)
       .map((event) => structuredClone(event));
+  }
+
+  async waitForJobSignal(timeoutMilliseconds: number): Promise<void> {
+    if ([...this.jobs.values()].some((job) => job.state === "queued")) return;
+    await this.waitWithTimeout(this.jobWaiters, timeoutMilliseconds);
+  }
+
+  async waitForEventSignal(
+    jobID: string,
+    afterSequence: number,
+    timeoutMilliseconds: number,
+  ): Promise<void> {
+    if ((this.jobs.get(jobID)?.lastSequence ?? 0) > afterSequence) return;
+    await new Promise<void>((resolve) => {
+      const waiters = this.eventWaiters.get(jobID) ?? new Set();
+      let timeout: ReturnType<typeof setTimeout>;
+      const waiter = {
+        afterSequence,
+        resolve: () => {
+          clearTimeout(timeout);
+          waiters.delete(waiter);
+          if (waiters.size === 0) this.eventWaiters.delete(jobID);
+          resolve();
+        },
+      };
+      waiters.add(waiter);
+      this.eventWaiters.set(jobID, waiters);
+      timeout = setTimeout(waiter.resolve, Math.max(0, timeoutMilliseconds));
+      if ((this.jobs.get(jobID)?.lastSequence ?? 0) > afterSequence) {
+        waiter.resolve();
+      }
+    });
   }
 
   async claimJob(
@@ -273,6 +325,27 @@ export class InMemorySomaStore implements SomaStore {
       owner,
       epoch: job.leaseEpoch,
     };
+  }
+
+  async renewLease(
+    jobID: string,
+    owner: string,
+    epoch: number,
+    now: Date,
+    leaseSeconds: number,
+  ): Promise<boolean> {
+    const job = this.jobs.get(jobID);
+    if (
+      job === undefined ||
+      job.state !== "running" ||
+      job.leaseOwner !== owner ||
+      job.leaseEpoch !== epoch
+    ) {
+      return false;
+    }
+    job.leaseExpiresAt = new Date(now.getTime() + leaseSeconds * 1_000);
+    job.updatedAt = now;
+    return true;
   }
 
   async appendEvent(
@@ -302,6 +375,7 @@ export class InMemorySomaStore implements SomaStore {
       sequence: row.sequence,
       phase: row.phase,
     }, event.createdAt);
+    this.emitEventSignal(jobID, row.sequence);
     return structuredClone(row);
   }
 
@@ -423,6 +497,7 @@ export class InMemorySomaStore implements SomaStore {
       },
       createdAt: now,
     });
+    this.emitJobSignal();
     return structuredClone(request);
   }
 
@@ -678,6 +753,34 @@ export class InMemorySomaStore implements SomaStore {
       attemptCount: 0,
     };
     this.outbox.set(row.id, row);
+  }
+
+  private async waitWithTimeout(
+    waiters: Set<() => void>,
+    timeoutMilliseconds: number,
+  ): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let timeout: ReturnType<typeof setTimeout>;
+      const wake = () => {
+        clearTimeout(timeout);
+        waiters.delete(wake);
+        resolve();
+      };
+      waiters.add(wake);
+      timeout = setTimeout(wake, Math.max(0, timeoutMilliseconds));
+    });
+  }
+
+  private emitJobSignal(): void {
+    for (const wake of [...this.jobWaiters]) wake();
+  }
+
+  private emitEventSignal(jobID: string, sequence: number): void {
+    const waiters = this.eventWaiters.get(jobID);
+    if (waiters === undefined) return;
+    for (const waiter of [...waiters]) {
+      if (sequence > waiter.afterSequence) waiter.resolve();
+    }
   }
 }
 

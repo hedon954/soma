@@ -7,6 +7,7 @@
   - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
   - [ADR 0032](../adr/0032-optional-remote-agent-execution.md)
   - [ADR 0033](../adr/0033-live-activity-agent-job-projection.md)
+  - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
 - 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
 
 本文固定 iOS 本地 Outbox、服务器 Job/Event、匿名设备鉴权、本地 Tool handoff、APNs 与
@@ -30,7 +31,8 @@ API Service ─── PostgreSQL(Job/Event/Outbox)
 APNs / ActivityKit       iOS Local Tool
 ```
 
-PostgreSQL 是远程任务事实来源。SSE、APNs、进程内队列和 Live Activity 都是可重建传输或投影。
+PostgreSQL 是远程任务事实来源。SSE、APNs、`LISTEN/NOTIFY` 和 Live Activity 都是可重建传输
+或投影；`NOTIFY` 只负责唤醒，丢失后仍以数据库 cursor 恢复。
 
 ## 一致性模型
 
@@ -203,6 +205,11 @@ GET /v1/agent-jobs/{serverJobID}/events/stream?after={sequence}
 
 SSE 是相同 Event 的实时视图。断线、App 重建或 sequence 缺口始终回到补拉端点。
 
+前台正常路径在补齐 cursor 后持续消费 SSE；Event transaction 提交后通过 PostgreSQL
+`NOTIFY` 唤醒 SSE 查询，不固定 sleep。`text/updated` payload 至少包含稳定 `itemID` 和
+`delta`，`text/completed` 使用相同 `itemID` 结束本段；`output/completed` 保存完整 answer，
+用于终态校正而不是再次拼接文字。
+
 ### 本地 Tool handoff
 
 ```text
@@ -231,12 +238,15 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 
 ## Worker 执行
 
-1. API 在一个 PostgreSQL transaction 中创建 Job、accepted Event 和 Outbox row。
-2. Worker 通过行锁/lease 原子领取 queued Job。
+1. API 在一个 PostgreSQL transaction 中创建 Job、accepted Event 和 Outbox row，并在 commit
+   时通知等待中的 Worker 与 Event stream。
+2. Worker 通过行锁/lease 原子领取 queued Job；健康路径由通知唤醒，低频 timeout 只恢复丢失
+   通知、进程重启和过期 lease。
 3. 每次 lease 包含 owner、epoch 和过期时间；失去 lease 的 Worker 不得继续追加 Event。
-4. 模型每轮形成 model Event；有完整 Tool Call 后才追加 tool request。
+4. 模型每轮使用原生流式 Tool Calling：首段文本立即追加，后续文本按自然边界、48 字符阈值
+   或 80ms 窗口合并；有完整 Tool Call 后才追加 tool request。
 5. 远程 Tool 由 Worker 执行；设备 Tool 进入 `waitingForDevice` 并释放计算资源。
-6. Tool Result 到达后创建新 Worker lease，从持久历史继续。
+6. Tool Result 到达后在同一事务通知 Worker，创建新 lease 并从持久历史继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。
 8. 崩溃恢复只读取已提交 Event 和 Tool Result，不重用进程内半成品。
 
@@ -322,12 +332,14 @@ DELETE /v1/agent-jobs/{serverJobID}/live-activity-token
 
 - 本地事务、Outbox、状态机、cursor、Event reducer；
 - App 重启、后台 lease、重复 ACK、取消竞态；
-- Tool Schema、Receipt、跨数据空间和 projection。
+- Tool Schema、Receipt、跨数据空间和 projection；
+- SSE block 解码、远端 text delta 持久重放和终态不重复拼接。
 
 ### 服务端
 
 - API transaction、Worker lease/epoch、进程崩溃恢复；
 - 重复 submit、重复 Tool Result、Event gap、取消/完成竞态；
+- Provider 原生流、文本 chunk 顺序，以及 Job/Event/Tool Result 即时唤醒；
 - 错误设备、签名重放、越权 Job、上传 digest/大小/type；
 - TTL、终态 ACK、对象清理与内容日志扫描。
 

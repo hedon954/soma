@@ -148,6 +148,64 @@ test("event cursor replay is ordered and non-destructive", async () => {
   assert.equal((await store.events(job.id, 0, 100)).length, 2);
 });
 
+test("job and event commits wake waiters without polling", async () => {
+  const store = new InMemorySomaStore();
+  const jobSignal = store.waitForJobSignal(1_000);
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input: makeJobInput(),
+    bodyDigest: sha256("wake-job"),
+    now: new Date(),
+  });
+  await jobSignal;
+
+  const lease = await store.claimJob("worker", new Date(), 30);
+  assert.ok(lease);
+  const eventSignal = store.waitForEventSignal(job.id, 1, 1_000);
+  await store.appendEvent(job.id, lease.epoch, {
+    kind: "text",
+    phase: "updated",
+    payloadVersion: 1,
+    payload: { delta: "首段" },
+    createdAt: new Date(),
+  });
+  await eventSignal;
+});
+
+test("worker projects provider deltas before the terminal output", async () => {
+  const store = new InMemorySomaStore();
+  const input = makeJobInput();
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  const worker = new AgentWorker(store, {
+    async run(_job, _events, _media, onTextDelta) {
+      await onTextDelta?.("第一段");
+      await onTextDelta?.("完成。");
+      return { kind: "completed", answer: "第一段完成。" };
+    },
+  });
+
+  await worker.runOnce();
+  const events = await store.events(job.id, 0, 100);
+
+  assert.deepEqual(
+    events.filter((event) => event.kind === "text").map((event) => [
+      event.phase,
+      event.payload.delta ?? null,
+    ]),
+    [
+      ["updated", "第一段"],
+      ["updated", "完成。"],
+      ["completed", null],
+    ],
+  );
+  assert.equal(events.at(-1)?.kind, "output");
+});
+
 test("worker survives process replacement and device tool result is idempotent", async () => {
   const store = new InMemorySomaStore();
   const deviceID = randomUUID();
@@ -350,7 +408,7 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
   );
 });
 
-test("managed provider sends only signed image inputs and visible limitations", async () => {
+test("managed provider streams text before completion and limits media", async () => {
   const store = new InMemorySomaStore();
   const job = await store.submitJob({
     deviceID: randomUUID(),
@@ -359,25 +417,44 @@ test("managed provider sends only signed image inputs and visible limitations", 
     now: new Date(),
   });
   let captured: Record<string, unknown> | undefined;
+  const deltas: string[] = [];
   const provider = new OpenAICompatibleManagedProvider(
     "https://provider.invalid/v1",
     "test-key",
     "test-model",
     async (_input, init) => {
       captured = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return new Response(JSON.stringify({
-        choices: [{ message: { content: "已分析可见关键帧。" } }],
-      }), {
+      const encoder = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"content":"已分析"}}]}\n\n',
+          ));
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"content":"可见关键帧。"},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":3}}\n\n',
+          ));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+      return new Response(body, {
         status: 200,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "text/event-stream" },
       });
     },
   );
 
-  await provider.run(job, [], [
-    { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
-    { contentType: "video/mp4", url: "https://signed.invalid/original.mp4" },
-  ]);
+  const step = await provider.run(
+    job,
+    [],
+    [
+      { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+      { contentType: "video/mp4", url: "https://signed.invalid/original.mp4" },
+    ],
+    async (delta) => {
+      deltas.push(delta);
+    },
+  );
 
   const messages = captured?.messages as Record<string, unknown>[];
   const content = messages[1]?.content as Record<string, unknown>[];
@@ -390,6 +467,13 @@ test("managed provider sends only signed image inputs and visible limitations", 
     /关键帧不足以证明完整动作轨迹/,
   );
   assert.doesNotMatch(JSON.stringify(captured), /original\.mp4/);
+  assert.equal(captured?.stream, true);
+  assert.deepEqual(deltas, ["已分析", "可见关键帧。"]);
+  assert.deepEqual(step, {
+    kind: "completed",
+    answer: "已分析可见关键帧。",
+    usage: { input: 4, output: 3 },
+  });
 });
 
 test("HTTP idempotent submission returns one job and no body log surface", async () => {

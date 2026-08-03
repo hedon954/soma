@@ -441,9 +441,9 @@ async function streamEvents(
         response.end();
         return;
       }
-      response.write(": keep-alive\n\n");
+      await store.waitForEventSignal(jobID, cursor, 15_000);
+      if (!closed) response.write(": keep-alive\n\n");
     }
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 }
 

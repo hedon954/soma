@@ -6,6 +6,7 @@
 - 下游落地：
   - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
   - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
+- 后续修订：[BUG 0005](0005-remote-agent-streaming-latency-regression.md) 修复远程持续执行引入的非流式与固定轮询延迟
 
 ## 症状
 

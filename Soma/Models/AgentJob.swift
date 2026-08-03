@@ -249,6 +249,7 @@ enum PersistentAgentEventKind: String, Codable, CaseIterable, Sendable {
     case jobQueued
     case jobClaimed
     case attemptStarted
+    case assistantTextDelta
     case assistantTextCompleted
     case span
     case waitingForNetwork
@@ -615,6 +616,15 @@ enum PersistentAgentEventProjection {
     ) {
         let payload = event.payload
         switch event.kind {
+        case .assistantTextDelta:
+            let itemID = payload.itemID ?? UUID()
+            if let text = payload.text, !text.isEmpty {
+                message.applyAgentEvent(.assistantTextDelta(
+                    itemID: itemID,
+                    delta: text
+                ))
+                message.text += text
+            }
         case .assistantTextCompleted:
             let itemID = payload.itemID ?? UUID()
             if let text = payload.text, !text.isEmpty {

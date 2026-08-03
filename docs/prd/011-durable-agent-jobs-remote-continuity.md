@@ -12,10 +12,12 @@
 - 上游依据：
   - [持久 Agent Job、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)
   - [BUG 0004](../bugs/0004-agent-background-stream-interruption.md)
+  - [BUG 0005](../bugs/0005-remote-agent-streaming-latency-regression.md)
 - 关联决策：
   - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
   - [ADR 0032](../adr/0032-optional-remote-agent-execution.md)
   - [ADR 0033](../adr/0033-live-activity-agent-job-projection.md)
+  - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
 
 ## 背景
 
@@ -35,6 +37,8 @@
 5. 需要本地 Tool 时任务显示“等待打开 Soma 完成记录”，设备恢复后继续。
 6. 聊天、Trace、灵动岛、锁屏和通知读取同一份 Job/Event 事实。
 7. 用户可以关闭远程持续执行，退回完全本地、可恢复但不能无限后台运行的模式。
+8. 引入远程队列不改变聊天表现：前台仍逐段显示文本与 Agent 事件，有事件立即唤醒，不等待
+   固定轮询周期。
 
 ## 产品承诺
 
@@ -69,6 +73,18 @@ Soma 不承诺：
 - 用户自带 Provider API Key 继续只在设备 Keychain 使用，不上传 Soma Server。
 - 远程执行使用 Soma 管理的 Provider 凭据和独立配额；BYOK 任务继续走本地执行。
 - 服务器不是训练、饮食、身体和健身房记录的事实来源。
+
+### 前台实时体验等价
+
+- 本地 Provider 流与远端 Server Event 在 Service 层归一为相同 `AgentTraceEvent`，聊天 View
+  不感知执行位置。
+- 远端 Provider 产生首段文字后立即形成 Event；后续 token 只在自然边界、字符阈值或短窗口
+  合并后持久化，避免逐 token 写数据库。
+- Job 创建、Event 追加和设备 Tool Result 提交必须通知等待中的 Worker 或 SSE；正常路径不
+  使用固定一秒或两秒轮询驱动进度。
+- SSE 长连接只承担低延迟传输；初始连接、重连和缺口继续使用持久 cursor 补拉，因此切换
+  网络不会以牺牲流式体验换取可靠性。
+- ACK、Live Activity 和 APNs 都是异步投影，不阻塞聊天文字和事件卡片显示。
 
 ## 发送与网络状态
 
@@ -170,6 +186,8 @@ Soma 不承诺：
 - 无网发送显示等待网络；网络恢复后只创建一个服务端 Job。
 - 服务端已创建但 ACK 丢失时，重复提交相同 `clientJobID` 返回同一个 Job。
 - SSE 在任意 sequence 断开后补拉得到相同有序事件，不丢失也不重复 Event Card。
+- Local/Remote 在前台使用相同的文本、Tool、错误和完成投影；远端首段文字不等待完整回答，
+  Job/Event/Tool Result 到达后不叠加固定轮询延迟。
 - App 被系统终止后，纯远程任务继续并在重开时同步完成结果。
 - 远程任务请求本地 mutation Tool 时准确进入等待；设备恢复后只写入一条业务记录。
 - 取消、完成、过期和重复 Tool Result 的竞态都有确定终态。

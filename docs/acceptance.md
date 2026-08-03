@@ -85,7 +85,8 @@
 ## 已实现：可靠 Agent 与远程持续执行
 
 以下是 [PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
-[BUG 0004](bugs/0004-agent-background-stream-interruption.md) 的当前实现证据。远端持续
+[BUG 0004](bugs/0004-agent-background-stream-interruption.md)、
+[BUG 0005](bugs/0005-remote-agent-streaming-latency-regression.md) 的当前实现证据。远端持续
 运行以部署 `Server/` 及配置 Provider、对象存储、App Attest 和 APNs 为前提。
 
 | 要求 | 目标验收 |
@@ -93,6 +94,8 @@
 | 持久发送 | `AgentJobStore.enqueue` 在一笔 SwiftData transaction 中保存 Turn、附件引用、上下文、Job 和首个 Event；失败时保留输入并回收副本。 |
 | 本地 Outbox | `clientJobID == AgentJob.id`；等待网络保留 `nextRetryAt`，同一 ID 幂等重投。 |
 | Event Log | 本地与服务端均使用唯一递增 sequence；分页/SSE 从 cursor 补拉，读取不删除。 |
+| 前台流式等价 | Local Provider Event 与 Remote Server Event 都归一为 `AgentTraceEvent`；文本逐段投影，最终 output 校正完整答案且不重复拼接。 |
+| 即时唤醒 | Provider 原生流式返回；PostgreSQL `LISTEN/NOTIFY` 唤醒 Worker 与 SSE；健康路径不使用固定一秒或两秒轮询。 |
 | 本地恢复 | 注入式后台租约到期保存等待状态；新 Attempt 重跑且 `AgentMutationReceipt` 防止重复写入。 |
 | 匿名设备 | Secure Enclave/Keychain P256 身份、challenge、短期 access/rotation token、nonce 与签名验证。 |
 | 远程执行 | PostgreSQL 保存 Job/Event/Tool/Outbox；Worker lease/epoch 支持进程替换，纯远程步骤不依赖 App 存活。 |

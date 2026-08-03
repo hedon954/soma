@@ -95,6 +95,8 @@ SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
 - 临时上传 grant、完成校验和删除；
 - 幂等 Agent Job 提交、查询、取消和确认；
 - Event 分页补拉与 SSE；
+- Provider 原生流式 Tool Calling，以及按语义边界合并的 text Event；
+- PostgreSQL `LISTEN/NOTIFY` 驱动的 Worker、Event stream 与 Tool Result 即时唤醒；
 - 设备 Tool Request/Result；
 - ActivityKit token 登记与删除；
 - 当前匿名设备全部远端数据删除。
@@ -110,7 +112,8 @@ URL 去抓取媒体，不接收用户 BYOK，不把请求正文、token、IP、�
 ## 运维与恢复
 
 - API ACK 丢失：客户端使用同一 `clientJobID` 重投，返回同一 Job。
-- SSE 断开：客户端按最后 sequence 补拉；Event 读取不删除记录。
+- SSE 断开：客户端按最后 sequence 补拉；Event 读取不删除记录；连接健康时由 Event commit
+  即时唤醒，不依赖固定轮询。
 - Worker 退出：租约到期后其他 Worker 使用新 epoch 领取；旧 Worker 的迟到写入被拒绝。
 - 设备 Tool：Job 停在 `waitingForDevice`，设备恢复后按 `toolCallID` 幂等返回结果。
 - Provider 失败：Job 记录稳定错误类别；本地消息和已经完成的设备 Tool 事实不回滚。

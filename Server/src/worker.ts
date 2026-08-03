@@ -29,6 +29,7 @@ export interface ManagedModelProvider {
     job: AgentJob,
     events: AgentEvent[],
     media: ProviderMedia[],
+    onTextDelta?: (delta: string) => Promise<void>,
   ): Promise<ProviderStep>;
 }
 
@@ -38,7 +39,15 @@ export class DeterministicTestProvider implements ManagedModelProvider {
     answer: "远程任务已完成。",
   }) {}
 
-  async run(): Promise<ProviderStep> {
+  async run(
+    _job: AgentJob,
+    _events: AgentEvent[],
+    _media: ProviderMedia[],
+    onTextDelta?: (delta: string) => Promise<void>,
+  ): Promise<ProviderStep> {
+    if (this.step.kind === "completed" && onTextDelta !== undefined) {
+      await onTextDelta(this.step.answer);
+    }
     return structuredClone(this.step);
   }
 }
@@ -72,10 +81,40 @@ export class AgentWorker {
       payload: { provider: "managed", model: "configured" },
       createdAt: now,
     });
+    const textItemID = randomUUID();
+    let emittedText = false;
+    const heartbeat = setInterval(() => {
+      void this.store.renewLease(
+        job.id,
+        lease.owner,
+        lease.epoch,
+        new Date(),
+        this.leaseSeconds,
+      );
+    }, Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3)));
     try {
       const history = await this.store.events(job.id, 0, 500);
       const media = await this.mediaResolver.resolve(job);
-      const step = await this.provider.run(job, history, media);
+      const step = await this.provider.run(job, history, media, async (delta) => {
+        if (delta.length === 0) return;
+        emittedText = true;
+        await this.store.appendEvent(job.id, lease.epoch, {
+          kind: "text",
+          phase: "updated",
+          payloadVersion: 1,
+          payload: { itemID: textItemID, delta },
+          createdAt: new Date(),
+        });
+      });
+      if (emittedText) {
+        await this.store.appendEvent(job.id, lease.epoch, {
+          kind: "text",
+          phase: "completed",
+          payloadVersion: 1,
+          payload: { itemID: textItemID },
+          createdAt: new Date(),
+        });
+      }
       if (step.kind === "deviceTool") {
         const definition = validateDeviceTool({
           name: step.toolName,
@@ -142,6 +181,8 @@ export class AgentWorker {
       } catch {
         return await this.store.getJob(job.deviceID, job.id);
       }
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 }

@@ -449,64 +449,87 @@ final class ConversationProcessingService {
                 throw RemoteAgentError.invalidResponse
             }
 
-            let page = try await client.events(
+            let catchUpPage = try await client.events(
                 remoteJobID: remoteJobID,
                 after: job.remoteEventCursor
             )
-            for event in page.events where event.sequence > job.remoteEventCursor {
-                guard !job.state.isTerminal,
-                      job.dataSpace == context.dataSpace
-                else {
-                    try? await client.cancel(remoteJobID: remoteJobID)
-                    return
-                }
-                try await applyRemoteEvent(
-                    event,
-                    remoteJobID: remoteJobID,
-                    job: job,
-                    userMessage: userMessage,
-                    responseMessage: responseMessage,
-                    trace: trace,
-                    context: context,
-                    client: client
-                )
-                job.remoteEventCursor = event.sequence
-                try context.modelContext.save()
-            }
-            if job.remoteEventCursor > 0 {
-                try await client.acknowledge(
-                    remoteJobID: remoteJobID,
-                    through: job.remoteEventCursor
-                )
-            }
+            try await applyRemoteEvents(
+                catchUpPage.events,
+                remoteJobID: remoteJobID,
+                job: job,
+                userMessage: userMessage,
+                responseMessage: responseMessage,
+                trace: trace,
+                context: context,
+                client: client
+            )
 
-            if job.state.isTerminal {
-                job.nextRetryAt = nil
-            } else if page.terminal {
-                if !job.state.isTerminal {
-                    let snapshot = try await remoteJobSnapshot(
-                        client: client,
-                        remoteJobID: remoteJobID,
-                        after: job.remoteEventCursor
-                    )
-                    if snapshot.terminal,
-                       job.state == .running || job.state == .remoteRunning
-                    {
-                        try job.transition(
-                            to: .failed,
-                            error: "后台任务已结束，但没有返回可展示的结果。"
-                        )
-                    }
-                }
-                job.nextRetryAt = nil
-            } else {
+            if !job.state.isTerminal, !catchUpPage.terminal {
                 if job.state == .running {
                     try job.transition(to: .remoteRunning)
                 }
                 job.leaseOwner = nil
                 job.leaseExpiresAt = nil
-                job.nextRetryAt = .now.addingTimeInterval(2)
+                job.nextRetryAt = nil
                 responseMessage.agentStatus = .running
+                try context.modelContext.save()
+
+                for try await event in client.eventStream(
+                    remoteJobID: remoteJobID,
+                    after: job.remoteEventCursor
+                ) {
+                    try await applyRemoteEvents(
+                        [event],
+                        remoteJobID: remoteJobID,
+                        job: job,
+                        userMessage: userMessage,
+                        responseMessage: responseMessage,
+                        trace: trace,
+                        context: context,
+                        client: client
+                    )
+                    if job.state.isTerminal {
+                        break
+                    }
+                }
+            }
+
+            let finalPage = try await client.events(
+                remoteJobID: remoteJobID,
+                after: job.remoteEventCursor
+            )
+            try await applyRemoteEvents(
+                finalPage.events,
+                remoteJobID: remoteJobID,
+                job: job,
+                userMessage: userMessage,
+                responseMessage: responseMessage,
+                trace: trace,
+                context: context,
+                client: client
+            )
+            if job.remoteEventCursor > 0 {
+                let acknowledgedCursor = job.remoteEventCursor
+                Task {
+                    try? await client.acknowledge(
+                        remoteJobID: remoteJobID,
+                        through: acknowledgedCursor
+                    )
+                }
+            }
+
+            if job.state.isTerminal {
+                job.nextRetryAt = nil
+            } else if finalPage.terminal || catchUpPage.terminal {
+                if job.state == .running || job.state == .remoteRunning {
+                    try job.transition(
+                        to: .failed,
+                        error: "后台任务已结束，但没有返回可展示的结果。"
+                    )
+                }
+                job.nextRetryAt = nil
+            } else {
+                throw URLError(.networkConnectionLost)
             }
             context.session.touch(at: .now)
             try context.modelContext.save()
@@ -550,19 +573,36 @@ final class ConversationProcessingService {
         }
     }
 
-    private func remoteJobSnapshot(
-        client _: RemoteAgentClient,
-        remoteJobID _: String,
-        after _: Int
-    ) async throws -> RemoteAgentEventPage {
-        // The Event page already carries terminal state. This small helper
-        // preserves one recovery point for future protocol versions.
-        RemoteAgentEventPage(
-            jobID: "",
-            events: [],
-            nextSequence: 0,
-            terminal: true
-        )
+    private func applyRemoteEvents(
+        _ events: [RemoteAgentEvent],
+        remoteJobID: String,
+        job: AgentJob,
+        userMessage: CoachMessage,
+        responseMessage: CoachMessage,
+        trace: AgentTrace,
+        context: ConversationProcessingContext,
+        client: RemoteAgentClient
+    ) async throws {
+        for event in events where event.sequence > job.remoteEventCursor {
+            guard !job.state.isTerminal,
+                  job.dataSpace == context.dataSpace
+            else {
+                try? await client.cancel(remoteJobID: remoteJobID)
+                return
+            }
+            try await applyRemoteEvent(
+                event,
+                remoteJobID: remoteJobID,
+                job: job,
+                userMessage: userMessage,
+                responseMessage: responseMessage,
+                trace: trace,
+                context: context,
+                client: client
+            )
+            job.remoteEventCursor = event.sequence
+            try context.modelContext.save()
+        }
     }
 
     private func applyRemoteEvent(
@@ -580,7 +620,7 @@ final class ConversationProcessingService {
                   let name = AgentToolName(rawValue: request.name),
                   name.isMutation == request.mutation,
                   job.turnID == userMessage.turnID,
-                  job.state == .running
+                  job.state == .running || job.state == .remoteRunning
             else {
                 throw RemoteAgentError.toolRejected(
                     "后台请求的 Tool 与当前 Turn、空间或 Schema 不匹配。"
@@ -645,7 +685,51 @@ final class ConversationProcessingService {
             return
         }
 
-        if event.kind == "model", event.phase == "started" {
+        if event.kind == "text",
+           event.phase == "updated",
+           let delta = event.payload["delta"]?.stringValue
+        {
+            let itemID = event.payload["itemID"]?.stringValue
+                .flatMap(UUID.init(uuidString:))
+                ?? UUID(uuidString: event.id)
+                ?? UUID()
+            let traceEvent = AgentTraceEvent.assistantTextDelta(
+                itemID: itemID,
+                delta: delta
+            )
+            trace.apply(traceEvent)
+            job.responseTextSnapshot += delta
+            responseMessage.text += delta
+            responseMessage.agentStatus = .running
+            responseMessage.applyAgentEvent(traceEvent)
+            applyLiveAgentEvent(traceEvent)
+            _ = try? AgentJobStore.append(
+                kind: .assistantTextDelta,
+                payload: .init(itemID: itemID, text: delta),
+                to: job,
+                in: context.modelContext,
+                at: event.createdAt
+            )
+        } else if event.kind == "text", event.phase == "completed" {
+            let itemID = event.payload["itemID"]?.stringValue
+                .flatMap(UUID.init(uuidString:))
+                ?? UUID(uuidString: event.id)
+                ?? UUID()
+            let traceEvent = AgentTraceEvent.assistantTextCompleted(
+                itemID: itemID,
+                at: event.createdAt
+            )
+            trace.apply(traceEvent)
+            responseMessage.applyAgentEvent(traceEvent)
+            applyLiveAgentEvent(traceEvent)
+            _ = try? AgentJobStore.append(
+                kind: .assistantTextCompleted,
+                payload: .init(itemID: itemID),
+                to: job,
+                in: context.modelContext,
+                at: event.createdAt
+            )
+        } else if event.kind == "model", event.phase == "started" {
             projectRemoteSpan(
                 AgentTraceSpan(
                     sequence: event.sequence,
@@ -680,6 +764,10 @@ final class ConversationProcessingService {
                 at: event.createdAt
             )
             responseMessage.applyAgentEvent(.completed(
+                answer: answer,
+                at: event.createdAt
+            ))
+            applyLiveAgentEvent(.completed(
                 answer: answer,
                 at: event.createdAt
             ))

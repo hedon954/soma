@@ -124,6 +124,72 @@ struct RemoteAgentClient: AgentExecutionBackend {
         return try decode(RemoteAgentEventPage.self, from: data)
     }
 
+    func eventStream(
+        remoteJobID: String,
+        after sequence: Int
+    ) -> AsyncThrowingStream<RemoteAgentEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var permitsAuthenticationRetry = true
+                    streamLoop: while true {
+                        let path = "/v1/agent-jobs/\(remoteJobID)/events/stream?after=\(sequence)"
+                        let request = try await authenticatedURLRequest(
+                            method: "GET",
+                            path: path,
+                            body: Data(),
+                            timeoutInterval: 60 * 60
+                        )
+                        let (bytes, response) = try await session.bytes(
+                            for: request
+                        )
+                        guard let http = response as? HTTPURLResponse else {
+                            throw RemoteAgentError.invalidResponse
+                        }
+                        if http.statusCode == 401,
+                           permitsAuthenticationRetry
+                        {
+                            identity.clearTokens()
+                            permitsAuthenticationRetry = false
+                            continue streamLoop
+                        }
+                        guard (200 ... 299).contains(http.statusCode) else {
+                            throw URLError(.badServerResponse)
+                        }
+                        var block: [String] = []
+                        for try await line in bytes.lines {
+                            try Task.checkCancellation()
+                            if line.isEmpty {
+                                if let event = try RemoteAgentSSEDecoder.decode(
+                                    block: block.joined(separator: "\n")
+                                ) {
+                                    continuation.yield(event)
+                                }
+                                block.removeAll(keepingCapacity: true)
+                            } else if !line.hasPrefix(":") {
+                                block.append(line)
+                            }
+                        }
+                        if !block.isEmpty,
+                           let event = try RemoteAgentSSEDecoder.decode(
+                               block: block.joined(separator: "\n")
+                           )
+                        {
+                            continuation.yield(event)
+                        }
+                        break streamLoop
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     func cancel(remoteJobID: String) async throws {
         _ = try await authenticatedRequest(
             method: "POST",
@@ -292,6 +358,36 @@ struct RemoteAgentClient: AgentExecutionBackend {
         headers: [String: String] = [:],
         permitsRetry: Bool = true
     ) async throws -> Data {
+        do {
+            let signed = try await authenticatedURLRequest(
+                method: method,
+                path: path,
+                body: body,
+                headers: headers
+            )
+            return try await request(signed)
+        } catch let RemoteAgentError.server(code, _)
+            where permitsRetry
+            && code == "unauthorized_device"
+        {
+            identity.clearTokens()
+            return try await authenticatedRequest(
+                method: method,
+                path: path,
+                body: body,
+                headers: headers,
+                permitsRetry: false
+            )
+        }
+    }
+
+    private func authenticatedURLRequest(
+        method: String,
+        path: String,
+        body: Data,
+        headers: [String: String] = [:],
+        timeoutInterval: TimeInterval = 30
+    ) async throws -> URLRequest {
         let accessToken = try await validAccessToken()
         let timestamp = String(Int(Date.now.timeIntervalSince1970))
         let nonce = UUID().uuidString.lowercased()
@@ -313,26 +409,13 @@ struct RemoteAgentClient: AgentExecutionBackend {
         signedHeaders["x-soma-signature"] = try identity.sign(
             Data(canonical.utf8)
         )
-        do {
-            return try await request(
-                method: method,
-                path: path,
-                body: body,
-                headers: signedHeaders
-            )
-        } catch let RemoteAgentError.server(code, _)
-            where permitsRetry
-            && code == "unauthorized_device"
-        {
-            identity.clearTokens()
-            return try await authenticatedRequest(
-                method: method,
-                path: path,
-                body: body,
-                headers: headers,
-                permitsRetry: false
-            )
-        }
+        return try makeRequest(
+            method: method,
+            path: path,
+            body: body,
+            headers: signedHeaders,
+            timeoutInterval: timeoutInterval
+        )
     }
 
     private func validAccessToken() async throws -> String {
@@ -420,13 +503,28 @@ struct RemoteAgentClient: AgentExecutionBackend {
         body: Data,
         headers: [String: String] = [:]
     ) async throws -> Data {
+        try await request(makeRequest(
+            method: method,
+            path: path,
+            body: body,
+            headers: headers
+        ))
+    }
+
+    private func makeRequest(
+        method: String,
+        path: String,
+        body: Data,
+        headers: [String: String] = [:],
+        timeoutInterval: TimeInterval = 30
+    ) throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw RemoteAgentError.endpointMissing
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body.isEmpty ? nil : body
-        request.timeoutInterval = 30
+        request.timeoutInterval = timeoutInterval
         if !body.isEmpty {
             request.setValue(
                 "application/json",
@@ -436,6 +534,10 @@ struct RemoteAgentClient: AgentExecutionBackend {
         for (name, value) in headers {
             request.setValue(value, forHTTPHeaderField: name)
         }
+        return request
+    }
+
+    private func request(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw RemoteAgentError.invalidResponse
@@ -459,28 +561,8 @@ struct RemoteAgentClient: AgentExecutionBackend {
         _ type: T.Type,
         from data: Data
     ) throws -> T {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let value = try decoder.singleValueContainer().decode(String.self)
-            let fractional = ISO8601DateFormatter()
-            fractional.formatOptions = [
-                .withInternetDateTime,
-                .withFractionalSeconds
-            ]
-            if let date = fractional.date(from: value) {
-                return date
-            }
-            let regular = ISO8601DateFormatter()
-            guard let date = regular.date(from: value) else {
-                throw try DecodingError.dataCorruptedError(
-                    in: decoder.singleValueContainer(),
-                    debugDescription: "Invalid ISO-8601 date"
-                )
-            }
-            return date
-        }
         do {
-            return try decoder.decode(type, from: data)
+            return try remoteAgentJSONDecoder().decode(type, from: data)
         } catch {
             throw RemoteAgentError.invalidResponse
         }
