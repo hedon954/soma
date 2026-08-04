@@ -265,6 +265,9 @@ enum ExerciseImageGenerationService {
         ai: AIService,
         in context: ModelContext
     ) async throws -> ExerciseImageReference {
+        guard kind == .actionIllustration else {
+            throw TrainingIntelligenceError.muscleMapGenerationRetired
+        }
         let imageData = try await ai.generateImage(prompt: prompt(
             kind: kind,
             exercise: exercise
@@ -273,9 +276,7 @@ enum ExerciseImageGenerationService {
         let reference = ExerciseImageReference(
             kind: kind,
             source: .generated,
-            title: kind == .actionIllustration
-                ? "AI 动作示意图"
-                : "AI 通用肌群图",
+            title: "AI 动作示意图",
             localPath: path
         )
         let original = exercise.imageReferences
@@ -297,29 +298,18 @@ enum ExerciseImageGenerationService {
     ) -> String {
         switch kind {
         case .actionIllustration:
-            return """
+            """
             为私人健身记录 App Soma 生成“\(exercise.canonicalName)”动作示意图。
-            正方形 1:1，暖白背景，单个成年人穿不透明运动服，以正确起始或最有辨识度的动作阶段展示，
-            清楚呈现必要器械、身体姿势和动作方向。采用简洁、写实但克制的运动教学插画风格，
+            正方形 1:1，浅灰白干净背景（#F4F6F5），单个成年人穿不透明深灰短袖与黑色短裤，
+            以正确起始或最有辨识度的动作阶段展示，清楚呈现必要器械、身体姿势和动作方向。
+            风格必须统一：扁平化矢量运动教学插画、边缘清晰、无厚重阴影、无写实皮肤纹理、
+            无油画感；配色克制，主色贴近 Soma 绿色 #1FB25E 作为点缀即可。
             全身完整入镜，移动端缩略图仍可辨认。不要文字、标签、数字、水印、Logo 或额外人物。
             这是一般动作示意，不描绘具体用户，也不作医疗诊断。
             """
         case .muscleMap:
-            let primary = exercise.primaryMuscles.isEmpty
-                ? "请依据该标准动作识别主要肌群"
-                : exercise.primaryMuscles.joined(separator: "、")
-            let secondary = exercise.secondaryMuscles.isEmpty
-                ? "请依据该标准动作识别辅助肌群"
-                : exercise.secondaryMuscles.joined(separator: "、")
-            return """
-            为私人健身记录 App Soma 生成“\(exercise.canonicalName)”的通用肌群示意图。
-            正方形 1:1，暖白背景；并排展示正面与背面的中性合成人体解剖训练模型，
-            全身中立站姿，穿不透明深灰运动短裤。肌肉以浅灰简化呈现。
-            主要肌群（\(primary)）用橙色 #FF8A2A 着色；
-            辅助肌群（\(secondary)）用金黄色 #FFC928 着色；其余保持灰色。
-            解剖位置清楚、左右对称、留白充足，移动端卡片中可读。
-            不要文字、标签、数字、水印、Logo 或器械。
-            仅表达该动作通常涉及的肌群，不声称是用户个人受力测量，也不作医疗诊断。
+            """
+            （已停用）肌群图改由 App 内程序化渲染，不再请求图像生成。
             """
         }
     }
@@ -328,9 +318,12 @@ enum ExerciseImageGenerationService {
 enum TrainingIntelligenceError: LocalizedError, Equatable {
     case videoMissing
     case invalidModelOutput
+    case muscleMapGenerationRetired
 
     var errorDescription: String? {
         switch self {
+        case .muscleMapGenerationRetired:
+            "肌群受力图已改为程序化渲染，不再支持 AI 生成。"
         case .videoMissing:
             "这项动作没有可供复盘的本机视频。"
         case .invalidModelOutput:

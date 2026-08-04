@@ -192,16 +192,33 @@ struct GuidedCompactSetView: View {
             GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
 
             if !showsCamera {
-                Button(action: onRecord) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button(action: onRecord) {
+                        if isStartingRecording {
+                            Label("正在开启相机…", systemImage: "camera.fill")
+                        } else {
+                            Label("录制本组", systemImage: "record.circle")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!canStartRecording || isStartingRecording)
+                    .accessibilityHint(recordingButtonHint)
+
                     if isStartingRecording {
-                        Label("正在开启录像…", systemImage: "camera.fill")
-                    } else {
-                        Label("录制本组", systemImage: "record.circle")
+                        Text("正在开启相机，请稍候。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if !canStartRecording {
+                        Text("当前已有录像进行中。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if let cameraErrorMessage, !cameraErrorMessage.isEmpty {
+                        Text(cameraErrorMessage)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .buttonStyle(.bordered)
-                .disabled(!canStartRecording || isStartingRecording)
-                .accessibilityHint("只有开始录像后才会调用相机")
             }
 
             Label(coachingNote, systemImage: "lightbulb.fill")
@@ -226,6 +243,19 @@ struct GuidedCompactSetView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
         }
+    }
+
+    private var recordingButtonHint: String {
+        if isStartingRecording {
+            return "正在开启相机"
+        }
+        if !canStartRecording {
+            return "当前已有录像进行中"
+        }
+        if let cameraErrorMessage, !cameraErrorMessage.isEmpty {
+            return cameraErrorMessage
+        }
+        return "只有开始录像后才会调用相机"
     }
 }
 

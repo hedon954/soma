@@ -41,6 +41,8 @@ struct WorkoutTemplateVersionDTO: Codable, Equatable, Sendable {
     var scheduleHint: String
     var source: String
     var createdAt: Date
+    var changeSummary: String?
+    var changeDetails: String?
 
     init(_ model: WorkoutTemplateVersion) {
         id = model.id
@@ -51,6 +53,8 @@ struct WorkoutTemplateVersionDTO: Codable, Equatable, Sendable {
         scheduleHint = model.scheduleHint
         source = model.source
         createdAt = model.createdAt
+        changeSummary = model.changeSummary
+        changeDetails = model.changeDetails
     }
 
     func makeModel() -> WorkoutTemplateVersion {
@@ -62,7 +66,9 @@ struct WorkoutTemplateVersionDTO: Codable, Equatable, Sendable {
             name: name,
             scheduleHint: scheduleHint,
             source: source,
-            createdAt: createdAt
+            createdAt: createdAt,
+            changeSummary: changeSummary,
+            changeDetails: changeDetails
         )
     }
 }
@@ -116,6 +122,8 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
     var startedAt: Date
     var endedAt: Date?
     var gymID: UUID?
+    var programID: UUID?
+    var programNameSnapshot: String?
     var sourceTemplateFamilyID: UUID?
     var sourceTemplateVersion: Int?
     var prescriptionSnapshotData: Data
@@ -135,6 +143,8 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
         startedAt = model.startedAt
         endedAt = model.endedAt
         gymID = model.gymID
+        programID = model.programID
+        programNameSnapshot = model.programNameSnapshot
         sourceTemplateFamilyID = model.sourceTemplateFamilyID
         sourceTemplateVersion = model.sourceTemplateVersion
         prescriptionSnapshotData = model.prescriptionSnapshotData
@@ -156,6 +166,8 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
             startedAt: startedAt,
             endedAt: endedAt,
             gymID: gymID,
+            programID: programID,
+            programNameSnapshot: programNameSnapshot,
             sourceTemplateFamilyID: sourceTemplateFamilyID,
             sourceTemplateVersion: sourceTemplateVersion,
             prescriptionSnapshot: TrainingPlanCoding.decode(

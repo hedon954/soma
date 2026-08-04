@@ -3,34 +3,80 @@ import SwiftUI
 
 struct WorkoutHistoryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
+    @Query(sort: \ExerciseDefinition.canonicalName) private var exercises: [ExerciseDefinition]
+    @Query(sort: \WorkoutEntry.date, order: .reverse) private var allWorkouts: [WorkoutEntry]
+
+    @State private var filter = WorkoutHistoryDateFilter.all
+    @State private var loaded: [WorkoutEntry] = []
+    @State private var hasMore = true
+    @State private var isLoading = false
+
+    private var dayGroups: [WorkoutHistoryDayGroup] {
+        WorkoutHistoryQuery.groupedByDay(loaded)
+    }
+
+    private var filterChoices: (
+        years: [Int],
+        monthsByYear: [Int: [Int]],
+        daysByYearMonth: [Int: [Int: [Int]]]
+    ) {
+        WorkoutHistoryQuery.filterChoices(from: allWorkouts.map(\.date))
+    }
 
     var body: some View {
         List {
-            if workouts.isEmpty {
+            if loaded.isEmpty, !isLoading {
                 ContentUnavailableView(
-                    "暂无训练记录",
+                    filter == .all ? "暂无训练记录" : "没有符合筛选的记录",
                     systemImage: "figure.strengthtraining.traditional",
-                    description: Text("在教练对话中描述训练，AI 会自动记录到这里。")
+                    description: Text(
+                        filter == .all
+                            ? "在教练对话中描述训练，AI 会自动记录到这里。"
+                            : "试试调整年、月或日筛选条件。"
+                    )
                 )
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             } else {
-                ForEach(workouts) { workout in
-                    NavigationLink {
-                        WorkoutRecordDetailView(workout: workout)
-                    } label: {
-                        WorkoutHistoryRow(workout: workout)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            modelContext.delete(workout)
-                            try? modelContext.save()
-                        } label: {
-                            Image(systemName: "trash")
+                ForEach(dayGroups) { group in
+                    Section {
+                        ForEach(group.workouts) { workout in
+                            NavigationLink {
+                                WorkoutRecordDetailView(workout: workout)
+                            } label: {
+                                WorkoutHistoryRow(
+                                    workout: workout,
+                                    exercise: resolvedExercise(for: workout)
+                                )
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    delete(workout)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .accessibilityLabel("删除训练记录")
+                                .tint(.red)
+                            }
                         }
-                        .accessibilityLabel("删除训练记录")
-                        .tint(.red)
+                    } header: {
+                        Text(group.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
+                }
+
+                if hasMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(.vertical, 12)
+                        Spacer()
+                    }
+                    .listRowSeparator(.hidden)
+                    .onAppear {
+                        loadMore()
                     }
                 }
             }
@@ -40,6 +86,151 @@ struct WorkoutHistoryView: View {
         .appPageBackground()
         .navigationTitle("训练记录")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                filterMenu
+            }
+        }
+        .onAppear {
+            if loaded.isEmpty {
+                reload()
+            }
+        }
+        .onChange(of: filter) { _, _ in
+            reload()
+        }
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Button("全部") { filter = .all }
+            Divider()
+            yearPickerSection
+            monthPickerSection
+            dayPickerSection
+        } label: {
+            Label(filter.label, systemImage: "line.3.horizontal.decrease.circle")
+        }
+        .accessibilityLabel("筛选训练记录")
+    }
+
+    @ViewBuilder
+    private var yearPickerSection: some View {
+        let years = filterChoices.years
+        if !years.isEmpty {
+            Menu("按年") {
+                ForEach(years, id: \.self) { year in
+                    Button("\(year)年") { filter = .year(year) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var monthPickerSection: some View {
+        let choices = filterChoices
+        let baseYear: Int? = switch filter {
+        case let .year(year), let .yearMonth(year, _), let .day(year, _, _):
+            year
+        case .all:
+            choices.years.first
+        }
+        if let baseYear, let months = choices.monthsByYear[baseYear], !months.isEmpty {
+            Menu("按月（\(baseYear)年）") {
+                ForEach(months, id: \.self) { month in
+                    Button("\(month)月") {
+                        filter = .yearMonth(year: baseYear, month: month)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dayPickerSection: some View {
+        let choices = filterChoices
+        let yearMonth: (year: Int, month: Int)? = {
+            switch filter {
+            case let .yearMonth(year, month), let .day(year, month, _):
+                return (year, month)
+            case let .year(year):
+                guard let month = choices.monthsByYear[year]?.first else { return nil }
+                return (year, month)
+            case .all:
+                guard let year = choices.years.first,
+                      let month = choices.monthsByYear[year]?.first
+                else { return nil }
+                return (year, month)
+            }
+        }()
+        if let yearMonth,
+           let days = choices.daysByYearMonth[yearMonth.year]?[yearMonth.month],
+           !days.isEmpty
+        {
+            Menu("按日（\(yearMonth.year)年\(yearMonth.month)月）") {
+                ForEach(days, id: \.self) { day in
+                    Button("\(day)日") {
+                        filter = .day(
+                            year: yearMonth.year,
+                            month: yearMonth.month,
+                            day: day
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func resolvedExercise(for workout: WorkoutEntry) -> ExerciseDefinition? {
+        if let exerciseID = workout.exerciseID {
+            if let match = exercises.first(where: { $0.id == exerciseID }) {
+                return match
+            }
+        }
+        let name = workout.exercise.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        let key = ExerciseLibraryStore.canonicalNameKey(name)
+        return exercises.first {
+            !$0.isArchived && $0.canonicalNameKey == key
+        }
+    }
+
+    private func reload() {
+        loaded = []
+        hasMore = true
+        isLoading = false
+        loadMore()
+    }
+
+    private func loadMore() {
+        guard hasMore, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        let descriptor = WorkoutHistoryQuery.fetchDescriptor(
+            filter: filter,
+            offset: loaded.count
+        )
+        do {
+            let page = try modelContext.fetch(descriptor)
+            ExerciseLibraryStore.linkExistingExercises(
+                for: page,
+                in: modelContext
+            )
+            loaded.append(contentsOf: page)
+            hasMore = page.count >= WorkoutHistoryQuery.pageSize
+        } catch {
+            hasMore = false
+        }
+    }
+
+    private func delete(_ workout: WorkoutEntry) {
+        loaded.removeAll { $0.id == workout.id }
+        modelContext.delete(workout)
+        try? modelContext.save()
+        if loaded.count < WorkoutHistoryQuery.pageSize, hasMore {
+            loadMore()
+        }
     }
 }
 
@@ -129,21 +320,24 @@ struct BodyHistoryView: View {
 
 private struct WorkoutHistoryRow: View {
     let workout: WorkoutEntry
+    var exercise: ExerciseDefinition?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            MediaThumbnail(
-                kind: workout.mediaAttachments.first?.kind ?? .none,
-                path: workout.mediaAttachments.first?.path,
-                fallbackIcon: "figure.strengthtraining.traditional"
-            )
+            workoutThumbnail
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(workout.exercise)
+                Text(exercise?.canonicalName ?? workout.exercise)
                     .font(.headline)
                 Text(workout.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let muscles = exercise?.primaryMuscles, !muscles.isEmpty {
+                    Text(muscles.joined(separator: "、"))
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.tint)
+                        .lineLimit(1)
+                }
                 if !metricsText.isEmpty {
                     Text(metricsText)
                         .font(.subheadline)
@@ -162,6 +356,31 @@ private struct WorkoutHistoryRow: View {
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var workoutThumbnail: some View {
+        if let exercise {
+            ExerciseArtworkView(
+                reference: exercise.preferredActionIllustration,
+                contentMode: .fill
+            )
+            .frame(width: 58, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityLabel("\(exercise.canonicalName)示意图")
+        } else if let image = workout.mediaAttachments.first(where: { $0.kind == .image }) {
+            MediaThumbnail(
+                kind: .image,
+                path: image.path,
+                fallbackIcon: "figure.strengthtraining.traditional"
+            )
+        } else {
+            MediaThumbnail(
+                kind: .none,
+                path: nil,
+                fallbackIcon: "figure.strengthtraining.traditional"
+            )
+        }
     }
 
     private var metricsText: String {

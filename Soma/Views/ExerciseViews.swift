@@ -142,7 +142,7 @@ struct ExerciseLibraryView: View {
     }
 }
 
-private struct ExerciseDetailView: View {
+struct ExerciseDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
@@ -299,31 +299,20 @@ private struct ExerciseDetailView: View {
 
             Section("通用肌群与动作模式") {
                 MuscleMapView(
-                    reference: exercise.muscleMaps.last
-                        ?? BundledExerciseCatalog.fallbackMuscleMap,
-                    primaryMuscles: split(primaryMuscles),
-                    secondaryMuscles: split(secondaryMuscles)
+                    intensities: MuscleGroupMapping.intensityMap(
+                        primary: split(primaryMuscles),
+                        secondary: split(secondaryMuscles)
+                    ),
+                    height: 300,
+                    allowsExpansion: true
                 )
-                Text("着色仅表示该动作通常涉及的主要与辅助肌群，不是你的个人受力测量。")
+                Text("着色由程序根据主要/辅助肌群确定性生成，表示该动作通常涉及的肌群，不是你的个人受力测量。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button {
-                    generateImage(.muscleMap)
-                } label: {
-                    generationLabel(
-                        kind: .muscleMap,
-                        title: "AI 生成肌群图"
-                    )
-                }
-                .disabled(generatingImageKind != nil || exercise.isArchived)
-                Button {
-                    imagePickerKind = .muscleMap
-                } label: {
-                    Label("上传我的肌群图", systemImage: "photo.badge.plus")
-                }
-                .disabled(exercise.isArchived)
                 ForEach(
-                    exercise.muscleMaps.filter { $0.source != .bundled }
+                    exercise.muscleMaps.filter {
+                        $0.source == .generated || $0.source == .user
+                    }
                 ) { reference in
                     HStack {
                         Label(reference.title, systemImage: "photo")
@@ -911,56 +900,6 @@ private extension ExerciseVideoSource.SourceKind {
         case .soma: "Soma 自有"
         case .authorized: "已授权"
         case .externalLink: "外部链接"
-        }
-    }
-}
-
-private struct MuscleMapView: View {
-    let reference: ExerciseImageReference
-    let primaryMuscles: [String]
-    let secondaryMuscles: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ExerciseArtworkView(reference: reference, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 10) {
-                muscleLegend(
-                    title: "主要肌群",
-                    values: primaryMuscles,
-                    color: .orange
-                )
-                muscleLegend(
-                    title: "辅助肌群",
-                    values: secondaryMuscles,
-                    color: .yellow
-                )
-            }
-            .font(.subheadline)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "通用肌群图。主要肌群：\(primaryMuscles.joined(separator: "、"))。辅助肌群：\(secondaryMuscles.joined(separator: "、"))"
-        )
-    }
-
-    private func muscleLegend(
-        title: String,
-        values: [String],
-        color: Color
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
-            Text(title)
-                .foregroundStyle(color)
-            Text(values.isEmpty ? "未记录" : values.joined(separator: "、"))
-                .foregroundStyle(.primary)
         }
     }
 }

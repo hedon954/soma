@@ -1,3 +1,4 @@
+import Charts
 import SwiftData
 import SwiftUI
 
@@ -89,21 +90,10 @@ struct TrainingProgramLibraryView: View {
                         NavigationLink {
                             WorkoutSessionReviewView(session: session)
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(session.startedAt.formatted(
-                                    date: .abbreviated,
-                                    time: .shortened
-                                ))
-                                Text(
-                                    TrainingPlanStore.summary(
-                                        for: session.id,
-                                        in: modelContext
-                                    ).text
-                                )
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                            }
+                            WorkoutSessionHistoryRow(
+                                session: session,
+                                programs: programs
+                            )
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
@@ -122,6 +112,9 @@ struct TrainingProgramLibraryView: View {
         .scrollContentBackground(.hidden)
         .appPageBackground()
         .navigationTitle("训练")
+        .onAppear {
+            TrainingPlanStore.backfillProgramSources(in: modelContext)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -183,6 +176,7 @@ struct TrainingProgramLibraryView: View {
 
 private struct TrainingProgramDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
     @Query(sort: \WorkoutTemplateVersion.createdAt, order: .reverse)
     private var allVersions: [WorkoutTemplateVersion]
@@ -192,6 +186,8 @@ private struct TrainingProgramDetailView: View {
     private var workouts: [WorkoutEntry]
     @Query(sort: \RecommendationSnapshot.createdAt, order: .reverse)
     private var recommendations: [RecommendationSnapshot]
+    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
+    private var sessions: [WorkoutSession]
 
     let program: TrainingProgram
     @State private var showsEditor = false
@@ -200,6 +196,7 @@ private struct TrainingProgramDetailView: View {
     @State private var startedSession: WorkoutSession?
     @State private var errorMessage: String?
     @State private var isOptimizing = false
+    @State private var confirmsDelete = false
     @AppStorage("workout.voiceCuesEnabled")
     private var voiceCuesEnabled = true
 
@@ -248,6 +245,76 @@ private struct TrainingProgramDetailView: View {
         }
     }
 
+    private var programSessions: [WorkoutSession] {
+        let familyIDs = Set(versions.map(\.familyID))
+        return sessions.filter { session in
+            guard session.status == .completed || session.status == .abandoned else {
+                return false
+            }
+            if session.programID == program.id {
+                return true
+            }
+            if let familyID = session.sourceTemplateFamilyID {
+                return familyIDs.contains(familyID)
+            }
+            return false
+        }
+    }
+
+    private var recentVolumePoints: [(id: UUID, date: Date, volume: Double)] {
+        programSessions.prefix(12).reversed().map { session in
+            (
+                id: session.id,
+                date: session.startedAt,
+                volume: TrainingPlanStore.summary(
+                    for: session.id,
+                    in: modelContext
+                ).completedVolume
+            )
+        }
+    }
+
+    private var programStatsSection: some View {
+        Section("训练统计") {
+            if programSessions.isEmpty {
+                Text("还没有用该计划训练过。完成一次带练后，这里会显示容量趋势。")
+                    .foregroundStyle(.secondary)
+            } else {
+                LabeledContent("完成次数", value: "\(programSessions.count) 次")
+                if let latest = programSessions.first {
+                    LabeledContent(
+                        "最近一次",
+                        value: latest.startedAt.formatted(
+                            date: .abbreviated,
+                            time: .shortened
+                        )
+                    )
+                }
+                if recentVolumePoints.contains(where: { $0.volume > 0 }) {
+                    Chart(recentVolumePoints, id: \.id) { point in
+                        BarMark(
+                            x: .value("日期", point.date),
+                            y: .value("有效容量", point.volume)
+                        )
+                        .foregroundStyle(AppTheme.tint.gradient)
+                    }
+                    .frame(height: 160)
+                    .accessibilityLabel("该计划近几次训练的有效容量趋势")
+                }
+                ForEach(programSessions.prefix(5)) { session in
+                    NavigationLink {
+                        WorkoutSessionReviewView(session: session)
+                    } label: {
+                        WorkoutSessionHistoryRow(
+                            session: session,
+                            preferredProgramName: program.name
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     var body: some View {
         List {
             Section("计划") {
@@ -287,18 +354,40 @@ private struct TrainingProgramDetailView: View {
                 }
             }
 
+            programStatsSection
+
             if !versions.isEmpty {
                 Section("版本历史") {
-                    ForEach(versions) { version in
-                        HStack {
-                            Text("v\(version.version) · \(version.name)")
-                            Spacer()
-                            Text(version.createdAt.formatted(
-                                date: .abbreviated,
-                                time: .omitted
-                            ))
-                            .foregroundStyle(.secondary)
+                    ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
+                        let previous = versions.dropFirst(index + 1).first
+                        let changeLog = TrainingPlanStore.resolvedChangeLog(
+                            for: version,
+                            previous: previous,
+                            in: modelContext
+                        )
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("v\(version.version) · \(version.name)")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer(minLength: 8)
+                                Text(version.createdAt.formatted(
+                                    date: .abbreviated,
+                                    time: .omitted
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                            Text(changeDescription(for: changeLog))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
                         }
+                        .padding(.vertical, 2)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(
+                            "v\(version.version) \(version.name)，\(changeDescription(for: changeLog))"
+                        )
                     }
                 }
             }
@@ -335,8 +424,8 @@ private struct TrainingProgramDetailView: View {
                 )
             }
 
-            if program.status == .active {
-                Section {
+            Section {
+                if program.status == .active {
                     Button {
                         showsEditor = true
                     } label: {
@@ -353,10 +442,46 @@ private struct TrainingProgramDetailView: View {
                             errorMessage = error.localizedDescription
                         }
                     }
+                } else if program.status == .archived {
+                    Button {
+                        do {
+                            try TrainingPlanStore.unarchive(
+                                program,
+                                in: modelContext
+                            )
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                    } label: {
+                        Label("恢复计划", systemImage: "arrow.uturn.backward")
+                    }
                 }
+
+                Button("删除计划", role: .destructive) {
+                    confirmsDelete = true
+                }
+            } footer: {
+                Text("删除计划会移除模板版本，但已完成的训练历史会保留。")
             }
         }
         .navigationTitle(program.name)
+        .confirmationDialog(
+            "删除训练计划？",
+            isPresented: $confirmsDelete,
+            titleVisibility: .visible
+        ) {
+            Button("删除计划", role: .destructive) {
+                do {
+                    try TrainingPlanStore.deleteProgram(program, in: modelContext)
+                    dismiss()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将删除「\(program.name)」及其全部模板版本。已完成的训练历史不会被删除。")
+        }
         .safeAreaInset(edge: .bottom) {
             if program.status == .active, !prescriptions.isEmpty {
                 Button {
@@ -466,6 +591,14 @@ private struct TrainingProgramDetailView: View {
         }
     }
 
+    private func changeDescription(for changeLog: TemplateVersionChangeLog) -> String {
+        let details = changeLog.details.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !details.isEmpty {
+            return details
+        }
+        return changeLog.summary
+    }
+
     private func start() {
         do {
             startedSession = try TrainingPlanStore.startSession(
@@ -527,6 +660,59 @@ private struct TrainingProgramDetailView: View {
     }
 }
 
+private struct WorkoutSessionHistoryRow: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let session: WorkoutSession
+    var programs: [TrainingProgram] = []
+    var preferredProgramName: String?
+
+    private var planLabel: String {
+        if let source = TrainingPlanStore.programSourceLabel(
+            for: session,
+            programs: programs,
+            in: modelContext
+        ) {
+            return source
+        }
+        if let preferredProgramName,
+           !preferredProgramName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            if let version = session.sourceTemplateVersion {
+                return "\(preferredProgramName) · v\(version)"
+            }
+            return preferredProgramName
+        }
+        return "未关联训练计划"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(planLabel)
+                .font(.headline)
+            Text(session.startedAt.formatted(
+                date: .abbreviated,
+                time: .shortened
+            ))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            Text(
+                TrainingPlanStore.summary(
+                    for: session.id,
+                    in: modelContext
+                ).text
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(planLabel)，\(session.startedAt.formatted(date: .abbreviated, time: .shortened))"
+        )
+    }
+}
+
 private struct WorkoutSessionReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ExercisePerformance.order)
@@ -534,14 +720,22 @@ private struct WorkoutSessionReviewView: View {
     @Query(sort: \WorkoutSet.order) private var allSets: [WorkoutSet]
 
     let session: WorkoutSession
+    @State private var shareModel: WorkoutSharePosterModel?
 
     private var performances: [ExercisePerformance] {
         allPerformances.filter { $0.sessionID == session.id }
     }
 
+    private var planLabel: String? {
+        TrainingPlanStore.programSourceLabel(for: session, in: modelContext)
+    }
+
     var body: some View {
         List {
             Section("本地总结") {
+                if let planLabel {
+                    LabeledContent("训练计划", value: planLabel)
+                }
                 Text(
                     TrainingPlanStore.summary(
                         for: session.id,
@@ -594,6 +788,30 @@ private struct WorkoutSessionReviewView: View {
         }
         .navigationTitle("训练复盘")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if TrainingPlanStore.backfillProgramSource(
+                for: session,
+                in: modelContext
+            ) {
+                try? modelContext.save()
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    shareModel = WorkoutSharePosterBuilder.makeModel(
+                        session: session,
+                        in: modelContext
+                    )
+                } label: {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityLabel("分享本次训练")
+            }
+        }
+        .sheet(item: $shareModel) { model in
+            WorkoutShareSheet(model: model)
+        }
     }
 }
 

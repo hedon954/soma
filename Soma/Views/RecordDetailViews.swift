@@ -173,6 +173,8 @@ private struct WorkoutRecordEditor: View {
     }
 
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \ExerciseDefinition.canonicalName)
+    private var definitions: [ExerciseDefinition]
     let workout: WorkoutEntry
 
     @State private var date: Date
@@ -205,6 +207,16 @@ private struct WorkoutRecordEditor: View {
         _notes = State(initialValue: workout.notes)
     }
 
+    private var linkedExercise: ExerciseDefinition? {
+        if let exerciseID = workout.exerciseID {
+            return definitions.first { $0.id == exerciseID }
+        }
+        let key = ExerciseLibraryStore.canonicalNameKey(exercise)
+        return definitions.first {
+            !$0.isArchived && $0.canonicalNameKey == key
+        }
+    }
+
     var body: some View {
         Form {
             if !workout.mediaAttachments.isEmpty {
@@ -219,6 +231,55 @@ private struct WorkoutRecordEditor: View {
                             )
                         }
                     )
+                }
+            }
+
+            if let linkedExercise {
+                Section("关联动作") {
+                    NavigationLink {
+                        ExerciseDetailView(exercise: linkedExercise)
+                    } label: {
+                        HStack(spacing: 12) {
+                            ExerciseArtworkView(
+                                reference: linkedExercise.preferredActionIllustration,
+                                contentMode: .fill
+                            )
+                            .frame(width: 64, height: 64)
+                            .clipShape(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            )
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(linkedExercise.canonicalName)
+                                    .font(.headline)
+                                if !linkedExercise.primaryMuscles.isEmpty {
+                                    Text(
+                                        "主要："
+                                            + linkedExercise.primaryMuscles
+                                            .joined(separator: "、")
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                }
+                                if !linkedExercise.coachingNotes.isEmpty {
+                                    Text(linkedExercise.coachingNotes)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                        }
+                    }
+                    .accessibilityLabel("查看动作 \(linkedExercise.canonicalName)")
+
+                    MuscleMapView(
+                        intensities: MuscleMapView.intensities(for: linkedExercise),
+                        height: 300,
+                        allowsExpansion: true
+                    )
+                    Text("肌群图来自动作库元数据，不是本次记录的个人测量。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -320,6 +381,7 @@ private struct WorkoutRecordEditor: View {
                 }
             }
         }
+        .onAppear(perform: sanitizeMistakenDurationIfNeeded)
     }
 
     private var isValid: Bool {
@@ -368,21 +430,54 @@ private struct WorkoutRecordEditor: View {
         )
     }
 
+    private func sanitizeMistakenDurationIfNeeded() {
+        let weight = WorkoutCalorieCalculator.currentReferenceWeight(in: modelContext)
+        guard WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
+            workout,
+            weightKG: weight
+        ) else {
+            return
+        }
+        try? modelContext.save()
+        durationMinutes = EditorValue.string(workout.durationMinutes)
+        estimatedCalories = EditorValue.string(workout.estimatedCalories)
+        calorieMET = EditorValue.string(workout.calorieMET)
+        calorieDurationMinutes = EditorValue.string(workout.calorieDurationMinutes)
+        calorieDurationEstimated = workout.calorieDurationEstimated
+    }
+
     private func save() {
         let normalizedExercise = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let definition = try? ExerciseLibraryStore.resolveOrCreateExact(
-            canonicalName: normalizedExercise,
-            in: modelContext
+        let nameKey = ExerciseLibraryStore.canonicalNameKey(normalizedExercise)
+        if let exerciseID = workout.exerciseID,
+           let current = definitions.first(where: { $0.id == exerciseID }),
+           current.canonicalNameKey != nameKey
+        {
+            // Name changed away from the previous linked exercise; re-resolve.
+            workout.exerciseID = nil
+        }
+        workout.exercise = normalizedExercise
+        let definition = try? ExerciseLibraryStore.linkedExercise(
+            for: workout,
+            in: modelContext,
+            persist: true,
+            allowCreate: true
         )
-        exercise = normalizedExercise
+        exercise = definition?.canonicalName ?? normalizedExercise
         notes = normalizedNotes
         workout.date = date
-        workout.exerciseID = definition?.id
-        workout.exercise = definition?.canonicalName ?? normalizedExercise
         workout.setEntries = setRows.map(\.evidence)
         workout.restSeconds = EditorValue.int(restSeconds)
-        workout.durationMinutes = EditorValue.int(durationMinutes)
+        let sets = workout.setCount
+        let reps = workout.representativeReps
+        workout.durationMinutes = WorkoutCalorieCalculator.sanitizedActualDurationMinutes(
+            EditorValue.int(durationMinutes),
+            sets: sets,
+            reps: reps,
+            restSeconds: workout.restSeconds
+        )
+        durationMinutes = EditorValue.string(workout.durationMinutes)
         workout.estimatedCalories = EditorValue.int(estimatedCalories)
         workout.calorieMET = EditorValue.double(calorieMET)
         workout.calorieDurationMinutes = EditorValue.double(calorieDurationMinutes)

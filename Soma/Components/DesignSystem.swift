@@ -162,9 +162,15 @@ struct MarkdownText: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
-        guard textView.attributedText?.string != markdown else { return }
-        textView.attributedText = attributedMarkdown
-        textView.accessibilityLabel = markdown
+        guard context.coordinator.renderedMarkdown != markdown else { return }
+        let attributed = MarkdownAttributedStringBuilder.attributedString(from: markdown)
+        textView.attributedText = attributed
+        textView.accessibilityLabel = attributed.string
+        context.coordinator.renderedMarkdown = markdown
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
     }
 
     func sizeThatFits(
@@ -179,41 +185,8 @@ struct MarkdownText: UIViewRepresentable {
         return CGSize(width: width, height: height)
     }
 
-    private var attributedMarkdown: NSAttributedString {
-        var attributed = (
-            try? AttributedString(
-                markdown: markdown,
-                options: .init(interpretedSyntax: .full)
-            )
-        ) ?? AttributedString(markdown)
-        let runs = attributed.runs.map {
-            ($0.range, $0.inlinePresentationIntent)
-        }
-        for (range, intent) in runs {
-            let baseFont = UIFont.preferredFont(forTextStyle: .body)
-            let font: UIFont
-            if intent?.contains(.code) == true {
-                font = UIFont.monospacedSystemFont(
-                    ofSize: baseFont.pointSize,
-                    weight: .regular
-                )
-            } else {
-                var traits: UIFontDescriptor.SymbolicTraits = []
-                if intent?.contains(.stronglyEmphasized) == true {
-                    traits.insert(.traitBold)
-                }
-                if intent?.contains(.emphasized) == true {
-                    traits.insert(.traitItalic)
-                }
-                let descriptor = baseFont.fontDescriptor
-                    .withSymbolicTraits(traits)
-                    ?? baseFont.fontDescriptor
-                font = UIFont(descriptor: descriptor, size: baseFont.pointSize)
-            }
-            attributed[range].font = font
-            attributed[range].foregroundColor = UIColor.label
-        }
-        return NSAttributedString(attributed)
+    final class Coordinator {
+        var renderedMarkdown: String?
     }
 }
 

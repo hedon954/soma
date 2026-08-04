@@ -1,10 +1,13 @@
 # ADR 0035：内置动作内容保持静默，图片只在动作激活后关联并按需生成
 
-- 状态：已采纳
+- 状态：部分已替代；通用肌群图素材与按需生成范围由 ADR 0044 替代
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：无
-- 后续替代：暂无
+- 后续替代：
+  - [ADR 0044](0044-programmatic-muscle-map-and-training-share-poster.md) 将 `muscleMap`
+    改为程序化受力图渲染，退役肌群位图与其 AI 按需生成入口；`actionIllustration`
+    与静默目录决策继续有效
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 关联：

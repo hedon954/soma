@@ -4,6 +4,10 @@ included:
 
 excluded:
   - Soma.xcodeproj
+  # Dense SVG command parser; short geometry identifiers are intentional.
+  - Soma/Components/SVGPath.swift
+  # Generated muscle SVG path tables.
+  - Soma/Models/MuscleMapPathData.swift
 
 strict: true
 

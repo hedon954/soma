@@ -21,15 +21,16 @@
 | [007：数据导出、自动备份与主动清除](007-data-export-backup-and-erasure.md) | 数据主权 | 开放年月日导出、外部加密自动备份、恢复与个人数据清除 |
 | [008：连续对话、逐组训练与自适应模型](008-coach-continuity-and-adaptive-models.md) | 体验精化 | 隐藏式可继续 Session、一次性位置确认、逐组训练、媒体上下文、长会话压缩与双档模型 |
 | [009：记录媒体归档与单张解绑](009-record-media-association-and-detachment.md) | 媒体审查 | 健身房跨轮照片归档，以及健身房、训练、饮食和身体记录的单张媒体解绑 |
-| [010：动作库、训练计划、带练与视频复盘](010-exercise-library-plans-guided-training.md) | 部分修订 | 稳定动作身份、最近值快捷输入、版本化计划、逐组带练和自动录像；计划与带练体验由 012/013 扩展 |
+| [010：动作库、训练计划、带练与视频复盘](010-exercise-library-plans-guided-training.md) | 部分修订 | 稳定动作身份、最近值快捷输入、版本化计划、逐组带练和自动录像；计划与带练体验由 012/013 扩展，版本历史、归档恢复与肌群图由 019 修订 |
 | [011：持久 Agent Job 与远程持续执行](011-durable-agent-jobs-remote-continuity.md) | 已实现 | 本地 Outbox、服务端 Job/Event、设备 Tool handoff、灵动岛和通知 |
 | [012：GUI 训练计划编排](012-gui-training-program-authoring.md) | 部分修订 | 从动作库选择、排序并配置处方；折叠处方和最近值由 013 扩展 |
 | [013：低摩擦计划与沉浸式带练](013-guided-workout-experience-and-capture.md) | 部分修订 | 动作图编排、显式最近值、聚焦逐组带练和横竖屏真实取景；相机触发与反馈由 014 修订 |
-| [014：按需录像、完整语音与完成复盘](014-guided-workout-recording-cues-and-review.md) | 已实现，待真机验收 | 单组/每组/手动录像、按需相机、事件语音、本地总结和历史删除 |
+| [014：按需录像、完整语音与完成复盘](014-guided-workout-recording-cues-and-review.md) | 已实现，部分修订 | 单组/每组/手动录像、按需相机、事件语音、本地总结和历史删除；录像失败反馈由 019 修订 |
 | [015：对话启动计划带练](015-agent-guided-workout-launch.md) | 已实现，待真机验收 | Agent 查询可执行计划并在本机启动确定性带练 |
 | [016：训练成为一级执行入口](016-training-primary-tab.md) | 已实现，待真机验收 | 训练计划与带练从进展迁移为一级训练 Tab |
 | [017：情境化私人教练主屏组件](017-contextual-private-coach-widgets.md) | 暂缓 | 需支持 App Groups 的 Team 后恢复动态训练状态 |
 | [018：免费签名 Widget 能力降级](018-free-team-widget-fallback.md) | 已实现，待真机验收 | 保留静态快速记录和锁屏入口，移除 App Groups 依赖 |
+| [019：训练回顾分组筛选、计划管理补全与程序化受力图分享](019-training-review-plan-management-and-muscle-map-share.md) | 已实现，待真机验收 | 记录按天分组筛选分页、回复排版修复、计划删除/恢复/变更说明、录像失败提示、程序化受力图与分享海报 |
 
 ## 阅读约定
 

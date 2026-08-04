@@ -43,6 +43,8 @@
 	<string>使用系统语音输入把训练、饮食或身体记录转成文字。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>选择器械、饮食、体型或训练媒体进行本地记录与分析。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>把本机渲染的训练分享海报保存到你的相册。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>把你的语音转成健身、饮食或身体记录文字。</string>
     <key>NSHealthShareUsageDescription</key>

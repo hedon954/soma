@@ -21,6 +21,7 @@ struct GuidedWorkoutView: View {
     @State private var showsEndConfirmation = false
     @State private var showsReplacement = false
     @State private var errorMessage: String?
+    @State private var recordingToast: String?
 
     init(session: WorkoutSession) {
         self.session = session
@@ -119,6 +120,16 @@ struct GuidedWorkoutView: View {
         }
         .navigationBarBackButtonHidden(session.status == .active)
         .toolbar(.hidden, for: .navigationBar)
+        .appToast(
+            $recordingToast,
+            systemImage: "camera.fill",
+            tint: .orange
+        )
+        .onChange(of: coordinator.recordingErrorMessage) { _, newValue in
+            if let newValue, !newValue.isEmpty {
+                recordingToast = newValue
+            }
+        }
         .task {
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(true)
@@ -243,14 +254,6 @@ struct GuidedWorkoutView: View {
             )
             .padding(.horizontal, 20)
             .padding(.top, 12)
-
-            if let recordingError = coordinator.recordingErrorMessage {
-                Label(recordingError, systemImage: "camera.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-            }
 
             phaseContent(isLandscape: isLandscape)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -159,6 +159,8 @@ final class WorkoutTemplateVersion {
     var scheduleHint: String
     var source: String
     var createdAt: Date
+    var changeSummary: String?
+    var changeDetails: String?
 
     init(
         id: UUID = UUID(),
@@ -168,7 +170,9 @@ final class WorkoutTemplateVersion {
         name: String,
         scheduleHint: String = "",
         source: String = "user",
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        changeSummary: String? = nil,
+        changeDetails: String? = nil
     ) {
         self.id = id
         self.programID = programID
@@ -178,6 +182,8 @@ final class WorkoutTemplateVersion {
         self.scheduleHint = scheduleHint
         self.source = source
         self.createdAt = createdAt
+        self.changeSummary = changeSummary
+        self.changeDetails = changeDetails
     }
 }
 
@@ -228,6 +234,8 @@ final class WorkoutSession {
     var startedAt: Date
     var endedAt: Date?
     var gymID: UUID?
+    var programID: UUID?
+    var programNameSnapshot: String?
     var sourceTemplateFamilyID: UUID?
     var sourceTemplateVersion: Int?
     var prescriptionSnapshotData: Data
@@ -247,6 +255,8 @@ final class WorkoutSession {
         startedAt: Date = .now,
         endedAt: Date? = nil,
         gymID: UUID? = nil,
+        programID: UUID? = nil,
+        programNameSnapshot: String? = nil,
         sourceTemplateFamilyID: UUID? = nil,
         sourceTemplateVersion: Int? = nil,
         prescriptionSnapshot: [TemplateExercisePrescription] = [],
@@ -265,6 +275,8 @@ final class WorkoutSession {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.gymID = gymID
+        self.programID = programID
+        self.programNameSnapshot = programNameSnapshot
         self.sourceTemplateFamilyID = sourceTemplateFamilyID
         self.sourceTemplateVersion = sourceTemplateVersion
         prescriptionSnapshotData = TrainingPlanCoding.encode(prescriptionSnapshot)

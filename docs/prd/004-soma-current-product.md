@@ -17,6 +17,7 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md)
   - [PRD 016](016-training-primary-tab.md)
   - [PRD 017](017-contextual-private-coach-widgets.md)
+  - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md)
 
 ## 产品定义
 

@@ -38,7 +38,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0032](0032-optional-remote-agent-execution.md) | 已采纳 | 以匿名设备身份提供可选远程持续执行与本地 Tool handoff |
 | [0033](0033-live-activity-agent-job-projection.md) | 已采纳 | Live Activity 只投影隐私安全的 Agent Job 状态 |
 | [0034](0034-bidirectional-document-lifecycle-links.md) | 已采纳 | 文档修订、替代与研究落地关系使用双向生命周期索引 |
-| [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 已采纳 | 内置动作内容保持静默，用户使用动作后才关联素材，长尾图片按需生成 |
+| [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 部分已替代 | 静默内置内容与按需动作插画保留；通用肌群图素材与生成由 0044 替代 |
 | [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 已采纳 | Local/Remote Backend 对 UI 提供等价流式事件，并由 PostgreSQL 通知即时唤醒 |
 | [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订 |
@@ -47,6 +47,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0041](0041-training-primary-tab.md) | 已采纳 | 训练计划与带练迁移为一级训练 Tab，进展保留审查与趋势 |
 | [0042](0042-contextual-widget-snapshot-and-privacy.md) | 暂缓 | 主屏最小快照方案，待支持 App Groups 的 Team 后恢复 |
 | [0043](0043-free-team-widget-fallback.md) | 已采纳 | 免费签名阶段保留静态快速记录，不使用 App Groups |
+| [0044](0044-programmatic-muscle-map-and-training-share-poster.md) | 已采纳 | 规范肌群枚举与矢量路径程序化渲染受力图，分享海报本地生成 |
 
 新决策使用 [ADR 模板](template.md)。
 

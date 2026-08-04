@@ -408,6 +408,40 @@ final class ExerciseLibraryTests: XCTestCase {
         XCTAssertEqual(Set(workouts.compactMap(\.exerciseID)).count, 2)
     }
 
+    @MainActor
+    func testLinkedExercisePersistsIDWithoutCreatingUnknownNames() throws {
+        let (spaces, defaults) = try makeSpaces()
+        defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
+        let context = ModelContext(spaces.personalContainer)
+        let squat = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "杠铃深蹲",
+            in: context
+        )
+        let known = WorkoutEntry(exercise: "杠铃深蹲 ")
+        let unknown = WorkoutEntry(exercise: "从未见过的动作XYZ")
+        context.insert(known)
+        context.insert(unknown)
+        try context.save()
+
+        ExerciseLibraryStore.linkExistingExercises(
+            for: [known, unknown],
+            in: context
+        )
+
+        XCTAssertEqual(known.exerciseID, squat.id)
+        XCTAssertEqual(known.exercise, "杠铃深蹲")
+        XCTAssertNil(unknown.exerciseID)
+
+        let created = try ExerciseLibraryStore.linkedExercise(
+            for: unknown,
+            in: context,
+            persist: true,
+            allowCreate: true
+        )
+        XCTAssertEqual(created?.canonicalName, "从未见过的动作XYZ")
+        XCTAssertEqual(unknown.exerciseID, created?.id)
+    }
+
     func testQuickFillUsesLatestRecordedCapacityWithoutInventingValues() {
         let workout = WorkoutEntry(
             exercise: "杠铃前蹲",

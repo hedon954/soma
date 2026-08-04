@@ -108,6 +108,18 @@ final class TrainingPlanTests: XCTestCase {
 
         XCTAssertEqual(session.prescriptionSnapshot, originalSnapshot)
         XCTAssertEqual(session.sourceTemplateVersion, 1)
+        XCTAssertEqual(session.programID, program.id)
+        XCTAssertEqual(session.programNameSnapshot, "力量 A/B")
+        XCTAssertEqual(
+            TrainingPlanStore.programSourceLabel(for: session),
+            "力量 A/B · v1"
+        )
+        let nextVersion = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
+                .first { $0.version == 2 && $0.programID == program.id }
+        )
+        XCTAssertEqual(nextVersion.changeSummary?.contains("移除") == true
+            || nextVersion.changeSummary?.contains("单侧哑铃卧推") == true, true)
         let performances = try context.fetch(FetchDescriptor<ExercisePerformance>())
             .filter { $0.sessionID == session.id }
         let sets = try context.fetch(FetchDescriptor<WorkoutSet>())
@@ -681,6 +693,124 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertEqual(exercise.contentRevisions.count, 2)
         XCTAssertEqual(exercise.contentRevisions.first, first)
         XCTAssertEqual(exercise.coachingNotes, "用户修订。")
+    }
+
+    @MainActor
+    func testLegacySessionResolvesPlanLabelFromTemplateFamily() throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let squat = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "高脚杯深蹲",
+            in: context
+        )
+        let program = try TrainingPlanStore.createProgram(
+            name: "下肢力量",
+            templateName: "腿日",
+            prescriptions: [
+                prescription(exercise: squat, order: 1, sets: 3)
+            ],
+            in: context
+        )
+        let version = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
+                .first { $0.id == program.currentTemplateVersionID }
+        )
+
+        // Pre-snapshot sessions only kept the template family link.
+        let legacy = WorkoutSession(
+            sourceTemplateFamilyID: version.familyID,
+            sourceTemplateVersion: version.version,
+            prescriptionSnapshot: TrainingPlanStore.prescriptions(
+                for: version,
+                in: context
+            ),
+            status: .completed
+        )
+        context.insert(legacy)
+        try context.save()
+
+        XCTAssertEqual(
+            TrainingPlanStore.programSourceLabel(for: legacy, in: context),
+            "下肢力量 · v1"
+        )
+        XCTAssertTrue(
+            TrainingPlanStore.backfillProgramSource(for: legacy, in: context)
+        )
+        try context.save()
+        XCTAssertEqual(legacy.programID, program.id)
+        XCTAssertEqual(legacy.programNameSnapshot, "下肢力量")
+        XCTAssertEqual(
+            TrainingPlanStore.programSourceLabel(for: legacy),
+            "下肢力量 · v1"
+        )
+    }
+
+    @MainActor
+    func testOrphanSessionResolvesPlanLabelFromPrescriptionFingerprint() throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let squat = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "箱式深蹲",
+            in: context
+        )
+        let program = try TrainingPlanStore.createProgram(
+            name: "基础力量训练",
+            templateName: "组合 A",
+            prescriptions: [
+                prescription(exercise: squat, order: 1, sets: 4, warmup: true)
+            ],
+            in: context
+        )
+        let version = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
+                .first { $0.id == program.currentTemplateVersionID }
+        )
+        let values = TrainingPlanStore.prescriptions(for: version, in: context)
+
+        // Lost every plan link except the frozen prescription snapshot.
+        let orphan = WorkoutSession(
+            prescriptionSnapshot: values,
+            status: .completed
+        )
+        context.insert(orphan)
+        try context.save()
+
+        XCTAssertEqual(
+            TrainingPlanStore.programSourceLabel(for: orphan, in: context),
+            "基础力量训练 · v1"
+        )
+    }
+
+    @MainActor
+    func testDeletingProgramKeepsPlanNameOnExistingSessions() throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let row = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "坐姿划船",
+            in: context
+        )
+        let program = try TrainingPlanStore.createProgram(
+            name: "上肢拉力",
+            templateName: "拉日",
+            prescriptions: [
+                prescription(exercise: row, order: 1, sets: 4)
+            ],
+            in: context
+        )
+        let session = try TrainingPlanStore.startSession(
+            program: program,
+            autoRecording: false,
+            in: context
+        )
+        session.status = .completed
+        try context.save()
+
+        try TrainingPlanStore.deleteProgram(program, in: context)
+
+        XCTAssertEqual(
+            TrainingPlanStore.programSourceLabel(for: session),
+            "上肢拉力 · v1"
+        )
     }
 
     private func prescription(

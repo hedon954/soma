@@ -1,148 +1,6 @@
 import Foundation
 import SwiftData
 
-struct WorkoutCalorieEstimate: Equatable {
-    let calories: Int
-    let met: Double
-    let activityLabel: String
-    let durationMinutes: Double
-    let durationWasEstimated: Bool
-}
-
-enum WorkoutCalorieCalculator {
-    /// MET values follow the 2024 Adult Compendium of Physical Activities.
-    /// The 4-second fallback is the midpoint of a controlled 1–2s concentric
-    /// plus 2–3s eccentric repetition; it is used only when the user supplied
-    /// complete sets, reps and rest, and never overwrites actual duration.
-    private static let estimatedSecondsPerResistanceRep = 4.0
-
-    static func estimate(
-        exercise: String,
-        intensity: String?,
-        durationMinutes: Int?,
-        sets: Int? = nil,
-        reps: Int? = nil,
-        restSeconds: Int? = nil,
-        weightKG: Double?
-    ) -> WorkoutCalorieEstimate? {
-        let duration: (minutes: Double, estimated: Bool)
-        if let durationMinutes, durationMinutes > 0 {
-            duration = (Double(durationMinutes), false)
-        } else {
-            guard let estimated = estimatedResistanceDuration(
-                sets: sets,
-                reps: reps,
-                restSeconds: restSeconds
-            ) else {
-                return nil
-            }
-            duration = (estimated, true)
-        }
-        guard
-            let weightKG,
-            weightKG > 0
-        else {
-            return nil
-        }
-
-        let activity = activity(for: exercise, intensity: intensity)
-        let calories = activity.met * weightKG * duration.minutes / 60
-        guard calories.isFinite, calories > 0 else { return nil }
-        return WorkoutCalorieEstimate(
-            calories: Int(calories.rounded()),
-            met: activity.met,
-            activityLabel: activity.label,
-            durationMinutes: duration.minutes,
-            durationWasEstimated: duration.estimated
-        )
-    }
-
-    static func estimatedResistanceDuration(
-        sets: Int?,
-        reps: Int?,
-        restSeconds: Int?
-    ) -> Double? {
-        guard
-            let sets,
-            sets > 0,
-            let reps,
-            reps > 0
-        else {
-            return nil
-        }
-        if sets > 1 {
-            guard let restSeconds, restSeconds >= 0 else { return nil }
-        }
-
-        let repetitionSeconds = Double(sets * reps) * estimatedSecondsPerResistanceRep
-        let recoverySeconds = Double(max(sets - 1, 0) * (restSeconds ?? 0))
-        let totalMinutes = (repetitionSeconds + recoverySeconds) / 60
-        return totalMinutes > 0 ? totalMinutes : nil
-    }
-
-    @MainActor
-    static func currentReferenceWeight(in context: ModelContext) -> Double? {
-        let recentBodyEntries = (try? context.fetch(FetchDescriptor<BodyEntry>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))) ?? []
-        if let weight = recentBodyEntries.compactMap(\.weight).first, weight > 0 {
-            return weight
-        }
-
-        let profiles = (try? context.fetch(FetchDescriptor<UserProfile>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        ))) ?? []
-        return profiles.compactMap(\.referenceWeight).first(where: { $0 > 0 })
-    }
-
-    private static func activity(
-        for exercise: String,
-        intensity: String?
-    ) -> (met: Double, label: String) {
-        let normalized = exercise
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
-        let vigorous = ["偏重", "高强度", "vigorous", "high intensity", "hiit"]
-            .contains { value in
-                intensity?.localizedCaseInsensitiveContains(value) == true
-                    || normalized.localizedCaseInsensitiveContains(value)
-            }
-
-        if containsAny(normalized, ["壶铃摆动", "kettlebell swing"]) {
-            return (9.8, "壶铃摆动")
-        }
-        if containsAny(normalized, ["循环训练", "循环", "circuit", "hiit"]) {
-            return vigorous ? (7.5, "高强度循环训练") : (5.0, "中等强度循环训练")
-        }
-        if containsAny(normalized, ["深蹲", "硬拉", "squat", "deadlift"]) {
-            return (5.0, "深蹲或硬拉训练")
-        }
-        if containsAny(normalized, ["俯卧撑", "引体", "徒手", "弓步", "平板支撑", "push-up", "pull-up", "calisthenics"]) {
-            return vigorous ? (6.5, "高强度自重训练") : (3.0, "一般自重训练")
-        }
-        if containsAny(normalized, ["登阶机", "爬楼机", "stair treadmill", "stairmaster"]) {
-            return (9.3, "登阶机训练")
-        }
-        if containsAny(normalized, ["划船机", "rowing"]) {
-            return vigorous ? (7.3, "高强度划船机") : (5.0, "中等强度划船机")
-        }
-        if containsAny(normalized, ["椭圆机", "elliptical"]) {
-            return vigorous ? (9.0, "高强度椭圆机") : (5.0, "中等强度椭圆机")
-        }
-        if containsAny(normalized, ["单车", "自行车", "动感单车", "cycling", "bike"]) {
-            return (6.8, "一般室内单车")
-        }
-        if containsAny(normalized, ["跑步", "慢跑", "跑步机", "running", "jogging", "treadmill"]) {
-            return (5.5, "一般健身房有氧训练")
-        }
-        return vigorous ? (6.0, "高强度力量训练") : (3.5, "一般抗阻训练")
-    }
-
-    private static func containsAny(_ source: String, _ candidates: [String]) -> Bool {
-        candidates.contains { source.localizedCaseInsensitiveContains($0) }
-    }
-}
-
 @MainActor
 enum ConversationRecorder {
     static func apply(
@@ -587,12 +445,20 @@ enum ConversationRecorder {
             return .failure("form_score 必须在 0 到 100 之间。")
         }
 
+        let sets = setEntries?.count ?? arguments.sets
+        let reps = representativeReps(in: setEntries) ?? arguments.reps
+        let durationMinutes = WorkoutCalorieCalculator.sanitizedActualDurationMinutes(
+            arguments.durationMinutes,
+            sets: sets,
+            reps: reps,
+            restSeconds: arguments.restSeconds
+        )
         let calorieEstimate = WorkoutCalorieCalculator.estimate(
             exercise: exercise,
             intensity: arguments.intensity,
-            durationMinutes: arguments.durationMinutes,
-            sets: setEntries?.count ?? arguments.sets,
-            reps: representativeReps(in: setEntries) ?? arguments.reps,
+            durationMinutes: durationMinutes,
+            sets: sets,
+            reps: reps,
             restSeconds: arguments.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
@@ -612,7 +478,7 @@ enum ConversationRecorder {
             reps: arguments.reps,
             weight: arguments.weight,
             restSeconds: arguments.restSeconds,
-            durationMinutes: arguments.durationMinutes,
+            durationMinutes: durationMinutes,
             sourceText: sourceText,
             media: resolvedMedia,
             isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
@@ -642,7 +508,7 @@ enum ConversationRecorder {
                 weight: arguments.weight,
                 setEntries: setEntries,
                 restSeconds: arguments.restSeconds,
-                durationMinutes: arguments.durationMinutes,
+                durationMinutes: durationMinutes,
                 notes: sourceText,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
@@ -887,7 +753,19 @@ extension ConversationRecorder {
             entry.setEntries = setEntries
         }
         entry.restSeconds = arguments.restSeconds ?? entry.restSeconds
-        entry.durationMinutes = arguments.durationMinutes ?? entry.durationMinutes
+        if arguments.durationMinutes != nil {
+            entry.durationMinutes = WorkoutCalorieCalculator.sanitizedActualDurationMinutes(
+                arguments.durationMinutes,
+                sets: entry.setCount,
+                reps: entry.representativeReps,
+                restSeconds: entry.restSeconds
+            )
+        } else {
+            WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
+                entry,
+                weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
+            )
+        }
         entry.formScore = arguments.formScore ?? entry.formScore
         entry.intensity = arguments.intensity?.trimmed.nilIfEmpty ?? entry.intensity
         entry.feedback = arguments.feedback?.trimmed.nilIfEmpty ?? entry.feedback
@@ -1599,12 +1477,20 @@ extension ConversationRecorder {
             reps: workout.reps,
             weight: workout.weight
         )
+        let sets = setEntries?.count ?? workout.sets
+        let reps = representativeReps(in: setEntries) ?? workout.reps
+        let durationMinutes = WorkoutCalorieCalculator.sanitizedActualDurationMinutes(
+            workout.durationMinutes,
+            sets: sets,
+            reps: reps,
+            restSeconds: workout.restSeconds
+        )
         let calorieEstimate = WorkoutCalorieCalculator.estimate(
             exercise: workout.exercise,
             intensity: workout.intensity,
-            durationMinutes: workout.durationMinutes,
-            sets: setEntries?.count ?? workout.sets,
-            reps: representativeReps(in: setEntries) ?? workout.reps,
+            durationMinutes: durationMinutes,
+            sets: sets,
+            reps: reps,
             restSeconds: workout.restSeconds,
             weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
         )
@@ -1624,7 +1510,7 @@ extension ConversationRecorder {
             reps: workout.reps,
             weight: workout.weight,
             restSeconds: workout.restSeconds,
-            durationMinutes: workout.durationMinutes,
+            durationMinutes: durationMinutes,
             sourceText: sourceText,
             media: resolvedMedia,
             isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
@@ -1651,7 +1537,7 @@ extension ConversationRecorder {
                 weight: workout.weight,
                 setEntries: setEntries,
                 restSeconds: workout.restSeconds,
-                durationMinutes: workout.durationMinutes,
+                durationMinutes: durationMinutes,
                 notes: sourceText,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,

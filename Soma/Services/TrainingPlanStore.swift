@@ -103,12 +103,18 @@ enum TrainingPlanStore {
         try validate(prescriptions, in: context)
 
         let program = TrainingProgram(name: normalizedName, goal: goal)
+        let initialChange = TemplateVersionDiff.changeLog(
+            from: nil,
+            to: prescriptions
+        )
         let version = WorkoutTemplateVersion(
             programID: program.id,
             version: 1,
             name: templateName,
             scheduleHint: scheduleHint,
-            source: source
+            source: source,
+            changeSummary: initialChange.summary,
+            changeDetails: initialChange.details
         )
         program.currentTemplateVersionID = version.id
         context.insert(program)
@@ -130,13 +136,22 @@ enum TrainingPlanStore {
         let versions = try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
             .filter { $0.programID == program.id }
         let prior = versions.max { $0.version < $1.version }
+        let previousPrescriptions = prior.map {
+            Self.prescriptions(for: $0, in: context)
+        }
+        let changeLog = TemplateVersionDiff.changeLog(
+            from: previousPrescriptions,
+            to: prescriptions
+        )
         let version = WorkoutTemplateVersion(
             programID: program.id,
             familyID: prior?.familyID ?? UUID(),
             version: (prior?.version ?? 0) + 1,
             name: name,
             scheduleHint: scheduleHint,
-            source: source
+            source: source,
+            changeSummary: changeLog.summary,
+            changeDetails: changeLog.details
         )
         context.insert(version)
         insert(prescriptions, templateVersionID: version.id, in: context)
@@ -274,6 +289,8 @@ enum TrainingPlanStore {
 
         let session = WorkoutSession(
             gymID: gymID,
+            programID: program.id,
+            programNameSnapshot: program.name,
             sourceTemplateFamilyID: version.familyID,
             sourceTemplateVersion: version.version,
             prescriptionSnapshot: values,
@@ -419,12 +436,36 @@ enum TrainingPlanStore {
         try context.save()
     }
 
+    static func unarchive(
+        _ program: TrainingProgram,
+        in context: ModelContext
+    ) throws {
+        program.status = .active
+        try context.save()
+    }
+
     static func deleteProgram(
         _ program: TrainingProgram,
         in context: ModelContext
     ) throws {
         let versions = try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
             .filter { $0.programID == program.id }
+        let familyIDs = Set(versions.map(\.familyID))
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
+            .filter {
+                $0.programID == program.id
+                    || ($0.sourceTemplateFamilyID.map(familyIDs.contains) ?? false)
+            }
+        for session in sessions {
+            if session.programID == nil {
+                session.programID = program.id
+            }
+            let snapshot = session.programNameSnapshot?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if snapshot == nil || snapshot?.isEmpty == true {
+                session.programNameSnapshot = program.name
+            }
+        }
         let versionIDs = Set(versions.map(\.id))
         let exercises = try context.fetch(FetchDescriptor<TemplateExercise>())
             .filter { versionIDs.contains($0.templateVersionID) }
@@ -432,6 +473,214 @@ enum TrainingPlanStore {
         versions.forEach { context.delete($0) }
         context.delete(program)
         try context.save()
+    }
+
+    /// Persists plan id/name onto sessions that still only have a template family link.
+    @discardableResult
+    static func backfillProgramSources(in context: ModelContext) -> Int {
+        let sessions = (try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? []
+        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
+        let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>()))
+            ?? []
+        var changed = 0
+        for session in sessions where backfillProgramSource(
+            for: session,
+            programs: programs,
+            versions: versions
+        ) {
+            changed += 1
+        }
+        if changed > 0 {
+            try? context.save()
+        }
+        return changed
+    }
+
+    @discardableResult
+    static func backfillProgramSource(
+        for session: WorkoutSession,
+        programs: [TrainingProgram] = [],
+        versions: [WorkoutTemplateVersion] = [],
+        in context: ModelContext? = nil
+    ) -> Bool {
+        let resolved = resolveProgramSource(
+            for: session,
+            programs: programs,
+            versions: versions,
+            in: context
+        )
+        guard let resolved else { return false }
+        var changed = false
+        if session.programID == nil {
+            session.programID = resolved.programID
+            changed = true
+        }
+        let snapshot = session.programNameSnapshot?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if snapshot == nil || snapshot?.isEmpty == true {
+            session.programNameSnapshot = resolved.name
+            changed = true
+        }
+        return changed
+    }
+
+    /// Resolves a display label for a historical session's source plan.
+    static func programSourceLabel(
+        for session: WorkoutSession,
+        programs: [TrainingProgram] = [],
+        versions: [WorkoutTemplateVersion] = [],
+        in context: ModelContext? = nil
+    ) -> String? {
+        guard let resolved = resolveProgramSource(
+            for: session,
+            programs: programs,
+            versions: versions,
+            in: context
+        ) else {
+            return nil
+        }
+        if let version = resolved.version {
+            return "\(resolved.name) · v\(version)"
+        }
+        return resolved.name
+    }
+
+    private struct ResolvedProgramSource {
+        var programID: UUID?
+        var name: String
+        var version: Int?
+    }
+
+    private static func resolveProgramSource(
+        for session: WorkoutSession,
+        programs: [TrainingProgram],
+        versions: [WorkoutTemplateVersion],
+        in context: ModelContext?
+    ) -> ResolvedProgramSource? {
+        let snapshot = session.programNameSnapshot?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let snapshot, !snapshot.isEmpty {
+            return ResolvedProgramSource(
+                programID: session.programID,
+                name: snapshot,
+                version: session.sourceTemplateVersion
+            )
+        }
+
+        let resolvedPrograms: [TrainingProgram]
+        let resolvedVersions: [WorkoutTemplateVersion]
+        if let context {
+            resolvedPrograms = (try? context.fetch(FetchDescriptor<TrainingProgram>()))
+                ?? programs
+            resolvedVersions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>()))
+                ?? versions
+        } else {
+            resolvedPrograms = programs
+            resolvedVersions = versions
+        }
+
+        if let programID = session.programID,
+           let program = resolvedPrograms.first(where: { $0.id == programID })
+        {
+            return ResolvedProgramSource(
+                programID: program.id,
+                name: program.name,
+                version: session.sourceTemplateVersion
+            )
+        }
+
+        if let familyID = session.sourceTemplateFamilyID {
+            let exactVersion = resolvedVersions.first(where: {
+                $0.familyID == familyID
+                    && (
+                        session.sourceTemplateVersion == nil
+                            || $0.version == session.sourceTemplateVersion
+                    )
+            })
+            let matchedVersion = exactVersion
+                ?? resolvedVersions.first(where: { $0.familyID == familyID })
+            if let matchedVersion,
+               let program = resolvedPrograms.first(where: {
+                   $0.id == matchedVersion.programID
+               })
+            {
+                return ResolvedProgramSource(
+                    programID: program.id,
+                    name: program.name,
+                    version: session.sourceTemplateVersion ?? matchedVersion.version
+                )
+            }
+        }
+
+        // Last resort for legacy rows that lost template family links: match the
+        // frozen prescription fingerprint against a unique surviving template.
+        guard let context else { return nil }
+        let fingerprint = prescriptionFingerprint(session.prescriptionSnapshot)
+        guard !fingerprint.isEmpty else { return nil }
+        let matches: [(TrainingProgram, WorkoutTemplateVersion)] = resolvedVersions
+            .compactMap { version in
+                guard let program = resolvedPrograms.first(where: {
+                    $0.id == version.programID
+                }) else {
+                    return nil
+                }
+                let values = prescriptions(for: version, in: context)
+                guard prescriptionFingerprint(values) == fingerprint else {
+                    return nil
+                }
+                return (program, version)
+            }
+        let uniquePrograms = Dictionary(grouping: matches, by: { $0.0.id })
+        guard uniquePrograms.count == 1,
+              let match = matches.first
+        else {
+            return nil
+        }
+        return ResolvedProgramSource(
+            programID: match.0.id,
+            name: match.0.name,
+            version: session.sourceTemplateVersion ?? match.1.version
+        )
+    }
+
+    private static func prescriptionFingerprint(
+        _ prescriptions: [TemplateExercisePrescription]
+    ) -> String {
+        prescriptions
+            .sorted { $0.order < $1.order }
+            .map {
+                [
+                    $0.exerciseID.uuidString,
+                    String($0.targetSets ?? -1),
+                    String($0.targetReps ?? -1),
+                    String($0.targetWeightKG ?? -1),
+                    String($0.targetRestSeconds ?? -1),
+                    $0.firstSetIsWarmup ? "1" : "0"
+                ].joined(separator: ":")
+            }
+            .joined(separator: "|")
+    }
+
+    static func resolvedChangeLog(
+        for version: WorkoutTemplateVersion,
+        previous: WorkoutTemplateVersion?,
+        in context: ModelContext
+    ) -> TemplateVersionChangeLog {
+        if let summary = version.changeSummary?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !summary.isEmpty
+        {
+            return TemplateVersionChangeLog(
+                summary: summary,
+                details: version.changeDetails?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                    ?? summary
+            )
+        }
+        let current = prescriptions(for: version, in: context)
+        let prior = previous.map { prescriptions(for: $0, in: context) }
+        return TemplateVersionDiff.changeLog(from: prior, to: current)
     }
 
     private static func insert(
@@ -492,5 +741,12 @@ enum TrainingPlanStore {
         _ message: String
     ) -> TrainingReadinessIssue {
         TrainingReadinessIssue(id: id, severity: severity, message: message)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

@@ -908,6 +908,77 @@ enum ExerciseLibraryStore {
         try? context.save()
     }
 
+    /// Resolves the exercise metadata linked to a workout record.
+    /// When `persist` is true and the workout only has a name, writes `exerciseID`
+    /// (and canonical name) so subsequent queries and UI stay attached.
+    @discardableResult
+    static func linkedExercise(
+        for workout: WorkoutEntry,
+        in context: ModelContext,
+        persist: Bool = true,
+        allowCreate: Bool = false
+    ) throws -> ExerciseDefinition? {
+        if let exerciseID = workout.exerciseID {
+            if let match = activeDefinitions(in: context)
+                .first(where: { $0.id == exerciseID })
+            {
+                return match
+            }
+            let any = (
+                try? context.fetch(FetchDescriptor<ExerciseDefinition>())
+            )?.first(where: { $0.id == exerciseID && $0.mergedIntoID == nil })
+            if let any {
+                return any
+            }
+        }
+
+        let name = workout.exercise.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+
+        let definition: ExerciseDefinition?
+        if allowCreate {
+            definition = try resolveOrCreateExact(canonicalName: name, in: context)
+        } else {
+            let key = canonicalNameKey(name)
+            definition = activeDefinitions(in: context)
+                .first { $0.canonicalNameKey == key }
+        }
+        guard let definition else { return nil }
+
+        if persist,
+           workout.exerciseID != definition.id
+           || workout.exercise != definition.canonicalName
+        {
+            workout.exerciseID = definition.id
+            workout.exercise = definition.canonicalName
+            try? context.save()
+        }
+        return definition
+    }
+
+    /// Backfills `exerciseID` for a page of history rows without creating new exercises.
+    static func linkExistingExercises(
+        for workouts: [WorkoutEntry],
+        in context: ModelContext
+    ) {
+        var changed = false
+        for workout in workouts where workout.exerciseID == nil {
+            if let linked = try? linkedExercise(
+                for: workout,
+                in: context,
+                persist: false,
+                allowCreate: false
+            ) {
+                workout.exerciseID = linked.id
+                workout.exercise = linked.canonicalName
+                changed = true
+            }
+        }
+        if changed {
+            try? context.save()
+        }
+    }
+
     static func activateBundledContent(in context: ModelContext) {
         let definitions = (
             try? context.fetch(FetchDescriptor<ExerciseDefinition>())

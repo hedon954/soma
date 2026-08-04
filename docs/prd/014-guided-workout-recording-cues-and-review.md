@@ -1,12 +1,14 @@
 # PRD 014：按需录像、完整语音节奏与训练完成复盘
 
-- 状态：已实现；待维护者真机录像与语音验收
+- 状态：已实现，部分修订；待维护者真机录像与语音验收，录像失败反馈由 PRD 019 修订
 - 日期：2026-08-04
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的带练录像与确定性总结基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的每动作单段自动录像范围
   - [PRD 013](013-guided-workout-experience-and-capture.md) 的开始前校准、紧凑取景和完成反馈
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 将录像失败反馈统一为
+    含原因的 toast 提示与可解释的按钮禁用
 - 上游依据：
   - [带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)
   - [BUG 0010](../bugs/0010-guided-recording-state-and-cue-gaps.md)

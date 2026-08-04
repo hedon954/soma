@@ -1,6 +1,7 @@
 # PRD 010：动作库、训练计划、程序化带练与视频复盘
 
-- 状态：部分修订；训练计划 GUI、带练体验与录像反馈由 PRD 012/013/014 扩展
+- 状态：部分修订；训练计划 GUI、带练体验与录像反馈由 PRD 012/013/014 扩展，
+  版本历史含义、归档恢复与通用肌群图由 PRD 019 修订
 - 日期：2026-07-31
 - 修订自：[PRD 004](004-soma-current-product.md) 的训练记录与动作分析范围
 - 后续修订：
@@ -9,6 +10,8 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 增加按需/每组录像、完整语音、完成复盘和历史删除
   - [PRD 015](015-agent-guided-workout-launch.md) 增加通过对话查询计划并启动带练
   - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口提升为一级训练 Tab
+  - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 增加版本变更说明、
+    归档恢复与删除计划，并将通用肌群图改为程序化受力图
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 关联决策：
   - [ADR 0028](../adr/0028-semantic-exercise-identity.md)

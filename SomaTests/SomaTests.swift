@@ -769,6 +769,7 @@ final class SomaTests: XCTestCase {
                     AgentWorkoutSetInput(reps: 8, externalWeightKG: 62.5)
                 },
                 restSeconds: 90,
+                // Mistaken Agent formula 4×8×90/60=48 must be discarded.
                 durationMinutes: 48,
                 formScore: 86,
                 intensity: "适中",
@@ -791,9 +792,10 @@ final class SomaTests: XCTestCase {
         XCTAssertEqual(records.first?.exercise, "杠铃深蹲")
         XCTAssertEqual(records.first?.setCount, 4)
         XCTAssertEqual(records.first?.representativeWeight, 62.5)
-        XCTAssertEqual(records.first?.estimatedCalories, 280)
+        XCTAssertNil(records.first?.durationMinutes)
+        XCTAssertEqual(records.first?.estimatedCalories, 39)
         XCTAssertEqual(records.first?.calorieMET, 5.0)
-        XCTAssertFalse(records.first?.calorieDurationEstimated ?? true)
+        XCTAssertTrue(records.first?.calorieDurationEstimated ?? false)
     }
 
     @MainActor
