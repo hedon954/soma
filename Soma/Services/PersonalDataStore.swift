@@ -82,30 +82,32 @@ enum PersonalDataStore {
 
 extension PersonalDataSnapshot {
     var modelCount: Int {
-        let core = externalSyncCursors.count
-            + userProfiles.count
-            + gymProfiles.count
-            + gymEquipment.count
-            + gymMedia.count
-            + meals.count
-            + bodyEntries.count
-            + workouts.count
-        let exercise = (exerciseDefinitions?.count ?? 0)
-            + (exerciseMergeRecords?.count ?? 0)
-            + (trainingPrograms?.count ?? 0)
-            + (workoutTemplateVersions?.count ?? 0)
-            + (templateExercises?.count ?? 0)
-        let training = (workoutSessions?.count ?? 0)
-            + (exercisePerformances?.count ?? 0)
-            + (workoutSets?.count ?? 0)
-            + (recommendationSnapshots?.count ?? 0)
-            + (performanceAnalyses?.count ?? 0)
-        let conversation = sessions.count
-            + messages.count
-            + traces.count
-            + mutationReceipts.count
-            + (agentJobs?.count ?? 0)
-            + (agentEvents?.count ?? 0)
-        return core + exercise + training + conversation
+        // Keep each sum tiny — CI's x86_64 type checker times out on long chains.
+        var total = 0
+        total += externalSyncCursors.count
+        total += userProfiles.count
+        total += gymProfiles.count
+        total += gymEquipment.count
+        total += gymMedia.count
+        total += meals.count
+        total += bodyEntries.count
+        total += workouts.count
+        total += exerciseDefinitions?.count ?? 0
+        total += exerciseMergeRecords?.count ?? 0
+        total += trainingPrograms?.count ?? 0
+        total += workoutTemplateVersions?.count ?? 0
+        total += templateExercises?.count ?? 0
+        total += workoutSessions?.count ?? 0
+        total += exercisePerformances?.count ?? 0
+        total += workoutSets?.count ?? 0
+        total += recommendationSnapshots?.count ?? 0
+        total += performanceAnalyses?.count ?? 0
+        total += sessions.count
+        total += messages.count
+        total += traces.count
+        total += mutationReceipts.count
+        total += agentJobs?.count ?? 0
+        total += agentEvents?.count ?? 0
+        return total
     }
 }
