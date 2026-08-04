@@ -5,7 +5,9 @@
 - 修订自：
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的程序化带练与自动录像交互
   - [PRD 012](012-gui-training-program-authoring.md) 的计划 GUI 编排交互
-- 后续修订：[PRD 014](014-guided-workout-recording-cues-and-review.md) 改为按需启动相机，扩展录像策略、语音和完成复盘
+- 后续修订：
+  - [PRD 014](014-guided-workout-recording-cues-and-review.md) 改为按需启动相机，扩展录像策略、语音和完成复盘
+  - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口迁移到一级训练 Tab
 - 上游依据：
   - [训练计划编排、沉浸式带练与真实取景调研](../research/2026-08-03-guided-workout-flow-and-capture.md)
   - [BUG 0006](../bugs/0006-workout-camera-preview-recording-mismatch.md)

@@ -5,7 +5,9 @@
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的“教练是唯一创建入口”边界
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的“聊天创建、GUI 审查计划”路径
-- 后续修订：[PRD 013](013-guided-workout-experience-and-capture.md) 增加动作图、折叠处方和显式最近值复用
+- 后续修订：
+  - [PRD 013](013-guided-workout-experience-and-capture.md) 增加动作图、折叠处方和显式最近值复用
+  - [PRD 016](016-training-primary-tab.md) 将计划入口从进展迁移到一级训练 Tab
 - 上游依据：用户提出训练计划在动作选择和组合场景下更适合 GUI
 - 下游落地：[ADR 0036](../adr/0036-gui-training-program-authoring.md)
 

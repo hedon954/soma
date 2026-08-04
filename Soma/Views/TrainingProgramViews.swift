@@ -26,7 +26,7 @@ struct TrainingProgramLibraryView: View {
     var body: some View {
         List {
             if let resumableSession {
-                Section("进行中") {
+                Section("继续训练") {
                     Button {
                         WorkoutInterfaceOrientationPolicy.shared
                             .setGuidedWorkoutActive(true)
@@ -40,7 +40,7 @@ struct TrainingProgramLibraryView: View {
                 }
             }
 
-            Section("训练计划") {
+            Section("我的计划") {
                 if activePrograms.isEmpty {
                     VStack(spacing: 14) {
                         ContentUnavailableView(
@@ -122,7 +122,7 @@ struct TrainingProgramLibraryView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .appPageBackground()
-        .navigationTitle("训练计划")
+        .navigationTitle("训练")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

@@ -9,6 +9,7 @@
 - 后续修订：
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 收敛一次性位置确认与 Session 上下文
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 扩展终止后恢复和远程等待
+  - [PRD 016](016-training-primary-tab.md) 仅替代“所有能力不新增第三个顶层 Tab”的范围
 - 关联决策：
   - [ADR 0016](../adr/0016-conversation-turn-attempt-and-footprint-projection.md)
   - [ADR 0017](../adr/0017-location-and-weather-context.md)

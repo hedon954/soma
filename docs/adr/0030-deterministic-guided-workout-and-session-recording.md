@@ -9,6 +9,7 @@
   - [ADR 0038](0038-focused-guided-workout-and-capture-geometry.md) 修订阶段 UI、单步完成和录像画幅方向
   - [ADR 0039](0039-event-driven-guided-recording-cues-and-review.md) 修订自动录像策略、Set 级证据与完成复盘
   - [ADR 0040](0040-agent-guided-workout-launch.md) 将“仅 GUI 启动”部分扩展为受控对话启动
+  - [ADR 0041](0041-training-primary-tab.md) 将高频带练入口提升为一级训练 Tab
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)

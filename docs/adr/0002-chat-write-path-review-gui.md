@@ -5,6 +5,7 @@
 - 后续替代：
   - [ADR 0030](0030-deterministic-guided-workout-and-session-recording.md) 允许带练直接保存用户确认的逐组事实
   - [ADR 0036](0036-gui-training-program-authoring.md) 允许 GUI 创建和编排训练计划
+  - [ADR 0041](0041-training-primary-tab.md) 将高频计划执行提升为一级训练 Tab
 
 ## 背景
 

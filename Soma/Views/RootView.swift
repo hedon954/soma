@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 
 enum AppTab: Hashable {
-    case coach, insights
+    case coach, training, insights
 }
 
 private enum RootSheet: Identifiable {
@@ -45,6 +45,13 @@ struct RootView: View {
             }
             .tabItem { Label("教练", systemImage: "bubble.left.and.bubble.right.fill") }
             .tag(AppTab.coach)
+
+            NavigationStack {
+                TrainingProgramLibraryView()
+                    .toolbar { settingsToolbar }
+            }
+            .tabItem { Label("训练", systemImage: "figure.strengthtraining.traditional") }
+            .tag(AppTab.training)
 
             NavigationStack {
                 InsightsView()

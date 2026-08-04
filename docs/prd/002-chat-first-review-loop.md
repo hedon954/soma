@@ -3,7 +3,9 @@
 - 状态：当前要求
 - 决策阶段：2026-07-27 至 2026-07-28
 - 修订自：[PRD 001](001-private-ai-fitness-coach.md)
-- 后续修订：[PRD 003](003-streaming-react-agent.md)
+- 后续修订:
+  - [PRD 003](003-streaming-react-agent.md)
+  - [PRD 016](016-training-primary-tab.md) 将高频计划执行提升为一级训练 Tab
 
 ## 产品收敛
 

@@ -27,6 +27,7 @@
 | [013：低摩擦计划与沉浸式带练](013-guided-workout-experience-and-capture.md) | 部分修订 | 动作图编排、显式最近值、聚焦逐组带练和横竖屏真实取景；相机触发与反馈由 014 修订 |
 | [014：按需录像、完整语音与完成复盘](014-guided-workout-recording-cues-and-review.md) | 已实现，待真机验收 | 单组/每组/手动录像、按需相机、事件语音、本地总结和历史删除 |
 | [015：对话启动计划带练](015-agent-guided-workout-launch.md) | 已实现，待真机验收 | Agent 查询可执行计划并在本机启动确定性带练 |
+| [016：训练成为一级执行入口](016-training-primary-tab.md) | 已实现，待真机验收 | 训练计划与带练从进展迁移为一级训练 Tab |
 
 ## 阅读约定
 

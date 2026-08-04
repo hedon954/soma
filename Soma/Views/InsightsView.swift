@@ -11,8 +11,6 @@ struct InsightsView: View {
     @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
     @Query(sort: \ExerciseDefinition.canonicalName)
     private var exerciseDefinitions: [ExerciseDefinition]
-    @Query(sort: \TrainingProgram.updatedAt, order: .reverse)
-    private var trainingPrograms: [TrainingProgram]
     @Query(sort: \WorkoutSession.startedAt)
     private var workoutSessions: [WorkoutSession]
     @Query(sort: \ExercisePerformance.order)
@@ -98,9 +96,6 @@ struct InsightsView: View {
                     mealCount: meals.count,
                     bodyCount: bodyEntries.count,
                     exerciseCount: exerciseDefinitions.count { !$0.isArchived },
-                    programCount: trainingPrograms.count {
-                        $0.status == .active
-                    },
                     latestWorkout: workouts.last?.exercise,
                     latestMeal: meals.last?.title,
                     latestWeight: weightedBodyEntries.last?.weight
@@ -141,7 +136,6 @@ private struct RecentRecordsCard: View {
     let mealCount: Int
     let bodyCount: Int
     let exerciseCount: Int
-    let programCount: Int
     let latestWorkout: String?
     let latestMeal: String?
     let latestWeight: Double?
@@ -193,22 +187,6 @@ private struct RecentRecordsCard: View {
                             latest: exerciseCount == 0
                                 ? "随训练自然形成"
                                 : "查看动作历史与最近训练"
-                        )
-                    }
-
-                    Divider()
-                        .padding(.leading, 44)
-
-                    NavigationLink {
-                        TrainingProgramLibraryView()
-                    } label: {
-                        RecordIndexRow(
-                            icon: "list.bullet.clipboard",
-                            title: "训练计划",
-                            count: programCount,
-                            latest: programCount == 0
-                                ? "在教练中创建计划"
-                                : "审查、调整并开始带练"
                         )
                     }
 
