@@ -2,6 +2,48 @@ import Foundation
 import SwiftData
 
 extension ConversationRecorder {
+    static func listTrainingPrograms(in context: ModelContext) -> AgentToolResult {
+        let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
+            .filter { $0.status == .active && $0.currentTemplateVersionID != nil }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? []
+        let values = programs.map { program in
+            let template = versions.first { $0.id == program.currentTemplateVersionID }
+            return "[id:\(program.id.uuidString)] \(program.name)"
+                + "；目标：\(program.goal.isEmpty ? "未记录" : program.goal)"
+                + "；当前模板：\(template?.name ?? "未找到")"
+        }
+        return .success(values.isEmpty ? "暂无可执行训练计划。" : values.joined(separator: "\n"))
+    }
+
+    static func getTrainingProgram(
+        _ arguments: AgentToolArguments,
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard let rawID = arguments.programID,
+              let programID = UUID(uuidString: rawID)
+        else {
+            return .failure("get_training_program 需要有效的 program_id。")
+        }
+        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
+        guard let program = programs.first(where: { $0.id == programID }),
+              let versionID = program.currentTemplateVersionID,
+              let version = ((try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? [])
+              .first(where: { $0.id == versionID })
+        else {
+            return .failure("没有找到训练计划或其当前模板，请重新查询。")
+        }
+        let prescriptions = TrainingPlanStore.prescriptions(for: version, in: context)
+        let exercises = prescriptions.map { prescription in
+            "\(prescription.order). \(prescription.exerciseName)：\(prescription.targetSets.map(String.init) ?? "未记录")组 × \(prescription.targetReps.map(String.init) ?? "未记录")次"
+        }
+        let goal = program.goal.isEmpty ? "未记录" : program.goal
+        let header = "[id:\(program.id.uuidString)] \(program.name)；目标：\(goal)；模板：\(version.name) v\(version.version)"
+        return .success(
+            "\(header)\n\(exercises.joined(separator: "\n"))"
+        )
+    }
+
     static func createTrainingProgram(
         _ arguments: AgentToolArguments,
         in context: ModelContext
@@ -86,6 +128,65 @@ extension ConversationRecorder {
         do {
             try TrainingPlanStore.archive(program, in: context)
             return .success("已归档训练计划：\(program.name)。")
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    static func deleteTrainingProgram(
+        _ arguments: AgentToolArguments,
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard let rawID = arguments.programID,
+              let programID = UUID(uuidString: rawID)
+        else {
+            return .failure("delete_training_program 需要有效的 program_id。")
+        }
+        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
+        guard let program = programs.first(where: { $0.id == programID }) else {
+            return .failure("没有找到训练计划，请重新查询。")
+        }
+        do {
+            try TrainingPlanStore.deleteProgram(program, in: context)
+            return .success("已永久删除训练计划：\(program.name)；既有训练历史仍保留。")
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    static func startGuidedWorkout(
+        _ arguments: AgentToolArguments,
+        in context: ModelContext
+    ) -> AgentToolResult {
+        guard let rawID = arguments.programID,
+              let programID = UUID(uuidString: rawID)
+        else {
+            return .failure("start_guided_workout 需要 list_training_programs 返回的有效 program_id。")
+        }
+        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
+        guard let program = programs.first(where: {
+            $0.id == programID && $0.status == .active
+        }) else {
+            return .failure("没有找到可执行的训练计划，请重新查询。")
+        }
+        let policy: AutoRecordingPolicy
+        switch arguments.autoRecordingPolicy {
+        case nil, "disabled": policy = .disabled
+        case "one_per_exercise": policy = .enabled
+        case "every_set": policy = .everySet
+        default:
+            return .failure("录像策略仅支持 disabled、one_per_exercise 或 every_set。")
+        }
+        do {
+            let session = try TrainingPlanStore.startSession(
+                program: program,
+                autoRecordingPolicy: policy,
+                in: context
+            )
+            SomaCaptureRouter.shared.requestWorkoutSession(session.id)
+            return .success(
+                "已开始「\(program.name)」带练 [session_id:\(session.id.uuidString)]。"
+            )
         } catch {
             return .failure(error.localizedDescription)
         }

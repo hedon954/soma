@@ -419,6 +419,21 @@ enum TrainingPlanStore {
         try context.save()
     }
 
+    static func deleteProgram(
+        _ program: TrainingProgram,
+        in context: ModelContext
+    ) throws {
+        let versions = try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
+            .filter { $0.programID == program.id }
+        let versionIDs = Set(versions.map(\.id))
+        let exercises = try context.fetch(FetchDescriptor<TemplateExercise>())
+            .filter { versionIDs.contains($0.templateVersionID) }
+        exercises.forEach { context.delete($0) }
+        versions.forEach { context.delete($0) }
+        context.delete(program)
+        try context.save()
+    }
+
     private static func insert(
         _ prescriptions: [TemplateExercisePrescription],
         templateVersionID: UUID,

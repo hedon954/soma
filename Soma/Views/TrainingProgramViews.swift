@@ -106,12 +106,14 @@ struct TrainingProgramLibraryView: View {
                                 .lineLimit(2)
                             }
                         }
-                        .swipeActions(edge: .trailing) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteSession(session)
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Image(systemName: "trash")
                             }
+                            .accessibilityLabel("删除计划训练记录")
+                            .tint(.red)
                         }
                     }
                 }

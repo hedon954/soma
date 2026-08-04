@@ -26,6 +26,7 @@
 | [012：GUI 训练计划编排](012-gui-training-program-authoring.md) | 部分修订 | 从动作库选择、排序并配置处方；折叠处方和最近值由 013 扩展 |
 | [013：低摩擦计划与沉浸式带练](013-guided-workout-experience-and-capture.md) | 部分修订 | 动作图编排、显式最近值、聚焦逐组带练和横竖屏真实取景；相机触发与反馈由 014 修订 |
 | [014：按需录像、完整语音与完成复盘](014-guided-workout-recording-cues-and-review.md) | 已实现，待真机验收 | 单组/每组/手动录像、按需相机、事件语音、本地总结和历史删除 |
+| [015：对话启动计划带练](015-agent-guided-workout-launch.md) | 已实现，待真机验收 | Agent 查询可执行计划并在本机启动确定性带练 |
 
 ## 阅读约定
 

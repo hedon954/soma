@@ -220,9 +220,13 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 - `update_workout_template`；
 - `archive_training_program`；
 - `query_user_data` 的 exercises/exercise_history/programs/templates/sessions scope。
+- `list_training_programs`：返回可执行计划的稳定 ID 和当前模板摘要；
+- `get_training_program`：按稳定 ID 读取当前模板的动作与处方，供 Agent 审查和版本更新；
+- `start_guided_workout`：只接受列表返回的计划 ID，在设备本地创建不可变 Session 并打开带练。
+- `delete_training_program`：仅在用户明确要求永久删除时清除计划及其模板，既有 Session 快照继续保留。
 
-Tool 只能创建和调整计划。开始 Session、完成 Set、控制相机和保存实际值由本地带练运行时处理，
-不暴露为模型任意调用。
+Tool 可创建、调整计划和在用户明确意图下启动一次带练。完成 Set、控制相机和保存实际值继续由
+本地带练运行时处理，不暴露为模型任意调用。
 
 ## 聊天快捷输入
 

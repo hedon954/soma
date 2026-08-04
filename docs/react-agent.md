@@ -46,6 +46,8 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 - `load_skill`：按需读取一项专业 Skill。
 - `query_user_data`：查询概览、训练、饮食、身体或健身房记录。
 - `list_exercise_names`：返回当前数据空间全部 active 动作 `{id,name}`，由模型完成语义选择。
+- `list_training_programs`：返回当前可执行计划的稳定 ID、名称、目标与当前模板。
+- `get_training_program`：按计划 ID 读取当前模板动作与处方详情。
 - `record_workout`：记录动作及用户明确提供或可靠识别的训练字段。
 - `record_meal`：记录餐次、食物、大卡与宏量营养。
 - `record_body`：记录体重、体脂、腰围、体型图片和中性观察。
@@ -57,6 +59,8 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 - `switch_gym`：切换已存在的当前健身房。
 - `create_training_program`、`create_workout_template_version`、
   `update_workout_template`、`archive_training_program`：维护版本化计划。
+- `start_guided_workout`：仅在用户明确要求时，用计划 ID 在本机创建 Session 并打开带练；默认不录像。
+- `delete_training_program`：仅在用户明确要求永久删除时，删除计划及其模板，保留既有 Session 快照。
 - `record_performance_analysis`：把用户主动视频复盘产生的证据、局限、输入指纹和建议绑定到
   指定 Performance。
 
@@ -137,6 +141,7 @@ Live Activity 和通知是独立投影。token delta 继续实时显示，但不
 - `record_workout` / `update_workout`：使用 `exercise_id` 引用已有动作；只有创建新动作时使用
   `exercise_name`；
 - 计划创建、版本更新和归档 Tool；
-- 带练逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
+- `list_training_programs` 先返回可执行计划 ID；`start_guided_workout` 仅创建本地不可变 Session
+  并路由到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
 
 工具合同见 [训练领域模型与运行时协议](engineering/training-domain-model.md)。

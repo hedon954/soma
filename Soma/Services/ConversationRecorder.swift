@@ -235,6 +235,10 @@ enum ConversationRecorder {
             )
         case .listExerciseNames:
             listExerciseNames(in: context)
+        case .listTrainingPrograms:
+            listTrainingPrograms(in: context)
+        case .getTrainingProgram:
+            getTrainingProgram(call.arguments, in: context)
         case .recordWorkout:
             recordWorkout(
                 call.arguments,
@@ -320,6 +324,10 @@ enum ConversationRecorder {
             createWorkoutTemplateVersion(call.arguments, in: context)
         case .archiveTrainingProgram:
             archiveTrainingProgram(call.arguments, in: context)
+        case .deleteTrainingProgram:
+            deleteTrainingProgram(call.arguments, in: context)
+        case .startGuidedWorkout:
+            startGuidedWorkout(call.arguments, in: context)
         case .recordPerformanceAnalysis:
             recordPerformanceAnalysis(
                 call.arguments,

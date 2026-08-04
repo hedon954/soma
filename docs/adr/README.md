@@ -43,6 +43,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 已采纳 | Local/Remote Backend 对 UI 提供等价流式事件，并由 PostgreSQL 通知即时唤醒 |
 | [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订 |
 | [0039](0039-event-driven-guided-recording-cues-and-review.md) | 已采纳 | 录像策略与实际活动分离，按 Set 保存证据，并以事件驱动语音、复盘和删除 |
+| [0040](0040-agent-guided-workout-launch.md) | 已采纳 | Agent 用固定计划 Tool 在设备本地创建快照并路由到既有带练 |
 
 新决策使用 [ADR 模板](template.md)。
 

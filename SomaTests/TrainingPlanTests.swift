@@ -419,6 +419,92 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
+    func testAgentToolsListAndStartGuidedWorkout() throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "杠铃深蹲",
+            in: context
+        )
+        let program = try TrainingPlanStore.createProgram(
+            name: "深蹲训练",
+            templateName: "下肢日",
+            prescriptions: [
+                TemplateExercisePrescription(
+                    exerciseID: exercise.id,
+                    exerciseName: exercise.canonicalName,
+                    order: 1,
+                    targetSets: 3,
+                    targetReps: 5
+                )
+            ],
+            in: context
+        )
+        let listed = ConversationRecorder.executeAgentTool(
+            AgentToolCall(name: .listTrainingPrograms, arguments: .init()),
+            sourceText: "我有哪些计划？",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        XCTAssertTrue(listed.ok)
+        XCTAssertTrue(listed.observation.contains(program.id.uuidString))
+
+        if let route = SomaCaptureRouter.shared.pendingWorkoutSession {
+            SomaCaptureRouter.shared.clearWorkoutSession(route.id)
+        }
+        let started = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .startGuidedWorkout,
+                arguments: .init(
+                    programID: program.id.uuidString,
+                    autoRecordingPolicy: "every_set"
+                )
+            ),
+            sourceText: "开始这个计划带练",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        let session = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutSession>()).first
+        )
+        XCTAssertTrue(started.ok)
+        XCTAssertEqual(session.autoRecordingPolicy, .everySet)
+        XCTAssertEqual(SomaCaptureRouter.shared.pendingWorkoutSession?.sessionID, session.id)
+        if let route = SomaCaptureRouter.shared.pendingWorkoutSession {
+            SomaCaptureRouter.shared.clearWorkoutSession(route.id)
+        }
+
+        let detail = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .getTrainingProgram,
+                arguments: .init(programID: program.id.uuidString)
+            ),
+            sourceText: "查看这个计划详情",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        XCTAssertTrue(detail.ok)
+        XCTAssertTrue(detail.observation.contains("杠铃深蹲"))
+
+        let deleted = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .deleteTrainingProgram,
+                arguments: .init(programID: program.id.uuidString)
+            ),
+            sourceText: "永久删除这个计划",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        XCTAssertTrue(deleted.ok)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<TrainingProgram>()).isEmpty)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSession>()).count, 1)
+    }
+
+    @MainActor
     func testPerformanceReviewToolBindsEvidenceToSourceJobIdempotently() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }

@@ -7,6 +7,7 @@
   - [PRD 012](012-gui-training-program-authoring.md) 增加从零选择动作并创建计划的 GUI 路径
   - [PRD 013](013-guided-workout-experience-and-capture.md) 重构低摩擦计划编排、聚焦带练和真实取景
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 增加按需/每组录像、完整语音、完成复盘和历史删除
+  - [PRD 015](015-agent-guided-workout-launch.md) 增加通过对话查询计划并启动带练
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 关联决策：
   - [ADR 0028](../adr/0028-semantic-exercise-identity.md)

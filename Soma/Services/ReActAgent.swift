@@ -5,6 +5,8 @@ enum AgentToolName: String, Codable, CaseIterable {
     case loadSkill = "load_skill"
     case queryUserData = "query_user_data"
     case listExerciseNames = "list_exercise_names"
+    case listTrainingPrograms = "list_training_programs"
+    case getTrainingProgram = "get_training_program"
     case recordWorkout = "record_workout"
     case recordMeal = "record_meal"
     case recordBody = "record_body"
@@ -18,11 +20,13 @@ enum AgentToolName: String, Codable, CaseIterable {
     case createWorkoutTemplateVersion = "create_workout_template_version"
     case updateWorkoutTemplate = "update_workout_template"
     case archiveTrainingProgram = "archive_training_program"
+    case deleteTrainingProgram = "delete_training_program"
+    case startGuidedWorkout = "start_guided_workout"
     case recordPerformanceAnalysis = "record_performance_analysis"
 
     var isMutation: Bool {
         switch self {
-        case .loadSkill, .queryUserData, .listExerciseNames:
+        case .loadSkill, .queryUserData, .listExerciseNames, .listTrainingPrograms, .getTrainingProgram:
             false
         default:
             true
@@ -34,6 +38,8 @@ enum AgentToolName: String, Codable, CaseIterable {
         case .loadSkill: "加载 Skill"
         case .queryUserData: "读取用户数据"
         case .listExerciseNames: "读取动作库"
+        case .listTrainingPrograms: "读取训练计划"
+        case .getTrainingProgram: "读取计划详情"
         case .recordWorkout: "记录训练"
         case .recordMeal: "记录饮食"
         case .recordBody: "记录身体信息"
@@ -47,6 +53,8 @@ enum AgentToolName: String, Codable, CaseIterable {
         case .createWorkoutTemplateVersion: "创建计划版本"
         case .updateWorkoutTemplate: "更新训练模板"
         case .archiveTrainingProgram: "归档训练计划"
+        case .deleteTrainingProgram: "永久删除训练计划"
+        case .startGuidedWorkout: "开始计划带练"
         case .recordPerformanceAnalysis: "保存视频复盘"
         }
     }
@@ -140,6 +148,7 @@ struct AgentToolArguments: Codable, Equatable {
     var templateName: String?
     var scheduleHint: String?
     var templateExercises: [AgentTemplateExerciseInput]?
+    var autoRecordingPolicy: String?
 
     enum CodingKeys: String, CodingKey {
         case scope, limit, summary, equipment, exercise, sets, reps, weight, intensity
@@ -169,6 +178,7 @@ struct AgentToolArguments: Codable, Equatable {
         case templateName = "template_name"
         case scheduleHint = "schedule_hint"
         case templateExercises = "template_exercises"
+        case autoRecordingPolicy = "auto_recording_policy"
     }
 
     init(
@@ -214,7 +224,8 @@ struct AgentToolArguments: Codable, Equatable {
         goal: String? = nil,
         templateName: String? = nil,
         scheduleHint: String? = nil,
-        templateExercises: [AgentTemplateExerciseInput]? = nil
+        templateExercises: [AgentTemplateExerciseInput]? = nil,
+        autoRecordingPolicy: String? = nil
     ) {
         self.skillID = skillID
         self.scope = scope
@@ -259,6 +270,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.templateName = templateName
         self.scheduleHint = scheduleHint
         self.templateExercises = templateExercises
+        self.autoRecordingPolicy = autoRecordingPolicy
     }
 }
 
@@ -408,6 +420,10 @@ extension AgentToolName {
             "读取用户本机已有的训练、饮食、身体或健身房记录。需要历史事实时先调用；不得猜测未返回的数据。"
         case .listExerciseNames:
             "返回当前数据空间动作库中全部未归档动作的稳定 ID 和标准名称。记录训练前先调用，由模型完成语义匹配；匹配已有动作时使用 exercise_id，没有语义等价项时使用标准 exercise_name 新建。"
+        case .listTrainingPrograms:
+            "返回当前数据空间可执行训练计划的稳定 ID、名称、目标和当前模板摘要。用户要求开始带练前必须先调用；随后把返回的 program_id 交给 start_guided_workout。"
+        case .getTrainingProgram:
+            "读取一个训练计划的当前模板、动作顺序和处方详情。修改计划前先调用，并使用 list_training_programs 返回的 program_id。"
         case .recordWorkout:
             "新增一条训练。先调用 list_exercise_names；匹配已有动作时只传 exercise_id，确实没有语义等价动作时只传标准 exercise_name。未知训练字段必须省略。"
         case .recordMeal:
@@ -438,6 +454,10 @@ extension AgentToolName {
             "更新训练模板；实现为给已有计划创建一个新版本，不修改已开始训练的快照。"
         case .archiveTrainingProgram:
             "归档已有训练计划；保留模板版本和历史训练。"
+        case .deleteTrainingProgram:
+            "永久删除一个训练计划及其模板，已开始的训练 Session 快照和训练历史会保留。只有用户当前消息明确要求永久删除时才能调用；先查询并使用准确 program_id。"
+        case .startGuidedWorkout:
+            "按 list_training_programs 返回的 program_id 在本机创建一次不可变训练 Session，并立即打开带练。只在用户当前消息明确要求开始、执行或带练该计划时调用；未提供录像偏好时保持关闭。"
         case .recordPerformanceAnalysis:
             "把用户主动请求的视频复盘保存到指定 Performance。只记录画面可见证据、明确局限和一般训练建议；不得诊断伤病或修改训练事实。"
         }
@@ -465,6 +485,12 @@ extension AgentToolName {
                 "session_id": string("查询指定计划训练时使用的 Session UUID"),
                 "limit": integer("最多返回多少条，1 到 20")
             ], required: ["scope"])
+        case .listTrainingPrograms:
+            object([:])
+        case .getTrainingProgram:
+            object([
+                "program_id": string("list_training_programs 返回的训练计划 UUID")
+            ], required: ["program_id"])
         case .listExerciseNames:
             object([:])
         case .recordWorkout:
@@ -577,6 +603,18 @@ extension AgentToolName {
         case .archiveTrainingProgram:
             object([
                 "program_id": string("query_user_data 返回的训练计划 UUID")
+            ], required: ["program_id"])
+        case .deleteTrainingProgram:
+            object([
+                "program_id": string("list_training_programs 返回的训练计划 UUID")
+            ], required: ["program_id"])
+        case .startGuidedWorkout:
+            object([
+                "program_id": string("list_training_programs 返回的训练计划 UUID"),
+                "auto_recording_policy": string(
+                    "本次明确选择的录像策略；省略则关闭",
+                    values: ["disabled", "one_per_exercise", "every_set"]
+                )
             ], required: ["program_id"])
         case .recordPerformanceAnalysis:
             object([

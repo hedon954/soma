@@ -87,6 +87,18 @@ const definitions: DeviceToolDefinition[] = [
     parameters: parameters({}),
   },
   {
+    name: "list_training_programs",
+    schemaVersion: 1,
+    mutation: false,
+    parameters: parameters({}),
+  },
+  {
+    name: "get_training_program",
+    schemaVersion: 1,
+    mutation: false,
+    parameters: parameters({ program_id: stringValue }, ["program_id"]),
+  },
+  {
     name: "record_workout",
     schemaVersion: 1,
     mutation: true,
@@ -269,6 +281,24 @@ const definitions: DeviceToolDefinition[] = [
     schemaVersion: 1,
     mutation: true,
     parameters: parameters({ program_id: stringValue }, ["program_id"]),
+  },
+  {
+    name: "delete_training_program",
+    schemaVersion: 1,
+    mutation: true,
+    parameters: parameters({ program_id: stringValue }, ["program_id"]),
+  },
+  {
+    name: "start_guided_workout",
+    schemaVersion: 1,
+    mutation: true,
+    parameters: parameters(
+      {
+        program_id: stringValue,
+        auto_recording_policy: stringValue,
+      },
+      ["program_id"],
+    ),
   },
   {
     name: "record_performance_analysis",
