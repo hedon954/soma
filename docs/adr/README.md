@@ -16,7 +16,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0010](0010-repository-governance-and-xcodegen.md) | 部分已替代 | 统一 Agent 契约、质量门禁与 XcodeGen 事实来源 |
 | [0011](0011-fast-check-full-verify.md) | 部分已替代 | `make check` 快速静态检查，`make verify` 完整构建测试 |
 | [0012](0012-ordered-mixed-media-collections.md) | 已采纳 | 有序混合媒体贯穿聊天、Agent、记录和审查 |
-| [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责进入聊天录入 |
+| [0013](0013-widget-and-app-intent-capture-routing.md) | 部分已替代 | Widget 与 App Intent 只负责快速进入；主屏只读快照由 0042 扩展 |
 | [0014](0014-agent-turn-ordered-event-cards.md) | 部分已替代 | 有序 Event Cards 保留；多 Attempt 关系由 0016 修订 |
 | [0015](0015-daily-conversation-session-lifecycle.md) | 已替代 | 旧消息归档等约束保留；每日自动切换由 0022 替代 |
 | [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 部分已替代 | Turn 可包含多次 Attempt；本地分析器路径由 0027 替代 |
@@ -45,6 +45,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0039](0039-event-driven-guided-recording-cues-and-review.md) | 已采纳 | 录像策略与实际活动分离，按 Set 保存证据，并以事件驱动语音、复盘和删除 |
 | [0040](0040-agent-guided-workout-launch.md) | 已采纳 | Agent 用固定计划 Tool 在设备本地创建快照并路由到既有带练 |
 | [0041](0041-training-primary-tab.md) | 已采纳 | 训练计划与带练迁移为一级训练 Tab，进展保留审查与趋势 |
+| [0042](0042-contextual-widget-snapshot-and-privacy.md) | 已采纳 | 主屏 Widget 从本机最小快照读取情境，并以私密默认值控制内容 |
 
 新决策使用 [ADR 模板](template.md)。
 

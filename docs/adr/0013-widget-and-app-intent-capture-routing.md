@@ -1,7 +1,8 @@
 # ADR 0013：Widget 与 App Intent 只负责进入聊天录入
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-29
+- 后续替代：[ADR 0042](0042-contextual-widget-snapshot-and-privacy.md) 部分替代主屏 Widget 的只读数据投影范围
 
 ## 背景
 
@@ -20,8 +21,8 @@ Widget 不能承载任意文本编辑，也不能在扩展进程中直接呈现�
 - `SomaCaptureRouter` 由 App 根生命周期持有，只传递短生命周期的录入意图。
 - 文字入口切到教练并聚焦输入框；拍照和媒体入口直接呈现对应的系统选择器，选择结果再交给
   教练输入区。
-- Widget 和 App Intent 不直接写业务记录、不运行 Agent、不读取本地健康数据，也不引入
-  App Group。所有事实仍从聊天进入固定 Tool Call 闭环。
+- Widget 和 App Intent 不直接写业务记录、不运行 Agent、不读取本地健康数据。主屏 Widget 的最小
+  只读 App Group 快照由 ADR 0042 单独授权；所有事实仍从聊天或确定性带练闭环进入。
 - 锁屏入口在设备锁定时由系统先完成身份验证；Widget 不尝试绕过解锁直接访问相机、媒体或
   私人身体数据。
 - App 未运行时允许系统启动 App；App 被终止后不承诺扩展内后台解析。
@@ -36,5 +37,5 @@ Widget 不能承载任意文本编辑，也不能在扩展进程中直接呈现�
 ## 结果
 
 主屏幕 Widget、锁屏 Widget 和系统快捷指令只是聊天的低摩擦入口，不形成第二条写入路径。
-后续若增加 Share Extension、App Group 或后台处理，必须新增 ADR 说明数据一致性、隐私和
-失败恢复。
+后续若增加 Share Extension、Widget 内写入或后台处理，必须新增 ADR 说明数据一致性、隐私和失败恢复；
+App Group 的主屏只读快照已由 ADR 0042 限定。

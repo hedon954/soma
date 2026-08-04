@@ -12,6 +12,12 @@ struct TrainingProgramLibraryView: View {
     @State private var showsCreation = false
     @State private var resumedSession: WorkoutSession?
     @State private var errorMessage: String?
+    @Binding private var requestedProgramID: UUID?
+    @State private var routedProgram: TrainingProgram?
+
+    init(requestedProgramID: Binding<UUID?> = .constant(nil)) {
+        _requestedProgramID = requestedProgramID
+    }
 
     private var activePrograms: [TrainingProgram] {
         programs.filter { $0.status == .active }
@@ -137,6 +143,19 @@ struct TrainingProgramLibraryView: View {
             NavigationStack {
                 TrainingProgramCreationView(definitions: definitions)
             }
+        }
+        .navigationDestination(item: $routedProgram) { program in
+            TrainingProgramDetailView(program: program)
+        }
+        .onChange(of: requestedProgramID, initial: true) {
+            guard let id = requestedProgramID else { return }
+            routedProgram = activePrograms.first { $0.id == id }
+            requestedProgramID = nil
+        }
+        .onChange(of: programs.map(\.id)) {
+            guard let id = requestedProgramID else { return }
+            routedProgram = activePrograms.first { $0.id == id }
+            requestedProgramID = nil
         }
         .fullScreenCover(item: $resumedSession) { session in
             NavigationStack {

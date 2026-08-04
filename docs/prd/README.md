@@ -28,6 +28,7 @@
 | [014：按需录像、完整语音与完成复盘](014-guided-workout-recording-cues-and-review.md) | 已实现，待真机验收 | 单组/每组/手动录像、按需相机、事件语音、本地总结和历史删除 |
 | [015：对话启动计划带练](015-agent-guided-workout-launch.md) | 已实现，待真机验收 | Agent 查询可执行计划并在本机启动确定性带练 |
 | [016：训练成为一级执行入口](016-training-primary-tab.md) | 已实现，待真机验收 | 训练计划与带练从进展迁移为一级训练 Tab |
+| [017：情境化私人教练主屏组件](017-contextual-private-coach-widgets.md) | 已实现，待真机验收 | 按进行中训练、固定计划与训练节奏动态展示，并以隐私等级控制主屏信息 |
 
 ## 阅读约定
 

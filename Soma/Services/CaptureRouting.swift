@@ -50,6 +50,11 @@ struct WorkoutSessionRoute: Equatable, Identifiable, Sendable {
     var sessionID: UUID
 }
 
+struct TrainingProgramRoute: Equatable, Identifiable, Sendable {
+    var id = UUID()
+    var programID: UUID?
+}
+
 @MainActor
 @Observable
 final class SomaCaptureRouter {
@@ -59,6 +64,7 @@ final class SomaCaptureRouter {
     private(set) var mediaDelivery: CaptureMediaDelivery?
     private(set) var pendingAgentTurn: AgentTurnRoute?
     private(set) var pendingWorkoutSession: WorkoutSessionRoute?
+    private(set) var pendingTrainingProgram: TrainingProgramRoute?
 
     private init() {}
 
@@ -89,6 +95,16 @@ final class SomaCaptureRouter {
                   let sessionID = UUID(uuidString: rawID)
         {
             requestWorkoutSession(sessionID)
+        } else if url.host?.lowercased() == "training" {
+            let components = url.pathComponents.dropFirst()
+            if components.first == "program",
+               let rawID = components.dropFirst().first,
+               let programID = UUID(uuidString: rawID)
+            {
+                requestTrainingProgram(programID)
+            } else {
+                requestTrainingProgram(nil)
+            }
         } else {
             somaCaptureLogger.error("Ignored unsupported Soma URL")
         }
@@ -125,6 +141,15 @@ final class SomaCaptureRouter {
     func clearWorkoutSession(_ routeID: UUID) {
         guard pendingWorkoutSession?.id == routeID else { return }
         pendingWorkoutSession = nil
+    }
+
+    func requestTrainingProgram(_ programID: UUID?) {
+        pendingTrainingProgram = TrainingProgramRoute(programID: programID)
+    }
+
+    func clearTrainingProgram(_ routeID: UUID) {
+        guard pendingTrainingProgram?.id == routeID else { return }
+        pendingTrainingProgram = nil
     }
 }
 

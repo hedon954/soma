@@ -28,9 +28,33 @@ struct RootView: View {
     @Environment(SomaCaptureRouter.self) private var captureRouter
     @Environment(DataManagementCoordinator.self) private var dataManagement
     @Query(sort: \AgentJob.createdAt) private var agentJobs: [AgentJob]
+    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
+    private var workoutSessions: [WorkoutSession]
+    @Query(sort: \TrainingProgram.updatedAt, order: .reverse)
+    private var trainingPrograms: [TrainingProgram]
+    @Query(sort: \WorkoutEntry.date, order: .reverse)
+    private var workouts: [WorkoutEntry]
+    @Query(sort: \WorkoutSet.order) private var workoutSets: [WorkoutSet]
     @State private var selectedTab: AppTab = .coach
     @State private var sheet: RootSheet?
     @State private var routedWorkoutSession: WorkoutSession?
+    @State private var routedTrainingProgramID: UUID?
+
+    private var widgetSnapshotFingerprint: String {
+        let sessionValues = workoutSessions.map {
+            "\($0.id.uuidString):\($0.statusRaw):\($0.guidedPhaseRaw):\($0.endedAt?.timeIntervalSinceReferenceDate ?? 0)"
+        }
+        let programValues = trainingPrograms.map {
+            "\($0.id.uuidString):\($0.statusRaw):\($0.updatedAt.timeIntervalSinceReferenceDate)"
+        }
+        let workoutValues = workouts.map {
+            "\($0.id.uuidString):\($0.date.timeIntervalSinceReferenceDate)"
+        }
+        let setValues = workoutSets.map {
+            "\($0.id.uuidString):\($0.statusRaw):\($0.completedAt?.timeIntervalSinceReferenceDate ?? 0)"
+        }
+        return (sessionValues + programValues + workoutValues + setValues).joined(separator: "|")
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -47,8 +71,10 @@ struct RootView: View {
             .tag(AppTab.coach)
 
             NavigationStack {
-                TrainingProgramLibraryView()
-                    .toolbar { settingsToolbar }
+                TrainingProgramLibraryView(
+                    requestedProgramID: $routedTrainingProgramID
+                )
+                .toolbar { settingsToolbar }
             }
             .tabItem { Label("训练", systemImage: "figure.strengthtraining.traditional") }
             .tag(AppTab.training)
@@ -81,6 +107,9 @@ struct RootView: View {
         }
         .onChange(of: captureRouter.pendingWorkoutSession, initial: true) {
             handleWorkoutSessionRoute()
+        }
+        .onChange(of: captureRouter.pendingTrainingProgram, initial: true) {
+            handleTrainingProgramRoute()
         }
         .fullScreenCover(item: $routedWorkoutSession) { session in
             NavigationStack {
@@ -121,6 +150,12 @@ struct RootView: View {
                 ai: ai,
                 modelContext: modelContext,
                 locationService: locationContext
+            )
+        }
+        .task(id: widgetSnapshotFingerprint) {
+            SomaWidgetSnapshotProjector.refresh(
+                in: modelContext,
+                dataSpace: dataSpace.activeSpace
             )
         }
         .onChange(of: scenePhase) {
@@ -185,6 +220,13 @@ struct RootView: View {
         }
         routedWorkoutSession = session
         captureRouter.clearWorkoutSession(route.id)
+    }
+
+    private func handleTrainingProgramRoute() {
+        guard let route = captureRouter.pendingTrainingProgram else { return }
+        selectedTab = .training
+        routedTrainingProgramID = route.programID
+        captureRouter.clearTrainingProgram(route.id)
     }
 
     @ToolbarContentBuilder
