@@ -82,29 +82,30 @@ enum PersonalDataStore {
 
 extension PersonalDataSnapshot {
     var modelCount: Int {
-        externalSyncCursors.count
+        let core = externalSyncCursors.count
             + userProfiles.count
             + gymProfiles.count
             + gymEquipment.count
             + gymMedia.count
             + meals.count
             + bodyEntries.count
-            + (exerciseDefinitions?.count ?? 0)
-            + (exerciseMergeRecords?.count ?? 0)
             + workouts.count
+        let exercise = (exerciseDefinitions?.count ?? 0)
+            + (exerciseMergeRecords?.count ?? 0)
             + (trainingPrograms?.count ?? 0)
             + (workoutTemplateVersions?.count ?? 0)
             + (templateExercises?.count ?? 0)
-            + (workoutSessions?.count ?? 0)
+        let training = (workoutSessions?.count ?? 0)
             + (exercisePerformances?.count ?? 0)
             + (workoutSets?.count ?? 0)
             + (recommendationSnapshots?.count ?? 0)
             + (performanceAnalyses?.count ?? 0)
-            + sessions.count
+        let conversation = sessions.count
             + messages.count
             + traces.count
             + mutationReceipts.count
             + (agentJobs?.count ?? 0)
             + (agentEvents?.count ?? 0)
+        return core + exercise + training + conversation
     }
 }
