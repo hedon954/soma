@@ -107,16 +107,6 @@ struct SettingsView: View {
             } label: {
                 Label("健身房", systemImage: "building.2")
             }
-
-            NavigationLink {
-                WidgetSettingsView()
-            } label: {
-                SettingsSummaryRow(
-                    icon: "rectangle.3.group.fill",
-                    title: "主屏组件",
-                    detail: "训练状态、计划与快速记录"
-                )
-            }
         }
     }
 

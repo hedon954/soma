@@ -1,10 +1,10 @@
 # ADR 0042：情境化组件使用最小本地快照与私密默认值
 
-- 状态：已采纳
+- 状态：暂缓（需支持 App Groups 的开发者 Team）
 - 日期：2026-08-04
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0013](0013-widget-and-app-intent-capture-routing.md) 的“Widget 不读取本地数据、不引入 App Group”范围
-- 后续替代：暂无
+- 后续替代：[ADR 0043](0043-free-team-widget-fallback.md) 在免费签名阶段恢复静态快速记录组件
 - 上游依据：[PRD 017](../prd/017-contextual-private-coach-widgets.md)、[组件调研](../research/2026-08-04-contextual-private-coach-widgets.md)
 
 ## 背景
@@ -44,6 +44,9 @@
 Soma 可在主屏按“继续带练 → 固定计划 → 训练节奏 → 首次记录”提供低摩擦入口，同时所有健康事实
 仍由 App 内确定性流程保存。ADR 0013 关于锁屏快捷录入、App Intent 不写业务记录和不绕过系统解锁的
 约束继续有效；仅主屏内容读取与 App Group 最小快照由本 ADR 扩展。
+
+在当前免费 Personal Team 无法为 App Groups 签名时，ADR 0043 暂时恢复 ADR 0013 的静态入口；本决策
+及实现会保留在 Git 历史中，待可用 Team 开通后重新采纳。
 
 ## 验证
 

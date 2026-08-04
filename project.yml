@@ -54,7 +54,6 @@ targets:
         PRODUCT_NAME: SomaWidgetExtension
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: SomaWidget/Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: SomaWidget/SomaWidget.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
         TARGETED_DEVICE_FAMILY: "1,2"

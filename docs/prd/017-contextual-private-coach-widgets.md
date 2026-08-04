@@ -1,9 +1,9 @@
 # PRD 017：情境化私人教练主屏组件
 
-- 状态：已实现，待真机验收
+- 状态：暂缓（需支持 App Groups 的开发者 Team）
 - 日期：2026-08-04
 - 修订自：[PRD 004](004-soma-current-product.md) 的“主屏幕、锁屏组件与系统快捷入口”范围
-- 后续修订：暂无
+- 后续修订：[PRD 018](018-free-team-widget-fallback.md) 在免费签名阶段恢复静态快速记录组件
 - 上游依据：[私人健身教练的情境化主屏组件调研](../research/2026-08-04-contextual-private-coach-widgets.md)、[ADR 0042](../adr/0042-contextual-widget-snapshot-and-privacy.md)
 - 关联决策：[ADR 0013](../adr/0013-widget-and-app-intent-capture-routing.md)、[ADR 0042](../adr/0042-contextual-widget-snapshot-and-privacy.md)
 
@@ -102,6 +102,11 @@ ADR 0042 已部分替代 ADR 0013 中“不引入 App Group”的限制，并明
 - 根据自然语言排期猜测“今天练什么”；在未新增结构化排期模型前，只支持用户明确固定的计划。
 - 锁屏、StandBy、CarPlay、Live Activity 上展示私人训练详情。
 - 账户、云端同步、远程业务数据投影或服务端刷新依赖。
+
+## 当前交付状态
+
+本 PRD 的情境化快照依赖 App Groups，免费 Personal Team 无法为主 App 和 Widget Extension 签名。当前由
+PRD 018 暂时恢复静态快速记录与锁屏入口；待拥有支持 App Groups 的 Team 后，按本 PRD 和 ADR 0042 恢复。
 
 ## 验收
 
