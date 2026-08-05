@@ -2,7 +2,10 @@
 
 - 状态：部分已替代
 - 决策阶段：2026-07-28
-- 后续替代：[ADR 0032](0032-optional-remote-agent-execution.md) 增加可选服务器 ReAct 与设备 Tool handoff
+- 后续替代：
+  - [ADR 0032](0032-optional-remote-agent-execution.md) 增加可选服务器 ReAct 与设备 Tool handoff
+  - [ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 修订每步全量工具暴露与串行 tool_calls 默认
+- 后续修订：固定八轮上限改为高级设置可配置（默认 100，见 `ReActAgentPreference`）
 
 ## 背景
 
@@ -11,7 +14,7 @@
 ## 决策
 
 1. 使用 `SwiftOpenAI` 负责 OpenAI-compatible 网络请求与 SSE 解析。
-2. App 负责最多八轮的 ReAct 编排。
+2. App 负责有上限的 ReAct 编排；步数上限由 `ReActAgentPreference` 配置，默认 100（原固定八轮）。
 3. 工具通过 API 的 `tools` 字段注册。
 4. 模型可以自然输出文本，也可以返回 `assistant.tool_calls`。
 5. 本地执行结果使用匹配的 `tool_call_id` 作为 `role: tool` 消息返回。

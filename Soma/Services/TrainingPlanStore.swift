@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -89,6 +90,18 @@ struct TrainingExerciseSummary: Equatable, Identifiable, Sendable {
 
 @MainActor
 enum TrainingPlanStore {
+    /// 计划模板内容指纹，用于 Agent 创建时识别同名同内容重复。
+    static func contentFingerprint(
+        _ prescriptions: [TemplateExercisePrescription]
+    ) -> String {
+        let data = TrainingPlanCoding.encode(
+            prescriptions.sorted { $0.order < $1.order }
+        )
+        return SHA256.hash(data: data).map {
+            String(format: "%02x", $0)
+        }.joined()
+    }
+
     static func createProgram(
         name: String,
         goal: String = "",

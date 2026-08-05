@@ -6,7 +6,9 @@
   - [PRD 004](004-soma-current-product.md) 的训练记录列表与教练回复渲染基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的版本历史、归档与通用肌群图范围
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 的录像失败反馈范围
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 将计划详情的版本历史与
+    统计改为默认折叠展示
 - 上游依据：无
 - 关联决策：[ADR 0044](../adr/0044-programmatic-muscle-map-and-training-share-poster.md)
 

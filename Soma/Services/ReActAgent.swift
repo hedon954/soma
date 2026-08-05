@@ -23,10 +23,16 @@ enum AgentToolName: String, Codable, CaseIterable {
     case deleteTrainingProgram = "delete_training_program"
     case startGuidedWorkout = "start_guided_workout"
     case recordPerformanceAnalysis = "record_performance_analysis"
+    case expandToolGroup = "expand_tool_group"
 
     var isMutation: Bool {
         switch self {
-        case .loadSkill, .queryUserData, .listExerciseNames, .listTrainingPrograms, .getTrainingProgram:
+        case .loadSkill,
+             .queryUserData,
+             .listExerciseNames,
+             .listTrainingPrograms,
+             .getTrainingProgram,
+             .expandToolGroup:
             false
         default:
             true
@@ -56,6 +62,7 @@ enum AgentToolName: String, Codable, CaseIterable {
         case .deleteTrainingProgram: "永久删除训练计划"
         case .startGuidedWorkout: "开始计划带练"
         case .recordPerformanceAnalysis: "保存视频复盘"
+        case .expandToolGroup: "展开工具组"
         }
     }
 }
@@ -104,6 +111,11 @@ struct AgentToolArguments: Codable, Equatable {
     var skillID: String?
     var scope: String?
     var limit: Int?
+    var dateFrom: String?
+    var dateTo: String?
+    var groupBy: String?
+    var metric: String?
+    var toolGroup: String?
 
     var gymName: String?
     var summary: String?
@@ -152,9 +164,13 @@ struct AgentToolArguments: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case scope, limit, summary, equipment, exercise, sets, reps, weight, intensity
-        case feedback, title, calories, protein, carbs, fat, note, waist
+        case feedback, title, calories, protein, carbs, fat, note, waist, metric
         case setEntries = "set_entries"
         case skillID = "skill_id"
+        case dateFrom = "date_from"
+        case dateTo = "date_to"
+        case groupBy = "group_by"
+        case toolGroup = "tool_group"
         case gymName = "gym_name"
         case mediaSource = "media_source"
         case exerciseID = "exercise_id"
@@ -185,6 +201,11 @@ struct AgentToolArguments: Codable, Equatable {
         skillID: String? = nil,
         scope: String? = nil,
         limit: Int? = nil,
+        dateFrom: String? = nil,
+        dateTo: String? = nil,
+        groupBy: String? = nil,
+        metric: String? = nil,
+        toolGroup: String? = nil,
         gymName: String? = nil,
         summary: String? = nil,
         equipment: [AgentEquipmentInput]? = nil,
@@ -230,6 +251,11 @@ struct AgentToolArguments: Codable, Equatable {
         self.skillID = skillID
         self.scope = scope
         self.limit = limit
+        self.dateFrom = dateFrom
+        self.dateTo = dateTo
+        self.groupBy = groupBy
+        self.metric = metric
+        self.toolGroup = toolGroup
         self.gymName = gymName
         self.summary = summary
         self.equipment = equipment
@@ -278,15 +304,163 @@ struct AgentToolCall: Codable, Equatable {
     var name: AgentToolName
     var arguments: AgentToolArguments
 
+    /// ADR 0049：规范化语义键，避免字面 JSON 差异（同义字段、缺省与 null）绕过幂等。
     var signature: String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(self),
-              let value = String(data: data, encoding: .utf8)
+        AgentToolCallSignature.canonical(name: name, arguments: arguments)
+    }
+}
+
+enum AgentToolCallSignature {
+    static func canonical(name: AgentToolName, arguments: AgentToolArguments) -> String {
+        var object: [String: Any] = ["name": name.rawValue]
+        var args: [String: Any] = [:]
+        func put(_ key: String, _ value: String?) {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty {
+                args[key] = trimmed
+            }
+        }
+        func put(_ key: String, _ value: Int?) {
+            if let value {
+                args[key] = value
+            }
+        }
+        func put(_ key: String, _ value: Double?) {
+            if let value {
+                args[key] = (value * 1000).rounded() / 1000
+            }
+        }
+
+        put("skill_id", arguments.skillID)
+        put("scope", arguments.scope)
+        put("limit", arguments.limit)
+        put("date_from", arguments.dateFrom)
+        put("date_to", arguments.dateTo)
+        put("group_by", arguments.groupBy)
+        put("metric", arguments.metric)
+        put("tool_group", arguments.toolGroup)
+        put("gym_name", arguments.gymName)
+        put("summary", arguments.summary)
+        put("media_source", arguments.mediaSource)
+        // exercise / exercise_name 同义，统一到 exercise_name。
+        let exerciseName = nonempty(arguments.exerciseName) ?? nonempty(arguments.exercise)
+        put("exercise_name", exerciseName)
+        put("exercise_id", arguments.exerciseID)
+        put("sets", arguments.sets)
+        put("reps", arguments.reps)
+        put("weight", arguments.weight)
+        put("rest_seconds", arguments.restSeconds)
+        put("duration_minutes", arguments.durationMinutes)
+        put("form_score", arguments.formScore)
+        put("intensity", arguments.intensity)
+        put("feedback", arguments.feedback)
+        put("meal_type", arguments.mealType)
+        put("title", arguments.title)
+        put("calories", arguments.calories)
+        put("protein", arguments.protein)
+        put("carbs", arguments.carbs)
+        put("fat", arguments.fat)
+        put("note", arguments.note)
+        put("body_fat", arguments.bodyFat)
+        put("waist", arguments.waist)
+        put("posture_note", arguments.postureNote)
+        put("safety_note", arguments.safetyNote)
+        put("record_id", arguments.recordID)
+        put("record_type", arguments.recordType)
+        put("program_id", arguments.programID)
+        put("session_id", arguments.sessionID)
+        put("performance_id", arguments.performanceID)
+        put("input_fingerprint", arguments.inputFingerprint)
+        put("evidence", arguments.evidence)
+        put("limitations", arguments.limitations)
+        put("program_name", arguments.programName)
+        put("goal", arguments.goal)
+        put("template_name", arguments.templateName)
+        put("schedule_hint", arguments.scheduleHint)
+        put("auto_recording_policy", arguments.autoRecordingPolicy)
+
+        if let setEntries = arguments.setEntries, !setEntries.isEmpty {
+            // 逐组顺序是事实（ADR 0023），不得排序打散。
+            args["set_entries"] = setEntries.map { entry -> [String: Any] in
+                var item: [String: Any] = [:]
+                if let reps = entry.reps {
+                    item["reps"] = reps
+                }
+                if let weight = entry.externalWeightKG {
+                    item["external_weight_kg"] = (weight * 1000).rounded() / 1000
+                }
+                return item
+            }
+        }
+        if let equipment = arguments.equipment, !equipment.isEmpty {
+            args["equipment"] = equipment
+                .map { item -> [String: Any] in
+                    var row: [String: Any] = [
+                        "name": item.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "category": item.category.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "capabilities": item.capabilities
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    ]
+                    if let confidence = item.confidence {
+                        row["confidence"] = (confidence * 1000).rounded() / 1000
+                    }
+                    return row
+                }
+                .sorted {
+                    ($0["name"] as? String ?? "") < ($1["name"] as? String ?? "")
+                }
+        }
+        if let exercises = arguments.templateExercises, !exercises.isEmpty {
+            args["template_exercises"] = exercises
+                .sorted { $0.order < $1.order }
+                .map { item -> [String: Any] in
+                    var row: [String: Any] = [
+                        "exercise_id": item.exerciseID
+                            .trimmingCharacters(in: .whitespacesAndNewlines),
+                        "order": item.order
+                    ]
+                    if let value = item.targetSets {
+                        row["target_sets"] = value
+                    }
+                    if let value = item.targetReps {
+                        row["target_reps"] = value
+                    }
+                    if let value = item.targetWeightKG {
+                        row["target_weight_kg"] = (value * 1000).rounded() / 1000
+                    }
+                    if let value = item.targetRestSeconds {
+                        row["target_rest_seconds"] = value
+                    }
+                    if let value = item.firstSetIsWarmup {
+                        row["first_set_is_warmup"] = value
+                    }
+                    if let value = nonempty(item.equipmentKind) {
+                        row["equipment_kind"] = value
+                    }
+                    if let value = nonempty(item.notes) {
+                        row["notes"] = value
+                    }
+                    return row
+                }
+        }
+        if !args.isEmpty {
+            object["arguments"] = args
+        }
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(
+                  withJSONObject: object,
+                  options: [.sortedKeys]
+              ),
+              let text = String(data: data, encoding: .utf8)
         else {
             return name.rawValue
         }
-        return value
+        return text
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -322,6 +496,39 @@ struct AgentOutcome: Equatable {
     }
 }
 
+/// ADR 0048：step 边界检查点，供同气泡中断续跑重建压缩上下文。
+struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
+    var lastCompletedStep: Int
+    var assistantPassages: [String]
+    var observations: [AgentCheckpointObservation]
+    var exposedGroups: [String]
+
+    static let empty = AgentLoopCheckpoint(
+        lastCompletedStep: 0,
+        assistantPassages: [],
+        observations: [],
+        exposedGroups: []
+    )
+}
+
+struct AgentCheckpointObservation: Codable, Equatable, Sendable {
+    var step: Int
+    var toolName: String
+    var signature: String
+    var observation: String
+    var ok: Bool
+    var recordTypeRaw: String?
+
+    init(step: Int, action: AgentToolCall, result: AgentToolResult) {
+        self.step = step
+        toolName = action.name.rawValue
+        signature = action.signature
+        observation = result.observation
+        ok = result.ok
+        recordTypeRaw = result.recordType?.rawValue
+    }
+}
+
 struct AgentConversationExchange: Sendable {
     var userText: String
     var assistantText: String?
@@ -348,10 +555,31 @@ struct AgentConversationExchange: Sendable {
     }
 }
 
+/// ReAct 循环步数上限：高级设置可改，默认 100。
+enum ReActAgentPreference {
+    static let maxStepsKey = "agent.react.maxSteps"
+    static let defaultMaxSteps = 100
+    static let minimumMaxSteps = 1
+    static let maximumMaxSteps = 500
+
+    static func maxSteps(defaults: UserDefaults = .standard) -> Int {
+        let stored = defaults.object(forKey: maxStepsKey) as? Int
+        let raw = stored ?? defaultMaxSteps
+        return min(maximumMaxSteps, max(minimumMaxSteps, raw))
+    }
+
+    static func setMaxSteps(_ value: Int, defaults: UserDefaults = .standard) {
+        defaults.set(
+            min(maximumMaxSteps, max(minimumMaxSteps, value)),
+            forKey: maxStepsKey
+        )
+    }
+}
+
 enum ReActAgentError: LocalizedError {
     case invalidToolCall(String)
     case emptyResponse
-    case stepLimit
+    case stepLimit(maxSteps: Int)
 
     var errorDescription: String? {
         switch self {
@@ -359,8 +587,8 @@ enum ReActAgentError: LocalizedError {
             "模型发出了无效工具调用：\(message)"
         case .emptyResponse:
             "模型没有返回文字或工具调用，请重试或切换模型"
-        case .stepLimit:
-            "Agent 在限定步骤内没有完成任务，请简化描述后重试"
+        case let .stepLimit(maxSteps):
+            "Agent 在 \(maxSteps) 步内没有完成任务，请简化描述后重试，或在高级设置中提高步骤上限"
         }
     }
 }
@@ -460,6 +688,8 @@ extension AgentToolName {
             "按 list_training_programs 返回的 program_id 在本机创建一次不可变训练 Session，并立即打开带练。只在用户当前消息明确要求开始、执行或带练该计划时调用；未提供录像偏好时保持关闭。"
         case .recordPerformanceAnalysis:
             "把用户主动请求的视频复盘保存到指定 Performance。只记录画面可见证据、明确局限和一般训练建议；不得诊断伤病或修改训练事实。"
+        case .expandToolGroup:
+            "展开当前未暴露的工具组。可选 plans、gym、review。仅在当前工具不足时调用一次。"
         }
     }
 
@@ -477,14 +707,31 @@ extension AgentToolName {
                     values: [
                         "overview", "profile", "workouts", "meals", "body",
                         "gyms", "exercises", "exercise_history", "programs",
-                        "templates", "sessions"
+                        "templates", "sessions", "aggregate"
                     ]
                 ),
                 "exercise_id": string("查询指定动作历史时使用的动作 UUID"),
                 "program_id": string("查询指定计划模板时使用的计划 UUID"),
                 "session_id": string("查询指定计划训练时使用的 Session UUID"),
+                "date_from": string("ISO8601 或 yyyy-MM-dd 起始日期（含）"),
+                "date_to": string("ISO8601 或 yyyy-MM-dd 结束日期（含）"),
+                "group_by": string(
+                    "聚合分组",
+                    values: ["day", "week", "muscle_group", "exercise"]
+                ),
+                "metric": string(
+                    "聚合指标",
+                    values: ["sets", "volume", "calories", "frequency"]
+                ),
                 "limit": integer("最多返回多少条，1 到 20")
             ], required: ["scope"])
+        case .expandToolGroup:
+            object([
+                "tool_group": string(
+                    "要展开的工具组",
+                    values: AgentToolGroup.expandableCases.map(\.rawValue)
+                )
+            ], required: ["tool_group"])
         case .listTrainingPrograms:
             object([:])
         case .getTrainingProgram:

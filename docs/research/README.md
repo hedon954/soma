@@ -12,6 +12,7 @@
 | [带练录像策略、语音节奏、完成反馈与历史管理](2026-08-04-guided-workout-recording-cues-and-review.md) | 已转化 | PRD 014、ADR 0039、BUG 0010 |
 | [持久 Agent Job、事件流与 Live Activities](2026-07-31-durable-agent-jobs-live-activities.md) | 已转化 | PRD 011、ADR 0031—0027、Agent Job 协议 |
 | [私人健身教练的情境化主屏组件](2026-08-04-contextual-private-coach-widgets.md) | 已转化 | PRD 017、ADR 0042 |
+| [全界面 GUI 精简与渐进披露审计](2026-08-05-ui-simplification-review.md) | 已转化 | PRD 020 |
 
 ## 生命周期规则
 

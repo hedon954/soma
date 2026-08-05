@@ -1,7 +1,8 @@
 # ADR 0004：Skills 渐进披露，Tool 协议固定
 
-- 状态：已采纳
+- 状态：部分已替代
 - 决策阶段：2026-07-28 至 2026-07-29
+- 后续替代：[ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 修订运行时工具暴露策略（Tool 契约本身仍固定）
 
 ## 背景
 

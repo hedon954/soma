@@ -5,8 +5,22 @@ enum AppTheme {
     static let tint = Color(red: 0.12, green: 0.70, blue: 0.37)
     static let softTint = Color(red: 0.12, green: 0.70, blue: 0.37).opacity(0.12)
     static let warning = Color.orange
+
+    // MARK: - 圆角 token（PRD 020）
+
+    /// 卡片、画廊大图与浮层容器。
     static let cardRadius: CGFloat = 18
+    /// 行内缩略图、小控件与胶囊以外的次级容器。
+    static let controlRadius: CGFloat = 12
+
     static let pagePadding: CGFloat = 16
+
+    // MARK: - 列表密度规范（PRD 020）
+
+    /// 列表行缩略图统一尺寸；副文案一行截断，行上下 padding 用
+    /// `listRowVerticalPadding`。低频操作统一收进工具栏 `ellipsis.circle` 菜单。
+    static let listThumbnailSize = CGSize(width: 48, height: 54)
+    static let listRowVerticalPadding: CGFloat = 4
 }
 
 struct AppCard<Content: View>: View {

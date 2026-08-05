@@ -30,16 +30,13 @@ struct FootprintsView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    LazyVStack(spacing: 12) {
                         ForEach(footprints) { message in
                             footprintDestination(for: message)
-                            if message.id != footprints.last?.id {
-                                Divider()
-                                    .padding(.leading, 54)
-                            }
                         }
                     }
                     .padding(.horizontal, 16)
+                    .padding(.top, 4)
                     .padding(.bottom, 40)
                 }
             }
@@ -121,61 +118,155 @@ extension Notification.Name {
     )
 }
 
+/// 朋友圈式 feed 卡片：头像 + 昵称在左上，正文、九宫格媒体、
+/// 位置与时间沿内容列对齐。
 private struct FootprintRow: View {
     let message: CoachMessage
     let resultLabel: String?
+    @State private var isTextExpanded = false
+
+    private static let collapsedLineLimit = 5
+    /// Heuristic for "long" content that deserves a collapse affordance.
+    private var isLongText: Bool {
+        let text = message.text
+        return text.count > 160
+            || text.filter { $0 == "\n" }.count >= Self.collapsedLineLimit
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.softTint)
-                Image(systemName: "person.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.tint)
-            }
-            .frame(width: 42, height: 42)
+        AppCard {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(AppTheme.softTint)
+                    Image(systemName: "person.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.tint)
+                }
+                .frame(width: 40, height: 40)
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("我")
-                        .font(.headline)
-                    Spacer()
-                    Text(message.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.tint)
 
-                if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(message.text)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
+                    if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(message.text)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineSpacing(3)
+                            .lineLimit(isTextExpanded ? nil : Self.collapsedLineLimit)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                        if isLongText {
+                            Button(isTextExpanded ? "收起" : "全文") {
+                                withAnimation(.snappy) {
+                                    isTextExpanded.toggle()
+                                }
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(AppTheme.tint)
+                        }
+                    }
 
-                if !message.mediaAttachments.isEmpty {
-                    StoredMediaStrip(attachments: message.mediaAttachments)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                    if !message.mediaAttachments.isEmpty {
+                        FootprintMediaGrid(attachments: message.mediaAttachments)
+                    }
 
-                HStack(spacing: 10) {
                     if let location = message.location {
                         Label(location.displayName, systemImage: "location.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppTheme.tint)
                             .lineLimit(1)
                     }
-                    if let resultLabel {
-                        Label(resultLabel, systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(AppTheme.tint)
+
+                    HStack(spacing: 10) {
+                        Text(relativeDateText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if let resultLabel {
+                            Label(resultLabel, systemImage: "checkmark.circle.fill")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppTheme.tint)
+                        }
                     }
                 }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 16)
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
+    }
+
+    private var relativeDateText: String {
+        if Calendar.current.isDateInToday(message.date) {
+            return message.date.formatted(date: .omitted, time: .shortened)
+        }
+        if Calendar.current.isDateInYesterday(message.date) {
+            return "昨天 " + message.date.formatted(date: .omitted, time: .shortened)
+        }
+        return message.date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+/// 朋友圈式媒体宫格：单图放大、双图/四图两列、其余三列方格。
+private struct FootprintMediaGrid: View {
+    let attachments: [MediaAttachmentReference]
+
+    @State private var presentedAttachment: MediaAttachmentReference?
+
+    private var columnCount: Int {
+        switch attachments.count {
+        case 1: 1
+        case 2, 4: 2
+        default: 3
+        }
+    }
+
+    private var tileSize: CGFloat {
+        attachments.count == 1 ? 184 : 88
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.fixed(tileSize), spacing: 5),
+                count: columnCount
+            ),
+            alignment: .leading,
+            spacing: 5
+        ) {
+            ForEach(attachments) { attachment in
+                Button {
+                    presentedAttachment = attachment
+                } label: {
+                    tile(attachment)
+                        .frame(width: tileSize, height: tileSize)
+                        .clipShape(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    attachment.kind == .video ? "播放视频" : "查看照片"
+                )
+            }
+        }
+        .fullScreenCover(item: $presentedAttachment) { attachment in
+            MediaViewer(
+                attachments: attachments,
+                initialAttachmentID: attachment.id
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func tile(_ attachment: MediaAttachmentReference) -> some View {
+        if attachment.kind == .video {
+            VideoPosterView(path: attachment.path)
+        } else {
+            LocalImageView(path: attachment.path)
+        }
     }
 }

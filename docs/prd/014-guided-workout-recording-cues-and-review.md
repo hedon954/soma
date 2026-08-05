@@ -7,6 +7,7 @@
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的每动作单段自动录像范围
   - [PRD 013](013-guided-workout-experience-and-capture.md) 的开始前校准、紧凑取景和完成反馈
 - 后续修订：
+  - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 收敛带练执行同屏控件密度与准备页选项呈现
   - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 将录像失败反馈统一为
     含原因的 toast 提示与可解释的按钮禁用
 - 上游依据：

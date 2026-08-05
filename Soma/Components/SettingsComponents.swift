@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsRoute: Hashable {
-    case aiService
+    case llm
 }
 
 struct AIConfigurationReminder: View {
@@ -11,7 +11,7 @@ struct AIConfigurationReminder: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("请先配置标准模型的 API Key")
                         .font(.headline)
-                    Text("配置完成后返回教练即可继续发送；刚才的草稿和附件仍会保留。")
+                    Text("配置完成后，刚才暂存的消息会按发送顺序自动继续处理。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

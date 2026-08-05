@@ -1,12 +1,14 @@
 # ADR 0031：Agent 使用持久 Job、语义 Event Log 与独立投影
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0005](0005-trace-span-event-observability.md) 的进程内 Event 作为唯一事件来源
   - [ADR 0008](0008-app-scoped-conversation-processing.md) 的单一内存在途 Task
-- 后续替代：[ADR 0037](0037-backend-transparent-streaming-and-notification-wake.md) 分离体验 Event 与 Job 内部状态，并统一 Local/Remote 实时投影
+- 后续替代：
+  - [ADR 0037](0037-backend-transparent-streaming-and-notification-wake.md) 分离体验 Event 与 Job 内部状态，并统一 Local/Remote 实时投影
+  - [ADR 0048](0048-loop-checkpoint-and-same-bubble-resume.md) 修订本地路径中断后从 step 检查点同气泡续跑
 - 上游依据：
   - [持久 Agent Job、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)
   - [BUG 0004](../bugs/0004-agent-background-stream-interruption.md)

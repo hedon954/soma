@@ -8,6 +8,8 @@
 - 后续修订：
   - [PRD 013](013-guided-workout-experience-and-capture.md) 增加动作图、折叠处方和显式最近值复用
   - [PRD 016](016-training-primary-tab.md) 将计划入口从进展迁移到一级训练 Tab
+  - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 将处方编辑改为组数/次数优先的
+    渐进披露
 - 上游依据：用户提出训练计划在动作选择和组合场景下更适合 GUI
 - 下游落地：[ADR 0036](../adr/0036-gui-training-program-authoring.md)
 

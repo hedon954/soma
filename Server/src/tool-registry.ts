@@ -66,6 +66,12 @@ const definitions: DeviceToolDefinition[] = [
     parameters: parameters({ skill_id: stringValue }, ["skill_id"]),
   },
   {
+    name: "expand_tool_group",
+    schemaVersion: 1,
+    mutation: false,
+    parameters: parameters({ tool_group: stringValue }, ["tool_group"]),
+  },
+  {
     name: "query_user_data",
     schemaVersion: 1,
     mutation: false,
@@ -76,6 +82,10 @@ const definitions: DeviceToolDefinition[] = [
         program_id: stringValue,
         session_id: stringValue,
         limit: integerValue,
+        date_from: stringValue,
+        date_to: stringValue,
+        group_by: stringValue,
+        metric: stringValue,
       },
       ["scope"],
     ),

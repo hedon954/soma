@@ -176,8 +176,9 @@ final class AgentJobTests: XCTestCase {
             includeLocation: false,
             locationService: LocationContextService()
         ))
-        XCTAssertFalse(processor.submit(
-            text: "重复发送",
+        // ADR 0045：已有任务在途时继续发送只是排队，不再被拒绝。
+        XCTAssertTrue(processor.submit(
+            text: "继续记录下一组",
             attachments: [],
             context: ConversationProcessingContext(
                 structuredContext: "测试上下文",
@@ -191,23 +192,25 @@ final class AgentJobTests: XCTestCase {
             includeLocation: false,
             locationService: LocationContextService()
         ))
-        XCTAssertEqual(
-            try context.fetch(FetchDescriptor<AgentJob>()).count,
-            1
-        )
         lease.expire()
 
         for _ in 0 ..< 100 where processor.isProcessing {
             try await Task.sleep(for: .milliseconds(20))
         }
 
-        let job = try XCTUnwrap(context.fetch(FetchDescriptor<AgentJob>()).first)
+        let jobs = try context.fetch(
+            FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
+        )
+        XCTAssertEqual(jobs.count, 2)
+        let job = try XCTUnwrap(jobs.first)
         XCTAssertEqual(job.state, .waitingForForeground)
         XCTAssertFalse(job.state.isTerminal)
         XCTAssertTrue(
             AgentJobStore.events(for: job.id, in: context)
                 .contains { $0.kind == .waitingForForeground }
         )
+        // 排在后面的消息保持可运行，不因为前一条被挂起而丢失。
+        XCTAssertEqual(jobs.last?.state, .queued)
     }
 
     @MainActor

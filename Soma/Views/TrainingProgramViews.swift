@@ -42,19 +42,11 @@ struct TrainingProgramLibraryView: View {
 
             Section("我的计划") {
                 if activePrograms.isEmpty {
-                    VStack(spacing: 14) {
-                        ContentUnavailableView(
-                            "还没有训练计划",
-                            systemImage: "list.bullet.clipboard",
-                            description: Text("可以自己选择动作组合，也可以在教练中描述目标，让 Soma 帮你生成。")
-                        )
-                        Button {
-                            showsCreation = true
-                        } label: {
-                            Label("新建训练计划", systemImage: "plus")
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
+                    ContentUnavailableView(
+                        "还没有训练计划",
+                        systemImage: "list.bullet.clipboard",
+                        description: Text("点右上角＋选择动作组合，或在教练中描述目标让 Soma 帮你生成。")
+                    )
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                 } else {
@@ -197,8 +189,10 @@ private struct TrainingProgramDetailView: View {
     @State private var errorMessage: String?
     @State private var isOptimizing = false
     @State private var confirmsDelete = false
-    @AppStorage("workout.voiceCuesEnabled")
-    private var voiceCuesEnabled = true
+    @State private var statsExpanded = false
+    @State private var versionsExpanded = false
+    @State private var adviceExpanded = false
+    @State private var recordingOptionsExpanded = false
 
     private var versions: [WorkoutTemplateVersion] {
         allVersions.filter { $0.programID == program.id }
@@ -274,43 +268,47 @@ private struct TrainingProgramDetailView: View {
         }
     }
 
+    /// PRD 020：统计默认折叠，首屏聚焦动作列表与开始训练。
+    @ViewBuilder
     private var programStatsSection: some View {
-        Section("训练统计") {
-            if programSessions.isEmpty {
-                Text("还没有用该计划训练过。完成一次带练后，这里会显示容量趋势。")
-                    .foregroundStyle(.secondary)
-            } else {
-                LabeledContent("完成次数", value: "\(programSessions.count) 次")
-                if let latest = programSessions.first {
-                    LabeledContent(
-                        "最近一次",
-                        value: latest.startedAt.formatted(
-                            date: .abbreviated,
-                            time: .shortened
-                        )
-                    )
-                }
-                if recentVolumePoints.contains(where: { $0.volume > 0 }) {
-                    Chart(recentVolumePoints, id: \.id) { point in
-                        BarMark(
-                            x: .value("日期", point.date),
-                            y: .value("有效容量", point.volume)
-                        )
-                        .foregroundStyle(AppTheme.tint.gradient)
-                    }
-                    .frame(height: 160)
-                    .accessibilityLabel("该计划近几次训练的有效容量趋势")
-                }
-                ForEach(programSessions.prefix(5)) { session in
-                    NavigationLink {
-                        WorkoutSessionReviewView(session: session)
-                    } label: {
-                        WorkoutSessionHistoryRow(
-                            session: session,
-                            preferredProgramName: program.name
+        if !programSessions.isEmpty {
+            Section {
+                DisclosureGroup(isExpanded: $statsExpanded) {
+                    LabeledContent("完成次数", value: "\(programSessions.count) 次")
+                    if let latest = programSessions.first {
+                        LabeledContent(
+                            "最近一次",
+                            value: latest.startedAt.formatted(
+                                date: .abbreviated,
+                                time: .shortened
+                            )
                         )
                     }
+                    if recentVolumePoints.contains(where: { $0.volume > 0 }) {
+                        Chart(recentVolumePoints, id: \.id) { point in
+                            BarMark(
+                                x: .value("日期", point.date),
+                                y: .value("有效容量", point.volume)
+                            )
+                            .foregroundStyle(AppTheme.tint.gradient)
+                        }
+                        .frame(height: 160)
+                        .accessibilityLabel("该计划近几次训练的有效容量趋势")
+                    }
+                    ForEach(programSessions.prefix(5)) { session in
+                        NavigationLink {
+                            WorkoutSessionReviewView(session: session)
+                        } label: {
+                            WorkoutSessionHistoryRow(
+                                session: session,
+                                preferredProgramName: program.name
+                            )
+                        }
+                    }
+                } label: {
+                    Text("训练统计")
                 }
+                .accessibilityLabel("训练统计，共 \(programSessions.count) 次")
             }
         }
     }
@@ -333,138 +331,141 @@ private struct TrainingProgramDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(prescriptions.sorted(by: { $0.order < $1.order })) { item in
-                    HStack(spacing: 12) {
-                        ExerciseArtworkView(
-                            reference: definition(for: item.exerciseID)?
-                                .preferredActionIllustration
-                                ?? BundledExerciseCatalog.fallbackActionIllustration
-                        )
-                        .frame(width: 68, height: 68)
-                        .clipShape(RoundedRectangle(cornerRadius: 15))
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("\(item.order). \(item.exerciseName)")
-                                .font(.headline)
-                            Text(prescriptionSummary(item))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
+                    prescriptionRow(item)
                 }
             }
+
+            planOverviewSection
 
             programStatsSection
 
             if !versions.isEmpty {
-                Section("版本历史") {
-                    ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
-                        let previous = versions.dropFirst(index + 1).first
-                        let changeLog = TrainingPlanStore.resolvedChangeLog(
-                            for: version,
-                            previous: previous,
-                            in: modelContext
-                        )
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text("v\(version.version) · \(version.name)")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer(minLength: 8)
-                                Text(version.createdAt.formatted(
-                                    date: .abbreviated,
-                                    time: .omitted
-                                ))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                Section {
+                    DisclosureGroup(isExpanded: $versionsExpanded) {
+                        ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
+                            let previous = versions.dropFirst(index + 1).first
+                            let changeLog = TrainingPlanStore.resolvedChangeLog(
+                                for: version,
+                                previous: previous,
+                                in: modelContext
+                            )
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text("v\(version.version) · \(version.name)")
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer(minLength: 8)
+                                    Text(version.createdAt.formatted(
+                                        date: .abbreviated,
+                                        time: .omitted
+                                    ))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                }
+                                Text(changeDescription(for: changeLog))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
                             }
-                            Text(changeDescription(for: changeLog))
+                            .padding(.vertical, 2)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(
+                                "v\(version.version) \(version.name)，\(changeDescription(for: changeLog))"
+                            )
+                        }
+                    } label: {
+                        Text("版本历史")
+                    }
+                    .accessibilityLabel("版本历史，共 \(versions.count) 个版本")
+                }
+            }
+
+            if isOptimizing || currentRecommendation != nil {
+                Section {
+                    DisclosureGroup(isExpanded: $adviceExpanded) {
+                        if let currentRecommendation {
+                            Text(currentRecommendation.advice)
+                                .textSelection(.enabled)
+                            Text("生成于 \(currentRecommendation.createdAt.formatted(date: .abbreviated, time: .shortened))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                        }
-                        .padding(.vertical, 2)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(
-                            "v\(version.version) \(version.name)，\(changeDescription(for: changeLog))"
-                        )
-                    }
-                }
-            }
-
-            Section("训练建议") {
-                if let currentRecommendation {
-                    Text(currentRecommendation.advice)
-                        .textSelection(.enabled)
-                    Text("生成于 \(currentRecommendation.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("只有你主动点击后，Soma 才会根据当前计划和已有训练历史生成建议。")
-                        .foregroundStyle(.secondary)
-                }
-                Button {
-                    optimize()
-                } label: {
-                    if isOptimizing {
-                        ProgressView()
-                    } else {
-                        Label(
-                            currentRecommendation == nil
-                                ? "优化本次训练"
-                                : "当前建议已缓存",
-                            systemImage: "sparkles"
-                        )
-                    }
-                }
-                .disabled(
-                    isOptimizing
-                        || prescriptions.isEmpty
-                        || currentRecommendation != nil
-                )
-            }
-
-            Section {
-                if program.status == .active {
-                    Button {
-                        showsEditor = true
-                    } label: {
-                        Label("编辑并创建新版本", systemImage: "slider.horizontal.3")
-                    }
-
-                    Button("归档计划", role: .destructive) {
-                        do {
-                            try TrainingPlanStore.archive(
-                                program,
-                                in: modelContext
-                            )
-                        } catch {
-                            errorMessage = error.localizedDescription
-                        }
-                    }
-                } else if program.status == .archived {
-                    Button {
-                        do {
-                            try TrainingPlanStore.unarchive(
-                                program,
-                                in: modelContext
-                            )
-                        } catch {
-                            errorMessage = error.localizedDescription
+                        } else {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("正在生成建议…")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     } label: {
-                        Label("恢复计划", systemImage: "arrow.uturn.backward")
+                        Label("训练建议", systemImage: "sparkles")
                     }
                 }
-
-                Button("删除计划", role: .destructive) {
-                    confirmsDelete = true
-                }
-            } footer: {
-                Text("删除计划会移除模板版本，但已完成的训练历史会保留。")
             }
         }
         .navigationTitle(program.name)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    if program.status == .active {
+                        Button {
+                            showsEditor = true
+                        } label: {
+                            Label("编辑并创建新版本", systemImage: "slider.horizontal.3")
+                        }
+
+                        Button {
+                            adviceExpanded = true
+                            optimize()
+                        } label: {
+                            Label(
+                                currentRecommendation == nil
+                                    ? "优化本次训练"
+                                    : "当前建议已缓存",
+                                systemImage: "sparkles"
+                            )
+                        }
+                        .disabled(
+                            isOptimizing
+                                || prescriptions.isEmpty
+                                || currentRecommendation != nil
+                        )
+
+                        Divider()
+
+                        Button("归档计划", role: .destructive) {
+                            do {
+                                try TrainingPlanStore.archive(
+                                    program,
+                                    in: modelContext
+                                )
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    } else if program.status == .archived {
+                        Button {
+                            do {
+                                try TrainingPlanStore.unarchive(
+                                    program,
+                                    in: modelContext
+                                )
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        } label: {
+                            Label("恢复计划", systemImage: "arrow.uturn.backward")
+                        }
+                    }
+
+                    Button("删除计划", role: .destructive) {
+                        confirmsDelete = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("计划管理")
+            }
+        }
         .confirmationDialog(
             "删除训练计划？",
             isPresented: $confirmsDelete,
@@ -514,15 +515,28 @@ private struct TrainingProgramDetailView: View {
         .sheet(isPresented: $showsStart) {
             NavigationStack {
                 Form {
+                    // PRD 020：录像选项默认折叠且默认关闭；语音提示改为设置项。
                     Section {
-                        Toggle("语音提示", isOn: $voiceCuesEnabled)
-                        Picker("自动录像", selection: $autoRecordingPolicy) {
-                            Text("关闭").tag(AutoRecordingPolicy.disabled)
-                            Text("每个动作录一组").tag(AutoRecordingPolicy.enabled)
-                            Text("每一组都录").tag(AutoRecordingPolicy.everySet)
+                        DisclosureGroup(isExpanded: $recordingOptionsExpanded) {
+                            Picker("自动录像", selection: $autoRecordingPolicy) {
+                                Text("关闭").tag(AutoRecordingPolicy.disabled)
+                                Text("每个动作录一组").tag(AutoRecordingPolicy.enabled)
+                                Text("每一组都录").tag(AutoRecordingPolicy.everySet)
+                            }
+                        } label: {
+                            LabeledContent(
+                                "录像",
+                                value: autoRecordingPolicy == .disabled
+                                    ? "关闭"
+                                    : (autoRecordingPolicy == .enabled
+                                        ? "每个动作录一组"
+                                        : "每一组都录")
+                            )
                         }
                     } footer: {
-                        Text("只在实际开始录像时调用相机。单组模式在首组为热身时录第 2 组，否则录第 1 组；训练中也可随时手动录制当前组。")
+                        if recordingOptionsExpanded {
+                            Text("只在实际开始录像时调用相机。单组模式在首组为热身时录第 2 组，否则录第 1 组；训练中也可随时手动录制当前组。")
+                        }
                     }
                     if !readiness.isEmpty {
                         Section("开始前检查") {
@@ -614,7 +628,7 @@ private struct TrainingProgramDetailView: View {
 
     private func optimize() {
         guard ai.hasRequiredAPIKey else {
-            errorMessage = "请先在设置中配置本机 AI 服务；个人 API Key 不会上传到 Soma 后台。"
+            errorMessage = "请先在设置的「LLM 配置」中完成配置；个人 API Key 不会上传到 Soma 后台。"
             return
         }
         isOptimizing = true
@@ -629,6 +643,85 @@ private struct TrainingProgramDetailView: View {
                 )
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// 计划内动作行：有动作库定义时可点击进入动作详情。
+    @ViewBuilder
+    private func prescriptionRow(
+        _ item: TemplateExercisePrescription
+    ) -> some View {
+        if let definition = definition(for: item.exerciseID) {
+            NavigationLink {
+                ExerciseDetailView(exercise: definition)
+            } label: {
+                prescriptionLabel(item)
+            }
+        } else {
+            prescriptionLabel(item)
+        }
+    }
+
+    private func prescriptionLabel(
+        _ item: TemplateExercisePrescription
+    ) -> some View {
+        HStack(spacing: 12) {
+            ExerciseArtworkView(
+                reference: definition(for: item.exerciseID)?
+                    .preferredActionIllustration
+                    ?? BundledExerciseCatalog.fallbackActionIllustration
+            )
+            .frame(width: 68, height: 68)
+            .clipShape(RoundedRectangle(cornerRadius: 15))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("\(item.order). \(item.exerciseName)")
+                    .font(.headline)
+                Text(prescriptionSummary(item))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// 训练效果总览：聚合当前模板全部动作的刺激肌群，确定性生成。
+    private var planOverview: TrainingPlanOverview.Summary {
+        TrainingPlanOverview.summarize(
+            prescriptions.map { item in
+                let definition = definition(for: item.exerciseID)
+                return TrainingPlanOverview.ExerciseInput(
+                    primaryMuscles: definition?.primaryMuscles ?? [],
+                    secondaryMuscles: definition?.secondaryMuscles ?? [],
+                    targetSets: item.targetSets
+                )
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var planOverviewSection: some View {
+        if !prescriptions.isEmpty {
+            let overview = planOverview
+            Section {
+                if !overview.intensities.isEmpty {
+                    MuscleMapView(
+                        intensities: overview.intensities,
+                        showsBothSides: true,
+                        height: 210,
+                        allowsExpansion: true
+                    )
+                }
+                Text(overview.overviewText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("训练效果总览")
+            } footer: {
+                if !overview.intensities.isEmpty {
+                    Text("按各动作的主要/辅助肌群与目标组数确定性聚合，不是个人受力测量。")
+                }
             }
         }
     }
@@ -746,16 +839,6 @@ private struct WorkoutSessionReviewView: View {
                     Label("本次训练提前结束，未确认组没有计为完成。", systemImage: "exclamationmark.circle")
                         .foregroundStyle(.secondary)
                 }
-                Button("在教练中继续总结", systemImage: "bubble.left.and.text.bubble.right") {
-                    let date = session.startedAt.formatted(
-                        date: .abbreviated,
-                        time: .shortened
-                    )
-                    NotificationCenter.default.post(
-                        name: .prefillCoachDraft,
-                        object: "请总结 \(date) 开始的这次计划训练。请先查询 sessions，只做总结和建议，不要新增或修改训练记录。"
-                    )
-                }
             }
             Section("动作") {
                 ForEach(performances) { performance in
@@ -808,6 +891,23 @@ private struct WorkoutSessionReviewView: View {
                 }
                 .accessibilityLabel("分享本次训练")
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("在教练中继续总结", systemImage: "bubble.left.and.text.bubble.right") {
+                        let date = session.startedAt.formatted(
+                            date: .abbreviated,
+                            time: .shortened
+                        )
+                        NotificationCenter.default.post(
+                            name: .prefillCoachDraft,
+                            object: "请总结 \(date) 开始的这次计划训练。请先查询 sessions，只做总结和建议，不要新增或修改训练记录。"
+                        )
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("更多操作")
+            }
         }
         .sheet(item: $shareModel) { model in
             WorkoutShareSheet(model: model)
@@ -831,6 +931,7 @@ struct PerformanceReviewView: View {
     @State private var evidence = ""
     @State private var limitations = ""
     @State private var feedback = ""
+    @State private var isEditingAnalysis = false
     @State private var isAnalyzing = false
     @State private var showsVideoPicker = false
     @State private var presentedVideo: MediaAttachmentReference?
@@ -899,47 +1000,71 @@ struct PerformanceReviewView: View {
                 }
             }
 
-            Section("AI 视频复盘") {
-                Text("只有点击下方按钮后，Soma 才会创建一条可恢复的教练任务，并发送所选视频或关键帧、动作身份和已确认组数值。分析必须经固定 Tool 保存，不会重复记录训练。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Button {
-                    analyze()
-                } label: {
-                    if isAnalyzing {
-                        ProgressView()
-                    } else {
-                        Label(
-                            analysis == nil ? "分析这段视频" : "当前视频已分析",
-                            systemImage: "sparkles"
-                        )
+            // PRD 020：AI 复盘入口只在存在可分析视频时出现，说明下沉为 footer。
+            if performance.activeVideoPath != nil, analysis == nil {
+                Section {
+                    Button {
+                        analyze()
+                    } label: {
+                        if isAnalyzing {
+                            ProgressView()
+                        } else {
+                            Label("分析这段视频", systemImage: "sparkles")
+                        }
                     }
+                    .disabled(isAnalyzing)
+                } header: {
+                    Text("AI 视频复盘")
+                } footer: {
+                    Text("点击后 Soma 会创建一条可恢复的教练任务，发送所选视频或关键帧、动作身份和已确认组数值；分析经固定 Tool 保存，不会重复记录训练。")
                 }
-                .disabled(
-                    performance.activeVideoPath == nil
-                        || isAnalyzing
-                        || analysis != nil
-                )
             }
 
             if analysis != nil {
-                Section("可见证据") {
-                    TextEditor(text: $evidence)
-                        .frame(minHeight: 90)
-                }
-                Section("分析局限") {
-                    TextEditor(text: $limitations)
-                        .frame(minHeight: 80)
-                }
-                Section("一般训练建议") {
-                    TextEditor(text: $feedback)
-                        .frame(minHeight: 110)
-                    Text("若出现疼痛、眩晕或明显不适，请停止训练并寻求专业帮助；本复盘不构成医疗诊断。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("保存编辑", action: saveAnalysis)
-                    Button("删除分析", role: .destructive) {
-                        deleteAnalysis()
+                if isEditingAnalysis {
+                    Section("可见证据") {
+                        TextEditor(text: $evidence)
+                            .frame(minHeight: 90)
+                    }
+                    Section("分析局限") {
+                        TextEditor(text: $limitations)
+                            .frame(minHeight: 80)
+                    }
+                    Section("一般训练建议") {
+                        TextEditor(text: $feedback)
+                            .frame(minHeight: 110)
+                        Button("保存编辑") {
+                            saveAnalysis()
+                            isEditingAnalysis = false
+                        }
+                        Button("删除分析", role: .destructive) {
+                            deleteAnalysis()
+                            isEditingAnalysis = false
+                        }
+                    }
+                } else {
+                    // PRD 020：复盘内容默认只读，显式进入编辑后才出现编辑器。
+                    Section("可见证据") {
+                        Text(evidence.isEmpty ? "未记录" : evidence)
+                            .foregroundStyle(evidence.isEmpty ? .secondary : .primary)
+                            .textSelection(.enabled)
+                    }
+                    Section("分析局限") {
+                        Text(limitations.isEmpty ? "未记录" : limitations)
+                            .foregroundStyle(limitations.isEmpty ? .secondary : .primary)
+                            .textSelection(.enabled)
+                    }
+                    Section {
+                        Text(feedback.isEmpty ? "未记录" : feedback)
+                            .foregroundStyle(feedback.isEmpty ? .secondary : .primary)
+                            .textSelection(.enabled)
+                        Button("编辑复盘内容") {
+                            isEditingAnalysis = true
+                        }
+                    } header: {
+                        Text("一般训练建议")
+                    } footer: {
+                        Text("若出现疼痛、眩晕或明显不适，请停止训练并寻求专业帮助；本复盘不构成医疗诊断。")
                     }
                 }
             }
@@ -1018,10 +1143,9 @@ struct PerformanceReviewView: View {
                 includeLocation: false,
                 locationService: locationContext
             )
+            // ADR 0045：落盘成功即接受，模型不可用只会让任务进入暂存。
             guard accepted else {
-                errorMessage = processor.isProcessing
-                    ? "已有教练任务正在执行，请完成后再试。"
-                    : "请先配置 AI 服务，或开启后台持续处理。"
+                errorMessage = "无法保存本次复盘任务，请稍后重试。"
                 return
             }
             isAnalyzing = true

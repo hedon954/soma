@@ -85,6 +85,8 @@ enum ConversationRecorder {
         switch call.name {
         case .loadSkill:
             .failure("load_skill 应由 Agent 运行时处理。")
+        case .expandToolGroup:
+            .failure("expand_tool_group 应由 Agent 运行时处理。")
         case .queryUserData:
             queryUserData(
                 call.arguments,
@@ -176,6 +178,27 @@ enum ConversationRecorder {
             )
         case .switchGym:
             switchGym(call.arguments, in: context)
+        case .createTrainingProgram,
+             .createWorkoutTemplateVersion,
+             .updateWorkoutTemplate,
+             .archiveTrainingProgram,
+             .deleteTrainingProgram,
+             .startGuidedWorkout,
+             .recordPerformanceAnalysis:
+            executeTrainingDomainTool(
+                call,
+                sourceTurnID: sourceTurnID,
+                in: context
+            )
+        }
+    }
+
+    private static func executeTrainingDomainTool(
+        _ call: AgentToolCall,
+        sourceTurnID: UUID?,
+        in context: ModelContext
+    ) -> AgentToolResult {
+        switch call.name {
         case .createTrainingProgram:
             createTrainingProgram(call.arguments, in: context)
         case .createWorkoutTemplateVersion, .updateWorkoutTemplate:
@@ -192,6 +215,8 @@ enum ConversationRecorder {
                 sourceTurnID: sourceTurnID,
                 in: context
             )
+        default:
+            .failure("训练域工具路由异常：\(call.name.rawValue)")
         }
     }
 
@@ -212,6 +237,12 @@ enum ConversationRecorder {
         let limit = min(max(arguments.limit ?? 5, 1), 20)
 
         switch scope {
+        case "aggregate":
+            return AgentUserDataAggregator.aggregate(
+                arguments: arguments,
+                in: context
+            )
+
         case "overview":
             let gyms = fetchGyms(in: context)
             let equipment = fetchEquipment(in: context)
@@ -487,6 +518,27 @@ enum ConversationRecorder {
             for: input,
             entries: fetchWorkouts(in: context)
         )
+        if existing == nil,
+           !input.isCorrection,
+           let duplicate = AgentBusinessKeyDeduper.matchingWorkout(
+               exerciseID: definition.id,
+               date: sourceDate,
+               setEntries: setEntries,
+               sets: arguments.sets,
+               reps: arguments.reps,
+               weight: arguments.weight,
+               excludingTurnID: sourceTurnID,
+               in: context
+           )
+        {
+            return .success(
+                AgentBusinessKeyDeduper.suspectedDuplicateMessage(
+                    kind: "训练",
+                    recordID: duplicate.id
+                ),
+                recordType: .workout
+            )
+        }
         if let existing {
             RecordMergePolicy.mergeWorkout(
                 existing,
@@ -613,6 +665,24 @@ enum ConversationRecorder {
             for: input,
             entries: fetchMeals(in: context)
         )
+        if existing == nil,
+           !input.isCorrection,
+           let duplicate = AgentBusinessKeyDeduper.matchingMeal(
+               title: title,
+               calories: calories,
+               date: sourceDate,
+               excludingTurnID: sourceTurnID,
+               in: context
+           )
+        {
+            return .success(
+                AgentBusinessKeyDeduper.suspectedDuplicateMessage(
+                    kind: "饮食",
+                    recordID: duplicate.id
+                ),
+                recordType: .meal
+            )
+        }
         if let existing {
             RecordMergePolicy.mergeMeal(existing, input: input)
         } else {
@@ -684,6 +754,24 @@ enum ConversationRecorder {
             for: input,
             entries: fetchBodyEntries(in: context)
         )
+        if existing == nil,
+           !input.isCorrection,
+           let duplicate = AgentBusinessKeyDeduper.matchingBody(
+               weight: arguments.weight,
+               bodyFat: arguments.bodyFat,
+               date: sourceDate,
+               excludingTurnID: sourceTurnID,
+               in: context
+           )
+        {
+            return .success(
+                AgentBusinessKeyDeduper.suspectedDuplicateMessage(
+                    kind: "身体",
+                    recordID: duplicate.id
+                ),
+                recordType: .body
+            )
+        }
         if let existing {
             RecordMergePolicy.mergeBody(existing, input: input, analysis: analysis)
         } else {
@@ -1594,59 +1682,6 @@ private extension String {
 
 @MainActor
 enum DataIntegrityRepair {
-    static func finalizeInterruptedAgentTraces(in context: ModelContext) {
-        let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
-        let durableRemoteTurnIDs = Set(jobs.compactMap { job in
-            job.backend == .remote && !job.state.isTerminal
-                ? job.turnID
-                : nil
-        })
-        let interrupted = traces.filter {
-            $0.status == .running
-                && !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
-        }
-        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
-        let interruptedMessages = messages.filter {
-            $0.agentStatus == .running
-                && !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
-        }
-        guard !interrupted.isEmpty || !interruptedMessages.isEmpty else { return }
-
-        let endedAt = Date()
-        let message = "上一次 ReAct Agent 执行未正常结束，可能是 App 被关闭或任务被系统中断。"
-        for trace in interrupted {
-            trace.apply(.span(AgentTraceSpan(
-                kind: .output,
-                title: "执行中断",
-                status: .failed,
-                startedAt: endedAt,
-                endedAt: endedAt,
-                errorMessage: message
-            )))
-            trace.apply(.failed(message: message, cancelled: false, at: endedAt))
-        }
-        for response in interruptedMessages {
-            response.agentStatus = .failed
-            response.applyAgentEvent(.failed(
-                message: message,
-                cancelled: false,
-                at: endedAt
-            ))
-            response.text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty ? message : response.text
-            response.replaceAgentEvents(response.agentEvents.map { event in
-                guard event.status == .running else { return event }
-                var failed = event
-                failed.statusRaw = AgentTraceStatus.failed.rawValue
-                failed.endedAt = endedAt
-                failed.errorMessage = message
-                return failed
-            })
-        }
-        try? context.save()
-    }
-
     static func removeUnsupportedInferences(in context: ModelContext) {
         let workouts = (try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? []
         var changed = false

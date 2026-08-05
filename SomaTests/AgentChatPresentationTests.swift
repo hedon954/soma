@@ -20,7 +20,7 @@ final class AgentChatPresentationTests: XCTestCase {
         XCTAssertNil(presentation?.disclosureLabel)
     }
 
-    func testManyExerciseResultsBecomeExpandableNameList() {
+    func testManyExerciseResultsShowNamesDirectly() {
         let names = ["杠铃深蹲", "引体向上", "哑铃卧推", "罗马尼亚硬拉"]
         let observation = AgentTraceText.json(names.enumerated().map { index, name in
             ExerciseNameReference(
@@ -34,12 +34,15 @@ final class AgentChatPresentationTests: XCTestCase {
             observation: observation
         ))
 
-        XCTAssertEqual(presentation?.summary, "动作库中有 4 个动作")
-        XCTAssertEqual(presentation?.details, names)
-        XCTAssertEqual(presentation?.disclosureLabel, "查看全部 4 个动作")
+        XCTAssertEqual(
+            presentation?.summary,
+            "动作库中有 4 个动作：杠铃深蹲、引体向上、哑铃卧推、罗马尼亚硬拉"
+        )
+        XCTAssertEqual(presentation?.details, [])
+        XCTAssertNil(presentation?.disclosureLabel)
     }
 
-    func testWorkoutQueryHidesIdentifiersAndFormatsBodyweight() {
+    func testWorkoutQueryShowsRecordsDirectlyWithoutIdentifiers() {
         let observation = """
         [id:643DC70A-0E1E-4CC4-A8F0-D3EB2EC4853A] 2026年8月3日 引体向上，5组 × 5次 · 0kg，间歇 120 秒
         [id:F948F483-9CE2-4662-802F-050F0734762D] 2026年8月3日 杠铃深蹲，2组 × 5次 · 30kg，间歇 60 秒
@@ -51,12 +54,13 @@ final class AgentChatPresentationTests: XCTestCase {
             observation: observation
         ))
 
-        XCTAssertEqual(presentation?.summary, "找到 2 条训练记录")
-        XCTAssertEqual(presentation?.details, [
-            "2026年8月3日 引体向上，5组 × 5次 · 自重，间歇 120 秒",
-            "2026年8月3日 杠铃深蹲，2组 × 5次 · 30kg，间歇 60 秒"
-        ])
-        XCTAssertEqual(presentation?.disclosureLabel, "查看 2 条训练记录")
+        XCTAssertEqual(
+            presentation?.summary,
+            "2026年8月3日 引体向上，5组 × 5次 · 自重，间歇 120 秒\n"
+                + "2026年8月3日 杠铃深蹲，2组 × 5次 · 30kg，间歇 60 秒"
+        )
+        XCTAssertEqual(presentation?.details, [])
+        XCTAssertNil(presentation?.disclosureLabel)
     }
 
     func testMutationSummaryHidesInternalRecordIdentifier() {
@@ -70,17 +74,31 @@ final class AgentChatPresentationTests: XCTestCase {
         XCTAssertEqual(presentation?.details, [])
     }
 
-    func testLongGenericResultKeepsCompleteTextBehindDisclosure() {
-        let observation = String(repeating: "完整结果", count: 30)
+    func testLongGenericResultShowsTextWithExpandDisclosure() {
+        let observation = String(repeating: "完整结果", count: 60)
         let presentation = AgentToolResultPresentation.make(for: toolItem(
             title: "读取用户数据",
             name: "query_user_data",
             observation: observation
         ))
 
-        XCTAssertEqual(presentation?.summary, "操作已完成，可查看完整结果")
-        XCTAssertEqual(presentation?.details, [observation])
-        XCTAssertEqual(presentation?.disclosureLabel, "查看完整结果")
+        XCTAssertEqual(presentation?.summary, observation)
+        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.disclosureLabel, "展开")
+    }
+
+    func testShortResultDoesNotShowExpandDisclosure() {
+        let observation = "已记录训练：杠铃深蹲，4 组 × 8 次 · 60kg。"
+        let presentation = AgentToolResultPresentation.make(for: toolItem(
+            title: "记录训练",
+            name: "record_workout",
+            observation: observation
+        ))
+
+        XCTAssertEqual(presentation?.summary, observation)
+        XCTAssertEqual(presentation?.details, [])
+        XCTAssertNil(presentation?.disclosureLabel)
+        XCTAssertFalse(AgentToolResultDisclosure.shouldCollapse(observation))
     }
 
     func testInternalFunctionMarkupIsRemovedFromChatText() {

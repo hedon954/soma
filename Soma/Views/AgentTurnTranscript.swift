@@ -11,6 +11,8 @@ struct AgentTurnTranscript: View {
         }
     }
 
+    /// ADR 0014：按 Item 顺序渲染。Skill/Tool 与文本在一次 Turn 里是交替发生的，
+    /// 按 kind 归类展示会打乱「先说什么、再做什么」的真实时序。
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(visibleItems) { item in
@@ -57,21 +59,10 @@ private struct AgentTurnItemCard: View {
                 .frame(width: 22, height: 22)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 7) {
-                    Text(item.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-
-                    if item.kind == .skill {
-                        Text("教练方法")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(kindColor)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(kindColor.opacity(0.1), in: Capsule())
-                    }
-                }
+                Text(item.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
                 if let toolPresentation {
                     AgentOperationResult(
@@ -174,9 +165,6 @@ private struct AgentTurnItemCard: View {
         case .failed:
             return "未完成"
         case .succeeded:
-            if item.kind == .skill {
-                return "已采用这项教练方法"
-            }
             return "已完成"
         }
     }
@@ -195,7 +183,10 @@ private struct AgentOperationResult: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(summaryLineLimit)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
 
             if isExpanded, !presentation.details.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
@@ -233,7 +224,7 @@ private struct AgentOperationResult: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(isExpanded ? "收起结果" : disclosureLabel)
+                        Text(isExpanded ? "收起" : disclosureLabel)
                         Spacer(minLength: 8)
                         Image(systemName: "chevron.down")
                             .rotationEffect(.degrees(isExpanded ? 180 : 0))
@@ -245,11 +236,20 @@ private struct AgentOperationResult: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(tint)
                 .accessibilityLabel(
-                    "\(isExpanded ? "收起" : "查看")\(accessibilityContext)结果"
+                    "\(isExpanded ? "收起" : "展开")\(accessibilityContext)结果"
                 )
                 .accessibilityValue(isExpanded ? "已展开" : "已收起")
-                .accessibilityHint(isExpanded ? "隐藏详细结果" : "显示详细结果")
+                .accessibilityHint(isExpanded ? "隐藏完整结果" : "显示完整结果")
             }
+        }
+    }
+
+    private var summaryLineLimit: Int? {
+        // 正文直接展示；仅在声明了展开入口且未展开时截断。
+        if presentation.disclosureLabel != nil, !isExpanded {
+            AgentToolResultDisclosure.collapsedLineLimit
+        } else {
+            nil
         }
     }
 }

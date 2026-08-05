@@ -6,6 +6,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case bailian
     case volcano
     case tencent
+    case openCode
     case other
 
     var id: String {
@@ -19,6 +20,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .bailian: "阿里云百炼"
         case .volcano: "火山引擎"
         case .tencent: "腾讯云"
+        case .openCode: "opencode"
         case .other: "其他"
         }
     }
@@ -30,6 +32,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .bailian: "https://dashscope.aliyuncs.com/compatible-mode/v1"
         case .volcano: "https://ark.cn-beijing.volces.com/api/v3"
         case .tencent: "https://tokenhub.tencentmaas.com/v1"
+        case .openCode: "https://opencode.ai/zen/v1"
         case .other: ""
         }
     }
@@ -41,6 +44,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .bailian: "qwen3.5-plus"
         case .volcano: "doubao-seed-1-6-vision-250815"
         case .tencent: "hy-vision-2.0-instruct"
+        case .openCode: "claude-sonnet-4"
         case .other: ""
         }
     }
@@ -112,9 +116,9 @@ enum MultimodalSupport: String {
 
     var label: String {
         switch self {
-        case .supported: "支持图片与视频关键帧"
-        case .unsupported: "不支持多模态"
-        case .unknown: "能力未标注，发送时验证"
+        case .supported: "支持多模态：图片与视频关键帧"
+        case .unsupported: "不支持多模态：只能发送文字"
+        case .unknown: "多模态能力未标注，发送图片或视频时由平台验证"
         }
     }
 }
@@ -163,6 +167,15 @@ enum ModelCapability {
             }
             if containsAny(value, ["image-generation", "video-generation", "3d"]) {
                 return .unsupported
+            }
+        case .openCode:
+            // opencode 上的 GPT / Codex 系模型只暴露 Responses API，
+            // Soma 走 Chat Completions，因此这里直接标记为不可用。
+            if containsAny(value, ["gpt-", "codex"]) {
+                return .unsupported
+            }
+            if containsAny(value, ["claude", "gemini"]) {
+                return .supported
             }
         case .other:
             return .unknown

@@ -31,6 +31,12 @@ private struct PreparedConversationMedia {
     }
 }
 
+private struct PreparedAgentHistory {
+    var projection: ConversationContextProjection
+    var history: [AgentConversationExchange]
+    var preparationMilliseconds: Int
+}
+
 private enum ConversationMediaPreparationError: LocalizedError {
     case attachmentPersistenceFailed
     case videoFramesUnavailable
@@ -59,7 +65,8 @@ struct ConversationProcessingContext {
 @Observable
 final class ConversationProcessingService {
     private static let maximumAnalysisImageCount = 12
-    private static let executionLeaseDuration: TimeInterval = 25
+    /// 配合 step 检查点分段续跑；到期前会落盘检查点。
+    private static let executionLeaseDuration: TimeInterval = 45
     private let runnerOwner = UUID().uuidString.lowercased()
 
     private(set) var isProcessing = false
@@ -96,13 +103,8 @@ final class ConversationProcessingService {
         locationService: LocationContextService,
         forceLocal: Bool = false
     ) -> Bool {
+        // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
         let useRemote = !forceLocal && RemoteAgentPreference.isEnabled()
-        guard useRemote || context.ai.hasRequiredAPIKey,
-              !isProcessing
-        else {
-            return false
-        }
-
         let persistedAttachments: [MediaAttachmentReference]
         do {
             persistedAttachments = try persistPendingAttachments(attachments)
@@ -157,7 +159,7 @@ final class ConversationProcessingService {
             return false
         }
 
-        start(
+        dispatch(
             job: job,
             userMessage: userMessage,
             context: context,
@@ -174,10 +176,8 @@ final class ConversationProcessingService {
         forceLocal: Bool = false
     ) -> Bool {
         let useRemote = !forceLocal && RemoteAgentPreference.isEnabled()
-        guard useRemote || context.ai.hasRequiredAPIKey,
-              !userMessage.isFromCoach,
-              userMessage.turnID != nil,
-              !isProcessing
+        guard !userMessage.isFromCoach,
+              userMessage.turnID != nil
         else {
             return false
         }
@@ -214,7 +214,7 @@ final class ConversationProcessingService {
             context.modelContext.rollback()
             return false
         }
-        start(
+        dispatch(
             job: job,
             userMessage: userMessage,
             context: context,
@@ -239,6 +239,13 @@ final class ConversationProcessingService {
                 dataSpace: dataSpace,
                 in: modelContext
             )
+            // ADR 0045：LLM 恢复后解除暂存并清掉退避，让补偿消费立即开始。
+            _ = try AgentJobStore.releaseStagedJobs(
+                dataSpace: dataSpace,
+                in: modelContext
+            ) { job in
+                isBackendAvailable(job.backend, ai: ai)
+            }
         } catch {
             return
         }
@@ -248,6 +255,61 @@ final class ConversationProcessingService {
             modelContext: modelContext,
             locationService: locationService
         )
+    }
+
+    /// 落盘成功后决定这条 Job 是立即执行、排队等待，还是进入暂存。
+    private func dispatch(
+        job: AgentJob,
+        userMessage: CoachMessage,
+        context: ConversationProcessingContext,
+        locationService: LocationContextService?
+    ) {
+        if let reason = backendUnavailableReason(job.backend, ai: context.ai) {
+            try? AgentJobStore.stage(
+                job,
+                message: reason,
+                retryDelay: nil,
+                in: context.modelContext
+            )
+            return
+        }
+        // 已有任务在途时保持 FIFO：当前任务结束后由 startNextPendingJob 领取。
+        guard !isProcessing else { return }
+        start(
+            job: job,
+            userMessage: userMessage,
+            context: context,
+            locationService: locationService
+        )
+    }
+
+    private func isBackendAvailable(
+        _ backend: AgentExecutionBackendKind,
+        ai: AIService
+    ) -> Bool {
+        backendUnavailableReason(backend, ai: ai) == nil
+    }
+
+    private func backendUnavailableReason(
+        _ backend: AgentExecutionBackendKind,
+        ai: AIService
+    ) -> String? {
+        switch backend {
+        case .remote:
+            guard RemoteAgentPreference.baseURL() == nil else { return nil }
+            return "后台持续处理还没有可用的服务地址，消息已暂存。"
+        case .local:
+            guard ai.hasRequiredAPIKey else {
+                return "还没有可用的 LLM 配置，消息已暂存。"
+            }
+            let provider = ai.provider(for: .standard)
+            let model = ai.model(for: provider, tier: .standard)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let baseURL = ai.baseURL(for: provider, tier: .standard)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard model.isEmpty || baseURL.isEmpty else { return nil }
+            return "标准模型还缺少模型 ID 或服务地址，消息已暂存。"
+        }
     }
 
     private func beginProcessing(
@@ -932,11 +994,6 @@ private extension ConversationProcessingService {
         let displayText = userMessage.text.isEmpty
             ? media.displaySummary
             : userMessage.text
-        let attemptNumber = nextAttemptNumber(
-            for: turnID,
-            in: context.modelContext
-        )
-        job.activeAttemptNumber = attemptNumber
         let resolution = GymLocationResolver.resolve(
             text: userMessage.text,
             snapshot: userMessage.location,
@@ -946,23 +1003,20 @@ private extension ConversationProcessingService {
         let effectiveGym = resolution.gymID.flatMap { id in
             context.gyms.first { $0.id == id }
         }
-        let projection = ConversationContextProjection.make(
-            messages: allMessages(in: context.modelContext),
-            sessionID: context.session.id,
-            excludingTurnID: turnID
+        let prepared = await prepareHistory(
+            excludingTurnID: turnID,
+            currentFrameCount: media.frames.count,
+            context: context
         )
-        let history = await prepareAgentHistory(
-            projection.exchanges,
-            frameLimit: max(
-                0,
-                Self.maximumAnalysisImageCount - media.frames.count
-            )
-        )
+        let projection = prepared.projection
+        let history = prepared.history
         let historicalFrameCount = history.reduce(0) { $0 + $1.images.count }
-        let persistentContext = context.structuredContext + turnContext(
-            location: userMessage.location,
-            gym: effectiveGym,
-            source: resolution.source
+        let persistentContext = composePersistentContext(
+            userMessage: userMessage,
+            turnID: turnID,
+            effectiveGym: effectiveGym,
+            resolution: resolution,
+            context: context
         )
         let weatherGuidance: String? = if let location = userMessage.location {
             await WeatherContextProvider.transientGuidance(
@@ -979,23 +1033,14 @@ private extension ConversationProcessingService {
 
         var performedRecordType: ConversationIntent?
         var activeTrace: AgentTrace?
-        let responseMessage = CoachMessage(
-            sessionID: context.session.id,
-            isFromCoach: true,
-            text: "",
-            agentStatus: .running,
+        let resumable = job.hasResumableCheckpoint
+        let (responseMessage, attemptNumber) = bindResponseMessage(
+            job: job,
             turnID: turnID,
-            attemptNumber: attemptNumber
+            resumable: resumable,
+            context: context
         )
-        context.modelContext.insert(responseMessage)
-        job.responseMessageID = responseMessage.id
         try? context.modelContext.save()
-        _ = try? AgentJobStore.append(
-            kind: .attemptStarted,
-            payload: .init(message: "开始第 \(attemptNumber) 次处理。"),
-            to: job,
-            in: context.modelContext
-        )
 
         do {
             let route = context.ai.route(
@@ -1025,6 +1070,7 @@ private extension ConversationProcessingService {
                 contextSnapshot: """
                 \(persistentContext)
                 Session 上下文投影：最近 \(history.count) 个来回；重新提供历史视觉帧 \(historicalFrameCount) 张。
+                本地准备耗时 \(prepared.preparationMilliseconds) ms（含历史媒体重新抽帧）。
                 """,
                 mediaKind: media.primaryKind,
                 imageCount: media.frames.count + historicalFrameCount,
@@ -1038,6 +1084,21 @@ private extension ConversationProcessingService {
             context.modelContext.insert(trace)
             try? context.modelContext.save()
 
+            let activePrograms = (
+                try? context.modelContext.fetch(FetchDescriptor<TrainingProgram>())
+            ) ?? []
+            let activeSessions = (
+                try? context.modelContext.fetch(FetchDescriptor<WorkoutSession>())
+            ) ?? []
+            let toolSignals = AgentToolExposureSignals(
+                text: userMessage.text,
+                hasVideo: media.hasVideo,
+                hasActiveProgram: activePrograms.contains { $0.status == .active },
+                hasActiveGuidedSession: activeSessions.contains {
+                    [.draft, .active, .paused].contains($0.status)
+                }
+            )
+            let resumeCheckpoint = resumable ? job.loopCheckpoint : nil
             let outcome = try await context.ai.runAgent(
                 text: userMessage.text,
                 images: media.frames,
@@ -1048,6 +1109,12 @@ private extension ConversationProcessingService {
                 history: history,
                 context: agentContext,
                 route: route,
+                toolSignals: toolSignals,
+                checkpoint: resumeCheckpoint,
+                onCheckpoint: { checkpoint in
+                    job.loopCheckpoint = checkpoint
+                    try? context.modelContext.save()
+                },
                 trace: { [weak self] event in
                     self?.applyLiveAgentEvent(event)
                     if case .failed = event,
@@ -1098,91 +1165,24 @@ private extension ConversationProcessingService {
             performedRecordType = outcome.primaryRecordType ?? performedRecordType
             responseMessage.recordType = performedRecordType
             responseMessage.agentStatus = .succeeded
+            job.loopCheckpoint = nil
+            job.lastCompletedStep = 0
             if job.state == .running {
                 try job.transition(to: .succeeded)
             }
             try context.modelContext.save()
         } catch {
-            let reason = error.localizedDescription
-            if backgroundLeaseExpired {
-                let pausedText = "Soma 已保存本次任务，回到前台后会从新的处理尝试继续。"
-                responseMessage.text = pausedText
-                responseMessage.agentStatus = .cancelled
-                if job.state == .running {
-                    try? job.transition(to: .waitingForForeground)
-                }
-                job.leaseOwner = nil
-                job.leaseExpiresAt = nil
-                _ = try? AgentJobStore.append(
-                    kind: .waitingForForeground,
-                    payload: .init(message: pausedText),
-                    to: job,
-                    in: context.modelContext
-                )
-                try? context.modelContext.save()
-                context.session.touch(at: .now)
-                return
-            }
-            if isTransientNetworkError(error) {
-                let retryDelay = min(
-                    pow(2, Double(job.submissionAttemptCount)) * 2,
-                    60
-                )
-                job.submissionAttemptCount += 1
-                job.nextRetryAt = Date.now.addingTimeInterval(retryDelay)
-                if job.state == .running {
-                    try? job.transition(
-                        to: .waitingForNetwork,
-                        error: reason
-                    )
-                }
-                let waitingText = "网络暂时不可用，任务已保留，将在网络恢复后继续。"
-                responseMessage.text = waitingText
-                responseMessage.agentStatus = .cancelled
-                _ = try? AgentJobStore.append(
-                    kind: .waitingForNetwork,
-                    payload: .init(message: waitingText),
-                    to: job,
-                    in: context.modelContext
-                )
-                try? context.modelContext.save()
-                scheduleRetry(
-                    at: job.nextRetryAt,
-                    dataSpace: context.dataSpace,
-                    ai: context.ai,
-                    modelContext: context.modelContext,
-                    locationService: locationService
-                )
-                context.session.touch(at: .now)
-                return
-            }
-            let recovery = if performedRecordType != nil {
-                "\n\nAgent 已完成的本地记录仍然保留，但生成最终回复时中断。"
-            } else if !media.attachments.isEmpty {
-                "\n\n附件已保存在本机对话中，但这次没有自动生成统计记录。请检查模型的多模态能力后重试。"
-            } else {
-                ""
-            }
-            let failureText = "这次没有处理成功：\(reason)。\(recovery)"
-            responseMessage.text = failureText
-            responseMessage.agentStatus = .failed
-            if let activeTrace, activeTrace.status == .running {
-                activeTrace.apply(.failed(
-                    message: reason,
-                    cancelled: false,
-                    at: .now
-                ))
-            }
-            if !responseMessage.agentTurnItems.contains(where: { $0.kind == .error }) {
-                responseMessage.applyAgentEvent(.failed(
-                    message: reason,
-                    cancelled: false,
-                    at: .now
-                ))
-            }
-            if job.state == .running {
-                try? job.transition(to: .failed, error: reason)
-            }
+            handleAttemptFailure(
+                error,
+                job: job,
+                responseMessage: responseMessage,
+                activeTrace: activeTrace,
+                performedRecordType: performedRecordType,
+                media: media,
+                context: context,
+                locationService: locationService
+            )
+            return
         }
 
         context.session.touch(at: .now)
@@ -1191,6 +1191,238 @@ private extension ConversationProcessingService {
 }
 
 private extension ConversationProcessingService {
+    private func handleAttemptFailure(
+        _ error: Error,
+        job: AgentJob,
+        responseMessage: CoachMessage,
+        activeTrace: AgentTrace?,
+        performedRecordType: ConversationIntent?,
+        media: PreparedConversationMedia,
+        context: ConversationProcessingContext,
+        locationService: LocationContextService?
+    ) {
+        let reason = error.localizedDescription
+        if backgroundLeaseExpired {
+            let pausedText = job.hasResumableCheckpoint
+                ? "Soma 已保存进度，回到前台后会从中断处继续。"
+                : "Soma 已保存本次任务，回到前台后会继续处理。"
+            if !job.responseTextSnapshot.isEmpty {
+                responseMessage.text = job.responseTextSnapshot
+            } else if responseMessage.text.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty {
+                responseMessage.text = pausedText
+            }
+            responseMessage.agentStatus = .cancelled
+            if job.state == .running {
+                try? job.transition(to: .waitingForForeground)
+            }
+            job.leaseOwner = nil
+            job.leaseExpiresAt = nil
+            _ = try? AgentJobStore.append(
+                kind: .waitingForForeground,
+                payload: .init(message: pausedText),
+                to: job,
+                in: context.modelContext
+            )
+            try? context.modelContext.save()
+            context.session.touch(at: .now)
+            return
+        }
+        switch LLMOutageClassifier.disposition(for: error) {
+        case .retryNetwork:
+            let retryDelay = min(
+                pow(2, Double(job.submissionAttemptCount)) * 2,
+                60
+            )
+            job.submissionAttemptCount += 1
+            job.nextRetryAt = Date.now.addingTimeInterval(retryDelay)
+            if job.state == .running {
+                try? job.transition(
+                    to: .waitingForNetwork,
+                    error: reason
+                )
+            }
+            let waitingText = "网络暂时不可用，任务已保留，将在网络恢复后继续。"
+            responseMessage.text = waitingText
+            responseMessage.agentStatus = .cancelled
+            _ = try? AgentJobStore.append(
+                kind: .waitingForNetwork,
+                payload: .init(message: waitingText),
+                to: job,
+                in: context.modelContext
+            )
+            try? context.modelContext.save()
+            scheduleRetry(
+                at: job.nextRetryAt,
+                dataSpace: context.dataSpace,
+                ai: context.ai,
+                modelContext: context.modelContext,
+                locationService: locationService
+            )
+            context.session.touch(at: .now)
+            return
+        case let .stage(message):
+            // ADR 0045：缺配置只等配置变更信号，供应商侧故障才按退避重试。
+            let waitsForConfiguration = LLMOutageClassifier
+                .signal(for: error)
+                .isMissingConfiguration
+            job.submissionAttemptCount += 1
+            responseMessage.text = message + "LLM 恢复后会自动继续。"
+            responseMessage.agentStatus = .cancelled
+            if let activeTrace, activeTrace.status == .running {
+                activeTrace.apply(.failed(
+                    message: reason,
+                    cancelled: true,
+                    at: .now
+                ))
+            }
+            try? AgentJobStore.stage(
+                job,
+                message: message,
+                retryDelay: waitsForConfiguration
+                    ? nil
+                    : LLMOutageClassifier.stagingRetryDelay(
+                        attemptCount: job.submissionAttemptCount
+                    ),
+                in: context.modelContext
+            )
+            scheduleRetry(
+                at: job.nextRetryAt,
+                dataSpace: context.dataSpace,
+                ai: context.ai,
+                modelContext: context.modelContext,
+                locationService: locationService
+            )
+            context.session.touch(at: .now)
+            return
+        case .fail:
+            break
+        }
+        let recovery = if performedRecordType != nil {
+            "\n\nAgent 已完成的本地记录仍然保留，但生成最终回复时中断。"
+        } else if !media.attachments.isEmpty {
+            "\n\n附件已保存在本机对话中，但这次没有自动生成统计记录。请检查模型的多模态能力后重试。"
+        } else {
+            ""
+        }
+        let failureText = "这次没有处理成功：\(reason)。\(recovery)"
+        responseMessage.text = failureText
+        responseMessage.agentStatus = .failed
+        if let activeTrace, activeTrace.status == .running {
+            activeTrace.apply(.failed(
+                message: reason,
+                cancelled: false,
+                at: .now
+            ))
+        }
+        if !responseMessage.agentTurnItems.contains(where: { $0.kind == .error }) {
+            responseMessage.applyAgentEvent(.failed(
+                message: reason,
+                cancelled: false,
+                at: .now
+            ))
+        }
+        if job.state == .running {
+            try? job.transition(to: .failed, error: reason)
+        }
+        context.session.touch(at: .now)
+        try? context.modelContext.save()
+    }
+
+    private func composePersistentContext(
+        userMessage: CoachMessage,
+        turnID: UUID,
+        effectiveGym: GymProfile?,
+        resolution: GymContextResolution,
+        context: ConversationProcessingContext
+    ) -> String {
+        let crossTurnFacts = AgentCrossTurnFactSummary.recentMutationFacts(
+            sessionID: context.session.id,
+            excludingTurnID: turnID,
+            in: context.modelContext
+        )
+        let olderDigest = AgentCrossTurnFactSummary.olderTurnDigest(
+            messages: allMessages(in: context.modelContext),
+            sessionID: context.session.id,
+            excludingTurnID: turnID
+        )
+        return [
+            context.structuredContext,
+            turnContext(
+                location: userMessage.location,
+                gym: effectiveGym,
+                source: resolution.source
+            ),
+            crossTurnFacts,
+            olderDigest
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
+    }
+
+    private func bindResponseMessage(
+        job: AgentJob,
+        turnID: UUID,
+        resumable: Bool,
+        context: ConversationProcessingContext
+    ) -> (CoachMessage, Int) {
+        if resumable,
+           let existingID = job.responseMessageID,
+           let existing = allMessages(in: context.modelContext)
+           .first(where: { $0.id == existingID })
+        {
+            let attemptNumber = max(existing.attemptNumber, 1)
+            job.activeAttemptNumber = attemptNumber
+            prepareResponseMessageForResume(existing, job: job)
+            return (existing, attemptNumber)
+        }
+        let attemptNumber = nextAttemptNumber(
+            for: turnID,
+            in: context.modelContext
+        )
+        job.activeAttemptNumber = attemptNumber
+        let created = CoachMessage(
+            sessionID: context.session.id,
+            isFromCoach: true,
+            text: "",
+            agentStatus: .running,
+            turnID: turnID,
+            attemptNumber: attemptNumber
+        )
+        context.modelContext.insert(created)
+        job.responseMessageID = created.id
+        try? context.modelContext.save()
+        _ = try? AgentJobStore.append(
+            kind: .attemptStarted,
+            payload: .init(message: "开始第 \(attemptNumber) 次处理。"),
+            to: job,
+            in: context.modelContext
+        )
+        return (created, attemptNumber)
+    }
+
+    /// ADR 0048：同气泡续跑时复用 CoachMessage，丢掉未完成 step 的 running 卡片。
+    private func prepareResponseMessageForResume(
+        _ message: CoachMessage,
+        job: AgentJob
+    ) {
+        let completedItems = message.agentTurnItems.filter { item in
+            item.status != .running && item.kind != .error
+        }
+        message.replaceAgentTurnItems(completedItems)
+        if !job.responseTextSnapshot.isEmpty {
+            message.text = job.responseTextSnapshot
+        } else {
+            let pausedHints = ["已保存本次任务", "已保存进度", "回到前台"]
+            if pausedHints.contains(where: { message.text.contains($0) }) {
+                message.text = ""
+            }
+        }
+        message.agentStatus = .running
+    }
+
     private func nextAttemptNumber(
         for turnID: UUID,
         in context: ModelContext
@@ -1260,20 +1492,52 @@ private extension ConversationProcessingService {
                 )
             )
         ) ?? []
-        let scoped = jobs.filter {
-            $0.dataSpace == dataSpace
-                && $0.state.isRunnable
-                && (
-                    $0.backend == .remote
-                        ? RemoteAgentPreference.baseURL() != nil
-                        : ai.hasRequiredAPIKey
-                )
+        let runnable = jobs.filter {
+            $0.dataSpace == dataSpace && $0.state.isRunnable
         }
-        guard let job = scoped.first(where: {
+        // ADR 0045：后端不可用的 Job 统一落到暂存，让队列状态与 UI 计数保持一致。
+        for job in runnable where job.state != .staged {
+            guard let reason = backendUnavailableReason(job.backend, ai: ai) else {
+                continue
+            }
+            try? AgentJobStore.stage(
+                job,
+                message: reason,
+                retryDelay: nil,
+                in: modelContext
+            )
+        }
+        let scoped = runnable.filter {
+            isBackendAvailable($0.backend, ai: ai)
+        }
+        let messages = (try? modelContext.fetch(FetchDescriptor<CoachMessage>())) ?? []
+        let messageByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+        // 回复已失败的 Job 不应被回前台自动领取，避免「失败气泡又自己跑起来」。
+        for job in scoped {
+            guard let responseID = job.responseMessageID,
+                  messageByID[responseID]?.agentStatus == .failed,
+                  job.state.canTransition(to: .failed)
+            else {
+                continue
+            }
+            try? job.transition(
+                to: .failed,
+                error: "上次处理已失败，等待手动重试。"
+            )
+            job.leaseOwner = nil
+            job.leaseExpiresAt = nil
+        }
+        try? modelContext.save()
+        let runnableAfterFailureGate = scoped.filter { job in
+            guard job.state.isRunnable else { return false }
+            guard let responseID = job.responseMessageID else { return true }
+            return messageByID[responseID]?.agentStatus != .failed
+        }
+        guard let job = runnableAfterFailureGate.first(where: {
             $0.nextRetryAt == nil || $0.nextRetryAt! <= now
         }) else {
             scheduleRetry(
-                at: scoped.compactMap(\.nextRetryAt).min(),
+                at: runnableAfterFailureGate.compactMap(\.nextRetryAt).min(),
                 dataSpace: dataSpace,
                 ai: ai,
                 modelContext: modelContext,
@@ -1281,7 +1545,6 @@ private extension ConversationProcessingService {
             )
             return
         }
-        let messages = (try? modelContext.fetch(FetchDescriptor<CoachMessage>())) ?? []
         guard let userMessage = messages.first(where: { $0.id == job.userMessageID }),
               var context = ConversationProcessingContextFactory.make(
                   sessionID: job.sessionID,
@@ -1441,7 +1704,7 @@ private extension ConversationProcessingService {
                     failedVideoCount += 1
                     continue
                 }
-                let frames = await VideoFrameExtractor.frames(from: url)
+                let frames = await VideoFrameCache.frames(for: url)
                 frameGroups.append(frames)
                 if let data = try? Data(contentsOf: url),
                    data.count <= 24 * 1024 * 1024
@@ -1463,6 +1726,32 @@ private extension ConversationProcessingService {
             imageCount: imageCount,
             videoCount: videoCount,
             failedVideoCount: failedVideoCount
+        )
+    }
+
+    /// 首个请求发出前的本地准备（上下文投影 + 历史媒体重新抽帧）需要单独计时，
+    /// 否则一次「慢」无法区分是供应商排队还是我们自己的准备开销。
+    private func prepareHistory(
+        excludingTurnID turnID: UUID,
+        currentFrameCount: Int,
+        context: ConversationProcessingContext
+    ) async -> PreparedAgentHistory {
+        let startedAt = Date.now
+        let projection = ConversationContextProjection.make(
+            messages: allMessages(in: context.modelContext),
+            sessionID: context.session.id,
+            excludingTurnID: turnID
+        )
+        let history = await prepareAgentHistory(
+            projection.exchanges,
+            frameLimit: max(0, Self.maximumAnalysisImageCount - currentFrameCount)
+        )
+        return PreparedAgentHistory(
+            projection: projection,
+            history: history,
+            preparationMilliseconds: Int(
+                (Date.now.timeIntervalSince(startedAt) * 1000).rounded()
+            )
         )
     }
 

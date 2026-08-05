@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 
 enum AppTab: Hashable {
-    case coach, training, insights
+    case coach, training, insights, settings
 }
 
 private enum RootSheet: Identifiable {
@@ -37,28 +37,30 @@ struct RootView: View {
             NavigationStack {
                 CoachView {
                     sheet = .settings(
-                        initialRoute: .aiService,
+                        initialRoute: .llm,
                         showsAIConfigurationReminder: true
                     )
                 }
-                .toolbar { settingsToolbar }
             }
             .tabItem { Label("教练", systemImage: "bubble.left.and.bubble.right.fill") }
             .tag(AppTab.coach)
 
             NavigationStack {
                 TrainingProgramLibraryView()
-                    .toolbar { settingsToolbar }
             }
             .tabItem { Label("训练", systemImage: "figure.strengthtraining.traditional") }
             .tag(AppTab.training)
 
             NavigationStack {
                 InsightsView()
-                    .toolbar { settingsToolbar }
             }
             .tabItem { Label("进展", systemImage: "chart.line.uptrend.xyaxis") }
             .tag(AppTab.insights)
+
+            // PRD 020 修订：设置从各页右上角 gear 收敛为底部第 4 个 Tab。
+            SettingsView(isEmbeddedInTab: true)
+                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tag(AppTab.settings)
         }
         .tint(AppTheme.tint)
         .overlay(alignment: .topLeading) {
@@ -96,6 +98,17 @@ struct RootView: View {
             NotificationCenter.default.publisher(for: .prefillCoachDraft)
         ) { _ in
             selectedTab = .coach
+        }
+        // ADR 0045：LLM 配置变化立即解除暂存并开始补偿消费。
+        .onReceive(
+            NotificationCenter.default.publisher(for: .llmConfigurationDidChange)
+        ) { _ in
+            processor.resumePendingJobs(
+                dataSpace: dataSpace.activeSpace,
+                ai: ai,
+                modelContext: modelContext,
+                locationService: locationContext
+            )
         }
         .task {
             await RemoteAgentRevocationService.retryIfNeeded()
@@ -185,20 +198,5 @@ struct RootView: View {
         }
         routedWorkoutSession = session
         captureRouter.clearWorkoutSession(route.id)
-    }
-
-    @ToolbarContentBuilder
-    private var settingsToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                sheet = .settings(
-                    initialRoute: nil,
-                    showsAIConfigurationReminder: false
-                )
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .accessibilityLabel("设置")
-        }
     }
 }

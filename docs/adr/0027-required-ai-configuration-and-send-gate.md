@@ -1,12 +1,17 @@
 # ADR 0027：AI 必配与发送前配置门禁
 
-- 状态：已接受
+- 状态：部分已替代
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0001](0001-local-first-dual-data-spaces.md) 的远程 AI 开关
   - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 的本地分析器 Attempt
   - [ADR 0025](0025-tiered-model-profiles-and-routing.md) 的“启用远程 Agent”前提
+- 后续替代：
+  - [ADR 0045](0045-llm-outage-staging-and-compensating-drain.md) 改为落盘暂存并在恢复后补偿消费，
+    取代“无 Key 时不落盘并跳转设置”的发送前门禁
+  - [ADR 0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) 把「AI 服务」
+    更名为「LLM 配置」
 
 ## 背景
 
@@ -23,7 +28,8 @@ API Key 是用户开始发送前唯一需要解决的硬前提。这个前提应
 - 设置页不再展示远程 Agent 开关、本地/远程模式标签或相关启用提示。Soma 的聊天处理始终
   使用用户配置的 OpenAI-compatible Agent。
 - 标准模型的 API Key 是发送新消息和重试失败消息的前提；小模型继续允许不配置。
-- 用户在标准档没有 API Key 时点击发送或重试：
+- 用户在标准档没有 API Key 时点击发送或重试（已由
+  [ADR 0045](0045-llm-outage-staging-and-compensating-drain.md) 改为落盘暂存）：
   - 不创建用户消息、Agent Attempt、Trace 或业务记录；
   - 保留当前草稿和待发送附件；
   - 直接打开“设置 → AI 服务”，并提醒完成平台、模型和 API Key 配置。

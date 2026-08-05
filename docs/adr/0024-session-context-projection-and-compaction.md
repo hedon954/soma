@@ -1,9 +1,11 @@
 # ADR 0024：投影最近十个 Session 来回并恢复历史媒体
 
-- 状态：部分已替代（健身房紧邻跨轮媒体归档由 ADR 0026 补充）
+- 状态：部分已替代（健身房紧邻跨轮媒体归档由 ADR 0026 补充；更早轮次 digest 与上下文包由 ADR 0047 修订）
 - 日期：2026-07-30
 - 维护者：Soma maintainers
-- 后续替代：[ADR 0026](0026-bounded-gym-media-attribution.md) 放开受限的健身房紧邻媒体归档
+- 后续替代：
+  - [ADR 0026](0026-bounded-gym-media-attribution.md) 放开受限的健身房紧邻媒体归档
+  - [ADR 0047](0047-deterministic-context-pack-and-cross-turn-facts.md) 用确定性上下文包与十轮外 digest 修订「不做滚动摘要 / 两行 structuredContext」边界
 
 ## 背景
 

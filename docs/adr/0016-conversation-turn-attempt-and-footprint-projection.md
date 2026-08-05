@@ -6,7 +6,9 @@
   - [ADR 0005](0005-trace-span-event-observability.md) 的“一条消息一条 Trace”和“不支持重试”
   - [ADR 0014](0014-agent-turn-ordered-event-cards.md) 的“一条用户消息仍对应一条 Trace”
   - [ADR 0015](0015-daily-conversation-session-lifecycle.md) 的同名约束
-- 后续替代：[ADR 0027](0027-required-ai-configuration-and-send-gate.md) 替代本地分析器 Attempt
+- 后续替代：
+  - [ADR 0027](0027-required-ai-configuration-and-send-gate.md) 替代本地分析器 Attempt
+  - [ADR 0048](0048-loop-checkpoint-and-same-bubble-resume.md) 修订「中断后续跑等同新 Attempt」的展示语义
 
 ## 背景
 

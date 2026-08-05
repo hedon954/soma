@@ -115,6 +115,36 @@ final class ExerciseLibraryTests: XCTestCase {
         )
     }
 
+    /// 扩展目录门禁：名称与别名的规范键全局唯一；每个条目的主要肌群
+    /// 至少能映射出一个受力图肌群，保证程序化受力图不落空。
+    func testCatalogEntriesAreUniqueAndMuscleMappable() {
+        XCTAssertGreaterThanOrEqual(BundledExerciseCatalog.entryCount, 150)
+        var seenKeys: [String: String] = [:]
+        for entry in BundledExerciseCatalog.entries {
+            for name in [entry.canonicalName] + entry.aliases {
+                let key = ExerciseLibraryStore.canonicalNameKey(name)
+                XCTAssertFalse(key.isEmpty, "空名称：\(entry.canonicalName)")
+                if let existing = seenKeys[key] {
+                    XCTFail(
+                        "目录键冲突：\(name)（\(entry.canonicalName)）与 \(existing)"
+                    )
+                } else {
+                    seenKeys[key] = entry.canonicalName
+                }
+            }
+            XCTAssertFalse(
+                MuscleGroupMapping.resolve(entry.primaryMuscles).isEmpty,
+                "主要肌群无法映射受力图：\(entry.canonicalName) \(entry.primaryMuscles)"
+            )
+            XCTAssertFalse(
+                entry.coachingNotes.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty,
+                "缺少教练提示：\(entry.canonicalName)"
+            )
+        }
+    }
+
     func testEveryCatalogResourceExistsInAppBundle() {
         for resourceName in BundledExerciseCatalog.resourceNames {
             XCTAssertNotNil(

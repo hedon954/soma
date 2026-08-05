@@ -371,16 +371,7 @@ private struct StoredMediaTile: View {
             if attachment.kind == .image {
                 LocalImageView(path: attachment.path)
             } else {
-                ZStack {
-                    Color.black.opacity(0.84)
-                    VStack(spacing: 5) {
-                        Image(systemName: "play.circle.fill")
-                            .font(.title2)
-                        Text("视频")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .foregroundStyle(.white)
-                }
+                VideoPosterView(path: attachment.path, badgeFont: .title2)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

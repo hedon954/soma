@@ -12,12 +12,7 @@ struct MediaThumbnail: View {
             case .image:
                 LocalImageView(path: path)
             case .video:
-                ZStack {
-                    Color.black.opacity(0.86)
-                    Image(systemName: "play.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                }
+                VideoPosterView(path: path)
             case .none:
                 ZStack {
                     AppTheme.softTint
@@ -43,16 +38,13 @@ private struct RecordImage: View {
 }
 
 private struct RecordVideoPreview: View {
+    let path: String
+
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.9)
-            Image(systemName: "play.fill")
-                .font(.largeTitle)
-                .foregroundStyle(.white)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 270)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        VideoPosterView(path: path, badgeFont: .largeTitle)
+            .frame(maxWidth: .infinity)
+            .frame(height: 270)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -73,7 +65,7 @@ private struct RecordMediaGallery: View {
                         case .image:
                             RecordImage(path: attachment.path)
                         case .video:
-                            RecordVideoPreview()
+                            RecordVideoPreview(path: attachment.path)
                         case .none:
                             EmptyView()
                         }
@@ -190,6 +182,10 @@ private struct WorkoutRecordEditor: View {
     @State private var intensity: String
     @State private var feedback: String
     @State private var notes: String
+    @State private var muscleMapExpanded = false
+    @State private var caloriesExpanded = false
+    @State private var analysisExpanded = false
+    @State private var notesExpanded = false
     init(workout: WorkoutEntry) {
         self.workout = workout
         _date = State(initialValue: workout.date)
@@ -272,14 +268,17 @@ private struct WorkoutRecordEditor: View {
                     }
                     .accessibilityLabel("查看动作 \(linkedExercise.canonicalName)")
 
-                    MuscleMapView(
-                        intensities: MuscleMapView.intensities(for: linkedExercise),
-                        height: 300,
-                        allowsExpansion: true
-                    )
-                    Text("肌群图来自动作库元数据，不是本次记录的个人测量。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // PRD 020：受力图默认收起，展开后仍可点击放大。
+                    DisclosureGroup("受力图", isExpanded: $muscleMapExpanded) {
+                        MuscleMapView(
+                            intensities: MuscleMapView.intensities(for: linkedExercise),
+                            height: 180,
+                            allowsExpansion: true
+                        )
+                        Text("肌群图来自动作库元数据，不是本次记录的个人测量。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -333,40 +332,52 @@ private struct WorkoutRecordEditor: View {
                 Text("组数由上方数组自动计算；每一组的次数和外部重量都可不同，留空代表没有数据。")
             }
 
+            // PRD 020：热量估算、AI 解析与原始记录默认折叠，展开后仍可完整编辑。
             Section {
-                numericField("预计消耗", unit: "kcal", text: $estimatedCalories, keyboard: .numberPad)
-                numericField("MET", text: $calorieMET, keyboard: .decimalPad)
-                numericField("计算时长", unit: "分钟", text: $calorieDurationMinutes, keyboard: .decimalPad)
-                Toggle("计算时长来自推算", isOn: $calorieDurationEstimated)
-            } header: {
-                Text("热量估算")
-            } footer: {
-                Text("MET × 参考体重 × 计算时长。推算时长只用于热量估算，不会填入上方的实际训练时长。")
-            }
-
-            Section("AI 解析") {
-                numericField("动作评分", text: $formScore, keyboard: .numberPad)
-                Picker("负荷判断", selection: $intensity) {
-                    Text("无").tag("")
-                    Text("偏轻").tag("偏轻")
-                    Text("适中").tag("适中")
-                    Text("偏重").tag("偏重")
+                DisclosureGroup(isExpanded: $caloriesExpanded) {
+                    numericField("预计消耗", unit: "kcal", text: $estimatedCalories, keyboard: .numberPad)
+                    numericField("MET", text: $calorieMET, keyboard: .decimalPad)
+                    numericField("计算时长", unit: "分钟", text: $calorieDurationMinutes, keyboard: .decimalPad)
+                    Toggle("计算时长来自推算", isOn: $calorieDurationEstimated)
+                } label: {
+                    LabeledContent(
+                        "热量估算",
+                        value: EditorValue.int(estimatedCalories).map { "约 \($0) kcal" } ?? "未记录"
+                    )
                 }
-                RecordFieldRow(
-                    title: "动作反馈",
-                    placeholder: "未记录",
-                    text: $feedback,
-                    isMultiline: true
-                )
+            } footer: {
+                if caloriesExpanded {
+                    Text("MET × 参考体重 × 计算时长。推算时长只用于热量估算，不会填入上方的实际训练时长。")
+                }
             }
 
-            Section("原始记录") {
-                RecordFieldRow(
-                    title: "文字记录",
-                    placeholder: "未记录",
-                    text: $notes,
-                    isMultiline: true
-                )
+            Section {
+                DisclosureGroup("AI 解析", isExpanded: $analysisExpanded) {
+                    numericField("动作评分", text: $formScore, keyboard: .numberPad)
+                    Picker("负荷判断", selection: $intensity) {
+                        Text("无").tag("")
+                        Text("偏轻").tag("偏轻")
+                        Text("适中").tag("适中")
+                        Text("偏重").tag("偏重")
+                    }
+                    RecordFieldRow(
+                        title: "动作反馈",
+                        placeholder: "未记录",
+                        text: $feedback,
+                        isMultiline: true
+                    )
+                }
+            }
+
+            Section {
+                DisclosureGroup("原始记录", isExpanded: $notesExpanded) {
+                    RecordFieldRow(
+                        title: "文字记录",
+                        placeholder: "未记录",
+                        text: $notes,
+                        isMultiline: true
+                    )
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -502,6 +513,8 @@ private struct MealRecordEditor: View {
     @State private var carbs: String
     @State private var fat: String
     @State private var notes: String
+    @State private var macrosExpanded = false
+    @State private var notesExpanded = false
     init(meal: MealEntry) {
         self.meal = meal
         _date = State(initialValue: meal.date)
@@ -541,6 +554,7 @@ private struct MealRecordEditor: View {
                 DatePicker("时间", selection: $date)
             }
 
+            // PRD 020：大卡保持直出，宏量与说明默认折叠。
             Section("营养估算") {
                 RecordFieldRow(
                     title: "大卡",
@@ -549,36 +563,40 @@ private struct MealRecordEditor: View {
                     text: $calories,
                     keyboard: .numberPad
                 )
-                RecordFieldRow(
-                    title: "蛋白质",
-                    placeholder: "必填",
-                    unit: "g",
-                    text: $protein,
-                    keyboard: .decimalPad
-                )
-                RecordFieldRow(
-                    title: "碳水",
-                    placeholder: "必填",
-                    unit: "g",
-                    text: $carbs,
-                    keyboard: .decimalPad
-                )
-                RecordFieldRow(
-                    title: "脂肪",
-                    placeholder: "必填",
-                    unit: "g",
-                    text: $fat,
-                    keyboard: .decimalPad
-                )
+                DisclosureGroup("宏量营养", isExpanded: $macrosExpanded) {
+                    RecordFieldRow(
+                        title: "蛋白质",
+                        placeholder: "必填",
+                        unit: "g",
+                        text: $protein,
+                        keyboard: .decimalPad
+                    )
+                    RecordFieldRow(
+                        title: "碳水",
+                        placeholder: "必填",
+                        unit: "g",
+                        text: $carbs,
+                        keyboard: .decimalPad
+                    )
+                    RecordFieldRow(
+                        title: "脂肪",
+                        placeholder: "必填",
+                        unit: "g",
+                        text: $fat,
+                        keyboard: .decimalPad
+                    )
+                }
             }
 
-            Section("记录与估算") {
-                RecordFieldRow(
-                    title: "说明",
-                    placeholder: "未记录",
-                    text: $notes,
-                    isMultiline: true
-                )
+            Section {
+                DisclosureGroup("记录与估算", isExpanded: $notesExpanded) {
+                    RecordFieldRow(
+                        title: "说明",
+                        placeholder: "未记录",
+                        text: $notes,
+                        isMultiline: true
+                    )
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -648,6 +666,8 @@ private struct BodyRecordEditor: View {
     @State private var waist: String
     @State private var analysis: String
     @State private var notes: String
+    @State private var analysisExpanded = false
+    @State private var notesExpanded = false
     init(entry: BodyEntry) {
         self.entry = entry
         _date = State(initialValue: entry.date)
@@ -700,22 +720,27 @@ private struct BodyRecordEditor: View {
                 )
             }
 
-            Section("AI 体态观察") {
-                RecordFieldRow(
-                    title: "观察",
-                    placeholder: "未记录",
-                    text: $analysis,
-                    isMultiline: true
-                )
+            // PRD 020：AI 观察与原始记录默认折叠，展开后仍可完整编辑。
+            Section {
+                DisclosureGroup("AI 体态观察", isExpanded: $analysisExpanded) {
+                    RecordFieldRow(
+                        title: "观察",
+                        placeholder: "未记录",
+                        text: $analysis,
+                        isMultiline: true
+                    )
+                }
             }
 
-            Section("原始记录") {
-                RecordFieldRow(
-                    title: "文字记录",
-                    placeholder: "未记录",
-                    text: $notes,
-                    isMultiline: true
-                )
+            Section {
+                DisclosureGroup("原始记录", isExpanded: $notesExpanded) {
+                    RecordFieldRow(
+                        title: "文字记录",
+                        placeholder: "未记录",
+                        text: $notes,
+                        isMultiline: true
+                    )
+                }
             }
         }
         .scrollContentBackground(.hidden)

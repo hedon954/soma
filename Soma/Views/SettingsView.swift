@@ -4,9 +4,10 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
-    @Environment(DataSpaceController.self) private var dataSpace
     @AppStorage(ConversationLocationPreference.defaultsKey)
     private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
+    @AppStorage("workout.voiceCuesEnabled")
+    private var voiceCuesEnabled = true
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
 
     @State private var modelTier: AIModelTier = .standard
@@ -21,15 +22,20 @@ struct SettingsView: View {
     @State private var modelError: String?
     @State private var keySaved = false
     @State private var showKey = false
+    @State private var didLoadConfiguration = false
+    @FocusState private var modelFieldFocused: Bool
     @State private var path: [SettingsRoute]
     private let showsAIConfigurationReminder: Bool
+    private let isEmbeddedInTab: Bool
 
     init(
         initialRoute: SettingsRoute? = nil,
-        showsAIConfigurationReminder: Bool = false
+        showsAIConfigurationReminder: Bool = false,
+        isEmbeddedInTab: Bool = false
     ) {
         _path = State(initialValue: initialRoute.map { [$0] } ?? [])
         self.showsAIConfigurationReminder = showsAIConfigurationReminder
+        self.isEmbeddedInTab = isEmbeddedInTab
     }
 
     private var selectedCapability: MultimodalSupport {
@@ -63,10 +69,12 @@ struct SettingsView: View {
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        persistConfiguration()
-                        dismiss()
+                if !isEmbeddedInTab {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") {
+                            persistConfiguration()
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -76,15 +84,18 @@ struct SettingsView: View {
             }
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
-                case .aiService:
+                case .llm:
                     Form {
                         if showsAIConfigurationReminder {
                             AIConfigurationReminder()
                         }
-                        aiSection
+                        llmSections
                     }
-                    .navigationTitle("AI 服务")
+                    .navigationTitle("LLM 配置")
                     .navigationBarTitleDisplayMode(.inline)
+                    .onDisappear {
+                        ai.notifyConfigurationChanged()
+                    }
                 }
             }
             .task(id: "\(modelTier.rawValue).\(provider.rawValue)") {
@@ -107,17 +118,22 @@ struct SettingsView: View {
             } label: {
                 Label("健身房", systemImage: "building.2")
             }
+
+            // PRD 020：带练语音提示从每次开练的准备页移到设置。
+            Toggle(isOn: $voiceCuesEnabled) {
+                Label("带练语音提示", systemImage: "speaker.wave.2")
+            }
         }
     }
 
     private var serviceSection: some View {
         Section("服务") {
-            NavigationLink(value: SettingsRoute.aiService) {
+            NavigationLink(value: SettingsRoute.llm) {
                 SettingsSummaryRow(
                     icon: "sparkles",
-                    title: "AI 教练",
+                    title: "LLM 配置",
                     detail: ai.hasRequiredAPIKey
-                        ? "\(ai.provider.displayName) · \(ai.model(for: ai.provider).isEmpty ? "未选择模型" : ai.model(for: ai.provider))"
+                        ? "\(ai.provider.displayName) · \(ai.model(for: ai.provider).isEmpty ? "未填写模型" : ai.model(for: ai.provider))"
                         : "需要配置 API Key"
                 )
             }
@@ -131,37 +147,28 @@ struct SettingsView: View {
                     detail: "Apple 健康、Keep、COROS"
                 )
             }
-
-            NavigationLink {
-                AgentSystemSettingsView()
-            } label: {
-                SettingsSummaryRow(
-                    icon: "waveform.path.ecg",
-                    title: "任务进度与通知",
-                    detail: "锁屏、灵动岛与完成提醒"
-                )
-            }
-
-            NavigationLink {
-                RemoteAgentSettingsView()
-            } label: {
-                SettingsSummaryRow(
-                    icon: "server.rack",
-                    title: "后台持续处理",
-                    detail: RemoteAgentPreference.isEnabled()
-                        ? "已开启 · Soma 管理模型"
-                        : "默认关闭"
-                )
-            }
         }
     }
 
+    /// PRD 020：任务进度与后台处理是低频配置，下沉到「更多」。
     private var privacyAndAdvancedSection: some View {
         Section("更多") {
             NavigationLink {
                 DataManagementView()
             } label: {
                 Label("数据与备份", systemImage: "externaldrive")
+            }
+
+            NavigationLink {
+                AgentSystemSettingsView()
+            } label: {
+                Label("任务进度与通知", systemImage: "waveform.path.ecg")
+            }
+
+            NavigationLink {
+                RemoteAgentSettingsView()
+            } label: {
+                Label("后台持续处理", systemImage: "server.rack")
             }
 
             NavigationLink {
@@ -205,73 +212,23 @@ struct SettingsView: View {
         }
     }
 
-    private var gymSection: some View {
-        Section {
-            NavigationLink {
-                GymLibraryView()
-            } label: {
-                Label("管理健身房", systemImage: "building.2")
-            }
-        } header: {
-            Text("训练环境")
-        } footer: {
-            Text("在这里审查健身房照片与器械；当前健身房也可在聊天输入框上方快速切换。")
-        }
-    }
-
-    private var personalSection: some View {
-        Section {
-            NavigationLink {
-                PersonalBodyInfoView()
-            } label: {
-                Label("身体信息", systemImage: "person.text.rectangle")
-            }
-        } header: {
-            Text("个人")
-        } footer: {
-            Text("用于个性化训练建议和本地运动热量估算。所有字段均可留空，只保存在当前数据空间。")
-        }
-    }
-
-    private var dataSpaceSection: some View {
-        Section {
-            Picker(
-                "当前数据",
-                selection: Binding(
-                    get: { dataSpace.activeSpace },
-                    set: { dataSpace.select($0) }
-                )
-            ) {
-                ForEach(DataSpace.allCases) { space in
-                    Label(space.title, systemImage: space.icon)
-                        .tag(space)
-                }
-            }
-            .pickerStyle(.segmented)
-        } header: {
-            Text("数据空间")
-        } footer: {
-            Text("两个空间完全隔离。演示数据用于体验完整功能；个人数据只保存你自己的聊天、照片与 AI 记录，切换不会删除任何数据。")
-        }
-    }
-
+    /// PRD 020：隐私页只保留可操作的位置开关，静态说明压缩为一句 footer。
     private var privacySection: some View {
         Section {
-            Label("无账户系统", systemImage: "person.crop.circle.badge.xmark")
-            Label("数据库与媒体保存在 App 沙盒", systemImage: "internaldrive.fill")
-            Label("每个平台的 API Key 仅存入本机 Keychain", systemImage: "key.fill")
             Toggle(isOn: locationEnabledBinding) {
                 Label("随消息记录位置", systemImage: "location")
             }
-            Label("天气仅在相关消息中按需获取", systemImage: "cloud.sun")
         } header: {
             Text("隐私")
         } footer: {
-            Text("首次发送时 Soma 会询问是否随消息记录位置；无论允许或拒绝都不再自动询问，可在这里修改。开启后仅在发送时获取一次并保存在本机，不持续或后台跟踪。天气或户外消息会向 Open-Meteo 发送约 1 公里精度的位置，服务方同时可见设备 IP；远程 Agent 不接收原始坐标。")
+            Text("开启后仅在发送时获取一次位置并保存在本机；天气或户外消息会向 Open-Meteo 发送约 1 公里精度的位置。Soma 无账户，数据与 API Key 只保存在本机。")
         }
     }
 
-    private var aiSection: some View {
+    /// ADR 0046：配置页不折叠配置本身。两档在顶部分段切换，
+    /// 平台、Base URL、API Key 与模型同屏可见可改，改动即时落盘。
+    @ViewBuilder
+    private var llmSections: some View {
         Section {
             Picker("模型档位", selection: modelTierBinding) {
                 ForEach(AIModelTier.allCases) { tier in
@@ -279,139 +236,175 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
+        } footer: {
+            Text(
+                modelTier == .standard
+                    ? "标准模型负责所有含媒体、含业务写入和复杂纠错的任务，是聊天的能力下限。"
+                    : "小模型可不配置。配置并启用后，Agent 只把短文本、无媒体且无业务写入意图的简单任务交给它。"
+            )
+        }
 
-            if modelTier == .small {
-                Toggle("配置小模型", isOn: $smallModelEnabled)
+        Section {
+            Picker("平台", selection: providerBinding) {
+                ForEach(AIProvider.allCases) { option in
+                    Text(option.displayName).tag(option)
+                }
             }
 
-            if modelTier == .standard || smallModelEnabled {
-                Picker("平台", selection: providerBinding) {
-                    ForEach(AIProvider.allCases) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
-
-                TextField(
-                    provider == .other ? "自定义 OpenAI-compatible URL" : "兼容 API Base URL",
-                    text: $baseURL
-                )
+            TextField("Base URL", text: $baseURL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
+                .onChange(of: baseURL) { persistConfiguration() }
 
+            HStack {
+                Group {
+                    if showKey {
+                        TextField("API Key", text: $apiKey)
+                    } else {
+                        SecureField("API Key", text: $apiKey)
+                    }
+                }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                Button {
+                    showKey.toggle()
+                } label: {
+                    Image(systemName: showKey ? "eye.slash" : "eye")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(showKey ? "隐藏 API Key" : "显示 API Key")
+            }
+
+            Button {
+                saveKeyAndRefresh()
+            } label: {
                 if isLoadingModels {
-                    LabeledContent("可用模型") {
+                    HStack {
                         ProgressView()
-                            .controlSize(.small)
-                    }
-                } else if models.isEmpty {
-                    LabeledContent("可用模型") {
-                        Text(apiKey.isEmpty ? "保存 API Key 后自动获取" : "暂无列表，可手动输入")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    LabeledContent("手动模型 ID") {
-                        TextField("输入模型 ID", text: $model)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
+                        Text("正在获取模型…")
                     }
                 } else {
-                    Picker("可用模型", selection: $model) {
-                        if !models.contains(where: { $0.id == model }) {
-                            Text("当前：\(model)").tag(model)
-                        }
-                        ForEach(models) { option in
-                            Text(option.id).tag(option.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-
-                capabilityRow
-
-                if modelTier == .standard {
-                    LabeledContent("图片生成模型") {
-                        TextField("例如 gpt-image-2", text: $imageModel)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                    Text("动作图片只会在你从动作详情主动点击生成时请求；不会在打开页面或记录训练时自动生成。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Group {
-                        if showKey {
-                            TextField("API Key", text: $apiKey)
-                        } else {
-                            SecureField("API Key", text: $apiKey)
-                        }
-                    }
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                    Button {
-                        showKey.toggle()
-                    } label: {
-                        Image(systemName: showKey ? "eye.slash" : "eye")
-                    }
-                    .accessibilityLabel(showKey ? "隐藏 API Key" : "显示 API Key")
-                }
-
-                HStack {
-                    Button(keySaved ? "API Key 已保存" : "保存并获取模型") {
-                        saveKeyAndRefresh()
-                    }
-                    .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    Spacer()
-
-                    Button {
-                        Task { await refreshModels() }
-                    } label: {
-                        if isLoadingModels {
-                            ProgressView()
-                        } else {
-                            Label("刷新模型", systemImage: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(apiKey.isEmpty || isLoadingModels)
-                }
-
-                if let modelError {
-                    Label(modelError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(AppTheme.warning)
-                } else if !models.isEmpty {
-                    Text("已从 \(provider.displayName) 获取 \(models.count) 个可用模型。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Text(keySaved ? "保存并重新获取模型" : "保存并获取模型")
                 }
             }
+            .disabled(
+                apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || isLoadingModels
+            )
         } header: {
-            Text("AI 服务")
+            Text("平台与凭据")
         } footer: {
-            Text("小模型可不配置；配置后，Agent 只把短文本、无媒体且无业务写入意图的简单任务交给小模型，其余使用标准模型。当前输入、同一对话最近 10 个来回，以及视觉额度内的压缩图片或视频关键帧会发送给所选平台，原始媒体继续留在本机。")
+            Text("Base URL 会按所选平台预填，可以改成自建或代理地址。API Key 只保存在本机 Keychain。")
+        }
+
+        modelSection
+
+        if modelTier == .standard {
+            Section {
+                TextField("例如 gpt-image-2", text: $imageModel)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onChange(of: imageModel) { persistConfiguration() }
+            } header: {
+                Text("图片生成模型")
+            } footer: {
+                Text("留空表示不启用。动作图片只在动作详情主动点击生成时请求。")
+            }
+        } else {
+            Section {
+                Toggle("启用小模型", isOn: $smallModelEnabled)
+            } footer: {
+                Text("关闭时所有任务都走标准模型，这里的配置会被保留。")
+            }
         }
     }
 
+    /// ADR 0046：模型是纯输入框，`/models` 结果只作为输入历史式建议。
+    private var modelSection: some View {
+        Section {
+            TextField("输入模型 ID", text: $model)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($modelFieldFocused)
+                .onChange(of: model) { persistConfiguration() }
+
+            if showsModelSuggestions {
+                InputSuggestionList(
+                    items: modelSuggestions,
+                    selectionHint: "填入模型输入框",
+                    scrollAfter: 5
+                ) { item in
+                    model = item.id
+                    modelFieldFocused = false
+                }
+                .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+            }
+
+            if isLoadingModels {
+                LabeledContent("可用模型") {
+                    ProgressView().controlSize(.small)
+                }
+            }
+
+            if !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                capabilityRow
+            }
+
+            if let modelError {
+                Label(modelError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.warning)
+            }
+        } header: {
+            Text("模型")
+        } footer: {
+            Text(modelFooterText)
+        }
+    }
+
+    private var modelFooterText: String {
+        if models.isEmpty {
+            return "可以直接输入平台的模型 ID。保存 API Key 后 Soma 会尝试拉取 /models，成功时在输入框下方给出候选。"
+        }
+        return "点选候选或直接输入都可以，输入的值会立即保存，重新拉取候选不会覆盖它。"
+    }
+
+    private var showsModelSuggestions: Bool {
+        modelFieldFocused && !modelSuggestions.isEmpty
+    }
+
+    /// 候选行只给模型 ID：能力标注在选定之后由下方那一行说明，不在每行重复。
+    private var modelSuggestions: [InputSuggestionItem] {
+        let query = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matched = query.isEmpty
+            ? models
+            : models.filter { $0.id.localizedCaseInsensitiveContains(query) }
+        if matched.count == 1, matched[0].id == query {
+            return []
+        }
+        return matched.map { option in
+            InputSuggestionItem(id: option.id, title: option.id, icon: "cpu")
+        }
+    }
+
+    /// 只在已经填好模型时出现，并且只占一行：能力标注本身已经说清了后果。
     private var capabilityRow: some View {
         HStack(spacing: 8) {
             Image(systemName: capabilityIcon)
                 .foregroundStyle(capabilityColor)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(selectedCapability.label)
-                    .font(.subheadline.weight(.medium))
-                if selectedCapability == .unsupported {
-                    Text("图片和视频不会发送给这个模型，请更换模型。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Text(selectedCapability.label)
+                .font(.footnote)
+                .foregroundStyle(
+                    selectedCapability == .unsupported
+                        ? AppTheme.warning
+                        : .secondary
+                )
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var capabilityIcon: String {
@@ -439,8 +432,12 @@ struct SettingsView: View {
         }
     }
 
+    /// 只在首次出现时载入。返回上一层会再次触发 `onAppear`，重新载入会覆盖
+    /// 子页刚改过的值——这正是「选了模型但没保存」缺陷的成因（ADR 0046）。
     private func loadInitialConfiguration() {
         locationPreferenceRaw = ConversationLocationPreference.current().rawValue
+        guard !didLoadConfiguration else { return }
+        didLoadConfiguration = true
         smallModelEnabled = ai.isTierEnabled(.small)
         loadTierConfiguration(.standard)
     }
@@ -450,7 +447,7 @@ struct SettingsView: View {
             get: { modelTier },
             set: { newTier in
                 guard newTier != modelTier else { return }
-                persistConfiguration()
+                modelFieldFocused = false
                 modelTier = newTier
                 loadTierConfiguration(newTier)
             }
@@ -462,7 +459,7 @@ struct SettingsView: View {
             get: { provider },
             set: { newProvider in
                 guard newProvider != provider else { return }
-                persistConfiguration()
+                modelFieldFocused = false
                 provider = newProvider
                 loadProviderConfiguration()
             }
@@ -531,12 +528,16 @@ struct SettingsView: View {
             try Task.checkCancellation()
             guard provider == requestedProvider else { return }
             models = fetched
-            if !fetched.contains(where: { $0.id == model }),
-               let suggested = fetched.first(where: { $0.multimodalSupport == .supported }) ?? fetched.first
-            {
-                model = suggested.id
-                persistConfiguration()
+            // ADR 0046：刷新候选不覆盖已填写的模型，只在为空时补一个默认值。
+            guard model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let suggested = fetched.first(where: {
+                      $0.multimodalSupport == .supported
+                  }) ?? fetched.first
+            else {
+                return
             }
+            model = suggested.id
+            persistConfiguration()
         } catch {
             guard !Task.isCancelled, provider == requestedProvider else { return }
             models = []
@@ -551,6 +552,7 @@ private struct HealthDataIntegrationsView: View {
     @State private var isImporting = false
     @State private var resultMessage: String?
     @State private var errorMessage: String?
+    @State private var otherDevicesExpanded = false
 
     var body: some View {
         Form {
@@ -593,31 +595,32 @@ private struct HealthDataIntegrationsView: View {
                 Text("只读取你明确授权的最近一年体重、训练和训练活动能量，并转换为 Soma 记录写入当前数据空间。每类数据分别保存增量游标，同时按 HealthKit 样本 ID 去重并同步来源删除；权限可随时在“健康”App 中撤销。")
             }
 
+            // PRD 020：Keep/COROS 没有直连路径，说明折叠为「其他设备」。
             Section {
-                LabeledContent("直接接入", value: "暂不可用")
-                Text("目前没有找到 Keep 面向个人开发者开放的官方运动数据 API，因此不提供不可用的登录开关。若 Keep 已把相关数据写入 Apple 健康，可通过上方 HealthKit 路径读取支持的数据类型。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Keep")
-            }
+                DisclosureGroup("Keep 与 COROS", isExpanded: $otherDevicesExpanded) {
+                    LabeledContent("Keep 直接接入", value: "暂不可用")
+                    Text("Keep 暂无面向个人开发者的官方运动数据 API。若 Keep 已把数据写入 Apple 健康，可通过上方路径读取。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
-            Section {
-                LabeledContent("推荐方式", value: "经 Apple 健康")
-                Text("COROS 官方支持把部分日常与训练相关数据同步到 Apple 健康。Soma 可读取其中获准的体重和 HealthKit 训练；更完整的 COROS 云端直连需要开发者申请 OAuth API 凭据。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    LabeledContent("COROS 推荐方式", value: "经 Apple 健康")
+                    Text("COROS 支持把部分数据同步到 Apple 健康；更完整的云端直连需要开发者申请 OAuth API 凭据。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
-                Link(
-                    "查看 COROS 与 Apple 健康同步说明",
-                    destination: URL(string: "https://support.coros.com/hc/en-us/articles/360041549551-Connecting-Apple-Health-with-COROS-App")!
-                )
-                Link(
-                    "申请 COROS API 接入",
-                    destination: URL(string: "https://support.coros.com/hc/en-us/articles/17085887816340-Submitting-an-API-Application")!
-                )
+                    Link(
+                        "查看 COROS 与 Apple 健康同步说明",
+                        destination: URL(string: "https://support.coros.com/hc/en-us/articles/360041549551-Connecting-Apple-Health-with-COROS-App")!
+                    )
+                    Link(
+                        "申请 COROS API 接入",
+                        destination: URL(string: "https://support.coros.com/hc/en-us/articles/17085887816340-Submitting-an-API-Application")!
+                    )
+                }
             } header: {
-                Text("COROS")
+                Text("其他设备")
+            } footer: {
+                Text("Keep 与 COROS 数据统一经 Apple 健康路径读取。")
             }
         }
         .navigationTitle("健康数据与设备")
@@ -668,14 +671,12 @@ private struct PersonalBodyInfoView: View {
     @State private var fitnessGoal = ""
     @State private var healthNotes = ""
     @State private var loadedProfileID: UUID?
+    @State private var moreBasicsExpanded = false
+    @State private var contextExpanded = false
 
     private var profile: UserProfile? {
         loadedProfileID.flatMap { id in profiles.first(where: { $0.id == id }) }
             ?? profiles.first
-    }
-
-    private var latestMeasuredWeight: Double? {
-        bodyEntries.compactMap(\.weight).first
     }
 
     private var postureEntries: [BodyEntry] {
@@ -684,23 +685,12 @@ private struct PersonalBodyInfoView: View {
 
     var body: some View {
         Form {
-            Section("基本信息") {
-                ProfileFieldRow(title: "称呼", placeholder: "可选", text: $displayName)
-
+            // PRD 020：默认只展示性别/身高/参考体重三个核心字段，其余折叠。
+            Section {
                 Picker("生理性别", selection: $biologicalSex) {
                     ForEach(BiologicalSex.allCases) { value in
                         Text(value.rawValue).tag(value)
                     }
-                }
-
-                Toggle("填写出生日期", isOn: $hasBirthDate)
-                if hasBirthDate {
-                    DatePicker(
-                        "出生日期",
-                        selection: $birthDate,
-                        in: earliestBirthDate ... Date.now,
-                        displayedComponents: .date
-                    )
                 }
                 ProfileFieldRow(
                     title: "身高",
@@ -716,23 +706,40 @@ private struct PersonalBodyInfoView: View {
                     text: $referenceWeight,
                     keyboard: .decimalPad
                 )
+
+                DisclosureGroup("更多（可选）", isExpanded: $moreBasicsExpanded) {
+                    ProfileFieldRow(title: "称呼", placeholder: "可选", text: $displayName)
+                    Toggle("填写出生日期", isOn: $hasBirthDate)
+                    if hasBirthDate {
+                        DatePicker(
+                            "出生日期",
+                            selection: $birthDate,
+                            in: earliestBirthDate ... Date.now,
+                            displayedComponents: .date
+                        )
+                    }
+                }
+            } header: {
+                Text("基本信息")
+            } footer: {
+                Text("参考体重用于本地热量估算（MET × 体重 × 时长），优先使用最近一次体重记录。所有字段均可留空。")
             }
 
             Section {
-                ProfileFieldRow(
-                    title: "健身目标",
-                    placeholder: "例如：提升力量、减脂或保持健康",
-                    text: $fitnessGoal,
-                    isMultiline: true
-                )
-                ProfileFieldRow(
-                    title: "身体限制与注意事项",
-                    placeholder: "例如：膝盖不适、医生给出的运动限制",
-                    text: $healthNotes,
-                    isMultiline: true
-                )
-            } header: {
-                Text("训练上下文")
+                DisclosureGroup("训练上下文", isExpanded: $contextExpanded) {
+                    ProfileFieldRow(
+                        title: "健身目标",
+                        placeholder: "例如：提升力量、减脂或保持健康",
+                        text: $fitnessGoal,
+                        isMultiline: true
+                    )
+                    ProfileFieldRow(
+                        title: "身体限制与注意事项",
+                        placeholder: "例如：膝盖不适、医生给出的运动限制",
+                        text: $healthNotes,
+                        isMultiline: true
+                    )
+                }
             } footer: {
                 Text("AI 只会把这里的信息当作上下文，不会据此进行医学诊断。")
             }
@@ -792,24 +799,6 @@ private struct PersonalBodyInfoView: View {
             } footer: {
                 Text("体态图按时间保留，方便在相近拍摄条件下回溯变化。左滑可删除，点入后可编辑解析数据。")
             }
-
-            Section {
-                LabeledContent("当前体重来源") {
-                    if let latestMeasuredWeight {
-                        Text("最近身体记录 · \(formatted(latestMeasuredWeight)) kg")
-                    } else if let profileWeight = parsedDouble(referenceWeight) {
-                        Text("个人信息 · \(formatted(profileWeight)) kg")
-                    } else {
-                        Text("未填写")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent("计算方式", value: "MET × 体重 × 时长")
-            } header: {
-                Text("热量估算")
-            } footer: {
-                Text("优先使用最近一次体重记录。无氧训练缺少实际时长时，可由组数、次数、间歇和每次约 4 秒的动作节奏推算，仅用于热量估算且会明确标记。")
-            }
         }
         .navigationTitle("身体信息")
         .navigationBarTitleDisplayMode(.inline)
@@ -862,6 +851,8 @@ private struct PersonalBodyInfoView: View {
         referenceWeight = profile.referenceWeight.map(formatted) ?? ""
         fitnessGoal = profile.fitnessGoal
         healthNotes = profile.healthNotes
+        moreBasicsExpanded = !profile.displayName.isEmpty || hasBirthDate
+        contextExpanded = !profile.fitnessGoal.isEmpty || !profile.healthNotes.isEmpty
     }
 
     private func save() {
@@ -971,9 +962,8 @@ private struct DeveloperSettingsView: View {
     @Environment(DataSpaceController.self) private var dataSpace
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
     @State private var customizedSections = Set<ReActPromptSection>()
-    @State private var customizedSkills = Set<AgentSkill>()
+    @State private var customizedSkillCount = 0
     @State private var confirmsResetAllPrompts = false
-    @State private var confirmsResetAllSkills = false
 
     var body: some View {
         Form {
@@ -993,6 +983,8 @@ private struct DeveloperSettingsView: View {
             } footer: {
                 Text("审查当前数据空间内每次 ReAct Loop 的完整本地 Trace。")
             }
+
+            ReActLoopSettingsSection()
 
             Section {
                 ForEach(ReActPromptSection.userEditableCases) { section in
@@ -1028,38 +1020,20 @@ private struct DeveloperSettingsView: View {
                 }
             }
 
+            // PRD 020：Skill 列表收进二级页，这里只保留入口与自定义摘要。
             Section {
-                ForEach(AgentSkill.allCases) { skill in
-                    NavigationLink {
-                        AgentSkillEditor(skill: skill)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text(skill.title)
-                                    .font(.headline)
-                                Spacer()
-                                Text(customizedSkills.contains(skill) ? "已自定义" : "默认")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(customizedSkills.contains(skill) ? AppTheme.tint : .secondary)
-                            }
-                            Text(skill.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                        .padding(.vertical, 4)
+                NavigationLink {
+                    AgentSkillsListView()
+                } label: {
+                    HStack {
+                        Label("Skills", systemImage: "text.book.closed")
+                        Spacer()
+                        Text(customizedSkillCount > 0 ? "\(customizedSkillCount) 项自定义" : "默认")
+                            .foregroundStyle(.secondary)
                     }
                 }
-            } header: {
-                Text("Skills")
             } footer: {
-                Text("系统提示词只披露 Skill 目录；Agent 通过 load_skill 按需加载这里保存的完整内容，加载过程会记录为独立 Span。")
-            }
-
-            Section {
-                Button("全部恢复默认 Skills", systemImage: "arrow.counterclockwise", role: .destructive) {
-                    confirmsResetAllSkills = true
-                }
+                Text("Agent 通过 load_skill 按需加载保存的完整内容。")
             }
 
             Section {
@@ -1082,11 +1056,11 @@ private struct DeveloperSettingsView: View {
                 Text("演示空间用于展示完整功能；个人空间只保存真实数据。两个空间完全隔离，切换不会删除内容。")
             }
         }
-        .navigationTitle("开发者设置")
+        .navigationTitle("高级设置")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             customizedSections = Set(ReActPromptSection.userEditableCases.filter { $0.isCustomized() })
-            customizedSkills = Set(AgentSkill.allCases.filter { $0.isCustomized() })
+            customizedSkillCount = AgentSkill.allCases.count { $0.isCustomized() }
         }
         .alert("恢复全部默认提示词？", isPresented: $confirmsResetAllPrompts) {
             Button("恢复默认", role: .destructive) {
@@ -1097,7 +1071,54 @@ private struct DeveloperSettingsView: View {
         } message: {
             Text("你保存的角色与安全策略自定义内容会被移除。")
         }
-        .alert("恢复全部默认 Skills？", isPresented: $confirmsResetAllSkills) {
+    }
+}
+
+/// PRD 020：Skill 目录二级页，承接原先平铺在高级设置里的列表。
+private struct AgentSkillsListView: View {
+    @State private var customizedSkills = Set<AgentSkill>()
+    @State private var confirmsResetAll = false
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(AgentSkill.allCases) { skill in
+                    NavigationLink {
+                        AgentSkillEditor(skill: skill)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(skill.title)
+                                    .font(.headline)
+                                Spacer()
+                                Text(customizedSkills.contains(skill) ? "已自定义" : "默认")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(customizedSkills.contains(skill) ? AppTheme.tint : .secondary)
+                            }
+                            Text(skill.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            } footer: {
+                Text("系统提示词只披露 Skill 目录；Agent 通过 load_skill 按需加载这里保存的完整内容，加载过程会记录为独立 Span。")
+            }
+
+            Section {
+                Button("全部恢复默认 Skills", systemImage: "arrow.counterclockwise", role: .destructive) {
+                    confirmsResetAll = true
+                }
+            }
+        }
+        .navigationTitle("Skills")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            customizedSkills = Set(AgentSkill.allCases.filter { $0.isCustomized() })
+        }
+        .alert("恢复全部默认 Skills？", isPresented: $confirmsResetAll) {
             Button("恢复默认", role: .destructive) {
                 AgentSkill.allCases.forEach { $0.reset() }
                 customizedSkills = []
@@ -1779,6 +1800,9 @@ private struct AgentTraceSpanRow: View {
             if let tokenSummary = metadata.tokenSummary {
                 parts.append(tokenSummary)
             }
+            if let latencySummary = metadata.latencySummary {
+                parts.append(latencySummary)
+            }
         case .skill:
             parts.insert(span.status.title, at: 0)
         case .tool, .output:
@@ -1843,6 +1867,24 @@ private struct TraceSpanMetadata {
         else {
             return "tokens \(totalText)"
         }
-        return "\(totalText) tokens · 入 \(input.formatted()) / 出 \(output.formatted())"
+        var summary = "\(totalText) tokens · 入 \(input.formatted()) / 出 \(output.formatted())"
+        // 供应商侧前缀缓存的命中量。没有这个字段说明该平台不回传，不等于没命中。
+        if let cached = integer("cached_prompt_tokens"), cached > 0 {
+            summary += " · 缓存 \(cached.formatted())"
+        }
+        return summary
+    }
+
+    /// 首个增量之前是请求与供应商排队，之后是流式与本机投影：
+    /// 两个数字分开才能判断慢在哪一侧。
+    var latencySummary: String? {
+        var parts: [String] = []
+        if let firstDelta = integer("time_to_first_delta_ms") {
+            parts.append("首字 \(firstDelta)ms")
+        }
+        if let projection = integer("projection_ms"), projection > 0 {
+            parts.append("投影 \(projection)ms")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

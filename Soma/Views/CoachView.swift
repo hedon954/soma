@@ -44,6 +44,7 @@ struct CoachView: View {
     private var workoutSessions: [WorkoutSession]
     @Query(sort: \WorkoutSet.order)
     private var workoutSets: [WorkoutSet]
+    @Query(sort: \AgentJob.createdAt) private var agentJobs: [AgentJob]
 
     @State private var draft = ""
     @State private var attachments: [PendingAttachment] = []
@@ -56,8 +57,10 @@ struct CoachView: View {
     @State private var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
     @State private var showsLocationPrompt = false
-    @State private var selectedExerciseID: UUID?
     @State private var useLocalForNextMessage = false
+    /// 流式期间合并滚动，避免每个 token 启动一次 250ms 动画反压 MainActor。
+    @State private var lastLiveScrollAt = Date.distantPast
+    @State private var liveScrollTask: Task<Void, Never>?
 
     let onRequireAIConfiguration: () -> Void
 
@@ -86,94 +89,30 @@ struct CoachView: View {
             && processor.sessionID == conversationSessions.activeSessionID
     }
 
+    /// ADR 0045：暂存队列按数据空间统计，不区分 Session——
+    /// 用户关心的是「还有多少条没被消费」。
+    private var stagedJobCount: Int {
+        agentJobs.filter {
+            $0.dataSpace == dataSpace.activeSpace && $0.state == .staged
+        }.count
+    }
+
+    private var stagedTurnIDs: Set<UUID> {
+        Set(
+            agentJobs
+                .filter {
+                    $0.dataSpace == dataSpace.activeSpace && $0.state == .staged
+                }
+                .map(\.turnID)
+        )
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let drawerWidth = min(340, geometry.size.width * 0.84)
             ZStack(alignment: .leading) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
-                            if messages.count <= 1 {
-                                ConversationStarter(onSelect: sendPrompt)
-                            }
-
-                            ForEach(messages) { message in
-                                CoachBubble(
-                                    message: message,
-                                    isLive: isProcessingHere
-                                        && message.agentStatus == .running,
-                                    canRetry: !processor.isProcessing
-                                        && ConversationTurnProjection.canRetry(
-                                            message,
-                                            in: messages
-                                        ),
-                                    onRetry: { retry(message) }
-                                )
-                                .id(message.id)
-                            }
-
-                            Color.clear.frame(height: 1).id("bottom")
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                    }
-                    .scrollDismissesKeyboard(.interactively)
-                    .appPageBackground()
-                    .safeAreaInset(edge: .bottom) {
-                        CoachComposer(
-                            draft: $draft,
-                            attachments: $attachments,
-                            gyms: gyms,
-                            currentGym: currentGym,
-                            exerciseCandidates: exerciseCandidates,
-                            selectedExercise: selectedExercise,
-                            latestExerciseCapacity: latestExerciseCapacity,
-                            showsExecutionChoice: remoteExecutionEnabled
-                                && RemoteAgentPreference.baseURL() != nil,
-                            useLocalForNextMessage: $useLocalForNextMessage,
-                            isSending: processor.isProcessing,
-                            isListening: speechInput.isListening,
-                            speechMessage: speechInput.errorMessage,
-                            focusRequest: composerFocusRequest,
-                            dismissRequest: composerDismissRequest,
-                            onAddMedia: showMedia,
-                            onSelectGym: selectGym,
-                            onManageGyms: { showsGyms = true },
-                            onSelectExercise: selectExercise,
-                            onApplyRecentWorkout: applyRecentWorkout,
-                            onToggleVoice: toggleVoice,
-                            onSend: send
-                        )
-                    }
-                    .onChange(of: messages.last?.id, initial: true) {
-                        scrollToBottomAfterLayout(proxy)
-                    }
-                    .onChange(of: processor.isProcessing) {
-                        scrollToBottom(proxy)
-                    }
-                    .onChange(of: processor.liveAssistantText) {
-                        scrollToBottom(proxy)
-                    }
-                    .onChange(of: processor.liveAgentActivity) {
-                        scrollToBottom(proxy)
-                    }
-                    .onChange(of: processor.liveEventRevision) {
-                        scrollToBottom(proxy)
-                    }
-                    .onChange(of: scrollRequest) {
-                        scrollToBottomAfterLayout(proxy)
-                    }
-                    .onChange(of: speechInput.transcript) {
-                        updateDraftFromSpeech()
-                    }
-                    .onChange(of: draft) {
-                        guard let selectedExercise else { return }
-                        if !draft.hasPrefix(selectedExercise.canonicalName) {
-                            selectedExerciseID = nil
-                        }
-                    }
-                }
-                .offset(x: sessionDrawerPresented ? drawerWidth : 0)
+                conversationArea
+                    .offset(x: sessionDrawerPresented ? drawerWidth : 0)
 
                 if sessionDrawerPresented {
                     HStack(spacing: 0) {
@@ -258,7 +197,6 @@ struct CoachView: View {
         ) { notification in
             guard let text = notification.object as? String else { return }
             draft = text
-            selectedExerciseID = nil
             composerFocusRequest = UUID()
         }
         .task(id: captureRouter.mediaDelivery?.id) {
@@ -270,6 +208,100 @@ struct CoachView: View {
         .onDisappear {
             speechInput.stop()
         }
+    }
+
+    private var conversationArea: some View {
+        ScrollViewReader { proxy in
+            messageList
+                .scrollDismissesKeyboard(.interactively)
+                .appPageBackground()
+                .safeAreaInset(edge: .bottom) {
+                    composer
+                }
+                .onChange(of: messages.last?.id, initial: true) {
+                    scrollToBottomAfterLayout(proxy)
+                }
+                .onChange(of: processor.isProcessing) { _, isProcessing in
+                    if isProcessing {
+                        scheduleLiveScroll(proxy)
+                    } else {
+                        liveScrollTask?.cancel()
+                        liveScrollTask = nil
+                        scrollToBottom(proxy)
+                    }
+                }
+                .onChange(of: processor.liveAssistantText) {
+                    scheduleLiveScroll(proxy)
+                }
+                .onChange(of: processor.liveAgentActivity) {
+                    scheduleLiveScroll(proxy)
+                }
+                .onChange(of: processor.liveEventRevision) {
+                    scheduleLiveScroll(proxy)
+                }
+                .onChange(of: scrollRequest) {
+                    scrollToBottomAfterLayout(proxy)
+                }
+                .onChange(of: speechInput.transcript) {
+                    updateDraftFromSpeech()
+                }
+        }
+    }
+
+    private var messageList: some View {
+        ScrollView {
+            LazyVStack(spacing: 14) {
+                if messages.count <= 1 {
+                    ConversationStarter(onSelect: sendPrompt)
+                }
+
+                ForEach(messages) { message in
+                    CoachBubble(
+                        message: message,
+                        isLive: isProcessingHere
+                            && message.agentStatus == .running,
+                        isStaged: message.turnID.map(stagedTurnIDs.contains) ?? false,
+                        canRetry: !processor.isProcessing
+                            && ConversationTurnProjection.canRetry(
+                                message,
+                                in: messages
+                            ),
+                        onRetry: { retry(message) }
+                    )
+                    .id(message.id)
+                }
+
+                Color.clear.frame(height: 1).id("bottom")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var composer: some View {
+        CoachComposer(
+            draft: $draft,
+            attachments: $attachments,
+            gyms: gyms,
+            currentGym: currentGym,
+            exerciseSuggestions: exerciseSuggestions,
+            stagedCount: stagedJobCount,
+            showsExecutionChoice: remoteExecutionEnabled
+                && RemoteAgentPreference.baseURL() != nil,
+            useLocalForNextMessage: $useLocalForNextMessage,
+            isSending: processor.isProcessing,
+            isListening: speechInput.isListening,
+            speechMessage: speechInput.errorMessage,
+            focusRequest: composerFocusRequest,
+            dismissRequest: composerDismissRequest,
+            onAddMedia: showMedia,
+            onSelectGym: selectGym,
+            onManageGyms: { showsGyms = true },
+            onApplySuggestion: applySuggestion,
+            onOpenLLMConfiguration: onRequireAIConfiguration,
+            onToggleVoice: toggleVoice,
+            onSend: send
+        )
     }
 
     private func showMedia() {
@@ -322,7 +354,6 @@ struct CoachView: View {
     private func switchToSession(_: ConversationSession) {
         draft = ""
         attachments = []
-        selectedExerciseID = nil
         useLocalForNextMessage = false
         speechInput.stop()
         composerDismissRequest = UUID()
@@ -381,80 +412,67 @@ struct CoachView: View {
 
     private func sendPrompt(_ prompt: String) {
         draft = prompt
-        selectedExerciseID = nil
         send()
     }
 
-    private var selectedExercise: ExerciseDefinition? {
-        guard let selectedExerciseID else { return nil }
-        return exerciseDefinitions.first {
-            $0.id == selectedExerciseID && !$0.isArchived
-        }
-    }
-
-    private var exerciseCandidates: [ExerciseDefinition] {
-        guard selectedExerciseID == nil else { return [] }
+    /// ADR 0046：一行同时给出动作名与最近一次训练容量，点一次即得到完整草稿。
+    private var exerciseSuggestions: [ExerciseInputSuggestion] {
         let query = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
-        return Array(exerciseDefinitions.lazy.filter {
-            !$0.isArchived
-                && $0.canonicalName.localizedCaseInsensitiveContains(query)
-        }.prefix(5))
+        let suggestions = ExerciseInputSuggestionBuilder.suggestions(
+            query: query,
+            exercises: exerciseDefinitions.map {
+                ExerciseInputSuggestionBuilder.ExerciseInput(
+                    id: $0.id,
+                    name: $0.canonicalName,
+                    isArchived: $0.isArchived
+                )
+            },
+            recentCapacities: recentExerciseCapacities
+        )
+        // 草稿已经等于唯一建议时不再重复提示。
+        if suggestions.count == 1, suggestions[0].draftText == query {
+            return []
+        }
+        return suggestions
     }
 
-    private var latestExerciseCapacity: ExerciseCapacitySuggestion? {
-        guard let selectedExerciseID else { return nil }
-        let legacy = workouts
-            .filter { $0.exerciseID == selectedExerciseID }
-            .map {
-                ExerciseCapacitySuggestion(
-                    date: $0.date,
-                    text: ExerciseQuickFill.text(for: $0)
-                )
+    private var recentExerciseCapacities:
+        [ExerciseInputSuggestionBuilder.RecentCapacityInput]
+    {
+        let legacy = workouts.compactMap { workout -> ExerciseInputSuggestionBuilder.RecentCapacityInput? in
+            guard let exerciseID = workout.exerciseID else { return nil }
+            return ExerciseInputSuggestionBuilder.RecentCapacityInput(
+                exerciseID: exerciseID,
+                date: workout.date,
+                text: ExerciseQuickFill.text(for: workout)
+            )
+        }
+        let guided = exercisePerformances.compactMap { performance -> ExerciseInputSuggestionBuilder.RecentCapacityInput? in
+            guard let session = workoutSessions.first(where: {
+                $0.id == performance.sessionID
+            }) else {
+                return nil
             }
-        let guided: [ExerciseCapacitySuggestion] = exercisePerformances
-            .compactMap { performance in
-                guard performance.exerciseID == selectedExerciseID,
-                      let session = workoutSessions.first(where: {
-                          $0.id == performance.sessionID
-                      })
-                else {
-                    return nil
-                }
-                let text = ExerciseQuickFill.text(for: workoutSets.filter {
+            return ExerciseInputSuggestionBuilder.RecentCapacityInput(
+                exerciseID: performance.exerciseID,
+                date: session.startedAt,
+                text: ExerciseQuickFill.text(for: workoutSets.filter {
                     $0.performanceID == performance.id
                 })
-                guard !text.isEmpty else { return nil }
-                return ExerciseCapacitySuggestion(
-                    date: session.startedAt,
-                    text: text
-                )
-            }
-        return (legacy + guided)
-            .filter { !$0.text.isEmpty }
-            .max { $0.date < $1.date }
+            )
+        }
+        return legacy + guided
     }
 
-    private func selectExercise(_ exercise: ExerciseDefinition) {
-        selectedExerciseID = exercise.id
-        draft = exercise.canonicalName
-        composerFocusRequest = UUID()
-    }
-
-    private func applyRecentWorkout() {
-        guard let selectedExercise, let latestExerciseCapacity else { return }
-        draft = latestExerciseCapacity.text.isEmpty
-            ? selectedExercise.canonicalName
-            : "\(selectedExercise.canonicalName)：\(latestExerciseCapacity.text)"
+    private func applySuggestion(_ suggestion: ExerciseInputSuggestion) {
+        draft = suggestion.draftText
         composerFocusRequest = UUID()
     }
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
-        guard ensureAIConfigured(forceLocal: useLocalForNextMessage) else {
-            return
-        }
+        guard !text.isEmpty || !attachments.isEmpty else { return }
         guard locationPreference != .unasked else {
             speechInput.stop()
             showsLocationPrompt = true
@@ -465,10 +483,7 @@ struct CoachView: View {
 
     private func submitCurrentDraft() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !attachments.isEmpty, !processor.isProcessing else { return }
-        guard ensureAIConfigured(forceLocal: useLocalForNextMessage) else {
-            return
-        }
+        guard !text.isEmpty || !attachments.isEmpty else { return }
         speechInput.stop()
         let pending = attachments
         let session = conversationSessions.ensureActiveSession(
@@ -483,6 +498,10 @@ struct CoachView: View {
         ) else {
             return
         }
+        // 引导条件要在落盘前判断：这条消息本身会让暂存计数从 0 变成 1。
+        let needsConfigurationGuidance = needsConfigurationGuidance(
+            forceLocal: useLocalForNextMessage
+        )
         let accepted = processor.submit(
             text: text,
             attachments: pending,
@@ -494,15 +513,17 @@ struct CoachView: View {
         if accepted {
             draft = ""
             attachments = []
-            selectedExerciseID = nil
             useLocalForNextMessage = false
             composerDismissRequest = UUID()
             scrollRequest = UUID()
+            if needsConfigurationGuidance {
+                openLLMConfiguration()
+            }
         }
     }
 
     private func retry(_ responseMessage: CoachMessage) {
-        guard ensureAIConfigured(forceLocal: false) else { return }
+        let needsConfigurationGuidance = needsConfigurationGuidance(forceLocal: false)
         guard let turnID = responseMessage.turnID,
               let userMessage = ConversationTurnProjection.userMessage(
                   for: turnID,
@@ -530,19 +551,24 @@ struct CoachView: View {
         ) {
             composerDismissRequest = UUID()
             scrollRequest = UUID()
+            if needsConfigurationGuidance {
+                openLLMConfiguration()
+            }
         }
     }
 
-    private func ensureAIConfigured(forceLocal: Bool) -> Bool {
+    /// ADR 0045：缺配置不再阻止发送。队列里还没有暂存消息时说明用户是第一次遇到，
+    /// 此时把消息落盘暂存并同时打开「LLM 配置」；之后只靠输入区的暂存提示，不再打断。
+    private func needsConfigurationGuidance(forceLocal: Bool) -> Bool {
         if !forceLocal, RemoteAgentPreference.isEnabled() {
-            return true
-        }
-        guard ai.hasRequiredAPIKey else {
-            speechInput.stop()
-            onRequireAIConfiguration()
             return false
         }
-        return true
+        return !ai.hasRequiredAPIKey && stagedJobCount == 0
+    }
+
+    private func openLLMConfiguration() {
+        speechInput.stop()
+        onRequireAIConfiguration()
     }
 
     private func toggleVoice() {
@@ -578,6 +604,27 @@ struct CoachView: View {
         }
     }
 
+    /// 约 10Hz 非动画跟随；流式结束后由 `isProcessing` 的 off 分支做一次动画归位。
+    private func scheduleLiveScroll(_ proxy: ScrollViewProxy) {
+        guard isProcessingHere else { return }
+        let interval: TimeInterval = 0.1
+        let elapsed = Date().timeIntervalSince(lastLiveScrollAt)
+        if elapsed >= interval {
+            lastLiveScrollAt = Date()
+            scrollToBottom(proxy, animated: false)
+            return
+        }
+        guard liveScrollTask == nil else { return }
+        let delay = interval - elapsed
+        liveScrollTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            liveScrollTask = nil
+            guard !Task.isCancelled, isProcessingHere else { return }
+            lastLiveScrollAt = Date()
+            scrollToBottom(proxy, animated: false)
+        }
+    }
+
     private func scrollToBottomAfterLayout(_ proxy: ScrollViewProxy) {
         Task { @MainActor in
             await Task.yield()
@@ -592,16 +639,12 @@ private struct ConversationStarter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("直接告诉我，剩下的交给 AI。")
+            Text("像聊天一样描述训练、饮食或身体变化，Soma 会理解并记录。")
                 .font(.title3.bold())
-            Text("发照片、视频，或者像聊天一样描述。我会自动理解、记录并更新你的进展。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .lineSpacing(3)
             VStack(spacing: 8) {
                 starter("刚做完深蹲 4组8次 60kg")
                 starter("午餐吃了鸡胸肉杂粮饭")
-                starter("切换到公司健身房")
             }
         }
         .padding(.vertical, 8)
@@ -611,18 +654,13 @@ private struct ConversationStarter: View {
         Button {
             onSelect(text)
         } label: {
-            HStack {
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Image(systemName: "arrow.up.left")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
-            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .background(.background, in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
     }
@@ -718,6 +756,7 @@ private struct SelectableChatText: UIViewRepresentable {
 struct CoachBubble: View {
     let message: CoachMessage
     var isLive = false
+    var isStaged = false
     var canRetry = false
     var onRetry: () -> Void = {}
 
@@ -778,12 +817,18 @@ struct CoachBubble: View {
                     .foregroundStyle(message.isFromCoach ? Color.primary : Color.white)
                 }
 
+                if isStaged, !message.isFromCoach {
+                    Label("已暂存，恢复后自动继续", systemImage: "tray.full")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
                 if canRetry {
                     Button(action: onRetry) {
                         Label("重试", systemImage: "arrow.clockwise")
                             .font(.subheadline.weight(.semibold))
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .tint(AppTheme.tint)
                     .accessibilityHint("复用原始文字、媒体和发送时的位置再次处理")
                 }
@@ -813,65 +858,13 @@ private extension CoachMessage {
     }
 }
 
-private struct LiveAgentResponse: View {
-    let text: String
-    let activity: String?
-    let isAgent: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            if !text.isEmpty {
-                HStack {
-                    MarkdownText(text)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
-                        .background(
-                            Color(uiColor: .secondarySystemGroupedBackground),
-                            in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-                        )
-                    Spacer(minLength: 32)
-                }
-            }
-
-            if let activity {
-                HStack(spacing: 7) {
-                    ProgressView().controlSize(.small)
-                    Text(activity)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Capsule())
-            } else if text.isEmpty {
-                HStack(spacing: 7) {
-                    ProgressView().controlSize(.small)
-                    Text(isAgent ? "Agent 正在分析…" : "正在理解并整理…")
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 10)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Capsule())
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct ExerciseCapacitySuggestion {
-    var date: Date
-    var text: String
-}
-
 private struct CoachComposer: View {
     @Binding var draft: String
     @Binding var attachments: [PendingAttachment]
     let gyms: [GymProfile]
     let currentGym: GymProfile?
-    let exerciseCandidates: [ExerciseDefinition]
-    let selectedExercise: ExerciseDefinition?
-    let latestExerciseCapacity: ExerciseCapacitySuggestion?
+    let exerciseSuggestions: [ExerciseInputSuggestion]
+    let stagedCount: Int
     let showsExecutionChoice: Bool
     @Binding var useLocalForNextMessage: Bool
     let isSending: Bool
@@ -882,102 +875,67 @@ private struct CoachComposer: View {
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
-    let onSelectExercise: (ExerciseDefinition) -> Void
-    let onApplyRecentWorkout: () -> Void
+    let onApplySuggestion: (ExerciseInputSuggestion) -> Void
+    let onOpenLLMConfiguration: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
     @FocusState private var focused: Bool
 
+    /// PRD 020：输入区同一时间最多一层上下文条，优先级为
+    /// 附件预览 > 动作建议 > 场馆切换。
+    private enum ContextStrip {
+        case attachments, suggestions, gym
+    }
+
+    private var contextStrip: ContextStrip? {
+        if !attachments.isEmpty {
+            return .attachments
+        }
+        if !exerciseSuggestions.isEmpty {
+            return .suggestions
+        }
+        if gyms.count >= 2 {
+            return .gym
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(spacing: 8) {
-            if !exerciseCandidates.isEmpty
-                || (selectedExercise != nil && latestExerciseCapacity != nil)
-            {
-                ExerciseComposerSuggestions(
-                    candidates: exerciseCandidates,
-                    selectedExercise: selectedExercise,
-                    latestCapacity: latestExerciseCapacity,
-                    onSelectExercise: onSelectExercise,
-                    onApplyRecentWorkout: onApplyRecentWorkout
+            // ADR 0045：暂存计数常驻在输入区上方，与上下文条互不挤占。
+            if stagedCount > 0 {
+                StagedQueueBanner(
+                    count: stagedCount,
+                    onOpenConfiguration: onOpenLLMConfiguration
                 )
             }
 
-            if gyms.count >= 2 {
-                Menu {
-                    ForEach(gyms) { gym in
-                        Button {
-                            onSelectGym(gym)
-                        } label: {
-                            if gym.id == currentGym?.id {
-                                Label(gym.name, systemImage: "checkmark")
-                            } else {
-                                Text(gym.name)
-                            }
-                        }
-                    }
-
-                    Divider()
-
-                    Button {
-                        onManageGyms()
-                    } label: {
-                        Label("管理健身房…", systemImage: "slider.horizontal.3")
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mappin.and.ellipse")
-                        Text(currentGym?.name ?? "选择健身房")
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.tertiary)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Color(uiColor: .secondarySystemGroupedBackground),
-                        in: Capsule()
-                    )
-                }
-                .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if showsExecutionChoice {
-                Button {
-                    useLocalForNextMessage.toggle()
-                } label: {
-                    Label(
-                        useLocalForNextMessage
-                            ? "本次仅本机"
-                            : "本次可后台继续",
-                        systemImage: useLocalForNextMessage
-                            ? "iphone"
-                            : "server.rack"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(
-                        useLocalForNextMessage
-                            ? AppTheme.warning
-                            : .secondary
-                    )
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
-                .accessibilityHint("切换这条消息是在本机执行还是投递为后台持续任务")
-            }
-
-            if !attachments.isEmpty {
+            switch contextStrip {
+            case .attachments:
                 AttachmentPreview(
                     attachments: attachments,
                     onRemove: { id in
                         attachments.removeAll { $0.id == id }
                     }
                 )
+            case .suggestions:
+                InputSuggestionList(
+                    items: exerciseSuggestions.map(Self.suggestionItem),
+                    selectionHint: "把动作与最近一次训练数据填入输入框"
+                ) { item in
+                    guard let suggestion = exerciseSuggestions.first(where: {
+                        $0.id.uuidString == item.id
+                    }) else {
+                        return
+                    }
+                    onApplySuggestion(suggestion)
+                }
+            case .gym:
+                gymStrip
+            case nil:
+                EmptyView()
             }
+
             if isListening {
                 Label("正在听写…", systemImage: "waveform")
                     .font(.caption.weight(.semibold))
@@ -1021,25 +979,7 @@ private struct CoachComposer: View {
                 .disabled(isSending)
                 .accessibilityLabel(isListening ? "停止语音输入" : "开始语音输入")
 
-                Button(action: onSend) {
-                    Group {
-                        if isSending {
-                            ProgressView().tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up").fontWeight(.bold)
-                        }
-                    }
-                    .frame(width: 38, height: 38)
-                    .foregroundStyle(.white)
-                    .background(AppTheme.tint, in: Circle())
-                }
-                .disabled(
-                    (
-                        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            && attachments.isEmpty
-                    ) || isSending
-                )
-                .accessibilityLabel("发送")
+                sendControl
             }
         }
         .padding(.horizontal, 12)
@@ -1057,56 +997,142 @@ private struct CoachComposer: View {
             }
         }
     }
-}
 
-private struct ExerciseComposerSuggestions: View {
-    let candidates: [ExerciseDefinition]
-    let selectedExercise: ExerciseDefinition?
-    let latestCapacity: ExerciseCapacitySuggestion?
-    let onSelectExercise: (ExerciseDefinition) -> Void
-    let onApplyRecentWorkout: () -> Void
-
-    var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(candidates) { exercise in
-                    Button {
-                        onSelectExercise(exercise)
-                    } label: {
-                        Label(
-                            exercise.canonicalName,
-                            systemImage: "figure.strengthtraining.traditional"
-                        )
-                        .lineLimit(1)
+    private var gymStrip: some View {
+        Menu {
+            ForEach(gyms) { gym in
+                Button {
+                    onSelectGym(gym)
+                } label: {
+                    if gym.id == currentGym?.id {
+                        Label(gym.name, systemImage: "checkmark")
+                    } else {
+                        Text(gym.name)
                     }
-                    .buttonStyle(.bordered)
-                    .accessibilityHint("把标准动作名称填入输入框")
-                }
-
-                if let selectedExercise, let latestCapacity {
-                    Button {
-                        onApplyRecentWorkout()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("上次训练")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text([
-                                selectedExercise.canonicalName,
-                                latestCapacity.text
-                            ].filter { !$0.isEmpty }.joined(separator: "："))
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(1)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityHint("把最近一次非空训练数值填入输入框")
                 }
             }
+
+            Divider()
+
+            Button {
+                onManageGyms()
+            } label: {
+                Label("管理健身房…", systemImage: "slider.horizontal.3")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "mappin.and.ellipse")
+                Text(currentGym?.name ?? "选择健身房")
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: Capsule()
+            )
         }
-        .scrollIndicators(.hidden)
+        .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 4)
+    }
+
+    private static func suggestionItem(
+        _ suggestion: ExerciseInputSuggestion
+    ) -> InputSuggestionItem {
+        InputSuggestionItem(
+            id: suggestion.id.uuidString,
+            title: suggestion.draftText,
+            detail: suggestion.recentDate.map {
+                "上次 " + $0.formatted(date: .abbreviated, time: .omitted)
+            },
+            icon: "figure.strengthtraining.traditional"
+        )
+    }
+
+    /// ADR 0045：任务在途时仍可继续发送，队列按 FIFO 消费。
+    private var sendDisabled: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && attachments.isEmpty
+    }
+
+    private var sendLabel: some View {
+        Group {
+            if isSending {
+                ProgressView().tint(.white)
+            } else {
+                Image(systemName: useLocalForNextMessage ? "iphone" : "arrow.up")
+                    .fontWeight(.bold)
+            }
+        }
+        .frame(width: 38, height: 38)
+        .foregroundStyle(.white)
+        .background(
+            useLocalForNextMessage ? AppTheme.warning : AppTheme.tint,
+            in: Circle()
+        )
+    }
+
+    /// PRD 020：远程执行方式不再常驻输入区，改为发送按钮长按菜单按条覆盖。
+    @ViewBuilder
+    private var sendControl: some View {
+        if showsExecutionChoice {
+            Menu {
+                Toggle(isOn: $useLocalForNextMessage) {
+                    Label("本次仅本机", systemImage: "iphone")
+                }
+            } label: {
+                sendLabel
+            } primaryAction: {
+                onSend()
+            }
+            .disabled(sendDisabled)
+            .accessibilityLabel(
+                useLocalForNextMessage ? "发送，本次仅本机" : "发送"
+            )
+            .accessibilityHint("长按选择这条消息是仅在本机执行还是可后台继续")
+        } else {
+            Button(action: onSend) {
+                sendLabel
+            }
+            .disabled(sendDisabled)
+            .accessibilityLabel("发送")
+        }
+    }
+}
+
+/// ADR 0045：暂存队列对用户只有两个信息——还有几条没被消费，以及去哪里恢复。
+private struct StagedQueueBanner: View {
+    let count: Int
+    let onOpenConfiguration: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "tray.full")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.warning)
+            Text("\(count) 条已暂存，LLM 恢复后自动继续")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button("去配置", action: onOpenConfiguration)
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.tint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            AppTheme.warning.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(count) 条消息已暂存，LLM 恢复后自动继续")
     }
 }
 

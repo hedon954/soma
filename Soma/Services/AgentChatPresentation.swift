@@ -2,12 +2,13 @@ import Foundation
 
 enum AgentToolResultDisclosure {
     static let collapsedLineLimit = 4
-    private static let collapsedCharacterThreshold = 80
+    /// 约 4 行 caption 正文；未超过行数且未超过该字数时不显示展开按钮。
+    private static let collapsedCharacterThreshold = 200
 
     static func shouldCollapse(_ text: String) -> Bool {
-        text.count > collapsedCharacterThreshold
-            || text.components(separatedBy: .newlines).count
-            > collapsedLineLimit
+        let lineCount = text.components(separatedBy: .newlines).count
+        return lineCount > collapsedLineLimit
+            || text.count > collapsedCharacterThreshold
     }
 }
 
@@ -47,29 +48,19 @@ struct AgentToolResultPresentation: Equatable {
         _ observation: String
     ) -> AgentToolResultPresentation {
         let names = AgentToolPresentationFormatter.exerciseNames(in: observation) ?? []
-        switch names.count {
-        case 0:
+        let image = "figure.strengthtraining.traditional"
+        guard !names.isEmpty else {
             return AgentToolResultPresentation(
                 summary: "动作库目前为空",
                 details: [],
                 disclosureLabel: nil,
-                detailSystemImage: "figure.strengthtraining.traditional"
-            )
-        case 1 ... 3:
-            return AgentToolResultPresentation(
-                summary: "动作库中有 \(names.count) 个动作：\(names.joined(separator: "、"))",
-                details: [],
-                disclosureLabel: nil,
-                detailSystemImage: "figure.strengthtraining.traditional"
-            )
-        default:
-            return AgentToolResultPresentation(
-                summary: "动作库中有 \(names.count) 个动作",
-                details: names,
-                disclosureLabel: "查看全部 \(names.count) 个动作",
-                detailSystemImage: "figure.strengthtraining.traditional"
+                detailSystemImage: image
             )
         }
+        return contentPresentation(
+            "动作库中有 \(names.count) 个动作：\(names.joined(separator: "、"))",
+            systemImage: image
+        )
     }
 
     private static func queryPresentation(
@@ -84,11 +75,9 @@ struct AgentToolResultPresentation: Equatable {
             guard details.count > 1 else {
                 return genericPresentation(observation)
             }
-            return AgentToolResultPresentation(
-                summary: "已读取个人资料和近期记录",
-                details: details,
-                disclosureLabel: "查看 \(details.count) 项信息",
-                detailSystemImage: "person.text.rectangle"
+            return contentPresentation(
+                details.joined(separator: "\n"),
+                systemImage: "person.text.rectangle"
             )
         }
 
@@ -97,11 +86,9 @@ struct AgentToolResultPresentation: Equatable {
         guard details.count > 1 else {
             return genericPresentation(observation, systemImage: kind.systemImage)
         }
-        return AgentToolResultPresentation(
-            summary: "找到 \(details.count) 条\(kind.name)",
-            details: details,
-            disclosureLabel: "查看 \(details.count) 条\(kind.name)",
-            detailSystemImage: kind.systemImage
+        return contentPresentation(
+            details.joined(separator: "\n"),
+            systemImage: kind.systemImage
         )
     }
 
@@ -140,18 +127,18 @@ struct AgentToolResultPresentation: Equatable {
                 detailSystemImage: systemImage
             )
         }
-        guard AgentToolResultDisclosure.shouldCollapse(text) else {
-            return AgentToolResultPresentation(
-                summary: text,
-                details: [],
-                disclosureLabel: nil,
-                detailSystemImage: systemImage
-            )
-        }
-        return AgentToolResultPresentation(
-            summary: "操作已完成，可查看完整结果",
-            details: lines.isEmpty ? [text] : lines,
-            disclosureLabel: "查看完整结果",
+        return contentPresentation(text, systemImage: systemImage)
+    }
+
+    /// 直接展示结果正文；过长时由 UI 截断并提供「展开」。
+    private static func contentPresentation(
+        _ text: String,
+        systemImage: String
+    ) -> AgentToolResultPresentation {
+        AgentToolResultPresentation(
+            summary: text,
+            details: [],
+            disclosureLabel: AgentToolResultDisclosure.shouldCollapse(text) ? "展开" : nil,
             detailSystemImage: systemImage
         )
     }

@@ -1,8 +1,9 @@
 # ReAct Agent
 
 本文描述当前持久 Job、本地 ReAct 与可选远程 Backend 运行时。产品范围
-见 [PRD 003](prd/003-streaming-react-agent.md) 和
-[PRD 011](prd/011-durable-agent-jobs-remote-continuity.md)，详细协议见
+见 [PRD 003](prd/003-streaming-react-agent.md)、
+[PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
+[PRD 022](prd/022-react-reliability-and-context-awareness.md)，详细协议见
 [Agent Job 与远程执行协议](engineering/agent-job-protocol.md)。
 
 ## 当前运行时
@@ -13,7 +14,7 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 
 ## 运行方式
 
-每次用户发送消息、图片或视频后，Agent 最多执行 8 轮：
+每次用户发送消息、图片或视频后，Agent 最多执行可配置步数的循环（默认 100，高级设置可改）：
 
 1. App 把系统提示词、用户输入和媒体作为 `messages` 发送，并通过 API 的 `tools` 字段注册固定 JSON Schema。
 2. 模型可以先输出自然语言，也可以返回一个或多个 `tool_calls`；不要求模型输出自定义决策 JSON。
@@ -23,7 +24,8 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 每轮模型调用都使用流式接口。文本增量和 Span 生命周期会立刻作为 Event 发送给 UI；模型返回的 `reasoning_content` 当前不展示、不持久化，也不参与工具执行。
 
 图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库和业务 Tool 始终留在
-设备上；本地模式标准档没有 API Key 时，发送会在落盘前打开 AI 服务设置。用户明确启用
+设备上；本地模式标准档没有 API Key 时，消息仍然落盘并进入暂存，首次遇到时同时打开「LLM 配置」，
+恢复后按发送顺序自动补偿消费（见 [ADR 0045](adr/0045-llm-outage-staging-and-compensating-drain.md)）。用户明确启用
 远程持续模式后，当前图片或视频关键帧可作为短期任务素材上传，原始视频和用户 BYOK 不上传。
 
 ## 渐进式 Skills
@@ -44,7 +46,9 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 ## 本地工具
 
 - `load_skill`：按需读取一项专业 Skill。
-- `query_user_data`：查询概览、训练、饮食、身体或健身房记录。
+- `query_user_data`：查询概览、训练、饮食、身体或健身房记录；可选 `date_from`/`date_to`/
+  `group_by`/`metric` 做本地确定性聚合。
+- `expand_tool_group`：本轮逃生工具，按组名扩展尚未暴露的工具组（plans/gym/review）。
 - `list_exercise_names`：返回当前数据空间全部 active 动作 `{id,name}`，由模型完成语义选择。
 - `list_training_programs`：返回当前可执行计划的稳定 ID、名称、目标与当前模板。
 - `get_training_program`：按计划 ID 读取当前模板动作与处方详情。
@@ -68,14 +72,15 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 
 ## 数据真实性与安全
 
-- 同一 Turn 的相同成功写入通过持久回执只执行一次，重试 Attempt 不会重复创建记录。
+- 同一 Turn 的相同成功写入通过规范化签名的持久回执只执行一次；失败回执不挡同键重试。
 - 跨 Turn 补图或纠错优先使用显式 `update_*`；即使 Agent 误用 `record_*`，本地仍按来源、
-  时间、类型、文本、结构化数值、媒体和纠错语义寻找唯一候选后合并。
+  时间、类型、文本、结构化数值、媒体和纠错语义寻找唯一候选后合并。业务键完全相同时返回
+  「疑似重复 + 既有 ID」，不静默合并。
 - 未提供的重量、间歇、时长、评分等字段保持为空，不自动补默认值。
 - 工具错误作为 `role: tool` 结果返回，让模型解释或修正，不静默写入异常数据。
 - 删除工具只处理用户明确指定的单条业务记录；Agent 仍没有账户、云同步或任意代码执行工具。
 - 已成功写入的数据不会因为后续最终回复失败而回滚。
-- 标准档未配置 API Key 时不创建 Turn、Trace 或业务记录，而是保留草稿与附件并引导配置。
+- 标准档未配置 API Key 时仍原子落盘 Turn 与 Job 并进入暂存，恢复后补偿消费。
 - 多模态能力能预判时在上传前提醒；无法预判时把供应商错误以用户可理解的方式展示。
 
 ## Trace、Span 与 Event
@@ -121,8 +126,15 @@ UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有�
 `AgentJobRunner` 领取任务并追加带 sequence 的语义 `AgentEvent`；Chat、Trace、
 Live Activity 和通知是独立投影。token delta 继续实时显示，但不逐 token 写入 SwiftData。
 
-本地执行获得有限后台时间。到期前 Job 进入 `waitingForForeground`；恢复时为同一 Turn
-创建新 Attempt，不续接半条 SSE。成功 mutation 继续由 `AgentMutationReceipt` 去重。
+本地执行获得有限后台时间（约 45 秒租约）。每个 ReAct step 边界落检查点；到期前 Job 进入
+`waitingForForeground`。有有效检查点时恢复复用同一条 CoachMessage、从下一步继续，且不递增
+`attemptNumber`；丢弃未完成 step 的半截文本，不续接半条 SSE。无检查点或用户手动重试才开新
+Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending → committed）去重；
+跨 Turn 业务键命中返回疑似重复而不静默合并。
+
+每轮请求只暴露预选工具组（core + 可选 plans/gym/review），可用 `expand_tool_group` 扩展。
+供应商侧允许并行 `tool_calls`，本机仍顺序执行。`AgentContextPackBuilder` 提供确定性上下文包；
+历史投影保留十轮全文并附加近期工具写入事实与更早轮次 digest。
 
 ### 可选远程 Backend
 

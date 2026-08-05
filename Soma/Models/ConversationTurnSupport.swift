@@ -1,6 +1,12 @@
 import Foundation
 import SwiftData
 
+enum AgentMutationReceiptStatus: String, Codable, Sendable {
+    case pending
+    case committed
+    case failed
+}
+
 @Model
 final class AgentMutationReceipt {
     @Attribute(.unique) var key: String
@@ -8,22 +14,38 @@ final class AgentMutationReceipt {
     var signature: String
     var resultData: Data
     var createdAt: Date
+    /// ADR 0049：pending → committed / failed；失败不阻挡同键重试。
+    var statusRaw: String = AgentMutationReceiptStatus.committed.rawValue
 
     init(
         turnID: UUID,
         signature: String,
-        result: AgentToolResult,
+        result: AgentToolResult? = nil,
+        status: AgentMutationReceiptStatus = .pending,
         createdAt: Date = .now
     ) {
         key = Self.key(turnID: turnID, signature: signature)
         self.turnID = turnID
         self.signature = signature
-        resultData = (try? JSONEncoder().encode(result)) ?? Data()
+        if let result {
+            resultData = (try? JSONEncoder().encode(result)) ?? Data()
+        } else {
+            resultData = Data()
+        }
         self.createdAt = createdAt
+        statusRaw = status.rawValue
+    }
+
+    var status: AgentMutationReceiptStatus {
+        get { AgentMutationReceiptStatus(rawValue: statusRaw) ?? .committed }
+        set { statusRaw = newValue.rawValue }
     }
 
     var result: AgentToolResult? {
-        try? JSONDecoder().decode(AgentToolResult.self, from: resultData)
+        get { try? JSONDecoder().decode(AgentToolResult.self, from: resultData) }
+        set {
+            resultData = (try? JSONEncoder().encode(newValue)) ?? Data()
+        }
     }
 
     static func key(turnID: UUID, signature: String) -> String {
@@ -47,21 +69,37 @@ enum AgentMutationStore {
         let descriptor = FetchDescriptor<AgentMutationReceipt>(
             predicate: #Predicate { $0.key == key }
         )
-        if let existing = try? context.fetch(descriptor).first,
-           let result = existing.result
-        {
-            return result
+        if let existing = try? context.fetch(descriptor).first {
+            switch existing.status {
+            case .committed:
+                if let result = existing.result {
+                    return result
+                }
+            case .failed, .pending:
+                context.delete(existing)
+                try? context.save()
+            }
         }
+
+        let receipt = AgentMutationReceipt(
+            turnID: turnID,
+            signature: call.signature,
+            status: .pending
+        )
+        context.insert(receipt)
+        try? context.save()
 
         let result = operation()
         if result.ok {
-            context.insert(AgentMutationReceipt(
-                turnID: turnID,
-                signature: call.signature,
-                result: result
-            ))
-            try? context.save()
+            receipt.status = .committed
+            receipt.result = result
+        } else {
+            receipt.status = .failed
+            receipt.result = result
+            // 失败不挡同键重试：删掉回执，留给下一次 Attempt。
+            context.delete(receipt)
         }
+        try? context.save()
         return result
     }
 }

@@ -86,6 +86,8 @@ struct GuidedCompactSetView: View {
     let onComplete: () -> Void
     let onSkip: () -> Void
 
+    @State private var showsCoachingNote = false
+
     var body: some View {
         GeometryReader { proxy in
             if isLandscape {
@@ -153,11 +155,11 @@ struct GuidedCompactSetView: View {
                                 ),
                                 contentMode: .fit
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
                             .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
                         }
                         .buttonStyle(.plain)
-                        .contentShape(RoundedRectangle(cornerRadius: 18))
+                        .contentShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
                         .padding(12)
                         .accessibilityLabel(camera.state == .recording
                             ? "正在录制，放大相机"
@@ -168,66 +170,97 @@ struct GuidedCompactSetView: View {
         }
     }
 
+    /// PRD 020：执行面以「完成本组」为唯一主操作；录制与跳过收入次级菜单，
+    /// 教练提示按需展开，组进度以文字呈现。
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .lastTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("本组目标")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.green.opacity(0.08), in: Capsule())
-                    Text(targetText)
-                        .font(.system(size: isLandscape ? 28 : 30, weight: .semibold))
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                }
-                Spacer()
-                Button("编辑", systemImage: "pencil", action: onEdit)
-                    .font(.subheadline)
-                    .buttonStyle(.bordered)
-            }
-
-            GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
-
-            if !showsCamera {
-                VStack(alignment: .leading, spacing: 6) {
-                    Button(action: onRecord) {
-                        if isStartingRecording {
-                            Label("正在开启相机…", systemImage: "camera.fill")
-                        } else {
-                            Label("录制本组", systemImage: "record.circle")
+                Button(action: onEdit) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(setProgressText)
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.green.opacity(0.08), in: Capsule())
+                        HStack(spacing: 6) {
+                            Text(targetText)
+                                .font(.system(
+                                    size: isLandscape ? 28 : 30,
+                                    weight: .semibold
+                                ))
+                                .minimumScaleFactor(0.7)
+                                .lineLimit(1)
+                            Image(systemName: "pencil")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(!canStartRecording || isStartingRecording)
-                    .accessibilityHint(recordingButtonHint)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("本组目标 \(targetText)")
+                .accessibilityHint("点击编辑本组实际次数和重量")
 
-                    if isStartingRecording {
-                        Text("正在开启相机，请稍候。")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if !canStartRecording {
-                        Text("当前已有录像进行中。")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if let cameraErrorMessage, !cameraErrorMessage.isEmpty {
-                        Text(cameraErrorMessage)
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+
+                HStack(spacing: 10) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showsCoachingNote.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "lightbulb")
+                            .font(.subheadline)
+                            .frame(width: 36, height: 36)
+                            .background(.thinMaterial, in: Circle())
                     }
+                    .foregroundStyle(showsCoachingNote ? .green : .secondary)
+                    .accessibilityLabel("教练提示")
+                    .accessibilityValue(showsCoachingNote ? "已展开" : "已收起")
+
+                    Menu {
+                        if !showsCamera {
+                            Button(action: onRecord) {
+                                if isStartingRecording {
+                                    Label("正在开启相机…", systemImage: "camera.fill")
+                                } else {
+                                    Label("录制本组", systemImage: "record.circle")
+                                }
+                            }
+                            .disabled(!canStartRecording || isStartingRecording)
+                        }
+                        Button("跳过本组", systemImage: "forward.end", action: onSkip)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.subheadline)
+                            .frame(width: 36, height: 36)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("本组更多操作")
+                    .accessibilityHint(recordingButtonHint)
                 }
             }
 
-            Label(coachingNote, systemImage: "lightbulb.fill")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+            if isStartingRecording {
+                Text("正在开启相机，请稍候。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else if let cameraErrorMessage, !cameraErrorMessage.isEmpty {
+                Text(cameraErrorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if showsCoachingNote {
+                Label(coachingNote, systemImage: "lightbulb.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: AppTheme.cardRadius))
+            }
 
             Button(action: onComplete) {
                 Text("完成：\(targetText)")
@@ -237,12 +270,13 @@ struct GuidedCompactSetView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-
-            Button("跳过本组", action: onSkip)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
         }
+    }
+
+    private var setProgressText: String {
+        guard let set else { return "本组目标" }
+        let base = "第 \(set.order)/\(max(sets.count, 1)) 组"
+        return set.kind == .warmup ? "\(base) · 热身" : base
     }
 
     private var recordingButtonHint: String {

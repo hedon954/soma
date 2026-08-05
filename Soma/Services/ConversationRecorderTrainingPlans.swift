@@ -56,12 +56,32 @@ extension ConversationRecorder {
             )
         }
         do {
+            let prescriptions = try planPrescriptions(arguments, in: context)
+            let contentKey = TrainingPlanStore.contentFingerprint(prescriptions)
+            let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
+                .filter { $0.status == .active }
+            let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? []
+            if let existing = programs.first(where: {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .localizedCaseInsensitiveCompare(name) == .orderedSame
+            }),
+                let version = versions.first(where: {
+                    $0.id == existing.currentTemplateVersionID
+                })
+            {
+                let current = TrainingPlanStore.prescriptions(for: version, in: context)
+                if TrainingPlanStore.contentFingerprint(current) == contentKey {
+                    return .success(
+                        "已有内容相同的训练计划 [id:\(existing.id.uuidString)]：\(existing.name)。"
+                    )
+                }
+            }
             let program = try TrainingPlanStore.createProgram(
                 name: name,
                 goal: normalized(arguments.goal),
                 templateName: templateName,
                 scheduleHint: normalized(arguments.scheduleHint),
-                prescriptions: planPrescriptions(arguments, in: context),
+                prescriptions: prescriptions,
                 source: "agent",
                 in: context
             )
@@ -176,6 +196,22 @@ extension ConversationRecorder {
         case "every_set": policy = .everySet
         default:
             return .failure("录像策略仅支持 disabled、one_per_exercise 或 every_set。")
+        }
+        let sessions = (
+            try? context.fetch(
+                FetchDescriptor<WorkoutSession>(
+                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+                )
+            )
+        ) ?? []
+        if let existing = sessions.first(where: {
+            $0.programID == program.id
+                && [.draft, .active, .paused].contains($0.status)
+        }) {
+            SomaCaptureRouter.shared.requestWorkoutSession(existing.id)
+            return .success(
+                "已有未完成的「\(program.name)」带练 [session_id:\(existing.id.uuidString)]，已继续该 Session。"
+            )
         }
         do {
             let session = try TrainingPlanStore.startSession(

@@ -23,6 +23,27 @@ struct WorkoutHistoryView: View {
         WorkoutHistoryQuery.filterChoices(from: allWorkouts.map(\.date))
     }
 
+    /// PRD 020：筛选扁平化为「全部 + 按月」，不再嵌套年/月/日三级菜单。
+    private var filterMenu: some View {
+        Menu {
+            Button("全部") { filter = .all }
+            ForEach(filterChoices.years, id: \.self) { year in
+                if let months = filterChoices.monthsByYear[year] {
+                    Section("\(String(year))年") {
+                        ForEach(months, id: \.self) { month in
+                            Button("\(month)月") {
+                                filter = .yearMonth(year: year, month: month)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(filter.label, systemImage: "line.3.horizontal.decrease.circle")
+        }
+        .accessibilityLabel("筛选训练记录")
+    }
+
     var body: some View {
         List {
             if loaded.isEmpty, !isLoading {
@@ -32,7 +53,7 @@ struct WorkoutHistoryView: View {
                     description: Text(
                         filter == .all
                             ? "在教练对话中描述训练，AI 会自动记录到这里。"
-                            : "试试调整年、月或日筛选条件。"
+                            : "试试调整筛选月份。"
                     )
                 )
                 .listRowBackground(Color.clear)
@@ -98,86 +119,6 @@ struct WorkoutHistoryView: View {
         }
         .onChange(of: filter) { _, _ in
             reload()
-        }
-    }
-
-    private var filterMenu: some View {
-        Menu {
-            Button("全部") { filter = .all }
-            Divider()
-            yearPickerSection
-            monthPickerSection
-            dayPickerSection
-        } label: {
-            Label(filter.label, systemImage: "line.3.horizontal.decrease.circle")
-        }
-        .accessibilityLabel("筛选训练记录")
-    }
-
-    @ViewBuilder
-    private var yearPickerSection: some View {
-        let years = filterChoices.years
-        if !years.isEmpty {
-            Menu("按年") {
-                ForEach(years, id: \.self) { year in
-                    Button("\(year)年") { filter = .year(year) }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var monthPickerSection: some View {
-        let choices = filterChoices
-        let baseYear: Int? = switch filter {
-        case let .year(year), let .yearMonth(year, _), let .day(year, _, _):
-            year
-        case .all:
-            choices.years.first
-        }
-        if let baseYear, let months = choices.monthsByYear[baseYear], !months.isEmpty {
-            Menu("按月（\(baseYear)年）") {
-                ForEach(months, id: \.self) { month in
-                    Button("\(month)月") {
-                        filter = .yearMonth(year: baseYear, month: month)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var dayPickerSection: some View {
-        let choices = filterChoices
-        let yearMonth: (year: Int, month: Int)? = {
-            switch filter {
-            case let .yearMonth(year, month), let .day(year, month, _):
-                return (year, month)
-            case let .year(year):
-                guard let month = choices.monthsByYear[year]?.first else { return nil }
-                return (year, month)
-            case .all:
-                guard let year = choices.years.first,
-                      let month = choices.monthsByYear[year]?.first
-                else { return nil }
-                return (year, month)
-            }
-        }()
-        if let yearMonth,
-           let days = choices.daysByYearMonth[yearMonth.year]?[yearMonth.month],
-           !days.isEmpty
-        {
-            Menu("按日（\(yearMonth.year)年\(yearMonth.month)月）") {
-                ForEach(days, id: \.self) { day in
-                    Button("\(day)日") {
-                        filter = .day(
-                            year: yearMonth.year,
-                            month: yearMonth.month,
-                            day: day
-                        )
-                    }
-                }
-            }
         }
     }
 
@@ -326,33 +267,22 @@ private struct WorkoutHistoryRow: View {
         HStack(alignment: .top, spacing: 12) {
             workoutThumbnail
 
+            // PRD 020：行内只保留名称、时间与一组主指标；肌群、评分与热量在详情查看。
             VStack(alignment: .leading, spacing: 5) {
                 Text(exercise?.canonicalName ?? workout.exercise)
                     .font(.headline)
                 Text(workout.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let muscles = exercise?.primaryMuscles, !muscles.isEmpty {
-                    Text(muscles.joined(separator: "、"))
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.tint)
-                        .lineLimit(1)
-                }
                 if !metricsText.isEmpty {
                     Text(metricsText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
             }
 
             Spacer(minLength: 8)
-
-            if let score = workout.formScore {
-                Text("\(score)")
-                    .font(.subheadline.bold().monospacedDigit())
-                    .foregroundStyle(score >= 85 ? AppTheme.tint : AppTheme.warning)
-            }
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
@@ -366,7 +296,7 @@ private struct WorkoutHistoryRow: View {
                 contentMode: .fill
             )
             .frame(width: 58, height: 58)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous))
             .accessibilityLabel("\(exercise.canonicalName)示意图")
         } else if let image = workout.mediaAttachments.first(where: { $0.kind == .image }) {
             MediaThumbnail(
@@ -403,15 +333,6 @@ private struct WorkoutHistoryRow: View {
                     ? "自重"
                     : "\(weight.formatted(.number.precision(.fractionLength(0 ... 1)))) kg"
             )
-        }
-        if let rest = workout.restSeconds {
-            metrics.append("间歇 \(rest)s")
-        }
-        if let duration = workout.durationMinutes {
-            metrics.append("\(duration) 分钟")
-        }
-        if let calories = workout.estimatedCalories {
-            metrics.append("约 \(calories) kcal")
         }
         return metrics.joined(separator: " · ")
     }

@@ -134,13 +134,14 @@ enum BundledExerciseCatalog {
         muscleMap: "soma_muscle_core.png"
     )
 
-    private static let entries: [BundledExerciseContent] = [
+    /// 精选条目：带专属示意图资源。
+    private static let curatedEntries: [BundledExerciseContent] = [
         item("杠铃深蹲", ["杠铃后蹲"], "soma_barbell_squat.png", squat),
         item("自重深蹲", ["徒手深蹲", "深蹲"], "soma_bodyweight_squat.png", squat),
         item("杠铃前蹲", ["前蹲", "颈前深蹲"], "free_Front_Squat_Clean_Grip.jpg", squat),
         item("高脚杯深蹲", ["哑铃杯式深蹲"], "free_Goblet_Squat.jpg", squat),
         item("史密斯深蹲", [], "free_Smith_Machine_Squat.jpg", squat),
-        item("腿举", ["器械腿举"], "free_Leg_Press.jpg", squat),
+        item("腿举", ["器械腿举", "倒蹬", "45度腿举", "斜卧腿举"], "free_Leg_Press.jpg", squat),
         item("腿屈伸", ["坐姿腿屈伸"], "free_Leg_Extensions.jpg", kneeExtension),
         item("俯卧腿弯举", ["俯卧腿屈曲"], "free_Lying_Leg_Curls.jpg", kneeFlexion),
         item("罗马尼亚硬拉", ["RDL"], "free_Romanian_Deadlift.jpg", hinge),
@@ -163,11 +164,11 @@ enum BundledExerciseCatalog {
         item("杠铃肩推", ["杠铃推举"], "free_Barbell_Shoulder_Press.jpg", verticalPress),
         item("哑铃侧平举", ["侧平举"], "free_Side_Lateral_Raise.jpg", shoulderIsolation),
         item("面拉", ["绳索面拉"], "free_Face_Pull.jpg", rearDelt),
-        item("反向飞鸟", ["俯身反向飞鸟"], "free_Reverse_Flyes.jpg", rearDelt),
+        item("反向飞鸟", ["俯身反向飞鸟", "俯身飞鸟", "俯身哑铃飞鸟"], "free_Reverse_Flyes.jpg", rearDelt),
         item("杠铃俯身划船", ["杠铃划船"], "free_Bent_Over_Barbell_Row.jpg", horizontalPull),
         item("单臂哑铃划船", ["单手哑铃划船"], "free_One-Arm_Dumbbell_Row.jpg", horizontalPull),
         item("坐姿绳索划船", ["坐姿划船"], "free_Seated_Cable_Rows.jpg", horizontalPull),
-        item("高位下拉", ["宽握高位下拉"], "soma_lat_pulldown.png", verticalPull),
+        item("高位下拉", ["宽握高位下拉", "宽距高位下拉", "坐姿下拉"], "soma_lat_pulldown.png", verticalPull),
         item("引体向上", ["正手引体向上"], "free_Pullups.jpg", verticalPull),
         item("反手引体向上", [], "free_Chin-Up.jpg", verticalPull),
         item("哑铃交替弯举", [], "free_Dumbbell_Alternate_Bicep_Curl.jpg", armCurl),
@@ -178,6 +179,11 @@ enum BundledExerciseCatalog {
         item("平板支撑", [], "free_Plank.jpg", core),
         item("卷腹", [], "free_Crunches.jpg", core)
     ]
+
+    /// 全量目录 = 精选条目 + 纯文字扩展条目（受力图按肌群程序生成，
+    /// 示意图留空走通用占位）。精选在前，重名时以精选为准。
+    static let entries: [BundledExerciseContent] =
+        curatedEntries + extendedEntries
 
     static var entryCount: Int {
         entries.count
@@ -191,7 +197,9 @@ enum BundledExerciseCatalog {
                     fallbackActionIllustration.resourceName,
                     fallbackMuscleMap.resourceName
                 ].compactMap { $0 }
-        )).sorted()
+        ))
+        .filter { !$0.isEmpty }
+        .sorted()
     }
 
     static func content(forName name: String) -> BundledExerciseContent? {
@@ -228,12 +236,15 @@ enum BundledExerciseCatalog {
         }
 
         var images = definition.imageReferences
-        changed = reconcileBundledImage(
-            kind: .actionIllustration,
-            title: "内置动作示意图",
-            resourceName: content.actionIllustrationResourceName,
-            in: &images
-        ) || changed
+        // 纯文字扩展条目没有专属示意图，保留占位提示引导用户生成/上传。
+        if !content.actionIllustrationResourceName.isEmpty {
+            changed = reconcileBundledImage(
+                kind: .actionIllustration,
+                title: "内置动作示意图",
+                resourceName: content.actionIllustrationResourceName,
+                in: &images
+            ) || changed
+        }
         changed = reconcileBundledImage(
             kind: .muscleMap,
             title: "内置通用肌群图",

@@ -345,25 +345,16 @@ struct WorkoutShareSheet: View {
                             .scaledToFit()
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                            // PRD 020：长按菜单只保留拷贝；保存用主按钮、分享用工具栏。
                             .contextMenu {
                                 Button {
                                     UIPasteboard.general.image = renderedImage
                                 } label: {
                                     Label("拷贝图片", systemImage: "doc.on.doc")
                                 }
-                                Button {
-                                    Task { await saveToPhotos(renderedImage) }
-                                } label: {
-                                    Label("保存到相册", systemImage: "square.and.arrow.down")
-                                }
-                                if let shareURL {
-                                    ShareLink(item: shareURL) {
-                                        Label("分享…", systemImage: "square.and.arrow.up")
-                                    }
-                                }
                             }
                             .accessibilityLabel("训练分享海报")
-                            .accessibilityHint("长按可保存到相册或分享")
+                            .accessibilityHint("长按可拷贝图片")
                     } else if errorMessage == nil {
                         ProgressView("正在生成海报…")
                             .frame(maxWidth: .infinity)
@@ -387,7 +378,7 @@ struct WorkoutShareSheet: View {
                         .disabled(isSaving)
                     }
 
-                    Text("也可长按图片拷贝或保存。海报在本机渲染，不含照片、视频或位置。")
+                    Text("海报在本机渲染，不含照片、视频或位置。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

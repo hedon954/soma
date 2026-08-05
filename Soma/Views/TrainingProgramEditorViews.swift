@@ -67,6 +67,7 @@ struct TrainingProgramCreationView: View {
     @State private var rows: [TrainingPrescriptionDraft] = []
     @State private var errorMessage: String?
     @State private var editMode = EditMode.inactive
+    @State private var detailsExpanded = false
 
     private var activeDefinitions: [ExerciseDefinition] {
         definitions.filter { !$0.isArchived }
@@ -74,11 +75,14 @@ struct TrainingProgramCreationView: View {
 
     var body: some View {
         Form {
+            // PRD 020：创建时只要求计划名称；目标与安排提示折叠为可选区。
             Section("计划") {
                 TextField("计划名称", text: $name)
-                TextField("训练目标（可选）", text: $goal, axis: .vertical)
-                    .lineLimit(2 ... 4)
-                TextField("安排提示（可选）", text: $scheduleHint)
+                DisclosureGroup("更多（可选）", isExpanded: $detailsExpanded) {
+                    TextField("训练目标（可选）", text: $goal, axis: .vertical)
+                        .lineLimit(2 ... 4)
+                    TextField("安排提示（可选）", text: $scheduleHint)
+                }
             }
 
             TrainingPrescriptionRowsSection(
@@ -475,7 +479,12 @@ private struct TrainingPrescriptionEditorView: View {
         self.recent = recent
         self.onSave = onSave
         _draft = State(initialValue: initialDraft)
+        _moreExpanded = State(initialValue: !initialDraft.weight.isEmpty
+            || !initialDraft.rest.isEmpty
+            || initialDraft.firstSetIsWarmup)
     }
+
+    @State private var moreExpanded: Bool
 
     var body: some View {
         Form {
@@ -490,50 +499,48 @@ private struct TrainingPrescriptionEditorView: View {
                     Text(exercise?.canonicalName ?? "已归档动作")
                         .font(.title3.bold())
                 }
-
-                NavigationLink {
-                    TrainingExercisePickerView(
-                        definitions: definitions,
-                        allowsMultipleSelection: false
-                    ) { exercises in
-                        guard let replacement = exercises.first else { return }
-                        draft.exerciseID = replacement.id
-                    }
-                } label: {
-                    Label("更换动作", systemImage: "arrow.triangle.2.circlepath")
-                }
             }
 
-            if let recent, !recent.summary.isEmpty {
-                Section("最近一次") {
-                    Button {
-                        draft.apply(recent)
-                    } label: {
-                        Label(recent.summary, systemImage: "clock.arrow.circlepath")
-                    }
-                    Text("只应用明确记录的字段，缺失或不一致的数值保持不变。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
+            // PRD 020：处方默认只露组数与次数；重量、间歇与热身进折叠区。
             Section("本次处方") {
                 Grid(horizontalSpacing: 12, verticalSpacing: 14) {
                     GridRow {
                         metric("组数", text: $draft.sets, keyboard: .numberPad)
                         metric("次数", text: $draft.reps, keyboard: .numberPad)
                     }
-                    GridRow {
-                        metric("重量 kg", text: $draft.weight, keyboard: .decimalPad)
-                        metric("间歇秒", text: $draft.rest, keyboard: .numberPad)
-                    }
                 }
-                Toggle("第 1 组是热身组", isOn: $draft.firstSetIsWarmup)
+                DisclosureGroup("更多处方", isExpanded: $moreExpanded) {
+                    Grid(horizontalSpacing: 12, verticalSpacing: 14) {
+                        GridRow {
+                            metric("重量 kg", text: $draft.weight, keyboard: .decimalPad)
+                            metric("间歇秒", text: $draft.rest, keyboard: .numberPad)
+                        }
+                    }
+                    Toggle("第 1 组是热身组", isOn: $draft.firstSetIsWarmup)
+                }
             }
         }
         .navigationTitle("编辑动作")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    NavigationLink {
+                        TrainingExercisePickerView(
+                            definitions: definitions,
+                            allowsMultipleSelection: false
+                        ) { exercises in
+                            guard let replacement = exercises.first else { return }
+                            draft.exerciseID = replacement.id
+                        }
+                    } label: {
+                        Label("更换动作", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("更多操作")
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("完成") {
                     onSave(draft)

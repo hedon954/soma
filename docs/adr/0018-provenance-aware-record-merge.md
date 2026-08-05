@@ -1,7 +1,8 @@
 # ADR 0018：业务记录使用来源与多维证据确定性合并
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-07-30
+- 后续替代：[ADR 0049](0049-normalized-idempotency-and-business-dedup.md) 补充规范化幂等键与跨 Turn 疑似重复反馈（纠错合并规则仍生效）
 - 关联：
   - [ADR 0006](0006-data-truth-and-derived-metrics.md)
   - [ADR 0012](0012-ordered-mixed-media-collections.md)

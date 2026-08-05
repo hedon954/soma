@@ -9,6 +9,9 @@ enum AgentExecutionBackendKind: String, Codable, CaseIterable, Sendable {
 enum AgentJobState: String, Codable, CaseIterable, Sendable {
     case queued
     case waitingForNetwork
+    /// 已持久化但当前没有可用的 LLM 执行位置（缺凭据、鉴权失败、限流或供应商 5xx）。
+    /// 见 ADR 0045。
+    case staged
     case running
     case remoteRunning
     case waitingForForeground
@@ -30,6 +33,7 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
         switch self {
         case .queued,
              .waitingForNetwork,
+             .staged,
              .waitingForForeground,
              .remoteRunning,
              .waitingForDevice:
@@ -44,14 +48,22 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
         return switch (self, next) {
         case (.queued, .running),
              (.queued, .waitingForNetwork),
+             (.queued, .staged),
              (.queued, .failed),
              (.queued, .cancelled),
              (.waitingForNetwork, .queued),
              (.waitingForNetwork, .running),
+             (.waitingForNetwork, .staged),
              (.waitingForNetwork, .failed),
              (.waitingForNetwork, .cancelled),
+             (.staged, .queued),
+             (.staged, .running),
+             (.staged, .waitingForNetwork),
+             (.staged, .failed),
+             (.staged, .cancelled),
              (.running, .queued),
              (.running, .waitingForNetwork),
+             (.running, .staged),
              (.running, .remoteRunning),
              (.running, .waitingForForeground),
              (.running, .waitingForDevice),
@@ -60,6 +72,8 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
              (.running, .cancelled),
              (.waitingForForeground, .queued),
              (.waitingForForeground, .running),
+             (.waitingForForeground, .staged),
+             (.waitingForForeground, .failed),
              (.waitingForForeground, .cancelled),
              (.waitingForDevice, .queued),
              (.waitingForDevice, .running),
@@ -67,6 +81,7 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
              (.waitingForDevice, .cancelled):
             true
         case (.remoteRunning, .running),
+             (.remoteRunning, .staged),
              (.remoteRunning, .waitingForDevice),
              (.remoteRunning, .succeeded),
              (.remoteRunning, .failed),
@@ -149,6 +164,9 @@ final class AgentJob {
     var liveActivityProjectionCursor: Int
     var notificationProjectionCursor: Int
     var responseTextSnapshot: String
+    /// ADR 0048：本地 ReAct 循环检查点（step 边界）。
+    var lastCompletedStep: Int = 0
+    var loopCheckpointData: Data = Data()
 
     init(
         id: UUID = UUID(),
@@ -225,6 +243,25 @@ final class AgentJob {
         }
     }
 
+    var loopCheckpoint: AgentLoopCheckpoint? {
+        get {
+            AgentJobCoding.decode(
+                AgentLoopCheckpoint.self,
+                from: loopCheckpointData
+            )
+        }
+        set {
+            loopCheckpointData = newValue.map(AgentJobCoding.encode) ?? Data()
+            if let newValue {
+                lastCompletedStep = newValue.lastCompletedStep
+            }
+        }
+    }
+
+    var hasResumableCheckpoint: Bool {
+        lastCompletedStep > 0 && loopCheckpoint != nil
+    }
+
     func transition(
         to next: AgentJobState,
         at date: Date = .now,
@@ -253,6 +290,7 @@ enum PersistentAgentEventKind: String, Codable, CaseIterable, Sendable {
     case assistantTextCompleted
     case span
     case waitingForNetwork
+    case staged
     case waitingForForeground
     case waitingForDevice
     case completed
@@ -378,14 +416,14 @@ enum AgentJobStore {
         after sequence: Int = 0,
         in context: ModelContext
     ) -> [PersistentAgentEvent] {
-        let all = (
-            try? context.fetch(
-                FetchDescriptor<PersistentAgentEvent>(
-                    sortBy: [SortDescriptor(\.sequence)]
-                )
-            )
-        ) ?? []
-        return all.filter { $0.jobID == jobID && $0.sequence > sequence }
+        var descriptor = FetchDescriptor<PersistentAgentEvent>(
+            predicate: #Predicate { event in
+                event.jobID == jobID && event.sequence > sequence
+            },
+            sortBy: [SortDescriptor(\.sequence)]
+        )
+        descriptor.fetchLimit = 5000
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     static func claimNext(
@@ -485,17 +523,93 @@ enum AgentJobStore {
         in context: ModelContext
     ) throws -> [UUID] {
         let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
+        let messageByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
         var resumed: [UUID] = []
+        var changed = false
         for job in jobs where job.dataSpace == dataSpace
             && job.state == .waitingForForeground
         {
+            // 回复气泡已失败时不自动续跑，留给用户手动重试。
+            if let responseID = job.responseMessageID,
+               messageByID[responseID]?.agentStatus == .failed
+            {
+                if job.state.canTransition(to: .failed) {
+                    try job.transition(
+                        to: .failed,
+                        at: now,
+                        error: "上次处理已失败，等待手动重试。"
+                    )
+                    job.leaseOwner = nil
+                    job.leaseExpiresAt = nil
+                    changed = true
+                }
+                continue
+            }
             try job.transition(to: .queued, at: now)
             resumed.append(job.id)
+            changed = true
         }
-        if !resumed.isEmpty {
+        if changed {
             try context.save()
         }
         return resumed
+    }
+
+    /// ADR 0045：把 Job 暂存到 LLM 恢复为止。`retryDelay` 为 nil 表示只等配置变更信号，
+    /// 不设退避计时。
+    static func stage(
+        _ job: AgentJob,
+        message: String,
+        retryDelay: TimeInterval?,
+        now: Date = .now,
+        in context: ModelContext
+    ) throws {
+        if job.state != .staged {
+            try job.transition(to: .staged, at: now, error: message)
+        }
+        job.leaseOwner = nil
+        job.leaseExpiresAt = nil
+        job.nextRetryAt = retryDelay.map { now.addingTimeInterval($0) }
+        try context.save()
+        _ = try append(
+            kind: .staged,
+            payload: .init(message: message),
+            to: job,
+            in: context,
+            at: now
+        )
+    }
+
+    /// LLM 恢复后解除暂存，让既有 FIFO 领取逻辑立即消费。
+    static func releaseStagedJobs(
+        dataSpace: DataSpace,
+        now: Date = .now,
+        in context: ModelContext,
+        isReady: (AgentJob) -> Bool = { _ in true }
+    ) throws -> [UUID] {
+        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        var released: [UUID] = []
+        for job in jobs where job.dataSpace == dataSpace
+            && job.state == .staged
+            && isReady(job)
+        {
+            try job.transition(to: .queued, at: now)
+            job.nextRetryAt = nil
+            released.append(job.id)
+        }
+        if !released.isEmpty {
+            try context.save()
+        }
+        return released
+    }
+
+    static func stagedJobCount(
+        dataSpace: DataSpace,
+        in context: ModelContext
+    ) -> Int {
+        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        return jobs.filter { $0.dataSpace == dataSpace && $0.state == .staged }.count
     }
 }
 
@@ -662,6 +776,7 @@ enum PersistentAgentEventProjection {
              .jobClaimed,
              .attemptStarted,
              .waitingForNetwork,
+             .staged,
              .waitingForForeground,
              .waitingForDevice:
             break

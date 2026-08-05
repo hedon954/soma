@@ -358,13 +358,14 @@ final class RecordMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testSimilarNearbyEventsRemainIndependentWithoutCorrectionEvidence() throws {
+    func testSameDayIdenticalBusinessKeysAreFlaggedAsSuspectedDuplicates() throws {
+        // ADR 0049：同日同业务键跨 Turn 返回疑似重复，不静默第二份写入。
         let context = try makeContext()
         let sessionID = UUID()
         let date = Date(timeIntervalSince1970: 1_785_386_220)
 
         for offset in [0.0, 300.0] {
-            _ = ConversationRecorder.executeAgentTool(
+            let meal = ConversationRecorder.executeAgentTool(
                 mealCall(title: "鸡肉荞麦面"),
                 sourceText: "吃了一份鸡肉荞麦面",
                 sourceDate: date.addingTimeInterval(offset),
@@ -374,7 +375,7 @@ final class RecordMutationTests: XCTestCase {
                 mediaPath: nil,
                 in: context
             )
-            _ = ConversationRecorder.executeAgentTool(
+            let workout = ConversationRecorder.executeAgentTool(
                 AgentToolCall(
                     name: .recordWorkout,
                     arguments: AgentToolArguments(
@@ -391,7 +392,7 @@ final class RecordMutationTests: XCTestCase {
                 mediaPath: nil,
                 in: context
             )
-            _ = ConversationRecorder.executeAgentTool(
+            let body = ConversationRecorder.executeAgentTool(
                 AgentToolCall(
                     name: .recordBody,
                     arguments: AgentToolArguments(weight: 70.2)
@@ -404,7 +405,99 @@ final class RecordMutationTests: XCTestCase {
                 mediaPath: nil,
                 in: context
             )
+            if offset > 0 {
+                XCTAssertTrue(meal.observation.contains("疑似重复"))
+                XCTAssertTrue(workout.observation.contains("疑似重复"))
+                XCTAssertTrue(body.observation.contains("疑似重复"))
+            }
         }
+
+        DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 1)
+    }
+
+    @MainActor
+    func testDifferingNearbyEventsRemainIndependentWithoutCorrectionEvidence() throws {
+        // 业务键不同时仍保持独立；纠错合并仍只在有纠错语义时发生。
+        let context = try makeContext()
+        let sessionID = UUID()
+        let date = Date(timeIntervalSince1970: 1_785_386_220)
+
+        _ = ConversationRecorder.executeAgentTool(
+            mealCall(title: "鸡肉荞麦面"),
+            sourceText: "吃了一份鸡肉荞麦面",
+            sourceDate: date,
+            sourceSessionID: sessionID,
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            mealCall(title: "牛肉荞麦面"),
+            sourceText: "又吃了一份牛肉荞麦面",
+            sourceDate: date.addingTimeInterval(300),
+            sourceSessionID: sessionID,
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .recordWorkout,
+                arguments: AgentToolArguments(exercise: "俯卧撑", sets: 4, reps: 12)
+            ),
+            sourceText: "做了俯卧撑 4 组 12 次",
+            sourceDate: date,
+            sourceSessionID: sessionID,
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .recordWorkout,
+                arguments: AgentToolArguments(exercise: "俯卧撑", sets: 3, reps: 10)
+            ),
+            sourceText: "又做了俯卧撑 3 组 10 次",
+            sourceDate: date.addingTimeInterval(300),
+            sourceSessionID: sessionID,
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .recordBody,
+                arguments: AgentToolArguments(weight: 70.2)
+            ),
+            sourceText: "体重 70.2kg",
+            sourceDate: date,
+            sourceSessionID: sessionID,
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .recordBody,
+                arguments: AgentToolArguments(weight: 70.5)
+            ),
+            sourceText: "体重 70.5kg",
+            sourceDate: date.addingTimeInterval(300),
+            sourceSessionID: sessionID,
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
 
         DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
 
@@ -467,16 +560,20 @@ final class RecordMutationTests: XCTestCase {
 
     @MainActor
     private func makeContext() throws -> ModelContext {
-        let container = try ModelContainer(
-            for: UserProfile.self,
+        let schema = Schema([
+            UserProfile.self,
             GymProfile.self,
             GymEquipment.self,
             GymMedia.self,
             MealEntry.self,
             BodyEntry.self,
             WorkoutEntry.self,
+            ExerciseDefinition.self,
             CoachMessage.self,
-            AgentMutationReceipt.self,
+            AgentMutationReceipt.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         return ModelContext(container)

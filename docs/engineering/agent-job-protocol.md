@@ -8,6 +8,7 @@
   - [ADR 0032](../adr/0032-optional-remote-agent-execution.md)
   - [ADR 0033](../adr/0033-live-activity-agent-job-projection.md)
   - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
+  - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
 - 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
 
 本文固定 iOS 本地 Outbox、服务器 Job/Event、匿名设备鉴权、本地 Tool handoff、APNs 与
@@ -60,7 +61,17 @@ localQueued
   → localRunning
   → waitingForForeground
   → localRunning | failed | cancelled
+
+localQueued | localRunning
+  → staged
+  → localQueued | localRunning | failed | cancelled
 ```
+
+`staged` 表示 Job 已持久化，但当前没有可用的 LLM 执行位置（缺少凭据、地址无效、鉴权失败、
+限流或供应商服务端错误）。它属于可运行态，由同一套 FIFO 领取逻辑消费；解除条件是
+App 启动、回到前台、LLM 配置变更、上一条任务结束或退避计时到期。传输层故障继续使用
+`waitingForNetwork`，不进入 `staged`；重试不会改变结果的请求级错误直接进入 `failed`。
+判定规则见 [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)。
 
 ### 服务端 Job
 
@@ -89,6 +100,8 @@ accepted
 - `provider/model/context` 发送时快照；
 - `lastServerSequence`、`lastProjectedSequence`；
 - `resumeReason`、`lastErrorCode`；
+- `lastCompletedStep`、`loopCheckpointData`：本地 ReAct step 边界检查点；有检查点时
+  中断恢复复用 `responseMessageID` 指向的同一条回复气泡，且不递增 `attemptNumber`；
 - `createdAt/updatedAt`。
 
 不得保存 API Key、Authorization 头或媒体 Base64。

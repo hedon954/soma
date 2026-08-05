@@ -18,6 +18,9 @@
   - [PRD 016](016-training-primary-tab.md)
   - [PRD 017](017-contextual-private-coach-widgets.md)
   - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md)
+  - [PRD 020](020-gui-simplification-and-progressive-disclosure.md)
+  - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md)
+  - [PRD 022](022-react-reliability-and-context-awareness.md)
 
 ## 产品定义
 
@@ -183,8 +186,8 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
   Trace；标准模型 API Key 是本地模式发送和重试的前提。
 - “后台持续处理”默认关闭。用户明确开启后，当前消息可经 Soma Server 使用 Soma 管理的
   Provider 凭据执行；每条消息仍可选择“本次仅本机”。
-- 本地模式缺少 API Key 时保留草稿与附件并打开 AI 服务设置，不创建失败 Turn 或 Trace；
-  远程模式不会上传用户 BYOK。
+- 本地模式缺少 API Key 时消息仍然落盘并进入暂存，不创建 Trace 或业务记录；首次未配置时
+  同时打开「LLM 配置」（见 PRD 021）。远程模式不会上传用户 BYOK。
 - 远程服务、协议或认证不可用时，尚未接受的 Job 保留在本地可恢复队列；已经接受的远端 Job
   不并行启动本地副本。需要 SwiftData 的 Tool 明确等待设备。
 - 模型或多模态能力错误以可操作语言显示，并保留失败 Trace。

@@ -29,7 +29,7 @@ struct GuidedExerciseIntroductionView: View {
                 .font(.body)
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: AppTheme.cardRadius))
 
                 Button(action: onPrepare) {
                     Text("准备本动作")

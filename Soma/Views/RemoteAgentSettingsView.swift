@@ -13,6 +13,7 @@ struct RemoteAgentSettingsView: View {
     @State private var showsEnableConfirmation = false
     @State private var showsDisableConfirmation = false
     @State private var validationMessage: String?
+    @State private var dataBoundaryExpanded = false
 
     var body: some View {
         Form {
@@ -49,20 +50,23 @@ struct RemoteAgentSettingsView: View {
                 Text("默认关闭。开启后，新消息会创建服务器持久任务；退出 App 或短时断网后，服务器仍可继续执行。每条消息仍可在输入框选择“本次仅本机”。")
             }
 
-            Section("数据边界") {
-                LabeledContent("模型凭据", value: "Soma 管理")
-                LabeledContent("用户 BYOK", value: "永不上传")
-                LabeledContent("任务内容", value: "确认消费后 24 小时清理")
-                LabeledContent("硬性内容上限", value: "7 天")
-                LabeledContent("非内容运行元数据", value: "30 天")
-                Label(
-                    "仅发送当前消息、所选图片或视频关键帧，以及提交时的最小上下文快照",
-                    systemImage: "checkmark.shield"
-                )
-                Label(
-                    "训练、饮食、身体与健身房业务数据仍由本机固定 Tool 写入",
-                    systemImage: "iphone.and.arrow.forward"
-                )
+            // PRD 020：数据边界说明默认折叠，开启确认弹窗仍完整披露发送内容。
+            Section {
+                DisclosureGroup("数据边界", isExpanded: $dataBoundaryExpanded) {
+                    LabeledContent("模型凭据", value: "Soma 管理")
+                    LabeledContent("用户 BYOK", value: "永不上传")
+                    LabeledContent("任务内容", value: "确认消费后 24 小时清理")
+                    LabeledContent("硬性内容上限", value: "7 天")
+                    LabeledContent("非内容运行元数据", value: "30 天")
+                    Label(
+                        "仅发送当前消息、所选图片或视频关键帧，以及提交时的最小上下文快照",
+                        systemImage: "checkmark.shield"
+                    )
+                    Label(
+                        "训练、饮食、身体与健身房业务数据仍由本机固定 Tool 写入",
+                        systemImage: "iphone.and.arrow.forward"
+                    )
+                }
             }
 
             Section {

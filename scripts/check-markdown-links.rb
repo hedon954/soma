@@ -20,7 +20,9 @@ output, status = Open3.capture2(
 )
 abort "Unable to enumerate repository files." unless status.success?
 
-output.split("\0").select { |path| path.end_with?(".md") }.sort.each do |relative_path|
+output.split("\0").select { |path|
+  path.end_with?(".md") && !path.start_with?(".cursor/")
+}.sort.each do |relative_path|
   file = root.join(relative_path)
   text = file.read
 

@@ -343,6 +343,29 @@ enum AIServiceError: LocalizedError {
     }
 }
 
+private struct AgentStreamOutcome {
+    var passage = ""
+    var toolCalls: [AgentStreamingToolCall] = []
+    var usage: ChatUsage?
+    var ignoredReasoning = false
+    var firstDeltaAt: Date?
+    var projectionSeconds: TimeInterval = 0
+}
+
+/// 流式中断时保留已产出的文本，让失败 Span 仍能解释这一步做到哪里。
+private enum StreamingFailure: Error {
+    case interrupted(Error, passage: String)
+}
+
+private struct AgentToolLoopState {
+    var messages: [ChatCompletionParameters.Message]
+    var tools: [ChatCompletionParameters.Tool]
+    var exposedGroups: Set<AgentToolGroup>
+    var observations: [AgentObservation] = []
+    var executedMutations = Set<String>()
+    var executedReads: [String: AgentToolResult] = [:]
+}
+
 @MainActor
 @Observable
 final class AIService {
@@ -483,6 +506,9 @@ final class AIService {
         history: [AgentConversationExchange] = [],
         context: String,
         route requestedRoute: AIModelRoute? = nil,
+        toolSignals: AgentToolExposureSignals? = nil,
+        checkpoint: AgentLoopCheckpoint? = nil,
+        onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) -> AgentToolResult
     ) async throws -> AgentOutcome {
@@ -495,7 +521,6 @@ final class AIService {
         let selectedRoute = routing.route
         let provider = selectedRoute.provider
         let model = selectedRoute.model
-        let baseURL = selectedRoute.baseURL
         let key = routing.apiKey
         let support = ModelCapability.multimodalSupport(provider: provider, model: model)
         let historicalImageCount = history.reduce(0) { $0 + $1.images.count }
@@ -515,25 +540,72 @@ final class AIService {
             imageAttachmentCount: imageAttachmentCount,
             videoAttachmentCount: videoAttachmentCount
         )
+        let startStep = max(1, (checkpoint?.lastCompletedStep ?? 0) + 1)
+        let historyForPrompt: [AgentConversationExchange] = startStep > 1
+            ? history.map {
+                AgentConversationExchange(
+                    userText: $0.userText,
+                    assistantText: $0.assistantText,
+                    images: [],
+                    imageAttachmentCount: $0.imageAttachmentCount,
+                    videoAttachmentCount: $0.videoAttachmentCount
+                )
+            }
+            : history
         var messages = agentInitialMessages(
             systemPrompt: systemPrompt,
-            history: history,
+            history: historyForPrompt,
             userPrompt: userPrompt,
             currentImages: images
         )
+        if let checkpoint, !checkpoint.observations.isEmpty {
+            messages.append(ChatCompletionParameters.Message(
+                role: .user,
+                content: .text(compactedCheckpointPrompt(checkpoint))
+            ))
+        }
         let traceInput = AgentTraceText.modelInput(
             systemPrompt: systemPrompt,
-            history: history,
+            history: historyForPrompt,
             userPrompt: userPrompt
         )
-        let tools = AgentToolName.allCases.map(\.chatTool)
-        var observations: [AgentObservation] = []
-        var executedMutations = Set<String>()
-        var assistantPassages: [String] = []
+        var exposedGroups: Set<AgentToolGroup>
+        if let checkpoint, !checkpoint.exposedGroups.isEmpty {
+            exposedGroups = Set(
+                checkpoint.exposedGroups.compactMap(AgentToolGroup.init(rawValue:))
+            )
+            if exposedGroups.isEmpty {
+                exposedGroups = [.core]
+            }
+        } else {
+            exposedGroups = AgentToolExposurePolicy.initialGroups(
+                signals: toolSignals ?? AgentToolExposureSignals(
+                    text: text,
+                    hasVideo: hasVideo,
+                    hasActiveProgram: false,
+                    hasActiveGuidedSession: false
+                )
+            )
+        }
+        var toolState = AgentToolLoopState(
+            messages: messages,
+            tools: AgentToolExposurePolicy.tools(for: exposedGroups).map(\.chatTool),
+            exposedGroups: exposedGroups
+        )
+        var assistantPassages: [String] = checkpoint?.assistantPassages ?? []
+        var clearedHistoryFrames = startStep > 1
+        let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
 
         do {
-            for step in 1 ... 8 {
+            guard startStep <= maxSteps else {
+                throw ReActAgentError.stepLimit(maxSteps: maxSteps)
+            }
+            for step in startStep ... maxSteps {
                 try Task.checkCancellation()
+                if step >= 2, !clearedHistoryFrames {
+                    clearHistoricalImageParts(in: &toolState.messages)
+                    clearedHistoryFrames = true
+                }
                 let modelSpanID = UUID()
                 let textItemID = UUID()
                 let modelStartedAt = Date()
@@ -545,71 +617,46 @@ final class AIService {
                     status: .running,
                     startedAt: modelStartedAt,
                     endedAt: modelStartedAt,
-                    input: step == 1
+                    input: step == startStep
                         ? traceInput
                         : "继续处理上一轮 assistant.tool_calls 与 role=tool 结果。",
                     metadata: AgentTraceText.jsonObject([
                         "history_exchange_count": history.count,
-                        "history_image_count": historicalImageCount,
+                        "history_image_count": startStep > 1 || clearedHistoryFrames
+                            ? 0
+                            : historicalImageCount,
                         "direct_video_count": videos.count,
                         "provider": provider.displayName,
                         "model": model,
                         "model_tier": selectedRoute.tier.title,
                         "routing_reason": selectedRoute.reason,
-                        "message_count": messages.count,
+                        "message_count": toolState.messages.count,
+                        "exposed_tool_groups": toolState.exposedGroups.map(\.rawValue).sorted(),
+                        "exposed_tool_count": toolState.tools.count,
                         "stream": true,
                         "thinking": false
                     ])
                 )))
 
-                var passage = ""
-                var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
-                var usage: ChatUsage?
-                var ignoredReasoning = false
-
+                let streamed: AgentStreamOutcome
                 do {
-                    let parameters = ChatCompletionParameters(
-                        messages: messages,
-                        model: .custom(model),
-                        store: provider == .openAI ? false : nil,
-                        toolChoice: .auto,
-                        tools: tools,
-                        parallelToolCalls: false,
-                        streamOptions: .init(includeUsage: true)
-                    )
-                    let stream = try await agentStream(
-                        parameters: parameters,
+                    streamed = try await consumeAgentStream(
+                        parameters: ChatCompletionParameters(
+                            messages: toolState.messages,
+                            model: .custom(model),
+                            store: provider == .openAI ? false : nil,
+                            toolChoice: .auto,
+                            tools: toolState.tools,
+                            parallelToolCalls: true,
+                            streamOptions: .init(includeUsage: true)
+                        ),
                         videos: videos,
-                        provider: provider,
-                        baseURL: baseURL,
-                        apiKey: key
+                        route: selectedRoute,
+                        apiKey: key,
+                        textItemID: textItemID,
+                        trace: trace
                     )
-                    for try await chunk in stream {
-                        try Task.checkCancellation()
-                        if let chunkUsage = chunk.usage {
-                            usage = chunkUsage
-                        }
-                        for choice in chunk.choices ?? [] where (choice.index ?? 0) == 0 {
-                            guard let delta = choice.delta else { continue }
-                            if let content = delta.content, !content.isEmpty {
-                                passage += content
-                                trace?(.assistantTextDelta(
-                                    itemID: textItemID,
-                                    delta: content
-                                ))
-                            }
-                            if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
-                                ignoredReasoning = true
-                            }
-                            for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
-                                let index = toolDelta.index ?? position
-                                var accumulator = toolCallDeltas[index] ?? AgentStreamingToolCall()
-                                accumulator.append(toolDelta)
-                                toolCallDeltas[index] = accumulator
-                            }
-                        }
-                    }
-                } catch {
+                } catch let StreamingFailure.interrupted(error, passage) {
                     let endedAt = Date()
                     let reason = agentErrorDescription(error)
                     trace?(.span(AgentTraceSpan(
@@ -620,7 +667,7 @@ final class AIService {
                         status: error is CancellationError ? .cancelled : .failed,
                         startedAt: modelStartedAt,
                         endedAt: endedAt,
-                        input: step == 1
+                        input: step == startStep
                             ? traceInput
                             : "继续处理上一轮工具结果。",
                         output: passage.nilIfEmpty,
@@ -636,6 +683,7 @@ final class AIService {
                     throw error
                 }
 
+                let passage = streamed.passage
                 let modelEndedAt = Date()
                 if !passage.isEmpty {
                     trace?(.assistantTextCompleted(
@@ -643,7 +691,7 @@ final class AIService {
                         at: modelEndedAt
                     ))
                 }
-                let orderedDeltas = toolCallDeltas.keys.sorted().compactMap { toolCallDeltas[$0] }
+                let orderedDeltas = streamed.toolCalls
                 trace?(.span(AgentTraceSpan(
                     id: modelSpanID,
                     step: step,
@@ -652,7 +700,7 @@ final class AIService {
                     status: .succeeded,
                     startedAt: modelStartedAt,
                     endedAt: modelEndedAt,
-                    input: step == 1
+                    input: step == startStep
                         ? traceInput
                         : "继续处理上一轮工具结果。",
                     output: passage.nilIfEmpty ?? (
@@ -660,20 +708,17 @@ final class AIService {
                             ? nil
                             : "生成 \(orderedDeltas.count) 个原生 tool_call。"
                     ),
-                    metadata: AgentTraceText.jsonObject([
-                        "history_exchange_count": history.count,
-                        "history_image_count": historicalImageCount,
-                        "direct_video_count": videos.count,
-                        "provider": provider.displayName,
-                        "model": model,
-                        "model_tier": selectedRoute.tier.title,
-                        "stream": true,
-                        "thinking_ignored": ignoredReasoning,
-                        "prompt_tokens": usage?.promptTokens.map { $0 as Any } ?? NSNull(),
-                        "completion_tokens": usage?.completionTokens.map { $0 as Any } ?? NSNull(),
-                        "total_tokens": usage?.totalTokens.map { $0 as Any } ?? NSNull(),
-                        "tool_call_count": orderedDeltas.count
-                    ])
+                    metadata: modelSpanMetadata(
+                        history: history,
+                        historicalImageCount: startStep > 1 || clearedHistoryFrames
+                            ? 0
+                            : historicalImageCount,
+                        directVideoCount: videos.count,
+                        route: selectedRoute,
+                        streamed: streamed,
+                        startedAt: modelStartedAt,
+                        endedAt: modelEndedAt
+                    )
                 )))
 
                 if !passage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -700,80 +745,42 @@ final class AIService {
                         output: finalAnswer
                     )))
                     trace?(.completed(answer: finalAnswer, at: completedAt))
-                    return AgentOutcome(finalAnswer: finalAnswer, observations: observations)
+                    return AgentOutcome(
+                        finalAnswer: finalAnswer,
+                        observations: toolState.observations
+                    )
                 }
 
                 let resolvedCalls = try orderedDeltas.enumerated().map { position, accumulator in
                     try accumulator.resolved(fallbackID: "soma_call_\(step)_\(position)")
                 }
-                messages.append(ChatCompletionParameters.Message(
+                toolState.messages.append(ChatCompletionParameters.Message(
                     role: .assistant,
                     content: .text(passage),
                     toolCalls: resolvedCalls.map(\.native)
                 ))
 
-                for resolved in resolvedCalls {
-                    try Task.checkCancellation()
-                    let call = resolved.local
-                    let spanID = UUID()
-                    let startedAt = Date()
-                    let skill = call.arguments.skillID.flatMap(AgentSkill.init(rawValue:))
-                    trace?(.span(AgentTraceSpan(
-                        id: spanID,
-                        step: step,
-                        kind: call.name == .loadSkill ? .skill : .tool,
-                        title: skill?.title ?? call.name.displayTitle,
-                        status: .running,
-                        startedAt: startedAt,
-                        endedAt: startedAt,
-                        input: AgentTraceText.json(call)
-                    )))
-
-                    let result: AgentToolResult
-                    let wasDeduplicated: Bool
-                    if call.name.isMutation,
-                       !executedMutations.insert(call.signature).inserted
-                    {
-                        result = .success("相同写入操作已经执行，本次重复调用已忽略。")
-                        wasDeduplicated = true
-                    } else if call.name == .loadSkill {
-                        result = loadSkill(call)
-                        wasDeduplicated = false
-                    } else {
-                        result = execute(call)
-                        wasDeduplicated = false
-                    }
-                    let endedAt = Date()
-                    trace?(.span(AgentTraceSpan(
-                        id: spanID,
-                        step: step,
-                        kind: call.name == .loadSkill ? .skill : .tool,
-                        title: skill?.title ?? call.name.displayTitle,
-                        status: result.ok ? .succeeded : .failed,
-                        startedAt: startedAt,
-                        endedAt: endedAt,
-                        input: AgentTraceText.json(call),
-                        output: AgentTraceText.json(result),
-                        metadata: AgentTraceText.jsonObject([
-                            "tool_call_id": resolved.native.id ?? "",
-                            "deduplicated": wasDeduplicated,
-                            "skill_id": call.arguments.skillID.map { $0 as Any } ?? NSNull(),
-                            "skill_customized": skill
-                                .map { $0.isCustomized(in: defaults) as Any } ?? NSNull(),
-                            "record_type": result.recordType
-                                .map { $0.rawValue as Any } ?? NSNull()
-                        ]),
-                        errorMessage: result.ok ? nil : result.observation
-                    )))
-                    observations.append(AgentObservation(step: step, action: call, result: result))
-                    messages.append(ChatCompletionParameters.Message(
-                        role: .tool,
-                        content: .text(AgentTraceText.json(result)),
-                        toolCallID: resolved.native.id
-                    ))
-                }
+                try applyResolvedToolCalls(
+                    resolvedCalls,
+                    step: step,
+                    state: &toolState,
+                    execute: execute,
+                    trace: trace
+                )
+                onCheckpoint?(AgentLoopCheckpoint(
+                    lastCompletedStep: step,
+                    assistantPassages: assistantPassages,
+                    observations: toolState.observations.map {
+                        AgentCheckpointObservation(
+                            step: $0.step,
+                            action: $0.action,
+                            result: $0.result
+                        )
+                    },
+                    exposedGroups: toolState.exposedGroups.map(\.rawValue).sorted()
+                ))
             }
-            throw ReActAgentError.stepLimit
+            throw ReActAgentError.stepLimit(maxSteps: maxSteps)
         } catch {
             let failedAt = Date()
             let cancelled = error is CancellationError
@@ -795,6 +802,202 @@ final class AIService {
         }
     }
 
+    private func applyResolvedToolCalls(
+        _ resolvedCalls: [(native: ToolCall, local: AgentToolCall)],
+        step: Int,
+        state: inout AgentToolLoopState,
+        execute: (AgentToolCall) -> AgentToolResult,
+        trace: ((AgentTraceEvent) -> Void)?
+    ) throws {
+        for resolved in resolvedCalls {
+            try Task.checkCancellation()
+            let call = resolved.local
+            let spanID = UUID()
+            let startedAt = Date()
+            let skill = call.arguments.skillID.flatMap(AgentSkill.init(rawValue:))
+            trace?(.span(AgentTraceSpan(
+                id: spanID,
+                step: step,
+                kind: call.name == .loadSkill ? .skill : .tool,
+                title: skill?.title ?? call.name.displayTitle,
+                status: .running,
+                startedAt: startedAt,
+                endedAt: startedAt,
+                input: AgentTraceText.json(call)
+            )))
+
+            let result: AgentToolResult
+            let wasDeduplicated: Bool
+            if call.name.isMutation,
+               !state.executedMutations.insert(call.signature).inserted
+            {
+                result = .success("相同写入操作已经执行，本次重复调用已忽略。")
+                wasDeduplicated = true
+            } else if !call.name.isMutation,
+                      call.name != .loadSkill,
+                      call.name != .expandToolGroup,
+                      let prior = state.executedReads[call.signature]
+            {
+                result = .success("已查过相同只读调用，复用结果：\n\(prior.observation)")
+                wasDeduplicated = true
+            } else if call.name == .loadSkill {
+                result = loadSkill(call)
+                wasDeduplicated = false
+            } else if call.name == .expandToolGroup {
+                result = AgentToolExposurePolicy.expanding(
+                    call.arguments.toolGroup,
+                    into: &state.exposedGroups
+                )
+                if result.ok {
+                    state.tools = AgentToolExposurePolicy.tools(for: state.exposedGroups)
+                        .map(\.chatTool)
+                }
+                wasDeduplicated = false
+            } else {
+                result = execute(call)
+                wasDeduplicated = false
+                if !call.name.isMutation {
+                    state.executedReads[call.signature] = result
+                }
+            }
+            let endedAt = Date()
+            let spanKind: AgentTraceSpanKind = call.name == .loadSkill
+                ? .skill
+                : .tool
+            trace?(.span(AgentTraceSpan(
+                id: spanID,
+                step: step,
+                kind: spanKind,
+                title: skill?.title ?? call.name.displayTitle,
+                status: result.ok ? .succeeded : .failed,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                input: AgentTraceText.json(call),
+                output: AgentTraceText.json(result),
+                metadata: AgentTraceText.jsonObject([
+                    "tool_call_id": resolved.native.id ?? "",
+                    "deduplicated": wasDeduplicated,
+                    "skill_id": call.arguments.skillID.map { $0 as Any } ?? NSNull(),
+                    "skill_customized": skill
+                        .map { $0.isCustomized(in: defaults) as Any } ?? NSNull(),
+                    "record_type": result.recordType
+                        .map { $0.rawValue as Any } ?? NSNull()
+                ]),
+                errorMessage: result.ok ? nil : result.observation
+            )))
+            state.observations.append(AgentObservation(step: step, action: call, result: result))
+            state.messages.append(ChatCompletionParameters.Message(
+                role: .tool,
+                content: .text(AgentTraceText.json(result)),
+                toolCallID: resolved.native.id
+            ))
+        }
+    }
+
+    /// 消费一步推理的流式响应。抽出来是为了让每个增量的投影耗时可计量：
+    /// 首个增量之前是请求与供应商排队，之后本机投影与流式读取共用同一个 actor。
+    private func consumeAgentStream(
+        parameters: ChatCompletionParameters,
+        videos: [AgentVideoInput],
+        route: AIModelRoute,
+        apiKey: String,
+        textItemID: UUID,
+        trace: ((AgentTraceEvent) -> Void)?
+    ) async throws -> AgentStreamOutcome {
+        var outcome = AgentStreamOutcome()
+        var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
+        do {
+            let stream = try await agentStream(
+                parameters: parameters,
+                videos: videos,
+                provider: route.provider,
+                baseURL: route.baseURL,
+                apiKey: apiKey
+            )
+            for try await chunk in stream {
+                try Task.checkCancellation()
+                if let chunkUsage = chunk.usage {
+                    outcome.usage = chunkUsage
+                }
+                for choice in chunk.choices ?? [] where (choice.index ?? 0) == 0 {
+                    guard let delta = choice.delta else { continue }
+                    if outcome.firstDeltaAt == nil,
+                       delta.content?.isEmpty == false || delta.toolCalls?.isEmpty == false
+                    {
+                        outcome.firstDeltaAt = Date()
+                    }
+                    if let content = delta.content, !content.isEmpty {
+                        outcome.passage += content
+                        let projectionStartedAt = Date()
+                        trace?(.assistantTextDelta(
+                            itemID: textItemID,
+                            delta: content
+                        ))
+                        outcome.projectionSeconds += Date()
+                            .timeIntervalSince(projectionStartedAt)
+                    }
+                    if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
+                        outcome.ignoredReasoning = true
+                    }
+                    for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
+                        let index = toolDelta.index ?? position
+                        var accumulator = toolCallDeltas[index] ?? AgentStreamingToolCall()
+                        accumulator.append(toolDelta)
+                        toolCallDeltas[index] = accumulator
+                    }
+                }
+            }
+        } catch {
+            throw StreamingFailure.interrupted(error, passage: outcome.passage)
+        }
+        outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap { toolCallDeltas[$0] }
+        return outcome
+    }
+
+    /// `cached_prompt_tokens` 说明这一步命中了多少前缀缓存；
+    /// `time_to_first_delta_ms` 与 `projection_ms` 把等待供应商和本机开销分开。
+    private func modelSpanMetadata(
+        history: [AgentConversationExchange],
+        historicalImageCount: Int,
+        directVideoCount: Int,
+        route: AIModelRoute,
+        streamed: AgentStreamOutcome,
+        startedAt: Date,
+        endedAt: Date
+    ) -> String {
+        let usage = streamed.usage
+        return AgentTraceText.jsonObject([
+            "history_exchange_count": history.count,
+            "history_image_count": historicalImageCount,
+            "direct_video_count": directVideoCount,
+            "provider": route.provider.displayName,
+            "model": route.model,
+            "model_tier": route.tier.title,
+            "stream": true,
+            "thinking_ignored": streamed.ignoredReasoning,
+            "prompt_tokens": usage?.promptTokens.map { $0 as Any } ?? NSNull(),
+            "completion_tokens": usage?.completionTokens.map { $0 as Any } ?? NSNull(),
+            "total_tokens": usage?.totalTokens.map { $0 as Any } ?? NSNull(),
+            "cached_prompt_tokens": usage?.promptTokensDetails?
+                .cachedTokens
+                .map { $0 as Any } ?? NSNull(),
+            "time_to_first_delta_ms": streamed.firstDeltaAt.map {
+                milliseconds(from: startedAt, to: $0) as Any
+            } ?? NSNull(),
+            "stream_ms": milliseconds(from: startedAt, to: endedAt),
+            "projection_ms": milliseconds(streamed.projectionSeconds),
+            "tool_call_count": streamed.toolCalls.count
+        ])
+    }
+
+    private func milliseconds(from start: Date, to end: Date) -> Int {
+        milliseconds(end.timeIntervalSince(start))
+    }
+
+    private func milliseconds(_ seconds: TimeInterval) -> Int {
+        Int((max(0, seconds) * 1000).rounded())
+    }
+
     private func agentUserContent(
         prompt: String,
         images: [Data],
@@ -811,6 +1014,46 @@ final class AIService {
             parts.append(.imageUrl(.init(url: url, detail: "auto")))
         }
         return .contentArray(parts)
+    }
+
+    private func compactedCheckpointPrompt(_ checkpoint: AgentLoopCheckpoint) -> String {
+        let lines = checkpoint.observations.map { item in
+            let status = item.ok ? "成功" : "失败"
+            return "- step \(item.step) \(item.toolName)（\(status)）：\(item.observation)"
+        }
+        return """
+        系统续跑摘要（已完成步骤，请勿重复成功写入）：
+        \(lines.joined(separator: "\n"))
+        """
+    }
+
+    /// step ≥ 2 时去掉历史 user 消息中的图片 parts，只保留文字占位，降低重复 prefill。
+    private func clearHistoricalImageParts(
+        in messages: inout [ChatCompletionParameters.Message]
+    ) {
+        guard messages.count >= 3 else { return }
+        // 保留 system(0) 与最后一条当前 user；中间历史 user 去掉图片。
+        let lastIndex = messages.count - 1
+        for index in messages.indices where index > 0 && index < lastIndex {
+            guard messages[index].role == ChatCompletionParameters.Message.Role.user.rawValue
+            else { continue }
+            if case let .contentArray(parts) = messages[index].content {
+                let textParts = parts.compactMap { part -> String? in
+                    if case let .text(text) = part {
+                        return text
+                    }
+                    return nil
+                }
+                let joined = textParts.joined(separator: "\n")
+                let note = joined.isEmpty
+                    ? "（历史视觉帧已在后续步骤清除，仅保留文字上下文。）"
+                    : joined + "\n（历史视觉帧已在后续步骤清除，仅保留文字上下文。）"
+                messages[index] = ChatCompletionParameters.Message(
+                    role: .user,
+                    content: .text(note)
+                )
+            }
+        }
     }
 
     private func agentInitialMessages(
@@ -1040,73 +1283,6 @@ final class AIService {
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
-    }
-}
-
-enum KeychainStore {
-    static func save(_ value: String, for key: String) {
-        let data = Data(value.utf8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Soma",
-            kSecAttrAccount as String: key
-        ]
-        SecItemDelete(query as CFDictionary)
-        var insert = query
-        insert[kSecValueData as String] = data
-        insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        SecItemAdd(insert as CFDictionary, nil)
-    }
-
-    static func read(_ key: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Soma",
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    static func saveData(_ data: Data, for key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Soma",
-            kSecAttrAccount as String: key
-        ]
-        SecItemDelete(query as CFDictionary)
-        var insert = query
-        insert[kSecValueData as String] = data
-        insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        SecItemAdd(insert as CFDictionary, nil)
-    }
-
-    static func readData(_ key: String) -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Soma",
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else {
-            return nil
-        }
-        return result as? Data
-    }
-
-    static func delete(_ key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Soma",
-            kSecAttrAccount as String: key
-        ]
-        SecItemDelete(query as CFDictionary)
     }
 }
 

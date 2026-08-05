@@ -10,6 +10,7 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 增加按需/每组录像、完整语音、完成复盘和历史删除
   - [PRD 015](015-agent-guided-workout-launch.md) 增加通过对话查询计划并启动带练
   - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口提升为一级训练 Tab
+  - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 将动作详情改为只读概览加渐进披露编辑
   - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 增加版本变更说明、
     归档恢复与删除计划，并将通用肌群图改为程序化受力图
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)

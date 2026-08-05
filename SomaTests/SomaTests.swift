@@ -137,8 +137,9 @@ final class SomaTests: XCTestCase {
         ))
     }
 
+    /// ADR 0045：缺少 API Key 不再拒绝发送，而是把回合暂存到 LLM 恢复。
     @MainActor
-    func testConversationProcessingRejectsMissingKeyBeforeCreatingTurn() throws {
+    func testConversationProcessingStagesTurnWhenAPIKeyMissing() throws {
         let suiteName = "SomaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -151,7 +152,7 @@ final class SomaTests: XCTestCase {
         context.insert(session)
         let service = ConversationProcessingService()
 
-        XCTAssertFalse(service.submit(
+        XCTAssertTrue(service.submit(
             text: "记录今天的训练",
             attachments: [],
             context: ConversationProcessingContext(
@@ -160,16 +161,26 @@ final class SomaTests: XCTestCase {
                 dataSpace: .demo,
                 gyms: [],
                 equipment: [],
-                ai: AIService(defaults: defaults),
+                ai: AIService(defaults: defaults, apiKeyOverride: ""),
                 modelContext: context
             ),
             includeLocation: false,
             locationService: LocationContextService()
         ))
         XCTAssertFalse(service.isProcessing)
-        XCTAssertTrue(
-            try context.fetch(FetchDescriptor<CoachMessage>()).isEmpty
+        XCTAssertEqual(
+            try context.fetch(FetchDescriptor<CoachMessage>()).count,
+            1
         )
+        let job = try XCTUnwrap(
+            context.fetch(FetchDescriptor<AgentJob>()).first
+        )
+        XCTAssertEqual(job.state, .staged)
+        XCTAssertEqual(
+            AgentJobStore.stagedJobCount(dataSpace: .demo, in: context),
+            1
+        )
+        // 暂存期间不产生 Trace，也就没有伪造的解析结果。
         XCTAssertTrue(
             try context.fetch(FetchDescriptor<AgentTrace>()).isEmpty
         )

@@ -1,5 +1,12 @@
 import Foundation
 
+extension Notification.Name {
+    /// ADR 0045：LLM 配置变化是暂存补偿消费的唤醒信号之一。
+    static let llmConfigurationDidChange = Notification.Name(
+        "Soma.llmConfigurationDidChange"
+    )
+}
+
 extension AIService {
     var provider: AIProvider {
         get {
@@ -59,15 +66,21 @@ extension AIService {
         baseURL: String,
         model: String
     ) {
-        setProvider(provider, for: tier)
         let normalizedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBaseURL = normalizedBaseURL.isEmpty
+            ? provider.defaultBaseURL
+            : normalizedBaseURL
+        let resolvedModel = normalizedModel.isEmpty
+            ? provider.fallbackModel
+            : normalizedModel
+        setProvider(provider, for: tier)
         defaults.set(
-            normalizedBaseURL.isEmpty ? provider.defaultBaseURL : normalizedBaseURL,
+            resolvedBaseURL,
             forKey: baseURLDefaultsKey(for: provider, tier: tier)
         )
         defaults.set(
-            normalizedModel.isEmpty ? provider.fallbackModel : normalizedModel,
+            resolvedModel,
             forKey: modelDefaultsKey(for: provider, tier: tier)
         )
     }
@@ -97,10 +110,15 @@ extension AIService {
         for provider: AIProvider,
         tier: AIModelTier
     ) {
+        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let changed = apiKey(for: provider, tier: tier) != normalized
         KeychainStore.save(
-            key.trimmingCharacters(in: .whitespacesAndNewlines),
+            normalized,
             for: keychainAccount(for: provider, tier: tier)
         )
+        if changed {
+            notifyConfigurationChanged()
+        }
     }
 
     func apiKey(for provider: AIProvider, tier: AIModelTier) -> String {
@@ -115,7 +133,20 @@ extension AIService {
 
     func setTierEnabled(_ enabled: Bool, tier: AIModelTier) {
         guard tier == .small else { return }
+        let changed = defaults.bool(forKey: "ai.profile.small.enabled") != enabled
         defaults.set(enabled, forKey: "ai.profile.small.enabled")
+        if changed {
+            notifyConfigurationChanged()
+        }
+    }
+
+    /// ADR 0045：唤醒暂存补偿。逐字符编辑地址或模型时不广播——半截配置发起请求
+    /// 只会把 Job 推进无谓的退避，改由保存 Key、切换档位或离开配置页时统一通知。
+    func notifyConfigurationChanged() {
+        NotificationCenter.default.post(
+            name: .llmConfigurationDidChange,
+            object: nil
+        )
     }
 
     func route(

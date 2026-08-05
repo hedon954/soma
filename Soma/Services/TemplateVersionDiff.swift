@@ -134,7 +134,7 @@ enum TemplateVersionDiff {
         switch (old, new) {
         case let (nil, .some(value)):
             changes.append("\(label) →\(value)")
-        case let (.some(value), nil):
+        case (.some, nil):
             changes.append("清除\(label)")
         case let (.some(before), .some(after)):
             changes.append("\(label) \(before)→\(after)")

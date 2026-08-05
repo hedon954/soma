@@ -3,7 +3,10 @@
 - 状态：部分已替代
 - 日期：2026-07-30
 - 维护者：Soma maintainers
-- 后续替代：[ADR 0027](0027-required-ai-configuration-and-send-gate.md) 取消聊天中的远程启用前提
+- 后续替代：
+  - [ADR 0027](0027-required-ai-configuration-and-send-gate.md) 取消聊天中的远程启用前提
+  - [ADR 0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) 把模型改为
+    可自由输入的文本框加输入历史式建议，并让 Base URL 与档位在配置页直接可见
 
 ## 背景
 
@@ -22,7 +25,9 @@ Tool Calling、安全边界和失败升级上保持可测试。
   [ADR 0027](0027-required-ai-configuration-and-send-gate.md)；旧单模型配置确定性迁移到标准档。
 - 平台增加“其他（OpenAI-compatible）”。它要求用户输入有效 HTTPS Base URL，并继续使用
   Chat Completions、流式 SSE 和原生 Tool Calling 子集。
-- `/models` 返回非空可用列表时只使用 Picker；只有列表为空或获取失败时显示手动模型 ID。
+- `/models` 返回非空可用列表时只使用 Picker；只有列表为空或获取失败时显示手动模型 ID
+  （已由 [ADR 0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) 改为
+  纯输入框加输入历史式建议）。
 - 每个 Profile 独立保存平台、URL、模型和 Keychain 凭据。媒体固定使用标准档，并由已知
   平台能力矩阵选择图片、内联视频或关键帧；其他平台保持未知并由真实请求验证。
 - App 根层的本地 `ModelRouter` 在每个 Attempt 开始前选择档位：
