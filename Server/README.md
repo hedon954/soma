@@ -11,6 +11,7 @@ Tool handoff、临时媒体和系统活动 token，不是训练、饮食、身�
 - S3-compatible 对象存储：用户明确选择的图片或视频关键帧；
 - OpenAI-compatible Provider：只使用 Soma 管理的凭据；
 - App Attest verifier：生产注册的独立验证适配器。
+- Resend：把用户在应用内明确提交的反馈文字与媒体投递到维护者邮箱。
 
 API 与 Worker 必须共享 PostgreSQL、对象存储、token 加密密钥和协议版本。可以横向启动多个
 Worker；数据库租约、epoch、唯一约束和 `FOR UPDATE SKIP LOCKED` 负责收敛并发。
@@ -59,6 +60,8 @@ SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
 5. TLS 在受信任的反向代理或平台入口终止；iOS Release 只接受 HTTPS 服务地址。
 6. 为对象存储配置生命周期规则作为第二道删除保护。应用层仍会主动删除已消费终态内容、
    过期 Job 和撤销设备的对象。
+7. 构建 iOS App 时通过 `SOMA_FEEDBACK_BASE_URL=https://api.example.com` 注入官方反馈服务地址；
+   Release 不读取用户可编辑的后台 Agent 地址来投递反馈。
 
 生产环境必须启用受信任 CA 的 PostgreSQL TLS。API 和 Worker 都会在
 `NODE_ENV=production` 时验证服务器证书。
@@ -79,6 +82,8 @@ SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
 | `SOMA_PROVIDER_BASE_URL` | Worker | Soma 管理 Provider 的 OpenAI-compatible Base URL |
 | `SOMA_PROVIDER_API_KEY` | Worker | Soma 管理 Provider 凭据 |
 | `SOMA_PROVIDER_MODEL` | Worker | 远程 Agent 模型 |
+| `SOMA_FEEDBACK_RESEND_API_KEY` | API | 反馈邮件投递凭据，只保存在服务端 secret manager |
+| `SOMA_FEEDBACK_FROM` | API | 已验证域名下的反馈邮件发件地址 |
 | `SOMA_APNS_TEAM_ID` | Worker | Apple Team ID |
 | `SOMA_APNS_KEY_ID` | Worker | APNs key ID |
 | `SOMA_APNS_PRIVATE_KEY` | Worker | APNs `.p8` 内容；不得写入文件或日志 |
@@ -100,6 +105,8 @@ SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
 - 设备 Tool Request/Result；
 - ActivityKit token 登记与删除；
 - 当前匿名设备全部远端数据删除。
+- 应用内反馈：认证设备一次提交最多 5,000 字和 10 项、合计 25 MB 的照片或视频；服务端投递到
+  `hedonwang@gmail.com` 后立即删除临时上传，不写入 PostgreSQL 业务表或普通日志。
 
 所有认证请求都绑定 method、path、timestamp、nonce 和 body digest。服务器不接受用户提供的
 URL 去抓取媒体，不接收用户 BYOK，不把请求正文、token、IP、模型 payload 或健康内容写入

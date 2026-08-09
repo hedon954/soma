@@ -37,6 +37,8 @@
     <true/>
     <key>NSSupportsLiveActivities</key>
     <true/>
+    <key>SOMAFeedbackBaseURL</key>
+    <string>$(SOMA_FEEDBACK_BASE_URL)</string>
     <key>NSCameraUsageDescription</key>
     <string>拍摄器械、饮食、体型和训练动作，用于生成你的私人健身记录与建议。</string>
 	<key>NSMicrophoneUsageDescription</key>

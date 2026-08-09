@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { createSomaServer } from "./api.js";
+import { ResendFeedbackEmailProvider } from "./feedback.js";
 import { S3TemporaryObjectStore } from "./object-store.js";
 import { logEvent } from "./operational-log.js";
 import { PostgresSomaStore } from "./postgres-store.js";
@@ -63,6 +64,10 @@ const server = createSomaServer({
   identity,
   objects: objectStore,
   tokenCipher: new TokenCipher(encryptionKey),
+  feedback: new ResendFeedbackEmailProvider(
+    requiredEnvironment("SOMA_FEEDBACK_RESEND_API_KEY"),
+    requiredEnvironment("SOMA_FEEDBACK_FROM"),
+  ),
 });
 
 server.listen(port, "0.0.0.0", () => {

@@ -5,6 +5,11 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Added
+
+- 设置“关于”区新增 Soma 内置反馈页：一个输入区支持文字、照片和视频，点击后经认证 Server
+  直接投递到 `hedonwang@gmail.com`，不跳转邮件 App，也不自动附带身体数据、聊天或日志。
+
 ## [0.0.3] - 2026-08-06
 
 自 `0.0.2` 起的综合发布：UI 渐进披露（PRD 020）、LLM 暂存与显式配置（PRD 021），以及

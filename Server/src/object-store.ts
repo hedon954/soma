@@ -28,6 +28,7 @@ export interface TemporaryObjectStore {
     contentLength: number;
     digest: string;
   }): Promise<boolean>;
+  readObject(objectKey: string): Promise<Buffer>;
   createDownloadURL(objectKey: string, expiresAt: Date): Promise<string>;
   deleteObjects(keys: string[]): Promise<void>;
 }
@@ -60,6 +61,10 @@ export class InMemoryObjectStore implements TemporaryObjectStore {
 
   async verifyUpload(): Promise<boolean> {
     return true;
+  }
+
+  async readObject(_objectKey: string): Promise<Buffer> {
+    return Buffer.alloc(0);
   }
 
   async createDownloadURL(objectKey: string): Promise<string> {
@@ -155,6 +160,17 @@ export class S3TemporaryObjectStore implements TemporaryObjectStore {
     } catch {
       return false;
     }
+  }
+
+  async readObject(objectKey: string): Promise<Buffer> {
+    const result = await this.client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+    }));
+    if (result.Body === undefined) {
+      throw new Error("temporary object body missing");
+    }
+    return Buffer.from(await result.Body.transformToByteArray());
   }
 
   async createDownloadURL(

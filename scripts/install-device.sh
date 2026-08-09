@@ -8,6 +8,7 @@ derived_data_path="$root_dir/build/DeviceDerivedData"
 source_packages_path="$root_dir/build/SourcePackages"
 team_id="${DEVELOPMENT_TEAM:-}"
 device_id="${SOMA_DEVICE_ID:-}"
+feedback_base_url="${SOMA_FEEDBACK_BASE_URL:-}"
 
 if [[ -z "$team_id" ]]; then
   echo "DEVELOPMENT_TEAM is required. Example: DEVELOPMENT_TEAM=ABCDE12345 make install-device" >&2
@@ -52,7 +53,8 @@ xcodebuild build \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   DEVELOPMENT_TEAM="$team_id" \
-  CODE_SIGN_STYLE=Automatic
+  CODE_SIGN_STYLE=Automatic \
+  SOMA_FEEDBACK_BASE_URL="$feedback_base_url"
 
 app_path="$derived_data_path/Build/Products/Debug-iphoneos/Soma.app"
 if [[ ! -d "$app_path" ]]; then

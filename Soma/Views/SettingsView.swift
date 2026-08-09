@@ -204,6 +204,11 @@ struct SettingsView: View {
             Text("Your body, understood.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            NavigationLink {
+                FeedbackView()
+            } label: {
+                Label("发送反馈", systemImage: "envelope")
+            }
             if let attributionURL = URL(string: "https://open-meteo.com/") {
                 LabeledContent("天气数据") {
                     Link("Open-Meteo", destination: attributionURL)

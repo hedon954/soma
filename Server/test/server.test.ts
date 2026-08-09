@@ -6,6 +6,7 @@ import {
 } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { afterEach, test } from "node:test";
+import { createServer as createHTTPServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   ActivityPushProjector,
@@ -13,6 +14,12 @@ import {
   OutboxDispatcher,
 } from "../src/apns.js";
 import { createSomaServer } from "../src/api.js";
+import {
+  feedbackRecipient,
+  ResendFeedbackEmailProvider,
+  type FeedbackEmailInput,
+  type FeedbackEmailProvider,
+} from "../src/feedback.js";
 import type {
   ActivityToken,
   AgentJobInput,
@@ -519,6 +526,131 @@ test("HTTP idempotent submission returns one job and no body log surface", async
   assert.equal(firstJSON.id, secondJSON.id);
 });
 
+test("authenticated feedback sends exact text and media then deletes upload", async () => {
+  const store = new InMemorySomaStore();
+  const now = new Date("2026-08-09T00:00:00Z");
+  const identity = new DeviceIdentityService(
+    store,
+    "test-secret-that-is-at-least-thirty-two-characters",
+    new AllowDevelopmentAttestation(),
+  );
+  const device = await registerDevice(store, identity, now);
+  const content = Buffer.from("synthetic feedback image");
+  const uploadID = randomUUID();
+  const objectKey = `temporary/${uploadID}`;
+  await store.saveUpload({
+    id: uploadID,
+    deviceID: device.id,
+    contentType: "image/png",
+    expectedBytes: content.length,
+    expectedDigest: sha256(content),
+    objectKey,
+    createdAt: now,
+  });
+  await store.completeUpload(
+    device.id,
+    uploadID,
+    content.length,
+    sha256(content),
+    now,
+  );
+  const objects = new FeedbackObjectStore(
+    new Map([[objectKey, content]]),
+  );
+  const feedback = new CapturingFeedbackProvider();
+  const server = createSomaServer({
+    store,
+    identity,
+    objects,
+    feedback,
+    tokenCipher: new TokenCipher(Buffer.alloc(32, 7).toString("base64")),
+    now: () => now,
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const feedbackID = randomUUID();
+  const body = Buffer.from(JSON.stringify({
+    feedbackID,
+    protocolVersion: 1,
+    message: "  这是虚构反馈。  ",
+    uploadIDs: [uploadID],
+  }));
+  const response = await signedFetch(
+    `http://127.0.0.1:${port}/v1/feedback`,
+    body,
+    device,
+    now,
+    feedbackID,
+  );
+  const result = (await response.json()) as {
+    feedbackID: string;
+    accepted: boolean;
+  };
+
+  assert.equal(response.status, 201);
+  assert.equal(result.feedbackID, feedbackID);
+  assert.equal(result.accepted, true);
+  assert.equal(feedback.inputs.length, 1);
+  assert.equal(feedback.inputs[0]?.message, "这是虚构反馈。");
+  assert.equal(
+    feedback.inputs[0]?.idempotencyKey,
+    `feedback/${device.id}/${feedbackID}`,
+  );
+  assert.equal(feedback.inputs[0]?.attachments[0]?.filename, "feedback-1.png");
+  assert.deepEqual(feedback.inputs[0]?.attachments[0]?.content, content);
+  assert.deepEqual(objects.deletedKeys, [objectKey]);
+  assert.equal((await store.getUploads(device.id, [uploadID])).length, 0);
+});
+
+test("Resend feedback delivery fixes recipient and forwards idempotency", async () => {
+  let capturedHeaders: Record<string, string | string[] | undefined> = {};
+  let capturedBody: Record<string, unknown> = {};
+  const deliveryServer = createHTTPServer(async (request, response) => {
+    capturedHeaders = request.headers;
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    capturedBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end('{"id":"email-id"}');
+  });
+  servers.push(deliveryServer);
+  await new Promise<void>((resolve) =>
+    deliveryServer.listen(0, "127.0.0.1", resolve)
+  );
+  const port = (deliveryServer.address() as AddressInfo).port;
+  const provider = new ResendFeedbackEmailProvider(
+    "test-api-key",
+    "Soma <feedback@example.com>",
+    `http://127.0.0.1:${port}/emails`,
+  );
+
+  await provider.send({
+    idempotencyKey: "feedback/device/id",
+    message: "虚构反馈",
+    attachments: [{
+      filename: "feedback-1.jpg",
+      contentType: "image/jpeg",
+      content: Buffer.from("image"),
+    }],
+  });
+
+  assert.equal(capturedHeaders.authorization, "Bearer test-api-key");
+  assert.equal(capturedHeaders["idempotency-key"], "feedback/device/id");
+  assert.deepEqual(capturedBody.to, [feedbackRecipient]);
+  assert.equal(capturedBody.from, "Soma <feedback@example.com>");
+  assert.equal(capturedBody.subject, "Soma 用户反馈");
+  assert.deepEqual(capturedBody.attachments, [{
+    filename: "feedback-1.jpg",
+    content: Buffer.from("image").toString("base64"),
+  }]);
+});
+
 test("migration defines database uniqueness and transactional outbox", async () => {
   const migration = await readFile(
     new URL("../migrations/001_initial.sql", import.meta.url),
@@ -629,4 +761,24 @@ async function signedFetch(
     },
     body,
   });
+}
+
+class FeedbackObjectStore extends InMemoryObjectStore {
+  constructor(private readonly contents: Map<string, Buffer>) {
+    super();
+  }
+
+  override async readObject(objectKey: string): Promise<Buffer> {
+    const content = this.contents.get(objectKey);
+    assert.ok(content);
+    return content;
+  }
+}
+
+class CapturingFeedbackProvider implements FeedbackEmailProvider {
+  readonly inputs: FeedbackEmailInput[] = [];
+
+  async send(input: FeedbackEmailInput): Promise<void> {
+    this.inputs.push(input);
+  }
 }

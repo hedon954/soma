@@ -13,6 +13,14 @@ import {
   type AgentJobInput,
 } from "./domain.js";
 import {
+  feedbackFilename,
+  maximumFeedbackAttachmentBytes,
+  maximumFeedbackAttachmentCount,
+  maximumFeedbackMessageCharacters,
+  type FeedbackEmailAttachment,
+  type FeedbackEmailProvider,
+} from "./feedback.js";
+import {
   allowedUploadTypes,
   maximumUploadBytes,
   type TemporaryObjectStore,
@@ -30,6 +38,7 @@ interface Dependencies {
   identity: DeviceIdentityService;
   objects: TemporaryObjectStore;
   tokenCipher: TokenCipher;
+  feedback?: FeedbackEmailProvider;
   now?: () => Date;
 }
 
@@ -161,6 +170,109 @@ async function route(
       uploadURL: grant.uploadURL,
       expiresAt: grant.expiresAt,
       requiredHeaders: grant.requiredHeaders,
+    }));
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/v1/feedback") {
+    const feedback = dependencies.feedback;
+    if (feedback === undefined) {
+      throw new ProtocolError(
+        "provider_unavailable",
+        "反馈服务尚未配置。",
+        503,
+      );
+    }
+    const input = parseObject(rawBody);
+    const feedbackID = requiredString(input, "feedbackID");
+    const idempotencyKey = singleHeader(request, "idempotency-key");
+    if (
+      idempotencyKey !== feedbackID ||
+      requiredNumber(input, "protocolVersion") !== protocolVersion
+    ) {
+      throw new ProtocolError(
+        "invalid_request",
+        "协议版本或 Idempotency-Key 不合法。",
+        400,
+      );
+    }
+    const rawMessage = input.message;
+    if (typeof rawMessage !== "string") {
+      throw new ProtocolError("invalid_request", "message 无效。", 400);
+    }
+    const message = rawMessage.trim();
+    if (message.length > maximumFeedbackMessageCharacters) {
+      throw new ProtocolError("invalid_request", "反馈文字过长。", 400);
+    }
+    const uploadIDs = requiredStringArray(input, "uploadIDs");
+    if (
+      uploadIDs.length > maximumFeedbackAttachmentCount ||
+      new Set(uploadIDs).size !== uploadIDs.length ||
+      (message.length === 0 && uploadIDs.length === 0)
+    ) {
+      throw new ProtocolError("invalid_request", "反馈内容或附件无效。", 400);
+    }
+    const uploads = await dependencies.store.getUploads(deviceID, uploadIDs);
+    const uploadsByID = new Map(uploads.map((upload) => [upload.id, upload]));
+    const orderedUploads = uploadIDs.map((uploadID) => uploadsByID.get(uploadID));
+    if (
+      orderedUploads.some(
+        (upload) => upload === undefined || upload.completedAt === undefined,
+      )
+    ) {
+      throw new ProtocolError(
+        "upload_incomplete",
+        "反馈媒体尚未上传完成。",
+        409,
+      );
+    }
+    const totalBytes = orderedUploads.reduce(
+      (total, upload) => total + (upload?.expectedBytes ?? 0),
+      0,
+    );
+    if (totalBytes > maximumFeedbackAttachmentBytes) {
+      throw new ProtocolError("invalid_request", "反馈附件总大小超过限制。", 413);
+    }
+    const attachments: FeedbackEmailAttachment[] = [];
+    for (const [index, upload] of orderedUploads.entries()) {
+      if (upload === undefined) continue;
+      const content = await dependencies.objects.readObject(upload.objectKey);
+      if (
+        content.length !== upload.expectedBytes ||
+        sha256(content) !== upload.expectedDigest
+      ) {
+        throw new ProtocolError(
+          "upload_incomplete",
+          "反馈媒体校验失败。",
+          409,
+        );
+      }
+      attachments.push({
+        filename: feedbackFilename(index + 1, upload.contentType),
+        contentType: upload.contentType,
+        content,
+      });
+    }
+    await feedback.send({
+      idempotencyKey: `feedback/${deviceID}/${feedbackID}`,
+      message,
+      attachments,
+    });
+    const objectKeys = (
+      await Promise.all(
+        uploadIDs.map((uploadID) =>
+          dependencies.store.deleteUpload(deviceID, uploadID, now)
+        ),
+      )
+    ).filter((key): key is string => key !== undefined);
+    try {
+      await dependencies.objects.deleteObjects(objectKeys);
+    } catch (error) {
+      logOperationalError("feedback_attachment_cleanup_failed", error);
+    }
+    sendJSON(response, 201, envelope(requestID, now, {
+      feedbackID,
+      accepted: true,
     }));
     return;
   }

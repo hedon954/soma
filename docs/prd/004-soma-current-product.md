@@ -21,6 +21,7 @@
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md)
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md)
   - [PRD 022](022-react-reliability-and-context-awareness.md)
+  - [PRD 023](023-in-app-multimodal-feedback.md)
 
 ## 产品定义
 
@@ -93,7 +94,9 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 1. 个人与训练：身体信息、健身房；
 2. 服务：AI 教练、健康数据与设备；
 3. 更多：隐私与安全、高级设置；
-4. 关于：Soma 版本与产品主张。
+4. 关于：Soma 版本、产品主张与应用内多模态反馈入口；反馈页在 Soma 内输入文字、照片和
+   视频，用户点击发送后经认证的 Soma Server 直接投递到 `hedonwang@gmail.com`，不跳转
+   系统邮件 App。
 
 低频的演示数据切换、提示词、Skills 和执行日志继续下沉到高级设置。执行日志在开发者
 设置内直接可见；固定 Tool 协议不作为设置项展示。
@@ -210,6 +213,8 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 - 主屏/锁屏 Widget 和 App Intent 只传递录入意图，均不写入身体数据。
 - 设置提供按年月日组织的饮食/训练开放导出、外部加密自动备份与恢复，以及主动清除个人
   数据；三者不包含或删除系统相册和 Apple 健康源数据。
+- 设置内反馈只发送用户明确填写的文字和所选媒体，不自动附带身体数据、聊天、Trace、位置或
+  日志；Server 投递被接受后删除临时上传，不保存反馈内容数据库。
 - Soma 提供一般健身建议，不做医疗诊断。
 - 远程模式只上传当前文字、所选图片或视频关键帧和最小上下文；原始训练视频、用户 BYOK、
   完整 SwiftData、Keychain 与原始坐标不上传。终态消费后清理内容，所有内容最长保留 7 天，

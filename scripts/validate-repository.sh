@@ -90,6 +90,16 @@ grep -q "PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma" project.yml ||
 grep -q "exactVersion:" project.yml ||
   fail "Swift package versions must be pinned"
 
+grep -q "<key>SOMAFeedbackBaseURL</key>" Soma/Resources/Info.plist ||
+  fail "Info.plist is missing the feedback service URL"
+for build_script in \
+  scripts/xcodebuild.sh \
+  scripts/install-device.sh \
+  scripts/archive-testflight.sh; do
+  grep -q 'SOMA_FEEDBACK_BASE_URL=' "$build_script" ||
+    fail "$build_script must forward SOMA_FEEDBACK_BASE_URL to xcodebuild"
+done
+
 if grep -R -nE \
   '\.(configurationDisplayName|description)\(Text\(' \
   SomaWidget >/dev/null 2>&1; then

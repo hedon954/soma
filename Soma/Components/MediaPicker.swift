@@ -165,6 +165,7 @@ struct MediaSourceDialog: View {
     let allowsVideo: Bool
     let selectionLimit: Int
     let initialSource: MediaPicker.Source?
+    let privacyMessage: String
     let onPick: ([PickedMedia]) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var destination: PickerDestination?
@@ -180,11 +181,13 @@ struct MediaSourceDialog: View {
         allowsVideo: Bool,
         selectionLimit: Int = MediaPicker.maximumSelectionCount,
         initialSource: MediaPicker.Source? = nil,
+        privacyMessage: String = "媒体原件保存在此设备；只有点击发送后，分析所需内容才会交给已配置的模型服务。",
         onPick: @escaping ([PickedMedia]) -> Void
     ) {
         self.allowsVideo = allowsVideo
         self.selectionLimit = max(1, min(selectionLimit, MediaPicker.maximumSelectionCount))
         self.initialSource = initialSource
+        self.privacyMessage = privacyMessage
         self.onPick = onPick
     }
 
@@ -206,7 +209,7 @@ struct MediaSourceDialog: View {
                     destination: .library
                 )
                 Spacer()
-                Label("媒体原件保存在此设备；只有点击发送后，分析所需内容才会交给已配置的模型服务。", systemImage: "lock.shield")
+                Label(privacyMessage, systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding()

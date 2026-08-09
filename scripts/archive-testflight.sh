@@ -4,6 +4,7 @@ set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 team_id="${DEVELOPMENT_TEAM:-}"
+feedback_base_url="${SOMA_FEEDBACK_BASE_URL:-}"
 archive_path="${project_dir}/build/Soma.xcarchive"
 export_path="${project_dir}/build/TestFlight"
 
@@ -30,6 +31,7 @@ xcodebuild archive \
   -archivePath "${archive_path}" \
   DEVELOPMENT_TEAM="${team_id}" \
   CODE_SIGN_STYLE=Automatic \
+  SOMA_FEEDBACK_BASE_URL="${feedback_base_url}" \
   -allowProvisioningUpdates
 
 xcodebuild -exportArchive \
