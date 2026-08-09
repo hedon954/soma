@@ -8,7 +8,8 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 ### Added
 
 - 设置“关于”区新增 Soma 内置反馈页：一个输入区支持文字、照片和视频，点击后经认证 Server
-  直接投递到 `hedonwang@gmail.com`，不跳转邮件 App，也不自动附带身体数据、聊天或日志。
+  通过 Gmail 从 `hedonwang@gmail.com` 直接投递到同一邮箱，不跳转邮件 App，也不自动附带
+  身体数据、聊天或日志。
 
 ## [0.0.3] - 2026-08-06
 

@@ -21,7 +21,7 @@ struct FeedbackView: View {
                 composer
 
                 Label(
-                    "只有点击发送后，文字和所选媒体才会经 Soma Server 投递到 hedonwang@gmail.com；不会进入身体数据库、聊天记录或 Agent Trace。",
+                    "只有点击发送后，文字和所选媒体才会经 Soma Server 从 hedonwang@gmail.com 发至同一邮箱；不会进入身体数据库、聊天记录或 Agent Trace。",
                     systemImage: "lock.shield"
                 )
                 .font(.footnote)

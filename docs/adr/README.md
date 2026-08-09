@@ -54,7 +54,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0048](0048-loop-checkpoint-and-same-bubble-resume.md) | 已采纳 | 本地 ReAct 在 step 边界落检查点，中断后同气泡续跑且不递增 attemptNumber |
 | [0049](0049-normalized-idempotency-and-business-dedup.md) | 已采纳 | 规范化幂等签名、pending 账本与跨 Turn 疑似重复反馈 |
 | [0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) | 已采纳 | 每轮工具组预选、expand_tool_group 逃生、并行 tool_calls 与历史帧 clearing |
-| [0051](0051-authenticated-in-app-feedback-email-delivery.md) | 已采纳 | 应用内多模态反馈经认证 Server 和临时上传幂等投递到固定维护者邮箱 |
+| [0051](0051-authenticated-in-app-feedback-email-delivery.md) | 部分已替代 | 应用内多模态反馈经认证 Server 和临时上传投递到固定维护者邮箱；邮件供应商由 0052 替代 |
+| [0052](0052-gmail-self-delivery-for-in-app-feedback.md) | 已采纳 | Gmail OAuth 从 `hedonwang@gmail.com` 向同一邮箱发送应用内反馈 |
 
 新决策使用 [ADR 模板](template.md)。
 

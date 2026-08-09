@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { createSomaServer } from "./api.js";
-import { ResendFeedbackEmailProvider } from "./feedback.js";
+import { GmailFeedbackEmailProvider } from "./feedback.js";
 import { S3TemporaryObjectStore } from "./object-store.js";
 import { logEvent } from "./operational-log.js";
 import { PostgresSomaStore } from "./postgres-store.js";
@@ -64,9 +64,10 @@ const server = createSomaServer({
   identity,
   objects: objectStore,
   tokenCipher: new TokenCipher(encryptionKey),
-  feedback: new ResendFeedbackEmailProvider(
-    requiredEnvironment("SOMA_FEEDBACK_RESEND_API_KEY"),
-    requiredEnvironment("SOMA_FEEDBACK_FROM"),
+  feedback: new GmailFeedbackEmailProvider(
+    requiredEnvironment("SOMA_FEEDBACK_GMAIL_CLIENT_ID"),
+    requiredEnvironment("SOMA_FEEDBACK_GMAIL_CLIENT_SECRET"),
+    requiredEnvironment("SOMA_FEEDBACK_GMAIL_REFRESH_TOKEN"),
   ),
 });
 

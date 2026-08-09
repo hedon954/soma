@@ -1,10 +1,10 @@
 # ADR 0051：认证的应用内反馈邮件投递
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-08-09
 - 维护者：Soma maintainers
 - 部分替代：无
-- 后续替代：暂无
+- 后续替代：[ADR 0052](0052-gmail-self-delivery-for-in-app-feedback.md) 替代邮件供应商与幂等边界
 - 上游依据：[PRD 023](../prd/023-in-app-multimodal-feedback.md)
 
 ## 背景

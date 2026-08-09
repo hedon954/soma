@@ -15,8 +15,10 @@ import {
 } from "../src/apns.js";
 import { createSomaServer } from "../src/api.js";
 import {
+  buildGmailMessage,
   feedbackRecipient,
-  ResendFeedbackEmailProvider,
+  feedbackSender,
+  GmailFeedbackEmailProvider,
   type FeedbackEmailInput,
   type FeedbackEmailProvider,
 } from "../src/feedback.js";
@@ -603,34 +605,40 @@ test("authenticated feedback sends exact text and media then deletes upload", as
   assert.equal((await store.getUploads(device.id, [uploadID])).length, 0);
 });
 
-test("Resend feedback delivery fixes recipient and forwards idempotency", async () => {
+test("Gmail feedback delivery refreshes OAuth and sends from the fixed mailbox", async () => {
+  let capturedTokenBody = "";
   let capturedHeaders: Record<string, string | string[] | undefined> = {};
-  let capturedBody: Record<string, unknown> = {};
+  let capturedMessage = Buffer.alloc(0);
   const deliveryServer = createHTTPServer(async (request, response) => {
-    capturedHeaders = request.headers;
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
-    capturedBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<
-      string,
-      unknown
-    >;
+    if (request.url === "/token") {
+      capturedTokenBody = Buffer.concat(chunks).toString("utf8");
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end('{"access_token":"gmail-access-token"}');
+      return;
+    }
+    capturedHeaders = request.headers;
+    capturedMessage = Buffer.concat(chunks);
     response.writeHead(200, { "content-type": "application/json" });
-    response.end('{"id":"email-id"}');
+    response.end('{"id":"gmail-message-id"}');
   });
   servers.push(deliveryServer);
   await new Promise<void>((resolve) =>
     deliveryServer.listen(0, "127.0.0.1", resolve)
   );
   const port = (deliveryServer.address() as AddressInfo).port;
-  const provider = new ResendFeedbackEmailProvider(
-    "test-api-key",
-    "Soma <feedback@example.com>",
-    `http://127.0.0.1:${port}/emails`,
+  const provider = new GmailFeedbackEmailProvider(
+    "test-client-id",
+    "test-client-secret",
+    "test-refresh-token",
+    `http://127.0.0.1:${port}/token`,
+    `http://127.0.0.1:${port}/send?uploadType=media`,
   );
 
-  await provider.send({
+  const input: FeedbackEmailInput = {
     idempotencyKey: "feedback/device/id",
     message: "虚构反馈",
     attachments: [{
@@ -638,17 +646,24 @@ test("Resend feedback delivery fixes recipient and forwards idempotency", async 
       contentType: "image/jpeg",
       content: Buffer.from("image"),
     }],
-  });
+  };
+  await provider.send(input);
 
-  assert.equal(capturedHeaders.authorization, "Bearer test-api-key");
-  assert.equal(capturedHeaders["idempotency-key"], "feedback/device/id");
-  assert.deepEqual(capturedBody.to, [feedbackRecipient]);
-  assert.equal(capturedBody.from, "Soma <feedback@example.com>");
-  assert.equal(capturedBody.subject, "Soma 用户反馈");
-  assert.deepEqual(capturedBody.attachments, [{
-    filename: "feedback-1.jpg",
-    content: Buffer.from("image").toString("base64"),
-  }]);
+  const tokenForm = new URLSearchParams(capturedTokenBody);
+  assert.equal(tokenForm.get("client_id"), "test-client-id");
+  assert.equal(tokenForm.get("client_secret"), "test-client-secret");
+  assert.equal(tokenForm.get("refresh_token"), "test-refresh-token");
+  assert.equal(tokenForm.get("grant_type"), "refresh_token");
+  assert.equal(capturedHeaders.authorization, "Bearer gmail-access-token");
+  assert.equal(capturedHeaders["content-type"], "message/rfc822");
+  const mime = capturedMessage.toString("utf8");
+  assert.match(mime, new RegExp(`^From: ${feedbackSender}\\r$`, "m"));
+  assert.match(mime, new RegExp(`^To: ${feedbackRecipient}\\r$`, "m"));
+  assert.match(mime, /^Subject: =\?UTF-8\?B\?.+\?=\r$/m);
+  assert.match(mime, /filename="feedback-1.jpg"/);
+  assert.ok(mime.includes(Buffer.from("虚构反馈").toString("base64")));
+  assert.ok(mime.includes(Buffer.from("image").toString("base64")));
+  assert.deepEqual(buildGmailMessage(input), capturedMessage);
 });
 
 test("migration defines database uniqueness and transactional outbox", async () => {
