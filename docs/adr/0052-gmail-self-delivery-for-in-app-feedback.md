@@ -65,6 +65,6 @@ PRD 023 要求反馈留在 Soma 内完成，ADR 0051 因此建立了认证 Serve
 ## 参考
 
 - [PRD 023](../prd/023-in-app-multimodal-feedback.md)
-- [Google：Gmail API 发送邮件](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/messages/send)
+- [Google：Gmail API 发送邮件](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send)
 - [Google：Gmail API 上传附件](https://developers.google.com/workspace/gmail/api/guides/uploads)
 - [Google：服务端 OAuth](https://developers.google.com/workspace/gmail/api/auth/web-server)
