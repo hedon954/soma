@@ -13,54 +13,64 @@ extension ConversationRecorder {
         let versions = (
             try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
         ) ?? []
-        let values = programs
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .filter {
-                arguments.programID == nil
-                    || $0.id.uuidString == arguments.programID
+        let sortedPrograms: [TrainingProgram] = programs.sorted {
+            $0.updatedAt > $1.updatedAt
+        }
+        let filteredPrograms: [TrainingProgram] = if let programID = arguments.programID {
+            sortedPrograms.filter {
+                $0.id.uuidString == programID
             }
-            .map { program in
-                var value = [
-                    "program_id": .string(program.id.uuidString),
-                    "name": .string(program.name),
-                    "goal": optionalText(program.goal)
-                        .map(AgentJSONValue.string) ?? .null,
-                    "status": .string(program.status.rawValue)
-                ] as [String: AgentJSONValue]
-                if arguments.projection == "detail",
-                   let version = versions.first(where: {
-                       $0.id == program.currentTemplateVersionID
-                   })
-                {
-                    let prescriptions = TrainingPlanStore.prescriptions(
-                        for: version,
-                        in: context
-                    )
-                    value["current_template"] = .object([
-                        "record_id": .string(version.id.uuidString),
-                        "name": .string(version.name),
-                        "version": .number(Double(version.version)),
-                        "schedule_hint": optionalText(version.scheduleHint)
-                            .map(AgentJSONValue.string) ?? .null,
-                        "exercises": .array(prescriptions.map { item in
-                            .object([
-                                "exercise_id": .string(item.exerciseID.uuidString),
-                                "name": .string(item.exerciseName),
-                                "order": .number(Double(item.order)),
-                                "target_sets": item.targetSets
-                                    .map { .number(Double($0)) } ?? .null,
-                                "target_reps": item.targetReps
-                                    .map { .number(Double($0)) } ?? .null,
-                                "target_weight_kg": item.targetWeightKG
-                                    .map(AgentJSONValue.number) ?? .null,
-                                "target_rest_seconds": item.targetRestSeconds
-                                    .map { .number(Double($0)) } ?? .null
-                            ])
-                        })
+        } else {
+            sortedPrograms
+        }
+
+        var values = [[String: AgentJSONValue]]()
+        values.reserveCapacity(filteredPrograms.count)
+        for program in filteredPrograms {
+            let goal = optionalText(program.goal)
+                .map(AgentJSONValue.string) ?? .null
+            var value: [String: AgentJSONValue] = [
+                "program_id": .string(program.id.uuidString),
+                "name": .string(program.name),
+                "goal": goal,
+                "status": .string(program.status.rawValue)
+            ]
+            if arguments.projection == "detail",
+               let version = versions.first(where: {
+                   $0.id == program.currentTemplateVersionID
+               })
+            {
+                let prescriptions = TrainingPlanStore.prescriptions(
+                    for: version,
+                    in: context
+                )
+                let scheduleHint = optionalText(version.scheduleHint)
+                    .map(AgentJSONValue.string) ?? .null
+                let exercises: [AgentJSONValue] = prescriptions.map { item in
+                    .object([
+                        "exercise_id": .string(item.exerciseID.uuidString),
+                        "name": .string(item.exerciseName),
+                        "order": .number(Double(item.order)),
+                        "target_sets": item.targetSets
+                            .map { .number(Double($0)) } ?? .null,
+                        "target_reps": item.targetReps
+                            .map { .number(Double($0)) } ?? .null,
+                        "target_weight_kg": item.targetWeightKG
+                            .map(AgentJSONValue.number) ?? .null,
+                        "target_rest_seconds": item.targetRestSeconds
+                            .map { .number(Double($0)) } ?? .null
                     ])
                 }
-                return value
+                value["current_template"] = .object([
+                    "record_id": .string(version.id.uuidString),
+                    "name": .string(version.name),
+                    "version": .number(Double(version.version)),
+                    "schedule_hint": scheduleHint,
+                    "exercises": .array(exercises)
+                ])
             }
+            values.append(value)
+        }
         return pagedResult(
             values,
             noun: "训练计划",
