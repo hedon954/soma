@@ -23,6 +23,7 @@ enum AgentToolName: String, Codable, CaseIterable {
     case deleteTrainingProgram = "delete_training_program"
     case startGuidedWorkout = "start_guided_workout"
     case recordPerformanceAnalysis = "record_performance_analysis"
+    case submitFeedback = "submit_feedback"
     case expandToolGroup = "expand_tool_group"
 
     var isMutation: Bool {
@@ -62,6 +63,7 @@ enum AgentToolName: String, Codable, CaseIterable {
         case .deleteTrainingProgram: "永久删除训练计划"
         case .startGuidedWorkout: "开始计划带练"
         case .recordPerformanceAnalysis: "保存视频复盘"
+        case .submitFeedback: "提交产品反馈"
         case .expandToolGroup: "展开工具组"
         }
     }
@@ -688,8 +690,10 @@ extension AgentToolName {
             "按 list_training_programs 返回的 program_id 在本机创建一次不可变训练 Session，并立即打开带练。只在用户当前消息明确要求开始、执行或带练该计划时调用；未提供录像偏好时保持关闭。"
         case .recordPerformanceAnalysis:
             "把用户主动请求的视频复盘保存到指定 Performance。只记录画面可见证据、明确局限和一般训练建议；不得诊断伤病或修改训练事实。"
+        case .submitFeedback:
+            "向 Soma 维护者提交产品反馈。只有当前用户消息明确要求提交产品反馈时才能调用；发送内容固定为当前消息原文和当前附件，不得用于动作评价、饮食建议、身体观察或一般教练反馈。"
         case .expandToolGroup:
-            "展开当前未暴露的工具组。可选 plans、gym、review。仅在当前工具不足时调用一次。"
+            "展开当前未暴露的工具组。可选 plans、gym、review、feedback。仅在当前工具不足时调用一次。"
         }
     }
 
@@ -877,6 +881,8 @@ extension AgentToolName {
                 "limitations",
                 "feedback"
             ])
+        case .submitFeedback:
+            object([:])
         }
     }
 

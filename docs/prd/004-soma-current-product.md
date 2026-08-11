@@ -22,6 +22,7 @@
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md)
   - [PRD 022](022-react-reliability-and-context-awareness.md)
   - [PRD 023](023-in-app-multimodal-feedback.md)
+  - [PRD 024](024-chat-agent-feedback-tool.md)
 
 ## 产品定义
 
@@ -215,6 +216,9 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 - 设置内反馈只发送用户明确填写的文字和所选媒体，不自动附带身体数据、聊天、Trace、位置或
   日志；当前个人阶段由 QQ 邮箱直投固定 Gmail，外部分发前必须通过 online check 迁移客户端
   凭据。
+- 用户也可在教练聊天中明确要求提交产品反馈；固定 Tool 只发送当前用户消息原文和当前消息
+  附件，不读取历史聊天、Agent 回复、身体数据、Trace、位置或日志。远程 Agent 只能请求设备
+  执行该 Tool，不能在服务器代发。
 - Soma 提供一般健身建议，不做医疗诊断。
 - 远程模式只上传当前文字、所选图片或视频关键帧和最小上下文；原始训练视频、用户 BYOK、
   完整 SwiftData、Keychain 与原始坐标不上传。终态消费后清理内容，所有内容最长保留 7 天，

@@ -87,6 +87,8 @@ enum ConversationRecorder {
             .failure("load_skill 应由 Agent 运行时处理。")
         case .expandToolGroup:
             .failure("expand_tool_group 应由 Agent 运行时处理。")
+        case .submitFeedback:
+            .failure("submit_feedback 应由 Agent 运行时异步处理。")
         case .queryUserData:
             queryUserData(
                 call.arguments,

@@ -2,6 +2,7 @@ import { ProtocolError } from "./domain.js";
 
 export interface DeviceToolDefinition {
   name: string;
+  description?: string;
   schemaVersion: 1;
   mutation: boolean;
   parameters: {
@@ -330,6 +331,14 @@ const definitions: DeviceToolDefinition[] = [
         "feedback",
       ],
     ),
+  },
+  {
+    name: "submit_feedback",
+    description:
+      "只有用户当前消息明确要求向 Soma 维护者提交产品反馈时调用；设备发送当前消息原文和当前附件，不用于训练或身体反馈。",
+    schemaVersion: 1,
+    mutation: true,
+    parameters: parameters({}),
   },
 ];
 

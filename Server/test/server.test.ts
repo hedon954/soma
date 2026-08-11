@@ -399,6 +399,23 @@ test("APNs retry remains in outbox with backoff until accepted", async () => {
 });
 
 test("tool validation rejects paths URLs and unsupported schemas", () => {
+  assert.equal(
+    validateDeviceTool({
+      name: "submit_feedback",
+      schemaVersion: 1,
+      arguments: {},
+      allowedNames: ["submit_feedback"],
+    }).mutation,
+    true,
+  );
+  assert.throws(() =>
+    validateDeviceTool({
+      name: "submit_feedback",
+      schemaVersion: 1,
+      arguments: { message: "模型不得提供反馈正文" },
+      allowedNames: ["submit_feedback"],
+    }),
+  );
   assert.throws(() =>
     validateDeviceTool({
       name: "record_workout",

@@ -510,7 +510,7 @@ final class AIService {
         checkpoint: AgentLoopCheckpoint? = nil,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
-        execute: (AgentToolCall) -> AgentToolResult
+        execute: (AgentToolCall) async throws -> AgentToolResult
     ) async throws -> AgentOutcome {
         let routing = try resolvedRoute(
             requested: requestedRoute,
@@ -760,7 +760,7 @@ final class AIService {
                     toolCalls: resolvedCalls.map(\.native)
                 ))
 
-                try applyResolvedToolCalls(
+                try await applyResolvedToolCalls(
                     resolvedCalls,
                     step: step,
                     state: &toolState,
@@ -806,9 +806,9 @@ final class AIService {
         _ resolvedCalls: [(native: ToolCall, local: AgentToolCall)],
         step: Int,
         state: inout AgentToolLoopState,
-        execute: (AgentToolCall) -> AgentToolResult,
+        execute: (AgentToolCall) async throws -> AgentToolResult,
         trace: ((AgentTraceEvent) -> Void)?
-    ) throws {
+    ) async throws {
         for resolved in resolvedCalls {
             try Task.checkCancellation()
             let call = resolved.local
@@ -854,7 +854,7 @@ final class AIService {
                 }
                 wasDeduplicated = false
             } else {
-                result = execute(call)
+                result = try await execute(call)
                 wasDeduplicated = false
                 if !call.name.isMutation {
                     state.executedReads[call.signature] = result

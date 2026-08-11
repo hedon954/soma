@@ -1,12 +1,12 @@
 # PRD 022：ReAct 可靠性与上下文感知
 
 - 状态：已实现，待真机验收
+- 后续修订：[PRD 024](024-chat-agent-feedback-tool.md) 为工具组新增当前 Turn 产品反馈能力
 - 日期：2026-08-05
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的 Agent 处理与本地摘要边界
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 的会话投影与长上下文策略
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 的本地中断恢复语义
-- 后续修订：暂无
 - 下游落地：
   - [ADR 0047](../adr/0047-deterministic-context-pack-and-cross-turn-facts.md)
   - [ADR 0048](../adr/0048-loop-checkpoint-and-same-bubble-resume.md)

@@ -30,6 +30,7 @@
 | 外部健康数据 | HealthKit 只读导入体重、训练和活动能量；转换为 Soma 模型，按空间/来源/数据流保存游标，使用样本 ID 去重并处理来源删除。 |
 | 位置与天气上下文 | 位置只在用户开启后随发送获取一次；天气相关文本才向 Open-Meteo 发送小数点后两位的公里级坐标，只在内存中派生一般风险提示，失败不阻塞 Agent，关于页提供数据归属。 |
 | 应用内反馈 | 设置的“关于”区进入 Soma 内置反馈页，一个输入区支持文字、照片和视频并直接发送，不跳转邮件 App；页面不出现 Base URL、Server、邮箱或 SMTP 说明。当前个人安装包通过 QQ SMTP 投递到固定 Gmail，只发送用户明确填写和选择的内容，不自动附带身体数据、聊天、Trace 或日志。客户端限制 5,000 字、10 项和 25 MB；外部分发前 `make online-check` 必须阻止客户端继续携带邮件凭据。 |
+| 聊天提交反馈 | 用户当前消息明确要求提交 Soma 产品反馈时，Agent 调用无参数 `submit_feedback`，只发送当前消息原文和当前附件；普通训练/饮食/身体反馈不触发。Tool 等待实际 SMTP 结果，失败不伪装成功；远程模式进入设备 Tool handoff，不上传 QQ 凭据。 |
 | 数据导出 | 用户选择目标文件夹后，饮食和训练按本地年/月/日生成文字、结构化 JSON 与有序媒体目录；不包含演示数据、API Key 或内部 Trace。 |
 | 备份与恢复 | 首次选择外部目录并设置密码后立即备份，进入后台时尽力自动更新；完整个人空间与媒体经认证加密，错误密码或损坏快照不会改变当前数据。 |
 | 主动清除 | 二次确认后删除个人空间和未共享沙盒媒体，保留演示数据、API Key、系统相册、Apple 健康及外部备份，并断开自动备份。 |
@@ -42,7 +43,7 @@
 | 动态模型 | 模型是纯文本输入框；保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以输入历史式建议列表出现在输入框下方，可点选也可手输。候选行只显示模型 ID，不截断列表，超过五条时列表内部滚动。刷新候选不覆盖已填写的模型，只在为空时补一个默认值。 |
 | 多模态提示位置 | 能力说明只在模型已填写后出现，且只占一行；文案明确说明是多模态能力（支持图片与视频关键帧 / 只能发送文字 / 未标注时由平台在发送时验证）。 |
 | 多模态提醒 | 已知不支持的模型上传前阻止；未知能力由服务端验证，失败时把平台原始原因展示到聊天和 Trace。 |
-| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。每轮按信号预选工具组（core + 可选 plans/gym/review），仅 `expand_tool_group` 可中途扩展。一次 Turn 的 Skill/Tool 过程默认折叠为一条状态摘要行，展开后按真实顺序显示独立 Event Cards。Tool 卡片直接展示结果正文，过长时用「展开/收起」；原始 JSON 只在开发者 Trace 中保留。 |
+| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。每轮按信号预选工具组（core + 可选 plans/gym/review/feedback），仅 `expand_tool_group` 可中途扩展。一次 Turn 的 Skill/Tool 过程默认折叠为一条状态摘要行，展开后按真实顺序显示独立 Event Cards。Tool 卡片直接展示结果正文，过长时用「展开/收起」；原始 JSON 只在开发者 Trace 中保留。 |
 | Agent 纠错与删除 | 数据查询返回稳定记录 ID；训练、饮食和身体支持显式 update 工具原位纠错并合并新媒体；delete 工具仅接受用户当前消息的明确意图，且不级联删除聊天和共享媒体。 |
 | 跨消息去重 | 同一现实事件的补图或纠错综合来源、时间、类型、文本、结构化数值、媒体和纠错语义确定性合并；歧义候选保持独立。 |
 | 可继续 Session | 历史会话抽屉由教练页左边界右滑打开（导航栏不放常驻按钮，VoiceOver 提供等效操作）；可新建或选择旧 Session 继续发送，跨天不自动抢走当前选择。 |
@@ -158,7 +159,7 @@
 | 规范化幂等 | `AgentToolCallSignature` 归一 trim/同义字段/数值/nil；`set_entries` 保序；失败 receipt 可重试（`AgentReliabilityTests`）。 |
 | 业务级疑似重复 | 同日同动作同组指纹命中返回既有 ID +「疑似重复」，不静默合并（`AgentBusinessKeyDeduper`）。 |
 | 同气泡续跑 | Job 持久化 `lastCompletedStep`/`loopCheckpoint`；有检查点时复用 `responseMessageID` 且不递增 `attemptNumber`；`DataIntegrityRepair` 不把可恢复中断标为 failed。 |
-| 工具组与并行 | `AgentToolExposurePolicy` 预选 core/plans/gym/review；`parallelToolCalls=true` 且本机顺序执行；未展开时同 session 连续两轮 system+tools 前缀稳定。 |
+| 工具组与并行 | `AgentToolExposurePolicy` 预选 core/plans/gym/review/feedback；`parallelToolCalls=true` 且本机顺序执行；未展开时同 session 连续两轮 system+tools 前缀稳定。 |
 | 延迟辅助 | 流式滚动约 10Hz 非动画节流；历史视频帧经 `VideoFrameCache` LRU；step ≥ 2 历史帧占位。Trace 可观测 `time_to_first_delta_ms`/`projection_ms`/`cached_prompt_tokens`。 |
 | 红线不破坏 | 不用 LLM 滚动摘要；不静默跨轮合并；Tool Schema 仍固定；远程 Job 协议不变。 |
 

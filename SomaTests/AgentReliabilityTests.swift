@@ -103,6 +103,70 @@ final class AgentReliabilityTests: XCTestCase {
     }
 
     @MainActor
+    func testAsyncMutationReceiptCommitsSuccessAndSkipsReplay() async throws {
+        let context = try makeContext()
+        let turnID = UUID()
+        let call = AgentToolCall(
+            name: .submitFeedback,
+            arguments: AgentToolArguments()
+        )
+        var attempts = 0
+
+        let first = try await AgentMutationStore.executeAsync(
+            call,
+            turnID: turnID,
+            in: context
+        ) {
+            attempts += 1
+            return .success("反馈已发送。")
+        }
+        let replay = try await AgentMutationStore.executeAsync(
+            call,
+            turnID: turnID,
+            in: context
+        ) {
+            attempts += 1
+            return .failure("不应再次执行")
+        }
+
+        XCTAssertTrue(first.ok)
+        XCTAssertEqual(replay, first)
+        XCTAssertEqual(attempts, 1)
+    }
+
+    @MainActor
+    func testAsyncMutationReceiptRemovesCancellationForRetry() async throws {
+        let context = try makeContext()
+        let turnID = UUID()
+        let call = AgentToolCall(
+            name: .submitFeedback,
+            arguments: AgentToolArguments()
+        )
+
+        do {
+            _ = try await AgentMutationStore.executeAsync(
+                call,
+                turnID: turnID,
+                in: context
+            ) {
+                throw CancellationError()
+            }
+            XCTFail("取消必须向上抛出")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        let retry = try await AgentMutationStore.executeAsync(
+            call,
+            turnID: turnID,
+            in: context
+        ) {
+            .success("反馈已发送。")
+        }
+        XCTAssertTrue(retry.ok)
+    }
+
+    @MainActor
     func testBusinessKeyFlagsCrossTurnDuplicateWithoutMerging() throws {
         let context = try makeContext()
         let date = Date(timeIntervalSince1970: 1_785_386_220)
@@ -161,6 +225,32 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertTrue(tools.contains(.expandToolGroup))
         XCTAssertTrue(tools.contains(.startGuidedWorkout))
         XCTAssertFalse(tools.contains(.updateGym))
+    }
+
+    func testToolExposureSelectsProductFeedbackButNotWorkoutFeedback() {
+        let productGroups = AgentToolExposurePolicy.initialGroups(
+            signals: AgentToolExposureSignals(
+                text: "我想反馈一个问题：这个按钮无法点击",
+                hasVideo: false,
+                hasActiveProgram: false,
+                hasActiveGuidedSession: false
+            )
+        )
+        XCTAssertTrue(productGroups.contains(.feedback))
+        XCTAssertTrue(
+            AgentToolExposurePolicy.tools(for: productGroups)
+                .contains(.submitFeedback)
+        )
+
+        let workoutGroups = AgentToolExposurePolicy.initialGroups(
+            signals: AgentToolExposureSignals(
+                text: "请给我的深蹲动作一些反馈",
+                hasVideo: false,
+                hasActiveProgram: false,
+                hasActiveGuidedSession: false
+            )
+        )
+        XCTAssertFalse(workoutGroups.contains(.feedback))
     }
 
     func testPrefixStabilityForExposedTools() {

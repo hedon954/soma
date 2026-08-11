@@ -102,6 +102,57 @@ enum AgentMutationStore {
         try? context.save()
         return result
     }
+
+    static func executeAsync(
+        _ call: AgentToolCall,
+        turnID: UUID,
+        in context: ModelContext,
+        operation: () async throws -> AgentToolResult
+    ) async throws -> AgentToolResult {
+        guard call.name.isMutation else { return try await operation() }
+        let key = AgentMutationReceipt.key(
+            turnID: turnID,
+            signature: call.signature
+        )
+        let descriptor = FetchDescriptor<AgentMutationReceipt>(
+            predicate: #Predicate { $0.key == key }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            switch existing.status {
+            case .committed:
+                if let result = existing.result {
+                    return result
+                }
+            case .failed, .pending:
+                context.delete(existing)
+                try? context.save()
+            }
+        }
+
+        let receipt = AgentMutationReceipt(
+            turnID: turnID,
+            signature: call.signature,
+            status: .pending
+        )
+        context.insert(receipt)
+        try? context.save()
+
+        do {
+            let result = try await operation()
+            if result.ok {
+                receipt.status = .committed
+                receipt.result = result
+            } else {
+                context.delete(receipt)
+            }
+            try? context.save()
+            return result
+        } catch {
+            context.delete(receipt)
+            try? context.save()
+            throw error
+        }
+    }
 }
 
 enum ConversationTurnProjection {

@@ -702,24 +702,14 @@ final class ConversationProcessingService {
                 in: context.modelContext
             )
             let currentGymID = GymSelection.current(in: context.gyms)?.id
-            let result = AgentMutationStore.execute(
+            let result = try await executeAgentTool(
                 call,
                 turnID: job.turnID,
-                in: context.modelContext
-            ) {
-                ConversationRecorder.executeAgentTool(
-                    call,
-                    sourceText: userMessage.text,
-                    sourceDate: userMessage.date,
-                    sourceSessionID: context.session.id,
-                    sourceTurnID: job.turnID,
-                    mediaKind: job.mediaAttachments.first?.kind ?? .none,
-                    mediaPath: job.mediaAttachments.first?.path,
-                    mediaAttachments: job.mediaAttachments,
-                    preferredGymID: currentGymID,
-                    in: context.modelContext
-                )
-            }
+                userMessage: userMessage,
+                mediaAttachments: job.mediaAttachments,
+                preferredGymID: currentGymID,
+                context: context
+            )
             try await client.submitToolResult(
                 remoteJobID: remoteJobID,
                 toolCallID: request.toolCallID,
@@ -1137,24 +1127,14 @@ private extension ConversationProcessingService {
                     current: media.attachments,
                     history: projection
                 )
-                let result = AgentMutationStore.execute(
+                let result = try await executeAgentTool(
                     call,
                     turnID: turnID,
-                    in: context.modelContext
-                ) {
-                    ConversationRecorder.executeAgentTool(
-                        call,
-                        sourceText: userMessage.text,
-                        sourceDate: userMessage.date,
-                        sourceSessionID: context.session.id,
-                        sourceTurnID: turnID,
-                        mediaKind: media.primaryKind,
-                        mediaPath: media.primaryPath,
-                        mediaAttachments: attributedMedia,
-                        preferredGymID: resolution.gymID,
-                        in: context.modelContext
-                    )
-                }
+                    userMessage: userMessage,
+                    mediaAttachments: attributedMedia,
+                    preferredGymID: resolution.gymID,
+                    context: context
+                )
                 if let recordType = result.recordType {
                     performedRecordType = recordType
                 }
@@ -1187,6 +1167,48 @@ private extension ConversationProcessingService {
 
         context.session.touch(at: .now)
         try? context.modelContext.save()
+    }
+
+    private func executeAgentTool(
+        _ call: AgentToolCall,
+        turnID: UUID,
+        userMessage: CoachMessage,
+        mediaAttachments: [MediaAttachmentReference],
+        preferredGymID: UUID?,
+        context: ConversationProcessingContext
+    ) async throws -> AgentToolResult {
+        if call.name == .submitFeedback {
+            return try await AgentMutationStore.executeAsync(
+                call,
+                turnID: turnID,
+                in: context.modelContext
+            ) {
+                try await AgentFeedbackTool.submit(
+                    id: turnID,
+                    sourceText: userMessage.text,
+                    mediaAttachments: mediaAttachments
+                )
+            }
+        }
+
+        return AgentMutationStore.execute(
+            call,
+            turnID: turnID,
+            in: context.modelContext
+        ) {
+            ConversationRecorder.executeAgentTool(
+                call,
+                sourceText: userMessage.text,
+                sourceDate: userMessage.date,
+                sourceSessionID: context.session.id,
+                sourceTurnID: turnID,
+                mediaKind: mediaAttachments.first?.kind ?? .none,
+                mediaPath: mediaAttachments.first?.path,
+                mediaAttachments: mediaAttachments,
+                preferredGymID: preferredGymID,
+                in: context.modelContext
+            )
+        }
     }
 }
 

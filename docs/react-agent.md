@@ -48,7 +48,9 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 - `load_skill`：按需读取一项专业 Skill。
 - `query_user_data`：查询概览、训练、饮食、身体或健身房记录；可选 `date_from`/`date_to`/
   `group_by`/`metric` 做本地确定性聚合。
-- `expand_tool_group`：本轮逃生工具，按组名扩展尚未暴露的工具组（plans/gym/review）。
+- `expand_tool_group`：本轮逃生工具，按组名扩展尚未暴露的工具组（plans/gym/review/feedback）。
+- `submit_feedback`：只在用户当前消息明确提交产品反馈时调用；无参数，设备固定发送当前原文与
+  当前附件，不附带历史消息、Trace 或身体数据。
 - `list_exercise_names`：返回当前数据空间全部 active 动作 `{id,name}`，由模型完成语义选择。
 - `list_training_programs`：返回当前可执行计划的稳定 ID、名称、目标与当前模板。
 - `get_training_program`：按计划 ID 读取当前模板动作与处方详情。
@@ -132,7 +134,8 @@ Live Activity 和通知是独立投影。token delta 继续实时显示，但不
 Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending → committed）去重；
 跨 Turn 业务键命中返回疑似重复而不静默合并。
 
-每轮请求只暴露预选工具组（core + 可选 plans/gym/review），可用 `expand_tool_group` 扩展。
+每轮请求只暴露预选工具组（core + 可选 plans/gym/review/feedback），可用
+`expand_tool_group` 扩展。
 供应商侧允许并行 `tool_calls`，本机仍顺序执行。`AgentContextPackBuilder` 提供确定性上下文包；
 历史投影保留十轮全文并附加近期工具写入事实与更早轮次 digest。
 

@@ -84,6 +84,66 @@ final class FeedbackSubmissionTests: XCTestCase {
         XCTAssertTrue(sentMessage?.contains("filename=\"feedback-1.jpg\"") == true)
     }
 
+    @MainActor
+    func testAgentFeedbackToolSendsCurrentSourceTextAndMedia() async throws {
+        let transport = CapturingFeedbackSMTPTransport()
+        let feedbackID = UUID()
+        let imageURL = FileManager.default.temporaryDirectory
+            .appending(path: "soma-agent-feedback-\(UUID().uuidString).jpg")
+        try Data("synthetic-current-image".utf8).write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let result = try await AgentFeedbackTool.submit(
+            id: feedbackID,
+            sourceText: "  提交反馈：虚构按钮无法点击。  ",
+            mediaAttachments: [
+                MediaAttachmentReference(
+                    kind: .image,
+                    path: "PrivateMedia/current-image.jpg"
+                )
+            ],
+            credentials: FeedbackQQMailCredentials(
+                senderAddress: "123456@qq.com",
+                smtpAuthorizationCode: "authorization-code"
+            ),
+            transport: transport,
+            mediaURL: { path in
+                path == "PrivateMedia/current-image.jpg" ? imageURL : nil
+            }
+        )
+
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.observation, "反馈已发送。")
+        let capturedDelivery = await transport.delivery
+        let delivery = try XCTUnwrap(capturedDelivery)
+        let sentMessage = try XCTUnwrap(
+            String(data: delivery.message, encoding: .utf8)
+        )
+        XCTAssertTrue(sentMessage.contains(
+            Data("提交反馈：虚构按钮无法点击。".utf8).base64EncodedString()
+        ))
+        XCTAssertTrue(sentMessage.contains(
+            Data("synthetic-current-image".utf8).base64EncodedString()
+        ))
+    }
+
+    @MainActor
+    func testAgentFeedbackToolReturnsFailureWhenDeliveryFails() async throws {
+        let result = try await AgentFeedbackTool.submit(
+            id: UUID(),
+            sourceText: "提交一条虚构反馈",
+            mediaAttachments: [],
+            credentials: FeedbackQQMailCredentials(
+                senderAddress: "123456@qq.com",
+                smtpAuthorizationCode: "authorization-code"
+            ),
+            transport: FailingFeedbackSMTPTransport()
+        )
+
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.observation, "反馈暂时无法发送，请稍后重试。")
+    }
+
     func testTextAndMediaOnlyFeedbackAreBothAccepted() throws {
         XCTAssertEqual(
             try FeedbackSubmissionPolicy.validatedMessage(
@@ -201,5 +261,16 @@ private actor CapturingFeedbackSMTPTransport: FeedbackSMTPTransport {
             recipient: recipient,
             authorizationCode: authorizationCode
         )
+    }
+}
+
+private struct FailingFeedbackSMTPTransport: FeedbackSMTPTransport {
+    func send(
+        message _: Data,
+        sender _: String,
+        recipient _: String,
+        authorizationCode _: String
+    ) async throws {
+        throw URLError(.notConnectedToInternet)
     }
 }

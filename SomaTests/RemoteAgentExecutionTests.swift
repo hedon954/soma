@@ -129,6 +129,7 @@ struct RemoteAgentExecutionTests {
         #expect(server.idempotencyKey == clientJobID.uuidString.lowercased())
         #expect(server.submittedDeviceTools.contains("list_exercise_names"))
         #expect(server.submittedDeviceTools.contains("record_workout"))
+        #expect(server.submittedDeviceTools.contains("submit_feedback"))
         #expect(server.submittedRemoteTools.isEmpty)
     }
 }

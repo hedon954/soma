@@ -1,12 +1,13 @@
 # ADR 0050：每轮工具组渐进披露与并行 tool_calls
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-08-05
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0003](0003-native-streaming-react-tool-calling.md) 中「每步暴露全部工具且 parallelToolCalls=false」的默认运行参数
   - [ADR 0004](0004-progressive-skills-fixed-tool-contract.md) 中「工具目录始终全量暴露给模型」的运行时暴露策略（工具契约本身仍固定）
 - 上游依据：[PRD 022](../prd/022-react-reliability-and-context-awareness.md)
+- 后续替代：[ADR 0054](0054-device-executed-chat-feedback-tool.md) 增加 `feedback` 工具组，其余预选、展开和并行规则保持不变
 
 ## 背景
 

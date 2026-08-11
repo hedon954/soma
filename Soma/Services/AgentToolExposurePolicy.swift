@@ -5,9 +5,10 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
     case plans
     case gym
     case review
+    case feedback
 
     static var expandableCases: [AgentToolGroup] {
-        [.plans, .gym, .review]
+        [.plans, .gym, .review, .feedback]
     }
 
     var tools: [AgentToolName] {
@@ -41,6 +42,8 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
             [.updateGym, .switchGym]
         case .review:
             [.recordPerformanceAnalysis]
+        case .feedback:
+            [.submitFeedback]
         }
     }
 }
@@ -76,6 +79,17 @@ enum AgentToolExposurePolicy {
         {
             groups.insert(.review)
         }
+        if containsAny(
+            lowered,
+            [
+                "提交反馈", "发送反馈", "反馈给 soma", "产品反馈", "问题反馈",
+                "我要反馈", "想反馈", "帮我反馈", "反馈一下", "反馈问题",
+                "功能建议", "bug 反馈", "report feedback", "submit feedback",
+                "feedback"
+            ]
+        ) {
+            groups.insert(.feedback)
+        }
         return groups
     }
 
@@ -98,7 +112,7 @@ enum AgentToolExposurePolicy {
               let group = AgentToolGroup(rawValue: groupRaw),
               AgentToolGroup.expandableCases.contains(group)
         else {
-            return .failure("tool_group 仅支持 plans、gym、review。")
+            return .failure("tool_group 仅支持 plans、gym、review、feedback。")
         }
         if groups.contains(group) {
             return .success("工具组 \(group.rawValue) 已经展开。")

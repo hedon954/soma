@@ -116,6 +116,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
             function: {
               name,
               description:
+                definition.description ??
                 "由用户设备执行的 Soma 固定 Tool；只传当前任务明确需要的最小参数。",
               parameters: definition.parameters,
             },
