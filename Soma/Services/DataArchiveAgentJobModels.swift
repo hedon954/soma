@@ -22,6 +22,7 @@ struct AgentJobDTO: Codable, Equatable, Sendable {
     var lastError: String?
     var remoteJobID: String?
     var remoteEventCursor: Int?
+    var remoteRequestAttempt: Int?
     var leaseOwner: String?
     var leaseExpiresAt: Date?
     var leaseEpoch: Int
@@ -54,6 +55,7 @@ struct AgentJobDTO: Codable, Equatable, Sendable {
         lastError = model.lastError
         remoteJobID = model.remoteJobID
         remoteEventCursor = model.remoteEventCursor
+        remoteRequestAttempt = model.remoteRequestAttempt
         leaseOwner = model.leaseOwner
         leaseExpiresAt = model.leaseExpiresAt
         leaseEpoch = model.leaseEpoch
@@ -109,6 +111,7 @@ struct AgentJobDTO: Codable, Equatable, Sendable {
         job.lastError = lastError
         job.remoteJobID = remoteJobID
         job.remoteEventCursor = remoteEventCursor ?? 0
+        job.remoteRequestAttempt = remoteRequestAttempt ?? 1
         job.leaseOwner = leaseOwner
         job.leaseExpiresAt = leaseExpiresAt
         job.leaseEpoch = leaseEpoch

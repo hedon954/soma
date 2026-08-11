@@ -1,6 +1,8 @@
+import SwiftData
 import SwiftUI
 
 struct AgentTurnTranscript: View {
+    @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
     let items: [AgentTurnItem]
     let isLive: Bool
 
@@ -11,11 +13,35 @@ struct AgentTurnTranscript: View {
         }
     }
 
+    private var recordedMeal: MealEntry? {
+        let recordID = items.reversed().compactMap { item -> UUID? in
+            guard let output = item.output,
+                  let data = output.data(using: .utf8),
+                  let result = try? JSONDecoder().decode(AgentToolResult.self, from: data),
+                  let rawID = result.recordRefs?
+                  .last(where: { $0.recordType == ConversationIntent.meal.rawValue })?
+                  .recordID
+            else {
+                return nil
+            }
+            return UUID(uuidString: rawID)
+        }.first
+        return recordID.flatMap { id in meals.first(where: { $0.id == id }) }
+    }
+
     /// ADR 0014：按 Item 顺序渲染。Skill/Tool 与文本在一次 Turn 里是交替发生的，
     /// 按 kind 归类展示会打乱「先说什么、再做什么」的真实时序。
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(visibleItems) { item in
+            if let recordedMeal {
+                Label("已完成饮食识别与记录", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.tint)
+                    .accessibilityLabel("饮食识别与记录已完成")
+                MealChatResultCard(meal: recordedMeal)
+            }
+
+            ForEach(displayItems) { item in
                 AgentTurnItemCard(item: item)
             }
 
@@ -24,6 +50,13 @@ struct AgentTurnTranscript: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var displayItems: [AgentTurnItem] {
+        guard recordedMeal != nil else { return visibleItems }
+        return visibleItems.filter {
+            $0.kind == .text || $0.kind == .error || $0.status == .failed
+        }
     }
 }
 

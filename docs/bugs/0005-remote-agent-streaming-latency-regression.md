@@ -4,8 +4,10 @@
 - 发现日期：2026-08-03
 - 影响范围：开启“后台持续处理”后的首段文本、Tool 往返和最终回复投影
 - 修订自：[BUG 0004](0004-agent-background-stream-interruption.md) 的远程持续执行闭环
+- 后续修订：[BUG 0012](0012-direct-video-and-first-delta-timeout.md) 增加 Provider 首增量、idle 与 total timeout
 - 下游落地：
   - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
+  - [ADR 0058](../adr/0058-first-delta-deadline-and-bounded-retry.md)
   - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
 
 ## 症状

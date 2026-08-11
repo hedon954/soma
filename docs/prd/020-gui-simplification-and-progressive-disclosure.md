@@ -9,6 +9,7 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 的带练执行同屏控件密度与准备页选项
   - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 的版本历史与统计常驻展示方式
 - 后续修订：
+  - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 用 typed 饮食结果卡收敛过程卡并扩展饮食详情审查
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 取消 LLM 配置页的
     「高级」折叠层，并把输入区动作候选从两步按钮改为一步输入历史式建议
 - 上游依据：[全界面 GUI 精简与渐进披露审计](../research/2026-08-05-ui-simplification-review.md)

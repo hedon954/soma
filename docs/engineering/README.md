@@ -5,6 +5,8 @@
 
 - [训练领域模型与运行时协议](training-domain-model.md)
 - [Agent Job 与远程执行协议](agent-job-protocol.md)
+- [Agent Tool 目录](agent-tool-catalog.md)
+- [默认 Prompt 来源目录](prompt-source-catalog.md)
 - [训练智能与可靠 Agent 实施次序](implementation-sequence.md)
 - [训练智能与可靠 Agent 全量 Todo](implementation-todo.md)
 - [可选 Agent Server 部署与运维](../../Server/README.md)

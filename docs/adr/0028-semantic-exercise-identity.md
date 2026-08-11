@@ -4,7 +4,7 @@
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：无
-- 后续替代：暂无
+- 后续替代：[ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 用搜索、分页和字段投影替代每轮完整名称列表；稳定动作 ID 保持不变
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 关联：

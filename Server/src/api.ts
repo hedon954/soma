@@ -39,6 +39,7 @@ interface Dependencies {
   objects: TemporaryObjectStore;
   tokenCipher: TokenCipher;
   feedback?: FeedbackEmailProvider;
+  directVideoEnabled?: boolean;
   now?: () => Date;
 }
 
@@ -123,6 +124,13 @@ async function route(
     dependencies.identity,
     now,
   );
+
+  if (method === "GET" && url.pathname === "/v1/capabilities") {
+    sendJSON(response, 200, envelope(requestID, now, {
+      directVideo: dependencies.directVideoEnabled ?? false,
+    }));
+    return;
+  }
 
   if (method === "DELETE" && url.pathname === "/v1/device-data") {
     const keys = await dependencies.store.deleteDeviceData(deviceID, now);
@@ -573,6 +581,40 @@ async function requiredJob(
 
 function parseJobInput(rawBody: Buffer): AgentJobInput {
   const value = parseObject(rawBody);
+  const allowedDeviceTools = requiredStringArray(value, "allowedDeviceTools");
+  const allowedDeviceToolSchemas = optionalToolSchemas(
+    value,
+    "allowedDeviceToolSchemas",
+  );
+  if (
+    allowedDeviceToolSchemas.length > 0 &&
+    (
+      allowedDeviceToolSchemas.length !== allowedDeviceTools.length ||
+      allowedDeviceToolSchemas.some(
+        (item) => !allowedDeviceTools.includes(item.name),
+      )
+    )
+  ) {
+    throw new ProtocolError(
+      "invalid_request",
+      "allowedDeviceTools 与 Schema 清单不一致。",
+      400,
+    );
+  }
+  const rawMediaMode = value.mediaMode;
+  const mediaMode = rawMediaMode === undefined ? "text" : rawMediaMode;
+  if (
+    typeof mediaMode !== "string" ||
+    !["text", "images", "keyframes", "direct_video"].includes(mediaMode)
+  ) {
+    throw new ProtocolError("invalid_request", "mediaMode 无效。", 400);
+  }
+  const requestAttempt = value.requestAttempt === undefined
+    ? 1
+    : requiredNumber(value, "requestAttempt");
+  if (!Number.isInteger(requestAttempt) || requestAttempt < 1 || requestAttempt > 2) {
+    throw new ProtocolError("invalid_request", "requestAttempt 无效。", 400);
+  }
   return {
     clientJobID: requiredString(value, "clientJobID"),
     turnID: requiredString(value, "turnID"),
@@ -581,10 +623,41 @@ function parseJobInput(rawBody: Buffer): AgentJobInput {
     text: requiredString(value, "text"),
     contextSnapshot: requiredString(value, "contextSnapshot"),
     uploadIDs: requiredStringArray(value, "uploadIDs"),
+    mediaMode: mediaMode as NonNullable<AgentJobInput["mediaMode"]>,
+    requestAttempt,
     allowedRemoteTools: requiredStringArray(value, "allowedRemoteTools"),
-    allowedDeviceTools: requiredStringArray(value, "allowedDeviceTools"),
+    allowedDeviceTools,
+    allowedDeviceToolSchemas,
     liveActivityEnabled: requiredBoolean(value, "liveActivityEnabled"),
   };
+}
+
+function optionalToolSchemas(
+  value: Record<string, unknown>,
+  key: string,
+): { name: string; schemaVersion: number }[] {
+  const resolved = value[key];
+  if (resolved === undefined) return [];
+  if (!Array.isArray(resolved)) {
+    throw new ProtocolError("invalid_request", key + " 无效。", 400);
+  }
+  return resolved.map((item) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      throw new ProtocolError("invalid_request", key + " 无效。", 400);
+    }
+    const object = item as Record<string, unknown>;
+    const name = object.name;
+    const schemaVersion = object.schemaVersion;
+    if (
+      typeof name !== "string" ||
+      name.length === 0 ||
+      typeof schemaVersion !== "number" ||
+      !Number.isInteger(schemaVersion)
+    ) {
+      throw new ProtocolError("invalid_request", key + " 无效。", 400);
+    }
+    return { name, schemaVersion };
+  });
 }
 
 function publicJob(job: Awaited<ReturnType<typeof requiredJob>>) {

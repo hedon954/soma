@@ -182,7 +182,7 @@ enum TrainingIntelligenceService {
         不推断不可见关节、疼痛或伤病，不作医疗诊断。若出现疼痛、眩晕或明显不适，建议停止训练并寻求专业帮助。
         完成分析后必须调用 record_performance_analysis，原样传回上述 performance_id 和 input_fingerprint，
         并分别填写：按阶段描述的 evidence、镜头/遮挡/采样造成的 limitations、以及中性可执行的 feedback。
-        不要调用 record_workout，也不要修改任何训练事实。
+        不要调用 mutate_user_data，也不要修改任何训练事实。
         """
     }
 

@@ -879,6 +879,7 @@ private struct CoachComposer: View {
     let onOpenLLMConfiguration: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var focused: Bool
 
     /// PRD 020：输入区同一时间最多一层上下文条，优先级为
@@ -949,37 +950,24 @@ private struct CoachComposer: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
             }
-            HStack(alignment: .bottom, spacing: 9) {
-                Button(action: onAddMedia) {
-                    Image(systemName: "plus")
-                        .font(.title3.weight(.semibold))
-                        .frame(width: 38, height: 38)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    composerTextField
+                    HStack(spacing: 12) {
+                        addMediaButton
+                        Spacer(minLength: 8)
+                        voiceButton
+                        sendControl
+                    }
+                    .padding(.horizontal, 6)
                 }
-                .disabled(attachments.count >= MediaPicker.maximumSelectionCount)
-                .accessibilityLabel("添加照片或视频，可多选")
-
-                TextField("说点什么，或添加照片与视频…", text: $draft, axis: .vertical)
-                    .lineLimit(1 ... 5)
-                    .focused($focused)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 9)
-                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 19))
-
-                Button(action: onToggleVoice) {
-                    Image(systemName: isListening ? "waveform" : "mic.fill")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 38, height: 38)
-                        .foregroundStyle(isListening ? Color.white : AppTheme.tint)
-                        .background(
-                            isListening ? AppTheme.tint : Color(uiColor: .secondarySystemGroupedBackground),
-                            in: Circle()
-                        )
+            } else {
+                HStack(alignment: .bottom, spacing: 9) {
+                    addMediaButton
+                    composerTextField
+                    voiceButton
+                    sendControl
                 }
-                .disabled(isSending)
-                .accessibilityLabel(isListening ? "停止语音输入" : "开始语音输入")
-
-                sendControl
             }
         }
         .padding(.horizontal, 12)
@@ -1039,6 +1027,44 @@ private struct CoachComposer: View {
         }
         .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var addMediaButton: some View {
+        Button(action: onAddMedia) {
+            Image(systemName: "plus")
+                .font(.title3.weight(.semibold))
+                .frame(width: 38, height: 38)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
+        }
+        .disabled(attachments.count >= MediaPicker.maximumSelectionCount)
+        .accessibilityLabel("添加照片或视频，可多选")
+    }
+
+    private var composerTextField: some View {
+        TextField("说点什么，或添加照片与视频…", text: $draft, axis: .vertical)
+            .lineLimit(1 ... 5)
+            .focused($focused)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 19)
+            )
+    }
+
+    private var voiceButton: some View {
+        Button(action: onToggleVoice) {
+            Image(systemName: isListening ? "waveform" : "mic.fill")
+                .font(.body.weight(.semibold))
+                .frame(width: 38, height: 38)
+                .foregroundStyle(isListening ? Color.white : AppTheme.tint)
+                .background(
+                    isListening ? AppTheme.tint : Color(uiColor: .secondarySystemGroupedBackground),
+                    in: Circle()
+                )
+        }
+        .disabled(isSending)
+        .accessibilityLabel(isListening ? "停止语音输入" : "开始语音输入")
     }
 
     private static func suggestionItem(

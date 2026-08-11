@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent, AgentJob, ToolRequest } from "./domain.js";
 import { isTerminal, ProtocolError } from "./domain.js";
 import type { SomaStore } from "./store.js";
-import { validateDeviceTool } from "./tool-registry.js";
+import {
+  effectiveAllowedDeviceTools,
+  validateDeviceTool,
+} from "./tool-registry.js";
 
 export type ProviderStep =
   | { kind: "completed"; answer: string; usage?: { input: number; output: number } }
@@ -78,7 +81,12 @@ export class AgentWorker {
       kind: "model",
       phase: "started",
       payloadVersion: 1,
-      payload: { provider: "managed", model: "configured" },
+      payload: {
+        provider: "managed",
+        model: "configured",
+        mediaMode: job.input?.mediaMode ?? "text",
+        requestAttempt: job.input?.requestAttempt ?? 1,
+      },
       createdAt: now,
     });
     const textItemID = randomUUID();
@@ -116,11 +124,27 @@ export class AgentWorker {
         });
       }
       if (step.kind === "deviceTool") {
+        const submittedSchema = job.input?.allowedDeviceToolSchemas?.find(
+          (item) => item.name === step.toolName,
+        );
+        if (
+          submittedSchema !== undefined &&
+          submittedSchema.schemaVersion !== step.schemaVersion
+        ) {
+          throw new ProtocolError(
+            "tool_schema_unsupported",
+            "Tool Schema 与任务提交契约不一致。",
+            409,
+          );
+        }
         const definition = validateDeviceTool({
           name: step.toolName,
           schemaVersion: step.schemaVersion,
           arguments: step.arguments,
-          allowedNames: job.input?.allowedDeviceTools ?? [],
+          allowedNames: effectiveAllowedDeviceTools(
+            job.input?.allowedDeviceTools ?? [],
+            history,
+          ),
         });
         const request: Omit<ToolRequest, "id"> = {
           jobID: job.id,
@@ -168,7 +192,11 @@ export class AgentWorker {
           kind: "error",
           phase: "failed",
           payloadVersion: 1,
-          payload: { code },
+          payload: {
+            code,
+            mediaMode: job.input?.mediaMode ?? "text",
+            requestAttempt: job.input?.requestAttempt ?? 1,
+          },
           createdAt: now,
         });
         return await this.store.transition(

@@ -343,18 +343,26 @@ enum AIServiceError: LocalizedError {
     }
 }
 
-private struct AgentStreamOutcome {
+struct AgentStreamOutcome {
     var passage = ""
     var toolCalls: [AgentStreamingToolCall] = []
     var usage: ChatUsage?
     var ignoredReasoning = false
     var firstDeltaAt: Date?
     var projectionSeconds: TimeInterval = 0
+    var requestAttempt = 1
+    var mediaMode: AgentMediaMode = .text
+    var fallbackReason: String?
+    var ttftBudgetMilliseconds = 0
 }
 
 /// 流式中断时保留已产出的文本，让失败 Span 仍能解释这一步做到哪里。
-private enum StreamingFailure: Error {
-    case interrupted(Error, passage: String)
+enum StreamingFailure: Error {
+    case interrupted(
+        Error,
+        passage: String,
+        receivedMeaningfulDelta: Bool
+    )
 }
 
 private struct AgentToolLoopState {
@@ -376,7 +384,9 @@ final class AIService {
     @ObservationIgnored
     private let requestLoader: AIRequestLoader
     @ObservationIgnored
-    private let agentStreamLoader: AgentStreamLoader?
+    let agentStreamLoader: AgentStreamLoader?
+    @ObservationIgnored
+    let streamDeadlinePolicy: AgentStreamDeadlinePolicy
 
     init(
         defaults: UserDefaults = .standard,
@@ -384,12 +394,14 @@ final class AIService {
         requestLoader: @escaping AIRequestLoader = { request in
             try await URLSession.shared.data(for: request)
         },
-        agentStreamLoader: AgentStreamLoader? = nil
+        agentStreamLoader: AgentStreamLoader? = nil,
+        streamDeadlinePolicy: AgentStreamDeadlinePolicy = .init()
     ) {
         self.defaults = defaults
         self.apiKeyOverride = apiKeyOverride
         self.requestLoader = requestLoader
         self.agentStreamLoader = agentStreamLoader
+        self.streamDeadlinePolicy = streamDeadlinePolicy
     }
 
     func fetchAvailableModels(
@@ -509,6 +521,7 @@ final class AIService {
         toolSignals: AgentToolExposureSignals? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
+        videoFrameFallback: (() async -> [Data])? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) async throws -> AgentToolResult
     ) async throws -> AgentOutcome {
@@ -537,6 +550,7 @@ final class AIService {
             context: context,
             imageCount: images.count,
             hasVideo: hasVideo,
+            directVideoCount: videos.count,
             imageAttachmentCount: imageAttachmentCount,
             videoAttachmentCount: videoAttachmentCount
         )
@@ -626,6 +640,11 @@ final class AIService {
                             ? 0
                             : historicalImageCount,
                         "direct_video_count": videos.count,
+                        "media_mode": initialMediaMode(
+                            images: images,
+                            videos: videos,
+                            hasVideo: hasVideo
+                        ).rawValue,
                         "provider": provider.displayName,
                         "model": model,
                         "model_tier": selectedRoute.tier.title,
@@ -638,25 +657,31 @@ final class AIService {
                     ])
                 )))
 
-                let streamed: AgentStreamOutcome
+                var streamed: AgentStreamOutcome
                 do {
-                    streamed = try await consumeAgentStream(
-                        parameters: ChatCompletionParameters(
-                            messages: toolState.messages,
-                            model: .custom(model),
-                            store: provider == .openAI ? false : nil,
-                            toolChoice: .auto,
+                    streamed = try await consumeAgentStepWithRetry(
+                        messages: &toolState.messages,
+                        request: AgentStreamStepRequest(
                             tools: toolState.tools,
-                            parallelToolCalls: true,
-                            streamOptions: .init(includeUsage: true)
+                            model: model,
+                            provider: provider,
+                            images: images,
+                            videos: videos,
+                            hasVideo: hasVideo,
+                            step: step,
+                            route: selectedRoute,
+                            apiKey: key,
+                            userPrompt: userPrompt,
+                            textItemID: textItemID
                         ),
-                        videos: videos,
-                        route: selectedRoute,
-                        apiKey: key,
-                        textItemID: textItemID,
+                        videoFrameFallback: videoFrameFallback,
                         trace: trace
                     )
-                } catch let StreamingFailure.interrupted(error, passage) {
+                } catch let StreamingFailure.interrupted(
+                    error,
+                    passage,
+                    _
+                ) {
                     let endedAt = Date()
                     let reason = agentErrorDescription(error)
                     trace?(.span(AgentTraceSpan(
@@ -894,111 +919,7 @@ final class AIService {
         }
     }
 
-    /// 消费一步推理的流式响应。抽出来是为了让每个增量的投影耗时可计量：
-    /// 首个增量之前是请求与供应商排队，之后本机投影与流式读取共用同一个 actor。
-    private func consumeAgentStream(
-        parameters: ChatCompletionParameters,
-        videos: [AgentVideoInput],
-        route: AIModelRoute,
-        apiKey: String,
-        textItemID: UUID,
-        trace: ((AgentTraceEvent) -> Void)?
-    ) async throws -> AgentStreamOutcome {
-        var outcome = AgentStreamOutcome()
-        var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
-        do {
-            let stream = try await agentStream(
-                parameters: parameters,
-                videos: videos,
-                provider: route.provider,
-                baseURL: route.baseURL,
-                apiKey: apiKey
-            )
-            for try await chunk in stream {
-                try Task.checkCancellation()
-                if let chunkUsage = chunk.usage {
-                    outcome.usage = chunkUsage
-                }
-                for choice in chunk.choices ?? [] where (choice.index ?? 0) == 0 {
-                    guard let delta = choice.delta else { continue }
-                    if outcome.firstDeltaAt == nil,
-                       delta.content?.isEmpty == false || delta.toolCalls?.isEmpty == false
-                    {
-                        outcome.firstDeltaAt = Date()
-                    }
-                    if let content = delta.content, !content.isEmpty {
-                        outcome.passage += content
-                        let projectionStartedAt = Date()
-                        trace?(.assistantTextDelta(
-                            itemID: textItemID,
-                            delta: content
-                        ))
-                        outcome.projectionSeconds += Date()
-                            .timeIntervalSince(projectionStartedAt)
-                    }
-                    if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
-                        outcome.ignoredReasoning = true
-                    }
-                    for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
-                        let index = toolDelta.index ?? position
-                        var accumulator = toolCallDeltas[index] ?? AgentStreamingToolCall()
-                        accumulator.append(toolDelta)
-                        toolCallDeltas[index] = accumulator
-                    }
-                }
-            }
-        } catch {
-            throw StreamingFailure.interrupted(error, passage: outcome.passage)
-        }
-        outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap { toolCallDeltas[$0] }
-        return outcome
-    }
-
-    /// `cached_prompt_tokens` 说明这一步命中了多少前缀缓存；
-    /// `time_to_first_delta_ms` 与 `projection_ms` 把等待供应商和本机开销分开。
-    private func modelSpanMetadata(
-        history: [AgentConversationExchange],
-        historicalImageCount: Int,
-        directVideoCount: Int,
-        route: AIModelRoute,
-        streamed: AgentStreamOutcome,
-        startedAt: Date,
-        endedAt: Date
-    ) -> String {
-        let usage = streamed.usage
-        return AgentTraceText.jsonObject([
-            "history_exchange_count": history.count,
-            "history_image_count": historicalImageCount,
-            "direct_video_count": directVideoCount,
-            "provider": route.provider.displayName,
-            "model": route.model,
-            "model_tier": route.tier.title,
-            "stream": true,
-            "thinking_ignored": streamed.ignoredReasoning,
-            "prompt_tokens": usage?.promptTokens.map { $0 as Any } ?? NSNull(),
-            "completion_tokens": usage?.completionTokens.map { $0 as Any } ?? NSNull(),
-            "total_tokens": usage?.totalTokens.map { $0 as Any } ?? NSNull(),
-            "cached_prompt_tokens": usage?.promptTokensDetails?
-                .cachedTokens
-                .map { $0 as Any } ?? NSNull(),
-            "time_to_first_delta_ms": streamed.firstDeltaAt.map {
-                milliseconds(from: startedAt, to: $0) as Any
-            } ?? NSNull(),
-            "stream_ms": milliseconds(from: startedAt, to: endedAt),
-            "projection_ms": milliseconds(streamed.projectionSeconds),
-            "tool_call_count": streamed.toolCalls.count
-        ])
-    }
-
-    private func milliseconds(from start: Date, to end: Date) -> Int {
-        milliseconds(end.timeIntervalSince(start))
-    }
-
-    private func milliseconds(_ seconds: TimeInterval) -> Int {
-        Int((max(0, seconds) * 1000).rounded())
-    }
-
-    private func agentUserContent(
+    func agentUserContent(
         prompt: String,
         images: [Data],
         maximumImageCount: Int
@@ -1104,104 +1025,6 @@ final class AIService {
         return messages
     }
 
-    private func agentStream(
-        parameters: ChatCompletionParameters,
-        videos: [AgentVideoInput],
-        provider: AIProvider,
-        baseURL: String,
-        apiKey: String
-    ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error> {
-        if let agentStreamLoader {
-            return try await agentStreamLoader(parameters, provider, baseURL, apiKey)
-        }
-        let configuration = openAICompatibleConfiguration(baseURL: baseURL)
-        let service = OpenAIServiceFactory.service(
-            apiKey: apiKey,
-            overrideBaseURL: configuration.origin,
-            proxyPath: configuration.proxyPath,
-            overrideVersion: configuration.version
-        )
-        if !videos.isEmpty {
-            let direct = try await directVideoStream(
-                parameters: parameters,
-                videos: videos,
-                provider: provider,
-                baseURL: baseURL,
-                apiKey: apiKey
-            )
-            return AsyncThrowingStream { continuation in
-                Task {
-                    var emittedChunk = false
-                    do {
-                        for try await chunk in direct {
-                            emittedChunk = true
-                            continuation.yield(chunk)
-                        }
-                        continuation.finish()
-                    } catch {
-                        guard !emittedChunk else {
-                            continuation.finish(throwing: error)
-                            return
-                        }
-                        do {
-                            let fallback = try await service.startStreamedChat(
-                                parameters: parameters
-                            )
-                            for try await chunk in fallback {
-                                continuation.yield(chunk)
-                            }
-                            continuation.finish()
-                        } catch {
-                            continuation.finish(throwing: error)
-                        }
-                    }
-                }
-            }
-        }
-        return try await service.startStreamedChat(parameters: parameters)
-    }
-
-    private func openAICompatibleConfiguration(
-        baseURL: String
-    ) -> (origin: String, proxyPath: String?, version: String) {
-        var normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        while normalized.hasSuffix("/") {
-            normalized.removeLast()
-        }
-        for suffix in ["/chat/completions", "/responses", "/models"] where normalized.hasSuffix(suffix) {
-            normalized.removeLast(suffix.count)
-            break
-        }
-
-        guard var components = URLComponents(string: normalized),
-              components.scheme != nil,
-              components.host != nil
-        else {
-            return (normalized, nil, "")
-        }
-        let pathComponents = components.path
-            .split(separator: "/")
-            .map(String.init)
-        let last = pathComponents.last ?? ""
-        let version: String
-        let proxyComponents: ArraySlice<String>
-        if last.range(of: #"^v\d+(?:beta\d*)?$"#, options: .regularExpression) != nil {
-            version = last
-            proxyComponents = pathComponents.dropLast()
-        } else {
-            version = ""
-            proxyComponents = pathComponents[...]
-        }
-
-        components.path = ""
-        components.query = nil
-        components.fragment = nil
-        let origin = components.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            ?? normalized
-        let proxyPath = proxyComponents.isEmpty ? nil : proxyComponents.joined(separator: "/")
-        return (origin, proxyPath, version)
-    }
-
     private func loadSkill(_ call: AgentToolCall) -> AgentToolResult {
         guard let skillID = call.arguments.skillID?
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1216,7 +1039,7 @@ final class AIService {
         return .success(skill.text(in: defaults))
     }
 
-    private func agentErrorDescription(_ error: Error) -> String {
+    func agentErrorDescription(_ error: Error) -> String {
         if let apiError = error as? APIError {
             return apiError.displayDescription
         }

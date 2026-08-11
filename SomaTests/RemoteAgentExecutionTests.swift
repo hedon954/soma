@@ -127,10 +127,17 @@ struct RemoteAgentExecutionTests {
         #expect(server.registrationSignatureWasValid)
         #expect(server.jobSignatureWasValid)
         #expect(server.idempotencyKey == clientJobID.uuidString.lowercased())
-        #expect(server.submittedDeviceTools.contains("list_exercise_names"))
-        #expect(server.submittedDeviceTools.contains("record_workout"))
-        #expect(server.submittedDeviceTools.contains("submit_feedback"))
+        #expect(Set(server.submittedDeviceTools) == Set([
+            "load_skill",
+            "query_user_data",
+            "mutate_user_data",
+            "expand_tool_group"
+        ]))
+        #expect(server.submittedDeviceToolSchemas.values.allSatisfy { $0 == 2 })
+        #expect(Set(server.submittedDeviceToolSchemas.keys) == Set(server.submittedDeviceTools))
         #expect(server.submittedRemoteTools.isEmpty)
+        #expect(server.submittedMediaMode == "text")
+        #expect(server.submittedRequestAttempt == 1)
     }
 }
 
@@ -141,7 +148,10 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
     private(set) var jobSignatureWasValid = false
     private(set) var idempotencyKey: String?
     private(set) var submittedDeviceTools: [String] = []
+    private(set) var submittedDeviceToolSchemas: [String: Int] = [:]
     private(set) var submittedRemoteTools: [String] = []
+    private(set) var submittedMediaMode: String?
+    private(set) var submittedRequestAttempt: Int?
     func response(to request: URLRequest) throws -> (HTTPURLResponse, Data) {
         let path = request.url?.path ?? ""
         let responseBody: [String: Any]
@@ -181,7 +191,17 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
             status = 201
             let body = try bodyObject(request)
             submittedDeviceTools = body["allowedDeviceTools"] as? [String] ?? []
+            submittedDeviceToolSchemas = Dictionary(uniqueKeysWithValues:
+                (body["allowedDeviceToolSchemas"] as? [[String: Any]] ?? [])
+                    .compactMap { item in
+                        guard let name = item["name"] as? String,
+                              let version = item["schemaVersion"] as? Int
+                        else { return nil }
+                        return (name, version)
+                    })
             submittedRemoteTools = body["allowedRemoteTools"] as? [String] ?? []
+            submittedMediaMode = body["mediaMode"] as? String
+            submittedRequestAttempt = body["requestAttempt"] as? Int
             idempotencyKey = request.value(
                 forHTTPHeaderField: "idempotency-key"
             )
@@ -196,6 +216,12 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
                 "lastSequence": 1,
                 "createdAt": iso(now),
                 "updatedAt": iso(now)
+            ]
+        case ("GET", "/v1/capabilities"):
+            status = 200
+            responseBody = [
+                "protocolVersion": 1,
+                "directVideo": false
             ]
         default:
             status = 404

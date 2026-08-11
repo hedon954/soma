@@ -11,6 +11,7 @@
 - 后续修订：
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 取消“无 Key 不落盘”，改为暂存并在 LLM 恢复后补偿消费
   - [PRD 022](022-react-reliability-and-context-awareness.md) 修订本地中断恢复为同气泡 step 检查点续跑
+  - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 统一本地/远程上下文并增加首增量门禁
 - 上游依据：
   - [持久 Agent Job、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)
   - [BUG 0004](../bugs/0004-agent-background-stream-interruption.md)

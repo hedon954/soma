@@ -60,16 +60,12 @@ enum ConversationSessionStore {
             in: context
         )
 
-        if let preferredSessionID,
-           let preferred = availableSessions.first(where: { $0.id == preferredSessionID })
-        {
-            try? context.save()
-            return preferred
-        }
-
-        let latestMessage = messages.max { $0.date < $1.date }
-        if let latestMessage,
-           let sessionID = latestMessage.sessionID
+        let latestUserMessage = messages
+            .filter { !$0.isFromCoach }
+            .max { $0.date < $1.date }
+        if let latestUserMessage,
+           calendar.isDate(latestUserMessage.date, inSameDayAs: now),
+           let sessionID = latestUserMessage.sessionID
         {
             if let existing = availableSessions.first(where: { $0.id == sessionID }) {
                 try? context.save()
@@ -80,18 +76,27 @@ enum ConversationSessionStore {
             let recovered = makeSession(
                 id: sessionID,
                 messages: relatedMessages,
-                fallbackDate: latestMessage.date
+                fallbackDate: latestUserMessage.date
             )
             context.insert(recovered)
             try? context.save()
             return recovered
         }
 
-        if let latestSession = availableSessions.max(by: {
-            $0.updatedAt < $1.updatedAt
-        }) {
+        let sessionIDsWithMessages = Set(messages.compactMap(\.sessionID))
+        let emptyToday = availableSessions.filter {
+            calendar.isDate($0.startedAt, inSameDayAs: now)
+                && !sessionIDsWithMessages.contains($0.id)
+        }
+        if !emptyToday.isEmpty {
+            let reusableEmpty = preferredSessionID.flatMap { preferredID in
+                emptyToday.first { $0.id == preferredID }
+            } ?? emptyToday.min { $0.startedAt < $1.startedAt }!
+            for duplicate in emptyToday where duplicate.id != reusableEmpty.id {
+                context.delete(duplicate)
+            }
             try? context.save()
-            return latestSession
+            return reusableEmpty
         }
 
         let session = ConversationSession(startedAt: now)
@@ -194,6 +199,7 @@ final class ConversationSessionController {
 
     private(set) var activeSessionID: UUID?
     private(set) var dataSpace: DataSpace?
+    private(set) var hasManualSessionOverride = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -206,6 +212,7 @@ final class ConversationSessionController {
         calendar: Calendar = .current,
         in context: ModelContext
     ) -> ConversationSession {
+        hasManualSessionOverride = false
         let messages = (
             try? context.fetch(
                 FetchDescriptor<CoachMessage>(
@@ -243,14 +250,22 @@ final class ConversationSessionController {
     @discardableResult
     func ensureActiveSession(
         dataSpace: DataSpace,
+        now: Date = .now,
+        calendar: Calendar = .current,
         in context: ModelContext
     ) -> ConversationSession {
         if self.dataSpace == dataSpace,
+           hasManualSessionOverride,
            let activeSession = activeSession(in: context)
         {
             return activeSession
         }
-        return resolveForEntry(dataSpace: dataSpace, in: context)
+        return resolveForEntry(
+            dataSpace: dataSpace,
+            now: now,
+            calendar: calendar,
+            in: context
+        )
     }
 
     @discardableResult
@@ -273,6 +288,7 @@ final class ConversationSessionController {
         context.insert(session)
         try? context.save()
         activate(session, dataSpace: dataSpace)
+        hasManualSessionOverride = true
         return session
     }
 
@@ -281,6 +297,7 @@ final class ConversationSessionController {
         dataSpace: DataSpace
     ) {
         activate(session, dataSpace: dataSpace)
+        hasManualSessionOverride = true
     }
 
     private func activate(

@@ -4,7 +4,7 @@ import XCTest
 
 final class RecordMutationTests: XCTestCase {
     @MainActor
-    func testMealCorrectionMergesNewImageIntoOriginalRecord() throws {
+    func testNewMealImageCreatesNewRecordWithoutGuessingHistoricalCandidate() throws {
         let context = try makeContext()
         let sessionID = UUID()
         let firstTurnID = UUID()
@@ -45,10 +45,12 @@ final class RecordMutationTests: XCTestCase {
 
         XCTAssertTrue(firstResult.ok)
         XCTAssertTrue(correctionResult.ok)
-        XCTAssertEqual(meals.count, 1)
-        XCTAssertEqual(meals[0].title, "荞麦面套餐 + 蔬菜清汤")
-        XCTAssertEqual(meals[0].mediaAttachments, [firstMedia, secondMedia])
-        XCTAssertEqual(meals[0].calories, 520)
+        XCTAssertEqual(meals.count, 2)
+        XCTAssertEqual(Set(meals.map(\.title)), Set([
+            "荞麦面套餐（含鱼、蛋、蔬菜）+ 蔬菜清汤",
+            "荞麦面套餐 + 蔬菜清汤"
+        ]))
+        XCTAssertEqual(Set(meals.flatMap(\.mediaAttachments)), Set([firstMedia, secondMedia]))
     }
 
     @MainActor
@@ -91,7 +93,7 @@ final class RecordMutationTests: XCTestCase {
         let meals = try context.fetch(FetchDescriptor<MealEntry>())
 
         XCTAssertTrue(result.ok)
-        XCTAssertTrue(result.observation.contains(meal.id.uuidString))
+        XCTAssertEqual(result.recordRefs?.first?.recordID, meal.id.uuidString)
         XCTAssertEqual(meals.count, 1)
         XCTAssertEqual(meals[0].title, "鸡肉荞麦面")
         XCTAssertEqual(meals[0].mediaAttachments, [originalMedia, correctionMedia])
@@ -358,8 +360,8 @@ final class RecordMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testSameDayIdenticalBusinessKeysAreFlaggedAsSuspectedDuplicates() throws {
-        // ADR 0049：同日同业务键跨 Turn 返回疑似重复，不静默第二份写入。
+    func testSameDayMealsRemainIndependentWhileWorkoutAndBodyDeduplicate() throws {
+        // ADR 0059：新餐不再按同日标题/热量猜测；其他既有业务键规则保持兼容。
         let context = try makeContext()
         let sessionID = UUID()
         let date = Date(timeIntervalSince1970: 1_785_386_220)
@@ -406,7 +408,7 @@ final class RecordMutationTests: XCTestCase {
                 in: context
             )
             if offset > 0 {
-                XCTAssertTrue(meal.observation.contains("疑似重复"))
+                XCTAssertFalse(meal.observation.contains("疑似重复"))
                 XCTAssertTrue(workout.observation.contains("疑似重复"))
                 XCTAssertTrue(body.observation.contains("疑似重复"))
             }
@@ -414,7 +416,7 @@ final class RecordMutationTests: XCTestCase {
 
         DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
 
-        XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 2)
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 1)
     }
@@ -540,8 +542,8 @@ final class RecordMutationTests: XCTestCase {
         let policy = ReActPromptSection.policy.defaultText
 
         XCTAssertTrue(policy.contains("record_id"))
-        XCTAssertTrue(policy.contains("update_*"))
-        XCTAssertTrue(policy.contains("delete_record"))
+        XCTAssertTrue(policy.contains("mutate_user_data(operation=update)"))
+        XCTAssertTrue(policy.contains("mutate_user_data(operation=delete)"))
     }
 
     private func mealCall(title: String) -> AgentToolCall {

@@ -5,6 +5,87 @@ import UIKit
 import XCTest
 
 final class ConversationContextProjectionTests: XCTestCase {
+    func testHistoricalMediaRequiresExplicitReferenceAndCapsComparisonAtTwo() {
+        let exchanges = (0 ..< 3).map { index in
+            ConversationContextProjection.Exchange(
+                turnID: UUID(),
+                date: Date(timeIntervalSince1970: Double(index)),
+                userText: "媒体 \(index)",
+                mediaAttachments: [
+                    .init(kind: .image, path: "image-\(index).jpg")
+                ]
+            )
+        }
+
+        XCTAssertTrue(HistoricalMediaSelectionPolicy.selectedTurnIDs(
+            currentText: "继续聊饮食",
+            hasCurrentMedia: false,
+            exchanges: exchanges
+        ).isEmpty)
+        XCTAssertEqual(HistoricalMediaSelectionPolicy.selectedTurnIDs(
+            currentText: "看看上一张",
+            hasCurrentMedia: false,
+            exchanges: exchanges
+        ), [exchanges[2].turnID])
+        XCTAssertEqual(HistoricalMediaSelectionPolicy.selectedTurnIDs(
+            currentText: "比较这几张",
+            hasCurrentMedia: false,
+            exchanges: exchanges
+        ), [exchanges[1].turnID, exchanges[2].turnID])
+        XCTAssertTrue(HistoricalMediaSelectionPolicy.selectedTurnIDs(
+            currentText: "比较上一张",
+            hasCurrentMedia: true,
+            exchanges: exchanges
+        ).isEmpty)
+    }
+
+    @MainActor
+    func testHistoryBudgetKeepsNewestCompleteExchangeWithoutHalfTurn() {
+        let sessionID = UUID()
+        let olderTurn = UUID()
+        let newestTurn = UUID()
+        let messages = [
+            CoachMessage(
+                date: Date(timeIntervalSince1970: 1),
+                sessionID: sessionID,
+                isFromCoach: false,
+                text: String(repeating: "older ", count: 80),
+                turnID: olderTurn
+            ),
+            CoachMessage(
+                date: Date(timeIntervalSince1970: 2),
+                sessionID: sessionID,
+                isFromCoach: true,
+                text: String(repeating: "reply ", count: 80),
+                turnID: olderTurn
+            ),
+            CoachMessage(
+                date: Date(timeIntervalSince1970: 3),
+                sessionID: sessionID,
+                isFromCoach: false,
+                text: String(repeating: "newest ", count: 80),
+                turnID: newestTurn
+            ),
+            CoachMessage(
+                date: Date(timeIntervalSince1970: 4),
+                sessionID: sessionID,
+                isFromCoach: true,
+                text: String(repeating: "answer ", count: 80),
+                turnID: newestTurn
+            )
+        ]
+
+        let projection = ConversationContextProjection.make(
+            messages: messages,
+            sessionID: sessionID,
+            excludingTurnID: nil,
+            maximumEstimatedTokens: 20
+        )
+
+        XCTAssertEqual(projection.exchanges.map(\.turnID), [newestTurn])
+        XCTAssertNotNil(projection.exchanges.first?.assistantText)
+    }
+
     @MainActor
     func testProjectionKeepsTenLatestExchangesAndLatestAssistantAttempt() {
         let sessionID = UUID()
@@ -134,7 +215,7 @@ final class ConversationContextProjectionTests: XCTestCase {
 
         let service = ConversationProcessingService()
         XCTAssertTrue(service.submit(
-            text: "那我的膝盖轨迹怎么样？",
+            text: "刚才那张照片里，我的膝盖轨迹怎么样？",
             attachments: [],
             context: ConversationProcessingContext(
                 structuredContext: "测试上下文",

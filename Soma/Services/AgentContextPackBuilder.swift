@@ -204,8 +204,11 @@ enum AgentContextPackBuilder {
 
     private static func nutritionLine(meals: [MealEntry], calendar: Calendar) -> String {
         let today = meals.filter { calendar.isDateInToday($0.date) }
-        let calories = today.reduce(0) { $0 + $1.calories }
-        return "今日饮食：\(calories)kcal"
+        let known = today.compactMap(\.calories)
+        guard known.count == today.count else {
+            return "今日饮食：存在未估算营养的记录"
+        }
+        return "今日饮食：\(known.reduce(0, +))kcal"
     }
 
     private static func weightTrendLine(bodies: [BodyEntry]) -> String? {

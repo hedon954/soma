@@ -6,6 +6,7 @@
 - 后续替代：
   - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 修订 Turn/Attempt 关系
   - [ADR 0022](0022-user-controlled-conversation-sessions.md) 替代每日自动切换和只读历史边界
+  - [ADR 0055](0055-hybrid-daily-conversation-sessions.md) 恢复自动按日解析并保留显式继续旧会话
 
 ## 背景
 

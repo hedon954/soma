@@ -187,7 +187,7 @@ final class SomaTests: XCTestCase {
     }
 
     @MainActor
-    func testConversationSessionKeepsLatestConversationAcrossDays() throws {
+    func testConversationSessionCreatesTodayAfterLatestConversationIsOlder() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
         let today = try XCTUnwrap(
@@ -219,11 +219,11 @@ final class SomaTests: XCTestCase {
         )
 
         XCTAssertNotNil(legacyMessage.sessionID)
-        XCTAssertEqual(legacyMessage.sessionID, current.id)
-        XCTAssertTrue(calendar.isDate(current.startedAt, inSameDayAs: yesterday))
+        XCTAssertNotEqual(legacyMessage.sessionID, current.id)
+        XCTAssertTrue(calendar.isDate(current.startedAt, inSameDayAs: today))
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<ConversationSession>()).count,
-            1
+            2
         )
 
         let resolvedAgain = try ConversationSessionStore.resolveForEntry(
@@ -237,12 +237,12 @@ final class SomaTests: XCTestCase {
         XCTAssertEqual(resolvedAgain.id, current.id)
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<ConversationSession>()).count,
-            1
+            2
         )
     }
 
     @MainActor
-    func testConversationSessionHonorsPreferredConversationAcrossDays() throws {
+    func testConversationSessionUsesTodaysLatestMessageInsteadOfOldPreference() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
         let today = try XCTUnwrap(
@@ -278,7 +278,7 @@ final class SomaTests: XCTestCase {
             in: context
         )
 
-        XCTAssertEqual(resolved.id, preferred.id)
+        XCTAssertEqual(resolved.id, latest.id)
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<ConversationSession>()).count,
             2
@@ -325,7 +325,8 @@ final class SomaTests: XCTestCase {
             dataSpace: .personal,
             in: context
         )
-        XCTAssertEqual(restored.id, created.id)
+        XCTAssertEqual(restored.id, initial.id)
+        XCTAssertNotEqual(restored.id, created.id)
     }
 
     func testMealTypeRoundTrip() {

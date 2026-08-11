@@ -181,7 +181,7 @@ extension ConversationRecorder {
         guard let rawID = arguments.programID,
               let programID = UUID(uuidString: rawID)
         else {
-            return .failure("start_guided_workout 需要 list_training_programs 返回的有效 program_id。")
+            return .failure("start_guided_workout 需要 query_user_data 返回的有效 program_id。")
         }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
         guard let program = programs.first(where: {

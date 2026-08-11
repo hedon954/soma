@@ -39,8 +39,14 @@ export interface AgentJobInput {
   text: string;
   contextSnapshot: string;
   uploadIDs: string[];
+  mediaMode?: "text" | "images" | "keyframes" | "direct_video";
+  requestAttempt?: number;
   allowedRemoteTools: string[];
   allowedDeviceTools: string[];
+  allowedDeviceToolSchemas?: {
+    name: string;
+    schemaVersion: number;
+  }[];
   liveActivityEnabled: boolean;
 }
 
@@ -155,6 +161,7 @@ export class ProtocolError extends Error {
       | "idempotency_conflict"
       | "upload_incomplete"
       | "provider_unavailable"
+      | "provider_timeout"
       | "waiting_for_device"
       | "tool_schema_unsupported"
       | "job_cancelled"

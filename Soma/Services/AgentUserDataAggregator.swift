@@ -1,7 +1,14 @@
 import Foundation
 import SwiftData
 
+@MainActor
 enum AgentUserDataAggregator {
+    private struct Bucket {
+        var value: Double = 0
+        var knownCount = 0
+        var missingCount = 0
+    }
+
     static func aggregate(
         arguments: AgentToolArguments,
         in context: ModelContext
@@ -14,6 +21,12 @@ enum AgentUserDataAggregator {
         let metric = arguments.metric?.lowercased() ?? "sets"
         guard ["sets", "volume", "calories", "frequency"].contains(metric) else {
             return .failure("metric 仅支持 sets、volume、calories、frequency。")
+        }
+        if metric == "calories", !["day", "week"].contains(groupBy) {
+            return .failure("calories 只支持按 day 或 week 聚合。")
+        }
+        if metric == "frequency", groupBy == "muscle_group" {
+            return .failure("frequency 不支持 muscle_group；请改用 day、week 或 exercise。")
         }
         let range = dateRange(from: arguments.dateFrom, to: arguments.dateTo)
         let workouts = ((try? context.fetch(
@@ -35,26 +48,34 @@ enum AgentUserDataAggregator {
 
         switch metric {
         case "calories" where groupBy == "day" || groupBy == "week":
-            return .success(calorieBuckets(meals: meals, groupBy: groupBy))
+            return result(
+                calorieBuckets(meals: meals, groupBy: groupBy),
+                arguments: arguments
+            )
         case "frequency":
-            return .success(frequencyBuckets(workouts: workouts, groupBy: groupBy))
+            return result(
+                frequencyBuckets(workouts: workouts, groupBy: groupBy),
+                arguments: arguments
+            )
         case "volume":
-            return .success(
+            return result(
                 workoutBuckets(
                     workouts: workouts,
                     groupBy: groupBy,
                     in: context,
                     value: volume(of:)
-                )
+                ),
+                arguments: arguments
             )
         default:
-            return .success(
+            return result(
                 workoutBuckets(
                     workouts: workouts,
                     groupBy: groupBy,
                     in: context,
-                    value: { Double($0.setCount ?? 0) }
-                )
+                    value: { $0.setCount.map(Double.init) }
+                ),
+                arguments: arguments
             )
         }
     }
@@ -64,7 +85,13 @@ enum AgentUserDataAggregator {
         to: String?
     ) -> (start: Date, end: Date) {
         let calendar = Calendar.current
-        let end = parseDate(to) ?? Date()
+        let rawEnd = parseDate(to) ?? Date()
+        let end = if to?.count == 10 {
+            calendar.date(byAdding: .day, value: 1, to: rawEnd)?
+                .addingTimeInterval(-0.001) ?? rawEnd
+        } else {
+            rawEnd
+        }
         let start = parseDate(from)
             ?? calendar.date(byAdding: .day, value: -28, to: end)
             ?? end
@@ -85,20 +112,23 @@ enum AgentUserDataAggregator {
         return formatter.date(from: String(raw.prefix(10)))
     }
 
-    private static func volume(of workout: WorkoutEntry) -> Double {
+    private static func volume(of workout: WorkoutEntry) -> Double? {
         let entries = workout.setEntries
         if !entries.isEmpty {
-            return entries.reduce(0) { sum, entry in
-                let reps = Double(entry.reps ?? 0)
-                let weight = entry.externalWeightKG ?? 0
-                return sum + reps * weight
+            let complete = entries.compactMap { entry -> Double? in
+                guard let reps = entry.reps,
+                      let weight = entry.externalWeightKG
+                else { return nil }
+                return Double(reps) * weight
             }
+            guard complete.count == entries.count else { return nil }
+            return complete.reduce(0, +)
         }
         guard let sets = workout.sets,
               let reps = workout.reps,
               let weight = workout.weight
         else {
-            return 0
+            return nil
         }
         return Double(sets * reps) * weight
     }
@@ -107,9 +137,9 @@ enum AgentUserDataAggregator {
         workouts: [WorkoutEntry],
         groupBy: String,
         in context: ModelContext,
-        value: (WorkoutEntry) -> Double
-    ) -> String {
-        var buckets: [String: Double] = [:]
+        value: (WorkoutEntry) -> Double?
+    ) -> [String: Bucket] {
+        var buckets: [String: Bucket] = [:]
         let definitions = (try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? []
         let byID = Dictionary(uniqueKeysWithValues: definitions.map { ($0.id, $0) })
         for workout in workouts {
@@ -130,18 +160,22 @@ enum AgentUserDataAggregator {
             default:
                 keys = [dayKey(workout.date)]
             }
-            let amount = value(workout)
             for key in keys {
-                buckets[key, default: 0] += amount
+                if let amount = value(workout) {
+                    buckets[key, default: Bucket()].value += amount
+                    buckets[key, default: Bucket()].knownCount += 1
+                } else {
+                    buckets[key, default: Bucket()].missingCount += 1
+                }
             }
         }
-        return formatBuckets(buckets)
+        return buckets
     }
 
     private static func frequencyBuckets(
         workouts: [WorkoutEntry],
         groupBy: String
-    ) -> String {
+    ) -> [String: Bucket] {
         var buckets: [String: Set<Date>] = [:]
         for workout in workouts {
             let key: String = switch groupBy {
@@ -156,27 +190,47 @@ enum AgentUserDataAggregator {
                 Calendar.current.startOfDay(for: workout.date)
             )
         }
-        let mapped = buckets.mapValues { Double($0.count) }
-        return formatBuckets(mapped)
+        return buckets.mapValues {
+            Bucket(value: Double($0.count), knownCount: $0.count)
+        }
     }
 
     private static func calorieBuckets(
         meals: [MealEntry],
         groupBy: String
-    ) -> String {
-        var buckets: [String: Double] = [:]
+    ) -> [String: Bucket] {
+        var buckets: [String: Bucket] = [:]
         for meal in meals {
             let key = groupBy == "week" ? weekKey(meal.date) : dayKey(meal.date)
-            buckets[key, default: 0] += Double(meal.calories)
+            if let calories = meal.calories {
+                buckets[key, default: Bucket()].value += Double(calories)
+                buckets[key, default: Bucket()].knownCount += 1
+            } else {
+                buckets[key, default: Bucket()].missingCount += 1
+            }
         }
-        return formatBuckets(buckets)
+        return buckets
     }
 
-    private static func formatBuckets(_ buckets: [String: Double]) -> String {
-        guard !buckets.isEmpty else { return "所选范围内没有可聚合的数据。" }
-        return buckets.sorted { $0.key > $1.key }.prefix(20).map {
-            "\($0.key)：\($0.value.formatted(.number.precision(.fractionLength(0 ... 1))))"
-        }.joined(separator: "\n")
+    private static func result(
+        _ buckets: [String: Bucket],
+        arguments: AgentToolArguments
+    ) -> AgentToolResult {
+        let items = buckets.sorted { $0.key > $1.key }.map { key, bucket in
+            [
+                "group": .string(key),
+                "value": bucket.knownCount > 0
+                    ? .number(bucket.value)
+                    : .null,
+                "missing_count": .number(Double(bucket.missingCount))
+            ] as [String: AgentJSONValue]
+        }
+        return ConversationRecorder.pagedResult(
+            items,
+            noun: "聚合结果",
+            arguments: arguments,
+            limit: min(max(arguments.limit ?? 3, 1), 10)
+        )
     }
 
     private static func dayKey(_ date: Date) -> String {

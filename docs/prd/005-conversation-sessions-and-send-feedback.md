@@ -7,6 +7,7 @@
   - [PRD 006](006-footprints-location-and-retry.md) 增加 Turn 多 Attempt 与失败重试
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 改为用户控制可继续 Session
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 扩展发送持久化与后台恢复
+  - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 恢复自动按日解析并保留显式继续旧会话
 - 关联决策：[ADR 0015](../adr/0015-daily-conversation-session-lifecycle.md)
 
 ## 背景

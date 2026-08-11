@@ -109,6 +109,18 @@ struct AgentVideoInput: Equatable {
     var mimeType: String
 }
 
+enum AgentMediaMode: String, Codable, Equatable, Sendable {
+    case text
+    case images
+    case keyframes
+    case directVideo = "direct_video"
+}
+
+struct DirectVideoCapability: Equatable, Sendable {
+    var maximumRawBytes: Int
+    var preferredMIMEType: String
+}
+
 enum MultimodalSupport: String {
     case supported
     case unsupported
@@ -187,14 +199,26 @@ enum ModelCapability {
         provider: AIProvider,
         model: String
     ) -> Bool {
-        guard provider == .bailian else { return false }
+        directVideoCapability(provider: provider, model: model) != nil
+    }
+
+    static func directVideoCapability(
+        provider: AIProvider,
+        model: String
+    ) -> DirectVideoCapability? {
+        guard provider == .bailian else { return nil }
         let value = model.lowercased()
-        return containsAny(
-            value,
-            [
-                "qwen-vl", "qwen3-vl", "qwen-omni", "qwen3.5",
-                "qwen3.6", "qwen3.7", "qvq"
-            ]
+        let verifiedPrefixes = [
+            "qwen-vl-max", "qwen-vl-plus", "qwen2.5-vl", "qwen3-vl"
+        ]
+        guard verifiedPrefixes.contains(where: {
+            value == $0 || value.hasPrefix("\($0)-")
+        }) else {
+            return nil
+        }
+        return DirectVideoCapability(
+            maximumRawBytes: 7 * 1024 * 1024,
+            preferredMIMEType: "video/mp4"
         )
     }
 

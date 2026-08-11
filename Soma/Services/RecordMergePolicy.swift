@@ -337,11 +337,13 @@ enum RecordMergePolicy {
         score += sessionScore(entry.sourceSessionID, input.sessionID)
         let similarity = normalizedSimilarity(entry.title, input.title)
         score += similarity >= 0.75 ? 4 : similarity >= 0.4 ? 3 : similarity >= 0.22 ? 1 : 0
-        score += abs(entry.calories - input.calories) <= 5
-            ? 2 : abs(entry.calories - input.calories) <= 80 ? 1 : 0
-        score += numericCloseness(entry.protein, input.protein, tolerance: 3)
-        score += numericCloseness(entry.carbs, input.carbs, tolerance: 5)
-        score += numericCloseness(entry.fat, input.fat, tolerance: 3)
+        if let calories = entry.calories, let inputCalories = input.calories {
+            score += abs(calories - inputCalories) <= 5
+                ? 2 : abs(calories - inputCalories) <= 80 ? 1 : 0
+        }
+        score += optionalCloseness(entry.protein, input.protein, tolerance: 3)
+        score += optionalCloseness(entry.carbs, input.carbs, tolerance: 5)
+        score += optionalCloseness(entry.fat, input.fat, tolerance: 3)
         score += mediaScore(entry.mediaAttachments, input.media)
         if input.isCorrection {
             score += 3
@@ -452,14 +454,6 @@ enum RecordMergePolicy {
         return lhs == rhs ? 2 : -4
     }
 
-    private static func numericCloseness(
-        _ lhs: Double,
-        _ rhs: Double,
-        tolerance: Double
-    ) -> Int {
-        abs(lhs - rhs) <= tolerance ? 1 : 0
-    }
-
     private static func optionalCloseness(
         _ lhs: Double?,
         _ rhs: Double?,
@@ -517,10 +511,10 @@ struct MealMergeInput {
     var turnID: UUID?
     var mealType: MealType
     var title: String
-    var calories: Int
-    var protein: Double
-    var carbs: Double
-    var fat: Double
+    var calories: Int?
+    var protein: Double?
+    var carbs: Double?
+    var fat: Double?
     var sourceText: String
     var media: [MediaAttachmentReference]
     var isCorrection: Bool

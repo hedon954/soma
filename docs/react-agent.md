@@ -3,7 +3,8 @@
 本文描述当前持久 Job、本地 ReAct 与可选远程 Backend 运行时。产品范围
 见 [PRD 003](prd/003-streaming-react-agent.md)、
 [PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
-[PRD 022](prd/022-react-reliability-and-context-awareness.md)，详细协议见
+[PRD 022](prd/022-react-reliability-and-context-awareness.md) 和
+[PRD 025](prd/025-trusted-context-direct-video-and-reviewable-meals.md)，详细协议见
 [Agent Job 与远程执行协议](engineering/agent-job-protocol.md)。
 
 ## 当前运行时
@@ -23,10 +24,16 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 
 每轮模型调用都使用流式接口。文本增量和 Span 生命周期会立刻作为 Event 发送给 UI；模型返回的 `reasoning_content` 当前不展示、不持久化，也不参与工具执行。
 
+请求真正发出后启用首增量门禁：文字 8 秒、图片/关键帧 10 秒、直传视频 20 秒。首个非空文字
+或 Tool delta 才算响应，headers、heartbeat 与 reasoning 不算；首增量前失败最多自动重试一次，
+收到首增量后使用 30 秒流空闲和 180 秒单步骤总时限。超时会取消底层请求；直传视频的唯一
+重试改为按需关键帧，并在聊天与 Trace 明示实际模式。
+
 图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库和业务 Tool 始终留在
 设备上；本地模式标准档没有 API Key 时，消息仍然落盘并进入暂存，首次遇到时同时打开「LLM 配置」，
 恢复后按发送顺序自动补偿消费（见 [ADR 0045](adr/0045-llm-outage-staging-and-compensating-drain.md)）。用户明确启用
-远程持续模式后，当前图片或视频关键帧可作为短期任务素材上传，原始视频和用户 BYOK 不上传。
+远程持续模式后，当前图片或媒体能力注册允许的规范化视频可作为短期任务素材上传；用户 BYOK
+不上传。直传和关键帧模式不会在同一个 Provider 请求里重复发送。
 
 ## 渐进式 Skills
 
@@ -45,39 +52,22 @@ Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地�
 
 ## 本地工具
 
-- `load_skill`：按需读取一项专业 Skill。
-- `query_user_data`：查询概览、训练、饮食、身体或健身房记录；可选 `date_from`/`date_to`/
-  `group_by`/`metric` 做本地确定性聚合。
-- `expand_tool_group`：本轮逃生工具，按组名扩展尚未暴露的工具组（plans/gym/review/feedback）。
-- `submit_feedback`：只在用户当前消息明确提交产品反馈时调用；无参数，设备固定发送当前原文与
-  当前附件，不附带历史消息、Trace 或身体数据。
-- `list_exercise_names`：返回当前数据空间全部 active 动作 `{id,name}`，由模型完成语义选择。
-- `list_training_programs`：返回当前可执行计划的稳定 ID、名称、目标与当前模板。
-- `get_training_program`：按计划 ID 读取当前模板动作与处方详情。
-- `record_workout`：记录动作及用户明确提供或可靠识别的训练字段。
-- `record_meal`：记录餐次、食物、大卡与宏量营养。
-- `record_body`：记录体重、体脂、腰围、体型图片和中性观察。
-- `update_workout`、`update_meal`、`update_body`：使用查询得到的稳定记录 ID 原位纠错，
-  并把本次新媒体有序合并到原记录。
-- `delete_record`：仅在用户当前消息明确要求删除时，按 ID 删除一条训练、饮食或身体记录；
-  聊天原文和共享媒体不级联删除。
-- `update_gym`：创建或更新健身房、照片及器械解析结果。
-- `switch_gym`：切换已存在的当前健身房。
-- `create_training_program`、`create_workout_template_version`、
-  `update_workout_template`、`archive_training_program`：维护版本化计划。
-- `start_guided_workout`：仅在用户明确要求时，用计划 ID 在本机创建 Session 并打开带练；默认不录像。
-- `delete_training_program`：仅在用户明确要求永久删除时，删除计划及其模板，保留既有 Session 快照。
-- `record_performance_analysis`：把用户主动视频复盘产生的证据、局限、输入指纹和建议绑定到
-  指定 Performance。
+新模型只看到 13 个 Tool：core 的 `load_skill`、`query_user_data`、`mutate_user_data`、
+`expand_tool_group`，以及按任务展开的 plans、gym、review、feedback 组。六个记录写 Tool、
+`delete_record` 和三个重复查询 Tool 只保留为历史调用兼容别名，不再暴露。
+
+`query_user_data` 默认返回 3 条、最大 10 条，支持真实日期过滤、搜索、字段投影和 cursor；
+`detail` 必须给精确 ID，动作库不得全量读取。`mutate_user_data` 只合并训练、饮食、身体三类
+CRUD，并严格校验 operation/type/ID/payload 组合。完整当前清单和出入参见
+[Agent Tool 目录](engineering/agent-tool-catalog.md)。
 
 工具名称、描述和参数 Schema 由 Runtime 固定，通过 API 原生注册，不拼接进系统提示词，也不允许用户修改。工具不会向模型暴露数据库句柄、API Key 或本地文件路径。
 
 ## 数据真实性与安全
 
 - 同一 Turn 的相同成功写入通过规范化签名的持久回执只执行一次；失败回执不挡同键重试。
-- 跨 Turn 补图或纠错优先使用显式 `update_*`；即使 Agent 误用 `record_*`，本地仍按来源、
-  时间、类型、文本、结构化数值、媒体和纠错语义寻找唯一候选后合并。业务键完全相同时返回
-  「疑似重复 + 既有 ID」，不静默合并。
+- 新媒体默认创建新记录；纠错必须绑定查询得到的稳定 `record_id`。只有明确回指紧邻 Turn 且
+  唯一候选时才更新；多个候选先询问，不再用两小时评分猜记录。
 - 未提供的重量、间歇、时长、评分等字段保持为空，不自动补默认值。
 - 工具错误作为 `role: tool` 结果返回，让模型解释或修正，不静默写入异常数据。
 - 删除工具只处理用户明确指定的单条业务记录；Agent 仍没有账户、云同步或任意代码执行工具。
@@ -137,7 +127,8 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 每轮请求只暴露预选工具组（core + 可选 plans/gym/review/feedback），可用
 `expand_tool_group` 扩展。
 供应商侧允许并行 `tool_calls`，本机仍顺序执行。`AgentContextPackBuilder` 提供确定性上下文包；
-历史投影保留十轮全文并附加近期工具写入事实与更早轮次 digest。
+历史投影在约 6,000 token 内保留最多十个完整来回，并附加短事实引用与更早轮次 digest；
+当前媒体优先，历史媒体只在明确回指或比较时选择最多一到两个匹配 Turn。
 
 ### 可选远程 Backend
 
@@ -152,11 +143,11 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 
 训练动作身份已经使用：
 
-- `list_exercise_names`：无参数，返回当前数据空间全部动作 `{id,name}`；
-- `record_workout` / `update_workout`：使用 `exercise_id` 引用已有动作；只有创建新动作时使用
+- `query_user_data(scope=exercises, query=...)`：按搜索词返回分页动作 `{id,name}`；
+- `mutate_user_data`：使用 `exercise_id` 引用已有动作；只有搜索后没有等价项时使用
   `exercise_name`；
 - 计划创建、版本更新和归档 Tool；
-- `list_training_programs` 先返回可执行计划 ID；`start_guided_workout` 仅创建本地不可变 Session
+- `query_user_data(scope=programs)` 先返回可执行计划 ID；`start_guided_workout` 仅创建本地不可变 Session
   并路由到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
 
 工具合同见 [训练领域模型与运行时协议](engineering/training-domain-model.md)。

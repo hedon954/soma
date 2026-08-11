@@ -232,6 +232,7 @@ struct AgentJobSubmission: Sendable {
     var contextSnapshot: String
     var attachments: [MediaAttachmentReference]
     var liveActivityEnabled: Bool
+    var requestAttempt: Int = 1
 }
 
 struct LocalAgentExecutionBackend: AgentExecutionBackend {

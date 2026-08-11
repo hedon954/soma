@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// ADR 0047：从持久 tool span 提取跨轮写入事实，以及十轮外的意图 digest。
+/// ADR 0056：跨轮只注入稳定记录引用与十轮外意图 digest，不重复长 Tool observation。
 @MainActor
 enum AgentCrossTurnFactSummary {
     static func recentMutationFacts(
@@ -10,33 +10,46 @@ enum AgentCrossTurnFactSummary {
         limit: Int = 8,
         in context: ModelContext
     ) -> String? {
-        let jobs = ((try? context.fetch(FetchDescriptor<AgentJob>())) ?? [])
-            .filter { $0.sessionID == sessionID }
-            .sorted { $0.createdAt > $1.createdAt }
-        var lines: [String] = []
-        for job in jobs where job.turnID != excludingTurnID {
-            let events = AgentJobStore.events(for: job.id, in: context)
-            for event in events.reversed() {
-                guard event.kind == .span,
-                      let span = event.payload.span,
-                      span.kind == .tool,
-                      span.status == .succeeded,
-                      let output = span.output?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !output.isEmpty
-                else {
-                    continue
-                }
-                lines.append("- \(span.title)：\(String(output.prefix(160)))")
-                if lines.count >= limit {
-                    break
-                }
-            }
-            if lines.count >= limit {
-                break
-            }
+        struct Fact {
+            var date: Date
+            var line: String
         }
+        let workouts = ((try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? [])
+            .filter {
+                $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
+            }
+            .map {
+                Fact(
+                    date: $0.date,
+                    line: "- write workout id=\($0.id.uuidString.lowercased()) title=\($0.exercise) time=\($0.date.ISO8601Format())"
+                )
+            }
+        let meals = ((try? context.fetch(FetchDescriptor<MealEntry>())) ?? [])
+            .filter {
+                $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
+            }
+            .map {
+                Fact(
+                    date: $0.date,
+                    line: "- write meal id=\($0.id.uuidString.lowercased()) title=\($0.title) time=\($0.date.ISO8601Format())"
+                )
+            }
+        let bodies = ((try? context.fetch(FetchDescriptor<BodyEntry>())) ?? [])
+            .filter {
+                $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
+            }
+            .map {
+                Fact(
+                    date: $0.date,
+                    line: "- write body id=\($0.id.uuidString.lowercased()) time=\($0.date.ISO8601Format())"
+                )
+            }
+        let lines = (workouts + meals + bodies)
+            .sorted { $0.date > $1.date }
+            .prefix(limit)
+            .map(\.line)
         guard !lines.isEmpty else { return nil }
-        return "本会话近期工具写入：\n\(lines.joined(separator: "\n"))"
+        return "本会话近期记录引用：\n\(lines.joined(separator: "\n"))"
     }
 
     static func olderTurnDigest(

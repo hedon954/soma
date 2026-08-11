@@ -362,7 +362,18 @@ final class AgentReliabilityTests: XCTestCase {
             in: context
         )
         XCTAssertTrue(result.ok)
-        XCTAssertTrue(result.observation.contains("3") || result.observation.contains("4"))
+        guard case let .object(data)? = result.data,
+              case let .array(items)? = data["items"]
+        else {
+            return XCTFail("聚合结果应返回 Tool v2 items。")
+        }
+        let values = items.compactMap { item -> Double? in
+            guard case let .object(fields) = item,
+                  case let .number(value)? = fields["value"]
+            else { return nil }
+            return value
+        }
+        XCTAssertEqual(Set(values), Set([3, 4]))
     }
 
     @MainActor

@@ -2,13 +2,15 @@ import Foundation
 import Observation
 import SwiftData
 
-private struct PreparedConversationMedia {
+struct PreparedConversationMedia {
     var attachments: [MediaAttachmentReference]
     var frames: [Data]
     var videos: [AgentVideoInput] = []
     var imageCount: Int
     var videoCount: Int
     var failedVideoCount: Int = 0
+    var mode: AgentMediaMode = .text
+    var preparationMilliseconds: Int = 0
 
     var hasVideo: Bool {
         videoCount > 0
@@ -29,12 +31,6 @@ private struct PreparedConversationMedia {
         ].compactMap { $0 }
         return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
     }
-}
-
-private struct PreparedAgentHistory {
-    var projection: ConversationContextProjection
-    var history: [AgentConversationExchange]
-    var preparationMilliseconds: Int
 }
 
 private enum ConversationMediaPreparationError: LocalizedError {
@@ -117,6 +113,15 @@ final class ConversationProcessingService {
             : text
         let submittedAt = Date.now
         let turnID = UUID()
+        let contextEnvelope = AgentTurnContextBuilder.build(
+            turnID: turnID,
+            userText: text,
+            hasCurrentMedia: !persistedAttachments.isEmpty,
+            turnSentAt: submittedAt,
+            businessSummary: context.structuredContext,
+            sessionID: context.session.id,
+            in: context.modelContext
+        )
         let userMessage = CoachMessage(
             date: submittedAt,
             sessionID: context.session.id,
@@ -136,9 +141,10 @@ final class ConversationProcessingService {
             userText: text,
             mediaAttachments: persistedAttachments,
             contextSnapshot: AgentJobContextSnapshot(
-                structuredContext: context.structuredContext,
+                structuredContext: contextEnvelope.promptText(at: submittedAt),
                 includeLocation: includeLocation,
-                createdAt: submittedAt
+                createdAt: submittedAt,
+                envelope: contextEnvelope
             ),
             createdAt: submittedAt
         )
@@ -183,8 +189,18 @@ final class ConversationProcessingService {
         }
 
         let submittedAt = Date.now
+        let retryTurnID = userMessage.turnID ?? UUID()
+        let contextEnvelope = AgentTurnContextBuilder.build(
+            turnID: retryTurnID,
+            userText: userMessage.text,
+            hasCurrentMedia: !userMessage.mediaAttachments.isEmpty,
+            turnSentAt: userMessage.date,
+            businessSummary: context.structuredContext,
+            sessionID: context.session.id,
+            in: context.modelContext
+        )
         let job = AgentJob(
-            turnID: userMessage.turnID ?? UUID(),
+            turnID: retryTurnID,
             sessionID: context.session.id,
             userMessageID: userMessage.id,
             dataSpace: context.dataSpace,
@@ -192,9 +208,10 @@ final class ConversationProcessingService {
             userText: userMessage.text,
             mediaAttachments: userMessage.mediaAttachments,
             contextSnapshot: AgentJobContextSnapshot(
-                structuredContext: context.structuredContext,
+                structuredContext: contextEnvelope.promptText(at: submittedAt),
                 includeLocation: userMessage.location != nil,
-                createdAt: submittedAt
+                createdAt: submittedAt,
+                envelope: contextEnvelope
             ),
             createdAt: submittedAt
         )
@@ -387,9 +404,18 @@ final class ConversationProcessingService {
                 userMessage.location = await locationService.requestSnapshot()
                 try? context.modelContext.save()
             }
-            let media = await prepareStoredMedia(
+            let mediaStartedAt = Date.now
+            var media = await prepareStoredMedia(
                 job.mediaAttachments,
-                frameLimit: Self.maximumAnalysisImageCount
+                frameLimit: Self.maximumAnalysisImageCount,
+                directVideoCapability: directVideoCapability(
+                    for: userMessage,
+                    attachments: job.mediaAttachments,
+                    context: context
+                )
+            )
+            media.preparationMilliseconds = Int(
+                (Date.now.timeIntervalSince(mediaStartedAt) * 1000).rounded()
             )
             guard job.state == .running, !backgroundLeaseExpired else {
                 finishProcessing()
@@ -486,10 +512,14 @@ final class ConversationProcessingService {
                 ? "正在投递后台任务…"
                 : "正在同步后台进度…"
             if job.remoteJobID == nil {
-                let snapshot = job.contextSnapshot?.structuredContext
+                let submissionStartedAt = Date.now
+                let snapshot = job.contextSnapshot?.envelope?.promptText(
+                    at: .now,
+                    includeRecentExchanges: true
+                ) ?? job.contextSnapshot?.structuredContext
                     ?? context.structuredContext
                 let submitted = try await client.submit(job: AgentJobSubmission(
-                    clientJobID: job.id,
+                    clientJobID: remoteClientJobID(for: job),
                     turnID: turnID,
                     sessionID: context.session.id,
                     text: userMessage.text,
@@ -497,7 +527,8 @@ final class ConversationProcessingService {
                     attachments: job.mediaAttachments,
                     liveActivityEnabled: UserDefaults.standard.bool(
                         forKey: AgentSystemPreference.liveActivitiesKey
-                    )
+                    ),
+                    requestAttempt: job.remoteRequestAttempt
                 ))
                 guard !job.state.isTerminal else {
                     try? await client.cancel(remoteJobID: submitted.id)
@@ -505,6 +536,35 @@ final class ConversationProcessingService {
                 }
                 job.remoteJobID = submitted.id
                 job.remoteEventCursor = 0
+                let submissionEndedAt = Date.now
+                projectRemoteSpan(
+                    AgentTraceSpan(
+                        kind: .output,
+                        title: "远程媒体上传与任务投递",
+                        status: .succeeded,
+                        startedAt: submissionStartedAt,
+                        endedAt: submissionEndedAt,
+                        metadata: AgentTraceText.jsonObject([
+                            "attachment_count": job.mediaAttachments.count,
+                            "video_count": job.mediaAttachments.count {
+                                $0.kind == .video
+                            },
+                            "media_mode": job.remoteRequestAttempt > 1
+                                ? "keyframes"
+                                : "negotiated",
+                            "request_attempt": job.remoteRequestAttempt,
+                            "duration_ms": Int(
+                                submissionEndedAt.timeIntervalSince(
+                                    submissionStartedAt
+                                ) * 1000
+                            )
+                        ])
+                    ),
+                    job: job,
+                    responseMessage: responseMessage,
+                    trace: trace,
+                    context: context
+                )
                 try context.modelContext.save()
             }
             guard let remoteJobID = job.remoteJobID else {
@@ -595,6 +655,51 @@ final class ConversationProcessingService {
             }
             context.session.touch(at: .now)
             try context.modelContext.save()
+        } catch let fallback as RemoteVideoKeyframeFallbackRequired {
+            guard job.remoteRequestAttempt == 1,
+                  !job.state.isTerminal
+            else {
+                failRemoteJob(
+                    job,
+                    message: "完整视频直传失败，且关键帧降级已用尽。",
+                    context: context
+                )
+                return
+            }
+            if job.state == .remoteRunning {
+                try? job.transition(to: .running)
+            }
+            job.remoteRequestAttempt = 2
+            job.remoteJobID = nil
+            job.remoteEventCursor = 0
+            job.responseTextSnapshot = ""
+            responseMessage.text = ""
+            responseMessage.agentStatus = .running
+            projectRemoteSpan(
+                AgentTraceSpan(
+                    kind: .output,
+                    title: "完整视频降级为关键帧",
+                    status: .succeeded,
+                    startedAt: .now,
+                    endedAt: .now,
+                    metadata: AgentTraceText.jsonObject([
+                        "fallback_reason": fallback.code,
+                        "media_mode": "keyframes",
+                        "request_attempt": 2
+                    ])
+                ),
+                job: job,
+                responseMessage: responseMessage,
+                trace: trace,
+                context: context
+            )
+            try? context.modelContext.save()
+            await runRemoteAttempt(
+                job: job,
+                userMessage: userMessage,
+                context: context
+            )
+            return
         } catch {
             let message = error.localizedDescription
             job.submissionAttemptCount += 1
@@ -635,39 +740,7 @@ final class ConversationProcessingService {
         }
     }
 
-    private func applyRemoteEvents(
-        _ events: [RemoteAgentEvent],
-        remoteJobID: String,
-        job: AgentJob,
-        userMessage: CoachMessage,
-        responseMessage: CoachMessage,
-        trace: AgentTrace,
-        context: ConversationProcessingContext,
-        client: RemoteAgentClient
-    ) async throws {
-        for event in events where event.sequence > job.remoteEventCursor {
-            guard !job.state.isTerminal,
-                  job.dataSpace == context.dataSpace
-            else {
-                try? await client.cancel(remoteJobID: remoteJobID)
-                return
-            }
-            try await applyRemoteEvent(
-                event,
-                remoteJobID: remoteJobID,
-                job: job,
-                userMessage: userMessage,
-                responseMessage: responseMessage,
-                trace: trace,
-                context: context,
-                client: client
-            )
-            job.remoteEventCursor = event.sequence
-            try context.modelContext.save()
-        }
-    }
-
-    private func applyRemoteEvent(
+    func applyRemoteEvent(
         _ event: RemoteAgentEvent,
         remoteJobID: String,
         job: AgentJob,
@@ -678,8 +751,15 @@ final class ConversationProcessingService {
         client: RemoteAgentClient
     ) async throws {
         if let request = RemoteDeviceToolRequest(event: event) {
-            guard request.schemaVersion == 1,
-                  let name = AgentToolName(rawValue: request.name),
+            updateRemoteModelSpan(
+                firstDeltaAt: nil,
+                completedAt: event.createdAt,
+                status: .succeeded,
+                trace: trace,
+                responseMessage: responseMessage
+            )
+            guard let name = AgentToolName(rawValue: request.name),
+                  [1, name.schemaVersion].contains(request.schemaVersion),
                   name.isMutation == request.mutation,
                   job.turnID == userMessage.turnID,
                   job.state == .running || job.state == .remoteRunning
@@ -741,6 +821,13 @@ final class ConversationProcessingService {
            event.phase == "updated",
            let delta = event.payload["delta"]?.stringValue
         {
+            updateRemoteModelSpan(
+                firstDeltaAt: event.createdAt,
+                completedAt: nil,
+                status: nil,
+                trace: trace,
+                responseMessage: responseMessage
+            )
             let itemID = event.payload["itemID"]?.stringValue
                 .flatMap(UUID.init(uuidString:))
                 ?? UUID(uuidString: event.id)
@@ -782,15 +869,23 @@ final class ConversationProcessingService {
                 at: event.createdAt
             )
         } else if event.kind == "model", event.phase == "started" {
+            let mediaMode = event.payload["mediaMode"]?.stringValue ?? "text"
+            let requestAttempt = event.payload["requestAttempt"]?.intValue ?? 1
             projectRemoteSpan(
                 AgentTraceSpan(
                     sequence: event.sequence,
                     kind: .model,
                     title: "Soma 后台模型",
-                    status: .succeeded,
+                    status: .running,
                     startedAt: event.createdAt,
                     endedAt: event.createdAt,
-                    metadata: "后台持续处理"
+                    metadata: AgentTraceText.jsonObject([
+                        "media_mode": mediaMode,
+                        "request_attempt": requestAttempt,
+                        "ttft_budget_seconds": mediaMode == "direct_video"
+                            ? 20
+                            : mediaMode == "text" ? 8 : 10
+                    ])
                 ),
                 job: job,
                 responseMessage: responseMessage,
@@ -801,29 +896,46 @@ final class ConversationProcessingService {
                   event.phase == "completed",
                   let answer = event.payload["answer"]?.stringValue
         {
-            job.responseTextSnapshot = answer
-            responseMessage.text = answer
+            updateRemoteModelSpan(
+                firstDeltaAt: nil,
+                completedAt: event.createdAt,
+                status: .succeeded,
+                trace: trace,
+                responseMessage: responseMessage
+            )
+            let presentedAnswer = job.remoteRequestAttempt > 1
+                ? "本次完整视频直传失败，已降级为关键帧分析。\n\n\(answer)"
+                : answer
+            job.responseTextSnapshot = presentedAnswer
+            responseMessage.text = presentedAnswer
             responseMessage.agentStatus = .succeeded
-            trace.apply(.completed(answer: answer, at: event.createdAt))
+            trace.apply(.completed(answer: presentedAnswer, at: event.createdAt))
             if job.state == .running || job.state == .remoteRunning {
                 try job.transition(to: .succeeded, at: event.createdAt)
             }
             _ = try? AgentJobStore.append(
                 kind: .completed,
-                payload: .init(text: answer),
+                payload: .init(text: presentedAnswer),
                 to: job,
                 in: context.modelContext,
                 at: event.createdAt
             )
             responseMessage.applyAgentEvent(.completed(
-                answer: answer,
+                answer: presentedAnswer,
                 at: event.createdAt
             ))
             applyLiveAgentEvent(.completed(
-                answer: answer,
+                answer: presentedAnswer,
                 at: event.createdAt
             ))
         } else if event.phase == "cancelled" {
+            updateRemoteModelSpan(
+                firstDeltaAt: nil,
+                completedAt: event.createdAt,
+                status: .cancelled,
+                trace: trace,
+                responseMessage: responseMessage
+            )
             let message = "后台任务已取消。"
             trace.apply(.failed(
                 message: message,
@@ -848,7 +960,25 @@ final class ConversationProcessingService {
                 at: event.createdAt
             )
         } else if event.kind == "error" || event.phase == "failed" {
+            updateRemoteModelSpan(
+                firstDeltaAt: nil,
+                completedAt: event.createdAt,
+                status: .failed,
+                trace: trace,
+                responseMessage: responseMessage
+            )
             let code = event.payload["code"]?.stringValue ?? "remote_failed"
+            let mediaMode = event.payload["mediaMode"]?.stringValue
+            let requestAttempt = event.payload["requestAttempt"]?.intValue
+            if ["provider_timeout", "provider_unavailable"].contains(code),
+               mediaMode == "direct_video",
+               requestAttempt == 1,
+               job.remoteRequestAttempt == 1,
+               job.responseTextSnapshot.isEmpty,
+               job.mediaAttachments.contains(where: { $0.kind == .video })
+            {
+                throw RemoteVideoKeyframeFallbackRequired(code: code)
+            }
             let message = "后台任务未完成（\(code)）。"
             trace.apply(.failed(
                 message: message,
@@ -864,104 +994,6 @@ final class ConversationProcessingService {
                 at: event.createdAt
             ))
         }
-    }
-
-    private func projectRemoteSpan(
-        _ span: AgentTraceSpan,
-        job: AgentJob,
-        responseMessage: CoachMessage,
-        trace: AgentTrace,
-        context: ConversationProcessingContext
-    ) {
-        trace.apply(.span(span))
-        responseMessage.applyAgentEvent(.span(span))
-        _ = try? AgentJobStore.append(
-            kind: .span,
-            payload: .init(span: span),
-            to: job,
-            in: context.modelContext,
-            at: span.endedAt
-        )
-    }
-
-    private func remoteResponseMessage(
-        for job: AgentJob,
-        turnID: UUID,
-        sessionID: UUID,
-        in context: ModelContext
-    ) -> CoachMessage {
-        let messages = (
-            try? context.fetch(FetchDescriptor<CoachMessage>())
-        ) ?? []
-        if let responseID = job.responseMessageID,
-           let existing = messages.first(where: { $0.id == responseID })
-        {
-            existing.agentStatus = .running
-            return existing
-        }
-        let response = CoachMessage(
-            sessionID: sessionID,
-            isFromCoach: true,
-            text: "",
-            agentStatus: .running,
-            turnID: turnID,
-            attemptNumber: nextAttemptNumber(for: turnID, in: context)
-        )
-        context.insert(response)
-        job.responseMessageID = response.id
-        try? context.save()
-        return response
-    }
-
-    private func remoteTrace(
-        for response: CoachMessage,
-        turnID: UUID,
-        dataSpace: DataSpace,
-        endpoint: URL,
-        input: String,
-        in context: ModelContext
-    ) -> AgentTrace {
-        let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
-        if let traceID = response.agentTraceID,
-           let existing = traces.first(where: { $0.id == traceID })
-        {
-            return existing
-        }
-        let trace = AgentTrace(
-            provider: "Soma Managed",
-            model: "managed",
-            endpoint: endpoint.absoluteString,
-            dataSpaceRaw: dataSpace.rawValue,
-            userInput: input,
-            contextSnapshot: "由用户启用的后台持续处理；仅发送当前任务最小上下文。",
-            mediaKind: .none,
-            imageCount: 0,
-            imageAttachmentCount: 0,
-            videoAttachmentCount: 0,
-            turnID: turnID,
-            attemptNumber: response.attemptNumber
-        )
-        context.insert(trace)
-        response.agentTraceID = trace.id
-        try? context.save()
-        return trace
-    }
-
-    private func failRemoteJob(
-        _ job: AgentJob,
-        message: String,
-        context: ConversationProcessingContext
-    ) {
-        if !job.state.isTerminal, job.state.canTransition(to: .failed) {
-            try? job.transition(to: .failed, error: message)
-            _ = try? AgentJobStore.append(
-                kind: .failed,
-                payload: .init(message: message),
-                to: job,
-                in: context.modelContext
-            )
-        }
-        try? context.modelContext.save()
     }
 }
 
@@ -996,12 +1028,17 @@ private extension ConversationProcessingService {
         let prepared = await prepareHistory(
             excludingTurnID: turnID,
             currentFrameCount: media.frames.count,
+            currentText: userMessage.text,
+            hasCurrentMedia: !media.attachments.isEmpty,
+            selectedHistoricalTurnIDs: job.contextSnapshot?.envelope?
+                .selectedHistoricalTurnIDs,
             context: context
         )
         let projection = prepared.projection
         let history = prepared.history
         let historicalFrameCount = history.reduce(0) { $0 + $1.images.count }
         let persistentContext = composePersistentContext(
+            job: job,
             userMessage: userMessage,
             turnID: turnID,
             effectiveGym: effectiveGym,
@@ -1060,7 +1097,8 @@ private extension ConversationProcessingService {
                 contextSnapshot: """
                 \(persistentContext)
                 Session 上下文投影：最近 \(history.count) 个来回；重新提供历史视觉帧 \(historicalFrameCount) 张。
-                本地准备耗时 \(prepared.preparationMilliseconds) ms（含历史媒体重新抽帧）。
+                媒体模式：\(media.mode.rawValue)；视频字节 \(media.videos.reduce(0) { $0 + $1.data.count })；关键帧 \(media.mode == .keyframes ? media.frames.count : 0)。
+                本地准备耗时 \(prepared.preparationMilliseconds) ms（含被明确引用的历史媒体准备）。
                 """,
                 mediaKind: media.primaryKind,
                 imageCount: media.frames.count + historicalFrameCount,
@@ -1072,6 +1110,60 @@ private extension ConversationProcessingService {
             activeTrace = trace
             responseMessage.agentTraceID = trace.id
             context.modelContext.insert(trace)
+            let traceNow = Date.now
+            let mediaSpan = AgentTraceSpan(
+                kind: .output,
+                title: "媒体准备",
+                status: .succeeded,
+                startedAt: traceNow.addingTimeInterval(
+                    -Double(media.preparationMilliseconds) / 1000
+                ),
+                endedAt: traceNow,
+                metadata: AgentTraceText.jsonObject([
+                    "media_mode": media.mode.rawValue,
+                    "video_bytes": mediaAttachmentBytes(media.attachments),
+                    "frame_count": media.mode == .keyframes ? media.frames.count : 0,
+                    "duration_ms": media.preparationMilliseconds
+                ])
+            )
+            let contextSpan = AgentTraceSpan(
+                kind: .output,
+                title: "上下文投影",
+                status: .succeeded,
+                startedAt: traceNow.addingTimeInterval(
+                    -Double(prepared.preparationMilliseconds) / 1000
+                ),
+                endedAt: traceNow,
+                metadata: AgentTraceText.jsonObject([
+                    "history_exchange_count": history.count,
+                    "historical_frame_count": historicalFrameCount,
+                    "duration_ms": prepared.preparationMilliseconds
+                ])
+            )
+            trace.apply(.span(mediaSpan))
+            trace.apply(.span(contextSpan))
+            responseMessage.applyAgentEvent(.span(mediaSpan))
+            responseMessage.applyAgentEvent(.span(contextSpan))
+            if media.hasVideo {
+                let modeItemID = UUID()
+                let notice = media.mode == .directVideo
+                    ? "本次使用完整视频分析。\n\n"
+                    : "本次使用关键帧分析；未覆盖的动作阶段不会据此推断。\n\n"
+                PersistentAgentEventProjection.persistAndProject(
+                    .assistantTextDelta(itemID: modeItemID, delta: notice),
+                    job: job,
+                    responseMessage: responseMessage,
+                    trace: trace,
+                    in: context.modelContext
+                )
+                PersistentAgentEventProjection.persistAndProject(
+                    .assistantTextCompleted(itemID: modeItemID, at: traceNow),
+                    job: job,
+                    responseMessage: responseMessage,
+                    trace: trace,
+                    in: context.modelContext
+                )
+            }
             try? context.modelContext.save()
 
             let activePrograms = (
@@ -1105,6 +1197,14 @@ private extension ConversationProcessingService {
                     job.loopCheckpoint = checkpoint
                     try? context.modelContext.save()
                 },
+                videoFrameFallback: media.mode == .directVideo ? { [weak self] in
+                    guard let self else { return [] }
+                    let fallback = await prepareStoredMedia(
+                        job.mediaAttachments,
+                        frameLimit: Self.maximumAnalysisImageCount
+                    )
+                    return fallback.frames
+                } : nil,
                 trace: { [weak self] event in
                     self?.applyLiveAgentEvent(event)
                     if case .failed = event,
@@ -1212,7 +1312,7 @@ private extension ConversationProcessingService {
     }
 }
 
-private extension ConversationProcessingService {
+extension ConversationProcessingService {
     private func handleAttemptFailure(
         _ error: Error,
         job: AgentJob,
@@ -1353,31 +1453,22 @@ private extension ConversationProcessingService {
     }
 
     private func composePersistentContext(
+        job: AgentJob,
         userMessage: CoachMessage,
         turnID: UUID,
         effectiveGym: GymProfile?,
         resolution: GymContextResolution,
         context: ConversationProcessingContext
     ) -> String {
-        let crossTurnFacts = AgentCrossTurnFactSummary.recentMutationFacts(
-            sessionID: context.session.id,
-            excludingTurnID: turnID,
-            in: context.modelContext
-        )
-        let olderDigest = AgentCrossTurnFactSummary.olderTurnDigest(
-            messages: allMessages(in: context.modelContext),
-            sessionID: context.session.id,
-            excludingTurnID: turnID
-        )
+        let snapshotContext = job.contextSnapshot?.envelope?
+            .promptText(at: .now) ?? context.structuredContext
         return [
-            context.structuredContext,
+            snapshotContext,
             turnContext(
                 location: userMessage.location,
                 gym: effectiveGym,
                 source: resolution.source
-            ),
-            crossTurnFacts,
-            olderDigest
+            )
         ]
         .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
@@ -1445,7 +1536,7 @@ private extension ConversationProcessingService {
         message.agentStatus = .running
     }
 
-    private func nextAttemptNumber(
+    func nextAttemptNumber(
         for turnID: UUID,
         in context: ModelContext
     ) -> Int {
@@ -1690,65 +1781,21 @@ private extension ConversationProcessingService {
         return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
     }
 
-    private func prepareStoredMedia(
-        _ attachments: [MediaAttachmentReference],
-        frameLimit: Int
-    ) async -> PreparedConversationMedia {
-        guard frameLimit > 0 else {
-            return PreparedConversationMedia(
-                attachments: attachments,
-                frames: [],
-                imageCount: attachments.count { $0.kind == .image },
-                videoCount: attachments.count { $0.kind == .video },
-                failedVideoCount: 0
-            )
-        }
-        var frameGroups: [[Data]] = []
-        var videos: [AgentVideoInput] = []
-        var imageCount = 0
-        var videoCount = 0
-        var failedVideoCount = 0
-        for attachment in attachments {
-            switch attachment.kind {
-            case .none:
-                continue
-            case .image:
-                guard let url = MediaStore.url(at: attachment.path) else {
-                    continue
-                }
-                if let data = try? Data(contentsOf: url) {
-                    frameGroups.append([data])
-                    imageCount += 1
-                }
-            case .video:
-                videoCount += 1
-                guard let url = MediaStore.url(at: attachment.path) else {
-                    failedVideoCount += 1
-                    continue
-                }
-                let frames = await VideoFrameCache.frames(for: url)
-                frameGroups.append(frames)
-                if let data = try? Data(contentsOf: url),
-                   data.count <= 24 * 1024 * 1024
-                {
-                    videos.append(AgentVideoInput(
-                        data: data,
-                        mimeType: videoMIMEType(for: url)
-                    ))
-                }
-                if frames.isEmpty {
-                    failedVideoCount += 1
-                }
+    private func mediaAttachmentBytes(
+        _ attachments: [MediaAttachmentReference]
+    ) -> Int {
+        attachments.reduce(0) { total, attachment in
+            guard attachment.kind == .video,
+                  let url = MediaStore.url(at: attachment.path),
+                  let attributes = try? FileManager.default.attributesOfItem(
+                      atPath: url.path
+                  ),
+                  let bytes = (attributes[.size] as? NSNumber)?.intValue
+            else {
+                return total
             }
+            return total + bytes
         }
-        return PreparedConversationMedia(
-            attachments: attachments,
-            frames: Self.balancedFrames(from: frameGroups, limit: frameLimit),
-            videos: videos,
-            imageCount: imageCount,
-            videoCount: videoCount,
-            failedVideoCount: failedVideoCount
-        )
     }
 
     /// 首个请求发出前的本地准备（上下文投影 + 历史媒体重新抽帧）需要单独计时，
@@ -1756,6 +1803,9 @@ private extension ConversationProcessingService {
     private func prepareHistory(
         excludingTurnID turnID: UUID,
         currentFrameCount: Int,
+        currentText: String,
+        hasCurrentMedia: Bool,
+        selectedHistoricalTurnIDs: [UUID]?,
         context: ConversationProcessingContext
     ) async -> PreparedAgentHistory {
         let startedAt = Date.now
@@ -1764,8 +1814,17 @@ private extension ConversationProcessingService {
             sessionID: context.session.id,
             excludingTurnID: turnID
         )
+        let selectedTurnIDs = Set(
+            selectedHistoricalTurnIDs
+                ?? HistoricalMediaSelectionPolicy.selectedTurnIDs(
+                    currentText: currentText,
+                    hasCurrentMedia: hasCurrentMedia,
+                    exchanges: projection.exchanges
+                )
+        )
         let history = await prepareAgentHistory(
             projection.exchanges,
+            selectedTurnIDs: selectedTurnIDs,
             frameLimit: max(0, Self.maximumAnalysisImageCount - currentFrameCount)
         )
         return PreparedAgentHistory(
@@ -1779,12 +1838,15 @@ private extension ConversationProcessingService {
 
     private func prepareAgentHistory(
         _ exchanges: [ConversationContextProjection.Exchange],
+        selectedTurnIDs: Set<UUID>,
         frameLimit: Int
     ) async -> [AgentConversationExchange] {
         var remainingFrameCount = max(0, frameLimit)
         var framesByTurnID: [UUID: [Data]] = [:]
 
-        for exchange in exchanges.reversed() where remainingFrameCount > 0 {
+        for exchange in exchanges.reversed()
+            where remainingFrameCount > 0 && selectedTurnIDs.contains(exchange.turnID)
+        {
             let media = await prepareStoredMedia(
                 exchange.mediaAttachments,
                 frameLimit: remainingFrameCount
@@ -1804,37 +1866,6 @@ private extension ConversationProcessingService {
         }
     }
 
-    private static func balancedFrames(
-        from groups: [[Data]],
-        limit: Int
-    ) -> [Data] {
-        guard limit > 0 else { return [] }
-        var result: [Data] = []
-        var index = 0
-        while result.count < limit {
-            var appended = false
-            for group in groups where index < group.count {
-                result.append(group[index])
-                appended = true
-                if result.count == limit {
-                    return result
-                }
-            }
-            guard appended else { break }
-            index += 1
-        }
-        return result
-    }
-
-    private func videoMIMEType(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "mp4", "m4v": "video/mp4"
-        case "avi": "video/x-msvideo"
-        case "webm": "video/webm"
-        default: "video/quicktime"
-        }
-    }
-
     private func applyLiveAgentEvent(_ event: AgentTraceEvent) {
         liveEventRevision += 1
         switch event {
@@ -1847,7 +1878,9 @@ private extension ConversationProcessingService {
             guard span.status == .running else { return }
             switch span.kind {
             case .model:
-                liveAgentActivity = "模型正在响应…"
+                liveAgentActivity = span.title == "LLM 推理"
+                    ? "模型正在响应…"
+                    : span.title
             case .skill:
                 liveAgentActivity = "正在加载 Skill：\(span.title)"
             case .tool:

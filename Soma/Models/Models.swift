@@ -20,6 +20,52 @@ enum MealType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum MealNutritionSource: String, Codable, CaseIterable, Sendable {
+    case aiEstimate
+    case derivedFromItems
+    case userEdited
+    case imported
+}
+
+struct MealItem: Codable, Equatable, Identifiable, Sendable {
+    var id: UUID
+    var name: String
+    var portionDescription: String?
+    var calories: Int?
+    var protein: Double?
+    var carbs: Double?
+    var fat: Double?
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        portionDescription: String? = nil,
+        calories: Int? = nil,
+        protein: Double? = nil,
+        carbs: Double? = nil,
+        fat: Double? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.portionDescription = portionDescription
+        self.calories = calories
+        self.protein = protein
+        self.carbs = carbs
+        self.fat = fat
+    }
+}
+
+private enum MealItemStorage {
+    static func encode(_ items: [MealItem]) -> Data {
+        (try? JSONEncoder().encode(items)) ?? Data()
+    }
+
+    static func decode(_ data: Data) -> [MealItem] {
+        guard !data.isEmpty else { return [] }
+        return (try? JSONDecoder().decode([MealItem].self, from: data)) ?? []
+    }
+}
+
 enum MediaKind: String, Codable, Hashable, Sendable {
     case none, image, video
 }
@@ -290,10 +336,12 @@ final class MealEntry {
     var date: Date
     var mealTypeRaw: String
     var title: String
-    var calories: Int
-    var protein: Double
-    var carbs: Double
-    var fat: Double
+    var calories: Int?
+    var protein: Double?
+    var carbs: Double?
+    var fat: Double?
+    var itemsData: Data = Data()
+    var nutritionSourceRaw: String = MealNutritionSource.aiEstimate.rawValue
     var notes: String
     var imagePath: String?
     var mediaAttachmentsData: Data = Data()
@@ -310,10 +358,12 @@ final class MealEntry {
         date: Date = .now,
         mealType: MealType,
         title: String,
-        calories: Int,
-        protein: Double,
-        carbs: Double,
-        fat: Double,
+        calories: Int? = nil,
+        protein: Double? = nil,
+        carbs: Double? = nil,
+        fat: Double? = nil,
+        items: [MealItem] = [],
+        nutritionSource: MealNutritionSource = .aiEstimate,
         notes: String = "",
         imagePath: String? = nil,
         mediaAttachments: [MediaAttachmentReference] = [],
@@ -329,6 +379,8 @@ final class MealEntry {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
+        itemsData = MealItemStorage.encode(items)
+        nutritionSourceRaw = nutritionSource.rawValue
         self.notes = notes
         self.imagePath = imagePath
         mediaAttachmentsData = MediaAttachmentStorage.encode(mediaAttachments)
@@ -349,6 +401,30 @@ final class MealEntry {
             mediaAttachmentsData = MediaAttachmentStorage.encode(newValue)
             imagePath = newValue.first(where: { $0.kind == .image })?.path
         }
+    }
+
+    var items: [MealItem] {
+        get { MealItemStorage.decode(itemsData) }
+        set { itemsData = MealItemStorage.encode(newValue) }
+    }
+
+    var nutritionSource: MealNutritionSource {
+        get { MealNutritionSource(rawValue: nutritionSourceRaw) ?? .aiEstimate }
+        set { nutritionSourceRaw = newValue.rawValue }
+    }
+
+    func replaceItemsAndDeriveTotals(_ newItems: [MealItem]) {
+        items = newItems
+        nutritionSource = .derivedFromItems
+        calories = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.calories))
+        protein = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.protein))
+        carbs = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.carbs))
+        fat = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.fat))
+    }
+
+    private func sumIfComplete<T: AdditiveArithmetic>(_ values: [T?]) -> T? {
+        guard values.allSatisfy({ $0 != nil }) else { return nil }
+        return values.compactMap { $0 }.reduce(.zero, +)
     }
 }
 

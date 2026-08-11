@@ -512,6 +512,7 @@ private struct MealRecordEditor: View {
     @State private var protein: String
     @State private var carbs: String
     @State private var fat: String
+    @State private var items: [MealItem]
     @State private var notes: String
     @State private var macrosExpanded = false
     @State private var notesExpanded = false
@@ -520,10 +521,11 @@ private struct MealRecordEditor: View {
         _date = State(initialValue: meal.date)
         _mealType = State(initialValue: meal.mealType)
         _title = State(initialValue: meal.title)
-        _calories = State(initialValue: String(meal.calories))
+        _calories = State(initialValue: EditorValue.string(meal.calories))
         _protein = State(initialValue: EditorValue.string(meal.protein))
         _carbs = State(initialValue: EditorValue.string(meal.carbs))
         _fat = State(initialValue: EditorValue.string(meal.fat))
+        _items = State(initialValue: meal.items)
         _notes = State(initialValue: meal.notes)
     }
 
@@ -554,11 +556,29 @@ private struct MealRecordEditor: View {
                 DatePicker("时间", selection: $date)
             }
 
+            Section("食物项") {
+                if items.isEmpty {
+                    Text("尚未拆分食物项")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach($items) { $item in
+                    MealItemEditorRow(item: $item)
+                }
+                .onDelete { items.remove(atOffsets: $0) }
+                .onMove { items.move(fromOffsets: $0, toOffset: $1) }
+
+                Button {
+                    items.append(MealItem(name: ""))
+                } label: {
+                    Label("添加食物", systemImage: "plus")
+                }
+            }
+
             // PRD 020：大卡保持直出，宏量与说明默认折叠。
             Section("营养估算") {
                 RecordFieldRow(
                     title: "大卡",
-                    placeholder: "必填",
+                    placeholder: "未估算",
                     unit: "kcal",
                     text: $calories,
                     keyboard: .numberPad
@@ -566,21 +586,21 @@ private struct MealRecordEditor: View {
                 DisclosureGroup("宏量营养", isExpanded: $macrosExpanded) {
                     RecordFieldRow(
                         title: "蛋白质",
-                        placeholder: "必填",
+                        placeholder: "未估算",
                         unit: "g",
                         text: $protein,
                         keyboard: .decimalPad
                     )
                     RecordFieldRow(
                         title: "碳水",
-                        placeholder: "必填",
+                        placeholder: "未估算",
                         unit: "g",
                         text: $carbs,
                         keyboard: .decimalPad
                     )
                     RecordFieldRow(
                         title: "脂肪",
-                        placeholder: "必填",
+                        placeholder: "未估算",
                         unit: "g",
                         text: $fat,
                         keyboard: .decimalPad
@@ -610,35 +630,35 @@ private struct MealRecordEditor: View {
                         .disabled(!isValid)
                 }
             }
+            ToolbarItem(placement: .topBarLeading) {
+                EditButton()
+            }
         }
     }
 
     private var isValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && EditorValue.requiredInt(calories, range: 0 ... 20000) != nil
-            && EditorValue.requiredDouble(protein, range: 0 ... 2000) != nil
-            && EditorValue.requiredDouble(carbs, range: 0 ... 2000) != nil
-            && EditorValue.requiredDouble(fat, range: 0 ... 2000) != nil
+            && EditorValue.validInt(calories, range: 0 ... 20000)
+            && EditorValue.validDouble(protein, range: 0 ... 2000)
+            && EditorValue.validDouble(carbs, range: 0 ... 2000)
+            && EditorValue.validDouble(fat, range: 0 ... 2000)
+            && items.allSatisfy { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     private var isDirty: Bool {
         date != meal.date
             || mealType != meal.mealType
             || EditorValue.optionalText(title) != meal.title
-            || EditorValue.requiredInt(calories, range: 0 ... 20000) != meal.calories
-            || EditorValue.requiredDouble(protein, range: 0 ... 2000) != meal.protein
-            || EditorValue.requiredDouble(carbs, range: 0 ... 2000) != meal.carbs
-            || EditorValue.requiredDouble(fat, range: 0 ... 2000) != meal.fat
+            || EditorValue.int(calories) != meal.calories
+            || EditorValue.double(protein) != meal.protein
+            || EditorValue.double(carbs) != meal.carbs
+            || EditorValue.double(fat) != meal.fat
+            || items != meal.items
             || notes.trimmingCharacters(in: .whitespacesAndNewlines) != meal.notes
     }
 
     private func save() {
-        guard
-            let calories = EditorValue.requiredInt(calories, range: 0 ... 20000),
-            let protein = EditorValue.requiredDouble(protein, range: 0 ... 2000),
-            let carbs = EditorValue.requiredDouble(carbs, range: 0 ... 2000),
-            let fat = EditorValue.requiredDouble(fat, range: 0 ... 2000)
-        else { return }
+        guard isValid else { return }
 
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -647,12 +667,90 @@ private struct MealRecordEditor: View {
         meal.date = date
         meal.mealType = mealType
         meal.title = normalizedTitle
-        meal.calories = calories
-        meal.protein = protein
-        meal.carbs = carbs
-        meal.fat = fat
+        let normalizedItems = items.map { item in
+            var item = item
+            item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.portionDescription = item.portionDescription
+                .flatMap(EditorValue.optionalText)
+            return item
+        }
+        let editedTotals = EditorValue.int(calories) != meal.calories
+            || EditorValue.double(protein) != meal.protein
+            || EditorValue.double(carbs) != meal.carbs
+            || EditorValue.double(fat) != meal.fat
+        if normalizedItems != meal.items {
+            meal.replaceItemsAndDeriveTotals(normalizedItems)
+        }
+        if editedTotals {
+            meal.calories = EditorValue.int(calories)
+            meal.protein = EditorValue.double(protein)
+            meal.carbs = EditorValue.double(carbs)
+            meal.fat = EditorValue.double(fat)
+            meal.nutritionSource = .userEdited
+        }
         meal.notes = normalizedNotes
         try? modelContext.save()
+    }
+}
+
+private struct MealItemEditorRow: View {
+    @Binding var item: MealItem
+    @State private var nutritionExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("食物名称", text: $item.name)
+            TextField(
+                "份量说明（可选）",
+                text: Binding(
+                    get: { item.portionDescription ?? "" },
+                    set: { item.portionDescription = EditorValue.optionalText($0) }
+                )
+            )
+            .foregroundStyle(.secondary)
+
+            DisclosureGroup("分项营养", isExpanded: $nutritionExpanded) {
+                mealItemNumberField("大卡", value: $item.calories, unit: "kcal")
+                mealItemNumberField("蛋白质", value: $item.protein, unit: "g")
+                mealItemNumberField("碳水", value: $item.carbs, unit: "g")
+                mealItemNumberField("脂肪", value: $item.fat, unit: "g")
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func mealItemNumberField(
+        _ title: String,
+        value: Binding<Int?>,
+        unit: String
+    ) -> some View {
+        RecordFieldRow(
+            title: title,
+            placeholder: "未估算",
+            unit: unit,
+            text: Binding(
+                get: { EditorValue.string(value.wrappedValue) },
+                set: { value.wrappedValue = EditorValue.int($0) }
+            ),
+            keyboard: .numberPad
+        )
+    }
+
+    private func mealItemNumberField(
+        _ title: String,
+        value: Binding<Double?>,
+        unit: String
+    ) -> some View {
+        RecordFieldRow(
+            title: title,
+            placeholder: "未估算",
+            unit: unit,
+            text: Binding(
+                get: { EditorValue.string(value.wrappedValue) },
+                set: { value.wrappedValue = EditorValue.double($0) }
+            ),
+            keyboard: .decimalPad
+        )
     }
 }
 

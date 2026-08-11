@@ -6,7 +6,7 @@
 - 部分替代：
   - [ADR 0031](0031-durable-agent-jobs-event-log-and-projections.md) 中把 Job 调度状态与用户体验 Event 混合、远程实时增量未形成统一流的边界
   - [ADR 0032](0032-optional-remote-agent-execution.md) 中 Remote Backend 以分页补拉作为前台正常交互路径的边界
-- 后续替代：暂无
+- 后续替代：[ADR 0058](0058-first-delta-deadline-and-bounded-retry.md) 增加 Provider 首增量、流空闲和单步骤总时限
 - 上游依据：[BUG 0005](../bugs/0005-remote-agent-streaming-latency-regression.md)
 - 下游落地：[Agent Job 与远程执行协议](../engineering/agent-job-protocol.md)
 - 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)

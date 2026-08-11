@@ -109,15 +109,18 @@ struct AgentJobContextSnapshot: Codable, Equatable, Sendable {
     var structuredContext: String
     var includeLocation: Bool
     var createdAt: Date
+    var envelope: AgentTurnContextEnvelope?
 
     init(
         structuredContext: String,
         includeLocation: Bool,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        envelope: AgentTurnContextEnvelope? = nil
     ) {
         self.structuredContext = structuredContext
         self.includeLocation = includeLocation
         self.createdAt = createdAt
+        self.envelope = envelope
     }
 }
 
@@ -155,6 +158,7 @@ final class AgentJob {
     var lastError: String?
     var remoteJobID: String?
     var remoteEventCursor: Int = 0
+    var remoteRequestAttempt: Int = 1
     var leaseOwner: String?
     var leaseExpiresAt: Date?
     var leaseEpoch: Int
@@ -203,6 +207,7 @@ final class AgentJob {
         liveActivityProjectionCursor = 0
         notificationProjectionCursor = 0
         responseTextSnapshot = ""
+        remoteRequestAttempt = 1
     }
 
     var dataSpace: DataSpace {

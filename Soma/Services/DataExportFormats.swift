@@ -42,10 +42,12 @@ struct PortableMealAnalysis: Codable, Equatable, Sendable {
     var date: Date
     var mealType: String
     var title: String
-    var calories: Int
-    var protein: Double
-    var carbs: Double
-    var fat: Double
+    var calories: Int?
+    var protein: Double?
+    var carbs: Double?
+    var fat: Double?
+    var items: [MealItem]?
+    var nutritionSource: String?
     var notes: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?

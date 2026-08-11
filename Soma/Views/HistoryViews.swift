@@ -355,7 +355,7 @@ private struct MealHistoryRow: View {
                 Text("\(meal.mealType.rawValue) · \(meal.date.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("蛋白质 \(meal.protein.formatted(.number.precision(.fractionLength(0 ... 1))))g · 碳水 \(meal.carbs.formatted(.number.precision(.fractionLength(0 ... 1))))g")
+                Text(macrosText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -363,7 +363,7 @@ private struct MealHistoryRow: View {
 
             Spacer(minLength: 8)
 
-            Text("\(meal.calories)")
+            Text(meal.calories.map(String.init) ?? "—")
                 .font(.subheadline.bold().monospacedDigit())
             Text("kcal")
                 .font(.caption2)
@@ -371,6 +371,16 @@ private struct MealHistoryRow: View {
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
+    }
+
+    private var macrosText: String {
+        let protein = meal.protein.map {
+            "蛋白质 \($0.formatted(.number.precision(.fractionLength(0 ... 1))))g"
+        } ?? "蛋白质 —"
+        let carbs = meal.carbs.map {
+            "碳水 \($0.formatted(.number.precision(.fractionLength(0 ... 1))))g"
+        } ?? "碳水 —"
+        return "\(protein) · \(carbs)"
     }
 }
 

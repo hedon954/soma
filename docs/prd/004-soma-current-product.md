@@ -23,6 +23,7 @@
   - [PRD 022](022-react-reliability-and-context-awareness.md)
   - [PRD 023](023-in-app-multimodal-feedback.md)
   - [PRD 024](024-chat-agent-feedback-tool.md)
+  - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md)
 
 ## 产品定义
 

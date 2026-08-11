@@ -37,7 +37,10 @@ import {
   TokenCipher,
 } from "../src/security.js";
 import { InMemorySomaStore } from "../src/store.js";
-import { validateDeviceTool } from "../src/tool-registry.js";
+import {
+  effectiveAllowedDeviceTools,
+  validateDeviceTool,
+} from "../src/tool-registry.js";
 import {
   AgentWorker,
   DeterministicTestProvider,
@@ -401,6 +404,22 @@ test("APNs retry remains in outbox with backoff until accepted", async () => {
 test("tool validation rejects paths URLs and unsupported schemas", () => {
   assert.equal(
     validateDeviceTool({
+      name: "mutate_user_data",
+      schemaVersion: 2,
+      arguments: {
+        operation: "create",
+        record_type: "meal",
+        payload: {
+          title: "虚构午餐",
+          items: [{ name: "豆腐", protein: 12 }],
+        },
+      },
+      allowedNames: ["mutate_user_data"],
+    }).mutation,
+    true,
+  );
+  assert.equal(
+    validateDeviceTool({
       name: "submit_feedback",
       schemaVersion: 1,
       arguments: {},
@@ -432,6 +451,44 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
       allowedNames: ["unknown"],
     }),
   );
+});
+
+test("completed expansion exposes only the requested remote tool group", () => {
+  const toolCallID = randomUUID();
+  const now = new Date();
+  const expanded = effectiveAllowedDeviceTools(
+    ["load_skill", "query_user_data", "mutate_user_data", "expand_tool_group"],
+    [
+      {
+        id: randomUUID(),
+        jobID: randomUUID(),
+        sequence: 1,
+        kind: "tool",
+        phase: "suspended",
+        payloadVersion: 1,
+        payload: {
+          toolCallID,
+          toolName: "expand_tool_group",
+          arguments: { tool_group: "gym" },
+        },
+        createdAt: now,
+      },
+      {
+        id: randomUUID(),
+        jobID: randomUUID(),
+        sequence: 2,
+        kind: "tool",
+        phase: "completed",
+        payloadVersion: 1,
+        payload: { toolCallID, result: { ok: true } },
+        createdAt: now,
+      },
+    ],
+  );
+
+  assert.ok(expanded.includes("update_gym"));
+  assert.ok(expanded.includes("switch_gym"));
+  assert.ok(!expanded.includes("submit_feedback"));
 });
 
 test("managed provider streams text before completion and limits media", async () => {
@@ -500,6 +557,96 @@ test("managed provider streams text before completion and limits media", async (
     answer: "已分析可见关键帧。",
     usage: { input: 4, output: 3 },
   });
+});
+
+test("verified Qwen provider sends the video without duplicate frames", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input: makeJobInput(),
+    bodyDigest: sha256("direct-video"),
+    now: new Date(),
+  });
+  let captured: Record<string, unknown> | undefined;
+  const provider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1",
+    "test-key",
+    "qwen3-vl-plus",
+    async (_input, init) => {
+      captured = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(
+            'data: {"choices":[{"delta":{"content":"完整视频结果"},"finish_reason":"stop"}]}\n\n',
+          ));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  );
+
+  await provider.run(job, [], [
+    { contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+    { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+  ]);
+
+  const messages = captured?.messages as Record<string, unknown>[];
+  const content = messages[1]?.content as Record<string, unknown>[];
+  assert.equal(content.filter((part) => part.type === "video_url").length, 1);
+  assert.equal(content.filter((part) => part.type === "image_url").length, 0);
+  assert.match(JSON.stringify(captured), /video\.mp4/);
+  assert.doesNotMatch(JSON.stringify(captured), /frame\.jpg/);
+});
+
+test("direct video failure preserves the only retry for keyframes", async () => {
+  const store = new InMemorySomaStore();
+  const directJob = await store.submitJob({
+    deviceID: randomUUID(),
+    input: makeJobInput({ mediaMode: "direct_video", requestAttempt: 1 }),
+    bodyDigest: sha256("direct-video-failure"),
+    now: new Date(),
+  });
+  let directCalls = 0;
+  const directProvider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1",
+    "test-key",
+    "qwen3-vl-plus",
+    async () => {
+      directCalls += 1;
+      return new Response("unavailable", { status: 503 });
+    },
+  );
+
+  await assert.rejects(directProvider.run(directJob, [], [
+    { contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+  ]));
+  assert.equal(directCalls, 1);
+
+  const fallbackJob = await store.submitJob({
+    deviceID: randomUUID(),
+    input: makeJobInput({ mediaMode: "keyframes", requestAttempt: 2 }),
+    bodyDigest: sha256("keyframe-fallback-failure"),
+    now: new Date(),
+  });
+  let fallbackCalls = 0;
+  const fallbackProvider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1",
+    "test-key",
+    "qwen3-vl-plus",
+    async () => {
+      fallbackCalls += 1;
+      return new Response("unavailable", { status: 503 });
+    },
+  );
+
+  await assert.rejects(fallbackProvider.run(fallbackJob, [], [
+    { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+  ]));
+  assert.equal(fallbackCalls, 1);
 });
 
 test("HTTP idempotent submission returns one job and no body log surface", async () => {
@@ -707,6 +854,8 @@ function makeJobInput(
     text: "虚构远程任务",
     contextSnapshot: "最小虚构上下文",
     uploadIDs: [],
+    mediaMode: "text",
+    requestAttempt: 1,
     allowedRemoteTools: [],
     allowedDeviceTools: [],
     liveActivityEnabled: true,

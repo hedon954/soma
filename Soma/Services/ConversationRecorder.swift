@@ -95,6 +95,18 @@ enum ConversationRecorder {
                 preferredGymID: preferredGymID,
                 in: context
             )
+        case .mutateUserData:
+            mutateUserData(
+                call.arguments,
+                sourceText: sourceText,
+                sourceDate: sourceDate,
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
         case .listExerciseNames:
             listExerciseNames(in: context)
         case .listTrainingPrograms:
@@ -230,13 +242,16 @@ enum ConversationRecorder {
         ))
     }
 
-    private static func queryUserData(
+    static func queryUserData(
         _ arguments: AgentToolArguments,
         preferredGymID: UUID?,
         in context: ModelContext
     ) -> AgentToolResult {
         let scope = arguments.scope?.lowercased() ?? "overview"
-        let limit = min(max(arguments.limit ?? 5, 1), 20)
+        let limit = min(max(arguments.limit ?? 3, 1), 10)
+        if let failure = queryValidationFailure(scope: scope, arguments: arguments) {
+            return failure
+        }
 
         switch scope {
         case "aggregate":
@@ -260,9 +275,13 @@ enum ConversationRecorder {
             let workout = workouts.first.map {
                 "[id:\($0.id.uuidString)] \(workoutSummary($0))"
             } ?? "暂无"
-            let todayCalories = meals
-                .filter { Calendar.current.isDateInToday($0.date) }
-                .reduce(0) { $0 + $1.calories }
+            let todayMeals = meals.filter {
+                Calendar.current.isDateInToday($0.date)
+            }
+            let knownTodayCalories = todayMeals.compactMap(\.calories)
+            let todayCalories = knownTodayCalories.count == todayMeals.count
+                ? "\(knownTodayCalories.reduce(0, +))kcal"
+                : "存在未估算记录"
             let weight = body.first.map {
                 let value = $0.weight.map { String(format: "%.1fkg", $0) } ?? "仅体态资料"
                 return "[id:\($0.id.uuidString)] \(value)"
@@ -272,53 +291,139 @@ enum ConversationRecorder {
                 "[id:\($0.id.uuidString)] \($0.mealType.rawValue) \($0.title)"
             } ?? "暂无"
             return .success(
-                "个人信息：\(profile)；当前健身房：\(gym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)kcal；最近体重：\(weight)。"
+                "个人信息：\(profile)；当前健身房：\(gym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)；最近体重：\(weight)。"
             )
 
         case "workouts":
-            let values = fetchWorkouts(in: context).prefix(limit).map {
-                "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \(workoutSummary($0))"
-            }
-            return .success(values.isEmpty ? "暂无训练记录。" : values.joined(separator: "\n"))
+            let values = filteredByDate(fetchWorkouts(in: context), arguments: arguments, date: \.date)
+                .filter { arguments.recordID == nil || $0.id.uuidString == arguments.recordID }
+                .map { entry in
+                    var value = [
+                        "record_id": .string(entry.id.uuidString),
+                        "date": .string(entry.date.ISO8601Format()),
+                        "title": .string(entry.exercise),
+                        "summary": .string(workoutSummary(entry))
+                    ] as [String: AgentJSONValue]
+                    if arguments.projection == "detail" {
+                        value["exercise_id"] = entry.exerciseID
+                            .map { .string($0.uuidString) } ?? .null
+                        value["set_entries"] = .array(entry.setEntries.map { set in
+                            .object([
+                                "reps": set.reps.map { .number(Double($0)) } ?? .null,
+                                "external_weight_kg": set.externalWeightKG
+                                    .map(AgentJSONValue.number) ?? .null
+                            ])
+                        })
+                        value["rest_seconds"] = entry.restSeconds
+                            .map { .number(Double($0)) } ?? .null
+                        value["duration_minutes"] = entry.durationMinutes
+                            .map { .number(Double($0)) } ?? .null
+                        value["feedback"] = entry.feedback?.nilIfEmpty
+                            .map(AgentJSONValue.string) ?? .null
+                    }
+                    return value
+                }
+            return pagedResult(values, noun: "训练记录", arguments: arguments, limit: limit)
 
         case "meals":
-            let values = fetchMeals(in: context).prefix(limit).map {
-                "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \($0.mealType.rawValue) \($0.title) \($0.calories)kcal"
-            }
-            return .success(values.isEmpty ? "暂无饮食记录。" : values.joined(separator: "\n"))
+            let values = filteredByDate(fetchMeals(in: context), arguments: arguments, date: \.date)
+                .filter { arguments.recordID == nil || $0.id.uuidString == arguments.recordID }
+                .map { entry in
+                    var value = [
+                        "record_id": .string(entry.id.uuidString),
+                        "date": .string(entry.date.ISO8601Format()),
+                        "meal_type": .string(entry.mealType.rawValue),
+                        "title": .string(entry.title),
+                        "calories": entry.calories.map { .number(Double($0)) } ?? .null
+                    ] as [String: AgentJSONValue]
+                    if arguments.projection == "detail" {
+                        value["protein"] = entry.protein.map(AgentJSONValue.number) ?? .null
+                        value["carbs"] = entry.carbs.map(AgentJSONValue.number) ?? .null
+                        value["fat"] = entry.fat.map(AgentJSONValue.number) ?? .null
+                        value["note"] = entry.notes.nilIfEmpty
+                            .map(AgentJSONValue.string) ?? .null
+                        value["items"] = .array(entry.items.map { item in
+                            .object([
+                                "id": .string(item.id.uuidString),
+                                "name": .string(item.name),
+                                "portion_description": item.portionDescription
+                                    .map(AgentJSONValue.string) ?? .null,
+                                "calories": item.calories
+                                    .map { .number(Double($0)) } ?? .null,
+                                "protein": item.protein.map(AgentJSONValue.number) ?? .null,
+                                "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
+                                "fat": item.fat.map(AgentJSONValue.number) ?? .null
+                            ])
+                        })
+                    }
+                    return value
+                }
+            return pagedResult(values, noun: "饮食记录", arguments: arguments, limit: limit)
 
         case "body":
-            let values = fetchBodyEntries(in: context).prefix(limit).map {
-                var metrics: [String] = []
-                if let weight = $0.weight {
-                    metrics.append(String(format: "%.1fkg", weight))
+            let values = filteredByDate(
+                fetchBodyEntries(in: context),
+                arguments: arguments,
+                date: \.date
+            )
+            .filter { arguments.recordID == nil || $0.id.uuidString == arguments.recordID }
+            .map { entry in
+                var value = [
+                    "record_id": .string(entry.id.uuidString),
+                    "date": .string(entry.date.ISO8601Format()),
+                    "weight": entry.weight.map(AgentJSONValue.number) ?? .null,
+                    "body_fat": entry.bodyFat.map(AgentJSONValue.number) ?? .null,
+                    "waist": entry.waist.map(AgentJSONValue.number) ?? .null
+                ] as [String: AgentJSONValue]
+                if arguments.projection == "detail" {
+                    value["analysis"] = entry.analysis.nilIfEmpty
+                        .map(AgentJSONValue.string) ?? .null
                 }
-                if let bodyFat = $0.bodyFat {
-                    metrics.append(String(format: "体脂 %.1f%%", bodyFat))
-                }
-                if let waist = $0.waist {
-                    metrics.append(String(format: "腰围 %.1fcm", waist))
-                }
-                let values = metrics.isEmpty ? "仅记录了体型资料" : metrics.joined(separator: "，")
-                return "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \(values)"
+                return value
             }
-            return .success(values.isEmpty ? "暂无身体记录。" : values.joined(separator: "\n"))
+            return pagedResult(values, noun: "身体记录", arguments: arguments, limit: limit)
 
         case "profile":
-            let values = fetchProfiles(in: context).prefix(limit).map(profileSummary)
-            return .success(values.isEmpty ? "尚未填写身体信息。" : values.joined(separator: "\n"))
+            let values = fetchProfiles(in: context).map {
+                [
+                    "record_id": .string($0.id.uuidString),
+                    "summary": .string(profileSummary($0))
+                ] as [String: AgentJSONValue]
+            }
+            return pagedResult(values, noun: "个人资料", arguments: arguments, limit: limit)
 
         case "gyms":
             let gyms = fetchGyms(in: context)
             let equipment = fetchEquipment(in: context)
-            let values = gyms.prefix(limit).map { gym in
+            let values = gyms.map { gym in
                 let names = equipment.filter { $0.gymID == gym.id }.map(\.name).joined(separator: "、")
-                return "[id:\(gym.id.uuidString)] \(gym.isCurrent ? "当前：" : "")\(gym.name)；器械：\(names.nilIfEmpty ?? "暂无")"
+                return [
+                    "record_id": .string(gym.id.uuidString),
+                    "name": .string(gym.name),
+                    "is_current": .bool(gym.isCurrent),
+                    "equipment": .string(names.nilIfEmpty ?? "暂无")
+                ] as [String: AgentJSONValue]
             }
-            return .success(values.isEmpty ? "还没有健身房。" : values.joined(separator: "\n"))
+            return pagedResult(values, noun: "健身房", arguments: arguments, limit: limit)
 
         case "exercises":
-            return listExerciseNames(in: context)
+            let exactExerciseID = arguments.exerciseID.flatMap(UUID.init(uuidString:))
+            let query = arguments.query?.trimmed.nilIfEmpty
+            guard exactExerciseID != nil || query != nil else {
+                return .failure("动作库查询必须提供 query 或精确 exercise_id，不再返回全库。")
+            }
+            let values = ExerciseLibraryStore.nameReferences(in: context)
+                .filter { reference in
+                    exactExerciseID.map { reference.id == $0 }
+                        ?? reference.name.localizedCaseInsensitiveContains(query ?? "")
+                }
+                .map {
+                    [
+                        "exercise_id": .string($0.id.uuidString),
+                        "name": .string($0.name)
+                    ] as [String: AgentJSONValue]
+                }
+            return pagedResult(values, noun: "动作", arguments: arguments, limit: limit)
 
         case "exercise_history":
             guard let rawID = arguments.exerciseID,
@@ -326,114 +431,25 @@ enum ConversationRecorder {
             else {
                 return .failure("exercise_history 需要有效的 exercise_id。")
             }
-            let values = fetchWorkouts(in: context)
+            let values = filteredByDate(fetchWorkouts(in: context), arguments: arguments, date: \.date)
                 .filter { $0.exerciseID == exerciseID }
-                .prefix(limit)
                 .map {
-                    "[id:\($0.id.uuidString)] \($0.date.formatted(date: .abbreviated, time: .omitted)) \(workoutSummary($0))"
+                    [
+                        "record_id": .string($0.id.uuidString),
+                        "date": .string($0.date.ISO8601Format()),
+                        "summary": .string(workoutSummary($0))
+                    ] as [String: AgentJSONValue]
                 }
-            return .success(
-                values.isEmpty
-                    ? "该动作暂无训练历史。"
-                    : values.joined(separator: "\n")
-            )
+            return pagedResult(values, noun: "动作训练历史", arguments: arguments, limit: limit)
 
         case "programs":
-            let programs = (
-                try? context.fetch(FetchDescriptor<TrainingProgram>())
-            ) ?? []
-            let values = programs
-                .sorted { $0.updatedAt > $1.updatedAt }
-                .prefix(limit)
-                .map {
-                    "[id:\($0.id.uuidString)] \($0.name)；目标：\($0.goal.nilIfEmpty ?? "未记录")；状态：\($0.status.rawValue)"
-                }
-            return .success(
-                values.isEmpty ? "暂无训练计划。" : values.joined(separator: "\n")
-            )
+            return queryPrograms(arguments, limit: limit, in: context)
 
         case "templates":
-            let versions = (
-                try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-            ) ?? []
-            let filtered: [WorkoutTemplateVersion] = if let rawID = arguments.programID,
-                                                        let programID = UUID(uuidString: rawID)
-            {
-                versions.filter { $0.programID == programID }
-            } else {
-                versions
-            }
-            let values = filtered
-                .sorted { lhs, rhs in
-                    lhs.createdAt == rhs.createdAt
-                        ? lhs.version > rhs.version
-                        : lhs.createdAt > rhs.createdAt
-                }
-                .prefix(limit)
-                .map {
-                    "[id:\($0.id.uuidString)] program_id:\($0.programID.uuidString) \($0.name) v\($0.version)"
-                }
-            return .success(
-                values.isEmpty ? "暂无训练模板。" : values.joined(separator: "\n")
-            )
+            return queryTemplates(arguments, limit: limit, in: context)
 
         case "sessions":
-            let sessions = (
-                try? context.fetch(FetchDescriptor<WorkoutSession>())
-            ) ?? []
-            let filtered: [WorkoutSession] = if let rawID = arguments.sessionID,
-                                                let sessionID = UUID(
-                                                    uuidString: rawID
-                                                )
-            {
-                sessions.filter { $0.id == sessionID }
-            } else {
-                sessions
-            }
-            let performances = (
-                try? context.fetch(FetchDescriptor<ExercisePerformance>())
-            ) ?? []
-            let sets = (
-                try? context.fetch(FetchDescriptor<WorkoutSet>())
-            ) ?? []
-            let values = filtered
-                .sorted { $0.startedAt > $1.startedAt }
-                .prefix(limit)
-                .map { session in
-                    let summary = TrainingPlanStore.summary(
-                        for: session.id,
-                        in: context
-                    )
-                    let details = performances
-                        .filter { $0.sessionID == session.id }
-                        .sorted { $0.order < $1.order }
-                        .map { performance in
-                            let completed = sets.filter {
-                                $0.performanceID == performance.id
-                                    && $0.status == .completed
-                            }
-                            let setText = completed.map { set in
-                                [
-                                    set.actualWeightKG.map {
-                                        "\($0.formatted())kg"
-                                    },
-                                    set.actualReps.map { "\($0)次" }
-                                ]
-                                .compactMap { $0 }
-                                .joined(separator: "×")
-                            }
-                            .filter { !$0.isEmpty }
-                            .joined(separator: "、")
-                            return "\(performance.exerciseName)：\(completed.count)组"
-                                + (setText.isEmpty ? "" : "（\(setText)）")
-                        }
-                        .joined(separator: "；")
-                    return "[id:\(session.id.uuidString)] \(session.startedAt.formatted(date: .abbreviated, time: .shortened))；\(session.status.rawValue)；\(summary.text)"
-                        + (details.isEmpty ? "" : "；动作：\(details)")
-                }
-            return .success(
-                values.isEmpty ? "暂无计划训练历史。" : values.joined(separator: "\n")
-            )
+            return querySessions(arguments, limit: limit, in: context)
 
         default:
             return .failure(
@@ -442,7 +458,7 @@ enum ConversationRecorder {
         }
     }
 
-    private static func recordWorkout(
+    static func recordWorkout(
         _ arguments: AgentToolArguments,
         sourceText: String,
         sourceDate: Date,
@@ -538,9 +554,11 @@ enum ConversationRecorder {
                     kind: "训练",
                     recordID: duplicate.id
                 ),
+                recordRefs: [workoutReference(duplicate)],
                 recordType: .workout
             )
         }
+        let entry: WorkoutEntry
         if let existing {
             RecordMergePolicy.mergeWorkout(
                 existing,
@@ -552,8 +570,9 @@ enum ConversationRecorder {
             )
             existing.exerciseID = definition.id
             existing.exercise = definition.canonicalName
+            entry = existing
         } else {
-            context.insert(WorkoutEntry(
+            let created = WorkoutEntry(
                 date: sourceDate,
                 exercise: exercise,
                 exerciseID: definition.id,
@@ -576,7 +595,9 @@ enum ConversationRecorder {
                 calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
                 sourceTurnID: sourceTurnID,
                 sourceSessionID: sourceSessionID
-            ))
+            )
+            context.insert(created)
+            entry = created
         }
         try? context.save()
         var summary = [exercise]
@@ -613,11 +634,12 @@ enum ConversationRecorder {
         }()
         return .success(
             "\(existing == nil ? "已记录" : "已合并更新")训练：\(summary.joined(separator: "，"))\(calorieSummary)。",
+            recordRefs: [workoutReference(entry)],
             recordType: .workout
         )
     }
 
-    private static func recordMeal(
+    static func recordMeal(
         _ arguments: AgentToolArguments,
         sourceText: String,
         sourceDate: Date,
@@ -631,14 +653,22 @@ enum ConversationRecorder {
         guard let title = arguments.title?.trimmed.nilIfEmpty else {
             return .failure("record_meal 缺少 title。")
         }
-        guard let calories = arguments.calories, (0 ... 10000).contains(calories) else {
+        if let calories = arguments.calories, !(0 ... 10000).contains(calories) {
             return .failure("calories 必须在 0 到 10000 之间。")
         }
-        let protein = arguments.protein ?? 0
-        let carbs = arguments.carbs ?? 0
-        let fat = arguments.fat ?? 0
-        guard [protein, carbs, fat].allSatisfy({ (0 ... 1000).contains($0) }) else {
+        let macros = [arguments.protein, arguments.carbs, arguments.fat].compactMap { $0 }
+        guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
+        }
+        let items = arguments.items?.map(\.model) ?? []
+        guard items.allSatisfy({ item in
+            !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && item.calories.map { (0 ... 10000).contains($0) } ?? true
+                && [item.protein, item.carbs, item.fat]
+                .compactMap { $0 }
+                .allSatisfy { (0 ... 1000).contains($0) }
+        }) else {
+            return .failure("items 包含空名称或超出范围的营养值。")
         }
         let mealType = MealType(rawValue: arguments.mealType ?? "") ?? inferredMealType()
         let resolvedMedia = resolvedMediaAttachments(
@@ -646,71 +676,56 @@ enum ConversationRecorder {
             legacyKind: mediaKind,
             legacyPath: mediaPath
         )
-        let input = MealMergeInput(
-            date: sourceDate,
-            sessionID: sourceSessionID,
-            turnID: sourceTurnID,
-            mealType: mealType,
-            title: title,
-            calories: calories,
-            protein: protein,
-            carbs: carbs,
-            fat: fat,
-            sourceText: recordedText(
-                sourceText,
-                analysis: arguments.note?.trimmed ?? ""
-            ),
-            media: resolvedMedia,
-            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
-        )
-        let existing = RecordMergePolicy.mealCandidate(
-            for: input,
-            entries: fetchMeals(in: context)
-        )
-        if existing == nil,
-           !input.isCorrection,
-           let duplicate = AgentBusinessKeyDeduper.matchingMeal(
-               title: title,
-               calories: calories,
-               date: sourceDate,
-               excludingTurnID: sourceTurnID,
-               in: context
-           )
+        if let sourceTurnID,
+           let existing = fetchMeals(in: context).first(where: {
+               $0.sourceTurnID == sourceTurnID
+           })
         {
             return .success(
-                AgentBusinessKeyDeduper.suspectedDuplicateMessage(
-                    kind: "饮食",
-                    recordID: duplicate.id
-                ),
+                "当前 Turn 已写入同一餐，本次重复调用已忽略。",
+                recordRefs: [mealReference(existing)],
                 recordType: .meal
             )
         }
-        if let existing {
-            RecordMergePolicy.mergeMeal(existing, input: input)
-        } else {
-            context.insert(MealEntry(
-                date: sourceDate,
-                mealType: mealType,
-                title: title,
-                calories: calories,
-                protein: protein,
-                carbs: carbs,
-                fat: fat,
-                notes: input.sourceText,
-                imagePath: mediaKind == .image ? mediaPath : nil,
-                mediaAttachments: resolvedMedia,
-                sourceTurnID: sourceTurnID,
-                sourceSessionID: sourceSessionID
-            ))
+        let entry = MealEntry(
+            date: sourceDate,
+            mealType: mealType,
+            title: title,
+            calories: arguments.calories,
+            protein: arguments.protein,
+            carbs: arguments.carbs,
+            fat: arguments.fat,
+            items: items,
+            nutritionSource: .aiEstimate,
+            notes: recordedText(
+                sourceText,
+                analysis: arguments.note?.trimmed ?? ""
+            ),
+            imagePath: mediaKind == .image ? mediaPath : nil,
+            mediaAttachments: resolvedMedia,
+            sourceTurnID: sourceTurnID,
+            sourceSessionID: sourceSessionID
+        )
+        if arguments.calories == nil,
+           arguments.protein == nil,
+           arguments.carbs == nil,
+           arguments.fat == nil,
+           !items.isEmpty
+        {
+            entry.replaceItemsAndDeriveTotals(items)
         }
+        context.insert(entry)
         try? context.save()
+        let caloriesText = entry.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
-            "\(existing == nil ? "已记录" : "已合并更新")\(mealType.rawValue)：\(title)，约 \(calories)kcal。",
+            "已记录\(mealType.rawValue)：\(title)，\(caloriesText)。",
+            data: mealResultData(entry),
+            recordRefs: [mealReference(entry)],
             recordType: .meal
         )
     }
 
-    private static func recordBody(
+    static func recordBody(
         _ arguments: AgentToolArguments,
         sourceText: String,
         sourceDate: Date,
@@ -771,13 +786,16 @@ enum ConversationRecorder {
                     kind: "身体",
                     recordID: duplicate.id
                 ),
+                recordRefs: [bodyReference(duplicate)],
                 recordType: .body
             )
         }
+        let entry: BodyEntry
         if let existing {
             RecordMergePolicy.mergeBody(existing, input: input, analysis: analysis)
+            entry = existing
         } else {
-            context.insert(BodyEntry(
+            let created = BodyEntry(
                 date: sourceDate,
                 weight: arguments.weight,
                 bodyFat: arguments.bodyFat,
@@ -788,17 +806,23 @@ enum ConversationRecorder {
                 analysis: analysis,
                 sourceTurnID: sourceTurnID,
                 sourceSessionID: sourceSessionID
-            ))
+            )
+            context.insert(created)
+            entry = created
         }
         try? context.save()
         let weightSummary = arguments.weight.map { String(format: "%.1fkg", $0) } ?? "未提供体重"
         let action = existing == nil ? "已记录" : "已合并更新"
-        return .success("\(action)身体数据：\(weightSummary)。", recordType: .body)
+        return .success(
+            "\(action)身体数据：\(weightSummary)。",
+            recordRefs: [bodyReference(entry)],
+            recordType: .body
+        )
     }
 }
 
 extension ConversationRecorder {
-    private static func updateWorkout(
+    static func updateWorkout(
         _ arguments: AgentToolArguments,
         sourceText: String,
         mediaKind: MediaKind,
@@ -884,11 +908,12 @@ extension ConversationRecorder {
         try? context.save()
         return .success(
             "已更新训练 [id:\(entry.id.uuidString)]：\(workoutSummary(entry))。",
+            recordRefs: [workoutReference(entry)],
             recordType: .workout
         )
     }
 
-    private static func updateMeal(
+    static func updateMeal(
         _ arguments: AgentToolArguments,
         sourceText: String,
         mediaKind: MediaKind,
@@ -909,6 +934,19 @@ extension ConversationRecorder {
         guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
         }
+        if let itemInputs = arguments.items {
+            let items = itemInputs.map(\.model)
+            guard items.allSatisfy({ item in
+                !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && item.calories.map { (0 ... 10000).contains($0) } ?? true
+                    && [item.protein, item.carbs, item.fat]
+                    .compactMap { $0 }
+                    .allSatisfy { (0 ... 1000).contains($0) }
+            }) else {
+                return .failure("items 包含空名称或超出范围的营养值。")
+            }
+            entry.replaceItemsAndDeriveTotals(items)
+        }
         if let rawType = arguments.mealType {
             guard let type = MealType(rawValue: rawType) else {
                 return .failure("meal_type 必须是早餐、午餐、晚餐或加餐。")
@@ -920,6 +958,13 @@ extension ConversationRecorder {
         entry.protein = arguments.protein ?? entry.protein
         entry.carbs = arguments.carbs ?? entry.carbs
         entry.fat = arguments.fat ?? entry.fat
+        if arguments.calories != nil
+            || arguments.protein != nil
+            || arguments.carbs != nil
+            || arguments.fat != nil
+        {
+            entry.nutritionSource = .aiEstimate
+        }
         let note = recordedText(
             sourceText,
             analysis: arguments.note?.trimmed ?? ""
@@ -936,13 +981,16 @@ extension ConversationRecorder {
             )
         )
         try? context.save()
+        let caloriesText = entry.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
-            "已更新\(entry.mealType.rawValue) [id:\(entry.id.uuidString)]：\(entry.title)，约 \(entry.calories)kcal。",
+            "已更新\(entry.mealType.rawValue)：\(entry.title)，\(caloriesText)。",
+            data: mealResultData(entry),
+            recordRefs: [mealReference(entry)],
             recordType: .meal
         )
     }
 
-    private static func updateBody(
+    static func updateBody(
         _ arguments: AgentToolArguments,
         sourceText: String,
         mediaKind: MediaKind,
@@ -989,11 +1037,12 @@ extension ConversationRecorder {
         try? context.save()
         return .success(
             "已更新身体记录 [id:\(entry.id.uuidString)]。",
+            recordRefs: [bodyReference(entry)],
             recordType: .body
         )
     }
 
-    private static func deleteRecord(
+    static func deleteRecord(
         _ arguments: AgentToolArguments,
         sourceText: String,
         in context: ModelContext
@@ -1456,46 +1505,26 @@ extension ConversationRecorder {
             legacyKind: mediaPath == nil ? .none : .image,
             legacyPath: mediaPath
         )
-        let input = MealMergeInput(
+        if let sourceTurnID,
+           fetchMeals(in: context).contains(where: { $0.sourceTurnID == sourceTurnID })
+        {
+            return
+        }
+        context.insert(MealEntry(
             date: sourceDate,
-            sessionID: sourceSessionID,
-            turnID: sourceTurnID,
             mealType: type,
             title: meal.title,
             calories: meal.calories,
             protein: meal.protein,
             carbs: meal.carbs,
             fat: meal.fat,
-            sourceText: recordedText(sourceText, analysis: meal.note),
-            media: resolvedMedia,
-            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
-        )
-        if let existing = RecordMergePolicy.mealCandidate(
-            for: input,
-            entries: fetchMeals(in: context)
-        ) {
-            RecordMergePolicy.mergeMeal(
-                existing,
-                input: input,
-                confidence: meal.confidence
-            )
-        } else {
-            context.insert(MealEntry(
-                date: sourceDate,
-                mealType: type,
-                title: meal.title,
-                calories: meal.calories,
-                protein: meal.protein,
-                carbs: meal.carbs,
-                fat: meal.fat,
-                notes: input.sourceText,
-                imagePath: mediaPath,
-                mediaAttachments: resolvedMedia,
-                confidence: meal.confidence,
-                sourceTurnID: sourceTurnID,
-                sourceSessionID: sourceSessionID
-            ))
-        }
+            notes: recordedText(sourceText, analysis: meal.note),
+            imagePath: mediaPath,
+            mediaAttachments: resolvedMedia,
+            confidence: meal.confidence,
+            sourceTurnID: sourceTurnID,
+            sourceSessionID: sourceSessionID
+        ))
     }
 
     private static func recordBody(

@@ -7,7 +7,9 @@
   - [ADR 0003](0003-native-streaming-react-tool-calling.md) 中「每步暴露全部工具且 parallelToolCalls=false」的默认运行参数
   - [ADR 0004](0004-progressive-skills-fixed-tool-contract.md) 中「工具目录始终全量暴露给模型」的运行时暴露策略（工具契约本身仍固定）
 - 上游依据：[PRD 022](../prd/022-react-reliability-and-context-awareness.md)
-- 后续替代：[ADR 0054](0054-device-executed-chat-feedback-tool.md) 增加 `feedback` 工具组，其余预选、展开和并行规则保持不变
+- 后续替代：
+  - [ADR 0054](0054-device-executed-chat-feedback-tool.md) 增加 `feedback` 工具组，其余预选、展开和并行规则保持不变
+  - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 收敛 core Tool 并让远程复用同一暴露集合
 
 ## 背景
 

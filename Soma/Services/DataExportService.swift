@@ -192,6 +192,8 @@ enum DataExportService {
             protein: meal.protein,
             carbs: meal.carbs,
             fat: meal.fat,
+            items: meal.items,
+            nutritionSource: meal.nutritionSourceRaw,
             notes: meal.notes.nilIfBlank,
             sourceTurnID: meal.sourceTurnID,
             sourceSessionID: meal.sourceSessionID,

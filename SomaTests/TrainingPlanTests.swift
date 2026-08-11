@@ -235,9 +235,13 @@ final class TrainingPlanTests: XCTestCase {
             in: context
         )
         XCTAssertTrue(query.ok)
-        XCTAssertTrue(query.observation.contains(session.id.uuidString))
-        XCTAssertTrue(query.observation.contains("杯式深蹲：2组"))
-        XCTAssertTrue(query.observation.contains("20kg×8次"))
+        let queryData = try XCTUnwrap(query.data)
+        let queryJSON = try XCTUnwrap(
+            String(data: JSONEncoder().encode(queryData), encoding: .utf8)
+        )
+        XCTAssertTrue(queryJSON.contains(session.id.uuidString))
+        XCTAssertTrue(queryJSON.contains("杯式深蹲：2组"))
+        XCTAssertTrue(queryJSON.contains("20kg×8次"))
     }
 
     @MainActor
@@ -421,7 +425,11 @@ final class TrainingPlanTests: XCTestCase {
 
         XCTAssertTrue(create.ok)
         XCTAssertTrue(update.ok)
-        XCTAssertTrue(query.observation.contains(program.id.uuidString))
+        let queryData = try XCTUnwrap(query.data)
+        let queryJSON = try XCTUnwrap(
+            String(data: JSONEncoder().encode(queryData), encoding: .utf8)
+        )
+        XCTAssertTrue(queryJSON.contains(program.id.uuidString))
         XCTAssertTrue(archive.ok)
         XCTAssertEqual(program.status, .archived)
         XCTAssertEqual(

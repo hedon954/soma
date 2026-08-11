@@ -400,10 +400,12 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
     var date: Date
     var mealTypeRaw: String
     var title: String
-    var calories: Int
-    var protein: Double
-    var carbs: Double
-    var fat: Double
+    var calories: Int?
+    var protein: Double?
+    var carbs: Double?
+    var fat: Double?
+    var items: [MealItem]?
+    var nutritionSourceRaw: String?
     var notes: String
     var mediaAttachments: [MediaAttachmentReference]
     var confidence: Double
@@ -419,6 +421,8 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
         protein = model.protein
         carbs = model.carbs
         fat = model.fat
+        items = model.items
+        nutritionSourceRaw = model.nutritionSourceRaw
         notes = model.notes
         mediaAttachments = model.mediaAttachments
         confidence = model.confidence
@@ -436,6 +440,9 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
             protein: protein,
             carbs: carbs,
             fat: fat,
+            items: items ?? [],
+            nutritionSource: nutritionSourceRaw
+                .flatMap(MealNutritionSource.init(rawValue:)) ?? .imported,
             notes: notes,
             mediaAttachments: attachments,
             confidence: confidence,

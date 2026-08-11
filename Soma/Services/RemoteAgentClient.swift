@@ -36,6 +36,10 @@ private struct DeletedEnvelope: Decodable {
     var deleted: Bool
 }
 
+private struct RemoteAgentCapabilitiesEnvelope: Decodable {
+    var directVideo: Bool
+}
+
 struct RemoteAgentClient: AgentExecutionBackend {
     let kind = AgentExecutionBackendKind.remote
 
@@ -57,7 +61,9 @@ struct RemoteAgentClient: AgentExecutionBackend {
         job: AgentJobSubmission
     ) async throws -> RemoteAgentJobSnapshot {
         var uploadIDs: [String] = []
+        var mediaMode = "text"
         do {
+            let capabilities = try await capabilities()
             for attachment in job.attachments {
                 if attachment.kind == .video {
                     guard let sourceURL = MediaStore.url(at: attachment.path)
@@ -67,22 +73,49 @@ struct RemoteAgentClient: AgentExecutionBackend {
                             message: "一项待发送视频已不在本机。"
                         )
                     }
-                    let frames = await VideoFrameExtractor.frames(
-                        from: sourceURL
-                    )
-                    guard !frames.isEmpty else {
-                        throw RemoteAgentError.server(
-                            code: "video_frames_unavailable",
-                            message: "无法读取视频关键帧；可改为本次仅本机后重试。"
+                    if capabilities.directVideo, job.requestAttempt == 1 {
+                        let capability = DirectVideoCapability(
+                            maximumRawBytes: 7 * 1024 * 1024,
+                            preferredMIMEType: "video/mp4"
                         )
-                    }
-                    for frame in frames {
-                        try await uploadIDs.append(uploadJPEGFrame(frame))
+                        guard let input = await DirectVideoPreparer.input(
+                            for: sourceURL,
+                            capability: capability
+                        ) else {
+                            throw RemoteAgentError.server(
+                                code: "direct_video_unavailable",
+                                message: "视频无法压缩到直传安全大小，请改用本机分析。"
+                            )
+                        }
+                        try await uploadIDs.append(uploadVideo(input))
+                        mediaMode = "direct_video"
+                    } else {
+                        let frames = await VideoFrameExtractor.frames(from: sourceURL)
+                        guard !frames.isEmpty else {
+                            throw RemoteAgentError.server(
+                                code: "video_frames_unavailable",
+                                message: "无法读取视频关键帧；可改为本次仅本机后重试。"
+                            )
+                        }
+                        for frame in frames {
+                            try await uploadIDs.append(uploadJPEGFrame(frame))
+                        }
+                        mediaMode = "keyframes"
                     }
                 } else if attachment.kind == .image {
                     try await uploadIDs.append(upload(attachment))
+                    if mediaMode == "text" {
+                        mediaMode = "images"
+                    }
                 }
             }
+            let groups = AgentToolExposurePolicy.initialGroups(signals: .init(
+                text: job.text,
+                hasVideo: job.attachments.contains(where: { $0.kind == .video }),
+                hasActiveProgram: false,
+                hasActiveGuidedSession: false
+            ))
+            let exposedTools = AgentToolExposurePolicy.tools(for: groups)
             let body = try encodeBody([
                 "clientJobID": job.clientJobID.uuidString.lowercased(),
                 "turnID": job.turnID.uuidString.lowercased(),
@@ -91,8 +124,16 @@ struct RemoteAgentClient: AgentExecutionBackend {
                 "text": job.text,
                 "contextSnapshot": job.contextSnapshot,
                 "uploadIDs": uploadIDs,
+                "mediaMode": mediaMode,
+                "requestAttempt": job.requestAttempt,
                 "allowedRemoteTools": [],
-                "allowedDeviceTools": AgentToolName.allCases.map(\.rawValue),
+                "allowedDeviceTools": exposedTools.map(\.rawValue),
+                "allowedDeviceToolSchemas": exposedTools.map {
+                    [
+                        "name": $0.rawValue,
+                        "schemaVersion": $0.schemaVersion
+                    ] as [String: Any]
+                },
                 "liveActivityEnabled": job.liveActivityEnabled
             ])
             let data = try await authenticatedRequest(
@@ -302,6 +343,24 @@ struct RemoteAgentClient: AgentExecutionBackend {
         try data.write(to: sourceURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: sourceURL) }
         return try await uploadFile(sourceURL, contentType: "image/jpeg")
+    }
+
+    private func uploadVideo(_ input: AgentVideoInput) async throws -> String {
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appending(path: "soma-remote-video-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
+        try input.data.write(to: sourceURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+        return try await uploadFile(sourceURL, contentType: input.mimeType)
+    }
+
+    private func capabilities() async throws -> RemoteAgentCapabilitiesEnvelope {
+        let data = try await authenticatedRequest(
+            method: "GET",
+            path: "/v1/capabilities",
+            body: Data()
+        )
+        return try decode(RemoteAgentCapabilitiesEnvelope.self, from: data)
     }
 
     private func uploadFile(

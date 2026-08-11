@@ -17,23 +17,13 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
             [
                 .loadSkill,
                 .queryUserData,
-                .listExerciseNames,
-                .recordWorkout,
-                .recordMeal,
-                .recordBody,
-                .updateWorkout,
-                .updateMeal,
-                .updateBody,
-                .deleteRecord,
+                .mutateUserData,
                 .expandToolGroup
             ]
         case .plans:
             [
-                .listTrainingPrograms,
-                .getTrainingProgram,
                 .createTrainingProgram,
                 .createWorkoutTemplateVersion,
-                .updateWorkoutTemplate,
                 .archiveTrainingProgram,
                 .deleteTrainingProgram,
                 .startGuidedWorkout

@@ -180,8 +180,12 @@ POST /v1/agent-jobs/{serverJobID}/ack
 - `protocolVersion`；
 - 用户输入 envelope；
 - 已完成 upload IDs；
-- 最小上下文快照；
-- 允许的固定远程 Tool 与设备 Tool Schema 版本；
+- `AgentTurnContextEnvelope v2` 快照：可信发送/尝试时间、业务摘要、最多十个完整来回的预算历史、
+  短事实引用及确定性媒体选择；
+- `allowedDeviceTools` 名称清单及逐项对应的
+  `allowedDeviceToolSchemas[{name,schemaVersion}]`；迁移期缺少版本清单的历史 Job 按 v1
+  兼容，当前提交必须让两份清单一一对应；
+- 允许的固定远程 Tool（当前为空）；
 - Live Activity preference。
 
 请求头 `Idempotency-Key` 必须等于 `clientJobID`。相同 key 与相同 body digest 返回同一 Job；
@@ -233,7 +237,7 @@ POST /v1/agent-jobs/{serverJobID}/tool-results
 
 - `toolCallID`；
 - 固定 `toolName`；
-- `schemaVersion`；
+- `schemaVersion`（新请求为 v2；迁移期仍接受持久化 v1 调用）；
 - 版本化 arguments；
 - 是否 mutation；
 - request expiry。
@@ -256,8 +260,9 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 2. Worker 通过行锁/lease 原子领取 queued Job；健康路径由通知唤醒，低频 timeout 只恢复丢失
    通知、进程重启和过期 lease。
 3. 每次 lease 包含 owner、epoch 和过期时间；失去 lease 的 Worker 不得继续追加 Event。
-4. 模型每轮使用原生流式 Tool Calling：首段文本立即追加，后续文本按自然边界、48 字符阈值
-   或 80ms 窗口合并；有完整 Tool Call 后才追加 tool request。
+4. 模型每轮使用原生流式 Tool Calling：文字/图片/直传视频分别使用 8/10/20 秒首增量门禁，
+   首文字或 Tool delta 前最多重试一次；之后 30 秒 idle、180 秒总时限。首段文本立即追加，
+   后续文本按自然边界、48 字符阈值或 80ms 窗口合并；有完整 Tool Call 后才追加 tool request。
 5. 远程 Tool 由 Worker 执行；设备 Tool 进入 `waitingForDevice` 并释放计算资源。
 6. Tool Result 到达后在同一事务通知 Worker，创建新 lease 并从持久历史继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。
@@ -269,8 +274,15 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 
 - 远程模式使用 Soma 管理的 Provider 凭据，凭据只在服务器 secret manager。
 - 用户 BYOK 永不进入 Job payload、数据库、对象存储或日志。
-- 上下文快照按任务最小化，可以包含动作 `{id,name}`、当前场馆摘要和用户明确限制。
-- 需要最新完整历史时请求设备 Tool，不静默上传整个数据库。
+- 上下文快照按任务最小化，但与本地共享同一个 Envelope v2 投影，不能丢失最近会话文本；较早
+  成功写入只保留操作、类型、稳定 ID、标题和时间，不重复长 Tool observation。
+- `GET /v1/capabilities` 在媒体准备前返回远程 Provider 是否启用已验证直传视频；直传时只上传
+  规范化 MP4，非直传模型只上传关键帧，同一 Provider 请求不同时包含视频和帧。
+- Job 输入显式携带 `mediaMode=text|images|keyframes|direct_video` 与
+  `requestAttempt=1|2`。直传首请求失败时 Server 不重复直传，而是返回带实际媒体模式和请求序号的
+  失败 Event；设备随后才抽取并上传关键帧，以稳定的第二个 `clientJobID` 在同一设备 Attempt/Trace
+  内完成唯一重试。第二次请求不得再由 Server 内部重试。
+- 需要最新数据库事实时请求分页设备 Tool，不静默上传整个数据库。
 - Provider request ID 可以进入非内容诊断；Authorization 和请求正文不得进入普通日志。
 - Provider background mode 只可作为纯分析适配器，不能取代 Soma Job 和 Tool 协议。
 

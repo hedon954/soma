@@ -18,20 +18,20 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0012](0012-ordered-mixed-media-collections.md) | 已采纳 | 有序混合媒体贯穿聊天、Agent、记录和审查 |
 | [0013](0013-widget-and-app-intent-capture-routing.md) | 已采纳 | Widget 与 App Intent 只负责快速进入；当前主屏保持静态快速记录 |
 | [0014](0014-agent-turn-ordered-event-cards.md) | 部分已替代 | 有序 Event Cards 保留；多 Attempt 关系由 0016 修订 |
-| [0015](0015-daily-conversation-session-lifecycle.md) | 已替代 | 旧消息归档等约束保留；每日自动切换由 0022 替代 |
+| [0015](0015-daily-conversation-session-lifecycle.md) | 部分已替代并恢复 | 旧消息归档保留；每日解析由 0055 恢复，手动继续旧会话仍有效 |
 | [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 部分已替代 | Turn 可包含多次 Attempt；本地分析器路径由 0027 替代；同气泡续跑由 0048 修订 |
 | [0017](0017-location-and-weather-context.md) | 部分已替代 | 位置作为最小、受控、非阻塞的 Turn 上下文；天气 Provider 由 ADR 0020 替代 |
 | [0018](0018-provenance-aware-record-merge.md) | 部分已替代 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并；规范化幂等与疑似重复由 0049 补充 |
 | [0019](0019-cost-aware-github-actions-gates.md) | 已采纳 | 日常 Actions 只跑快速门禁，完整验证与 CodeQL 收敛到 release tag |
 | [0020](0020-open-meteo-transient-weather-provider.md) | 已采纳 | 使用 Open-Meteo 获取公里级、临时、非阻塞的天气上下文 |
 | [0021](0021-portable-export-encrypted-backup-and-erasure.md) | 已采纳 | 分离开放年月日导出、外部加密备份恢复与个人数据清除 |
-| [0022](0022-user-controlled-conversation-sessions.md) | 已采纳 | Session 由用户新建、选择并继续，不再按自然日强制切换 |
+| [0022](0022-user-controlled-conversation-sessions.md) | 部分已替代 | 用户新建、选择和继续保留；跨日默认恢复由 0055 修订 |
 | [0023](0023-ordered-workout-set-evidence.md) | 已采纳 | 训练使用有序逐组次数与重量，组数和容量由逐组事实派生 |
 | [0024](0024-session-context-projection-and-compaction.md) | 部分已替代 | 投影 Session 最近十个来回并在视觉额度内恢复历史媒体；确定性上下文包与十轮外 digest 由 0047 修订 |
 | [0025](0025-tiered-model-profiles-and-routing.md) | 部分已替代 | 双档配置与本地保守路由保留；远程启用前提由 0027 替代，模型选择控件由 0046 替代 |
 | [0026](0026-bounded-gym-media-attribution.md) | 已采纳 | 只在紧邻命名确认时把上一轮健身房照片归入档案 |
 | [0027](0027-required-ai-configuration-and-send-gate.md) | 部分已替代 | 聊天始终使用 AI；发送前硬门禁由 0045 改为暂存补偿，页面命名由 0046 改为「LLM 配置」 |
-| [0028](0028-semantic-exercise-identity.md) | 已采纳 | 动作使用稳定 ID，模型基于完整 ID/名称列表完成语义归一 |
+| [0028](0028-semantic-exercise-identity.md) | 部分已替代 | 稳定动作 ID 保留；全量名称列表由 0059 的搜索分页替代 |
 | [0029](0029-versioned-training-plans-and-session-facts.md) | 已采纳 | 分离计划版本、执行快照、逐组事实与 AI 建议 |
 | [0030](0030-deterministic-guided-workout-and-session-recording.md) | 部分已替代 | 确定性状态机和录像目标保留；UI 与录像几何由 0038 修订 |
 | [0031](0031-durable-agent-jobs-event-log-and-projections.md) | 部分已替代 | Agent 使用持久 Job、语义 Event Log 与独立投影；本地同气泡检查点续跑由 0048 修订 |
@@ -40,7 +40,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0034](0034-bidirectional-document-lifecycle-links.md) | 已采纳 | 文档修订、替代与研究落地关系使用双向生命周期索引 |
 | [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 部分已替代 | 静默内置内容与按需动作插画保留；通用肌群图素材与生成由 0044 替代 |
 | [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
-| [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 已采纳 | Local/Remote Backend 对 UI 提供等价流式事件，并由 PostgreSQL 通知即时唤醒 |
+| [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 部分已替代 | Local/Remote 流式等价保留；Provider 时限由 0058 扩展 |
 | [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订 |
 | [0039](0039-event-driven-guided-recording-cues-and-review.md) | 已采纳 | 录像策略与实际活动分离，按 Set 保存证据，并以事件驱动语音、复盘和删除 |
 | [0040](0040-agent-guided-workout-launch.md) | 已采纳 | Agent 用固定计划 Tool 在设备本地创建快照并路由到既有带练 |
@@ -50,7 +50,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0044](0044-programmatic-muscle-map-and-training-share-poster.md) | 已采纳 | 规范肌群枚举与矢量路径程序化渲染受力图，分享海报本地生成 |
 | [0045](0045-llm-outage-staging-and-compensating-drain.md) | 已采纳 | LLM 失效时消息落盘暂存，恢复后按 FIFO 自动补偿消费 |
 | [0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) | 已采纳 | LLM 配置字段直接摊开并即时落盘，模型与动作候选统一为输入历史式建议 |
-| [0047](0047-deterministic-context-pack-and-cross-turn-facts.md) | 已采纳 | 确定性上下文包、跨轮工具事实摘要与聚合查询替代两行 structuredContext |
+| [0047](0047-deterministic-context-pack-and-cross-turn-facts.md) | 部分已替代 | 确定性上下文包保留；可信时间、预算和短事实引用由 0056 修订 |
 | [0048](0048-loop-checkpoint-and-same-bubble-resume.md) | 已采纳 | 本地 ReAct 在 step 边界落检查点，中断后同气泡续跑且不递增 attemptNumber |
 | [0049](0049-normalized-idempotency-and-business-dedup.md) | 已采纳 | 规范化幂等签名、pending 账本与跨 Turn 疑似重复反馈 |
 | [0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) | 部分已替代 | 每轮工具组预选、expand_tool_group 逃生、并行 tool_calls 与历史帧 clearing；feedback 组由 0054 增加 |
@@ -58,6 +58,11 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0052](0052-gmail-self-delivery-for-in-app-feedback.md) | 部分已替代 | Gmail OAuth 从 `hedonwang@gmail.com` 向同一邮箱自发自收；个人阶段的凭据位置由 0053 临时替代 |
 | [0053](0053-personal-only-direct-qq-mail-feedback.md) | 已采纳，仅限个人使用阶段 | App 直连 QQ SMTP 并投递到固定 Gmail；外部分发由 online check 强制迁移凭据 |
 | [0054](0054-device-executed-chat-feedback-tool.md) | 已采纳 | Chat 通过无参数固定 Tool 提交当前 Turn 原文与媒体；本机等待 SMTP，远程模式交回设备执行 |
+| [0055](0055-hybrid-daily-conversation-sessions.md) | 已采纳 | 默认按设备自然日解析 Session，同时保留前台生命周期内显式继续旧会话 |
+| [0056](0056-trusted-selective-multimodal-context.md) | 已采纳 | 可信时间、本地远程统一 envelope、token 预算与选择性历史媒体 |
+| [0057](0057-direct-video-capability-and-observable-fallback.md) | 已采纳 | 按 provider/model 能力直传视频，失败后才按需抽帧并诚实降级 |
+| [0058](0058-first-delta-deadline-and-bounded-retry.md) | 已采纳 | 8/10/20 秒首增量门禁、单次重试、idle/total timeout 与取消传播 |
+| [0059](0059-precise-tools-and-reviewable-meal-items.md) | 已采纳 | 精确分页查询、通用记录 CRUD、Tool v2 与可审查饮食分项 |
 
 新决策使用 [ADR 模板](template.md)。
 
