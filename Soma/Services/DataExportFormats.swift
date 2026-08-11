@@ -79,6 +79,8 @@ struct PortableWorkoutAnalysis: Codable, Equatable, Sendable {
     var externalID: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
+    var sourceWorkoutSessionID: UUID?
+    var sourcePerformanceID: UUID?
     var sourceText: String?
     var agentAnalysis: String?
     var media: [PortableExportMedia]

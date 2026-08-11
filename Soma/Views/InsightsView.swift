@@ -22,7 +22,9 @@ struct InsightsView: View {
     }
 
     private var weekWorkouts: [WorkoutEntry] {
-        workouts.filter { $0.date >= weekStart }
+        workouts.filter {
+            $0.sourceWorkoutSessionID == nil && $0.date >= weekStart
+        }
     }
 
     private var completedSessions: [WorkoutSession] {
@@ -32,7 +34,8 @@ struct InsightsView: View {
     }
 
     private var trainingDates: [Date] {
-        workouts.map(\.date) + completedSessions.map(\.startedAt)
+        workouts.filter { $0.sourceWorkoutSessionID == nil }.map(\.date)
+            + completedSessions.map(\.startedAt)
     }
 
     private var weekTrainingCount: Int {
@@ -534,10 +537,15 @@ enum TrainingVolumeAnalytics {
         let sessionsByID = Dictionary(
             uniqueKeysWithValues: sessions.map { ($0.id, $0) }
         )
+        let projectedPerformanceIDs = Set(
+            workouts.compactMap(\.sourcePerformanceID)
+        )
         for set in sets where set.status == .completed {
             guard let volume = set.completedVolume,
                   volume > 0,
                   let performance = performancesByID[set.performanceID],
+                  !projectedPerformanceIDs.contains(performance.id),
+                  !performance.workoutProjectionSuppressed,
                   let session = sessionsByID[performance.sessionID]
             else {
                 continue

@@ -75,24 +75,56 @@ enum ExerciseRecentPrescriptionResolver {
         performances: [ExercisePerformance],
         sets: [WorkoutSet]
     ) -> RecentExercisePrescription? {
+        let performancesByID = Dictionary(uniqueKeysWithValues: performances.map {
+            ($0.id, $0)
+        })
         var candidates = workouts.compactMap { workout -> RecentExercisePrescription? in
             guard workout.exerciseID == exerciseID else { return nil }
+            let completed = workout.sourcePerformanceID.flatMap { performanceID in
+                performancesByID[performanceID].map { performance in
+                    sets.filter {
+                        $0.performanceID == performance.id
+                            && $0.status == .completed
+                    }
+                    .sorted { $0.order < $1.order }
+                }
+            } ?? []
+            let evidence: [WorkoutSetEvidence]
+            if completed.count == workout.setEntries.count {
+                let working = zip(completed, workout.setEntries)
+                    .filter { $0.0.kind != .warmup }
+                    .map(\.1)
+                evidence = working.isEmpty ? workout.setEntries : working
+            } else {
+                evidence = workout.setEntries
+            }
             return RecentExercisePrescription(
                 sourceDate: workout.date,
                 setCount: workout.setCount,
-                reps: workout.representativeReps,
-                weightKG: workout.representativeWeight,
+                reps: uniform(
+                    evidence.compactMap(\.reps),
+                    count: evidence.count
+                ) ?? workout.representativeReps,
+                weightKG: uniform(
+                    evidence.compactMap(\.externalWeightKG),
+                    count: evidence.count
+                ) ?? workout.representativeWeight,
                 restSeconds: workout.restSeconds,
-                firstSetIsWarmup: nil
+                firstSetIsWarmup: completed.first.map { $0.kind == .warmup }
             )
         }
 
         let sessionsByID = Dictionary(uniqueKeysWithValues: sessions.map {
             ($0.id, $0)
         })
+        let projectedPerformanceIDs = Set(
+            workouts.compactMap(\.sourcePerformanceID)
+        )
         for performance in performances
             where performance.exerciseID == exerciseID
             && performance.status == .completed
+            && !projectedPerformanceIDs.contains(performance.id)
+            && !performance.workoutProjectionSuppressed
         {
             guard let session = sessionsByID[performance.sessionID] else {
                 continue

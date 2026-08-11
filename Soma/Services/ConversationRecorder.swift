@@ -1061,7 +1061,11 @@ extension ConversationRecorder {
             guard let entry = fetchWorkouts(in: context).first(where: { $0.id == id }) else {
                 return .failure("没有找到指定训练记录，请重新查询。")
             }
-            context.delete(entry)
+            do {
+                try GuidedWorkoutRecordStore.delete(entry, in: context)
+            } catch {
+                return .failure("删除训练记录失败：\(error.localizedDescription)")
+            }
         case "meal":
             guard let entry = fetchMeals(in: context).first(where: { $0.id == id }) else {
                 return .failure("没有找到指定饮食记录，请重新查询。")

@@ -328,6 +328,7 @@ final class ExercisePerformance {
     var statusRaw: String
     var notes: String
     var activeVideoPath: String?
+    var workoutProjectionSuppressed: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -338,7 +339,8 @@ final class ExercisePerformance {
         prescriptionSnapshot: TemplateExercisePrescription,
         status: ExercisePerformanceStatus = .pending,
         notes: String = "",
-        activeVideoPath: String? = nil
+        activeVideoPath: String? = nil,
+        workoutProjectionSuppressed: Bool = false
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -349,6 +351,7 @@ final class ExercisePerformance {
         statusRaw = status.rawValue
         self.notes = notes
         self.activeVideoPath = activeVideoPath
+        self.workoutProjectionSuppressed = workoutProjectionSuppressed
     }
 
     var prescriptionSnapshot: TemplateExercisePrescription? {

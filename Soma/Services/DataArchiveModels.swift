@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 struct PersonalDataSnapshot: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     var schemaVersion = Self.currentSchemaVersion
     var createdAt: Date
@@ -527,6 +527,8 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var externalID: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
+    var sourceWorkoutSessionID: UUID?
+    var sourcePerformanceID: UUID?
 
     init(_ model: WorkoutEntry) {
         id = model.id
@@ -552,6 +554,8 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         externalID = model.externalID
         sourceTurnID = model.sourceTurnID
         sourceSessionID = model.sourceSessionID
+        sourceWorkoutSessionID = model.sourceWorkoutSessionID
+        sourcePerformanceID = model.sourcePerformanceID
     }
 
     func makeModel(mediaPathMapping: [String: String]) -> WorkoutEntry {
@@ -578,7 +582,9 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
             externalSource: externalSource,
             externalID: externalID,
             sourceTurnID: sourceTurnID,
-            sourceSessionID: sourceSessionID
+            sourceSessionID: sourceSessionID,
+            sourceWorkoutSessionID: sourceWorkoutSessionID,
+            sourcePerformanceID: sourcePerformanceID
         )
         model.id = id
         return model

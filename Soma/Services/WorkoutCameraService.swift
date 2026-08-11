@@ -1,6 +1,28 @@
 @preconcurrency import AVFoundation
 import Observation
+import OSLog
 import UIKit
+
+enum WorkoutRecordingDiagnostics {
+    private static let logger = Logger(
+        subsystem: "top.hedon.soma",
+        category: "GuidedWorkoutRecording"
+    )
+
+    static func failure(stage: String, error: Error) {
+        let nsError = error as NSError
+        let type = String(reflecting: Swift.type(of: error))
+        logger.error(
+            "stage=\(stage, privacy: .public) type=\(type, privacy: .public) domain=\(nsError.domain, privacy: .public) code=\(nsError.code, privacy: .public)"
+        )
+    }
+
+    static func interruption(reason: String) {
+        logger.error(
+            "stage=interruption reason=\(reason, privacy: .public)"
+        )
+    }
+}
 
 enum WorkoutCameraState: Equatable {
     case idle
@@ -119,6 +141,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var preparationTask: Task<Void, Error>?
     @ObservationIgnored private var previewStartupTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var recordingStartupTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var activePreviewHostID: UUID?
 
     override init() {
@@ -165,8 +188,10 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     private func performPreparation() async throws {
         state = .requestingPermission
         guard await cameraPermissionGranted() else {
-            state = .unavailable(WorkoutCameraError.permissionDenied.localizedDescription)
-            throw WorkoutCameraError.permissionDenied
+            let error = WorkoutCameraError.permissionDenied
+            WorkoutRecordingDiagnostics.failure(stage: "permission", error: error)
+            state = .unavailable(error.localizedDescription)
+            throw error
         }
         do {
             try await configureIfNeeded()
@@ -177,6 +202,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             refreshPreviewConnectionState()
             armPreviewStartupTimeout()
         } catch {
+            WorkoutRecordingDiagnostics.failure(stage: "prepare", error: error)
             state = .unavailable(error.localizedDescription)
             throw error
         }
@@ -190,10 +216,10 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             try await prepare()
         }
         guard hasRecordingCapacity else {
-            state = .unavailable(
-                WorkoutCameraError.insufficientStorage.localizedDescription
-            )
-            throw WorkoutCameraError.insufficientStorage
+            let error = WorkoutCameraError.insufficientStorage
+            WorkoutRecordingDiagnostics.failure(stage: "capacity", error: error)
+            state = .unavailable(error.localizedDescription)
+            throw error
         }
         let url = FileManager.default.temporaryDirectory
             .appending(path: "soma-set-\(performanceID.uuidString)-\(setID.uuidString)-\(UUID().uuidString)")
@@ -203,6 +229,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         lockCaptureGeometry()
         try await withCheckedThrowingContinuation { continuation in
             startContinuation = continuation
+            armRecordingStartupTimeout()
             sessionQueue.async { [movieOutput, recordingDelegate] in
                 movieOutput.startRecording(
                     to: url,
@@ -220,7 +247,12 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
         guard isRecording else {
             unlockCaptureGeometry()
-            return nil
+            let error = WorkoutCameraError.recordingFailed(
+                "系统录像已提前停止，未保存视频；训练数据已保留。"
+            )
+            WorkoutRecordingDiagnostics.failure(stage: "stop-missing", error: error)
+            state = .unavailable(error.localizedDescription)
+            throw error
         }
         let path = try await withCheckedThrowingContinuation { continuation in
             stopContinuation = continuation
@@ -234,6 +266,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
 
     func cancelRecording() async {
         discardCurrentRecording = true
+        recordingStartupTimeoutTask?.cancel()
+        recordingStartupTimeoutTask = nil
         startContinuation?.resume(
             throwing: WorkoutCameraError.recordingFailed("录像已取消")
         )
@@ -252,6 +286,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             }
         } else {
             unlockCaptureGeometry()
+            removeTemporaryRecordingIfPresent()
         }
         await stopCaptureSession()
     }
@@ -327,6 +362,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     #endif
 
     private func finishRecording(at url: URL, error: Error?) {
+        recordingStartupTimeoutTask?.cancel()
+        recordingStartupTimeoutTask = nil
         defer {
             temporaryURL = nil
             discardCurrentRecording = false
@@ -347,6 +384,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             return
         }
         if let error {
+            WorkoutRecordingDiagnostics.failure(stage: "finish", error: error)
             try? FileManager.default.removeItem(at: url)
             let resolved = WorkoutCameraError.recordingFailed(
                 error.localizedDescription
@@ -374,6 +412,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             lastSavedPath = path
             stopContinuation?.resume(returning: path)
         } catch {
+            WorkoutRecordingDiagnostics.failure(stage: "persist", error: error)
             try? FileManager.default.removeItem(at: url)
             stopContinuation?.resume(throwing: error)
             state = .unavailable(error.localizedDescription)
@@ -382,6 +421,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     private func recordingDidStart() {
+        recordingStartupTimeoutTask?.cancel()
+        recordingStartupTimeoutTask = nil
         if discardCurrentRecording {
             sessionQueue.async { [movieOutput] in
                 if movieOutput.isRecording {
@@ -500,8 +541,14 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         let values = try? FileManager.default
             .temporaryDirectory
             .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        return (values?.volumeAvailableCapacityForImportantUsage ?? 0)
-            > 100 * 1024 * 1024
+        return Self.hasSufficientRecordingCapacity(
+            values?.volumeAvailableCapacityForImportantUsage
+        )
+    }
+
+    static func hasSufficientRecordingCapacity(_ capacity: Int64?) -> Bool {
+        guard let capacity else { return true }
+        return capacity > 100 * 1024 * 1024
     }
 
     private func installObservers() {
@@ -532,7 +579,13 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             forName: .AVCaptureSessionRuntimeError,
             object: captureSession,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            if let error = notification.userInfo?[AVCaptureSessionErrorKey] as? Error {
+                WorkoutRecordingDiagnostics.failure(
+                    stage: "runtime",
+                    error: error
+                )
+            }
             Task { @MainActor in
                 await self?.interrupt(
                     message: "相机运行异常，录像已停止；请退出本次取景后重试。"
@@ -641,7 +694,47 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                 return
             }
             isPreviewReady = false
-            previewIssueMessage = "相机画面未能显示；训练可以继续，请收起后重新进入取景。"
+            let message = "相机画面未能显示；训练可以继续，请收起后重新进入取景。"
+            previewIssueMessage = message
+            WorkoutRecordingDiagnostics.failure(
+                stage: "preview-timeout",
+                error: WorkoutCameraError.recordingFailed(message)
+            )
+        }
+    }
+
+    private func armRecordingStartupTimeout() {
+        recordingStartupTimeoutTask?.cancel()
+        recordingStartupTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard let self,
+                  !Task.isCancelled,
+                  startContinuation != nil
+            else {
+                return
+            }
+            let error = WorkoutCameraError.recordingFailed(
+                "系统未在限定时间内确认录像启动，请重试。训练仍可继续。"
+            )
+            WorkoutRecordingDiagnostics.failure(
+                stage: "start-timeout",
+                error: error
+            )
+            let continuation = startContinuation
+            startContinuation = nil
+            recordingStartupTimeoutTask = nil
+            discardCurrentRecording = true
+            state = .unavailable(error.localizedDescription)
+            unlockCaptureGeometry()
+            continuation?.resume(throwing: error)
+
+            sessionQueue.async { [captureSession, movieOutput] in
+                if movieOutput.isRecording {
+                    movieOutput.stopRecording()
+                } else if captureSession.isRunning {
+                    captureSession.stopRunning()
+                }
+            }
         }
     }
 
@@ -733,8 +826,15 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     }
 
     private func interrupt(message: String) async {
+        WorkoutRecordingDiagnostics.interruption(reason: message)
         await cancelRecording()
         state = .unavailable(message)
+    }
+
+    private func removeTemporaryRecordingIfPresent() {
+        guard let temporaryURL else { return }
+        try? FileManager.default.removeItem(at: temporaryURL)
+        self.temporaryURL = nil
     }
 }
 

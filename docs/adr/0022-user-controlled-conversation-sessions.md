@@ -4,7 +4,9 @@
 - 日期：2026-07-30
 - 维护者：Soma maintainers
 - 替代：[ADR 0015](0015-daily-conversation-session-lifecycle.md) 的每日自动切换和只读历史边界
-- 后续替代：[ADR 0055](0055-hybrid-daily-conversation-sessions.md) 恢复自动按日解析并保留当前前台生命周期内的手动覆盖
+- 后续替代：
+  - [ADR 0055](0055-hybrid-daily-conversation-sessions.md) 恢复自动按日解析并保留当前前台生命周期内的手动覆盖
+  - [ADR 0061](0061-discoverable-conversation-session-entry.md) 恢复可见时间按钮并保留抽屉手势
 
 ## 背景
 

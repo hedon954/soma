@@ -515,6 +515,8 @@ final class WorkoutEntry {
     var externalID: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
+    var sourceWorkoutSessionID: UUID?
+    var sourcePerformanceID: UUID?
 
     var setEntries: [WorkoutSetEvidence] {
         get {
@@ -660,7 +662,9 @@ final class WorkoutEntry {
         externalSource: String? = nil,
         externalID: String? = nil,
         sourceTurnID: UUID? = nil,
-        sourceSessionID: UUID? = nil
+        sourceSessionID: UUID? = nil,
+        sourceWorkoutSessionID: UUID? = nil,
+        sourcePerformanceID: UUID? = nil
     ) {
         id = UUID()
         self.date = date
@@ -693,6 +697,8 @@ final class WorkoutEntry {
         self.externalID = externalID
         self.sourceTurnID = sourceTurnID
         self.sourceSessionID = sourceSessionID
+        self.sourceWorkoutSessionID = sourceWorkoutSessionID
+        self.sourcePerformanceID = sourcePerformanceID
     }
 }
 

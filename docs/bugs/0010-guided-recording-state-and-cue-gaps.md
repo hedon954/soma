@@ -4,7 +4,8 @@
 - 发现日期：2026-08-04
 - 影响范围：自动/手动录像、相机按需使用、紧凑小窗、全程语音、完成总结与历史删除
 - 修订自：[BUG 0009](0009-guided-workout-preview-host-ownership-and-visible-state.md) 的相机可见状态与竖屏布局修复
-- 后续修订：暂无
+- 后续修订：[BUG 0013](0013-guided-recording-startup-silent-stall.md) 增加录像启动截止时间、
+  隐私安全日志与系统警告框
 - 上游依据：[带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)
 - 下游落地：
   - [PRD 014](../prd/014-guided-workout-recording-cues-and-review.md)

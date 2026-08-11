@@ -57,6 +57,24 @@ private final class SuspendedRecordingSpy: WorkoutRecordingControlling {
 }
 
 @MainActor
+private final class FailingRecordingSpy: WorkoutRecordingControlling {
+    private(set) var startCount = 0
+
+    func prepare() async throws {}
+
+    func startRecording(performanceID _: UUID, setID _: UUID) async throws {
+        startCount += 1
+        throw WorkoutCameraError.recordingFailed("虚构启动失败")
+    }
+
+    func stopRecording() async throws -> String? {
+        nil
+    }
+
+    func cancelRecording() async {}
+}
+
+@MainActor
 private struct SilentCues: WorkoutCueProviding {
     func announce(_: String) {}
     func success() {}
@@ -139,6 +157,9 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
             ).orientation,
             .landscapeRight
         )
+        XCTAssertTrue(WorkoutCameraService.hasSufficientRecordingCapacity(nil))
+        XCTAssertFalse(WorkoutCameraService.hasSufficientRecordingCapacity(50 * 1024 * 1024))
+        XCTAssertTrue(WorkoutCameraService.hasSufficientRecordingCapacity(200 * 1024 * 1024))
     }
 
     func testCountdownClockReachesZeroAndBecomesDue() {
@@ -241,6 +262,133 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
             in: fixture.context
         )
         XCTAssertEqual(fixture.sets[0].recordedVideoPath, recorder.path)
+    }
+
+    @MainActor
+    func testRepeatedRecordingFailureProducesDistinctFailureEvents() async throws {
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 1,
+            recordingPolicy: .disabled
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(forName: fixture.suiteName)
+        }
+        let recorder = FailingRecordingSpy()
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: recorder,
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+
+        try await coordinator.startManualRecording(in: fixture.context)
+        let firstFailure = try XCTUnwrap(coordinator.recordingFailure)
+        try await coordinator.startManualRecording(in: fixture.context)
+        let secondFailure = try XCTUnwrap(coordinator.recordingFailure)
+
+        XCTAssertEqual(recorder.startCount, 2)
+        XCTAssertNotEqual(firstFailure.id, secondFailure.id)
+        XCTAssertEqual(firstFailure.message, secondFailure.message)
+        XCTAssertTrue(secondFailure.message.contains("虚构启动失败"))
+    }
+
+    @MainActor
+    func testTerminalPerformanceCreatesWorkoutEntryBeforeSessionCompletion() async throws {
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 3,
+            recordingPolicy: .disabled
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(forName: fixture.suiteName)
+        }
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: RecordingSpy(),
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+        try coordinator.finishRest(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: nil,
+            actualWeightKG: nil,
+            in: fixture.context
+        )
+        try coordinator.finishRest(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.skipCurrentSet(in: fixture.context)
+
+        let workouts = try fixture.context.fetch(FetchDescriptor<WorkoutEntry>())
+        let workout = try XCTUnwrap(workouts.first)
+        XCTAssertEqual(workouts.count, 1)
+        XCTAssertEqual(workout.sourceWorkoutSessionID, fixture.session.id)
+        XCTAssertEqual(workout.sourcePerformanceID, fixture.performance.id)
+        XCTAssertEqual(
+            workout.setEntries,
+            [
+                WorkoutSetEvidence(reps: 8, externalWeightKG: 20),
+                WorkoutSetEvidence(reps: nil, externalWeightKG: nil)
+            ]
+        )
+        XCTAssertEqual(GuidedWorkoutRecordStore.backfill(in: fixture.context), 0)
+        XCTAssertEqual(
+            try fixture.context.fetch(FetchDescriptor<WorkoutEntry>()).count,
+            1
+        )
+        try GuidedWorkoutRecordStore.delete(workout, in: fixture.context)
+        XCTAssertTrue(fixture.performance.workoutProjectionSuppressed)
+        XCTAssertEqual(GuidedWorkoutRecordStore.backfill(in: fixture.context), 0)
+        XCTAssertTrue(
+            try fixture.context.fetch(FetchDescriptor<WorkoutEntry>()).isEmpty
+        )
+        XCTAssertTrue(TrainingVolumeAnalytics.dailyPoints(
+            from: [],
+            sessions: [fixture.session],
+            performances: [fixture.performance],
+            sets: fixture.sets
+        ).isEmpty)
+        XCTAssertEqual(fixture.session.status, .active)
+        XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
+    }
+
+    @MainActor
+    func testFullySkippedPerformanceDoesNotCreateEmptyWorkoutEntry() async throws {
+        let fixture = try makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 2,
+            recordingPolicy: .disabled
+        )
+        defer {
+            fixture.defaults.removePersistentDomain(forName: fixture.suiteName)
+        }
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: RecordingSpy(),
+            cues: SilentCues(),
+            now: { fixture.now }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+
+        try await coordinator.skipCurrentExercise(in: fixture.context)
+
+        XCTAssertTrue(
+            try fixture.context.fetch(FetchDescriptor<WorkoutEntry>()).isEmpty
+        )
+        XCTAssertEqual(fixture.performance.status, .skipped)
+        XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
     @MainActor

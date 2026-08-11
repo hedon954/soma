@@ -8,7 +8,9 @@
   - [ADR 0030](../adr/0030-deterministic-guided-workout-and-session-recording.md)
   - [ADR 0035](../adr/0035-silent-bundled-exercise-content-and-on-demand-images.md)
   - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
+  - [ADR 0060](../adr/0060-guided-performance-workout-entry-projection.md)
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
+  - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯
@@ -30,13 +32,16 @@ TrainingProgram
             ↓ 开始时快照
 WorkoutSession
   └─ ExercisePerformance
-       └─ WorkoutSet
+       ├─ WorkoutSet
+       └─ WorkoutEntry（终态、至少一组完成时的可审查投影）
 ```
 
 - `ExerciseDefinition` 是动作身份事实。
 - `WorkoutTemplateVersion` 是可修改的计划处方。
 - `WorkoutSession` 是一次执行容器。
 - `WorkoutSet.actual*` 是完成统计的事实。
+- `WorkoutEntry` 是完成动作进入统一 CRUD、导出和趋势的业务投影，通过 Session/Performance 来源
+  ID 与原始事实关联。
 - `RecommendationSnapshot` 是建议，不是计划或实际结果。
 
 ## SwiftData 目标模型
@@ -164,12 +169,17 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 ### 旧记录兼容
 
-1. 给现有 `WorkoutEntry` 增加可空 `exerciseID`。
+1. `WorkoutEntry` 保留可空 `exerciseID`，并增加可空 `sourceWorkoutSessionID` 与
+   `sourcePerformanceID`。
 2. 按现有名称生成迁移候选；无法可靠确认时保持空并等待 Agent/用户后续归一。
 3. 不从聚合 `sets × reps × weight` 创建多条 `WorkoutSet`。
 4. 新的自由聊天记录可以继续产生聚合 `WorkoutEntry`，并关联动作 ID。
-5. 带练产生 Session/Performance/Set，不再额外创建等价 `WorkoutEntry`。
-6. 统计层以来源 ID 去重后合并两种事实。
+5. 带练动作全部 Set 都为 completed/skipped 且至少一组 completed 时，按完成组顺序物化一条
+   `WorkoutEntry`；跳过组不复制，缺少实际值保持 `nil`，全跳过不创建空记录。
+6. 启动回填和完成路径以 `sourcePerformanceID` 幂等；统计层优先读取投影记录，只有旧
+   Performance 尚未投影时才回退原始 Set。
+7. 用户单独删除投影训练记录时，来源 Performance 设置 `workoutProjectionSuppressed`；原始执行
+   证据继续保留，确定性回填不得重新创建该记录。
 
 ## 固定 Tool 协议
 

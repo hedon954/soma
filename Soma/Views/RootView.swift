@@ -125,6 +125,7 @@ struct RootView: View {
             if dataSpace.activeSpace == .demo {
                 DemoTrainingPlanSeeder.seedIfNeeded(in: modelContext)
             }
+            GuidedWorkoutRecordStore.backfill(in: modelContext)
             conversationSessions.resolveForEntry(
                 dataSpace: dataSpace.activeSpace,
                 in: modelContext

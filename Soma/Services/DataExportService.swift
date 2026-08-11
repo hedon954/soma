@@ -33,7 +33,7 @@ struct PortableExportResult: Equatable, Sendable {
 }
 
 enum DataExportService {
-    static let formatVersion = 2
+    static let formatVersion = 3
 
     static func export(
         _ payload: PortableExportPayload,
@@ -278,6 +278,8 @@ enum DataExportService {
             externalID: workout.externalID,
             sourceTurnID: workout.sourceTurnID,
             sourceSessionID: workout.sourceSessionID,
+            sourceWorkoutSessionID: workout.sourceWorkoutSessionID,
+            sourcePerformanceID: workout.sourcePerformanceID,
             sourceText: source.message?.text.nilIfBlank,
             agentAnalysis: source.agentAnswer,
             media: mediaOutcome.descriptors

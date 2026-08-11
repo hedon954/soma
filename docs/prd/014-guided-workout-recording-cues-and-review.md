@@ -7,9 +7,9 @@
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的每动作单段自动录像范围
   - [PRD 013](013-guided-workout-experience-and-capture.md) 的开始前校准、紧凑取景和完成反馈
 - 后续修订：
+  - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 将录像失败升级为有限等待、诊断日志与系统警告框，并补动作训练记录投影
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 收敛带练执行同屏控件密度与准备页选项呈现
-  - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 将录像失败反馈统一为
-    含原因的 toast 提示与可解释的按钮禁用
+  - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 将录像失败反馈统一为含原因的 toast 提示与可解释的按钮禁用
 - 上游依据：
   - [带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)
   - [BUG 0010](../bugs/0010-guided-recording-state-and-cue-gaps.md)

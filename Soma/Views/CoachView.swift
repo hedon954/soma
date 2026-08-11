@@ -143,6 +143,15 @@ struct CoachView: View {
         .navigationTitle("Soma")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: openSessionDrawer) {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .accessibilityLabel("历史对话")
+                .accessibilityHint("打开对话会话列表")
+            }
+        }
         .accessibilityAction(named: "打开历史对话") {
             openSessionDrawer()
         }
@@ -448,10 +457,16 @@ struct CoachView: View {
                 text: ExerciseQuickFill.text(for: workout)
             )
         }
+        let projectedPerformanceIDs = Set(
+            workouts.compactMap(\.sourcePerformanceID)
+        )
         let guided = exercisePerformances.compactMap { performance -> ExerciseInputSuggestionBuilder.RecentCapacityInput? in
-            guard let session = workoutSessions.first(where: {
-                $0.id == performance.sessionID
-            }) else {
+            guard !projectedPerformanceIDs.contains(performance.id),
+                  !performance.workoutProjectionSuppressed,
+                  let session = workoutSessions.first(where: {
+                      $0.id == performance.sessionID
+                  })
+            else {
                 return nil
             }
             return ExerciseInputSuggestionBuilder.RecentCapacityInput(

@@ -299,6 +299,16 @@ final class TrainingPlanTests: XCTestCase {
         context.insert(performance)
         context.insert(set)
         context.insert(analysis)
+        context.insert(WorkoutEntry(
+            date: startedAt,
+            exercise: exercise.canonicalName,
+            exerciseID: exercise.id,
+            setEntries: [
+                WorkoutSetEvidence(reps: 5, externalWeightKG: 0)
+            ],
+            sourceWorkoutSessionID: session.id,
+            sourcePerformanceID: performance.id
+        ))
         try context.save()
 
         let summary = TrainingPlanStore.summary(
@@ -316,6 +326,7 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<ExercisePerformance>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSet>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<PerformanceAnalysis>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutEntry>()).isEmpty)
         XCTAssertNil(MediaStore.url(at: path))
     }
 
@@ -659,10 +670,24 @@ final class TrainingPlanTests: XCTestCase {
         sets[1].actualReps = 5
         sets[1].actualWeightKG = 40
         sets[1].status = .pending
+        let projected = WorkoutEntry(
+            date: session.startedAt,
+            exercise: exercise.canonicalName,
+            exerciseID: exercise.id,
+            setEntries: [
+                WorkoutSetEvidence(reps: 5, externalWeightKG: 40)
+            ],
+            sourceWorkoutSessionID: session.id,
+            sourcePerformanceID: performance.id
+        )
+        context.insert(projected)
         try context.save()
+        DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
+        let retainedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
+        XCTAssertEqual(retainedWorkouts.count, 2)
 
         let points = TrainingVolumeAnalytics.dailyPoints(
-            from: [legacy],
+            from: retainedWorkouts,
             sessions: [session],
             performances: [performance],
             sets: sets,

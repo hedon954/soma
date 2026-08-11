@@ -89,10 +89,23 @@ final class ExerciseRecentPrescriptionResolverTests: XCTestCase {
                 status: .completed
             )
         ]
+        let projected = WorkoutEntry(
+            date: session.startedAt,
+            exercise: "测试动作",
+            exerciseID: exerciseID,
+            setEntries: [
+                .init(reps: 8, externalWeightKG: 10),
+                .init(reps: 5, externalWeightKG: 30),
+                .init(reps: 5, externalWeightKG: 30)
+            ],
+            restSeconds: 90,
+            sourceWorkoutSessionID: session.id,
+            sourcePerformanceID: performance.id
+        )
 
         let value = ExerciseRecentPrescriptionResolver.latest(
             exerciseID: exerciseID,
-            workouts: [],
+            workouts: [projected],
             sessions: [session],
             performances: [performance],
             sets: sets

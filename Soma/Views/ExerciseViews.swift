@@ -124,8 +124,13 @@ struct ExerciseLibraryView: View {
         let legacy = workouts
             .filter { $0.exerciseID == definition.id }
             .map(ExerciseHistoryItem.legacy)
+        let projectedPerformanceIDs = Set(
+            workouts.compactMap(\.sourcePerformanceID)
+        )
         let guided: [ExerciseHistoryItem] = performances.compactMap { performance in
             guard performance.exerciseID == definition.id,
+                  !projectedPerformanceIDs.contains(performance.id),
+                  !performance.workoutProjectionSuppressed,
                   let session = sessions.first(where: {
                       $0.id == performance.sessionID
                   })
@@ -173,8 +178,13 @@ struct ExerciseDetailView: View {
     }
 
     private var sessionHistory: [ExerciseSessionHistory] {
-        performances.compactMap { performance in
+        let projectedPerformanceIDs = Set(
+            workouts.compactMap(\.sourcePerformanceID)
+        )
+        return performances.compactMap { performance in
             guard performance.exerciseID == exercise.id,
+                  !projectedPerformanceIDs.contains(performance.id),
+                  !performance.workoutProjectionSuppressed,
                   let session = sessions.first(where: {
                       $0.id == performance.sessionID
                   })

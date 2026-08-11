@@ -202,6 +202,7 @@ struct ExercisePerformanceDTO: Codable, Equatable, Sendable {
     var statusRaw: String
     var notes: String
     var activeVideoPath: String?
+    var workoutProjectionSuppressed: Bool?
 
     init(_ model: ExercisePerformance) {
         id = model.id
@@ -213,6 +214,7 @@ struct ExercisePerformanceDTO: Codable, Equatable, Sendable {
         statusRaw = model.statusRaw
         notes = model.notes
         activeVideoPath = model.activeVideoPath
+        workoutProjectionSuppressed = model.workoutProjectionSuppressed
     }
 
     func makeModel(
@@ -235,7 +237,8 @@ struct ExercisePerformanceDTO: Codable, Equatable, Sendable {
             prescriptionSnapshot: snapshot,
             status: ExercisePerformanceStatus(rawValue: statusRaw) ?? .pending,
             notes: notes,
-            activeVideoPath: mapped(activeVideoPath, with: mediaPathMapping)
+            activeVideoPath: mapped(activeVideoPath, with: mediaPathMapping),
+            workoutProjectionSuppressed: workoutProjectionSuppressed ?? false
         )
         model.prescriptionSnapshotData = prescriptionSnapshotData
         return model

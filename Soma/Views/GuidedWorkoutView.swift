@@ -1,5 +1,30 @@
 import SwiftData
 import SwiftUI
+import UIKit
+
+private struct GuidedWorkoutAlertItem: Identifiable {
+    enum Kind: Equatable {
+        case operation
+        case recording
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let message: String
+
+    var title: String {
+        switch kind {
+        case .operation:
+            "训练操作失败"
+        case .recording:
+            "录像无法继续"
+        }
+    }
+
+    var offersSettings: Bool {
+        kind == .recording && message.contains("系统设置")
+    }
+}
 
 struct GuidedWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
@@ -20,8 +45,7 @@ struct GuidedWorkoutView: View {
     @State private var showsActualEditor = false
     @State private var showsEndConfirmation = false
     @State private var showsReplacement = false
-    @State private var errorMessage: String?
-    @State private var recordingToast: String?
+    @State private var presentedAlert: GuidedWorkoutAlertItem?
 
     init(session: WorkoutSession) {
         self.session = session
@@ -120,14 +144,9 @@ struct GuidedWorkoutView: View {
         }
         .navigationBarBackButtonHidden(session.status == .active)
         .toolbar(.hidden, for: .navigationBar)
-        .appToast(
-            $recordingToast,
-            systemImage: "camera.fill",
-            tint: .orange
-        )
-        .onChange(of: coordinator.recordingErrorMessage) { _, newValue in
-            if let newValue, !newValue.isEmpty {
-                recordingToast = newValue
+        .onChange(of: coordinator.recordingFailure?.id) {
+            if let failure = coordinator.recordingFailure {
+                presentRecordingError(failure.message)
             }
         }
         .task {
@@ -138,7 +157,7 @@ struct GuidedWorkoutView: View {
                 do {
                     try coordinator.introduceCurrentExercise(in: modelContext)
                 } catch {
-                    errorMessage = error.localizedDescription
+                    presentOperationError(error)
                 }
             }
         }
@@ -164,6 +183,14 @@ struct GuidedWorkoutView: View {
             var next = presentation
             next.cameraStateChanged(camera.state)
             presentation = next
+            if case let .unavailable(message) = camera.state {
+                presentRecordingError(message)
+            }
+        }
+        .onChange(of: camera.previewIssueMessage) {
+            if let message = camera.previewIssueMessage {
+                presentRecordingError(message)
+            }
         }
         .onChange(of: session.guidedPhaseRaw) {
             var next = presentation
@@ -224,20 +251,26 @@ struct GuidedWorkoutView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
-        .alert(
-            "训练操作失败",
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: {
-                    if !$0 {
-                        errorMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
+        .alert(item: $presentedAlert) { item in
+            if item.offersSettings {
+                Alert(
+                    title: Text(item.title),
+                    message: Text(item.message),
+                    primaryButton: .default(Text("打开设置")) {
+                        guard let url = URL(
+                            string: UIApplication.openSettingsURLString
+                        ) else { return }
+                        UIApplication.shared.open(url)
+                    },
+                    secondaryButton: .cancel(Text("好"))
+                )
+            } else {
+                Alert(
+                    title: Text(item.title),
+                    message: Text(item.message),
+                    dismissButton: .default(Text("好"))
+                )
+            }
         }
     }
 
@@ -398,7 +431,7 @@ struct GuidedWorkoutView: View {
             do {
                 try coordinator.resume(in: modelContext)
             } catch {
-                errorMessage = error.localizedDescription
+                presentOperationError(error)
             }
         } else {
             run { try await coordinator.pause(in: modelContext) }
@@ -409,7 +442,7 @@ struct GuidedWorkoutView: View {
         do {
             try coordinator.prepareCurrentSet(in: modelContext)
         } catch {
-            errorMessage = error.localizedDescription
+            presentOperationError(error)
         }
     }
 
@@ -419,7 +452,7 @@ struct GuidedWorkoutView: View {
         do {
             try await coordinator.beginCurrentSet(in: modelContext)
         } catch {
-            errorMessage = error.localizedDescription
+            presentOperationError(error)
         }
     }
 
@@ -449,7 +482,7 @@ struct GuidedWorkoutView: View {
         do {
             try coordinator.adjustRest(by: seconds, in: modelContext)
         } catch {
-            errorMessage = error.localizedDescription
+            presentOperationError(error)
         }
     }
 
@@ -457,7 +490,7 @@ struct GuidedWorkoutView: View {
         do {
             try coordinator.finishRest(in: modelContext)
         } catch {
-            errorMessage = error.localizedDescription
+            presentOperationError(error)
         }
     }
 
@@ -473,7 +506,7 @@ struct GuidedWorkoutView: View {
             }
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            presentOperationError(error)
         }
     }
 
@@ -485,7 +518,7 @@ struct GuidedWorkoutView: View {
             )
             showsReplacement = false
         } catch {
-            errorMessage = error.localizedDescription
+            presentOperationError(error)
         }
     }
 
@@ -496,9 +529,33 @@ struct GuidedWorkoutView: View {
             do {
                 try await operation()
             } catch {
-                errorMessage = error.localizedDescription
+                if coordinator.recordingFailure?.message == error.localizedDescription {
+                    presentRecordingError(error.localizedDescription)
+                } else {
+                    presentOperationError(error)
+                }
             }
         }
+    }
+
+    private func presentOperationError(_ error: Error) {
+        presentedAlert = GuidedWorkoutAlertItem(
+            kind: .operation,
+            message: error.localizedDescription
+        )
+    }
+
+    private func presentRecordingError(_ message: String) {
+        guard !message.isEmpty else { return }
+        if presentedAlert?.kind == .recording,
+           presentedAlert?.message == message
+        {
+            return
+        }
+        presentedAlert = GuidedWorkoutAlertItem(
+            kind: .recording,
+            message: message
+        )
     }
 }
 

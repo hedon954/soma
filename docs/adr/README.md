@@ -63,6 +63,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0057](0057-direct-video-capability-and-observable-fallback.md) | 已采纳 | 按 provider/model 能力直传视频，失败后才按需抽帧并诚实降级 |
 | [0058](0058-first-delta-deadline-and-bounded-retry.md) | 已采纳 | 8/10/20 秒首增量门禁、单次重试、idle/total timeout 与取消传播 |
 | [0059](0059-precise-tools-and-reviewable-meal-items.md) | 已采纳 | 精确分页查询、通用记录 CRUD、Tool v2 与可审查饮食分项 |
+| [0060](0060-guided-performance-workout-entry-projection.md) | 已采纳 | 终态带练动作物化为训练记录，以来源 ID 组成计划执行并避免重复统计 |
+| [0061](0061-discoverable-conversation-session-entry.md) | 已采纳 | 会话抽屉同时保留左上角时间按钮、左缘手势与 VoiceOver 操作 |
 
 新决策使用 [ADR 模板](template.md)。
 

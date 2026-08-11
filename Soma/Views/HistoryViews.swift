@@ -167,8 +167,7 @@ struct WorkoutHistoryView: View {
 
     private func delete(_ workout: WorkoutEntry) {
         loaded.removeAll { $0.id == workout.id }
-        modelContext.delete(workout)
-        try? modelContext.save()
+        try? GuidedWorkoutRecordStore.delete(workout, in: modelContext)
         if loaded.count < WorkoutHistoryQuery.pageSize, hasMore {
             loadMore()
         }

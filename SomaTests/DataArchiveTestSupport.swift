@@ -168,6 +168,8 @@ enum DataArchiveTestSupport {
             status: .completed,
             activeVideoPath: workoutMediaPath
         )
+        workout.sourceWorkoutSessionID = workoutSession.id
+        workout.sourcePerformanceID = performance.id
         let workoutSet = WorkoutSet(
             performanceID: performance.id,
             order: 1,

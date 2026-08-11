@@ -28,6 +28,16 @@ protocol WorkoutCueProviding {
     func success()
 }
 
+struct WorkoutRecordingFailure: Equatable, Identifiable, Sendable {
+    let id: UUID
+    let message: String
+
+    init(id: UUID = UUID(), message: String) {
+        self.id = id
+        self.message = message
+    }
+}
+
 @MainActor
 final class SystemWorkoutCueProvider: WorkoutCueProviding {
     private let synthesizer = AVSpeechSynthesizer()
@@ -60,6 +70,7 @@ final class GuidedWorkoutCoordinator {
     private(set) var activeSessionID: UUID?
     private(set) var lastErrorMessage: String?
     private(set) var recordingErrorMessage: String?
+    private(set) var recordingFailure: WorkoutRecordingFailure?
     private(set) var recordingSetID: UUID?
     private(set) var isStartingRecording = false
 
@@ -95,6 +106,7 @@ final class GuidedWorkoutCoordinator {
         isStartingRecording = false
         recordingRequestID = nil
         recordingErrorMessage = nil
+        recordingFailure = nil
         announcedCountdownValues = []
         recover(session, in: context)
     }
@@ -213,7 +225,7 @@ final class GuidedWorkoutCoordinator {
                 }
                 recordingErrorMessage = nil
             } catch {
-                recordingErrorMessage = error.localizedDescription
+                reportRecordingFailure(error, stage: "stop")
             }
             recordingSetID = nil
         }
@@ -238,8 +250,8 @@ final class GuidedWorkoutCoordinator {
         else {
             throw GuidedWorkoutError.missingSet
         }
-        await recorder.cancelRecording()
         clearRecordingState()
+        await recorder.cancelRecording()
         set.status = .skipped
         set.completedAt = now()
         try advanceAfterSet(
@@ -256,8 +268,8 @@ final class GuidedWorkoutCoordinator {
         guard let set = currentSet(for: session, in: context) else {
             throw GuidedWorkoutError.missingSet
         }
-        await recorder.cancelRecording()
         clearRecordingState()
+        await recorder.cancelRecording()
         set.status = .pending
         set.startedAt = nil
         set.completedAt = nil
@@ -274,8 +286,8 @@ final class GuidedWorkoutCoordinator {
         else {
             throw GuidedWorkoutError.missingPerformance
         }
-        await recorder.cancelRecording()
         clearRecordingState()
+        await recorder.cancelRecording()
         for set in sets(for: performance, in: context)
             where set.status == .pending || set.status == .inProgress
         {
@@ -283,6 +295,11 @@ final class GuidedWorkoutCoordinator {
             set.completedAt = now()
         }
         performance.status = .skipped
+        _ = try GuidedWorkoutRecordStore.materialize(
+            performance: performance,
+            session: session,
+            in: context
+        )
         try advanceAfterPerformance(session, in: context)
         try context.save()
     }
@@ -363,8 +380,8 @@ final class GuidedWorkoutCoordinator {
 
     func pause(in context: ModelContext) async throws {
         let session = try activeSession(in: context)
-        await recorder.cancelRecording()
         clearRecordingState()
+        await recorder.cancelRecording()
         session.status = .paused
         cues.announce("训练已暂停")
         try context.save()
@@ -379,12 +396,13 @@ final class GuidedWorkoutCoordinator {
 
     func endEarly(in context: ModelContext) async throws {
         let session = try activeSession(in: context)
-        await recorder.cancelRecording()
         clearRecordingState()
+        await recorder.cancelRecording()
         session.status = .abandoned
         session.endedAt = now()
         session.restTargetEndAt = nil
         session.autoRecordingPolicy = .cancelled
+        _ = GuidedWorkoutRecordStore.backfill(in: context)
         activeSessionID = nil
         cues.announce("训练已提前结束")
         try context.save()
@@ -396,6 +414,7 @@ final class GuidedWorkoutCoordinator {
         session.guidedPhase = .completed
         session.endedAt = now()
         session.restTargetEndAt = nil
+        _ = GuidedWorkoutRecordStore.backfill(in: context)
         activeSessionID = nil
         try context.save()
     }
@@ -407,8 +426,8 @@ final class GuidedWorkoutCoordinator {
         let session = try activeSession(in: context)
         session.autoRecordingPolicy = policy
         if !policy.usesAutomaticRecording {
-            await recorder.cancelRecording()
             clearRecordingState()
+            await recorder.cancelRecording()
         }
         try context.save()
     }
@@ -451,6 +470,11 @@ final class GuidedWorkoutCoordinator {
             )
         } else {
             performance.status = .completed
+            _ = try GuidedWorkoutRecordStore.materialize(
+                performance: performance,
+                session: session,
+                in: context
+            )
             try advanceAfterPerformance(session, in: context)
         }
     }
@@ -565,6 +589,7 @@ final class GuidedWorkoutCoordinator {
         let requestID = UUID()
         recordingRequestID = requestID
         isStartingRecording = true
+        recordingErrorMessage = nil
         do {
             try await recorder.prepare()
             guard recordingRequestID == requestID else { return }
@@ -581,7 +606,7 @@ final class GuidedWorkoutCoordinator {
         } catch {
             if recordingRequestID == requestID {
                 recordingSetID = nil
-                recordingErrorMessage = Self.friendlyRecordingError(error)
+                reportRecordingFailure(error, stage: "start")
             }
         }
         if recordingRequestID == requestID {
@@ -594,6 +619,13 @@ final class GuidedWorkoutCoordinator {
         recordingSetID = nil
         isStartingRecording = false
         recordingRequestID = nil
+    }
+
+    private func reportRecordingFailure(_ error: Error, stage: String) {
+        let message = Self.friendlyRecordingError(error)
+        recordingErrorMessage = message
+        recordingFailure = WorkoutRecordingFailure(message: message)
+        WorkoutRecordingDiagnostics.failure(stage: stage, error: error)
     }
 
     private func allSets(

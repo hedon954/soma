@@ -373,6 +373,18 @@ enum TrainingPlanStore {
         let session = (
             try? context.fetch(FetchDescriptor<WorkoutSession>())
         )?.first { $0.id == sessionID }
+        let projectedWorkouts = (
+            try? context.fetch(FetchDescriptor<WorkoutEntry>())
+        )?.filter { $0.sourceWorkoutSessionID == sessionID } ?? []
+        let workoutsByPerformanceID = projectedWorkouts.reduce(
+            into: [UUID: WorkoutEntry]()
+        ) { result, workout in
+            if let performanceID = workout.sourcePerformanceID,
+               result[performanceID] == nil
+            {
+                result[performanceID] = workout
+            }
+        }
         let summaryEnd = session?.endedAt
             ?? sets.compactMap(\.completedAt).max()
             ?? session?.startedAt
@@ -380,6 +392,7 @@ enum TrainingPlanStore {
         let mediaPaths = Set(
             sets.compactMap(\.recordedVideoPath)
                 + performances.compactMap(\.activeVideoPath)
+                + projectedWorkouts.flatMap(\.mediaAttachments).map(\.path)
         )
         let exerciseSummaries = performances
             .sorted { $0.order < $1.order }
@@ -387,25 +400,24 @@ enum TrainingPlanStore {
                 let performanceSets = sets.filter {
                     $0.performanceID == performance.id
                 }
+                let projectedWorkout = workoutsByPerformanceID[performance.id]
                 return TrainingExerciseSummary(
                     id: performance.id,
                     name: performance.exerciseName,
-                    completedSets: performanceSets.count {
-                        $0.status == .completed
-                    },
+                    completedSets: projectedWorkout?.setEntries.count
+                        ?? performanceSets.count { $0.status == .completed },
                     skippedSets: performanceSets.count {
                         $0.status == .skipped
                     },
-                    completedVolume: performanceSets
-                        .compactMap(\.completedVolume)
-                        .reduce(0, +)
+                    completedVolume: projectedWorkout?.estimatedVolume
+                        ?? performanceSets.compactMap(\.completedVolume).reduce(0, +)
                 )
             }
         return TrainingSessionSummary(
-            completedSets: sets.count { $0.status == .completed },
+            completedSets: exerciseSummaries.reduce(0) { $0 + $1.completedSets },
             skippedSets: sets.count { $0.status == .skipped },
-            completedVolume: sets.compactMap(\.completedVolume).reduce(0, +),
-            exerciseCount: performances.count { $0.status == .completed },
+            completedVolume: exerciseSummaries.reduce(0) { $0 + $1.completedVolume },
+            exerciseCount: exerciseSummaries.count { $0.completedSets > 0 },
             durationSeconds: max(
                 Int(summaryEnd.timeIntervalSince(session?.startedAt ?? summaryEnd)),
                 0
@@ -427,13 +439,17 @@ enum TrainingPlanStore {
             .filter { performanceIDs.contains($0.performanceID) }
         let analyses = try context.fetch(FetchDescriptor<PerformanceAnalysis>())
             .filter { performanceIDs.contains($0.performanceID) }
+        let projectedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
+            .filter { $0.sourceWorkoutSessionID == session.id }
         let mediaPaths = Set(
             sets.compactMap(\.recordedVideoPath)
                 + performances.compactMap(\.activeVideoPath)
                 + analyses.map(\.sourceMediaPath).filter { !$0.isEmpty }
+                + projectedWorkouts.flatMap(\.mediaAttachments).map(\.path)
         )
 
         analyses.forEach(context.delete)
+        projectedWorkouts.forEach(context.delete)
         sets.forEach(context.delete)
         performances.forEach(context.delete)
         context.delete(session)

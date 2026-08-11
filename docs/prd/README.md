@@ -37,6 +37,7 @@
 | [023：应用内多模态反馈](023-in-app-multimodal-feedback.md) | 已实现，个人设备凭据待配置与真机验收 | Soma 内文字、照片和视频反馈；个人阶段由 QQ 邮箱直投固定 Gmail，外部分发前由 online check 强制迁移凭据 |
 | [024：聊天内 Agent 反馈 Tool](024-chat-agent-feedback-tool.md) | 已实现，待真机验收 | 用户在教练当前消息中明确提交产品反馈；固定设备 Tool 只发送当前原文与附件，并复用现有 QQ→Gmail 链路 |
 | [025：可信对话上下文、直传视频与可审查饮食](025-trusted-context-direct-video-and-reviewable-meals.md) | 已采纳，实施中 | 自动按日 Session、可信时间、选择性媒体、直传视频、TTFT、Tool v2 与饮食结果卡 |
+| [026：带练记录投影、录像失败可见性与会话入口恢复](026-guided-workout-record-projection-camera-failures-and-session-entry.md) | 已实现，待真机验收 | 动作终态形成训练记录、计划执行确定性组合、录像失败警告与日志、恢复左上角历史入口 |
 
 ## 阅读约定
 

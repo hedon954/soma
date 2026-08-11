@@ -191,6 +191,18 @@ final class DataBackupServiceTests: XCTestCase {
         XCTAssertEqual(restored.workoutSessions, snapshot.workoutSessions)
         XCTAssertEqual(restored.workoutSets, snapshot.workoutSets)
         XCTAssertEqual(
+            restored.workouts.first?.sourceWorkoutSessionID,
+            snapshot.workouts.first?.sourceWorkoutSessionID
+        )
+        XCTAssertEqual(
+            restored.workouts.first?.sourcePerformanceID,
+            snapshot.workouts.first?.sourcePerformanceID
+        )
+        XCTAssertEqual(
+            restored.exercisePerformances?.first?.workoutProjectionSuppressed,
+            snapshot.exercisePerformances?.first?.workoutProjectionSuppressed
+        )
+        XCTAssertEqual(
             restored.exercisePerformances?.first?.activeVideoPath,
             "PrivateMedia/restored.mov"
         )

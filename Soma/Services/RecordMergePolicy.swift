@@ -277,7 +277,13 @@ enum RecordMergePolicy {
         _ lhs: WorkoutEntry,
         _ rhs: WorkoutEntry
     ) -> Bool {
-        guard lhs.sourceTurnID == nil, rhs.sourceTurnID == nil else {
+        guard lhs.sourceTurnID == nil,
+              rhs.sourceTurnID == nil,
+              lhs.sourceWorkoutSessionID == nil,
+              rhs.sourceWorkoutSessionID == nil,
+              lhs.sourcePerformanceID == nil,
+              rhs.sourcePerformanceID == nil
+        else {
             return false
         }
         let input = WorkoutMergeInput(

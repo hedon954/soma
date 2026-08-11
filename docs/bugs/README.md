@@ -23,6 +23,8 @@
 | [0010](0010-guided-recording-state-and-cue-gaps.md) | 已修复，待真机复验 | 录像策略和真实活动混用，导致首组失败、相机常驻、语音与完成反馈缺失 | 多策略/手动录像、启动回调、Cue 序列、总结与级联删除测试 |
 | [0011](0011-meal-correction-misattributed-media.md) | 修复中 | 饮食纠错把当前图片写入错误记录，且结果难以审查 | 选择性媒体、精确 record ID、歧义不写入与 typed 结果卡 |
 | [0012](0012-direct-video-and-first-delta-timeout.md) | 修复中 | 直传视频仍重复抽帧，请求缺少首增量门禁 | 请求体、延迟抽帧、8/10/20 秒 TTFT、Abort 与单次重试 |
+| [0013](0013-guided-recording-startup-silent-stall.md) | 已修复，待真机复验 | 带练录像启动可永久等待，失败无诊断日志且提示不可见 | 启动截止时间、独立失败事件、阶段日志、系统警告框与真机复验 |
+| [0014](0014-guided-performance-missing-workout-entry.md) | 已修复，待真机观察 | 带练动作完成后只保留 Session/Set，没有形成统一训练记录 | 终态投影、来源 ID、幂等回填、趋势去重、备份与级联删除测试 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 
