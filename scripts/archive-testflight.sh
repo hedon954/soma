@@ -4,7 +4,6 @@ set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 team_id="${DEVELOPMENT_TEAM:-}"
-feedback_base_url="${SOMA_FEEDBACK_BASE_URL:-}"
 archive_path="${project_dir}/build/Soma.xcarchive"
 export_path="${project_dir}/build/TestFlight"
 
@@ -12,6 +11,8 @@ if [[ -z "${team_id}" ]]; then
   echo "请先执行：DEVELOPMENT_TEAM=你的10位TeamID make archive" >&2
   exit 2
 fi
+
+"${project_dir}/scripts/online-check.sh"
 
 if [[ -e "$archive_path" || -e "$export_path" ]]; then
   echo "归档输出已存在，请先移动它们或执行 make clean：" >&2
@@ -31,7 +32,6 @@ xcodebuild archive \
   -archivePath "${archive_path}" \
   DEVELOPMENT_TEAM="${team_id}" \
   CODE_SIGN_STYLE=Automatic \
-  SOMA_FEEDBACK_BASE_URL="${feedback_base_url}" \
   -allowProvisioningUpdates
 
 xcodebuild -exportArchive \

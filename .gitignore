@@ -38,6 +38,7 @@ exports/
 .env
 .env.*
 !.env.example
+Soma/Resources/FeedbackCredentials.plist
 .claude/settings.local.json
 .cursor/plans/
 .codex/plans/

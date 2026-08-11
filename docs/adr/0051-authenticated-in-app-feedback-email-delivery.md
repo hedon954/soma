@@ -4,7 +4,7 @@
 - 日期：2026-08-09
 - 维护者：Soma maintainers
 - 部分替代：无
-- 后续替代：[ADR 0052](0052-gmail-self-delivery-for-in-app-feedback.md) 替代邮件供应商与幂等边界
+- 后续替代：[ADR 0052](0052-gmail-self-delivery-for-in-app-feedback.md) 替代邮件供应商与幂等边界；[ADR 0053](0053-personal-only-direct-qq-mail-feedback.md) 在个人阶段替代当前投递路径与构建地址
 - 上游依据：[PRD 023](../prd/023-in-app-multimodal-feedback.md)
 
 ## 背景

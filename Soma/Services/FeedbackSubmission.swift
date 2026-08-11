@@ -1,34 +1,207 @@
 import Foundation
 
-enum FeedbackServiceConfiguration {
-    static func baseURL(bundle: Bundle = .main) -> URL? {
-        guard let rawValue = bundle.object(
-            forInfoDictionaryKey: "SOMAFeedbackBaseURL"
-        ) as? String,
-            let url = URL(string: rawValue),
-            let scheme = url.scheme?.lowercased(),
-            scheme == "https" || isDevelopmentLoopback(url)
-        else {
-            return nil
+enum FeedbackMailConfiguration {
+    static let recipient = "hedonwang@gmail.com"
+
+    static func credentials(bundle: Bundle = .main) throws
+        -> FeedbackQQMailCredentials
+    {
+        guard let url = bundle.url(
+            forResource: "FeedbackCredentials",
+            withExtension: "plist"
+        ) else {
+            throw FeedbackSubmissionError.deliveryUnavailable
         }
-        return url
+        do {
+            return try credentials(plistData: Data(contentsOf: url))
+        } catch {
+            throw FeedbackSubmissionError.deliveryUnavailable
+        }
     }
 
-    private static func isDevelopmentLoopback(_ url: URL) -> Bool {
-        #if DEBUG
-            url.scheme?.lowercased() == "http"
-                && ["127.0.0.1", "localhost"].contains(
-                    url.host?.lowercased() ?? ""
-                )
-        #else
-            false
-        #endif
+    static func credentials(plistData: Data) throws
+        -> FeedbackQQMailCredentials
+    {
+        guard let object = try? PropertyListSerialization.propertyList(
+            from: plistData,
+            options: [],
+            format: nil
+        ),
+            let plist = object as? [String: Any],
+            let senderAddress = nonemptyString(plist["SenderAddress"]),
+            isQQMailAddress(senderAddress),
+            let authorizationCode = nonemptyString(
+                plist["SMTPAuthorizationCode"]
+            )
+        else {
+            throw FeedbackSubmissionError.deliveryUnavailable
+        }
+        return FeedbackQQMailCredentials(
+            senderAddress: senderAddress,
+            smtpAuthorizationCode: authorizationCode
+        )
+    }
+
+    private static func nonemptyString(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty || normalized.hasPrefix("YOUR_")
+            ? nil
+            : normalized
+    }
+
+    private static func isQQMailAddress(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.hasSuffix("@qq.com")
+            || normalized.hasSuffix("@foxmail.com")
     }
 }
 
-struct FeedbackSubmissionReceipt: Decodable, Equatable, Sendable {
-    let feedbackID: String
-    let accepted: Bool
+struct FeedbackQQMailCredentials: Equatable, Sendable {
+    let senderAddress: String
+    let smtpAuthorizationCode: String
+}
+
+struct QQMailFeedbackClient {
+    private let credentials: FeedbackQQMailCredentials
+    private let transport: any FeedbackSMTPTransport
+
+    init(
+        credentials: FeedbackQQMailCredentials,
+        transport: any FeedbackSMTPTransport = QQSMTPTransport()
+    ) {
+        self.credentials = credentials
+        self.transport = transport
+    }
+
+    func submit(
+        id: UUID,
+        message: String,
+        attachments: [PendingAttachment]
+    ) async throws {
+        do {
+            let normalizedMessage = try FeedbackSubmissionPolicy
+                .validatedMessage(message, attachments: attachments)
+            let body = try FeedbackMailMessageBuilder.message(
+                id: id,
+                sender: credentials.senderAddress,
+                text: normalizedMessage,
+                attachments: attachments
+            )
+            try await transport.send(
+                message: body,
+                sender: credentials.senderAddress,
+                recipient: FeedbackMailConfiguration.recipient,
+                authorizationCode: credentials.smtpAuthorizationCode
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as FeedbackSubmissionError {
+            throw error
+        } catch {
+            throw FeedbackSubmissionError.deliveryUnavailable
+        }
+    }
+}
+
+enum FeedbackMailMessageBuilder {
+    static func message(
+        id: UUID,
+        sender: String,
+        text: String,
+        attachments: [PendingAttachment]
+    ) throws -> Data {
+        let messageID = id.uuidString.lowercased()
+        let subject = Data("Soma 用户反馈".utf8).base64EncodedString()
+        let headers = [
+            "From: \(sender)",
+            "To: \(FeedbackMailConfiguration.recipient)",
+            "Subject: =?UTF-8?B?\(subject)?=",
+            "Message-ID: <\(messageID)@soma.feedback>",
+            "MIME-Version: 1.0"
+        ]
+        let bodyText = text.isEmpty ? "（仅媒体反馈）" : text
+        guard !attachments.isEmpty else {
+            let lines = headers + [
+                "Content-Type: text/plain; charset=UTF-8",
+                "Content-Transfer-Encoding: base64",
+                "",
+                base64Lines(Data(bodyText.utf8)),
+                ""
+            ]
+            return Data(lines.joined(separator: "\r\n").utf8)
+        }
+
+        let boundary = "soma-feedback-\(messageID)"
+        var lines = headers + [
+            "Content-Type: multipart/mixed; boundary=\"\(boundary)\"",
+            "",
+            "--\(boundary)",
+            "Content-Type: text/plain; charset=UTF-8",
+            "Content-Transfer-Encoding: base64",
+            "",
+            base64Lines(Data(bodyText.utf8))
+        ]
+        for (index, attachment) in attachments.enumerated() {
+            let item = try mailAttachment(attachment, position: index + 1)
+            lines.append(contentsOf: [
+                "--\(boundary)",
+                "Content-Type: \(item.contentType); name=\"\(item.filename)\"",
+                "Content-Disposition: attachment; filename=\"\(item.filename)\"",
+                "Content-Transfer-Encoding: base64",
+                "",
+                base64Lines(item.data)
+            ])
+        }
+        lines.append(contentsOf: ["--\(boundary)--", ""])
+        return Data(lines.joined(separator: "\r\n").utf8)
+    }
+
+    private static func mailAttachment(
+        _ attachment: PendingAttachment,
+        position: Int
+    ) throws -> (filename: String, contentType: String, data: Data) {
+        switch attachment.kind {
+        case .image:
+            guard let data = attachment.imageData, !data.isEmpty else {
+                throw FeedbackSubmissionError.attachmentUnavailable
+            }
+            return ("feedback-\(position).jpg", "image/jpeg", data)
+        case .video:
+            guard let url = attachment.videoURL,
+                  let data = try? Data(contentsOf: url),
+                  !data.isEmpty
+            else {
+                throw FeedbackSubmissionError.attachmentUnavailable
+            }
+            let isMP4 = url.pathExtension.lowercased() == "mp4"
+            return (
+                "feedback-\(position).\(isMP4 ? "mp4" : "mov")",
+                isMP4 ? "video/mp4" : "video/quicktime",
+                data
+            )
+        case .none:
+            throw FeedbackSubmissionError.attachmentUnavailable
+        }
+    }
+
+    private static func base64Lines(_ data: Data) -> String {
+        let encoded = data.base64EncodedString()
+        var lines: [Substring] = []
+        var start = encoded.startIndex
+        while start < encoded.endIndex {
+            let end = encoded.index(
+                start,
+                offsetBy: min(
+                    76,
+                    encoded.distance(from: start, to: encoded.endIndex)
+                )
+            )
+            lines.append(encoded[start ..< end])
+            start = end
+        }
+        return lines.joined(separator: "\r\n")
+    }
 }
 
 enum FeedbackSubmissionError: LocalizedError, Equatable {
@@ -37,6 +210,7 @@ enum FeedbackSubmissionError: LocalizedError, Equatable {
     case tooManyAttachments
     case attachmentsTooLarge
     case attachmentUnavailable
+    case deliveryUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -50,6 +224,8 @@ enum FeedbackSubmissionError: LocalizedError, Equatable {
             "附件总大小不能超过 25 MB，请移除较大的视频后重试。"
         case .attachmentUnavailable:
             "一项照片或视频已无法读取，请移除后重新添加。"
+        case .deliveryUnavailable:
+            "反馈暂时无法发送，请稍后重试。"
         }
     }
 }

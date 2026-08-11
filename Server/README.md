@@ -60,8 +60,8 @@ SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
 5. TLS 在受信任的反向代理或平台入口终止；iOS Release 只接受 HTTPS 服务地址。
 6. 为对象存储配置生命周期规则作为第二道删除保护。应用层仍会主动删除已消费终态内容、
    过期 Job 和撤销设备的对象。
-7. 构建 iOS App 时通过 `SOMA_FEEDBACK_BASE_URL=https://api.example.com` 注入官方反馈服务地址；
-   Release 不读取用户可编辑的后台 Agent 地址来投递反馈。
+7. 当前个人使用阶段的 iOS 反馈不调用 Server；既有 `/v1/feedback` 作为未来外部分发时迁回
+   服务端凭据保管的参考实现，不应为个人安装强制部署。
 
 生产环境必须启用受信任 CA 的 PostgreSQL TLS。API 和 Worker 都会在
 `NODE_ENV=production` 时验证服务器证书。

@@ -90,15 +90,26 @@ grep -q "PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma" project.yml ||
 grep -q "exactVersion:" project.yml ||
   fail "Swift package versions must be pinned"
 
-grep -q "<key>SOMAFeedbackBaseURL</key>" Soma/Resources/Info.plist ||
-  fail "Info.plist is missing the feedback service URL"
-for build_script in \
-  scripts/xcodebuild.sh \
-  scripts/install-device.sh \
-  scripts/archive-testflight.sh; do
-  grep -q 'SOMA_FEEDBACK_BASE_URL=' "$build_script" ||
-    fail "$build_script must forward SOMA_FEEDBACK_BASE_URL to xcodebuild"
-done
+grep -q 'NWEndpoint.Host("smtp.qq.com")' \
+  Soma/Services/FeedbackSMTPTransport.swift ||
+  fail "personal-only feedback must use the fixed QQ SMTP endpoint"
+grep -q 'static let recipient = "hedonwang@gmail.com"' \
+  Soma/Services/FeedbackSubmission.swift ||
+  fail "personal-only feedback must keep the fixed Gmail recipient"
+if grep -R -n \
+  --exclude=validate-repository.sh \
+  'SOMA_FEEDBACK_BASE_URL\|SOMAFeedbackBaseURL' \
+  Soma project.yml scripts >/dev/null 2>&1; then
+  fail "feedback must not expose or inject a service URL"
+fi
+if grep -nE 'Soma Server|hedonwang@gmail\.com|Base URL|SMTP|QQ 邮箱' \
+  Soma/Views/FeedbackView.swift >/dev/null 2>&1; then
+  fail "FeedbackView must not expose delivery implementation details"
+fi
+grep -q '^Soma/Resources/FeedbackCredentials\.plist$' .gitignore ||
+  fail "the local mail credential resource must stay ignored"
+grep -q 'online-check.sh' scripts/archive-testflight.sh ||
+  fail "TestFlight archive must run the feedback online check"
 
 if grep -R -nE \
   '\.(configurationDisplayName|description)\(Text\(' \

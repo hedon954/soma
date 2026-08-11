@@ -53,41 +53,6 @@ struct RemoteAgentClient: AgentExecutionBackend {
         self.session = session
     }
 
-    func submitFeedback(
-        id: UUID,
-        message: String,
-        attachments: [PendingAttachment]
-    ) async throws -> FeedbackSubmissionReceipt {
-        let validatedMessage = try FeedbackSubmissionPolicy.validatedMessage(
-            message,
-            attachments: attachments
-        )
-        var uploadIDs: [String] = []
-        do {
-            for attachment in attachments {
-                try await uploadIDs.append(uploadFeedbackAttachment(attachment))
-            }
-            let feedbackID = id.uuidString.lowercased()
-            let data = try await authenticatedRequest(
-                method: "POST",
-                path: "/v1/feedback",
-                body: encodeBody([
-                    "feedbackID": feedbackID,
-                    "protocolVersion": 1,
-                    "message": validatedMessage,
-                    "uploadIDs": uploadIDs
-                ]),
-                headers: ["idempotency-key": feedbackID]
-            )
-            return try decode(FeedbackSubmissionReceipt.self, from: data)
-        } catch {
-            for uploadID in uploadIDs {
-                try? await deleteUpload(uploadID)
-            }
-            throw error
-        }
-    }
-
     func submit(
         job: AgentJobSubmission
     ) async throws -> RemoteAgentJobSnapshot {
@@ -330,39 +295,6 @@ struct RemoteAgentClient: AgentExecutionBackend {
         )
     }
 
-    private func uploadFeedbackAttachment(
-        _ attachment: PendingAttachment
-    ) async throws -> String {
-        switch attachment.kind {
-        case .image:
-            guard let data = attachment.imageData,
-                  let image = UIImage(data: data),
-                  let normalized = image.jpegData(compressionQuality: 0.84)
-            else {
-                throw FeedbackSubmissionError.attachmentUnavailable
-            }
-            let sourceURL = FileManager.default.temporaryDirectory
-                .appending(path: "soma-feedback-\(UUID().uuidString)")
-                .appendingPathExtension("jpg")
-            try normalized.write(to: sourceURL, options: .atomic)
-            defer { try? FileManager.default.removeItem(at: sourceURL) }
-            return try await uploadFeedbackFile(
-                sourceURL,
-                contentType: "image/jpeg"
-            )
-        case .video:
-            guard let sourceURL = attachment.videoURL else {
-                throw FeedbackSubmissionError.attachmentUnavailable
-            }
-            return try await uploadFeedbackFile(
-                sourceURL,
-                contentType: mediaType(for: sourceURL, kind: .video)
-            )
-        case .none:
-            throw FeedbackSubmissionError.attachmentUnavailable
-        }
-    }
-
     private func uploadJPEGFrame(_ data: Data) async throws -> String {
         let sourceURL = FileManager.default.temporaryDirectory
             .appending(path: "soma-remote-frame-\(UUID().uuidString)")
@@ -370,55 +302,6 @@ struct RemoteAgentClient: AgentExecutionBackend {
         try data.write(to: sourceURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: sourceURL) }
         return try await uploadFile(sourceURL, contentType: "image/jpeg")
-    }
-
-    private func uploadFeedbackFile(
-        _ sourceURL: URL,
-        contentType: String
-    ) async throws -> String {
-        let attributes = try FileManager.default.attributesOfItem(
-            atPath: sourceURL.path
-        )
-        let bytes = (attributes[.size] as? NSNumber)?.intValue ?? 0
-        let digest = try fileDigest(sourceURL)
-        let grantData = try await authenticatedRequest(
-            method: "POST",
-            path: "/v1/uploads",
-            body: encodeBody([
-                "contentType": contentType,
-                "contentLength": bytes,
-                "sha256": digest
-            ])
-        )
-        let grant = try decode(UploadGrantEnvelope.self, from: grantData)
-        do {
-            var request = URLRequest(url: grant.uploadURL)
-            request.httpMethod = "PUT"
-            for (name, value) in grant.requiredHeaders {
-                request.setValue(value, forHTTPHeaderField: name)
-            }
-            let (_, response) = try await session.upload(
-                for: request,
-                fromFile: sourceURL
-            )
-            guard let http = response as? HTTPURLResponse,
-                  (200 ... 299).contains(http.statusCode)
-            else {
-                throw RemoteAgentError.server(
-                    code: "upload_failed",
-                    message: "反馈媒体上传失败，请稍后重试。"
-                )
-            }
-            try await completeUpload(
-                uploadID: grant.uploadID,
-                bytes: bytes,
-                digest: digest
-            )
-            return grant.uploadID
-        } catch {
-            try? await deleteUpload(grant.uploadID)
-            throw error
-        }
     }
 
     private func uploadFile(

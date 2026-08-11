@@ -55,7 +55,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0049](0049-normalized-idempotency-and-business-dedup.md) | 已采纳 | 规范化幂等签名、pending 账本与跨 Turn 疑似重复反馈 |
 | [0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) | 已采纳 | 每轮工具组预选、expand_tool_group 逃生、并行 tool_calls 与历史帧 clearing |
 | [0051](0051-authenticated-in-app-feedback-email-delivery.md) | 部分已替代 | 应用内多模态反馈经认证 Server 和临时上传投递到固定维护者邮箱；邮件供应商由 0052 替代 |
-| [0052](0052-gmail-self-delivery-for-in-app-feedback.md) | 已采纳 | Gmail OAuth 从 `hedonwang@gmail.com` 向同一邮箱发送应用内反馈 |
+| [0052](0052-gmail-self-delivery-for-in-app-feedback.md) | 部分已替代 | Gmail OAuth 从 `hedonwang@gmail.com` 向同一邮箱自发自收；个人阶段的凭据位置由 0053 临时替代 |
+| [0053](0053-personal-only-direct-qq-mail-feedback.md) | 已采纳，仅限个人使用阶段 | App 直连 QQ SMTP 并投递到固定 Gmail；外部分发由 online check 强制迁移凭据 |
 
 新决策使用 [ADR 模板](template.md)。
 

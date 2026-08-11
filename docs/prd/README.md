@@ -34,7 +34,7 @@
 | [020：GUI 精简与渐进披露](020-gui-simplification-and-progressive-disclosure.md) | 已实现，部分修订 | 全界面渐进披露：输入区单层上下文、过程卡折叠、详情只读优先、低频入口下沉，不删任何能力；LLM 配置折叠与输入区候选由 021 修订 |
 | [021：LLM 暂存补偿、显式 LLM 配置与一步输入建议](021-llm-staging-explicit-configuration-and-input-suggestions.md) | 已实现，待真机验收 | LLM 失效时消息落盘暂存并在恢复后自动补偿；LLM 配置双档同屏可改、支持 opencode 与自定义 URL；模型与动作候选统一为输入历史式建议 |
 | [022：ReAct 可靠性与上下文感知](022-react-reliability-and-context-awareness.md) | 已实现，待真机验收 | 确定性上下文包与聚合查询、规范化幂等与疑似重复、同气泡 step 检查点续跑、工具组渐进披露与并行 tool_calls |
-| [023：应用内多模态反馈](023-in-app-multimodal-feedback.md) | 已实现，待生产服务配置与真机验收 | Soma 内文字、照片和视频反馈，经认证 Server 幂等投递到固定维护者邮箱 |
+| [023：应用内多模态反馈](023-in-app-multimodal-feedback.md) | 已实现，个人设备凭据待配置与真机验收 | Soma 内文字、照片和视频反馈；个人阶段由 QQ 邮箱直投固定 Gmail，外部分发前由 online check 强制迁移凭据 |
 
 ## 阅读约定
 

@@ -131,38 +131,6 @@ struct RemoteAgentExecutionTests {
         #expect(server.submittedDeviceTools.contains("record_workout"))
         #expect(server.submittedRemoteTools.isEmpty)
     }
-
-    @Test
-    func feedbackUsesAuthenticatedDirectSubmissionWithoutMailURL() async throws {
-        let identity = RemoteDeviceIdentity(usesEphemeralStorage: true)
-        let server = MockRemoteAgentServer()
-        MockRemoteURLProtocol.handler = { request in
-            try server.response(to: request)
-        }
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MockRemoteURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        let baseURL = try #require(URL(string: "https://soma.test"))
-        let client = RemoteAgentClient(
-            baseURL: baseURL,
-            identity: identity,
-            session: session
-        )
-        let feedbackID = UUID()
-
-        let receipt = try await client.submitFeedback(
-            id: feedbackID,
-            message: "  这是虚构反馈。  ",
-            attachments: []
-        )
-
-        #expect(receipt.accepted)
-        #expect(receipt.feedbackID == feedbackID.uuidString.lowercased())
-        #expect(server.feedbackSignatureWasValid)
-        #expect(server.feedbackIdempotencyKey == feedbackID.uuidString.lowercased())
-        #expect(server.feedbackMessage == "这是虚构反馈。")
-        #expect(server.feedbackUploadIDs.isEmpty)
-    }
 }
 
 private final class MockRemoteAgentServer: @unchecked Sendable {
@@ -173,11 +141,6 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
     private(set) var idempotencyKey: String?
     private(set) var submittedDeviceTools: [String] = []
     private(set) var submittedRemoteTools: [String] = []
-    private(set) var feedbackSignatureWasValid = false
-    private(set) var feedbackIdempotencyKey: String?
-    private(set) var feedbackMessage: String?
-    private(set) var feedbackUploadIDs: [String] = []
-
     func response(to request: URLRequest) throws -> (HTTPURLResponse, Data) {
         let path = request.url?.path ?? ""
         let responseBody: [String: Any]
@@ -232,20 +195,6 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
                 "lastSequence": 1,
                 "createdAt": iso(now),
                 "updatedAt": iso(now)
-            ]
-        case ("POST", "/v1/feedback"):
-            status = 201
-            let body = try bodyObject(request)
-            feedbackSignatureWasValid = verifyRequest(request)
-            feedbackIdempotencyKey = request.value(
-                forHTTPHeaderField: "idempotency-key"
-            )
-            feedbackMessage = body["message"] as? String
-            feedbackUploadIDs = body["uploadIDs"] as? [String] ?? []
-            responseBody = try [
-                "protocolVersion": 1,
-                "feedbackID": requiredString(body["feedbackID"]),
-                "accepted": true
             ]
         default:
             status = 404

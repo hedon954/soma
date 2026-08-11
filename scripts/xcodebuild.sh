@@ -7,7 +7,6 @@ project_path="$root_dir/Soma.xcodeproj"
 derived_data_path="$root_dir/build/DerivedData"
 source_packages_path="$root_dir/build/SourcePackages"
 action="${1:-build}"
-feedback_base_url="${SOMA_FEEDBACK_BASE_URL:-}"
 
 if [[ ! -d "$project_path" ]]; then
   echo "Generated project is missing. Run: make generate" >&2
@@ -73,5 +72,4 @@ xcodebuild "$action" \
   -clonedSourcePackagesDirPath "$source_packages_path" \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  SOMA_FEEDBACK_BASE_URL="$feedback_base_url"
+  CODE_SIGNING_ALLOWED=NO

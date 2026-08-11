@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env generate build test format format-check lint server-check server-test check verify install-device archive clean
+.PHONY: help setup env generate build test format format-check lint server-check server-test check verify online-check install-device archive clean
 
 help:
 	@echo "Soma development commands:"
@@ -14,6 +14,7 @@ help:
 	@echo "  make server-test   Test the optional Agent server"
 	@echo "  make check         Run fast static checks without a Simulator"
 	@echo "  make verify        Run static checks, build, and Simulator tests"
+	@echo "  make online-check  Block external distribution while mail credentials live in the App"
 	@echo "  make install-device Sign, install, and launch on a connected iPhone"
 	@echo "  make archive       Export a signed App Store Connect archive"
 	@echo "  make clean         Remove generated project and build artifacts"
@@ -67,6 +68,9 @@ verify:
 	@$(MAKE) server-test
 	@$(MAKE) build
 	@$(MAKE) test
+
+online-check:
+	./scripts/online-check.sh
 
 install-device: generate
 	./scripts/install-device.sh

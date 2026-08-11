@@ -14,18 +14,11 @@ struct FeedbackView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("告诉我们哪里不好用，或你希望 Soma 接下来做什么。")
+                Text("告诉我哪里不好用，或你希望 Soma 接下来做什么。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 composer
-
-                Label(
-                    "只有点击发送后，文字和所选媒体才会经 Soma Server 从 hedonwang@gmail.com 发至同一邮箱；不会进入身体数据库、聊天记录或 Agent Trace。",
-                    systemImage: "lock.shield"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
             }
             .padding()
         }
@@ -40,7 +33,7 @@ struct FeedbackView: View {
                         - attachments.count,
                     1
                 ),
-                privacyMessage: "所选媒体只在你点击发送后用于本次反馈，并经 Soma Server 投递到反馈邮箱。"
+                privacyMessage: "只会发送你明确选择的照片或视频。"
             ) { media in
                 let available = max(
                     FeedbackSubmissionPolicy.maximumAttachmentCount
@@ -122,7 +115,7 @@ struct FeedbackView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isSending || isEmpty)
-                .accessibilityHint("将反馈直接发送到 Soma 反馈邮箱")
+                .accessibilityHint("提交当前文字和附件")
             }
         }
         .padding(16)
@@ -150,14 +143,6 @@ struct FeedbackView: View {
             alert = FeedbackAlert(error: error)
             return
         }
-        guard let baseURL = FeedbackServiceConfiguration.baseURL() else {
-            alert = FeedbackAlert(
-                title: "反馈服务暂不可用",
-                message: "当前版本没有可用的反馈服务地址，请更新后重试。"
-            )
-            return
-        }
-
         editorFocused = false
         isSending = true
         let id = draftID
@@ -169,15 +154,12 @@ struct FeedbackView: View {
                 submissionTask = nil
             }
             do {
-                let receipt = try await RemoteAgentClient(baseURL: baseURL)
-                    .submitFeedback(
-                        id: id,
-                        message: submittedMessage,
-                        attachments: submittedAttachments
-                    )
-                guard receipt.accepted else {
-                    throw RemoteAgentError.invalidResponse
-                }
+                let credentials = try FeedbackMailConfiguration.credentials()
+                try await QQMailFeedbackClient(credentials: credentials).submit(
+                    id: id,
+                    message: submittedMessage,
+                    attachments: submittedAttachments
+                )
                 cleanupTemporaryVideos(in: submittedAttachments)
                 message = ""
                 attachments = []

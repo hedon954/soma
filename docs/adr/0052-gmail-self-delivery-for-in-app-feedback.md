@@ -1,10 +1,10 @@
 # ADR 0052：Gmail 自发自收应用内反馈
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-08-09
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0051](0051-authenticated-in-app-feedback-email-delivery.md) 的邮件供应商与幂等边界
-- 后续替代：暂无
+- 后续替代：[ADR 0053](0053-personal-only-direct-qq-mail-feedback.md) 在个人阶段替代邮件供应商与凭据保管位置
 - 上游依据：[PRD 023](../prd/023-in-app-multimodal-feedback.md)
 
 ## 背景
