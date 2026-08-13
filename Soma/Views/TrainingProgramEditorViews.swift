@@ -479,12 +479,7 @@ private struct TrainingPrescriptionEditorView: View {
         self.recent = recent
         self.onSave = onSave
         _draft = State(initialValue: initialDraft)
-        _moreExpanded = State(initialValue: !initialDraft.weight.isEmpty
-            || !initialDraft.rest.isEmpty
-            || initialDraft.firstSetIsWarmup)
     }
-
-    @State private var moreExpanded: Bool
 
     var body: some View {
         Form {
@@ -501,23 +496,19 @@ private struct TrainingPrescriptionEditorView: View {
                 }
             }
 
-            // PRD 020：处方默认只露组数与次数；重量、间歇与热身进折叠区。
+            // 高频处方必须同屏可见，避免用户误以为计划不支持重量与间歇。
             Section("本次处方") {
                 Grid(horizontalSpacing: 12, verticalSpacing: 14) {
                     GridRow {
                         metric("组数", text: $draft.sets, keyboard: .numberPad)
                         metric("次数", text: $draft.reps, keyboard: .numberPad)
                     }
-                }
-                DisclosureGroup("更多处方", isExpanded: $moreExpanded) {
-                    Grid(horizontalSpacing: 12, verticalSpacing: 14) {
-                        GridRow {
-                            metric("重量 kg", text: $draft.weight, keyboard: .decimalPad)
-                            metric("间歇秒", text: $draft.rest, keyboard: .numberPad)
-                        }
+                    GridRow {
+                        metric("重量 kg", text: $draft.weight, keyboard: .decimalPad)
+                        metric("间歇秒", text: $draft.rest, keyboard: .numberPad)
                     }
-                    Toggle("第 1 组是热身组", isOn: $draft.firstSetIsWarmup)
                 }
+                Toggle("第 1 组是热身组", isOn: $draft.firstSetIsWarmup)
             }
         }
         .navigationTitle("编辑动作")

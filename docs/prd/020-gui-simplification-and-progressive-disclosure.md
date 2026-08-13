@@ -12,6 +12,7 @@
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 恢复教练页左上角历史时间按钮，同时保留左缘手势与 VoiceOver 操作
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 用 typed 饮食结果卡收敛过程卡并扩展饮食详情审查
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 取消 LLM 配置页的「高级」折叠层，并把输入区动作候选从两步按钮改为一步输入历史式建议
+  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 增加聊天原位编辑卡、当前健身房卡、设置页内嵌反馈与新 Session 快捷语
 - 上游依据：[全界面 GUI 精简与渐进披露审计](../research/2026-08-05-ui-simplification-review.md)
 
 ## 背景

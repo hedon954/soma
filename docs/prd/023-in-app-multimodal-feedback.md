@@ -3,7 +3,9 @@
 - 状态：已实现，个人设备凭据待配置与真机验收
 - 日期：2026-08-09
 - 修订自：[PRD 004](004-soma-current-product.md) 的设置与外部数据流边界
-- 后续修订：[PRD 024](024-chat-agent-feedback-tool.md) 增加聊天中的固定反馈 Tool，设置页入口继续保留
+- 后续修订：
+  - [PRD 024](024-chat-agent-feedback-tool.md) 增加聊天中的固定反馈 Tool，设置页入口继续保留
+  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 将反馈直接内嵌在设置页底部，并增加维护者 Gmail 到 Draft PR 自动化边界
 - 上游依据：维护者明确要求反馈不跳转系统邮件 App
 - 下游落地：[ADR 0051](../adr/0051-authenticated-in-app-feedback-email-delivery.md)、[ADR 0052](../adr/0052-gmail-self-delivery-for-in-app-feedback.md)、[ADR 0053](../adr/0053-personal-only-direct-qq-mail-feedback.md)
 

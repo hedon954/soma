@@ -7,7 +7,7 @@
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 的双档模型配置呈现与模型选择方式
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 的“无 Key 不落盘”发送前置条件
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的 AI 服务折叠分层与输入区动作候选两步选择
-- 后续修订：暂无
+- 后续修订：[PRD 027](027-reliable-efficient-react-and-in-context-review.md) 将明确欠费改为仅用户可释放的 FIFO 屏障，并增加暂存消息单删与全清
 - 关联决策：
   - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
   - [ADR 0046](../adr/0046-explicit-llm-configuration-and-input-history-suggestions.md)

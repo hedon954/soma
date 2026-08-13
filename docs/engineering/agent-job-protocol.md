@@ -9,6 +9,7 @@
   - [ADR 0033](../adr/0033-live-activity-agent-job-projection.md)
   - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
   - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
+  - [ADR 0062](../adr/0062-user-resumed-llm-interruption-barrier.md)
 - 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
 
 本文固定 iOS 本地 Outbox、服务器 Job/Event、匿名设备鉴权、本地 Tool handoff、APNs 与
@@ -65,13 +66,19 @@ localQueued
 localQueued | localRunning
   → staged
   → localQueued | localRunning | failed | cancelled
+
+localRunning | waitingForForeground
+  → waitingForUser
+  → localQueued | failed | cancelled
 ```
 
-`staged` 表示 Job 已持久化，但当前没有可用的 LLM 执行位置（缺少凭据、地址无效、鉴权失败、
-限流或供应商服务端错误）。它属于可运行态，由同一套 FIFO 领取逻辑消费；解除条件是
-App 启动、回到前台、LLM 配置变更、上一条任务结束或退避计时到期。传输层故障继续使用
-`waitingForNetwork`，不进入 `staged`；重试不会改变结果的请求级错误直接进入 `failed`。
-判定规则见 [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)。
+`staged` 表示 Job 已持久化但被队首恢复条件阻塞；它本身不可由 FIFO 自动领取。缺少凭据、
+地址无效、鉴权、通用限流或供应商服务端错误可在明确配置变化或退避恢复后释放。明确额度耗尽、
+billing 或 payment failure 进入 `waitingForUser`，App 启动、回到前台和定时器都不得释放；
+后续 Job 继续 staged 且不能越过队首，只有用户重试或删除屏障才能继续。传输层故障继续使用
+`waitingForNetwork`；重试不会改变结果的请求级错误进入 `failed`。判定规则见
+[ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md) 与
+[ADR 0062](../adr/0062-user-resumed-llm-interruption-barrier.md)。
 
 ### 服务端 Job
 
@@ -260,9 +267,10 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 2. Worker 通过行锁/lease 原子领取 queued Job；健康路径由通知唤醒，低频 timeout 只恢复丢失
    通知、进程重启和过期 lease。
 3. 每次 lease 包含 owner、epoch 和过期时间；失去 lease 的 Worker 不得继续追加 Event。
-4. 模型每轮使用原生流式 Tool Calling：文字/图片/直传视频分别使用 8/10/20 秒首增量门禁，
-   首文字或 Tool delta 前最多重试一次；之后 30 秒 idle、180 秒总时限。首段文本立即追加，
-   后续文本按自然边界、48 字符阈值或 80ms 窗口合并；有完整 Tool Call 后才追加 tool request。
+4. 模型每轮使用原生流式 Tool Calling：只在 ReAct Loop 第一次模型处理使用文字/图片/直传视频
+   20/40/60 秒首增量门禁；后续 step 不设单步时限。整个 Loop 从冻结 `loopStartedAt` 起使用
+   3/5/10 分钟墙钟预算，恢复不得重置。首段文本立即追加，后续文本按自然边界、48 字符阈值或
+   80ms 窗口合并；有完整 Tool Call 后才追加 tool request。
 5. 远程 Tool 由 Worker 执行；设备 Tool 进入 `waitingForDevice` 并释放计算资源。
 6. Tool Result 到达后在同一事务通知 Worker，创建新 lease 并从持久历史继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。

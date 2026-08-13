@@ -2,13 +2,14 @@ import Foundation
 
 enum AgentToolGroup: String, CaseIterable, Sendable {
     case core
+    case records
     case plans
     case gym
     case review
     case feedback
 
     static var expandableCases: [AgentToolGroup] {
-        [.plans, .gym, .review, .feedback]
+        [.records, .plans, .gym, .review, .feedback]
     }
 
     var tools: [AgentToolName] {
@@ -17,9 +18,10 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
             [
                 .loadSkill,
                 .queryUserData,
-                .mutateUserData,
                 .expandToolGroup
             ]
+        case .records:
+            [.mutateUserData]
         case .plans:
             [
                 .createTrainingProgram,
@@ -49,6 +51,16 @@ enum AgentToolExposurePolicy {
     static func initialGroups(signals: AgentToolExposureSignals) -> Set<AgentToolGroup> {
         var groups: Set<AgentToolGroup> = [.core]
         let lowered = signals.text.lowercased()
+        if containsAny(
+            lowered,
+            [
+                "记录", "新增", "保存", "修改", "更新", "删除", "撤回",
+                "刚做", "做完", "吃了", "喝了", "体重", "体脂", "腰围",
+                "kg", "公斤", "组", "次", "早餐", "午餐", "晚餐", "加餐"
+            ]
+        ) {
+            groups.insert(.records)
+        }
         if signals.hasActiveProgram
             || signals.hasActiveGuidedSession
             || containsAny(
@@ -102,7 +114,7 @@ enum AgentToolExposurePolicy {
               let group = AgentToolGroup(rawValue: groupRaw),
               AgentToolGroup.expandableCases.contains(group)
         else {
-            return .failure("tool_group 仅支持 plans、gym、review、feedback。")
+            return .failure("tool_group 仅支持 records、plans、gym、review、feedback。")
         }
         if groups.contains(group) {
             return .success("工具组 \(group.rawValue) 已经展开。")

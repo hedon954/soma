@@ -65,6 +65,11 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0059](0059-precise-tools-and-reviewable-meal-items.md) | 已采纳 | 精确分页查询、通用记录 CRUD、Tool v2 与可审查饮食分项 |
 | [0060](0060-guided-performance-workout-entry-projection.md) | 已采纳 | 终态带练动作物化为训练记录，以来源 ID 组成计划执行并避免重复统计 |
 | [0061](0061-discoverable-conversation-session-entry.md) | 已采纳 | 会话抽屉同时保留左上角时间按钮、左缘手势与 VoiceOver 操作 |
+| [0062](0062-user-resumed-llm-interruption-barrier.md) | 已采纳 | 明确欠费只由用户释放，后续消息受严格 FIFO 屏障约束 |
+| [0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) | 已采纳 | 失败 step 同气泡续跑、冻结 Loop 时间，并采用首次处理加整轮两层截止时间 |
+| [0064](0064-deterministic-quick-write-and-latest-inline-review.md) | 已采纳 | 未修改 typed 快捷训练直写本地，最新 AI 回复提供原位记录 CRUD 与修订上下文 |
+| [0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) | 已采纳 | mutation 按明确写意图暴露，System/User Prompt 使用版本化稳定前缀 |
+| [0066](0066-bundled-action-illustration-coverage.md) | 已采纳 | 静默内置目录至少维持一百个 common action 专属离线图 |
 
 新决策使用 [ADR 模板](template.md)。
 

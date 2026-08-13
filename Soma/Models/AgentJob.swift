@@ -6,12 +6,19 @@ enum AgentExecutionBackendKind: String, Codable, CaseIterable, Sendable {
     case remote
 }
 
+enum AgentJobExecutionKind: String, Codable, Sendable {
+    case react
+    case deterministicWorkout
+}
+
 enum AgentJobState: String, Codable, CaseIterable, Sendable {
     case queued
     case waitingForNetwork
     /// 已持久化但当前没有可用的 LLM 执行位置（缺凭据、鉴权失败、限流或供应商 5xx）。
     /// 见 ADR 0045。
     case staged
+    /// 欠费或需要用户决定的失败。只能由显式重试释放。
+    case waitingForUser
     case running
     case remoteRunning
     case waitingForForeground
@@ -33,7 +40,6 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
         switch self {
         case .queued,
              .waitingForNetwork,
-             .staged,
              .waitingForForeground,
              .remoteRunning,
              .waitingForDevice:
@@ -61,9 +67,13 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
              (.staged, .waitingForNetwork),
              (.staged, .failed),
              (.staged, .cancelled),
+             (.waitingForUser, .queued),
+             (.waitingForUser, .failed),
+             (.waitingForUser, .cancelled),
              (.running, .queued),
              (.running, .waitingForNetwork),
              (.running, .staged),
+             (.running, .waitingForUser),
              (.running, .remoteRunning),
              (.running, .waitingForForeground),
              (.running, .waitingForDevice),
@@ -73,6 +83,7 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
              (.waitingForForeground, .queued),
              (.waitingForForeground, .running),
              (.waitingForForeground, .staged),
+             (.waitingForForeground, .waitingForUser),
              (.waitingForForeground, .failed),
              (.waitingForForeground, .cancelled),
              (.waitingForDevice, .queued),
@@ -171,6 +182,12 @@ final class AgentJob {
     /// ADR 0048：本地 ReAct 循环检查点（step 边界）。
     var lastCompletedStep: Int = 0
     var loopCheckpointData: Data = Data()
+    /// 第一次领取时冻结，后续 step、恢复与手动重试都复用。
+    var loopStartedAt: Date?
+    /// 第一个模型 invoke 的首增量门禁只消费一次。
+    var firstStepDeadlineConsumed: Bool = false
+    var executionKindRaw: String = AgentJobExecutionKind.react.rawValue
+    var deterministicPayloadData: Data = Data()
 
     init(
         id: UUID = UUID(),
@@ -224,6 +241,23 @@ final class AgentJob {
         set { stateRaw = newValue.rawValue }
     }
 
+    var executionKind: AgentJobExecutionKind {
+        get { AgentJobExecutionKind(rawValue: executionKindRaw) ?? .react }
+        set { executionKindRaw = newValue.rawValue }
+    }
+
+    var deterministicWorkoutDraft: ExerciseQuickRecordDraft? {
+        get {
+            AgentJobCoding.decode(
+                ExerciseQuickRecordDraft.self,
+                from: deterministicPayloadData
+            )
+        }
+        set {
+            deterministicPayloadData = newValue.map(AgentJobCoding.encode) ?? Data()
+        }
+    }
+
     var mediaAttachments: [MediaAttachmentReference] {
         get {
             AgentJobCoding.decode(
@@ -267,6 +301,20 @@ final class AgentJob {
         lastCompletedStep > 0 && loopCheckpoint != nil
     }
 
+    func freezeLoopStartIfNeeded(at date: Date) {
+        guard loopStartedAt == nil else { return }
+        loopStartedAt = date
+        guard var snapshot = contextSnapshot,
+              let envelope = snapshot.envelope
+        else {
+            return
+        }
+        snapshot.envelope = envelope.freezingLoopStart(at: date)
+        snapshot.structuredContext = snapshot.envelope?.promptText(at: date)
+            ?? snapshot.structuredContext
+        contextSnapshot = snapshot
+    }
+
     func transition(
         to next: AgentJobState,
         at date: Date = .now,
@@ -296,6 +344,7 @@ enum PersistentAgentEventKind: String, Codable, CaseIterable, Sendable {
     case span
     case waitingForNetwork
     case staged
+    case waitingForUser
     case waitingForForeground
     case waitingForDevice
     case completed
@@ -446,13 +495,14 @@ enum AgentJobStore {
             )
         ) ?? []
         guard let job = jobs.first(where: {
-            $0.dataSpace == dataSpace
-                && $0.state.isRunnable
-                && ($0.nextRetryAt == nil || $0.nextRetryAt! <= now)
-        }) else {
+            $0.dataSpace == dataSpace && !$0.state.isTerminal
+        }), job.state.isRunnable,
+        job.nextRetryAt == nil || job.nextRetryAt! <= now
+        else {
             return nil
         }
         try job.transition(to: .running, at: now)
+        job.freezeLoopStartIfNeeded(at: now)
         job.leaseOwner = owner
         job.leaseExpiresAt = now.addingTimeInterval(leaseDuration)
         job.leaseEpoch += 1
@@ -483,6 +533,7 @@ enum AgentJobStore {
             )
         }
         try job.transition(to: .running, at: now)
+        job.freezeLoopStartIfNeeded(at: now)
         job.leaseOwner = owner
         job.leaseExpiresAt = now.addingTimeInterval(leaseDuration)
         job.leaseEpoch += 1
@@ -539,9 +590,9 @@ enum AgentJobStore {
             if let responseID = job.responseMessageID,
                messageByID[responseID]?.agentStatus == .failed
             {
-                if job.state.canTransition(to: .failed) {
+                if job.state.canTransition(to: .waitingForUser) {
                     try job.transition(
-                        to: .failed,
+                        to: .waitingForUser,
                         at: now,
                         error: "上次处理已失败，等待手动重试。"
                     )
@@ -586,6 +637,78 @@ enum AgentJobStore {
         )
     }
 
+    static func waitForUser(
+        _ job: AgentJob,
+        message: String,
+        now: Date = .now,
+        in context: ModelContext
+    ) throws {
+        if job.state != .waitingForUser {
+            try job.transition(to: .waitingForUser, at: now, error: message)
+        }
+        job.leaseOwner = nil
+        job.leaseExpiresAt = nil
+        job.nextRetryAt = nil
+        try context.save()
+        _ = try append(
+            kind: .waitingForUser,
+            payload: .init(message: message),
+            to: job,
+            in: context,
+            at: now
+        )
+    }
+
+    static func stageFollowingJobs(
+        after blockingJob: AgentJob,
+        message: String,
+        now: Date = .now,
+        in context: ModelContext
+    ) throws {
+        let jobs = (
+            try? context.fetch(
+                FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
+            )
+        ) ?? []
+        for job in jobs where job.dataSpace == blockingJob.dataSpace
+            && job.createdAt > blockingJob.createdAt
+            && !job.state.isTerminal
+            && job.state != .staged
+            && job.state != .waitingForUser
+        {
+            guard job.state.canTransition(to: .staged) else { continue }
+            try job.transition(to: .staged, at: now, error: message)
+            job.leaseOwner = nil
+            job.leaseExpiresAt = nil
+            job.nextRetryAt = nil
+            _ = try append(
+                kind: .staged,
+                payload: .init(message: message),
+                to: job,
+                in: context,
+                at: now
+            )
+        }
+        try context.save()
+    }
+
+    static func releaseForManualRetry(
+        _ job: AgentJob,
+        dataSpace: DataSpace,
+        now: Date = .now,
+        in context: ModelContext
+    ) throws {
+        guard job.dataSpace == dataSpace,
+              job.state == .waitingForUser || job.state == .staged
+        else {
+            throw AgentJobStateError.invalidTransition(from: job.state, to: .queued)
+        }
+        try job.transition(to: .queued, at: now)
+        job.nextRetryAt = nil
+        _ = try releaseStagedJobs(dataSpace: dataSpace, now: now, in: context)
+        try context.save()
+    }
+
     /// LLM 恢复后解除暂存，让既有 FIFO 领取逻辑立即消费。
     static func releaseStagedJobs(
         dataSpace: DataSpace,
@@ -614,7 +737,10 @@ enum AgentJobStore {
         in context: ModelContext
     ) -> Int {
         let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
-        return jobs.filter { $0.dataSpace == dataSpace && $0.state == .staged }.count
+        return jobs.filter {
+            $0.dataSpace == dataSpace
+                && ($0.state == .staged || $0.state == .waitingForUser)
+        }.count
     }
 }
 
@@ -782,6 +908,7 @@ enum PersistentAgentEventProjection {
              .attemptStarted,
              .waitingForNetwork,
              .staged,
+             .waitingForUser,
              .waitingForForeground,
              .waitingForDevice:
             break

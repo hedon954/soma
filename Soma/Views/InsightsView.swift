@@ -73,8 +73,10 @@ struct InsightsView: View {
                 NavigationLink {
                     GymLibraryView()
                 } label: {
-                    CompactContextRow(
+                    CurrentGymContextCard(
                         gymName: currentGym?.name ?? "尚未建立",
+                        coverImagePath: currentGym?.coverImagePath,
+                        note: currentGym?.notes,
                         equipmentCount: currentEquipmentCount
                     )
                 }
@@ -745,34 +747,50 @@ private struct TrainingVolumeTrendCard: View {
     }
 }
 
-/// PRD 020：AI 当前上下文降为一行紧凑入口。
-private struct CompactContextRow: View {
+/// 当前健身房是 Agent 的高频上下文，首屏直接呈现名称、封面和器械摘要。
+private struct CurrentGymContextCard: View {
     let gymName: String
+    let coverImagePath: String?
+    let note: String?
     let equipmentCount: Int
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "sparkles")
-                .font(.caption)
-                .foregroundStyle(AppTheme.tint)
-            Text("AI 上下文：\(gymName)")
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-            if equipmentCount > 0 {
-                Text("· \(equipmentCount) 件器械")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        AppCard {
+            HStack(spacing: 12) {
+                LocalImageView(path: coverImagePath)
+                    .frame(width: 58, height: 58)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("当前健身房", systemImage: "sparkles")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.tint)
+                    Text(gymName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(contextDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.bold())
-                .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.background, in: Capsule())
-        .overlay { Capsule().stroke(.primary.opacity(0.06)) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("AI 当前上下文，健身房 \(gymName)，\(equipmentCount) 件器械")
+        .accessibilityLabel("当前健身房 \(gymName)，\(equipmentCount) 件器械")
+    }
+
+    private var contextDetail: String {
+        if equipmentCount > 0 {
+            return "\(equipmentCount) 件器械可供 Agent 使用"
+        }
+        if let note = note?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !note.isEmpty
+        {
+            return note
+        }
+        return "点开管理健身房与器械"
     }
 }

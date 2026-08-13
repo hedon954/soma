@@ -3,7 +3,7 @@ import SwiftData
 import SwiftOpenAI
 import XCTest
 
-/// ADR 0045：LLM 失效只允许三种处置，暂存队列在恢复后先进先出补偿消费。
+/// ADR 0062：自动恢复与等待用户重试必须分离，队列保持严格 FIFO。
 final class LLMOutageStagingTests: XCTestCase {
     func testTransportFailuresRetryAsNetwork() {
         XCTAssertEqual(
@@ -55,6 +55,22 @@ final class LLMOutageStagingTests: XCTestCase {
         }
     }
 
+    func testQuotaExhaustionWaitsForExplicitUserRetry() {
+        let quotaDisposition = LLMOutageClassifier.disposition(
+            for: APIError.responseUnsuccessful(
+                description: #"{"error":{"code":"insufficient_quota"}}"#,
+                statusCode: 429
+            )
+        )
+        guard case let .waitForUser(message) = quotaDisposition else {
+            return XCTFail("欠费必须等待用户手动重试")
+        }
+        XCTAssertTrue(message.contains("不会自动继续"))
+        guard case .stage = disposition(forStatus: 429) else {
+            return XCTFail("普通 429 频率限制仍应暂存退避")
+        }
+    }
+
     func testUnsupportedMultimodalFailsWithoutStaging() {
         XCTAssertEqual(
             LLMOutageClassifier.disposition(
@@ -83,7 +99,7 @@ final class LLMOutageStagingTests: XCTestCase {
         let job = makeJob()
 
         try job.transition(to: .staged)
-        XCTAssertTrue(job.state.isRunnable)
+        XCTAssertFalse(job.state.isRunnable)
         XCTAssertFalse(job.state.isTerminal)
         XCTAssertTrue(job.state.canTransition(to: .running))
         XCTAssertTrue(job.state.canTransition(to: .queued))
@@ -91,6 +107,48 @@ final class LLMOutageStagingTests: XCTestCase {
         try job.transition(to: .running)
         try job.transition(to: .succeeded)
         XCTAssertFalse(job.state.canTransition(to: .staged))
+    }
+
+    @MainActor
+    func testWaitingForUserBlocksFollowingJobsUntilManualRelease() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let first = makeJob(createdAt: Date(timeIntervalSince1970: 10))
+        let second = makeJob(createdAt: Date(timeIntervalSince1970: 20))
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+        try AgentJobStore.claim(first, owner: "runner", in: context)
+        try AgentJobStore.waitForUser(first, message: "额度已用尽", in: context)
+        try AgentJobStore.stageFollowingJobs(
+            after: first,
+            message: "等待前一条",
+            in: context
+        )
+
+        XCTAssertEqual(first.state, .waitingForUser)
+        XCTAssertEqual(second.state, .staged)
+        XCTAssertNil(try AgentJobStore.claimNext(
+            dataSpace: .personal,
+            owner: "runner",
+            in: context
+        ))
+
+        try AgentJobStore.releaseForManualRetry(
+            first,
+            dataSpace: .personal,
+            in: context
+        )
+        XCTAssertEqual(first.state, .queued)
+        XCTAssertEqual(second.state, .queued)
+        XCTAssertEqual(
+            try AgentJobStore.claimNext(
+                dataSpace: .personal,
+                owner: "runner",
+                in: context
+            )?.id,
+            first.id
+        )
     }
 
     @MainActor
@@ -229,6 +287,63 @@ final class LLMOutageStagingTests: XCTestCase {
         )
         XCTAssertTrue(try context.fetch(FetchDescriptor<AgentTrace>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutEntry>()).isEmpty)
+    }
+
+    @MainActor
+    func testExactQuickWorkoutRunsWithoutLLMAndUsesExecutionTime() async throws {
+        let suiteName = "QuickWorkoutTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
+        let context = ModelContext(spaces.personalContainer)
+        let session = ConversationSession()
+        let exercise = ExerciseDefinition(canonicalName: "杠铃深蹲")
+        context.insert(session)
+        context.insert(exercise)
+        try context.save()
+        let ai = AIService(defaults: defaults, apiKeyOverride: "")
+        let processor = ConversationProcessingService(
+            backgroundLease: StagingTestBackgroundLease()
+        )
+        let startedAt = Date.now
+
+        XCTAssertTrue(processor.submitQuickWorkout(
+            text: "杠铃深蹲：60kg × 8 × 4组",
+            draft: ExerciseQuickRecordDraft(
+                exerciseID: exercise.id,
+                exerciseName: exercise.canonicalName,
+                setEntries: (0 ..< 4).map { _ in
+                    WorkoutSetEvidence(reps: 8, externalWeightKG: 60)
+                },
+                restSeconds: 90,
+                durationMinutes: nil
+            ),
+            context: ConversationProcessingContext(
+                structuredContext: "",
+                session: session,
+                dataSpace: .personal,
+                gyms: [],
+                equipment: [],
+                ai: ai,
+                modelContext: context
+            ),
+            locationService: LocationContextService()
+        ))
+        for _ in 0 ..< 100 where processor.isProcessing {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let workout = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<WorkoutEntry>()).first
+        )
+        let job = try XCTUnwrap(try context.fetch(FetchDescriptor<AgentJob>()).first)
+        XCTAssertEqual(job.executionKind, .deterministicWorkout)
+        XCTAssertEqual(job.state, .succeeded)
+        XCTAssertEqual(workout.setEntries.count, 4)
+        XCTAssertGreaterThanOrEqual(workout.date, startedAt)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<AgentTrace>()).allSatisfy {
+            $0.provider == "Soma 本机规则"
+        })
     }
 
     private func disposition(forStatus status: Int) -> LLMFailureDisposition {

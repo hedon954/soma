@@ -7,6 +7,8 @@ enum LLMFailureDisposition: Equatable {
     case retryNetwork
     /// 可由“等待供应商恢复”或“用户改配置”修复：落入 `staged`。
     case stage(message: String)
+    /// 欠费、额度耗尽等强制中断：只能由用户显式重试。
+    case waitForUser(message: String)
     /// 重试不会改变结果：进入终态并保留手动重试。
     case fail
 }
@@ -19,6 +21,7 @@ struct LLMFailureSignal: Equatable {
     var isInvalidEndpoint = false
     var isUnsupportedRequest = false
     var httpStatusCode: Int?
+    var responseDescription: String?
 }
 
 enum LLMOutageClassifier {
@@ -49,6 +52,11 @@ enum LLMOutageClassifier {
             return .fail
         }
         if status == 429 {
+            if isQuotaExhaustion(signal.responseDescription) {
+                return .waitForUser(
+                    message: "模型服务额度已用尽。请处理额度后手动重试；Soma 不会自动继续。"
+                )
+            }
             return .stage(message: "模型服务额度或频率受限，消息已暂存。")
         }
         if status == 401 || status == 403 {
@@ -85,8 +93,9 @@ enum LLMOutageClassifier {
             switch apiError {
             case .timeOutError:
                 signal.isTransportFailure = true
-            case let .responseUnsuccessful(_, statusCode):
+            case let .responseUnsuccessful(description, statusCode):
                 signal.httpStatusCode = statusCode
+                signal.responseDescription = description
             case .requestFailed,
                  .invalidData,
                  .jsonDecodingFailure,
@@ -107,6 +116,20 @@ enum LLMOutageClassifier {
             signal.isTransportFailure = true
         }
         return signal
+    }
+
+    private static func isQuotaExhaustion(_ description: String?) -> Bool {
+        guard let normalized = description?.lowercased() else { return false }
+        return [
+            "insufficient_quota",
+            "quota_exhausted",
+            "billing",
+            "payment_required",
+            "credit balance",
+            "余额不足",
+            "欠费",
+            "额度已用尽"
+        ].contains { normalized.contains($0) }
     }
 
     /// 暂存退避：指数增长、上限 5 分钟。等待用户改配置的场景不设退避。

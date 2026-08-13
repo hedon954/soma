@@ -721,6 +721,8 @@ final class CoachMessage {
     var attemptNumber: Int = 0
     var locationData: Data = Data()
     var effectiveGymID: UUID?
+    /// 最新回复卡片内的用户修订摘要；下一轮作为结构化纠错块注入历史。
+    var manualCorrectionSummary: String?
 
     init(
         date: Date = .now,
@@ -757,6 +759,17 @@ final class CoachMessage {
         self.attemptNumber = attemptNumber
         locationData = (try? location.map { try JSONEncoder().encode($0) }) ?? Data()
         self.effectiveGymID = effectiveGymID
+    }
+
+    func recordManualCorrection(_ summary: String) {
+        let line = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return }
+        let prior = manualCorrectionSummary?
+            .split(separator: "\n")
+            .map(String.init) ?? []
+        manualCorrectionSummary = (prior + ["- \(line)"])
+            .suffix(8)
+            .joined(separator: "\n")
     }
 
     var mediaKind: MediaKind {

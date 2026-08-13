@@ -227,6 +227,47 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertFalse(tools.contains(.updateGym))
     }
 
+    func testGeneralAdviceDoesNotExposeMutationToolUntilNeeded() {
+        let advice = AgentToolExposurePolicy.initialGroups(
+            signals: AgentToolExposureSignals(
+                text: "深蹲时怎样保持躯干稳定？",
+                hasVideo: false,
+                hasActiveProgram: false,
+                hasActiveGuidedSession: false
+            )
+        )
+        XCTAssertFalse(advice.contains(.records))
+        XCTAssertFalse(
+            AgentToolExposurePolicy.tools(for: advice).contains(.mutateUserData)
+        )
+
+        let recording = AgentToolExposurePolicy.initialGroups(
+            signals: AgentToolExposureSignals(
+                text: "记录深蹲 4组8次60kg",
+                hasVideo: false,
+                hasActiveProgram: false,
+                hasActiveGuidedSession: false
+            )
+        )
+        XCTAssertTrue(recording.contains(.records))
+        XCTAssertTrue(
+            AgentToolExposurePolicy.tools(for: recording).contains(.mutateUserData)
+        )
+    }
+
+    func testCurrentTurnPromptSeparatesStableContractFromDynamicInput() {
+        let prompt = ReActAgentPrompt.user(
+            text: "记录深蹲",
+            context: "可信摘要",
+            imageCount: 0,
+            hasVideo: false
+        )
+        XCTAssertTrue(prompt.hasPrefix("[SOMA CURRENT TURN v1]"))
+        XCTAssertTrue(prompt.contains("[TRUSTED LOCAL CONTEXT]\n可信摘要"))
+        XCTAssertTrue(prompt.contains("[CURRENT USER INPUT]\n记录深蹲"))
+        XCTAssertTrue(prompt.contains("一般建议直接回答"))
+    }
+
     func testToolExposureSelectsProductFeedbackButNotWorkoutFeedback() {
         let productGroups = AgentToolExposurePolicy.initialGroups(
             signals: AgentToolExposureSignals(

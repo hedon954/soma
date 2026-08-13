@@ -4,6 +4,7 @@
 - 后续修订：
   - [PRD 024](024-chat-agent-feedback-tool.md) 为工具组新增当前 Turn 产品反馈能力
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 收敛上下文、Tool Schema 与首增量恢复策略
+  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 收敛 step 续跑、固定 Loop 时间、分层超时、按意图 Tool 与稳定 Prompt 前缀
 - 日期：2026-08-05
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的 Agent 处理与本地摘要边界

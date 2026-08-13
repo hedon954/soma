@@ -116,6 +116,7 @@ final class AgentJobTests: XCTestCase {
 
         XCTAssertEqual(claimed.id, personal.id)
         XCTAssertEqual(claimed.activeAttemptNumber, 1)
+        XCTAssertEqual(claimed.loopStartedAt, now)
         XCTAssertEqual(demo.state, .queued)
         XCTAssertEqual(
             try AgentJobStore.recoverExpiredLeases(
@@ -127,6 +128,30 @@ final class AgentJobTests: XCTestCase {
         )
         XCTAssertEqual(personal.state, .waitingForForeground)
         XCTAssertEqual(demo.state, .queued)
+    }
+
+    @MainActor
+    func testLoopStartTimeIsFrozenAcrossManualRetry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let sentAt = Date(timeIntervalSince1970: 100)
+        let firstStart = sentAt.addingTimeInterval(20)
+        let retryAt = sentAt.addingTimeInterval(120)
+        let job = makeJob(createdAt: sentAt)
+        context.insert(job)
+        try context.save()
+
+        try AgentJobStore.claim(job, owner: "runner", now: firstStart, in: context)
+        try AgentJobStore.waitForUser(job, message: "手动重试", now: firstStart, in: context)
+        try AgentJobStore.releaseForManualRetry(
+            job,
+            dataSpace: .personal,
+            now: retryAt,
+            in: context
+        )
+        try AgentJobStore.claim(job, owner: "runner", now: retryAt, in: context)
+
+        XCTAssertEqual(job.loopStartedAt, firstStart)
     }
 
     @MainActor

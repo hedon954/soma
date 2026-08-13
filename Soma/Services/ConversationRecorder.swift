@@ -1171,6 +1171,7 @@ extension ConversationRecorder {
             : "，并保存 \(imageAttachments.count) 张照片"
         return .success(
             "已更新健身房「\(target.name)」：\(detail)\(photoDetail)。",
+            recordRefs: [gymReference(target)],
             recordType: .gym
         )
     }

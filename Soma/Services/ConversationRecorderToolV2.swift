@@ -299,6 +299,14 @@ extension ConversationRecorder {
         )
     }
 
+    static func gymReference(_ gym: GymProfile) -> AgentRecordReference {
+        AgentRecordReference(
+            recordType: ConversationIntent.gym.rawValue,
+            recordID: gym.id.uuidString,
+            title: gym.name
+        )
+    }
+
     static func mealResultData(_ entry: MealEntry) -> AgentJSONValue {
         .object([
             "record_id": .string(entry.id.uuidString),

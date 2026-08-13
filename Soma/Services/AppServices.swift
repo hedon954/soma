@@ -520,6 +520,7 @@ final class AIService {
         route requestedRoute: AIModelRoute? = nil,
         toolSignals: AgentToolExposureSignals? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
+        firstStepDeadlineEnabled: Bool = true,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
         videoFrameFallback: (() async -> [Data])? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
@@ -672,7 +673,9 @@ final class AIService {
                             route: selectedRoute,
                             apiKey: key,
                             userPrompt: userPrompt,
-                            textItemID: textItemID
+                            textItemID: textItemID,
+                            enforceFirstStepDeadline: firstStepDeadlineEnabled
+                                && step == 1
                         ),
                         videoFrameFallback: videoFrameFallback,
                         trace: trace

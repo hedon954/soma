@@ -7,7 +7,9 @@
   - [ADR 0004](0004-progressive-skills-fixed-tool-contract.md) 中每个记录动作使用独立固定 Tool 名称的边界
   - [ADR 0028](0028-semantic-exercise-identity.md) 中每次语义归一必须返回完整动作列表的边界；稳定动作 ID 保持不变
   - [ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 中 core 暴露十一个 Tool 的边界
-- 后续替代：暂无
+- 后续替代：
+  - [ADR 0064](0064-deterministic-quick-write-and-latest-inline-review.md) 将 record reference 扩展为最新回复原位 CRUD 与修订上下文
+  - [ADR 0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) 将 `mutate_user_data` 从常驻 core 移入按写意图暴露的 records 组
 - 上游依据：
   - [PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
   - [BUG 0011](../bugs/0011-meal-correction-misattributed-media.md)

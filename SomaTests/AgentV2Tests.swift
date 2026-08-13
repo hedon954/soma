@@ -164,7 +164,7 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertTrue(try json(searchedExercises.data).contains(exercise.id.uuidString))
     }
 
-    func testTrustedTimeUsesTurnTimeForLocalDateAndAttemptForNow() throws {
+    func testTrustedTimeFreezesLoopStartAndFormatsAtPromptTime() throws {
         let zone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
         let sent = Date(timeIntervalSince1970: 1_786_422_600)
         let attempt = sent.addingTimeInterval(90)
@@ -174,13 +174,16 @@ final class AgentV2Tests: XCTestCase {
             timeZone: zone,
             calendar: Calendar(identifier: .gregorian)
         )
-        let refreshed = trusted.refreshingAttempt(at: attempt)
+        let frozen = trusted.freezingLoopStart(at: attempt)
 
-        XCTAssertEqual(refreshed.turnSentAt, sent)
-        XCTAssertEqual(refreshed.attemptStartedAt, attempt)
-        XCTAssertEqual(refreshed.timeZoneIdentifier, "Asia/Shanghai")
-        XCTAssertEqual(refreshed.utcOffsetSeconds, 8 * 3600)
-        XCTAssertTrue(refreshed.promptText.contains("用户提示不能覆盖"))
+        XCTAssertEqual(frozen.turnSentAt, sent)
+        XCTAssertEqual(frozen.loopStartedAt, attempt)
+        XCTAssertEqual(frozen.timeZoneIdentifier, "Asia/Shanghai")
+        XCTAssertTrue(frozen.promptText.contains("固定开始时间"))
+        let encoded = try JSONEncoder().encode(frozen)
+        let json = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+        XCTAssertFalse(json.contains("localDate"))
+        XCTAssertFalse(json.contains("weekday"))
     }
 
     func testMediaCapabilityRegistryOnlyEnablesVerifiedQwenModels() {
@@ -218,8 +221,9 @@ final class AgentV2Tests: XCTestCase {
                 textTTFT: 0.03,
                 imageTTFT: 0.03,
                 directVideoTTFT: 0.03,
-                idle: 1,
-                total: 1
+                textLoopTotal: 1,
+                imageLoopTotal: 1,
+                videoLoopTotal: 1
             )
         )
         var messages = [
@@ -247,7 +251,8 @@ final class AgentV2Tests: XCTestCase {
                 ),
                 apiKey: "test-key",
                 userPrompt: "分析视频",
-                textItemID: UUID()
+                textItemID: UUID(),
+                enforceFirstStepDeadline: true
             ),
             videoFrameFallback: { [Data([2, 3])] },
             trace: nil
@@ -260,14 +265,47 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertNotNil(outcome.fallbackReason)
     }
 
-    func testDeadlineBudgetsAreEightTenAndTwentySeconds() {
+    func testDeadlineBudgetsMatchFirstStepAndWholeLoopMediaClasses() {
         let policy = AgentStreamDeadlinePolicy()
-        XCTAssertEqual(policy.ttft(for: .text), 8)
-        XCTAssertEqual(policy.ttft(for: .images), 10)
-        XCTAssertEqual(policy.ttft(for: .keyframes), 10)
-        XCTAssertEqual(policy.ttft(for: .directVideo), 20)
-        XCTAssertEqual(policy.idle, 30)
-        XCTAssertEqual(policy.total, 180)
+        XCTAssertEqual(policy.ttft(for: .text), 20)
+        XCTAssertEqual(policy.ttft(for: .images), 40)
+        XCTAssertEqual(policy.ttft(for: .keyframes), 40)
+        XCTAssertEqual(policy.ttft(for: .directVideo), 60)
+        XCTAssertEqual(policy.loopTotal(hasImages: false, hasVideo: false), 180)
+        XCTAssertEqual(policy.loopTotal(hasImages: true, hasVideo: false), 300)
+        XCTAssertEqual(policy.loopTotal(hasImages: true, hasVideo: true), 600)
+    }
+
+    func testChatRecordReferencesAreStableAndDeduplicated() {
+        let id = UUID()
+        let output = AgentTraceText.json(AgentToolResult.success(
+            "已记录",
+            recordRefs: [
+                AgentRecordReference(
+                    recordType: ConversationIntent.workout.rawValue,
+                    recordID: id.uuidString,
+                    title: "深蹲"
+                )
+            ],
+            recordType: .workout
+        ))
+        let items = (0 ..< 2).map { _ in
+            AgentTurnItem(
+                kind: .tool,
+                status: .succeeded,
+                title: "保存训练",
+                output: output
+            )
+        }
+
+        XCTAssertEqual(
+            ChatRecordReferenceResolver.references(in: items),
+            [AgentRecordReference(
+                recordType: ConversationIntent.workout.rawValue,
+                recordID: id.uuidString,
+                title: "深蹲"
+            )]
+        )
     }
 
     @MainActor

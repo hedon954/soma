@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct FeedbackView: View {
+    var isEmbedded = false
     @State private var draftID = UUID()
     @State private var message = ""
     @State private var attachments: [PendingAttachment] = []
@@ -12,19 +13,18 @@ struct FeedbackView: View {
     @FocusState private var editorFocused: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("告诉我哪里不好用，或你希望 Soma 接下来做什么。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                composer
+        Group {
+            if isEmbedded {
+                content
+            } else {
+                ScrollView {
+                    content.padding()
+                }
+                .appPageBackground()
+                .navigationTitle("发送反馈")
+                .navigationBarTitleDisplayMode(.inline)
             }
-            .padding()
         }
-        .appPageBackground()
-        .navigationTitle("发送反馈")
-        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showsMediaPicker) {
             MediaSourceDialog(
                 allowsVideo: true,
@@ -55,6 +55,15 @@ struct FeedbackView: View {
         .onDisappear {
             submissionTask?.cancel()
             cleanupTemporaryVideos(in: attachments)
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("告诉我哪里不好用，或你希望 Soma 接下来做什么。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            composer
         }
     }
 

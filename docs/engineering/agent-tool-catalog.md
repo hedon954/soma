@@ -27,7 +27,7 @@ PRD 025 / ADR 0059 的 Tool v2 已落地。“v2 暴露”列是新请求唯一�
 | --- | --- | --- | --- | --- |
 | `load_skill` | core | 读取 | 是 | 保留 |
 | `query_user_data` | core | 读取 | 是，Schema v2 | v1 参数继续解码 |
-| `mutate_user_data` | core | 写入 | 是，Schema v2 | 新增 |
+| `mutate_user_data` | records | 写入 | 是，Schema v2 | 仅明确记录／修改／删除意图预选 |
 | `expand_tool_group` | core | 运行时 | 是 | 保留 |
 | `create_training_program` | plans | 写入 | 是 | 保留 |
 | `create_workout_template_version` | plans | 写入 | 是 | 保留 |
@@ -57,7 +57,7 @@ PRD 025 / ADR 0059 的 Tool v2 已落地。“v2 暴露”列是新请求唯一�
 | `load_skill` | `skill_id` | — | Skill 内容；仅按需加载 |
 | `query_user_data` | `scope` | `record_id`、`exercise_id`、`program_id`、`session_id`、`query`、`date_from`、`date_to`、`sort`、`limit`、`cursor`、`projection`、`fields`、`group_by`、`metric` | `data.items` 与 `page.next_cursor`；默认 3、最大 10；`detail` 必须精确 ID；动作查询必须有搜索词或 ID |
 | `mutate_user_data` | `operation`、`record_type` | `record_id`、与记录类型唯一对应的 `payload` | 稳定 `record_refs`；create/update 需要 payload，update/delete 需要 ID，delete 不接受 payload |
-| `expand_tool_group` | `tool_group` | — | 只可展开 plans/gym/review/feedback |
+| `expand_tool_group` | `tool_group` | — | 只可展开 records/plans/gym/review/feedback |
 | `create_training_program` | `program_name`、`template_name`、`template_exercises` | `goal`、`schedule_hint` | 新计划与首个不可变模板 |
 | `create_workout_template_version` | `program_id`、`template_name`、`template_exercises` | `schedule_hint` | 新的不可变模板版本 |
 | `archive_training_program` | `program_id` | — | 归档回执 |

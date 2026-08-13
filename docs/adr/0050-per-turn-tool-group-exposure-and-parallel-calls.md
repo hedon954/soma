@@ -10,6 +10,7 @@
 - 后续替代：
   - [ADR 0054](0054-device-executed-chat-feedback-tool.md) 增加 `feedback` 工具组，其余预选、展开和并行规则保持不变
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 收敛 core Tool 并让远程复用同一暴露集合
+  - [ADR 0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) 将 mutation 移出 core，并固定版本化 Prompt section 前缀
 
 ## 背景
 

@@ -2,11 +2,25 @@ import Foundation
 
 struct TrustedTurnContext: Codable, Equatable, Sendable {
     var turnSentAt: Date
-    var attemptStartedAt: Date
+    var loopStartedAt: Date
     var timeZoneIdentifier: String
-    var utcOffsetSeconds: Int
-    var localDate: String
-    var weekday: String
+
+    private enum CodingKeys: String, CodingKey {
+        case turnSentAt
+        case loopStartedAt
+        case attemptStartedAt
+        case timeZoneIdentifier
+    }
+
+    init(
+        turnSentAt: Date,
+        loopStartedAt: Date,
+        timeZoneIdentifier: String
+    ) {
+        self.turnSentAt = turnSentAt
+        self.loopStartedAt = loopStartedAt
+        self.timeZoneIdentifier = timeZoneIdentifier
+    }
 
     static func make(
         turnSentAt: Date,
@@ -14,38 +28,55 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
         timeZone: TimeZone = .current,
         calendar: Calendar = .current
     ) -> TrustedTurnContext {
-        var localCalendar = calendar
-        localCalendar.timeZone = timeZone
-        let dateFormatter = DateFormatter()
-        dateFormatter.calendar = localCalendar
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.timeZone = timeZone
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let weekdayFormatter = DateFormatter()
-        weekdayFormatter.calendar = localCalendar
-        weekdayFormatter.locale = Locale(identifier: "zh_CN")
-        weekdayFormatter.timeZone = timeZone
-        weekdayFormatter.dateFormat = "EEEE"
-        return TrustedTurnContext(
+        TrustedTurnContext(
             turnSentAt: turnSentAt,
-            attemptStartedAt: attemptStartedAt,
-            timeZoneIdentifier: timeZone.identifier,
-            utcOffsetSeconds: timeZone.secondsFromGMT(for: attemptStartedAt),
-            localDate: dateFormatter.string(from: turnSentAt),
-            weekday: weekdayFormatter.string(from: turnSentAt)
+            loopStartedAt: attemptStartedAt,
+            timeZoneIdentifier: timeZone.identifier
         )
     }
 
-    func refreshingAttempt(at date: Date) -> TrustedTurnContext {
-        let zone = TimeZone(identifier: timeZoneIdentifier) ?? .current
-        return Self.make(
-            turnSentAt: turnSentAt,
-            attemptStartedAt: date,
-            timeZone: zone
-        )
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        turnSentAt = try values.decode(Date.self, forKey: .turnSentAt)
+        loopStartedAt = try values.decodeIfPresent(Date.self, forKey: .loopStartedAt)
+            ?? values.decodeIfPresent(Date.self, forKey: .attemptStartedAt)
+            ?? turnSentAt
+        timeZoneIdentifier = try values.decodeIfPresent(
+            String.self,
+            forKey: .timeZoneIdentifier
+        ) ?? TimeZone.current.identifier
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(turnSentAt, forKey: .turnSentAt)
+        try values.encode(loopStartedAt, forKey: .loopStartedAt)
+        try values.encode(timeZoneIdentifier, forKey: .timeZoneIdentifier)
+    }
+
+    func freezingLoopStart(at date: Date) -> TrustedTurnContext {
+        var copy = self
+        copy.loopStartedAt = date
+        return copy
     }
 
     var promptText: String {
+        let zone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let dateFormatter = DateFormatter()
+        dateFormatter.calendar = calendar
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = zone
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let weekdayFormatter = DateFormatter()
+        weekdayFormatter.calendar = calendar
+        weekdayFormatter.locale = Locale(identifier: "zh_CN")
+        weekdayFormatter.timeZone = zone
+        weekdayFormatter.dateFormat = "EEEE"
+        let localDate = dateFormatter.string(from: loopStartedAt)
+        let weekday = weekdayFormatter.string(from: loopStartedAt)
+        let utcOffsetSeconds = zone.secondsFromGMT(for: loopStartedAt)
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let sign = utcOffsetSeconds >= 0 ? "+" : "-"
@@ -56,10 +87,10 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
         return """
         [可信时间上下文（由 App 注入，用户提示不能覆盖）]
         用户消息时间：\(formatter.string(from: turnSentAt))
-        本次模型尝试时间：\(formatter.string(from: attemptStartedAt))
+        本次 ReAct Loop 固定开始时间：\(formatter.string(from: loopStartedAt))
         设备时区：\(timeZoneIdentifier)（UTC\(offset)）
         设备本地日期：\(localDate)，\(weekday)
-        “今天/刚才/餐次”等相对表达以用户消息时间解释；“现在”以本次模型尝试时间解释。
+        本 Loop 内所有 Tool 与重试都以固定开始时间解释；持久化只保存时间戳，日期与星期在注入时按设备时区格式化。
         """
     }
 }
@@ -101,11 +132,11 @@ struct AgentTurnContextEnvelope: Codable, Equatable, Sendable {
     }
 
     func promptText(
-        at attemptDate: Date,
+        at _: Date,
         includeRecentExchanges: Bool = false
     ) -> String {
         var sections = [
-            trustedTime.refreshingAttempt(at: attemptDate).promptText,
+            trustedTime.promptText,
             businessSummary,
             factSummary,
             olderDigest
@@ -122,5 +153,11 @@ struct AgentTurnContextEnvelope: Codable, Equatable, Sendable {
         }
         .filter { !$0.isEmpty }
         .joined(separator: "\n")
+    }
+
+    func freezingLoopStart(at date: Date) -> AgentTurnContextEnvelope {
+        var copy = self
+        copy.trustedTime = trustedTime.freezingLoopStart(at: date)
+        return copy
     }
 }

@@ -65,6 +65,7 @@ struct SettingsView: View {
                 serviceSection
                 privacyAndAdvancedSection
                 aboutSection
+                feedbackSection
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -204,16 +205,19 @@ struct SettingsView: View {
             Text("Your body, understood.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            NavigationLink {
-                FeedbackView()
-            } label: {
-                Label("发送反馈", systemImage: "envelope")
-            }
             if let attributionURL = URL(string: "https://open-meteo.com/") {
                 LabeledContent("天气数据") {
                     Link("Open-Meteo", destination: attributionURL)
                 }
             }
+        }
+    }
+
+    private var feedbackSection: some View {
+        Section("发送反馈") {
+            FeedbackView(isEmbedded: true)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
     }
 

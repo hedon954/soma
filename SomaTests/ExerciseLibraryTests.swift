@@ -154,6 +154,23 @@ final class ExerciseLibraryTests: XCTestCase {
         }
     }
 
+    func testCatalogKeepsAtLeastOneHundredDedicatedActionIllustrations() {
+        let illustratedEntries = BundledExerciseCatalog.entries.filter {
+            !$0.actionIllustrationResourceName.isEmpty
+        }
+
+        XCTAssertGreaterThanOrEqual(
+            illustratedEntries.count,
+            100,
+            "常见动作专属图覆盖不应退回到通用占位"
+        )
+        XCTAssertEqual(
+            Set(illustratedEntries.map(\.canonicalName)).count,
+            illustratedEntries.count,
+            "每个专属图映射必须对应唯一 canonicalName"
+        )
+    }
+
     @MainActor
     func testListToolReturnsCompleteStableIDAndNamePairs() throws {
         let (spaces, defaults) = try makeSpaces()
