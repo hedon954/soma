@@ -729,6 +729,7 @@ final class ConversationProcessingService {
                 call,
                 turnID: job.turnID,
                 userMessage: userMessage,
+                sourceDate: job.frozenExecutionDate,
                 mediaAttachments: job.mediaAttachments,
                 preferredGymID: currentGymID,
                 context: context
@@ -1190,6 +1191,7 @@ private extension ConversationProcessingService {
                         call,
                         turnID: turnID,
                         userMessage: userMessage,
+                        sourceDate: job.frozenExecutionDate,
                         mediaAttachments: attributedMedia,
                         preferredGymID: resolution.gymID,
                         context: context
@@ -1232,6 +1234,7 @@ private extension ConversationProcessingService {
         _ call: AgentToolCall,
         turnID: UUID,
         userMessage: CoachMessage,
+        sourceDate: Date,
         mediaAttachments: [MediaAttachmentReference],
         preferredGymID: UUID?,
         context: ConversationProcessingContext
@@ -1258,7 +1261,7 @@ private extension ConversationProcessingService {
             ConversationRecorder.executeAgentTool(
                 call,
                 sourceText: userMessage.text,
-                sourceDate: userMessage.date,
+                sourceDate: sourceDate,
                 sourceSessionID: context.session.id,
                 sourceTurnID: turnID,
                 mediaKind: mediaAttachments.first?.kind ?? .none,
@@ -1510,9 +1513,9 @@ extension ConversationProcessingService {
         _ message: CoachMessage,
         job: AgentJob
     ) {
-        let completedItems = message.agentTurnItems.filter { item in
-            item.status != .running && item.kind != .error
-        }
+        let completedItems = ConversationResumeProjection.completedItems(
+            from: message.agentTurnItems
+        )
         message.replaceAgentTurnItems(completedItems)
         let checkpointText = job.loopCheckpoint?.assistantPassages
             .joined(separator: "\n\n")
@@ -1876,5 +1879,11 @@ extension ConversationProcessingService {
         case .completed, .failed:
             liveAgentActivity = nil
         }
+    }
+}
+
+enum ConversationResumeProjection {
+    static func completedItems(from items: [AgentTurnItem]) -> [AgentTurnItem] {
+        items.filter { $0.status == .succeeded && $0.kind != .error }
     }
 }

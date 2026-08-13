@@ -138,7 +138,7 @@
 | 有任务在途仍可发送 | 发送键不再因 `isProcessing` 失效；后续消息按 `createdAt` 排队，前一条被后台租约挂起也不丢失（`AgentJobTests.testBackgroundLeaseExpirationKeepsJobRecoverable`）。 |
 | 失败三分类 | `LLMOutageClassifier` 把传输错误映射为 `retryNetwork`，缺配置/地址无效/401/403/408/409/425/429/5xx 映射为 `stage`，400/404/413/422 与明确不支持多模态映射为 `fail`（`LLMOutageStagingTests`）。 |
 | 暂存退避有界 | 供应商侧故障按 `2^n` 秒退避、上限 5 分钟；等待用户改配置的场景不设退避，靠配置变更信号唤醒（`testStagingRetryDelayGrowsAndCapsAtFiveMinutes`、`testStagingWithDelaySetsBoundedRetryWindow`）。 |
-| 补偿消费 | App 启动、回到前台、`llmConfigurationDidChange`、上一条任务结束与退避到期触发 `resumePendingJobs`；`releaseStagedJobs` 只解锁后端可用的 Job，按 FIFO 串行执行，`AgentMutationReceipt` 保证同一 Turn 不重复写入（`testReleaseStagedJobsRespectsReadinessAndClearsBackoff`）。 |
+| 补偿消费 | App 启动、回到前台、`llmConfigurationDidChange`、上一条任务结束与退避到期只恢复普通可运行/可补偿 Job；明确欠费的 `waitingForUser` 不被这些信号释放。`AgentMutationReceipt` 继续保证同一 Turn 不重复写入。 |
 | 暂存可解释 | 暂存中的用户消息显示「已暂存，恢复后自动继续」，输入区上方显示「N 条已暂存 · 去配置」并深链到「LLM 配置」；不展示状态机名称、退避秒数或内部分类结果。 |
 | LLM 配置直出 | 「AI 服务」更名「LLM 配置」；顶部档位分段，平台/Base URL/API Key/模型同屏可改；模型、Base URL 与图片生成模型改动即落盘，不依赖返回时机，返回设置首页再进入值不变。 |
 | opencode | 默认 `https://opencode.ai/zen/v1`，端点拼接与多模态标注（GPT/Codex 不支持、Claude/Gemini 支持、其余未知）由 `LLMConfigurationTests` 覆盖。 |
@@ -162,6 +162,25 @@
 | 工具组与并行 | `AgentToolExposurePolicy` 预选 core/plans/gym/review/feedback；`parallelToolCalls=true` 且本机顺序执行；未展开时同 session 连续两轮 system+tools 前缀稳定。 |
 | 延迟辅助 | 流式滚动约 10Hz 非动画节流；历史视频帧经 `VideoFrameCache` LRU；step ≥ 2 历史帧占位。Trace 可观测 `time_to_first_delta_ms`/`projection_ms`/`cached_prompt_tokens`。 |
 | 红线不破坏 | 不用 LLM 滚动摘要；不静默跨轮合并；Tool Schema 仍固定；远程 Job 协议不变。 |
+
+## 可靠高效 ReAct 与原位审查
+
+[PRD 027](prd/027-reliable-efficient-react-and-in-context-review.md) 与
+[ADR 0062](adr/0062-user-resumed-llm-interruption-barrier.md)–[0066](adr/0066-bundled-action-illustration-coverage.md)
+的当前实现证据。
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 欠费人工屏障与 FIFO | `waitingForUser` 不可运行且不被启动、前台、定时器或配置变化释放；`claimNext` 不跳过队首。`LLMOutageStagingTests` 覆盖欠费分类、手动释放、后发暂存、单删和全清。 |
+| 每个 step 精确续跑 | 检查点持久化原生 `assistant.tool_calls` 和逐条 `role=tool` 结果；模型成功后、每个 Tool 成功后都立即落盘。双 Tool 回归证明第二个失败后只重试第二个，恢复请求的 System/User 前缀不变。 |
+| 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；`AgentJob.frozenExecutionDate` 在首次 claim 后固定为 `loopStartedAt`，业务 Tool 不再使用消息时间或重试墙钟。持久 envelope 只存时间戳与 IANA 时区。 |
+| 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁，`AgentLoopDeadline` 仍以 3/5/10 分钟总预算取消整轮，重试扣除已耗墙钟。 |
+| 确定性快捷训练 | typed 最近训练草稿 trim 后未改且无附件时使用 `deterministicWorkout` Job；空 Key 测试证明不调用 LLM、执行时间实时读取并产生同构 Trace/Event/结果卡。 |
+| 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存/删除写入有界 correction block，下一轮上下文投影最新修订。 |
+| 计划与一级页面 | 计划编辑同屏提供组数、次数、重量、间歇；进展首卡直出当前健身房；设置底部直接嵌入反馈；空 Session 提供确定性和最多六条自定义快捷语。 |
+| Tool 与 Prompt 节制 | `core` 不含 mutation；建议/疑问句不暴露 records，明确写入和结构化事实才预选。System 固定，User 固定 `[SOMA CURRENT TURN v1]` section 顺序，后续只追加 assistant/tool 尾部。 |
+| 动作图覆盖 | 内置专属图条目不少于 100，Bundle 逐资源校验；真机核对得到的 24 个常见动作名称全部有确定目录映射与离线动作图，不把个人训练事实写入仓库。 |
+| Gmail 自动化 | Codex 自动化 `soma-gmail-draft-pr` 每 3 小时运行一次；只处理一封未标记反馈，从最新 `origin/main` 建隔离分支并产出分析、必要 PRD/ADR、实现、测试、Changelog 和 Draft PR。成功建 PR 后才标记邮件；不合并、发布或真机安装。 |
 
 ## 实施前文档门禁
 

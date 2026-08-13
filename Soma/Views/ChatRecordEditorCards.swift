@@ -25,6 +25,15 @@ enum ChatRecordReferenceResolver {
     }
 }
 
+enum ChatRecordEditPolicy {
+    static func latestEditableAssistantMessageID(
+        in messages: [CoachMessage]
+    ) -> UUID? {
+        guard let last = messages.last, last.isFromCoach else { return nil }
+        return last.id
+    }
+}
+
 struct ChatRecordEditorCards: View {
     @Query private var workouts: [WorkoutEntry]
     @Query private var meals: [MealEntry]
@@ -113,6 +122,7 @@ private struct InlineRecordShell<Content: View>: View {
 
 private struct InlineWorkoutCard: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var definitions: [ExerciseDefinition]
     let workout: WorkoutEntry
     let sourceMessage: CoachMessage?
     let isEditable: Bool
@@ -161,13 +171,40 @@ private struct InlineWorkoutCard: View {
     private func save() {
         let normalized = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
+        let nameKey = ExerciseLibraryStore.canonicalNameKey(normalized)
+        if let exerciseID = workout.exerciseID,
+           let current = definitions.first(where: { $0.id == exerciseID }),
+           current.canonicalNameKey != nameKey
+        {
+            workout.exerciseID = nil
+        }
         workout.exercise = normalized
+        let definition = try? ExerciseLibraryStore.linkedExercise(
+            for: workout,
+            in: modelContext,
+            persist: true,
+            allowCreate: true
+        )
+        exercise = definition?.canonicalName ?? normalized
         workout.setEntries = (0 ..< (Int(sets) ?? 0)).map { _ in
             WorkoutSetEvidence(reps: Int(reps), externalWeightKG: Double(weight))
         }
         workout.restSeconds = Int(rest)
+        let estimate = WorkoutCalorieCalculator.estimate(
+            exercise: workout.exercise,
+            intensity: workout.intensity,
+            durationMinutes: workout.durationMinutes,
+            sets: workout.setCount,
+            reps: workout.representativeReps,
+            restSeconds: workout.restSeconds,
+            weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: modelContext)
+        )
+        workout.estimatedCalories = estimate?.calories
+        workout.calorieMET = estimate?.met
+        workout.calorieDurationMinutes = estimate?.durationMinutes
+        workout.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         sourceMessage?.recordManualCorrection(
-            "训练记录 \(workout.id.uuidString) 已改为 \(normalized)，\(sets)组，\(reps)次，\(weight)kg，间歇\(rest)秒"
+            "训练记录 \(workout.id.uuidString) 已改为 \(workout.exercise)，\(sets)组，\(reps)次，\(weight)kg，间歇\(rest)秒"
         )
         try? modelContext.save()
     }
@@ -338,6 +375,7 @@ private struct InlineGymCard: View {
                 TextField("名称", text: $name)
                 TextField("说明", text: $notes, axis: .vertical).lineLimit(1 ... 3)
                 Toggle("设为当前健身房", isOn: $isCurrent)
+                    .disabled(gym.isCurrent)
                 actionRow(save: save, delete: { showsDelete = true })
             } else {
                 Text(gym.name).font(.body.weight(.medium))
@@ -360,7 +398,7 @@ private struct InlineGymCard: View {
             GymSelection.activate(gym, among: allGyms)
         }
         sourceMessage?.recordManualCorrection(
-            "健身房记录 \(gym.id.uuidString) 已改为 \(normalized)，当前状态 \(isCurrent ? "已选择" : "未选择")"
+            "健身房记录 \(gym.id.uuidString) 已改为 \(normalized)，当前状态 \(gym.isCurrent ? "已选择" : "未选择")"
         )
         try? modelContext.save()
     }

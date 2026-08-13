@@ -3,6 +3,7 @@
 - 状态：已采纳，已实施；真机交互与 Gmail 自动化验收待维护者确认
 - 日期：2026-08-13
 - 修订自：
+  - [PRD 004](004-soma-current-product.md) 的当前教练、进展、设置、计划与 Agent 失败重试基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的计划处方可发现性、快捷训练记录与内置动作图覆盖
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的进展、设置、聊天结果卡和空会话呈现
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 的失效暂存与自动补偿语义
@@ -15,6 +16,9 @@
   - [ADR 0064](../adr/0064-deterministic-quick-write-and-latest-inline-review.md)
   - [ADR 0065](../adr/0065-intent-scoped-tools-and-prefix-stable-prompts.md)
   - [ADR 0066](../adr/0066-bundled-action-illustration-coverage.md)
+- 上游依据：
+  - [BUG 0015](../bugs/0015-billing-retry-loop-and-queue-order.md)
+  - [BUG 0016](../bugs/0016-batched-tool-retry-repeats-completed-work.md)
 
 ## 背景
 
@@ -110,7 +114,7 @@
 
 ### 10. Gmail 反馈到 Draft PR
 
-维护者可配置 Codex 桌面自动化定期读取新的 Soma 反馈邮件。每封反馈必须去重，并在隔离 worktree
+维护者配置 Codex 桌面自动化每 3 小时读取一次新的 Soma 反馈邮件。每封反馈必须去重，并在隔离 worktree
 从最新 `main` 建分支，依次完成隐私清洗、问题分析、必要 PRD/ADR、实现、测试、Changelog、
 提交、推送和 Draft PR。自动化不得合并、发布、真机安装、携带真实身体数据或泄露邮件凭据；
 不明确或高风险需求只产出分析与 Draft PR，不自行扩大产品范围。

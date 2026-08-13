@@ -290,6 +290,64 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingQueueSupportsSingleDiscardAndClearAll() throws {
+        let suiteName = "LLMOutageStagingTests.queue.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
+        let modelContext = ModelContext(spaces.personalContainer)
+        let session = ConversationSession()
+        modelContext.insert(session)
+        let ai = AIService(defaults: defaults, apiKeyOverride: "")
+        ai.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
+        let processor = ConversationProcessingService(
+            backgroundLease: StagingTestBackgroundLease()
+        )
+        let processingContext = ConversationProcessingContext(
+            structuredContext: "",
+            session: session,
+            dataSpace: .personal,
+            gyms: [],
+            equipment: [],
+            ai: ai,
+            modelContext: modelContext
+        )
+        let location = LocationContextService()
+        for text in ["记录深蹲 4组8次", "记录卧推 3组10次", "记录硬拉 5组5次"] {
+            XCTAssertTrue(processor.submit(
+                text: text,
+                attachments: [],
+                context: processingContext,
+                includeLocation: false,
+                locationService: location
+            ))
+        }
+        let jobs = try modelContext.fetch(
+            FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
+        )
+        XCTAssertEqual(jobs.count, 3)
+
+        XCTAssertTrue(processor.discardPendingTurn(
+            turnID: jobs[0].turnID,
+            context: processingContext,
+            locationService: location
+        ))
+        XCTAssertEqual(try modelContext.fetch(FetchDescriptor<AgentJob>()).count, 2)
+        XCTAssertEqual(try modelContext.fetch(FetchDescriptor<CoachMessage>()).count, 2)
+
+        XCTAssertTrue(processor.clearPendingQueue(context: processingContext))
+        XCTAssertTrue(try modelContext.fetch(FetchDescriptor<AgentJob>()).isEmpty)
+        XCTAssertTrue(try modelContext.fetch(FetchDescriptor<CoachMessage>()).isEmpty)
+        XCTAssertTrue(
+            try modelContext.fetch(FetchDescriptor<PersistentAgentEvent>()).isEmpty
+        )
+    }
+
+    @MainActor
     func testExactQuickWorkoutRunsWithoutLLMAndUsesExecutionTime() async throws {
         let suiteName = "QuickWorkoutTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

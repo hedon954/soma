@@ -276,6 +276,45 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(policy.loopTotal(hasImages: true, hasVideo: true), 600)
     }
 
+    func testLaterModelStepHasNoStandaloneFirstDeltaDeadline() async throws {
+        let chunk = try streamChunk(content: "较晚返回")
+        let stream = AsyncThrowingStream<ChatCompletionChunkObject, Error> { continuation in
+            Task {
+                try await Task.sleep(for: .milliseconds(40))
+                continuation.yield(chunk)
+                continuation.finish()
+            }
+        }
+        var output = ""
+
+        try await AgentStreamDeadline.consume(
+            stream: stream,
+            mode: .text,
+            policy: AgentStreamDeadlinePolicy(textTTFT: 0.01),
+            enforceFirstDelta: false
+        ) { value in
+            output += value.choices?.first?.delta?.content ?? ""
+            return !output.isEmpty
+        }
+
+        XCTAssertEqual(output, "较晚返回")
+    }
+
+    @MainActor
+    func testWholeLoopDeadlineStillAppliesAcrossLaterSteps() async {
+        do {
+            _ = try await AgentLoopDeadline.run(seconds: 0.01) {
+                try await Task.sleep(for: .milliseconds(50))
+                return "不应完成"
+            }
+            XCTFail("整个 ReAct Loop 必须受总时限控制")
+        } catch let timeout as AgentStreamTimeoutError {
+            XCTAssertEqual(timeout.phase, .loopTotal)
+        } catch {
+            XCTFail("应返回 loop_total 超时：\(error)")
+        }
+    }
+
     func testChatRecordReferencesAreStableAndDeduplicated() {
         let id = UUID()
         let output = AgentTraceText.json(AgentToolResult.success(
@@ -348,6 +387,19 @@ final class AgentV2Tests: XCTestCase {
         return try XCTUnwrap(
             String(data: JSONEncoder().encode(value), encoding: .utf8)
         )
+    }
+
+    private func streamChunk(content: String) throws -> ChatCompletionChunkObject {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "id": "chatcmpl_delayed",
+            "object": "chat.completion.chunk",
+            "choices": [[
+                "index": 0,
+                "delta": ["content": content],
+                "finish_reason": "stop"
+            ]]
+        ])
+        return try JSONDecoder().decode(ChatCompletionChunkObject.self, from: data)
     }
 }
 

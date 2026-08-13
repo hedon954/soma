@@ -77,7 +77,7 @@ struct CoachView: View {
     }
 
     private var latestAssistantMessageID: UUID? {
-        messages.last(where: { $0.isFromCoach })?.id
+        ChatRecordEditPolicy.latestEditableAssistantMessageID(in: messages)
     }
 
     private var currentGym: GymProfile? {
@@ -283,7 +283,7 @@ struct CoachView: View {
     private var messageList: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
-                if messages.count <= 1 {
+                if ConversationStarterPolicy.shouldShow(for: messages) {
                     ConversationStarter(
                         suggestions: sessionStarterSuggestions,
                         onSelect: sendStarter
@@ -847,6 +847,27 @@ private struct ConversationStarterSuggestion {
     }
 }
 
+enum ConversationStarterPolicy {
+    static func shouldShow(for messages: [CoachMessage]) -> Bool {
+        messages.isEmpty
+    }
+
+    static func customPrompts(from rawValue: String) -> [String] {
+        let normalized = rawValue
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        return Array(normalized.filter { seen.insert($0).inserted }.suffix(6))
+    }
+
+    static func adding(_ value: String, to prompts: [String]) -> [String] {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return prompts }
+        return Array((prompts.filter { $0 != normalized } + [normalized]).suffix(6))
+    }
+}
+
 private struct ConversationStarter: View {
     let suggestions: [ConversationStarterSuggestion]
     let onSelect: (ConversationStarterSuggestion) -> Void
@@ -855,10 +876,7 @@ private struct ConversationStarter: View {
     @State private var customizationExpanded = false
 
     private var customPrompts: [String] {
-        customPromptsRaw
-            .split(separator: "\n")
-            .map(String.init)
-            .filter { !$0.isEmpty }
+        ConversationStarterPolicy.customPrompts(from: customPromptsRaw)
     }
 
     var body: some View {
@@ -899,7 +917,7 @@ private struct ConversationStarter: View {
     private func addCustomPrompt() {
         let value = customDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
-        customPromptsRaw = Array((customPrompts + [value]).suffix(6))
+        customPromptsRaw = ConversationStarterPolicy.adding(value, to: customPrompts)
             .joined(separator: "\n")
         customDraft = ""
     }

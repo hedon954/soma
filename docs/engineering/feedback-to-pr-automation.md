@@ -2,7 +2,7 @@
 
 ## 目标
 
-Codex 桌面自动化定期读取维护者 Gmail 中的新 Soma 反馈，在隔离 worktree 从最新 `main` 建立
+Codex 桌面自动化每 3 小时读取一次维护者 Gmail 中的新 Soma 反馈，在隔离 worktree 从最新 `main` 建立
 `codex/feedback-*` 分支，并把一封可执行反馈推进到隐私安全、可审阅的 Draft PR。
 
 ## 固定流程

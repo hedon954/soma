@@ -301,6 +301,11 @@ final class AgentJob {
         lastCompletedStep > 0 && loopCheckpoint != nil
     }
 
+    /// 同一 ReAct Loop 的所有业务写入复用第一次执行时间；显示时再按用户时区格式化。
+    var frozenExecutionDate: Date {
+        loopStartedAt ?? createdAt
+    }
+
     func freezeLoopStartIfNeeded(at date: Date) {
         guard loopStartedAt == nil else { return }
         loopStartedAt = date

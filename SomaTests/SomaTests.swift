@@ -1438,6 +1438,104 @@ extension SomaTests {
     }
 
     @MainActor
+    func testAgentRetryContinuesAtFailedToolWithoutRepeatingCompletedSteps() async throws {
+        let suiteName = "SomaTests.checkpoint.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstTransport = MockAgentStreamTransport(responses: [
+            .toolCalls([
+                ("query_user_data", #"{"scope":"workouts","limit":1}"#),
+                ("query_user_data", #"{"scope":"meals","limit":1}"#)
+            ])
+        ])
+        let firstService = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key",
+            agentStreamLoader: firstTransport.load
+        )
+        firstService.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
+        var checkpoint: AgentLoopCheckpoint?
+        var firstAttemptScopes: [String] = []
+
+        do {
+            _ = try await firstService.runAgent(
+                text: "总结最近记录",
+                images: [],
+                hasVideo: false,
+                context: "测试上下文",
+                onCheckpoint: { checkpoint = $0 }
+            ) { call in
+                firstAttemptScopes.append(call.arguments.scope ?? "")
+                if call.arguments.scope == "meals" {
+                    throw URLError(.networkConnectionLost)
+                }
+                return .success("训练查询成功")
+            }
+            XCTFail("第二个工具应中断第一次 Attempt")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+        }
+
+        let saved = try XCTUnwrap(checkpoint)
+        XCTAssertEqual(firstAttemptScopes, ["workouts", "meals"])
+        XCTAssertEqual(saved.lastCompletedStep, 2, "模型 invoke 与第一个工具各完成一步")
+        XCTAssertEqual(saved.nextModelStep, 1)
+        XCTAssertEqual(saved.toolBatches?.last?.completedResults.count, 1)
+
+        let retryTransport = MockAgentStreamTransport(responses: [
+            .text(["已根据两项查询完成总结。"])
+        ])
+        let retryService = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key",
+            agentStreamLoader: retryTransport.load
+        )
+        retryService.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
+        var retryScopes: [String] = []
+        let outcome = try await retryService.runAgent(
+            text: "总结最近记录",
+            images: [],
+            hasVideo: false,
+            context: "测试上下文",
+            checkpoint: saved,
+            firstStepDeadlineEnabled: false
+        ) { call in
+            retryScopes.append(call.arguments.scope ?? "")
+            return .success("饮食查询成功")
+        }
+
+        XCTAssertEqual(retryScopes, ["meals"])
+        XCTAssertEqual(outcome.observations.count, 2)
+        XCTAssertEqual(outcome.finalAnswer, "已根据两项查询完成总结。")
+        XCTAssertEqual(firstTransport.requests.count, 1)
+        XCTAssertEqual(retryTransport.requests.count, 1)
+
+        let firstData = try JSONEncoder().encode(XCTUnwrap(firstTransport.requests.first))
+        let retryData = try JSONEncoder().encode(XCTUnwrap(retryTransport.requests.first))
+        let firstJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: firstData) as? [String: Any]
+        )
+        let retryJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: retryData) as? [String: Any]
+        )
+        let firstMessages = try XCTUnwrap(firstJSON["messages"] as? [[String: Any]])
+        let retryMessages = try XCTUnwrap(retryJSON["messages"] as? [[String: Any]])
+        XCTAssertEqual(firstMessages[0]["content"] as? String, retryMessages[0]["content"] as? String)
+        XCTAssertEqual(firstMessages[1]["content"] as? String, retryMessages[1]["content"] as? String)
+        XCTAssertEqual(retryMessages.suffix(3).map { $0["role"] as? String }, [
+            "assistant", "tool", "tool"
+        ])
+    }
+
+    @MainActor
     func testAIServiceLoadsSkillWithoutCallingExternalDataToolAndTracesSkillSpan() async throws {
         let suiteName = "SomaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -1572,6 +1670,7 @@ extension SomaTests {
 private final class MockAgentStreamTransport {
     enum Response {
         case toolCall(name: String, argumentsFragments: [String])
+        case toolCalls([(name: String, arguments: String)])
         case text([String])
     }
 
@@ -1616,6 +1715,28 @@ private final class MockAgentStreamTransport {
                     ]]
                 ])
             }
+        case let .toolCalls(calls):
+            try [Self.chunk([
+                "id": "chatcmpl_tools",
+                "object": "chat.completion.chunk",
+                "choices": [[
+                    "index": 0,
+                    "delta": [
+                        "tool_calls": calls.enumerated().map { index, call in
+                            [
+                                "index": index,
+                                "id": "call_\(index + 1)",
+                                "type": "function",
+                                "function": [
+                                    "name": call.name,
+                                    "arguments": call.arguments
+                                ]
+                            ] as [String: Any]
+                        }
+                    ],
+                    "finish_reason": "tool_calls"
+                ]]
+            ])]
         case let .text(fragments):
             try fragments.enumerated().map { index, fragment in
                 try Self.chunk([

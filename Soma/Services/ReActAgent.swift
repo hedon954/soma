@@ -641,12 +641,33 @@ struct AgentOutcome: Equatable, @unchecked Sendable {
     }
 }
 
-/// ADR 0048：step 边界检查点，供同气泡中断续跑重建压缩上下文。
+/// ADR 0062：每个 LLM invoke / tool call 都是可恢复 step。
+///
+/// `toolBatches == nil` 代表旧版压缩检查点；新检查点保留原生 assistant.tool_calls
+/// 与 role=tool 结果，恢复时不重新调用已经成功的模型或工具。
 struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
     var lastCompletedStep: Int
     var assistantPassages: [String]
     var observations: [AgentCheckpointObservation]
     var exposedGroups: [String]
+    var nextModelStep: Int?
+    var toolBatches: [AgentCheckpointToolBatch]?
+
+    init(
+        lastCompletedStep: Int,
+        assistantPassages: [String],
+        observations: [AgentCheckpointObservation],
+        exposedGroups: [String],
+        nextModelStep: Int? = nil,
+        toolBatches: [AgentCheckpointToolBatch]? = nil
+    ) {
+        self.lastCompletedStep = lastCompletedStep
+        self.assistantPassages = assistantPassages
+        self.observations = observations
+        self.exposedGroups = exposedGroups
+        self.nextModelStep = nextModelStep
+        self.toolBatches = toolBatches
+    }
 
     static let empty = AgentLoopCheckpoint(
         lastCompletedStep: 0,
@@ -654,6 +675,40 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
         observations: [],
         exposedGroups: []
     )
+}
+
+struct AgentCheckpointToolCall: Codable, Equatable, @unchecked Sendable {
+    var id: String
+    var argumentsJSON: String
+    var action: AgentToolCall
+
+    var native: ToolCall {
+        ToolCall(
+            id: id,
+            function: FunctionCall(
+                arguments: argumentsJSON,
+                name: action.name.rawValue
+            )
+        )
+    }
+}
+
+struct AgentCheckpointToolResult: Codable, Equatable, @unchecked Sendable {
+    var step: Int
+    var call: AgentCheckpointToolCall
+    var result: AgentToolResult
+}
+
+struct AgentCheckpointToolBatch: Codable, Equatable, @unchecked Sendable {
+    var modelStep: Int
+    var modelOperationStep: Int
+    var passage: String
+    var calls: [AgentCheckpointToolCall]
+    var completedResults: [AgentCheckpointToolResult]
+
+    var isComplete: Bool {
+        completedResults.count == calls.count
+    }
 }
 
 struct AgentCheckpointObservation: Codable, Equatable, Sendable {

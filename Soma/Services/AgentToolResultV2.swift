@@ -58,7 +58,7 @@ struct AgentToolPage: Codable, Equatable, Sendable {
     }
 }
 
-struct AgentToolResult: Codable, Equatable {
+struct AgentToolResult: Codable, Equatable, Sendable {
     var ok: Bool
     var code: String
     var message: String

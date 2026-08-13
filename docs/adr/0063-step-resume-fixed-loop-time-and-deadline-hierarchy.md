@@ -16,12 +16,14 @@
 
 ## 决策
 
-1. Job 首次 claim 时冻结 `loopStartedAt`；检查点保存已完成 step、可展示段落、压缩 observation、
-   已暴露工具组和写入账本。
+1. Job 首次 claim 时冻结 `loopStartedAt`；检查点把每个 LLM invoke 和每个 Tool Call 分别计为
+   step，并保存原生 `assistant.tool_calls`、逐条 `role=tool` 结果、可展示段落、已暴露工具组和
+   幂等信息。批量 tool calls 中途失败时，已完成 Tool 不会重新执行。
 2. 所有可重试失败复用 `responseMessageID`；重试前移除 error/running Event 与半截失败文本，恢复
    已完成段落，从首个未完成 step 继续。
 3. `TrustedTurnContext` 只持久化 `turnSentAt`、`loopStartedAt`、IANA timezone identifier；日期、
    weekday 与 offset 在 prompt 或 UI format 时生成。
+   同一 Loop 创建或更新业务记录时也统一使用 `loopStartedAt`，不再使用消息发送时间或重试墙钟。
 4. 第一次模型处理的首增量门禁为文字 20 秒、图片 40 秒、视频 60 秒；后续 step 不设单 step
    截止时间，也不做传输级自动重试。
 5. 整个 Loop 的墙钟预算分别为 3/5/10 分钟，从 `loopStartedAt` 计算；恢复和手动重试都不重置。
@@ -44,7 +46,8 @@
 
 ## 验证
 
-- `AgentJobTests`、`AgentV2Tests` 与 `AgentReliabilityTests` 覆盖固定时间、旧数据解码、预算与 step 恢复。
+- `AgentJobTests`、`AgentV2Tests` 与 `AgentReliabilityTests` 覆盖固定时间、旧数据解码、预算、原生
+  assistant/tool 消息恢复，以及批量 Tool 中途失败后只重试首个未完成 step。
 
 ## 参考
 
