@@ -2,11 +2,12 @@ import Foundation
 import SwiftOpenAI
 
 struct AgentStreamDeadlinePolicy: Equatable, Sendable {
-    var textTTFT: TimeInterval = 8
-    var imageTTFT: TimeInterval = 10
-    var directVideoTTFT: TimeInterval = 20
-    var idle: TimeInterval = 30
-    var total: TimeInterval = 180
+    var textTTFT: TimeInterval = 20
+    var imageTTFT: TimeInterval = 40
+    var directVideoTTFT: TimeInterval = 60
+    var textLoopTotal: TimeInterval = 180
+    var imageLoopTotal: TimeInterval = 300
+    var videoLoopTotal: TimeInterval = 600
 
     func ttft(for mode: AgentMediaMode) -> TimeInterval {
         switch mode {
@@ -18,12 +19,21 @@ struct AgentStreamDeadlinePolicy: Equatable, Sendable {
             directVideoTTFT
         }
     }
+
+    func loopTotal(hasImages: Bool, hasVideo: Bool) -> TimeInterval {
+        if hasVideo {
+            return videoLoopTotal
+        }
+        if hasImages {
+            return imageLoopTotal
+        }
+        return textLoopTotal
+    }
 }
 
 enum AgentStreamTimeoutPhase: String, Sendable {
     case firstDelta = "first_delta"
-    case idle
-    case total
+    case loopTotal = "loop_total"
 }
 
 struct AgentStreamTimeoutError: LocalizedError, Sendable {
@@ -34,10 +44,8 @@ struct AgentStreamTimeoutError: LocalizedError, Sendable {
         switch phase {
         case .firstDelta:
             "模型在 \(formattedSeconds) 秒内没有返回文字或工具调用"
-        case .idle:
-            "模型流连续 \(formattedSeconds) 秒没有新数据"
-        case .total:
-            "单次模型流超过 \(formattedSeconds) 秒"
+        case .loopTotal:
+            "整个 ReAct Loop 超过 \(formattedSeconds) 秒"
         }
     }
 
@@ -71,53 +79,40 @@ enum AgentStreamDeadline {
         stream: AsyncThrowingStream<ChatCompletionChunkObject, Error>,
         mode: AgentMediaMode,
         policy: AgentStreamDeadlinePolicy,
+        enforceFirstDelta: Bool,
         onChunk: (ChatCompletionChunkObject) throws -> Bool
     ) async throws {
         let reader = AgentStreamChunkReader(stream: stream)
+        guard enforceFirstDelta else {
+            while let chunk = try await reader.next() {
+                _ = try onChunk(chunk)
+            }
+            return
+        }
         let startedAt = Date()
-        let totalDeadline = startedAt.addingTimeInterval(policy.total)
         let firstDeltaDeadline = startedAt.addingTimeInterval(policy.ttft(for: mode))
         var receivedFirstDelta = false
-        var lastActivityAt = startedAt
 
         while true {
-            let now = Date()
-            let phase: AgentStreamTimeoutPhase
-            let phaseBudget: TimeInterval
-            let phaseDeadline: Date
-            if now >= totalDeadline {
-                throw AgentStreamTimeoutError(phase: .total, seconds: policy.total)
-            } else if receivedFirstDelta {
-                phase = .idle
-                phaseBudget = policy.idle
-                phaseDeadline = min(
-                    lastActivityAt.addingTimeInterval(policy.idle),
-                    totalDeadline
-                )
-            } else {
-                phase = .firstDelta
-                phaseBudget = policy.ttft(for: mode)
-                phaseDeadline = min(firstDeltaDeadline, totalDeadline)
+            if receivedFirstDelta {
+                while let chunk = try await reader.next() {
+                    _ = try onChunk(chunk)
+                }
+                return
             }
-            let timeout = max(0, phaseDeadline.timeIntervalSince(now))
+            let now = Date()
+            let timeout = max(0, firstDeltaDeadline.timeIntervalSince(now))
             let result = try await raceNext(reader: reader, timeout: timeout)
             switch result {
             case let .chunk(chunk):
                 guard let chunk else { return }
-                lastActivityAt = Date()
                 if try onChunk(chunk) {
                     receivedFirstDelta = true
                 }
             case .timeout:
-                if phaseDeadline == totalDeadline {
-                    throw AgentStreamTimeoutError(
-                        phase: .total,
-                        seconds: policy.total
-                    )
-                }
                 throw AgentStreamTimeoutError(
-                    phase: phase,
-                    seconds: phaseBudget
+                    phase: .firstDelta,
+                    seconds: policy.ttft(for: mode)
                 )
             }
         }

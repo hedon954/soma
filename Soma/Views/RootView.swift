@@ -107,7 +107,8 @@ struct RootView: View {
                 dataSpace: dataSpace.activeSpace,
                 ai: ai,
                 modelContext: modelContext,
-                locationService: locationContext
+                locationService: locationContext,
+                releaseStaged: true
             )
         }
         .task {

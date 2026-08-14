@@ -110,6 +110,12 @@ grep -q '^Soma/Resources/FeedbackCredentials\.plist$' .gitignore ||
   fail "the local mail credential resource must stay ignored"
 grep -q 'online-check.sh' scripts/archive-testflight.sh ||
   fail "TestFlight archive must run the feedback online check"
+grep -q 'make db-migrate-create name=<snake_case_name>' CLAUDE.md ||
+  fail "AGENTS.md must require the PostgreSQL migration creation command"
+grep -q 'make db-migrate-status' CLAUDE.md ||
+  fail "AGENTS.md must require PostgreSQL migration status review"
+grep -q 'make db-migrate' CLAUDE.md ||
+  fail "AGENTS.md must require applying PostgreSQL migrations through the runner"
 
 if grep -R -nE \
   '\.(configurationDisplayName|description)\(Text\(' \
@@ -135,5 +141,6 @@ plutil -lint Soma/Resources/Info.plist Soma/Soma.entitlements ExportOptions.plis
 ./scripts/check-document-lifecycle-links.rb
 ./scripts/check-secrets.sh
 ruby ./scripts/check-agent-tool-registry.rb
+ruby ./scripts/check-database-schema-doc.rb
 
 echo "Repository contract passed."

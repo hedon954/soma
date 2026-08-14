@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { after, test } from "node:test";
 import { Pool } from "pg";
 import type { AgentJobInput } from "../src/domain.js";
+import { applyMigrations } from "../src/migrations.js";
 import { PostgresSomaStore } from "../src/postgres-store.js";
 import { sha256 } from "../src/security.js";
 
@@ -23,11 +23,12 @@ test(
   { skip: databaseURL === undefined ? "SOMA_TEST_DATABASE_URL 未设置" : false },
   async () => {
     assert.ok(pool);
-    const migration = await readFile(
-      new URL("../migrations/001_initial.sql", import.meta.url),
-      "utf8",
-    );
-    await pool.query(migration);
+    const migrationClient = await pool.connect();
+    try {
+      await applyMigrations(migrationClient);
+    } finally {
+      migrationClient.release();
+    }
     assert.ok(store);
     const now = new Date("2026-07-31T00:00:00Z");
     const deviceID = randomUUID();

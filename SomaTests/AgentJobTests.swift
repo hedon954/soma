@@ -116,6 +116,7 @@ final class AgentJobTests: XCTestCase {
 
         XCTAssertEqual(claimed.id, personal.id)
         XCTAssertEqual(claimed.activeAttemptNumber, 1)
+        XCTAssertEqual(claimed.loopStartedAt, now)
         XCTAssertEqual(demo.state, .queued)
         XCTAssertEqual(
             try AgentJobStore.recoverExpiredLeases(
@@ -127,6 +128,87 @@ final class AgentJobTests: XCTestCase {
         )
         XCTAssertEqual(personal.state, .waitingForForeground)
         XCTAssertEqual(demo.state, .queued)
+    }
+
+    @MainActor
+    func testLoopStartTimeIsFrozenAcrossManualRetry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let sentAt = Date(timeIntervalSince1970: 100)
+        let firstStart = sentAt.addingTimeInterval(20)
+        let interruptedAt = firstStart.addingTimeInterval(35)
+        let retryAt = sentAt.addingTimeInterval(3600)
+        let job = makeJob(createdAt: sentAt)
+        context.insert(job)
+        try context.save()
+
+        try AgentJobStore.claim(job, owner: "runner", now: firstStart, in: context)
+        try AgentJobStore.waitForUser(
+            job,
+            message: "手动重试",
+            now: interruptedAt,
+            in: context
+        )
+        XCTAssertEqual(job.loopActiveDuration, 35)
+        try AgentJobStore.releaseForManualRetry(
+            job,
+            dataSpace: .personal,
+            now: retryAt,
+            in: context
+        )
+        XCTAssertEqual(job.loopActiveDuration, 0)
+        try AgentJobStore.claim(job, owner: "runner", now: retryAt, in: context)
+
+        XCTAssertEqual(job.loopStartedAt, firstStart)
+        XCTAssertEqual(
+            job.activeLoopDuration(at: retryAt.addingTimeInterval(5)),
+            5
+        )
+    }
+
+    @MainActor
+    func testAutomaticResumeExcludesWaitingTimeWithoutResettingConsumedBudget() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let firstStart = Date(timeIntervalSince1970: 100)
+        let waitingAt = firstStart.addingTimeInterval(12)
+        let resumedAt = firstStart.addingTimeInterval(3600)
+        let job = makeJob(createdAt: firstStart)
+        context.insert(job)
+        try context.save()
+
+        try AgentJobStore.claim(job, owner: "runner", now: firstStart, in: context)
+        try job.transition(to: .waitingForNetwork, at: waitingAt)
+        try job.transition(to: .queued, at: resumedAt)
+        try AgentJobStore.claim(job, owner: "runner", now: resumedAt, in: context)
+
+        XCTAssertEqual(job.loopStartedAt, firstStart)
+        XCTAssertEqual(job.loopActiveDuration, 12)
+        XCTAssertEqual(
+            job.activeLoopDuration(at: resumedAt.addingTimeInterval(8)),
+            20
+        )
+    }
+
+    @MainActor
+    func testAgentJobArchivePreservesPausedActiveBudget() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let startedAt = Date(timeIntervalSince1970: 100)
+        let job = makeJob(createdAt: startedAt)
+        context.insert(job)
+        try context.save()
+
+        try AgentJobStore.claim(job, owner: "runner", now: startedAt, in: context)
+        try job.transition(
+            to: .waitingForNetwork,
+            at: startedAt.addingTimeInterval(14)
+        )
+
+        let restored = AgentJobDTO(job).makeModel(mediaPathMapping: [:])
+
+        XCTAssertEqual(restored.loopActiveDuration, 14)
+        XCTAssertNil(restored.loopActiveStartedAt)
     }
 
     @MainActor

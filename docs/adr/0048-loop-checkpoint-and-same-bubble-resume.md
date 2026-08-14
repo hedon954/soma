@@ -7,6 +7,7 @@
   - [ADR 0031](0031-durable-agent-jobs-event-log-and-projections.md) 中本地路径「恢复即新 Attempt / 不重建 LLM 循环状态」的隐含语义
   - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 中「中断后续跑等同新 Attempt」的展示语义
 - 上游依据：[PRD 022](../prd/022-react-reliability-and-context-awareness.md)
+- 后续替代：[ADR 0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) 将同气泡续跑扩展到失败 step，并固定 Loop 时间与整轮预算
 
 ## 背景
 

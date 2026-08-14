@@ -53,13 +53,20 @@ struct ConversationContextProjection {
                         return lhs.attemptNumber < rhs.attemptNumber
                     }
             }
-            let assistantText = assistantMessage?.text
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let assistantText = [
+                assistantMessage?.text,
+                assistantMessage?.manualCorrectionSummary.map {
+                    "[用户在回复卡片中的最新修订]\n\($0)"
+                }
+            ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
             return Exchange(
                 turnID: userMessage.turnID ?? userMessage.id,
                 date: userMessage.date,
                 userText: userMessage.text,
-                assistantText: assistantText?.isEmpty == false ? assistantText : nil,
+                assistantText: assistantText.isEmpty ? nil : assistantText,
                 mediaAttachments: userMessage.mediaAttachments
             )
         }

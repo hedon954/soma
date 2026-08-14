@@ -5,6 +5,7 @@
 - 日期：2026-07-31
 - 修订自：[PRD 004](004-soma-current-product.md) 的训练记录与动作分析范围
 - 后续修订：
+  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 让计划处方直接可见、精确快捷记录直写本地，并将专属动作图覆盖提升到至少一百个
   - [PRD 012](012-gui-training-program-authoring.md) 增加从零选择动作并创建计划的 GUI 路径
   - [PRD 013](013-guided-workout-experience-and-capture.md) 重构低摩擦计划编排、聚焦带练和真实取景
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 增加按需/每组录像、完整语音、完成复盘和历史删除

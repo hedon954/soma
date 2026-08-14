@@ -154,6 +154,43 @@ final class ExerciseLibraryTests: XCTestCase {
         }
     }
 
+    func testCatalogKeepsAtLeastOneHundredDedicatedActionIllustrations() {
+        let illustratedEntries = BundledExerciseCatalog.entries.filter {
+            !$0.actionIllustrationResourceName.isEmpty
+        }
+
+        XCTAssertGreaterThanOrEqual(
+            illustratedEntries.count,
+            100,
+            "常见动作专属图覆盖不应退回到通用占位"
+        )
+        XCTAssertEqual(
+            Set(illustratedEntries.map(\.canonicalName)).count,
+            illustratedEntries.count,
+            "每个专属图映射必须对应唯一 canonicalName"
+        )
+    }
+
+    func testCommonDeviceActionNamesAllResolveToBundledIllustrations() {
+        let names = [
+            "侧平板支撑", "击掌俯卧撑", "单腿硬拉", "哑铃交替卧推",
+            "哑铃单臂交替弯举", "哑铃卧推", "哑铃垂式弯举", "哑铃弯举",
+            "哑铃高脚杯侧弓步蹲", "壶铃摆荡", "平板哑铃划船", "引体向上",
+            "弹力带站姿抗旋", "杠铃前蹲", "杠铃卧推", "杠铃实力推",
+            "杠铃深蹲", "杠铃硬拉", "水平引体", "罗马尼亚硬拉",
+            "负重蹲跳", "辅助引体向上", "静态保加利亚蹲", "静态死虫式"
+        ]
+
+        for name in names {
+            let content = BundledExerciseCatalog.content(forName: name)
+            XCTAssertNotNil(content, "动作名没有内置目录映射：\(name)")
+            XCTAssertFalse(
+                content?.actionIllustrationResourceName.isEmpty ?? true,
+                "动作名没有内置动作图：\(name)"
+            )
+        }
+    }
+
     @MainActor
     func testListToolReturnsCompleteStableIDAndNamePairs() throws {
         let (spaces, defaults) = try makeSpaces()

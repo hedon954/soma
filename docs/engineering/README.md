@@ -4,6 +4,7 @@
 长期决策在 `docs/adr/`；工程文档不得静默改变 PRD/ADR。
 
 - [训练领域模型与运行时协议](training-domain-model.md)
+- [数据库结构与 ER 图](database-schema.md)
 - [Agent Job 与远程执行协议](agent-job-protocol.md)
 - [Agent Tool 目录](agent-tool-catalog.md)
 - [默认 Prompt 来源目录](prompt-source-catalog.md)
@@ -11,6 +12,7 @@
 - [训练智能与可靠 Agent 全量 Todo](implementation-todo.md)
 - [可选 Agent Server 部署与运维](../../Server/README.md)
 - [个人设备 QQ 邮箱反馈配置](personal-feedback-qq-mail.md)
+- [Soma 反馈到 Draft PR 自动化](feedback-to-pr-automation.md)
 - [仓库与开发工作流](repository-workflow.md)
 - [GitHub 仓库设置](github-settings.md)
 - [版本、GitHub Release 与 TestFlight](release.md)

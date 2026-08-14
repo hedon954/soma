@@ -2,13 +2,14 @@ import Foundation
 
 enum AgentToolGroup: String, CaseIterable, Sendable {
     case core
+    case records
     case plans
     case gym
     case review
     case feedback
 
     static var expandableCases: [AgentToolGroup] {
-        [.plans, .gym, .review, .feedback]
+        [.records, .plans, .gym, .review, .feedback]
     }
 
     var tools: [AgentToolName] {
@@ -17,9 +18,10 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
             [
                 .loadSkill,
                 .queryUserData,
-                .mutateUserData,
                 .expandToolGroup
             ]
+        case .records:
+            [.mutateUserData]
         case .plans:
             [
                 .createTrainingProgram,
@@ -49,6 +51,9 @@ enum AgentToolExposurePolicy {
     static func initialGroups(signals: AgentToolExposureSignals) -> Set<AgentToolGroup> {
         var groups: Set<AgentToolGroup> = [.core]
         let lowered = signals.text.lowercased()
+        if hasRecordMutationIntent(lowered) {
+            groups.insert(.records)
+        }
         if signals.hasActiveProgram
             || signals.hasActiveGuidedSession
             || containsAny(
@@ -102,7 +107,7 @@ enum AgentToolExposurePolicy {
               let group = AgentToolGroup(rawValue: groupRaw),
               AgentToolGroup.expandableCases.contains(group)
         else {
-            return .failure("tool_group 仅支持 plans、gym、review、feedback。")
+            return .failure("tool_group 仅支持 records、plans、gym、review、feedback。")
         }
         if groups.contains(group) {
             return .success("工具组 \(group.rawValue) 已经展开。")
@@ -114,5 +119,38 @@ enum AgentToolExposurePolicy {
 
     private static func containsAny(_ haystack: String, _ needles: [String]) -> Bool {
         needles.contains { haystack.contains($0) }
+    }
+
+    private static func hasRecordMutationIntent(_ text: String) -> Bool {
+        let explicitWrite = [
+            "记录", "新增", "保存", "修改", "更新", "删除", "撤回", "更正", "补充"
+        ]
+        if containsAny(text, explicitWrite) {
+            return true
+        }
+        if containsAny(text, ["刚做", "做完", "练完", "吃了", "喝了", "完成了"]) {
+            return true
+        }
+
+        // 问建议、问知识不等于授权写入；即使句子里出现“体重”“晚餐”或“几次”。
+        if containsAny(
+            text,
+            ["怎么", "如何", "多少", "合适", "建议", "应该", "能否", "可以吗", "吗", "？", "?"]
+        ) {
+            return false
+        }
+
+        let factualPatterns = [
+            #"(?:体重|体脂|腰围)\s*[:：]?\s*\d"#,
+            #"\d+(?:\.\d+)?\s*(?:kg|公斤|组|次|g|克|kcal|千卡)"#
+        ]
+        if factualPatterns.contains(where: {
+            text.range(of: $0, options: .regularExpression) != nil
+        }) {
+            return true
+        }
+
+        // 无疑问语气的餐次短句通常就是聊天式快速记录，例如“午餐 两个鸡蛋”。
+        return containsAny(text, ["早餐", "午餐", "晚餐", "加餐"])
     }
 }

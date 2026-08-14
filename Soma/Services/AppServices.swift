@@ -365,7 +365,7 @@ enum StreamingFailure: Error {
     )
 }
 
-private struct AgentToolLoopState {
+struct AgentToolLoopState {
     var messages: [ChatCompletionParameters.Message]
     var tools: [ChatCompletionParameters.Tool]
     var exposedGroups: Set<AgentToolGroup>
@@ -520,123 +520,118 @@ final class AIService {
         route requestedRoute: AIModelRoute? = nil,
         toolSignals: AgentToolExposureSignals? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
+        firstStepDeadlineEnabled: Bool = true,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
         videoFrameFallback: (() async -> [Data])? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) async throws -> AgentToolResult
     ) async throws -> AgentOutcome {
-        let routing = try resolvedRoute(
-            requested: requestedRoute,
+        let prepared = try prepareAgentRun(AgentRunPreparationRequest(
             text: text,
-            hasMedia: !images.isEmpty,
-            hasVideo: hasVideo
-        )
-        let selectedRoute = routing.route
+            images: images,
+            videos: videos,
+            hasVideo: hasVideo,
+            imageAttachmentCount: imageAttachmentCount,
+            videoAttachmentCount: videoAttachmentCount,
+            history: history,
+            context: context,
+            requestedRoute: requestedRoute,
+            toolSignals: toolSignals,
+            checkpoint: checkpoint
+        ))
+        let selectedRoute = prepared.selectedRoute
         let provider = selectedRoute.provider
         let model = selectedRoute.model
-        let key = routing.apiKey
-        let support = ModelCapability.multimodalSupport(provider: provider, model: model)
-        let historicalImageCount = history.reduce(0) { $0 + $1.images.count }
-        let hasVisualInput = !images.isEmpty
-            || !videos.isEmpty
-            || historicalImageCount > 0
-        if hasVisualInput, support == .unsupported {
-            throw AIServiceError.multimodalUnsupported(provider: provider.displayName, model: model)
-        }
+        let key = prepared.apiKey
+        let support = prepared.support
+        let historicalImageCount = prepared.historicalImageCount
+        let hasVisualInput = prepared.hasVisualInput
+        let userPrompt = prepared.userPrompt
+        let traceInput = prepared.traceInput
+        var currentModelStep = prepared.currentModelStep
+        var toolState = prepared.toolState
+        var assistantPassages = prepared.assistantPassages
+        var checkpointBatches = prepared.checkpointBatches
+        var completedOperationCount = prepared.completedOperationCount
+        var clearedHistoryFrames = prepared.clearedHistoryFrames
+        let maxSteps = prepared.maxSteps
 
-        let systemPrompt = ReActAgentPrompt.system(defaults: defaults)
-        let userPrompt = ReActAgentPrompt.user(
-            text: text,
-            context: context,
-            imageCount: images.count,
-            hasVideo: hasVideo,
-            directVideoCount: videos.count,
-            imageAttachmentCount: imageAttachmentCount,
-            videoAttachmentCount: videoAttachmentCount
-        )
-        let startStep = max(1, (checkpoint?.lastCompletedStep ?? 0) + 1)
-        let historyForPrompt: [AgentConversationExchange] = startStep > 1
-            ? history.map {
-                AgentConversationExchange(
-                    userText: $0.userText,
-                    assistantText: $0.assistantText,
-                    images: [],
-                    imageAttachmentCount: $0.imageAttachmentCount,
-                    videoAttachmentCount: $0.videoAttachmentCount
-                )
-            }
-            : history
-        var messages = agentInitialMessages(
-            systemPrompt: systemPrompt,
-            history: historyForPrompt,
-            userPrompt: userPrompt,
-            currentImages: images
-        )
-        if let checkpoint, !checkpoint.observations.isEmpty {
-            messages.append(ChatCompletionParameters.Message(
-                role: .user,
-                content: .text(compactedCheckpointPrompt(checkpoint))
+        func persistCheckpoint(nextModelStep: Int) {
+            onCheckpoint?(makeAgentCheckpoint(
+                completedOperationCount: completedOperationCount,
+                assistantPassages: assistantPassages,
+                state: toolState,
+                nextModelStep: nextModelStep,
+                batches: checkpointBatches
             ))
         }
-        let traceInput = AgentTraceText.modelInput(
-            systemPrompt: systemPrompt,
-            history: historyForPrompt,
-            userPrompt: userPrompt
-        )
-        var exposedGroups: Set<AgentToolGroup>
-        if let checkpoint, !checkpoint.exposedGroups.isEmpty {
-            exposedGroups = Set(
-                checkpoint.exposedGroups.compactMap(AgentToolGroup.init(rawValue:))
-            )
-            if exposedGroups.isEmpty {
-                exposedGroups = [.core]
-            }
-        } else {
-            exposedGroups = AgentToolExposurePolicy.initialGroups(
-                signals: toolSignals ?? AgentToolExposureSignals(
-                    text: text,
-                    hasVideo: hasVideo,
-                    hasActiveProgram: false,
-                    hasActiveGuidedSession: false
-                )
-            )
-        }
-        var toolState = AgentToolLoopState(
-            messages: messages,
-            tools: AgentToolExposurePolicy.tools(for: exposedGroups).map(\.chatTool),
-            exposedGroups: exposedGroups
-        )
-        var assistantPassages: [String] = checkpoint?.assistantPassages ?? []
-        var clearedHistoryFrames = startStep > 1
-        let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
 
         do {
-            guard startStep <= maxSteps else {
+            if let pendingBatchIndex = checkpointBatches.indices.last,
+               !checkpointBatches[pendingBatchIndex].isComplete
+            {
+                let pendingModelStep = checkpointBatches[pendingBatchIndex].modelStep
+                let nextCallIndex = checkpointBatches[pendingBatchIndex].completedResults.count
+                for callIndex in nextCallIndex ..< checkpointBatches[pendingBatchIndex].calls.count {
+                    try Task.checkCancellation()
+                    guard completedOperationCount < maxSteps else {
+                        throw ReActAgentError.stepLimit(maxSteps: maxSteps)
+                    }
+                    let operationStep = completedOperationCount + 1
+                    let checkpointCall = checkpointBatches[pendingBatchIndex].calls[callIndex]
+                    let result = try await applyResolvedToolCall(
+                        native: checkpointCall.native,
+                        call: checkpointCall.action,
+                        step: operationStep,
+                        state: &toolState,
+                        execute: execute,
+                        trace: trace
+                    )
+                    checkpointBatches[pendingBatchIndex].completedResults.append(
+                        AgentCheckpointToolResult(
+                            step: operationStep,
+                            call: checkpointCall,
+                            result: result
+                        )
+                    )
+                    completedOperationCount = operationStep
+                    let nextStep = checkpointBatches[pendingBatchIndex].isComplete
+                        ? pendingModelStep + 1
+                        : pendingModelStep
+                    persistCheckpoint(nextModelStep: nextStep)
+                }
+                currentModelStep = pendingModelStep + 1
+            }
+
+            guard currentModelStep <= maxSteps,
+                  completedOperationCount < maxSteps
+            else {
                 throw ReActAgentError.stepLimit(maxSteps: maxSteps)
             }
-            for step in startStep ... maxSteps {
+            while currentModelStep <= maxSteps, completedOperationCount < maxSteps {
                 try Task.checkCancellation()
-                if step >= 2, !clearedHistoryFrames {
+                if currentModelStep >= 2, !clearedHistoryFrames {
                     clearHistoricalImageParts(in: &toolState.messages)
                     clearedHistoryFrames = true
                 }
+                let operationStep = completedOperationCount + 1
                 let modelSpanID = UUID()
                 let textItemID = UUID()
                 let modelStartedAt = Date()
                 trace?(.span(AgentTraceSpan(
                     id: modelSpanID,
-                    step: step,
+                    step: operationStep,
                     kind: .model,
                     title: "LLM 推理",
                     status: .running,
                     startedAt: modelStartedAt,
                     endedAt: modelStartedAt,
-                    input: step == startStep
+                    input: currentModelStep == 1
                         ? traceInput
                         : "继续处理上一轮 assistant.tool_calls 与 role=tool 结果。",
                     metadata: AgentTraceText.jsonObject([
                         "history_exchange_count": history.count,
-                        "history_image_count": startStep > 1 || clearedHistoryFrames
+                        "history_image_count": checkpoint != nil || clearedHistoryFrames
                             ? 0
                             : historicalImageCount,
                         "direct_video_count": videos.count,
@@ -668,11 +663,13 @@ final class AIService {
                             images: images,
                             videos: videos,
                             hasVideo: hasVideo,
-                            step: step,
+                            step: currentModelStep,
                             route: selectedRoute,
                             apiKey: key,
                             userPrompt: userPrompt,
-                            textItemID: textItemID
+                            textItemID: textItemID,
+                            enforceFirstStepDeadline: firstStepDeadlineEnabled
+                                && currentModelStep == 1
                         ),
                         videoFrameFallback: videoFrameFallback,
                         trace: trace
@@ -686,13 +683,13 @@ final class AIService {
                     let reason = agentErrorDescription(error)
                     trace?(.span(AgentTraceSpan(
                         id: modelSpanID,
-                        step: step,
+                        step: operationStep,
                         kind: .model,
                         title: "LLM 推理",
                         status: error is CancellationError ? .cancelled : .failed,
                         startedAt: modelStartedAt,
                         endedAt: endedAt,
-                        input: step == startStep
+                        input: currentModelStep == 1
                             ? traceInput
                             : "继续处理上一轮工具结果。",
                         output: passage.nilIfEmpty,
@@ -719,13 +716,13 @@ final class AIService {
                 let orderedDeltas = streamed.toolCalls
                 trace?(.span(AgentTraceSpan(
                     id: modelSpanID,
-                    step: step,
+                    step: operationStep,
                     kind: .model,
                     title: "LLM 推理",
                     status: .succeeded,
                     startedAt: modelStartedAt,
                     endedAt: modelEndedAt,
-                    input: step == startStep
+                    input: currentModelStep == 1
                         ? traceInput
                         : "继续处理上一轮工具结果。",
                     output: passage.nilIfEmpty ?? (
@@ -735,7 +732,7 @@ final class AIService {
                     ),
                     metadata: modelSpanMetadata(
                         history: history,
-                        historicalImageCount: startStep > 1 || clearedHistoryFrames
+                        historicalImageCount: checkpoint != nil || clearedHistoryFrames
                             ? 0
                             : historicalImageCount,
                         directVideoCount: videos.count,
@@ -751,33 +748,18 @@ final class AIService {
                 }
 
                 guard !orderedDeltas.isEmpty else {
-                    let finalAnswer = passage
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .nilIfEmpty
-                        ?? assistantPassages.last?
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        ?? ""
-                    guard !finalAnswer.isEmpty else {
-                        throw ReActAgentError.emptyResponse
-                    }
-                    let completedAt = Date()
-                    trace?(.span(AgentTraceSpan(
-                        kind: .output,
-                        title: "最终回复",
-                        status: .succeeded,
-                        startedAt: completedAt,
-                        endedAt: completedAt,
-                        output: finalAnswer
-                    )))
-                    trace?(.completed(answer: finalAnswer, at: completedAt))
-                    return AgentOutcome(
-                        finalAnswer: finalAnswer,
-                        observations: toolState.observations
+                    return try completeAgentRun(
+                        passage: passage,
+                        assistantPassages: assistantPassages,
+                        observations: toolState.observations,
+                        trace: trace
                     )
                 }
 
                 let resolvedCalls = try orderedDeltas.enumerated().map { position, accumulator in
-                    try accumulator.resolved(fallbackID: "soma_call_\(step)_\(position)")
+                    try accumulator.resolved(
+                        fallbackID: "soma_call_\(currentModelStep)_\(position)"
+                    )
                 }
                 toolState.messages.append(ChatCompletionParameters.Message(
                     role: .assistant,
@@ -785,25 +767,52 @@ final class AIService {
                     toolCalls: resolvedCalls.map(\.native)
                 ))
 
-                try await applyResolvedToolCalls(
-                    resolvedCalls,
-                    step: step,
-                    state: &toolState,
-                    execute: execute,
-                    trace: trace
-                )
-                onCheckpoint?(AgentLoopCheckpoint(
-                    lastCompletedStep: step,
-                    assistantPassages: assistantPassages,
-                    observations: toolState.observations.map {
-                        AgentCheckpointObservation(
-                            step: $0.step,
-                            action: $0.action,
-                            result: $0.result
-                        )
-                    },
-                    exposedGroups: toolState.exposedGroups.map(\.rawValue).sorted()
+                let checkpointCalls = resolvedCalls.map { resolved in
+                    AgentCheckpointToolCall(
+                        id: resolved.native.id ?? UUID().uuidString,
+                        argumentsJSON: resolved.native.function.arguments,
+                        action: resolved.local
+                    )
+                }
+                checkpointBatches.append(AgentCheckpointToolBatch(
+                    modelStep: currentModelStep,
+                    modelOperationStep: operationStep,
+                    passage: passage,
+                    calls: checkpointCalls,
+                    completedResults: []
                 ))
+                completedOperationCount = operationStep
+                persistCheckpoint(nextModelStep: currentModelStep)
+
+                let batchIndex = checkpointBatches.count - 1
+                for callIndex in checkpointCalls.indices {
+                    guard completedOperationCount < maxSteps else {
+                        throw ReActAgentError.stepLimit(maxSteps: maxSteps)
+                    }
+                    let checkpointCall = checkpointCalls[callIndex]
+                    let toolStep = completedOperationCount + 1
+                    let result = try await applyResolvedToolCall(
+                        native: checkpointCall.native,
+                        call: checkpointCall.action,
+                        step: toolStep,
+                        state: &toolState,
+                        execute: execute,
+                        trace: trace
+                    )
+                    checkpointBatches[batchIndex].completedResults.append(
+                        AgentCheckpointToolResult(
+                            step: toolStep,
+                            call: checkpointCall,
+                            result: result
+                        )
+                    )
+                    completedOperationCount = toolStep
+                    let nextStep = checkpointBatches[batchIndex].isComplete
+                        ? currentModelStep + 1
+                        : currentModelStep
+                    persistCheckpoint(nextModelStep: nextStep)
+                }
+                currentModelStep += 1
             }
             throw ReActAgentError.stepLimit(maxSteps: maxSteps)
         } catch {
@@ -827,32 +836,32 @@ final class AIService {
         }
     }
 
-    private func applyResolvedToolCalls(
-        _ resolvedCalls: [(native: ToolCall, local: AgentToolCall)],
+    private func applyResolvedToolCall(
+        native: ToolCall,
+        call: AgentToolCall,
         step: Int,
         state: inout AgentToolLoopState,
         execute: (AgentToolCall) async throws -> AgentToolResult,
         trace: ((AgentTraceEvent) -> Void)?
-    ) async throws {
-        for resolved in resolvedCalls {
-            try Task.checkCancellation()
-            let call = resolved.local
-            let spanID = UUID()
-            let startedAt = Date()
-            let skill = call.arguments.skillID.flatMap(AgentSkill.init(rawValue:))
-            trace?(.span(AgentTraceSpan(
-                id: spanID,
-                step: step,
-                kind: call.name == .loadSkill ? .skill : .tool,
-                title: skill?.title ?? call.name.displayTitle,
-                status: .running,
-                startedAt: startedAt,
-                endedAt: startedAt,
-                input: AgentTraceText.json(call)
-            )))
+    ) async throws -> AgentToolResult {
+        try Task.checkCancellation()
+        let spanID = UUID()
+        let startedAt = Date()
+        let skill = call.arguments.skillID.flatMap(AgentSkill.init(rawValue:))
+        trace?(.span(AgentTraceSpan(
+            id: spanID,
+            step: step,
+            kind: call.name == .loadSkill ? .skill : .tool,
+            title: skill?.title ?? call.name.displayTitle,
+            status: .running,
+            startedAt: startedAt,
+            endedAt: startedAt,
+            input: AgentTraceText.json(call)
+        )))
 
-            let result: AgentToolResult
-            let wasDeduplicated: Bool
+        let result: AgentToolResult
+        let wasDeduplicated: Bool
+        do {
             if call.name.isMutation,
                !state.executedMutations.insert(call.signature).inserted
             {
@@ -885,37 +894,90 @@ final class AIService {
                     state.executedReads[call.signature] = result
                 }
             }
+        } catch {
             let endedAt = Date()
-            let spanKind: AgentTraceSpanKind = call.name == .loadSkill
-                ? .skill
-                : .tool
             trace?(.span(AgentTraceSpan(
                 id: spanID,
                 step: step,
-                kind: spanKind,
+                kind: call.name == .loadSkill ? .skill : .tool,
                 title: skill?.title ?? call.name.displayTitle,
-                status: result.ok ? .succeeded : .failed,
+                status: error is CancellationError ? .cancelled : .failed,
                 startedAt: startedAt,
                 endedAt: endedAt,
                 input: AgentTraceText.json(call),
-                output: AgentTraceText.json(result),
                 metadata: AgentTraceText.jsonObject([
-                    "tool_call_id": resolved.native.id ?? "",
-                    "deduplicated": wasDeduplicated,
-                    "skill_id": call.arguments.skillID.map { $0 as Any } ?? NSNull(),
-                    "skill_customized": skill
-                        .map { $0.isCustomized(in: defaults) as Any } ?? NSNull(),
-                    "record_type": result.recordType
-                        .map { $0.rawValue as Any } ?? NSNull()
+                    "tool_call_id": native.id ?? ""
                 ]),
-                errorMessage: result.ok ? nil : result.observation
+                errorMessage: agentErrorDescription(error)
             )))
-            state.observations.append(AgentObservation(step: step, action: call, result: result))
+            throw error
+        }
+
+        let endedAt = Date()
+        let spanKind: AgentTraceSpanKind = call.name == .loadSkill
+            ? .skill
+            : .tool
+        trace?(.span(AgentTraceSpan(
+            id: spanID,
+            step: step,
+            kind: spanKind,
+            title: skill?.title ?? call.name.displayTitle,
+            status: result.ok ? .succeeded : .failed,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            input: AgentTraceText.json(call),
+            output: AgentTraceText.json(result),
+            metadata: AgentTraceText.jsonObject([
+                "tool_call_id": native.id ?? "",
+                "deduplicated": wasDeduplicated,
+                "skill_id": call.arguments.skillID.map { $0 as Any } ?? NSNull(),
+                "skill_customized": skill
+                    .map { $0.isCustomized(in: defaults) as Any } ?? NSNull(),
+                "record_type": result.recordType
+                    .map { $0.rawValue as Any } ?? NSNull()
+            ]),
+            errorMessage: result.ok ? nil : result.observation
+        )))
+        state.observations.append(AgentObservation(step: step, action: call, result: result))
+        state.messages.append(ChatCompletionParameters.Message(
+            role: .tool,
+            content: .text(AgentTraceText.json(result)),
+            toolCallID: native.id
+        ))
+        return result
+    }
+
+    func restoreCheckpointBatches(
+        _ batches: [AgentCheckpointToolBatch],
+        state: inout AgentToolLoopState
+    ) {
+        for batch in batches {
             state.messages.append(ChatCompletionParameters.Message(
-                role: .tool,
-                content: .text(AgentTraceText.json(result)),
-                toolCallID: resolved.native.id
+                role: .assistant,
+                content: .text(batch.passage),
+                toolCalls: batch.calls.map(\.native)
             ))
+            for completed in batch.completedResults {
+                let call = completed.call.action
+                let result = completed.result
+                state.observations.append(AgentObservation(
+                    step: completed.step,
+                    action: call,
+                    result: result
+                ))
+                if call.name.isMutation {
+                    state.executedMutations.insert(call.signature)
+                } else if call.name != .loadSkill,
+                          call.name != .expandToolGroup
+                {
+                    state.executedReads[call.signature] = result
+                }
+                state.messages.append(ChatCompletionParameters.Message(
+                    role: .tool,
+                    content: .text(AgentTraceText.json(result)),
+                    toolCallID: completed.call.id
+                ))
+            }
         }
     }
 
@@ -937,7 +999,7 @@ final class AIService {
         return .contentArray(parts)
     }
 
-    private func compactedCheckpointPrompt(_ checkpoint: AgentLoopCheckpoint) -> String {
+    func compactedCheckpointPrompt(_ checkpoint: AgentLoopCheckpoint) -> String {
         let lines = checkpoint.observations.map { item in
             let status = item.ok ? "成功" : "失败"
             return "- step \(item.step) \(item.toolName)（\(status)）：\(item.observation)"
@@ -977,7 +1039,7 @@ final class AIService {
         }
     }
 
-    private func agentInitialMessages(
+    func agentInitialMessages(
         systemPrompt: String,
         history: [AgentConversationExchange],
         userPrompt: String,

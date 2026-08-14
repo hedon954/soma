@@ -267,6 +267,41 @@ final class ConversationContextProjectionTests: XCTestCase {
         XCTAssertTrue(trace.contextSnapshot.contains("最近 1 个来回"))
         XCTAssertTrue(trace.contextSnapshot.contains("历史视觉帧 1 张"))
     }
+
+    func testLatestInlineCorrectionIsProjectedIntoNextTurnHistory() {
+        let sessionID = UUID()
+        let turnID = UUID()
+        let user = CoachMessage(
+            sessionID: sessionID,
+            isFromCoach: false,
+            text: "记录深蹲",
+            turnID: turnID
+        )
+        let assistant = CoachMessage(
+            sessionID: sessionID,
+            isFromCoach: true,
+            text: "已记录深蹲。",
+            agentStatus: .succeeded,
+            turnID: turnID,
+            attemptNumber: 1
+        )
+        assistant.recordManualCorrection("训练记录已改为 4组8次60kg")
+
+        let projection = ConversationContextProjection.make(
+            messages: [user, assistant],
+            sessionID: sessionID,
+            excludingTurnID: UUID()
+        )
+
+        XCTAssertTrue(
+            projection.exchanges.first?.assistantText?
+                .contains("用户在回复卡片中的最新修订") == true
+        )
+        XCTAssertTrue(
+            projection.exchanges.first?.assistantText?
+                .contains("4组8次60kg") == true
+        )
+    }
 }
 
 private final class ContextProjectionMockTransport {

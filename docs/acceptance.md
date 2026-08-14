@@ -29,7 +29,7 @@
 | 训练热量 | 使用本地 MET 公式；优先实际时长，无氧推算时长只用于热量且明确标记，不回填实际训练时长。 |
 | 外部健康数据 | HealthKit 只读导入体重、训练和活动能量；转换为 Soma 模型，按空间/来源/数据流保存游标，使用样本 ID 去重并处理来源删除。 |
 | 位置与天气上下文 | 位置只在用户开启后随发送获取一次；天气相关文本才向 Open-Meteo 发送小数点后两位的公里级坐标，只在内存中派生一般风险提示，失败不阻塞 Agent，关于页提供数据归属。 |
-| 应用内反馈 | 设置的“关于”区进入 Soma 内置反馈页，一个输入区支持文字、照片和视频并直接发送，不跳转邮件 App；页面不出现 Base URL、Server、邮箱或 SMTP 说明。当前个人安装包通过 QQ SMTP 投递到固定 Gmail，只发送用户明确填写和选择的内容，不自动附带身体数据、聊天、Trace 或日志。客户端限制 5,000 字、10 项和 25 MB；外部分发前 `make online-check` 必须阻止客户端继续携带邮件凭据。 |
+| 应用内反馈 | 设置底部以“反馈”标题直接嵌入 Soma 内置反馈表单，说明文字在 Dynamic Type 和列表安全边距下不被输入卡遮挡；一个输入区支持文字、照片和视频并直接发送，不跳转邮件 App，页面不出现 Base URL、Server、邮箱或 SMTP 说明。当前个人安装包通过 QQ SMTP 投递到固定 Gmail，只发送用户明确填写和选择的内容，不自动附带身体数据、聊天、Trace 或日志。客户端限制 5,000 字、10 项和 25 MB；外部分发前 `make online-check` 必须阻止客户端继续携带邮件凭据。 |
 | 聊天提交反馈 | 用户当前消息明确要求提交 Soma 产品反馈时，Agent 调用无参数 `submit_feedback`，只发送当前消息原文和当前附件；普通训练/饮食/身体反馈不触发。Tool 等待实际 SMTP 结果，失败不伪装成功；远程模式进入设备 Tool handoff，不上传 QQ 凭据。 |
 | 数据导出 | 用户选择目标文件夹后，饮食和训练按本地年/月/日生成文字、结构化 JSON 与有序媒体目录；不包含演示数据、API Key 或内部 Trace。 |
 | 备份与恢复 | 首次选择外部目录并设置密码后立即备份，进入后台时尽力自动更新；完整个人空间与媒体经认证加密，错误密码或损坏快照不会改变当前数据。 |
@@ -138,9 +138,9 @@
 | 有任务在途仍可发送 | 发送键不再因 `isProcessing` 失效；后续消息按 `createdAt` 排队，前一条被后台租约挂起也不丢失（`AgentJobTests.testBackgroundLeaseExpirationKeepsJobRecoverable`）。 |
 | 失败三分类 | `LLMOutageClassifier` 把传输错误映射为 `retryNetwork`，缺配置/地址无效/401/403/408/409/425/429/5xx 映射为 `stage`，400/404/413/422 与明确不支持多模态映射为 `fail`（`LLMOutageStagingTests`）。 |
 | 暂存退避有界 | 供应商侧故障按 `2^n` 秒退避、上限 5 分钟；等待用户改配置的场景不设退避，靠配置变更信号唤醒（`testStagingRetryDelayGrowsAndCapsAtFiveMinutes`、`testStagingWithDelaySetsBoundedRetryWindow`）。 |
-| 补偿消费 | App 启动、回到前台、`llmConfigurationDidChange`、上一条任务结束与退避到期触发 `resumePendingJobs`；`releaseStagedJobs` 只解锁后端可用的 Job，按 FIFO 串行执行，`AgentMutationReceipt` 保证同一 Turn 不重复写入（`testReleaseStagedJobsRespectsReadinessAndClearsBackoff`）。 |
-| 暂存可解释 | 暂存中的用户消息显示「已暂存，恢复后自动继续」，输入区上方显示「N 条已暂存 · 去配置」并深链到「LLM 配置」；不展示状态机名称、退避秒数或内部分类结果。 |
-| LLM 配置直出 | 「AI 服务」更名「LLM 配置」；顶部档位分段，平台/Base URL/API Key/模型同屏可改；模型、Base URL 与图片生成模型改动即落盘，不依赖返回时机，返回设置首页再进入值不变。 |
+| 补偿消费 | App 启动、回到前台、`llmConfigurationDidChange`、上一条任务结束与退避到期只恢复普通可运行/可补偿 Job；明确欠费的 `waitingForUser` 不被这些信号释放。`AgentMutationReceipt` 继续保证同一 Turn 不重复写入。 |
+| 暂存可解释 | 暂存中的用户消息显示「已暂存，恢复后自动继续」，输入区上方显示待处理计数与“管理”入口；管理页按发送顺序列出内容摘要、状态和附件数量，支持左滑单删、清空全部与按顺序重试全部，不展示状态机名称、退避秒数或供应商原始报文。 |
+| LLM 配置直出 | 「AI 服务」更名「LLM 配置」；顶部档位分段，平台/Base URL/API Key/模型同屏可改；模型、Base URL 与图片生成模型改动即落盘，不依赖返回时机，设置 Tab 与暂存管理入口始终从共享 `AIService` 读取同一值。 |
 | opencode | 默认 `https://opencode.ai/zen/v1`，端点拼接与多模态标注（GPT/Codex 不支持、Claude/Gemini 支持、其余未知）由 `LLMConfigurationTests` 覆盖。 |
 | 输入历史式建议 | `InputSuggestionList` 同时服务模型建议与聊天动作建议；动作建议最多 5 条、归档动作不出现、前缀命中优先，合并规则由 `ExerciseInputSuggestionBuilderTests` 覆盖。 |
 | 红线不破坏 | Tool Schema、幂等边界、missing-is-nil、本地优先与 BYOK 均未变化；暂存只推迟执行时机，队列完全保存在本机。 |
@@ -162,6 +162,25 @@
 | 工具组与并行 | `AgentToolExposurePolicy` 预选 core/plans/gym/review/feedback；`parallelToolCalls=true` 且本机顺序执行；未展开时同 session 连续两轮 system+tools 前缀稳定。 |
 | 延迟辅助 | 流式滚动约 10Hz 非动画节流；历史视频帧经 `VideoFrameCache` LRU；step ≥ 2 历史帧占位。Trace 可观测 `time_to_first_delta_ms`/`projection_ms`/`cached_prompt_tokens`。 |
 | 红线不破坏 | 不用 LLM 滚动摘要；不静默跨轮合并；Tool Schema 仍固定；远程 Job 协议不变。 |
+
+## 可靠高效 ReAct 与原位审查
+
+[PRD 027](prd/027-reliable-efficient-react-and-in-context-review.md) 与
+[ADR 0062](adr/0062-user-resumed-llm-interruption-barrier.md)–[0066](adr/0066-bundled-action-illustration-coverage.md)
+的当前实现证据。
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 欠费人工屏障与 FIFO | `waitingForUser` 不可运行且不被启动、前台、定时器或配置变化释放；`claimNext` 不跳过队首。“按顺序重试全部”统一释放待处理状态但仍由 `claimNext` 串行领取；`LLMOutageStagingTests` 覆盖欠费分类、后发暂存、批量释放顺序、单删和全清。 |
+| 每个 step 精确续跑 | 检查点持久化原生 `assistant.tool_calls` 和逐条 `role=tool` 结果；模型成功后、每个 Tool 成功后都立即落盘。双 Tool 回归证明第二个失败后只重试第二个，恢复请求的 System/User 前缀不变。 |
+| 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；`AgentJob.frozenExecutionDate` 在首次 claim 后固定为 `loopStartedAt`，业务 Tool 不再使用消息时间或重试墙钟。持久 envelope 只存时间戳与 IANA 时区。 |
+| 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁。`AgentLoopDeadline` 以 3/5/10 分钟活动执行预算取消当前窗口，等待用户、网络或前台不计时；自动恢复保留已耗时长，用户显式重试刷新预算但保留固定业务时间与成功 step。 |
+| 确定性快捷训练 | typed 最近训练草稿 trim 后未改且无附件时使用 `deterministicWorkout` Job；空 Key 测试证明不调用 LLM、执行时间实时读取并产生同构 Trace/Event/结果卡。 |
+| 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存/删除写入有界 correction block，下一轮上下文投影最新修订。 |
+| 计划与一级页面 | 计划编辑同屏提供组数、次数、重量、间歇；进展首卡直出当前健身房；设置底部直接嵌入反馈；空 Session 提供确定性和最多六条自定义快捷语。 |
+| Tool 与 Prompt 节制 | `core` 不含 mutation；建议/疑问句不暴露 records，明确写入和结构化事实才预选。System 固定，User 固定 `[SOMA CURRENT TURN v1]` section 顺序，后续只追加 assistant/tool 尾部。 |
+| 动作图覆盖 | 内置专属图条目不少于 100，Bundle 逐资源校验；真机核对得到的 24 个常见动作名称全部有确定目录映射与离线动作图，不把个人训练事实写入仓库。 |
+| Gmail 自动化 | Codex 自动化 `soma-gmail-draft-pr` 每 3 小时运行一次；只处理一封未标记反馈，从最新 `origin/main` 建隔离分支并产出分析、必要 PRD/ADR、实现、测试、Changelog 和 Draft PR。成功建 PR 后才标记邮件；不合并、发布或真机安装。 |
 
 ## 实施前文档门禁
 
@@ -242,10 +261,12 @@ Live Activity/本地通知倒计时正确，点击返回当前 Session。完成�
 从浮层分别移除一项，并确认另一项、记录本身与聊天原件不变。
 
 AI 配置引导与暂存在模拟器使用空标准档 Key 验收：准备文字和附件后点击发送，确认消息已落盘
-并显示“已暂存”、输入区出现「1 条已暂存 · 去配置」，同时打开“设置 → LLM 配置”并显示提醒；
-执行日志没有新增失败项。继续发送两条，确认三条都进入暂存且不再重复弹出配置页。保存标准档
-Key 后返回教练，确认三条按发送顺序自动进入流式 Agent、不需要手动重试、不产生重复业务记录；
-设置中不出现远程 Agent 开关或本地模式提示。
+并显示“已暂存”、输入区出现「1 条待处理」与“管理”入口，同时首次打开“设置 → LLM 配置”
+并显示提醒；执行日志没有新增失败项。继续发送两条，确认三条都进入暂存且不再重复弹出配置页。
+打开暂存管理，确认三条按发送顺序显示摘要、状态和附件数量；分别验证单删、清空确认与“按顺序
+重试全部”。从管理页进入 LLM 配置应与设置 Tab 的平台、地址、Key 和模型一致。保存标准档 Key 后
+返回教练，确认其余消息按发送顺序进入流式 Agent，不产生重复业务记录；设置中不出现远程 Agent
+开关或本地模式提示。
 
 LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/models` 列表中的 ID，返回设置首页再
 进入，确认值不变且重新拉取候选也不覆盖；切换到小模型档确认平台、Base URL、Key、模型独立；

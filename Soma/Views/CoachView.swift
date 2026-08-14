@@ -6,12 +6,15 @@ import UIKit
 
 private enum CoachSheet: Identifiable {
     case media
+    case pendingQueue
     case quickCapture(CaptureEntryRequest)
 
     var id: String {
         switch self {
         case .media:
             "media"
+        case .pendingQueue:
+            "pending-queue"
         case let .quickCapture(request):
             "capture-\(request.id)"
         }
@@ -58,6 +61,7 @@ struct CoachView: View {
     @State private var sessionDrawerPresented = false
     @State private var showsLocationPrompt = false
     @State private var useLocalForNextMessage = false
+    @State private var selectedExerciseSuggestion: ExerciseInputSuggestion?
     /// 流式期间合并滚动，避免每个 token 启动一次 250ms 动画反压 MainActor。
     @State private var lastLiveScrollAt = Date.distantPast
     @State private var liveScrollTask: Task<Void, Never>?
@@ -73,6 +77,10 @@ struct CoachView: View {
             return []
         }
         return allMessages.filter { $0.sessionID == activeSessionID }
+    }
+
+    private var latestAssistantMessageID: UUID? {
+        ChatRecordEditPolicy.latestEditableAssistantMessageID(in: messages)
     }
 
     private var currentGym: GymProfile? {
@@ -91,10 +99,16 @@ struct CoachView: View {
 
     /// ADR 0045：暂存队列按数据空间统计，不区分 Session——
     /// 用户关心的是「还有多少条没被消费」。
-    private var stagedJobCount: Int {
+    private var pendingJobs: [AgentJob] {
         agentJobs.filter {
-            $0.dataSpace == dataSpace.activeSpace && $0.state == .staged
-        }.count
+            $0.dataSpace == dataSpace.activeSpace
+                && [.staged, .waitingForUser, .queued, .waitingForNetwork]
+                .contains($0.state)
+        }
+    }
+
+    private var pendingJobCount: Int {
+        pendingJobs.count
     }
 
     private var stagedTurnIDs: Set<UUID> {
@@ -102,6 +116,8 @@ struct CoachView: View {
             agentJobs
                 .filter {
                     $0.dataSpace == dataSpace.activeSpace && $0.state == .staged
+                        || $0.dataSpace == dataSpace.activeSpace
+                        && $0.state == .waitingForUser
                 }
                 .map(\.turnID)
         )
@@ -188,6 +204,20 @@ struct CoachView: View {
                         contentsOf: media.prefix(available).map(PendingAttachment.init)
                     )
                 }
+            case .pendingQueue:
+                PendingAgentQueueView(
+                    jobs: pendingJobs,
+                    isBusy: processor.isProcessing,
+                    onRetryAll: retryPendingQueue,
+                    onDelete: { job in
+                        discardPending(
+                            turnID: job.turnID,
+                            sessionID: job.sessionID
+                        )
+                    },
+                    onClear: clearPendingQueue,
+                    onOpenLLMConfiguration: openLLMConfigurationFromPendingQueue
+                )
             case let .quickCapture(request):
                 MediaSourceDialog(
                     allowsVideo: true,
@@ -213,6 +243,14 @@ struct CoachView: View {
         }
         .onAppear {
             locationPreferenceRaw = ConversationLocationPreference.current().rawValue
+        }
+        .onChange(of: draft) {
+            guard let selectedExerciseSuggestion else { return }
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                != selectedExerciseSuggestion.draftText
+            {
+                self.selectedExerciseSuggestion = nil
+            }
         }
         .onDisappear {
             speechInput.stop()
@@ -260,13 +298,17 @@ struct CoachView: View {
     private var messageList: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
-                if messages.count <= 1 {
-                    ConversationStarter(onSelect: sendPrompt)
+                if ConversationStarterPolicy.shouldShow(for: messages) {
+                    ConversationStarter(
+                        suggestions: sessionStarterSuggestions,
+                        onSelect: sendStarter
+                    )
                 }
 
                 ForEach(messages) { message in
                     CoachBubble(
                         message: message,
+                        isLatestAssistantMessage: message.id == latestAssistantMessageID,
                         isLive: isProcessingHere
                             && message.agentStatus == .running,
                         isStaged: message.turnID.map(stagedTurnIDs.contains) ?? false,
@@ -275,7 +317,10 @@ struct CoachView: View {
                                 message,
                                 in: messages
                             ),
-                        onRetry: { retry(message) }
+                        onRetry: { retry(message) },
+                        onDiscardPending: message.turnID.map(stagedTurnIDs.contains) == true
+                            ? { discardPending(message) }
+                            : nil
                     )
                     .id(message.id)
                 }
@@ -294,7 +339,7 @@ struct CoachView: View {
             gyms: gyms,
             currentGym: currentGym,
             exerciseSuggestions: exerciseSuggestions,
-            stagedCount: stagedJobCount,
+            pendingCount: pendingJobCount,
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
             useLocalForNextMessage: $useLocalForNextMessage,
@@ -307,7 +352,7 @@ struct CoachView: View {
             onSelectGym: selectGym,
             onManageGyms: { showsGyms = true },
             onApplySuggestion: applySuggestion,
-            onOpenLLMConfiguration: onRequireAIConfiguration,
+            onManagePending: { sheet = .pendingQueue },
             onToggleVoice: toggleVoice,
             onSend: send
         )
@@ -424,6 +469,60 @@ struct CoachView: View {
         send()
     }
 
+    private func sendStarter(_ suggestion: ConversationStarterSuggestion) {
+        guard let quickRecord = suggestion.quickRecord else {
+            sendPrompt(suggestion.prompt)
+            return
+        }
+        draft = quickRecord.draftText
+        selectedExerciseSuggestion = quickRecord
+        guard locationPreference != .unasked else {
+            speechInput.stop()
+            showsLocationPrompt = true
+            return
+        }
+        submitCurrentDraft(quickRecordOverride: quickRecord)
+    }
+
+    private var sessionStarterSuggestions: [ConversationStarterSuggestion] {
+        var values: [ConversationStarterSuggestion] = []
+        if let currentGym {
+            let prompt = "我到\(currentGym.name)了，今天怎么练？"
+            values.append(.init(title: prompt, prompt: prompt))
+        }
+        if let recent = recentExerciseCapacities
+            .filter({
+                !$0.text.isEmpty && $0.recordDraft?.setEntries.isEmpty == false
+            })
+            .max(by: { $0.date < $1.date }),
+            let exercise = exerciseDefinitions.first(where: {
+                $0.id == recent.exerciseID
+            })
+        {
+            let quickRecord = ExerciseInputSuggestion(
+                id: exercise.id,
+                exerciseName: exercise.canonicalName,
+                recentSummary: recent.text,
+                recentDate: recent.date,
+                recordDraft: recent.recordDraft
+            )
+            values.append(.init(
+                title: "继续记录\(exercise.canonicalName)",
+                prompt: quickRecord.draftText,
+                quickRecord: quickRecord
+            ))
+        } else if let latest = workouts.first {
+            let prompt = "继续记录\(latest.exercise)"
+            values.append(.init(title: prompt, prompt: prompt))
+        }
+        let hour = Calendar.current.component(.hour, from: .now)
+        let mealPrompt = hour < 11
+            ? "记录今天的早餐"
+            : hour < 17 ? "记录刚才这顿饭" : "记录今天的晚餐"
+        values.append(.init(title: mealPrompt, prompt: mealPrompt))
+        return Array(values.prefix(3))
+    }
+
     /// ADR 0046：一行同时给出动作名与最近一次训练容量，点一次即得到完整草稿。
     private var exerciseSuggestions: [ExerciseInputSuggestion] {
         let query = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -454,7 +553,14 @@ struct CoachView: View {
             return ExerciseInputSuggestionBuilder.RecentCapacityInput(
                 exerciseID: exerciseID,
                 date: workout.date,
-                text: ExerciseQuickFill.text(for: workout)
+                text: ExerciseQuickFill.text(for: workout),
+                recordDraft: ExerciseQuickRecordDraft(
+                    exerciseID: exerciseID,
+                    exerciseName: workout.exercise,
+                    setEntries: workout.setEntries,
+                    restSeconds: workout.restSeconds,
+                    durationMinutes: workout.durationMinutes
+                )
             )
         }
         let projectedPerformanceIDs = Set(
@@ -474,7 +580,11 @@ struct CoachView: View {
                 date: session.startedAt,
                 text: ExerciseQuickFill.text(for: workoutSets.filter {
                     $0.performanceID == performance.id
-                })
+                }),
+                recordDraft: guidedQuickRecordDraft(
+                    performance: performance,
+                    sets: workoutSets.filter { $0.performanceID == performance.id }
+                )
             )
         }
         return legacy + guided
@@ -482,7 +592,34 @@ struct CoachView: View {
 
     private func applySuggestion(_ suggestion: ExerciseInputSuggestion) {
         draft = suggestion.draftText
+        selectedExerciseSuggestion = suggestion
         composerFocusRequest = UUID()
+    }
+
+    private func guidedQuickRecordDraft(
+        performance: ExercisePerformance,
+        sets: [WorkoutSet]
+    ) -> ExerciseQuickRecordDraft? {
+        let completed = sets
+            .filter { $0.status == .completed }
+            .sorted { $0.order < $1.order }
+        guard !completed.isEmpty else { return nil }
+        let rests = completed.compactMap(\.actualRestSeconds)
+        let rest = rests.count == completed.count && Set(rests).count == 1
+            ? rests.first
+            : nil
+        return ExerciseQuickRecordDraft(
+            exerciseID: performance.exerciseID,
+            exerciseName: performance.exerciseName,
+            setEntries: completed.map {
+                WorkoutSetEvidence(
+                    reps: $0.actualReps,
+                    externalWeightKG: $0.actualWeightKG
+                )
+            },
+            restSeconds: rest,
+            durationMinutes: nil
+        )
     }
 
     private func send() {
@@ -496,7 +633,9 @@ struct CoachView: View {
         submitCurrentDraft()
     }
 
-    private func submitCurrentDraft() {
+    private func submitCurrentDraft(
+        quickRecordOverride: ExerciseInputSuggestion? = nil
+    ) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return }
         speechInput.stop()
@@ -513,22 +652,37 @@ struct CoachView: View {
         ) else {
             return
         }
-        // 引导条件要在落盘前判断：这条消息本身会让暂存计数从 0 变成 1。
-        let needsConfigurationGuidance = needsConfigurationGuidance(
-            forceLocal: useLocalForNextMessage
-        )
-        let accepted = processor.submit(
-            text: text,
-            attachments: pending,
-            context: processingContext,
-            includeLocation: locationPreference == .enabled,
-            locationService: locationContext,
-            forceLocal: useLocalForNextMessage
-        )
+        let quickRecord = quickRecordOverride ?? selectedExerciseSuggestion
+        let exactQuickDraft = pending.isEmpty
+            && quickRecord?.draftText == text
+            ? quickRecord?.recordDraft
+            : nil
+        // 精确的结构化快捷记录不经过 LLM，即使尚未配置 API Key 也不应打断发送。
+        // 其他路径仍要在落盘前判断：提交后暂存计数会从 0 变成 1。
+        let needsConfigurationGuidance = exactQuickDraft == nil
+            && needsConfigurationGuidance(forceLocal: useLocalForNextMessage)
+        let accepted = if let exactQuickDraft {
+            processor.submitQuickWorkout(
+                text: text,
+                draft: exactQuickDraft,
+                context: processingContext,
+                locationService: locationContext
+            )
+        } else {
+            processor.submit(
+                text: text,
+                attachments: pending,
+                context: processingContext,
+                includeLocation: locationPreference == .enabled,
+                locationService: locationContext,
+                forceLocal: useLocalForNextMessage
+            )
+        }
         if accepted {
             draft = ""
             attachments = []
             useLocalForNextMessage = false
+            selectedExerciseSuggestion = nil
             composerDismissRequest = UUID()
             scrollRequest = UUID()
             if needsConfigurationGuidance {
@@ -538,12 +692,25 @@ struct CoachView: View {
     }
 
     private func retry(_ responseMessage: CoachMessage) {
+        guard let turnID = responseMessage.turnID else { return }
+        retry(turnID: turnID)
+    }
+
+    private func retryPendingQueue() -> Bool {
+        processor.retryPendingQueue(
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            modelContext: modelContext,
+            locationService: locationContext
+        )
+    }
+
+    private func retry(turnID: UUID) {
         let needsConfigurationGuidance = needsConfigurationGuidance(forceLocal: false)
-        guard let turnID = responseMessage.turnID,
-              let userMessage = ConversationTurnProjection.userMessage(
-                  for: turnID,
-                  in: messages
-              )
+        guard let userMessage = ConversationTurnProjection.userMessage(
+            for: turnID,
+            in: messages
+        )
         else {
             return
         }
@@ -572,18 +739,65 @@ struct CoachView: View {
         }
     }
 
+    private func discardPending(_ message: CoachMessage) {
+        guard let turnID = message.turnID else { return }
+        _ = discardPending(
+            turnID: turnID,
+            sessionID: message.sessionID ?? conversationSessions.activeSessionID ?? UUID()
+        )
+    }
+
+    private func discardPending(turnID: UUID, sessionID: UUID) -> Bool {
+        guard let processingContext = ConversationProcessingContextFactory.make(
+            sessionID: sessionID,
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            in: modelContext
+        )
+        else {
+            return false
+        }
+        return processor.discardPendingTurn(
+            turnID: turnID,
+            context: processingContext,
+            locationService: locationContext
+        )
+    }
+
+    private func clearPendingQueue() -> Bool {
+        guard let sessionID = conversationSessions.activeSessionID,
+              let processingContext = ConversationProcessingContextFactory.make(
+                  sessionID: sessionID,
+                  dataSpace: dataSpace.activeSpace,
+                  ai: ai,
+                  in: modelContext
+              )
+        else {
+            return false
+        }
+        return processor.clearPendingQueue(context: processingContext)
+    }
+
     /// ADR 0045：缺配置不再阻止发送。队列里还没有暂存消息时说明用户是第一次遇到，
     /// 此时把消息落盘暂存并同时打开「LLM 配置」；之后只靠输入区的暂存提示，不再打断。
     private func needsConfigurationGuidance(forceLocal: Bool) -> Bool {
         if !forceLocal, RemoteAgentPreference.isEnabled() {
             return false
         }
-        return !ai.hasRequiredAPIKey && stagedJobCount == 0
+        return !ai.hasRequiredAPIKey && pendingJobCount == 0
     }
 
     private func openLLMConfiguration() {
         speechInput.stop()
         onRequireAIConfiguration()
+    }
+
+    private func openLLMConfigurationFromPendingQueue() {
+        sheet = nil
+        Task { @MainActor in
+            await Task.yield()
+            openLLMConfiguration()
+        }
     }
 
     private func toggleVoice() {
@@ -649,8 +863,53 @@ struct CoachView: View {
     }
 }
 
+private struct ConversationStarterSuggestion {
+    let title: String
+    let prompt: String
+    var quickRecord: ExerciseInputSuggestion?
+
+    init(
+        title: String,
+        prompt: String,
+        quickRecord: ExerciseInputSuggestion? = nil
+    ) {
+        self.title = title
+        self.prompt = prompt
+        self.quickRecord = quickRecord
+    }
+}
+
+enum ConversationStarterPolicy {
+    static func shouldShow(for messages: [CoachMessage]) -> Bool {
+        messages.isEmpty
+    }
+
+    static func customPrompts(from rawValue: String) -> [String] {
+        let normalized = rawValue
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        return Array(normalized.filter { seen.insert($0).inserted }.suffix(6))
+    }
+
+    static func adding(_ value: String, to prompts: [String]) -> [String] {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return prompts }
+        return Array((prompts.filter { $0 != normalized } + [normalized]).suffix(6))
+    }
+}
+
 private struct ConversationStarter: View {
-    let onSelect: (String) -> Void
+    let suggestions: [ConversationStarterSuggestion]
+    let onSelect: (ConversationStarterSuggestion) -> Void
+    @AppStorage("coach.customStarterPrompts") private var customPromptsRaw = ""
+    @State private var customDraft = ""
+    @State private var customizationExpanded = false
+
+    private var customPrompts: [String] {
+        ConversationStarterPolicy.customPrompts(from: customPromptsRaw)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -658,18 +917,59 @@ private struct ConversationStarter: View {
                 .font(.title3.bold())
                 .lineSpacing(3)
             VStack(spacing: 8) {
-                starter("刚做完深蹲 4组8次 60kg")
-                starter("午餐吃了鸡胸肉杂粮饭")
+                ForEach(Array(allSuggestions.enumerated()), id: \.offset) { _, suggestion in
+                    starter(suggestion)
+                }
+            }
+            DisclosureGroup("自定义快捷语", isExpanded: $customizationExpanded) {
+                HStack {
+                    TextField("例如：记录晨起体重", text: $customDraft)
+                        .textFieldStyle(.roundedBorder)
+                    Button("添加", action: addCustomPrompt)
+                        .disabled(customDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                ForEach(customPrompts, id: \.self) { prompt in
+                    HStack {
+                        Text(prompt).font(.caption).lineLimit(1)
+                        Spacer()
+                        Button(role: .destructive) {
+                            removeCustomPrompt(prompt)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除快捷语 \(prompt)")
+                    }
+                }
             }
         }
         .padding(.vertical, 8)
     }
 
-    private func starter(_ text: String) -> some View {
+    private func addCustomPrompt() {
+        let value = customDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        customPromptsRaw = ConversationStarterPolicy.adding(value, to: customPrompts)
+            .joined(separator: "\n")
+        customDraft = ""
+    }
+
+    private func removeCustomPrompt(_ prompt: String) {
+        customPromptsRaw = customPrompts.filter { $0 != prompt }
+            .joined(separator: "\n")
+    }
+
+    private var allSuggestions: [ConversationStarterSuggestion] {
+        suggestions + customPrompts.map {
+            ConversationStarterSuggestion(title: $0, prompt: $0)
+        }
+    }
+
+    private func starter(_ suggestion: ConversationStarterSuggestion) -> some View {
         Button {
-            onSelect(text)
+            onSelect(suggestion)
         } label: {
-            Text(text)
+            Text(suggestion.title)
                 .font(.subheadline)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -770,10 +1070,12 @@ private struct SelectableChatText: UIViewRepresentable {
 
 struct CoachBubble: View {
     let message: CoachMessage
+    var isLatestAssistantMessage = false
     var isLive = false
     var isStaged = false
     var canRetry = false
     var onRetry: () -> Void = {}
+    var onDiscardPending: (() -> Void)?
 
     var body: some View {
         let visibleMessageText = message.isFromCoach
@@ -811,7 +1113,9 @@ struct CoachBubble: View {
                 {
                     AgentTurnTranscript(
                         items: message.agentTurnItems,
-                        isLive: isLive
+                        isLive: isLive,
+                        sourceMessage: message,
+                        isEditable: isLatestAssistantMessage
                     )
                 } else if !visibleMessageText.isEmpty, !message.isAutomaticMediaSummary {
                     Group {
@@ -833,9 +1137,18 @@ struct CoachBubble: View {
                 }
 
                 if isStaged, !message.isFromCoach {
-                    Label("已暂存，恢复后自动继续", systemImage: "tray.full")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Label("已暂存，等待队首处理", systemImage: "tray.full")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        if let onDiscardPending {
+                            Button(role: .destructive, action: onDiscardPending) {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("删除这条暂存消息")
+                        }
+                    }
                 }
 
                 if canRetry {
@@ -879,7 +1192,7 @@ private struct CoachComposer: View {
     let gyms: [GymProfile]
     let currentGym: GymProfile?
     let exerciseSuggestions: [ExerciseInputSuggestion]
-    let stagedCount: Int
+    let pendingCount: Int
     let showsExecutionChoice: Bool
     @Binding var useLocalForNextMessage: Bool
     let isSending: Bool
@@ -891,7 +1204,7 @@ private struct CoachComposer: View {
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
     let onApplySuggestion: (ExerciseInputSuggestion) -> Void
-    let onOpenLLMConfiguration: () -> Void
+    let onManagePending: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -919,10 +1232,10 @@ private struct CoachComposer: View {
     var body: some View {
         VStack(spacing: 8) {
             // ADR 0045：暂存计数常驻在输入区上方，与上下文条互不挤占。
-            if stagedCount > 0 {
-                StagedQueueBanner(
-                    count: stagedCount,
-                    onOpenConfiguration: onOpenLLMConfiguration
+            if pendingCount > 0 {
+                PendingQueueBanner(
+                    count: pendingCount,
+                    onManage: onManagePending
                 )
             }
 
@@ -1146,25 +1459,27 @@ private struct CoachComposer: View {
     }
 }
 
-/// ADR 0045：暂存队列对用户只有两个信息——还有几条没被消费，以及去哪里恢复。
-private struct StagedQueueBanner: View {
+/// ADR 0062：输入区只保留计数入口，完整队列操作进入可审查的管理列表。
+private struct PendingQueueBanner: View {
     let count: Int
-    let onOpenConfiguration: () -> Void
+    let onManage: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "tray.full")
                 .font(.footnote)
                 .foregroundStyle(AppTheme.warning)
-            Text("\(count) 条已暂存，LLM 恢复后自动继续")
+            Text("\(count) 条待处理，按发送顺序等待")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Button("去配置", action: onOpenConfiguration)
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.plain)
-                .foregroundStyle(AppTheme.tint)
+            Button(action: onManage) {
+                Text("管理")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.tint)
+            }
+            .accessibilityHint("查看暂存列表并重试或删除")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -1173,7 +1488,7 @@ private struct StagedQueueBanner: View {
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(count) 条消息已暂存，LLM 恢复后自动继续")
+        .accessibilityLabel("\(count) 条消息待处理，按发送顺序等待")
     }
 }
 

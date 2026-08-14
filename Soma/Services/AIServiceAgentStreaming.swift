@@ -13,6 +13,7 @@ struct AgentStreamStepRequest {
     var apiKey: String
     var userPrompt: String
     var textItemID: UUID
+    var enforceFirstStepDeadline: Bool = false
 }
 
 extension AIService {
@@ -48,6 +49,7 @@ extension AIService {
                     route: request.route,
                     apiKey: request.apiKey,
                     textItemID: request.textItemID,
+                    enforceFirstDelta: request.enforceFirstStepDeadline,
                     trace: trace
                 )
                 streamed.requestAttempt = requestAttempt
@@ -59,7 +61,8 @@ extension AIService {
                 passage,
                 receivedMeaningfulDelta
             ) {
-                guard requestAttempt == 1,
+                guard request.enforceFirstStepDeadline,
+                      requestAttempt == 1,
                       !receivedMeaningfulDelta,
                       shouldRetryStream(error)
                 else {
@@ -121,6 +124,7 @@ extension AIService {
         route: AIModelRoute,
         apiKey: String,
         textItemID: UUID,
+        enforceFirstDelta: Bool,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
         var outcome = AgentStreamOutcome()
@@ -136,7 +140,8 @@ extension AIService {
             try await AgentStreamDeadline.consume(
                 stream: stream,
                 mode: mediaMode,
-                policy: streamDeadlinePolicy
+                policy: streamDeadlinePolicy,
+                enforceFirstDelta: enforceFirstDelta
             ) { chunk in
                 if let chunkUsage = chunk.usage {
                     outcome.usage = chunkUsage

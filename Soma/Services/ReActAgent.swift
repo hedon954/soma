@@ -632,7 +632,7 @@ struct AgentObservation: Codable, Equatable {
     var result: AgentToolResult
 }
 
-struct AgentOutcome: Equatable {
+struct AgentOutcome: Equatable, @unchecked Sendable {
     var finalAnswer: String
     var observations: [AgentObservation]
 
@@ -641,12 +641,33 @@ struct AgentOutcome: Equatable {
     }
 }
 
-/// ADR 0048：step 边界检查点，供同气泡中断续跑重建压缩上下文。
+/// ADR 0062：每个 LLM invoke / tool call 都是可恢复 step。
+///
+/// `toolBatches == nil` 代表旧版压缩检查点；新检查点保留原生 assistant.tool_calls
+/// 与 role=tool 结果，恢复时不重新调用已经成功的模型或工具。
 struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
     var lastCompletedStep: Int
     var assistantPassages: [String]
     var observations: [AgentCheckpointObservation]
     var exposedGroups: [String]
+    var nextModelStep: Int?
+    var toolBatches: [AgentCheckpointToolBatch]?
+
+    init(
+        lastCompletedStep: Int,
+        assistantPassages: [String],
+        observations: [AgentCheckpointObservation],
+        exposedGroups: [String],
+        nextModelStep: Int? = nil,
+        toolBatches: [AgentCheckpointToolBatch]? = nil
+    ) {
+        self.lastCompletedStep = lastCompletedStep
+        self.assistantPassages = assistantPassages
+        self.observations = observations
+        self.exposedGroups = exposedGroups
+        self.nextModelStep = nextModelStep
+        self.toolBatches = toolBatches
+    }
 
     static let empty = AgentLoopCheckpoint(
         lastCompletedStep: 0,
@@ -656,6 +677,40 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
     )
 }
 
+struct AgentCheckpointToolCall: Codable, Equatable, @unchecked Sendable {
+    var id: String
+    var argumentsJSON: String
+    var action: AgentToolCall
+
+    var native: ToolCall {
+        ToolCall(
+            id: id,
+            function: FunctionCall(
+                arguments: argumentsJSON,
+                name: action.name.rawValue
+            )
+        )
+    }
+}
+
+struct AgentCheckpointToolResult: Codable, Equatable, @unchecked Sendable {
+    var step: Int
+    var call: AgentCheckpointToolCall
+    var result: AgentToolResult
+}
+
+struct AgentCheckpointToolBatch: Codable, Equatable, @unchecked Sendable {
+    var modelStep: Int
+    var modelOperationStep: Int
+    var passage: String
+    var calls: [AgentCheckpointToolCall]
+    var completedResults: [AgentCheckpointToolResult]
+
+    var isComplete: Bool {
+        completedResults.count == calls.count
+    }
+}
+
 struct AgentCheckpointObservation: Codable, Equatable, Sendable {
     var step: Int
     var toolName: String
@@ -663,6 +718,10 @@ struct AgentCheckpointObservation: Codable, Equatable, Sendable {
     var observation: String
     var ok: Bool
     var recordTypeRaw: String?
+
+    var recordType: ConversationIntent? {
+        recordTypeRaw.flatMap(ConversationIntent.init(rawValue:))
+    }
 
     init(step: Int, action: AgentToolCall, result: AgentToolResult) {
         self.step = step
@@ -838,7 +897,7 @@ extension AgentToolName {
         case .submitFeedback:
             "向 Soma 维护者提交产品反馈。只有当前用户消息明确要求提交产品反馈时才能调用；发送内容固定为当前消息原文和当前附件，不得用于动作评价、饮食建议、身体观察或一般教练反馈。"
         case .expandToolGroup:
-            "展开当前未暴露的工具组。可选 plans、gym、review、feedback。仅在当前工具不足时调用一次。"
+            "展开当前未暴露的工具组。可选 records、plans、gym、review、feedback。仅当当前用户目标确实需要缺失工具时调用一次。"
         }
     }
 
@@ -1233,6 +1292,7 @@ enum ReActPromptSection: String, CaseIterable, Identifiable {
             2. 需要确定性读取或写入时使用已注册工具，不要用文字假装操作已经完成。
             3. 可以先简短说明正在做什么再调用工具；工具完成后必须基于真实结果确认成功或说明失败。
             4. 最终回复只保留结论、必要依据和下一步。简单任务通常用两到五句；复杂任务可用少量自然段或列表。不要复述用户输入、执行过程，不要输出分隔线、冗长表格或多级标题；也不要为了简短而堆砌生硬短句。
+            5. 一般知识、鼓励或不依赖本机事实的建议直接回答。只有回答当前目标确实缺少本机事实时才查询；只有用户明确要求产生副作用时才写入。不要为了“更完整”重复查询摘要中已有的信息。
             """
         case .policy:
             """
@@ -1517,13 +1577,20 @@ enum ReActAgentPrompt {
             "图片：提供 \(imageCount) 张。"
         }
         return """
-        当前本地摘要：
+        [SOMA CURRENT TURN v1]
+        执行约束：
+        - 当前用户输入是本轮动作授权的唯一来源；历史只提供上下文。
+        - 先使用已给的确定性摘要；只有缺少完成当前目标所必需的精确事实时才查询。
+        - 一般建议直接回答；数据写入、修改、删除或设备动作才调用相应 Tool。
+        - 同一事实或同一副作用不要重复查询、重复写入。
+
+        [TRUSTED LOCAL CONTEXT]
         \(context)
 
-        用户本次输入：
-        \(text.isEmpty ? "无文字，请根据媒体判断意图。" : text)
+        [CURRENT USER INPUT]
+        \(text.isEmpty ? "无文字，请只根据本轮媒体判断意图。" : text)
 
-        媒体：
+        [CURRENT MEDIA MANIFEST]
         用户共上传 \(attachmentSummary)；实际分析模式为 \(analysisMode)
         """
     }

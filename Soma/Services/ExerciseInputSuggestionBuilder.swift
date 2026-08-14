@@ -5,6 +5,7 @@ struct ExerciseInputSuggestion: Identifiable, Equatable {
     let exerciseName: String
     let recentSummary: String?
     let recentDate: Date?
+    let recordDraft: ExerciseQuickRecordDraft?
 
     /// 点一次就写入输入框的完整草稿。没有历史时只给动作名，不补默认数值。
     var draftText: String {
@@ -13,6 +14,14 @@ struct ExerciseInputSuggestion: Identifiable, Equatable {
         }
         return "\(exerciseName)：\(recentSummary)"
     }
+}
+
+struct ExerciseQuickRecordDraft: Codable, Equatable, Sendable {
+    var exerciseID: UUID
+    var exerciseName: String
+    var setEntries: [WorkoutSetEvidence]
+    var restSeconds: Int?
+    var durationMinutes: Int?
 }
 
 /// ADR 0046：把「动作名」与「最近一次训练容量」合并成一条建议，
@@ -37,6 +46,19 @@ enum ExerciseInputSuggestionBuilder {
         let exerciseID: UUID
         let date: Date
         let text: String
+        let recordDraft: ExerciseQuickRecordDraft?
+
+        init(
+            exerciseID: UUID,
+            date: Date,
+            text: String,
+            recordDraft: ExerciseQuickRecordDraft? = nil
+        ) {
+            self.exerciseID = exerciseID
+            self.date = date
+            self.text = text
+            self.recordDraft = recordDraft
+        }
     }
 
     static func suggestions(
@@ -60,7 +82,8 @@ enum ExerciseInputSuggestionBuilder {
                     id: exercise.id,
                     exerciseName: exercise.name,
                     recentSummary: latest?.text,
-                    recentDate: latest?.date
+                    recentDate: latest?.date,
+                    recordDraft: latest?.recordDraft
                 )
             }
 

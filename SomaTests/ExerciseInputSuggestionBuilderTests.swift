@@ -8,12 +8,19 @@ final class ExerciseInputSuggestionBuilderTests: XCTestCase {
     private let archivedID = UUID()
 
     func testSuggestionMergesExerciseAndLatestCapacityInOneRow() {
+        let draft = ExerciseQuickRecordDraft(
+            exerciseID: benchID,
+            exerciseName: "卧推",
+            setEntries: [WorkoutSetEvidence(reps: 8, externalWeightKG: 60)],
+            restSeconds: 90,
+            durationMinutes: nil
+        )
         let suggestions = ExerciseInputSuggestionBuilder.suggestions(
             query: "卧推",
             exercises: exercises(),
             recentCapacities: [
                 capacity(benchID, day: 1, text: "50kg × 10 × 3组"),
-                capacity(benchID, day: 5, text: "60kg × 8 × 4组")
+                capacity(benchID, day: 5, text: "60kg × 8 × 4组", draft: draft)
             ]
         )
 
@@ -21,6 +28,7 @@ final class ExerciseInputSuggestionBuilderTests: XCTestCase {
         let bench = try? XCTUnwrap(suggestions.first { $0.id == benchID })
         XCTAssertEqual(bench?.recentSummary, "60kg × 8 × 4组")
         XCTAssertEqual(bench?.draftText, "卧推：60kg × 8 × 4组")
+        XCTAssertEqual(bench?.recordDraft, draft)
     }
 
     func testSuggestionWithoutHistoryOnlyGivesExerciseName() {
@@ -122,12 +130,14 @@ final class ExerciseInputSuggestionBuilderTests: XCTestCase {
     private func capacity(
         _ exerciseID: UUID,
         day: Int,
-        text: String
+        text: String,
+        draft: ExerciseQuickRecordDraft? = nil
     ) -> ExerciseInputSuggestionBuilder.RecentCapacityInput {
         ExerciseInputSuggestionBuilder.RecentCapacityInput(
             exerciseID: exerciseID,
             date: Date(timeIntervalSince1970: Double(day) * 86400),
-            text: text
+            text: text,
+            recordDraft: draft
         )
     }
 }

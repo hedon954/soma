@@ -8,6 +8,7 @@
   - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 的本地分析器 Attempt
   - [ADR 0025](0025-tiered-model-profiles-and-routing.md) 的“启用远程 Agent”前提
 - 后续替代：
+  - [ADR 0064](0064-deterministic-quick-write-and-latest-inline-review.md) 允许未修改的 typed 快捷训练在无 LLM 配置时直接执行确定性本地写入
   - [ADR 0045](0045-llm-outage-staging-and-compensating-drain.md) 改为落盘暂存并在恢复后补偿消费，
     取代“无 Key 时不落盘并跳转设置”的发送前门禁
   - [ADR 0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) 把「AI 服务」

@@ -65,6 +65,7 @@ struct SettingsView: View {
                 serviceSection
                 privacyAndAdvancedSection
                 aboutSection
+                feedbackSection
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -78,7 +79,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            .onAppear(perform: loadInitialConfiguration)
             .onChange(of: smallModelEnabled) {
                 ai.setTierEnabled(smallModelEnabled, tier: .small)
             }
@@ -103,6 +103,8 @@ struct SettingsView: View {
                 await refreshModels()
             }
         }
+        // 初始路由直接进入 LLM 子页时，根 Form 不会出现；加载必须挂在容器上。
+        .onAppear(perform: loadInitialConfiguration)
     }
 
     private var profileAndTrainingSection: some View {
@@ -204,16 +206,21 @@ struct SettingsView: View {
             Text("Your body, understood.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            NavigationLink {
-                FeedbackView()
-            } label: {
-                Label("发送反馈", systemImage: "envelope")
-            }
             if let attributionURL = URL(string: "https://open-meteo.com/") {
                 LabeledContent("天气数据") {
                     Link("Open-Meteo", destination: attributionURL)
                 }
             }
+        }
+    }
+
+    private var feedbackSection: some View {
+        Section("反馈") {
+            FeedbackView(isEmbedded: true)
+                .listRowInsets(
+                    EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0)
+                )
+                .listRowBackground(Color.clear)
         }
     }
 
@@ -472,15 +479,27 @@ struct SettingsView: View {
     }
 
     private func loadTierConfiguration(_ tier: AIModelTier) {
-        provider = ai.provider(for: tier)
-        loadProviderConfiguration()
+        applyConfigurationDraft(
+            SettingsLLMConfigurationDraft.load(from: ai, tier: tier)
+        )
     }
 
     private func loadProviderConfiguration() {
-        baseURL = ai.baseURL(for: provider, tier: modelTier)
-        model = ai.model(for: provider, tier: modelTier)
-        imageModel = ai.imageModel(for: provider)
-        apiKey = ai.apiKey(for: provider, tier: modelTier)
+        applyConfigurationDraft(
+            SettingsLLMConfigurationDraft.load(
+                from: ai,
+                tier: modelTier,
+                provider: provider
+            )
+        )
+    }
+
+    private func applyConfigurationDraft(_ draft: SettingsLLMConfigurationDraft) {
+        provider = draft.provider
+        baseURL = draft.baseURL
+        model = draft.model
+        imageModel = draft.imageModel
+        apiKey = draft.apiKey
         models = []
         modelError = nil
         keySaved = !apiKey.isEmpty
@@ -1835,61 +1854,5 @@ private struct AgentTraceSpanRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-    }
-}
-
-private struct TraceSpanMetadata {
-    private let values: [String: Any]
-
-    init(_ rawValue: String?) {
-        guard let rawValue,
-              let data = rawValue.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dictionary = object as? [String: Any]
-        else {
-            values = [:]
-            return
-        }
-        values = dictionary
-    }
-
-    func string(_ key: String) -> String? {
-        values[key] as? String
-    }
-
-    private func integer(_ key: String) -> Int? {
-        if let value = values[key] as? Int {
-            return value
-        }
-        return (values[key] as? NSNumber)?.intValue
-    }
-
-    var tokenSummary: String? {
-        guard let total = integer("total_tokens") else { return nil }
-        let totalText = total.formatted(.number.grouping(.automatic))
-        guard let input = integer("prompt_tokens"),
-              let output = integer("completion_tokens")
-        else {
-            return "tokens \(totalText)"
-        }
-        var summary = "\(totalText) tokens · 入 \(input.formatted()) / 出 \(output.formatted())"
-        // 供应商侧前缀缓存的命中量。没有这个字段说明该平台不回传，不等于没命中。
-        if let cached = integer("cached_prompt_tokens"), cached > 0 {
-            summary += " · 缓存 \(cached.formatted())"
-        }
-        return summary
-    }
-
-    /// 首个增量之前是请求与供应商排队，之后是流式与本机投影：
-    /// 两个数字分开才能判断慢在哪一侧。
-    var latencySummary: String? {
-        var parts: [String] = []
-        if let firstDelta = integer("time_to_first_delta_ms") {
-            parts.append("首字 \(firstDelta)ms")
-        }
-        if let projection = integer("projection_ms"), projection > 0 {
-            parts.append("投影 \(projection)ms")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

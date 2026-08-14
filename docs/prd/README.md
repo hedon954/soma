@@ -38,6 +38,8 @@
 | [024：聊天内 Agent 反馈 Tool](024-chat-agent-feedback-tool.md) | 已实现，待真机验收 | 用户在教练当前消息中明确提交产品反馈；固定设备 Tool 只发送当前原文与附件，并复用现有 QQ→Gmail 链路 |
 | [025：可信对话上下文、直传视频与可审查饮食](025-trusted-context-direct-video-and-reviewable-meals.md) | 已采纳，实施中 | 自动按日 Session、可信时间、选择性媒体、直传视频、TTFT、Tool v2 与饮食结果卡 |
 | [026：带练记录投影、录像失败可见性与会话入口恢复](026-guided-workout-record-projection-camera-failures-and-session-entry.md) | 已实现，待真机验收 | 动作终态形成训练记录、计划执行确定性组合、录像失败警告与日志、恢复左上角历史入口 |
+| [027：可靠高效 ReAct 与原位审查闭环](027-reliable-efficient-react-and-in-context-review.md) | 已实施，部分修订 | 欠费人工恢复、step 续跑、固定时间、分层超时、快捷直写、聊天原位 CRUD、稳定 Tool/Prompt 前缀与百图动作库；执行预算由 028 修订 |
+| [028：重试活动执行预算](028-retry-active-runtime-budget.md) | 已实施，待真机验收 | 固定业务时间与超时计时解耦，等待不消耗预算，手动重试刷新执行窗口并覆盖误导性取消态 |
 
 ## 阅读约定
 

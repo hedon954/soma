@@ -9,6 +9,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "db:migrate": "node --import tsx src/migrate-main.ts up",
+    "db:migrate:baseline": "node --import tsx src/migrate-main.ts baseline",
+    "db:migrate:create": "node --import tsx src/migrate-main.ts create",
+    "db:migrate:status": "node --import tsx src/migrate-main.ts status",
     "test": "node --import tsx --test test/**/*.test.ts",
     "test:postgres": "node --import tsx --test test/postgres.test.ts",
     "start": "node dist/main.js",

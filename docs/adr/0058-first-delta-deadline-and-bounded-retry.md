@@ -4,7 +4,7 @@
 - 日期：2026-08-11
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0037](0037-backend-transparent-streaming-and-notification-wake.md) 中只约束固定轮询、不约束 Provider 首响应时限的边界
-- 后续替代：暂无
+- 后续替代：[ADR 0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) 改为仅第一次处理使用 20/40/60 秒首增量门禁，整轮使用 3/5/10 分钟预算
 - 上游依据：
   - [PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
   - [BUG 0005](../bugs/0005-remote-agent-streaming-latency-regression.md)

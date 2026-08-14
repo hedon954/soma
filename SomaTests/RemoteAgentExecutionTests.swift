@@ -130,7 +130,6 @@ struct RemoteAgentExecutionTests {
         #expect(Set(server.submittedDeviceTools) == Set([
             "load_skill",
             "query_user_data",
-            "mutate_user_data",
             "expand_tool_group"
         ]))
         #expect(server.submittedDeviceToolSchemas.values.allSatisfy { $0 == 2 })

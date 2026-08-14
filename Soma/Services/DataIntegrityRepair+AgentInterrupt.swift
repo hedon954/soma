@@ -76,6 +76,7 @@ extension DataIntegrityRepair {
         for job in jobs where !job.state.isTerminal {
             if resumableTurnIDs.contains(job.turnID) {
                 if job.state == .running {
+                    job.pauseLoopRuntime(at: min(job.leaseExpiresAt ?? endedAt, endedAt))
                     try? job.transition(to: .waitingForForeground, at: endedAt)
                     job.leaseOwner = nil
                     job.leaseExpiresAt = nil
