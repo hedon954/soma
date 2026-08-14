@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct FeedbackView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var isEmbedded = false
     @State private var draftID = UUID()
     @State private var message = ""
@@ -21,7 +22,7 @@ struct FeedbackView: View {
                     content.padding()
                 }
                 .appPageBackground()
-                .navigationTitle("发送反馈")
+                .navigationTitle("反馈")
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
@@ -63,6 +64,7 @@ struct FeedbackView: View {
             Text("告诉我哪里不好用，或你希望 Soma 接下来做什么。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             composer
         }
     }
@@ -88,44 +90,7 @@ struct FeedbackView: View {
 
             Divider()
 
-            HStack(spacing: 12) {
-                Button {
-                    editorFocused = false
-                    showsMediaPicker = true
-                } label: {
-                    Label("照片或视频", systemImage: "plus.circle.fill")
-                }
-                .disabled(
-                    isSending
-                        || attachments.count
-                        >= FeedbackSubmissionPolicy.maximumAttachmentCount
-                )
-
-                Spacer()
-
-                if !attachments.isEmpty {
-                    Text("\(attachments.count)/\(FeedbackSubmissionPolicy.maximumAttachmentCount)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("已添加 \(attachments.count) 项附件")
-                }
-
-                Button {
-                    submit()
-                } label: {
-                    if isSending {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(minWidth: 44)
-                    } else {
-                        Text("发送")
-                            .fontWeight(.semibold)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isSending || isEmpty)
-                .accessibilityHint("提交当前文字和附件")
-            }
+            composerActions
         }
         .padding(16)
         .background(
@@ -135,6 +100,70 @@ struct FeedbackView: View {
                 style: .continuous
             )
         )
+    }
+
+    @ViewBuilder
+    private var composerActions: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                addMediaButton
+                HStack(spacing: 12) {
+                    attachmentCount
+                    Spacer(minLength: 8)
+                    submitButton
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                addMediaButton
+                Spacer()
+                attachmentCount
+                submitButton
+            }
+        }
+    }
+
+    private var addMediaButton: some View {
+        Button {
+            editorFocused = false
+            showsMediaPicker = true
+        } label: {
+            Label("照片或视频", systemImage: "plus.circle.fill")
+        }
+        .disabled(
+            isSending
+                || attachments.count
+                >= FeedbackSubmissionPolicy.maximumAttachmentCount
+        )
+    }
+
+    @ViewBuilder
+    private var attachmentCount: some View {
+        if !attachments.isEmpty {
+            Text("\(attachments.count)/\(FeedbackSubmissionPolicy.maximumAttachmentCount)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("已添加 \(attachments.count) 项附件")
+        }
+    }
+
+    private var submitButton: some View {
+        Button {
+            submit()
+        } label: {
+            if isSending {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(minWidth: 44)
+            } else {
+                Text("发送")
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(isSending || isEmpty)
+        .accessibilityHint("提交当前文字和附件")
     }
 
     private var isEmpty: Bool {

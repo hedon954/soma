@@ -152,6 +152,42 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
+    func testRetryAllPendingReleasesEveryItemInFIFOOrder() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let first = makeJob(createdAt: Date(timeIntervalSince1970: 10))
+        let second = makeJob(createdAt: Date(timeIntervalSince1970: 20))
+        let third = makeJob(createdAt: Date(timeIntervalSince1970: 30))
+        for job in [first, second, third] {
+            context.insert(job)
+        }
+        try context.save()
+        try AgentJobStore.claim(first, owner: "runner", in: context)
+        try AgentJobStore.waitForUser(first, message: "额度已用尽", in: context)
+        try AgentJobStore.stageFollowingJobs(
+            after: first,
+            message: "等待前一条",
+            in: context
+        )
+
+        let released = try AgentJobStore.releasePendingQueueForManualRetry(
+            dataSpace: .personal,
+            in: context
+        )
+
+        XCTAssertEqual(released, [first.id, second.id, third.id])
+        XCTAssertTrue([first, second, third].allSatisfy { $0.state == .queued })
+        XCTAssertEqual(
+            try AgentJobStore.claimNext(
+                dataSpace: .personal,
+                owner: "runner",
+                in: context
+            )?.id,
+            first.id
+        )
+    }
+
+    @MainActor
     func testStagingRecordsEventAndClearsLease() throws {
         let container = try makeContainer()
         let context = ModelContext(container)

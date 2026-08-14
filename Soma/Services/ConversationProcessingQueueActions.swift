@@ -200,6 +200,33 @@ extension ConversationProcessingService {
     }
 
     @discardableResult
+    func retryPendingQueue(
+        dataSpace: DataSpace,
+        ai: AIService,
+        modelContext: ModelContext,
+        locationService: LocationContextService
+    ) -> Bool {
+        guard !isProcessing else { return false }
+        do {
+            let released = try AgentJobStore.releasePendingQueueForManualRetry(
+                dataSpace: dataSpace,
+                in: modelContext
+            )
+            guard !released.isEmpty else { return false }
+        } catch {
+            modelContext.rollback()
+            return false
+        }
+        startNextPendingJob(
+            dataSpace: dataSpace,
+            ai: ai,
+            modelContext: modelContext,
+            locationService: locationService
+        )
+        return true
+    }
+
+    @discardableResult
     func discardPendingTurn(
         turnID: UUID,
         context: ConversationProcessingContext,
