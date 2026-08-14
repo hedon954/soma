@@ -5,6 +5,11 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-08-15
+
+这次更新让欠费后的消息严格等待用户恢复，并把 ReAct 重试收敛为失败 step 原位续跑；同时加入
+聊天内记录审查、训练计划处方编辑、确定性快捷记录、更完整的动作图片与数据库演进门禁。
+
 ### Added
 
 - 带练动作全部组完成或跳过且至少有一组真实完成后，立即形成可编辑、可删除的普通训练记录；
@@ -16,6 +21,8 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
   保留一致的 Message、Job、Trace、Tool Event 与结果卡。
 - 内置常见动作专属图覆盖提升到 100 个以上，并加入覆盖数量、唯一名称和 Bundle 资源门禁。
 - 教练空会话新增当前健身房、最近动作和时段快捷语，以及最多六个本机自定义快捷语。
+- 新增设备端 SwiftData 与 Agent Server PostgreSQL 的当前表结构、编码字段和 ER 图；Server 数据库
+  迁移改由带顺序、checksum、事务和 advisory lock 的命令统一管理。
 
 ### Changed
 
@@ -50,6 +57,22 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 - `WorkoutEntry` 新增可空的计划执行与动作表现来源 ID；启动时在本机幂等补齐历史已完成动作。
   来源 Performance 同时保留用户删除投影的抑制标记，避免后续回填重新创建；加密备份与开放导出
   保留来源关系，旧数据库无需清空或重建。
+- Agent Server 使用现有 `001_initial.sql` 作为基线，并新增 `soma_schema_migrations` 台账；后续结构
+  变化只允许通过向前 migration 演进。最低系统版本不变，仍为 iOS 17。
+
+### Privacy
+
+- 暂存消息、step 检查点、可编辑记录卡和结构化快捷草稿仍只保存在当前设备的数据空间；训练、
+  饮食、身体和健身房记录不会因为本次 Server migration 工具而迁移到远端事实库。
+- 反馈仍只在用户明确提交时发送当前文字与所选附件，不自动附带身体数据、历史聊天、Trace、日志
+  或原始位置。
+
+### Known limitations
+
+- 应用内邮件反馈链路仍仅供维护者本人使用；在 TestFlight、App Store、Ad Hoc 或他人安装前，
+  必须迁移到已认证的服务端边界、轮换旧凭据并通过 `make online-check`。
+- 欠费后的恢复依赖不同 LLM Provider 对账单错误的实际响应；本版已覆盖本地队列、重启和手动续跑
+  回归，但仍需在对应 Provider 恢复额度后完成一次真机端到端验收。
 
 ## [0.0.4] - 2026-08-12
 
