@@ -65,6 +65,10 @@ struct FeedbackView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(
+                    .horizontal,
+                    isEmbedded ? AppTheme.pagePadding : 0
+                )
             composer
         }
     }
@@ -93,6 +97,7 @@ struct FeedbackView: View {
             composerActions
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(
