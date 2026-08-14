@@ -6,12 +6,15 @@ import UIKit
 
 private enum CoachSheet: Identifiable {
     case media
+    case pendingQueue
     case quickCapture(CaptureEntryRequest)
 
     var id: String {
         switch self {
         case .media:
             "media"
+        case .pendingQueue:
+            "pending-queue"
         case let .quickCapture(request):
             "capture-\(request.id)"
         }
@@ -96,18 +99,16 @@ struct CoachView: View {
 
     /// ADR 0045：暂存队列按数据空间统计，不区分 Session——
     /// 用户关心的是「还有多少条没被消费」。
-    private var stagedJobCount: Int {
+    private var pendingJobs: [AgentJob] {
         agentJobs.filter {
             $0.dataSpace == dataSpace.activeSpace
-                && ($0.state == .staged || $0.state == .waitingForUser)
-        }.count
+                && [.staged, .waitingForUser, .queued, .waitingForNetwork]
+                .contains($0.state)
+        }
     }
 
-    private var oldestPendingJob: AgentJob? {
-        agentJobs.first {
-            $0.dataSpace == dataSpace.activeSpace
-                && ($0.state == .staged || $0.state == .waitingForUser)
-        }
+    private var pendingJobCount: Int {
+        pendingJobs.count
     }
 
     private var stagedTurnIDs: Set<UUID> {
@@ -203,6 +204,20 @@ struct CoachView: View {
                         contentsOf: media.prefix(available).map(PendingAttachment.init)
                     )
                 }
+            case .pendingQueue:
+                PendingAgentQueueView(
+                    jobs: pendingJobs,
+                    isBusy: processor.isProcessing,
+                    onRetryAll: retryPendingQueue,
+                    onDelete: { job in
+                        discardPending(
+                            turnID: job.turnID,
+                            sessionID: job.sessionID
+                        )
+                    },
+                    onClear: clearPendingQueue,
+                    onOpenLLMConfiguration: openLLMConfigurationFromPendingQueue
+                )
             case let .quickCapture(request):
                 MediaSourceDialog(
                     allowsVideo: true,
@@ -324,7 +339,7 @@ struct CoachView: View {
             gyms: gyms,
             currentGym: currentGym,
             exerciseSuggestions: exerciseSuggestions,
-            stagedCount: stagedJobCount,
+            pendingCount: pendingJobCount,
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
             useLocalForNextMessage: $useLocalForNextMessage,
@@ -337,9 +352,7 @@ struct CoachView: View {
             onSelectGym: selectGym,
             onManageGyms: { showsGyms = true },
             onApplySuggestion: applySuggestion,
-            onOpenLLMConfiguration: onRequireAIConfiguration,
-            onRetryOldestPending: retryOldestPending,
-            onClearPending: clearPendingQueue,
+            onManagePending: { sheet = .pendingQueue },
             onToggleVoice: toggleVoice,
             onSend: send
         )
@@ -683,9 +696,13 @@ struct CoachView: View {
         retry(turnID: turnID)
     }
 
-    private func retryOldestPending() {
-        guard let turnID = oldestPendingJob?.turnID else { return }
-        retry(turnID: turnID)
+    private func retryPendingQueue() -> Bool {
+        processor.retryPendingQueue(
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            modelContext: modelContext,
+            locationService: locationContext
+        )
     }
 
     private func retry(turnID: UUID) {
@@ -723,24 +740,31 @@ struct CoachView: View {
     }
 
     private func discardPending(_ message: CoachMessage) {
-        guard let turnID = message.turnID,
-              let processingContext = ConversationProcessingContextFactory.make(
-                  sessionID: message.sessionID ?? conversationSessions.activeSessionID ?? UUID(),
-                  dataSpace: dataSpace.activeSpace,
-                  ai: ai,
-                  in: modelContext
-              )
+        guard let turnID = message.turnID else { return }
+        _ = discardPending(
+            turnID: turnID,
+            sessionID: message.sessionID ?? conversationSessions.activeSessionID ?? UUID()
+        )
+    }
+
+    private func discardPending(turnID: UUID, sessionID: UUID) -> Bool {
+        guard let processingContext = ConversationProcessingContextFactory.make(
+            sessionID: sessionID,
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            in: modelContext
+        )
         else {
-            return
+            return false
         }
-        _ = processor.discardPendingTurn(
+        return processor.discardPendingTurn(
             turnID: turnID,
             context: processingContext,
             locationService: locationContext
         )
     }
 
-    private func clearPendingQueue() {
+    private func clearPendingQueue() -> Bool {
         guard let sessionID = conversationSessions.activeSessionID,
               let processingContext = ConversationProcessingContextFactory.make(
                   sessionID: sessionID,
@@ -749,9 +773,9 @@ struct CoachView: View {
                   in: modelContext
               )
         else {
-            return
+            return false
         }
-        _ = processor.clearPendingQueue(context: processingContext)
+        return processor.clearPendingQueue(context: processingContext)
     }
 
     /// ADR 0045：缺配置不再阻止发送。队列里还没有暂存消息时说明用户是第一次遇到，
@@ -760,12 +784,20 @@ struct CoachView: View {
         if !forceLocal, RemoteAgentPreference.isEnabled() {
             return false
         }
-        return !ai.hasRequiredAPIKey && stagedJobCount == 0
+        return !ai.hasRequiredAPIKey && pendingJobCount == 0
     }
 
     private func openLLMConfiguration() {
         speechInput.stop()
         onRequireAIConfiguration()
+    }
+
+    private func openLLMConfigurationFromPendingQueue() {
+        sheet = nil
+        Task { @MainActor in
+            await Task.yield()
+            openLLMConfiguration()
+        }
     }
 
     private func toggleVoice() {
@@ -1160,7 +1192,7 @@ private struct CoachComposer: View {
     let gyms: [GymProfile]
     let currentGym: GymProfile?
     let exerciseSuggestions: [ExerciseInputSuggestion]
-    let stagedCount: Int
+    let pendingCount: Int
     let showsExecutionChoice: Bool
     @Binding var useLocalForNextMessage: Bool
     let isSending: Bool
@@ -1172,9 +1204,7 @@ private struct CoachComposer: View {
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
     let onApplySuggestion: (ExerciseInputSuggestion) -> Void
-    let onOpenLLMConfiguration: () -> Void
-    let onRetryOldestPending: () -> Void
-    let onClearPending: () -> Void
+    let onManagePending: () -> Void
     let onToggleVoice: () -> Void
     let onSend: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -1202,12 +1232,10 @@ private struct CoachComposer: View {
     var body: some View {
         VStack(spacing: 8) {
             // ADR 0045：暂存计数常驻在输入区上方，与上下文条互不挤占。
-            if stagedCount > 0 {
-                StagedQueueBanner(
-                    count: stagedCount,
-                    onRetryOldest: onRetryOldestPending,
-                    onClear: onClearPending,
-                    onOpenConfiguration: onOpenLLMConfiguration
+            if pendingCount > 0 {
+                PendingQueueBanner(
+                    count: pendingCount,
+                    onManage: onManagePending
                 )
             }
 
@@ -1431,12 +1459,10 @@ private struct CoachComposer: View {
     }
 }
 
-/// ADR 0045：暂存队列对用户只有两个信息——还有几条没被消费，以及去哪里恢复。
-private struct StagedQueueBanner: View {
+/// ADR 0062：输入区只保留计数入口，完整队列操作进入可审查的管理列表。
+private struct PendingQueueBanner: View {
     let count: Int
-    let onRetryOldest: () -> Void
-    let onClear: () -> Void
-    let onOpenConfiguration: () -> Void
+    let onManage: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1448,22 +1474,12 @@ private struct StagedQueueBanner: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Menu {
-                Button(action: onRetryOldest) {
-                    Label("重试最早一条", systemImage: "arrow.clockwise")
-                }
-                Button(action: onOpenConfiguration) {
-                    Label("LLM 配置", systemImage: "sparkles")
-                }
-                Divider()
-                Button(role: .destructive, action: onClear) {
-                    Label("清空暂存", systemImage: "trash")
-                }
-            } label: {
+            Button(action: onManage) {
                 Text("管理")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.tint)
             }
+            .accessibilityHint("查看暂存列表并重试或删除")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

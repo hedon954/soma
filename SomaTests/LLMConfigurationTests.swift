@@ -140,4 +140,35 @@ final class LLMConfigurationTests: XCTestCase {
         ai.notifyConfigurationChanged()
         waitForExpectations(timeout: 1)
     }
+
+    @MainActor
+    func testEverySettingsEntryReadsTheSameSavedConfiguration() throws {
+        let suiteName = "LLMConfigurationTests.shared.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let ai = AIService(defaults: defaults, apiKeyOverride: "test-api-key")
+        ai.configure(
+            tier: .standard,
+            provider: .openCode,
+            baseURL: "https://llm.example.com/v1",
+            model: "shared-model"
+        )
+        ai.configureImageModel("shared-image-model", for: .openCode)
+
+        let settingsTab = SettingsLLMConfigurationDraft.load(
+            from: ai,
+            tier: .standard
+        )
+        let pendingQueueEntry = SettingsLLMConfigurationDraft.load(
+            from: ai,
+            tier: .standard
+        )
+
+        XCTAssertEqual(pendingQueueEntry, settingsTab)
+        XCTAssertEqual(pendingQueueEntry.provider, .openCode)
+        XCTAssertEqual(pendingQueueEntry.baseURL, "https://llm.example.com/v1")
+        XCTAssertEqual(pendingQueueEntry.model, "shared-model")
+        XCTAssertEqual(pendingQueueEntry.imageModel, "shared-image-model")
+        XCTAssertEqual(pendingQueueEntry.apiKey, "test-api-key")
+    }
 }

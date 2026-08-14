@@ -714,6 +714,41 @@ enum AgentJobStore {
         try context.save()
     }
 
+    /// 用户从暂存管理显式选择“按顺序重试全部”时，一次性释放整个本地队列。
+    /// 真正领取仍由 `claimNext` 严格按 `createdAt` 串行完成。
+    @discardableResult
+    static func releasePendingQueueForManualRetry(
+        dataSpace: DataSpace,
+        now: Date = .now,
+        in context: ModelContext
+    ) throws -> [UUID] {
+        let jobs = (
+            try? context.fetch(
+                FetchDescriptor<AgentJob>(
+                    sortBy: [SortDescriptor(\.createdAt)]
+                )
+            )
+        ) ?? []
+        let pendingStates: Set<AgentJobState> = [
+            .staged,
+            .waitingForUser,
+            .queued,
+            .waitingForNetwork
+        ]
+        let targets = jobs.filter {
+            $0.dataSpace == dataSpace && pendingStates.contains($0.state)
+        }
+        guard !targets.isEmpty else { return [] }
+        for job in targets {
+            if job.state != .queued {
+                try job.transition(to: .queued, at: now)
+            }
+            job.nextRetryAt = nil
+        }
+        try context.save()
+        return targets.map(\.id)
+    }
+
     /// LLM 恢复后解除暂存，让既有 FIFO 领取逻辑立即消费。
     static func releaseStagedJobs(
         dataSpace: DataSpace,
