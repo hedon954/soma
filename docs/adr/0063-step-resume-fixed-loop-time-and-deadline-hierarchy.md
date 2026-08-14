@@ -1,6 +1,6 @@
 # ADR 0063：step 续跑复用同一气泡、固定 Loop 时间并采用分层截止时间
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-08-13
 - 维护者：Soma maintainers
 - 部分替代：
@@ -8,6 +8,7 @@
   - [ADR 0056](0056-trusted-selective-multimodal-context.md) 中每次模型请求刷新 Attempt 时间并持久化格式化日期字段的边界
   - [ADR 0058](0058-first-delta-deadline-and-bounded-retry.md) 中每个模型 step 使用 8/10/20 秒首增量、idle 与单步总时限的边界
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
+- 后续替代：[ADR 0067](0067-separate-business-time-and-active-loop-budget.md) 修订整轮预算的计时来源与用户显式重试窗口
 
 ## 背景
 
@@ -27,6 +28,7 @@
 4. 第一次模型处理的首增量门禁为文字 20 秒、图片 40 秒、视频 60 秒；后续 step 不设单 step
    截止时间，也不做传输级自动重试。
 5. 整个 Loop 的墙钟预算分别为 3/5/10 分钟，从 `loopStartedAt` 计算；恢复和手动重试都不重置。
+   此项已由 [ADR 0067](0067-separate-business-time-and-active-loop-budget.md) 替代；业务时间仍保持冻结。
 6. timeout 通过结构化并发取消底层流，完整 Tool Call 形成前不执行副作用。
 
 ## 未选择的方案

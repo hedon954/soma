@@ -368,6 +368,98 @@ final class AgentReliabilityTests: XCTestCase {
         )
     }
 
+    func testLaterFailureReplacesCancellationAndCompletionClearsFailureStyle() {
+        let message = CoachMessage(
+            isFromCoach: true,
+            text: "",
+            agentStatus: .running
+        )
+        message.applyAgentEvent(.failed(
+            message: "已取消",
+            cancelled: true,
+            at: Date(timeIntervalSince1970: 100)
+        ))
+        message.applyAgentEvent(.failed(
+            message: "整个 ReAct Loop 超过 180 秒",
+            cancelled: false,
+            at: Date(timeIntervalSince1970: 101)
+        ))
+
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(
+            message.agentTurnItems.first?.errorMessage,
+            "整个 ReAct Loop 超过 180 秒"
+        )
+
+        message.applyAgentEvent(.completed(
+            answer: "已完成",
+            at: Date(timeIntervalSince1970: 102)
+        ))
+        XCTAssertFalse(message.agentTurnItems.contains { $0.kind == .error })
+    }
+
+    @MainActor
+    func testPersistentAttemptStartClearsPriorFailureButKeepsSuccessfulStep() {
+        let jobID = UUID()
+        let turnID = UUID()
+        let completedAt = Date(timeIntervalSince1970: 100)
+        let completedTool = AgentTraceSpan(
+            kind: .tool,
+            title: "保存训练记录",
+            status: .succeeded,
+            startedAt: completedAt,
+            endedAt: completedAt
+        )
+        let events = [
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 1,
+                attemptNumber: 1,
+                kind: .attemptStarted,
+                createdAt: completedAt
+            ),
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 2,
+                attemptNumber: 1,
+                kind: .span,
+                payload: .init(span: completedTool),
+                createdAt: completedAt
+            ),
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 3,
+                attemptNumber: 1,
+                kind: .cancelled,
+                payload: .init(message: "已取消", cancelled: true),
+                createdAt: completedAt
+            ),
+            PersistentAgentEvent(
+                jobID: jobID,
+                turnID: turnID,
+                sequence: 4,
+                attemptNumber: 1,
+                kind: .attemptStarted,
+                createdAt: completedAt.addingTimeInterval(1)
+            )
+        ]
+        let message = CoachMessage(
+            isFromCoach: true,
+            text: "",
+            agentStatus: .failed,
+            turnID: turnID
+        )
+
+        PersistentAgentEventProjection.replayChat(events: events, onto: message)
+
+        XCTAssertEqual(message.agentStatus, .running)
+        XCTAssertEqual(message.agentTurnItems.map(\.title), ["保存训练记录"])
+        XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
+    }
+
     func testCurrentTurnPromptSeparatesStableContractFromDynamicInput() {
         let prompt = ReActAgentPrompt.user(
             text: "记录深蹲",

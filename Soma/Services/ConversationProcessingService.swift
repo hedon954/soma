@@ -1133,7 +1133,7 @@ private extension ConversationProcessingService {
                 hasImages: media.imageCount > 0,
                 hasVideo: media.hasVideo
             )
-            let elapsed = Date.now.timeIntervalSince(job.loopStartedAt ?? .now)
+            let elapsed = job.activeLoopDuration(at: .now)
             let remainingLoopBudget = max(0.01, loopBudget - elapsed)
             let outcome = try await AgentLoopDeadline.run(
                 seconds: remainingLoopBudget
@@ -1416,14 +1416,19 @@ extension ConversationProcessingService {
         let failureText = "这次没有处理成功：\(reason)。\(recovery)"
         responseMessage.text = failureText
         responseMessage.agentStatus = .failed
-        if let activeTrace, activeTrace.status == .running {
-            activeTrace.apply(.failed(
-                message: reason,
-                cancelled: false,
-                at: .now
-            ))
-        }
-        if !responseMessage.agentTurnItems.contains(where: { $0.kind == .error }) {
+        if let activeTrace, activeTrace.status == .cancelled {
+            PersistentAgentEventProjection.persistAndProject(
+                .failed(
+                    message: reason,
+                    cancelled: false,
+                    at: .now
+                ),
+                job: job,
+                responseMessage: responseMessage,
+                trace: activeTrace,
+                in: context.modelContext
+            )
+        } else if !responseMessage.agentTurnItems.contains(where: { $0.kind == .error }) {
             responseMessage.applyAgentEvent(.failed(
                 message: reason,
                 cancelled: false,
@@ -1481,6 +1486,12 @@ extension ConversationProcessingService {
             let attemptNumber = max(existing.attemptNumber, 1)
             job.activeAttemptNumber = attemptNumber
             prepareResponseMessageForResume(existing, job: job)
+            _ = try? AgentJobStore.append(
+                kind: .attemptStarted,
+                payload: .init(message: "继续处理首个未完成 step。"),
+                to: job,
+                in: context.modelContext
+            )
             return (existing, attemptNumber)
         }
         let attemptNumber = nextAttemptNumber(

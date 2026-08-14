@@ -1,7 +1,8 @@
 # PRD 027：可靠高效 ReAct 与原位审查闭环
 
-- 状态：已采纳，已实施；真机交互与 Gmail 自动化验收待维护者确认
+- 状态：已实施，部分修订；真机交互与 Gmail 自动化验收待维护者确认
 - 日期：2026-08-13
+- 后续修订：[PRD 028](028-retry-active-runtime-budget.md) 将整轮墙钟预算拆为可暂停的实际执行预算，并允许用户显式重试开启新窗口
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的当前教练、进展、设置、计划与 Agent 失败重试基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的计划处方可发现性、快捷训练记录与内置动作图覆盖
@@ -68,7 +69,7 @@
 | 直接视频 | 60 秒 | 10 分钟 |
 
 - 首增量门禁只应用于 Loop 的第一次模型处理；后续 step 不设置单 step 首增量、idle 或总时限。
-- 整轮预算从冻结的 `loopStartedAt` 计算，重试不能重置。
+- 整轮预算最初从冻结的 `loopStartedAt` 计算且重试不重置；该边界已由 [PRD 028](028-retry-active-runtime-budget.md) 修订。
 - 超时必须取消底层请求并产生可解释 Event，不能用固定 sleep 修复竞态。
 
 ### 5. 结构化快捷训练直接保存

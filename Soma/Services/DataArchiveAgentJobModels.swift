@@ -32,6 +32,8 @@ struct AgentJobDTO: Codable, Equatable, Sendable {
     var liveActivityProjectionCursor: Int
     var notificationProjectionCursor: Int
     var responseTextSnapshot: String
+    var loopActiveDuration: TimeInterval?
+    var loopActiveStartedAt: Date?
 
     init(_ model: AgentJob) {
         clientJobKey = model.clientJobKey
@@ -65,6 +67,9 @@ struct AgentJobDTO: Codable, Equatable, Sendable {
         liveActivityProjectionCursor = model.liveActivityProjectionCursor
         notificationProjectionCursor = model.notificationProjectionCursor
         responseTextSnapshot = model.responseTextSnapshot
+        loopActiveDuration = model.activeLoopDuration(at: .now)
+        // 备份不是继续运行信号；恢复时从暂停状态重新 claim。
+        loopActiveStartedAt = nil
     }
 
     func makeModel(mediaPathMapping: [String: String]) -> AgentJob {
@@ -121,6 +126,8 @@ struct AgentJobDTO: Codable, Equatable, Sendable {
         job.liveActivityProjectionCursor = liveActivityProjectionCursor
         job.notificationProjectionCursor = notificationProjectionCursor
         job.responseTextSnapshot = responseTextSnapshot
+        job.loopActiveDuration = loopActiveDuration ?? 0
+        job.loopActiveStartedAt = loopActiveStartedAt
         return job
     }
 }

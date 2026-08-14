@@ -184,6 +184,10 @@ final class AgentJob {
     var loopCheckpointData: Data = Data()
     /// 第一次领取时冻结，后续 step、恢复与手动重试都复用。
     var loopStartedAt: Date?
+    /// 当前用户授权执行窗口内，ReAct Loop 已实际运行的秒数；等待用户、网络或前台不计入。
+    var loopActiveDuration: TimeInterval = 0
+    /// 当前运行区间的起点。离开 running 时累计进 loopActiveDuration 并清空。
+    var loopActiveStartedAt: Date?
     /// 第一个模型 invoke 的首增量门禁只消费一次。
     var firstStepDeadlineConsumed: Bool = false
     var executionKindRaw: String = AgentJobExecutionKind.react.rawValue
@@ -320,6 +324,25 @@ final class AgentJob {
         contextSnapshot = snapshot
     }
 
+    func activeLoopDuration(at date: Date = .now) -> TimeInterval {
+        let currentInterval = loopActiveStartedAt.map {
+            max(0, date.timeIntervalSince($0))
+        } ?? 0
+        return max(0, loopActiveDuration + currentInterval)
+    }
+
+    func pauseLoopRuntime(at date: Date = .now) {
+        guard let startedAt = loopActiveStartedAt else { return }
+        loopActiveDuration += max(0, date.timeIntervalSince(startedAt))
+        loopActiveStartedAt = nil
+    }
+
+    /// 用户显式重试为未完成 step 开启新的执行预算，但不改变业务时间和检查点。
+    func resetLoopRuntimeBudget() {
+        loopActiveDuration = 0
+        loopActiveStartedAt = nil
+    }
+
     func transition(
         to next: AgentJobState,
         at date: Date = .now,
@@ -328,6 +351,11 @@ final class AgentJob {
         let current = state
         guard current.canTransition(to: next) else {
             throw AgentJobStateError.invalidTransition(from: current, to: next)
+        }
+        if current == .running, next != .running {
+            pauseLoopRuntime(at: date)
+        } else if current != .running, next == .running, loopActiveStartedAt == nil {
+            loopActiveStartedAt = date
         }
         state = next
         updatedAt = date
@@ -563,6 +591,8 @@ enum AgentJobStore {
             && job.state == .running
             && (job.leaseExpiresAt ?? .distantPast) <= now
         {
+            // App 被系统结束后，离线等待不能被算作 ReAct 实际执行时间。
+            job.pauseLoopRuntime(at: min(job.leaseExpiresAt ?? now, now))
             try job.transition(to: .waitingForForeground, at: now)
             job.leaseOwner = nil
             job.leaseExpiresAt = nil
@@ -709,6 +739,7 @@ enum AgentJobStore {
             throw AgentJobStateError.invalidTransition(from: job.state, to: .queued)
         }
         try job.transition(to: .queued, at: now)
+        job.resetLoopRuntimeBudget()
         job.nextRetryAt = nil
         _ = try releaseStagedJobs(dataSpace: dataSpace, now: now, in: context)
         try context.save()
@@ -743,6 +774,7 @@ enum AgentJobStore {
             if job.state != .queued {
                 try job.transition(to: .queued, at: now)
             }
+            job.resetLoopRuntimeBudget()
             job.nextRetryAt = nil
         }
         try context.save()
@@ -943,9 +975,21 @@ enum PersistentAgentEventProjection {
                 at: event.createdAt
             ))
             message.agentStatus = cancelled ? .cancelled : .failed
+        case .attemptStarted:
+            let completedItems = message.agentTurnItems.filter {
+                $0.status == .succeeded && $0.kind != .error
+            }
+            message.replaceAgentTurnItems(completedItems)
+            message.replaceAgentEvents(
+                message.agentEvents.filter { $0.status == .succeeded }
+            )
+            message.text = completedItems
+                .filter { $0.kind == .text }
+                .map(\.text)
+                .joined(separator: "\n\n")
+            message.agentStatus = .running
         case .jobQueued,
              .jobClaimed,
-             .attemptStarted,
              .waitingForNetwork,
              .staged,
              .waitingForUser,

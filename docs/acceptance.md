@@ -174,7 +174,7 @@
 | 欠费人工屏障与 FIFO | `waitingForUser` 不可运行且不被启动、前台、定时器或配置变化释放；`claimNext` 不跳过队首。“按顺序重试全部”统一释放待处理状态但仍由 `claimNext` 串行领取；`LLMOutageStagingTests` 覆盖欠费分类、后发暂存、批量释放顺序、单删和全清。 |
 | 每个 step 精确续跑 | 检查点持久化原生 `assistant.tool_calls` 和逐条 `role=tool` 结果；模型成功后、每个 Tool 成功后都立即落盘。双 Tool 回归证明第二个失败后只重试第二个，恢复请求的 System/User 前缀不变。 |
 | 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；`AgentJob.frozenExecutionDate` 在首次 claim 后固定为 `loopStartedAt`，业务 Tool 不再使用消息时间或重试墙钟。持久 envelope 只存时间戳与 IANA 时区。 |
-| 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁，`AgentLoopDeadline` 仍以 3/5/10 分钟总预算取消整轮，重试扣除已耗墙钟。 |
+| 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁。`AgentLoopDeadline` 以 3/5/10 分钟活动执行预算取消当前窗口，等待用户、网络或前台不计时；自动恢复保留已耗时长，用户显式重试刷新预算但保留固定业务时间与成功 step。 |
 | 确定性快捷训练 | typed 最近训练草稿 trim 后未改且无附件时使用 `deterministicWorkout` Job；空 Key 测试证明不调用 LLM、执行时间实时读取并产生同构 Trace/Event/结果卡。 |
 | 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存/删除写入有界 correction block，下一轮上下文投影最新修订。 |
 | 计划与一级页面 | 计划编辑同屏提供组数、次数、重量、间歇；进展首卡直出当前健身房；设置底部直接嵌入反馈；空 Session 提供确定性和最多六条自定义快捷语。 |

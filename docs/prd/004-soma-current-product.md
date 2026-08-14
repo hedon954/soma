@@ -26,6 +26,7 @@
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md)
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md)
+  - [PRD 028](028-retry-active-runtime-budget.md)
 
 ## 产品定义
 
@@ -208,7 +209,8 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 - 模型或多模态能力错误以可操作语言显示，并保留失败 Trace。
 - 每个 LLM invoke 和 Tool Call 都是独立可恢复 step；重试复用同一气泡与冻结的 Loop 时间，保留
   原生 assistant/tool 消息链，并从首个未完成 step 继续。首个模型处理使用 20/40/60 秒首增量
-  门禁，后续 step 只受 3/5/10 分钟整轮预算约束。
+  门禁，后续 step 只受 3/5/10 分钟执行预算约束；等待用户、网络或前台不消耗预算，用户显式
+  重试为未完成 step 开启新的执行窗口，但不改变业务时间或重跑成功 step。
 - 数据查询返回稳定业务记录 ID；Agent 可显式更新或删除用户指定的训练、饮食和身体记录。
   跨消息补图/纠错仍由本地多维规则合并，避免模型误用新增工具时制造重复。
 

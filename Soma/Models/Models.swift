@@ -856,12 +856,21 @@ final class CoachMessage {
             }
             applyLegacyAgentEvent(span)
         case let .completed(_, date):
+            items.removeAll {
+                $0.kind == .error || $0.status == .failed || $0.status == .cancelled
+            }
             for index in items.indices
                 where items[index].kind == .text && items[index].status == .running
             {
                 items[index].finishText(at: date)
             }
         case let .failed(message, _, date):
+            let isReplacingFailure = items.contains { $0.kind == .error }
+            items.removeAll {
+                $0.kind == .error
+                    || (isReplacingFailure
+                        && ($0.status == .failed || $0.status == .cancelled))
+            }
             for index in items.indices where items[index].status == .running {
                 items[index].fail(message: message, at: date)
             }

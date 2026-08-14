@@ -27,6 +27,7 @@
 | [0014](0014-guided-performance-missing-workout-entry.md) | 已修复，待真机观察 | 带练动作完成后只保留 Session/Set，没有形成统一训练记录 | 终态投影、来源 ID、幂等回填、趋势去重、备份与级联删除测试 |
 | [0015](0015-billing-retry-loop-and-queue-order.md) | 已修复，待真机确认 | 明确欠费在进入 App 后反复重试，后发消息可能错序 | 欠费分类、人工释放、严格 FIFO、单删与全清测试 |
 | [0016](0016-batched-tool-retry-repeats-completed-work.md) | 已修复，待真机观察 | 批量 Tool 中途失败会重复已成功的模型和工具步骤 | 原生 assistant/tool 检查点与失败 Tool 精确续跑测试 |
+| [0017](0017-manual-retry-immediately-cancelled.md) | 已修复，待真机确认 | 等待超过整轮墙钟后，手动重试每次都在 0.01 秒内取消 | 活动执行预算、人工重置、错误覆盖与成功清理测试 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 
