@@ -82,6 +82,12 @@ App → Views → Services → Models
 - Skills 是可编辑的专业方法，不是任意代码或动态工具。
 - SwiftData 的级联删除、当前健身房唯一性和外部数据去重必须由共享规则维护，
   不能在不同 View 中复制出多套逻辑。
+- PostgreSQL 的表、列、索引、枚举或约束只能通过向前 migration 修改：先运行
+  `make db-migrate-create name=<snake_case_name>` 创建新文件，只编辑新 migration，禁止修改或
+  删除已经执行的 migration；部署前依次运行 `make db-migrate-status` 与 `make db-migrate`。
+- 新增或修改 SwiftData 持久字段、`ModelContainer` 注册模型或 PostgreSQL migration 时，
+  必须同步 `docs/engineering/database-schema.md`，并通过数据库结构文档门禁。SwiftData 不使用
+  SQL migration 命令；不兼容变更必须通过 `VersionedSchema` / `SchemaMigrationPlan` 明确迁移并测试。
 - 长期改变数据模型、Agent 协议、隐私边界、外部同步或分发方式前新增 ADR。
 - 远程 Agent 必须通过 `AgentExecutionBackend` 边界接入；View、业务 Tool 和本地
   SwiftData 不感知具体执行位置。

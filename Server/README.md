@@ -25,7 +25,7 @@ npm test
 ```
 
 真实 PostgreSQL 集成测试需要一个专用空数据库；测试会自行执行
-`migrations/001_initial.sql`：
+全部待执行 migration：
 
 ```bash
 SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
@@ -34,13 +34,48 @@ SOMA_TEST_DATABASE_URL=postgresql://localhost/soma_test npm run test:postgres
 不要把该变量指向包含其他数据的数据库。仓库根目录的 `make check` 会执行 TypeScript
 类型检查，`make verify` 还会执行服务器单元测试、iOS 构建与模拟器测试。
 
+## 数据库迁移
+
+PostgreSQL 结构只通过仓库内的向前 migration 演进。不要直接修改数据库，也不要修改或删除
+已经执行过的 migration；迁移器会记录文件 SHA-256 checksum，并在历史发生漂移时拒绝继续。
+
+在仓库根目录创建 migration：
+
+```bash
+make db-migrate-create name=add_example_column
+```
+
+编辑新生成的 `Server/migrations/NNN_add_example_column.sql` 后，先查看目标数据库状态，再执行：
+
+```bash
+DATABASE_URL=postgresql://localhost/soma make db-migrate-status
+DATABASE_URL=postgresql://localhost/soma make db-migrate
+```
+
+迁移器使用 PostgreSQL advisory lock 串行执行，每个 migration 与历史登记处于同一事务；只提供
+向前迁移，不提供可能破坏数据的通用 down 命令。`000_schema_migrations.sql` 是迁移器自己的
+registry，不计入业务 migration 序号。
+
+如果某个数据库已经手工执行过旧的 `001_initial.sql`，必须先人工核对它确实是该结构，再做
+一次显式 baseline；新数据库不要运行 baseline：
+
+```bash
+cd Server
+DATABASE_URL=postgresql://localhost/soma \
+  npm run db:migrate:baseline -- 001_initial.sql
+```
+
+baseline 只登记最早的 migration，并会先确认其中声明的表都已存在；它不会自动猜测或修改
+现有业务表。
+
 ## 部署
 
 1. 复制 `.env.example` 的变量到部署平台的 secret/config 管理，不创建可提交的 `.env`。
-2. 在空 PostgreSQL 数据库执行：
+2. 查看并执行 PostgreSQL migration：
 
    ```bash
-   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_initial.sql
+   npm run db:migrate:status
+   npm run db:migrate
    ```
 
 3. 构建 TypeScript：

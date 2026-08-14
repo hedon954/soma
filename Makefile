@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env generate build test format format-check lint server-check server-test check verify online-check install-device archive clean
+.PHONY: help setup env generate build test format format-check lint server-check server-test db-migrate-create db-migrate-status db-migrate check verify online-check install-device archive clean
 
 help:
 	@echo "Soma development commands:"
@@ -12,6 +12,9 @@ help:
 	@echo "  make lint          Run SwiftLint, actionlint, shellcheck, and repo validation"
 	@echo "  make server-check  Type-check the optional Agent server"
 	@echo "  make server-test   Test the optional Agent server"
+	@echo "  make db-migrate-create name=<name>  Create the next PostgreSQL migration"
+	@echo "  make db-migrate-status              Show PostgreSQL migration status"
+	@echo "  make db-migrate                     Apply pending PostgreSQL migrations"
 	@echo "  make check         Run fast static checks without a Simulator"
 	@echo "  make verify        Run static checks, build, and Simulator tests"
 	@echo "  make online-check  Block external distribution while mail credentials live in the App"
@@ -56,6 +59,16 @@ server-check:
 
 server-test:
 	npm --prefix Server test
+
+db-migrate-create:
+	@test -n "$(name)" || (echo "Usage: make db-migrate-create name=<snake_case_name>" >&2; exit 1)
+	npm --prefix Server run db:migrate:create -- "$(name)"
+
+db-migrate-status:
+	npm --prefix Server run db:migrate:status
+
+db-migrate:
+	npm --prefix Server run db:migrate
 
 check:
 	@$(MAKE) env
