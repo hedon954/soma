@@ -4,8 +4,10 @@
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：无
-- 后续替代：[ADR 0060](0060-guided-performance-workout-entry-projection.md) 将终态 Performance
-  物化为可审查训练记录，并以来源 ID 组成计划执行
+- 后续替代：
+  - [ADR 0071](0071-integer-business-identities-and-explicit-relations.md) 将训练领域身份迁移为 Int64，并建立必需动作关系
+  - [ADR 0060](0060-guided-performance-workout-entry-projection.md) 将终态 Performance
+    物化为可审查训练记录，并以来源 ID 组成计划执行
 - 上游依据：[动作库、训练计划、带练与视频复盘调研](../research/2026-07-31-exercise-library-plans-guided-training.md)
 - 下游落地：[训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)

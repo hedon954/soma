@@ -15,12 +15,22 @@ export interface DeviceToolDefinition {
 }
 
 const expandableTools: Record<string, string[]> = {
+  exercises: [
+    "search_exercises", "create_exercise", "update_exercise",
+    "archive_exercise", "merge_exercises",
+  ],
+  workouts: [
+    "list_workouts", "get_workout", "create_workout",
+    "update_workout", "delete_workout",
+  ],
+  meals: ["list_meals", "get_meal", "create_meal", "update_meal", "delete_meal"],
+  body: [
+    "list_body_entries", "get_body_entry", "create_body_entry",
+    "update_body", "delete_body_entry",
+  ],
   plans: [
-    "create_training_program",
-    "create_workout_template_version",
-    "archive_training_program",
-    "delete_training_program",
-    "start_guided_workout",
+    "list_programs", "get_program", "create_program",
+    "create_program_version", "archive_program", "delete_program", "start_program",
   ],
   gym: ["update_gym", "switch_gym"],
   review: ["record_performance_analysis"],
@@ -88,7 +98,7 @@ const templateExercises = {
   items: {
     type: "object",
     properties: {
-      exercise_id: stringValue,
+      exercise_id: integerValue,
       order: integerValue,
       target_sets: integerValue,
       target_reps: integerValue,
@@ -122,7 +132,7 @@ const mealItems = {
 const mutationPayload = {
   type: "object",
   properties: {
-    exercise_id: stringValue,
+    exercise_id: integerValue,
     exercise_name: stringValue,
     set_entries: setEntries,
     rest_seconds: integerValue,
@@ -158,7 +168,204 @@ function parameters(
   };
 }
 
+function recordDomainDefinitions(): DeviceToolDefinition[] {
+  const listParameters = parameters({
+    date_from: stringValue,
+    date_to: stringValue,
+    sort: stringValue,
+    limit: integerValue,
+  });
+  const recordIDParameters = parameters(
+    { record_id: integerValue },
+    ["record_id"],
+  );
+  const workoutProperties = {
+    exercise_id: integerValue,
+    occurred_at: stringValue,
+    set_entries: setEntries,
+    rest_seconds: integerValue,
+    duration_minutes: integerValue,
+    form_score: integerValue,
+    intensity: stringValue,
+    feedback: stringValue,
+  };
+  const mealProperties = {
+    record_id: integerValue,
+    occurred_at: stringValue,
+    meal_type: stringValue,
+    title: stringValue,
+    calories: integerValue,
+    protein: numberValue,
+    carbs: numberValue,
+    fat: numberValue,
+    items: mealItems,
+    note: stringValue,
+  };
+  const bodyProperties = {
+    record_id: integerValue,
+    occurred_at: stringValue,
+    weight: numberValue,
+    body_fat: numberValue,
+    waist: numberValue,
+    posture_note: stringValue,
+    safety_note: stringValue,
+  };
+  return [
+    { name: "list_workouts", schemaVersion: 2, mutation: false, parameters: listParameters },
+    { name: "get_workout", schemaVersion: 2, mutation: false, parameters: recordIDParameters },
+    {
+      name: "create_workout",
+      schemaVersion: 2,
+      mutation: true,
+      parameters: parameters(workoutProperties, ["exercise_id"]),
+    },
+    {
+      name: "delete_workout",
+      schemaVersion: 2,
+      mutation: true,
+      parameters: recordIDParameters,
+    },
+    { name: "list_meals", schemaVersion: 2, mutation: false, parameters: listParameters },
+    { name: "get_meal", schemaVersion: 2, mutation: false, parameters: recordIDParameters },
+    {
+      name: "create_meal",
+      schemaVersion: 2,
+      mutation: true,
+      parameters: parameters(
+        Object.fromEntries(Object.entries(mealProperties).filter(([key]) => key !== "record_id")),
+        ["title"],
+      ),
+    },
+    { name: "delete_meal", schemaVersion: 2, mutation: true, parameters: recordIDParameters },
+    {
+      name: "list_body_entries",
+      schemaVersion: 2,
+      mutation: false,
+      parameters: listParameters,
+    },
+    {
+      name: "get_body_entry",
+      schemaVersion: 2,
+      mutation: false,
+      parameters: recordIDParameters,
+    },
+    {
+      name: "create_body_entry",
+      schemaVersion: 2,
+      mutation: true,
+      parameters: parameters(
+        Object.fromEntries(Object.entries(bodyProperties).filter(([key]) => key !== "record_id")),
+      ),
+    },
+    {
+      name: "delete_body_entry",
+      schemaVersion: 2,
+      mutation: true,
+      parameters: recordIDParameters,
+    },
+  ];
+}
+
 const definitions: DeviceToolDefinition[] = [
+  {
+    name: "search_exercises",
+    schemaVersion: 2,
+    mutation: false,
+    parameters: parameters({ query: stringValue, limit: integerValue }, ["query"]),
+  },
+  {
+    name: "create_exercise",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters({ exercise_name: stringValue }, ["exercise_name"]),
+  },
+  {
+    name: "update_exercise",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters(
+      { exercise_id: integerValue, exercise_name: stringValue },
+      ["exercise_id", "exercise_name"],
+    ),
+  },
+  {
+    name: "archive_exercise",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters({ exercise_id: integerValue }, ["exercise_id"]),
+  },
+  {
+    name: "merge_exercises",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters(
+      { exercise_id: integerValue, target_exercise_id: integerValue },
+      ["exercise_id", "target_exercise_id"],
+    ),
+  },
+  ...recordDomainDefinitions(),
+  {
+    name: "list_programs",
+    schemaVersion: 2,
+    mutation: false,
+    parameters: parameters({}),
+  },
+  {
+    name: "get_program",
+    schemaVersion: 2,
+    mutation: false,
+    parameters: parameters({ program_id: integerValue }, ["program_id"]),
+  },
+  {
+    name: "create_program",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters(
+      {
+        program_name: stringValue,
+        goal: stringValue,
+        template_name: stringValue,
+        schedule_hint: stringValue,
+        template_exercises: templateExercises,
+      },
+      ["program_name", "template_name", "template_exercises"],
+    ),
+  },
+  {
+    name: "create_program_version",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters(
+      {
+        program_id: integerValue,
+        template_name: stringValue,
+        schedule_hint: stringValue,
+        template_exercises: templateExercises,
+      },
+      ["program_id", "template_name", "template_exercises"],
+    ),
+  },
+  {
+    name: "archive_program",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters({ program_id: integerValue }, ["program_id"]),
+  },
+  {
+    name: "delete_program",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters({ program_id: integerValue }, ["program_id"]),
+  },
+  {
+    name: "start_program",
+    schemaVersion: 2,
+    mutation: true,
+    parameters: parameters(
+      { program_id: integerValue, auto_recording_policy: stringValue },
+      ["program_id"],
+    ),
+  },
   {
     name: "load_skill",
     schemaVersion: 2,
@@ -274,12 +481,13 @@ const definitions: DeviceToolDefinition[] = [
   },
   {
     name: "update_workout",
-    schemaVersion: 1,
+    schemaVersion: 2,
     mutation: true,
     parameters: parameters(
       {
-        record_id: stringValue,
-        exercise_id: stringValue,
+        record_id: integerValue,
+        occurred_at: stringValue,
+        exercise_id: integerValue,
         set_entries: setEntries,
         rest_seconds: integerValue,
         duration_minutes: integerValue,
@@ -292,17 +500,19 @@ const definitions: DeviceToolDefinition[] = [
   },
   {
     name: "update_meal",
-    schemaVersion: 1,
+    schemaVersion: 2,
     mutation: true,
     parameters: parameters(
       {
-        record_id: stringValue,
+        record_id: integerValue,
+        occurred_at: stringValue,
         meal_type: stringValue,
         title: stringValue,
         calories: integerValue,
         protein: numberValue,
         carbs: numberValue,
         fat: numberValue,
+        items: mealItems,
         note: stringValue,
       },
       ["record_id"],
@@ -310,11 +520,12 @@ const definitions: DeviceToolDefinition[] = [
   },
   {
     name: "update_body",
-    schemaVersion: 1,
+    schemaVersion: 2,
     mutation: true,
     parameters: parameters(
       {
-        record_id: stringValue,
+        record_id: integerValue,
+        occurred_at: stringValue,
         weight: numberValue,
         body_fat: numberValue,
         waist: numberValue,

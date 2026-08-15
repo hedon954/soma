@@ -12,6 +12,7 @@ struct AgentRunPreparationRequest {
     var context: String
     var requestedRoute: AIModelRoute?
     var toolSignals: AgentToolExposureSignals?
+    var selectedSkillID: String?
     var checkpoint: AgentLoopCheckpoint?
 }
 
@@ -59,6 +60,8 @@ extension AIService {
             )
         }
         let systemPrompt = ReActAgentPrompt.system(defaults: defaults)
+        let selectedSkill = request.selectedSkillID
+            .flatMap { AgentSkillRegistry.descriptor(id: $0, defaults: defaults) }
         let userPrompt = ReActAgentPrompt.user(
             text: request.text,
             context: request.context,
@@ -66,14 +69,25 @@ extension AIService {
             hasVideo: request.hasVideo,
             directVideoCount: request.videos.count,
             imageAttachmentCount: request.imageAttachmentCount,
-            videoAttachmentCount: request.videoAttachmentCount
+            videoAttachmentCount: request.videoAttachmentCount,
+            selectedSkill: selectedSkill.map {
+                AgentModelSkillSnapshot(
+                    id: $0.id,
+                    name: $0.title,
+                    description: $0.summary,
+                    whenToUse: $0.whenToUse,
+                    content: $0.markdown
+                )
+            }
         )
         let historyForPrompt = request.checkpoint == nil
             ? request.history
             : request.history.map(removingImages)
         var exposedGroups = restoredToolGroups(request)
         if exposedGroups.isEmpty {
-            exposedGroups = [.core]
+            exposedGroups = selectedSkill?.toolGroups
+                ?? request.toolSignals.map(AgentToolExposurePolicy.initialGroups)
+                ?? []
         }
         let exposedTools = AgentToolExposurePolicy.tools(for: exposedGroups)
         let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
@@ -85,6 +99,7 @@ extension AIService {
             currentVideos: request.videos,
             skills: AgentSkill.snapshots(defaults: defaults),
             tools: exposedTools,
+            selectedSkillID: selectedSkill?.id,
             maxSteps: maxSteps,
             deadlinePolicy: streamDeadlinePolicy
         )
@@ -184,14 +199,7 @@ extension AIService {
         if let checkpoint = request.checkpoint, !checkpoint.exposedGroups.isEmpty {
             return Set(checkpoint.exposedGroups.compactMap(AgentToolGroup.init(rawValue:)))
         }
-        return AgentToolExposurePolicy.initialGroups(
-            signals: request.toolSignals ?? AgentToolExposureSignals(
-                text: request.text,
-                hasVideo: request.hasVideo,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            )
-        )
+        return []
     }
 
     private func removingImages(

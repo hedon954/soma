@@ -8,17 +8,44 @@ final class ConversationSession {
     var startedAt: Date
     var updatedAt: Date
     var title: String
+    /// 用户在这个 Session 内默认操作的业务日期；旧库由启动迁移按 startedAt 回填。
+    var businessDate: Date?
+    /// 业务日期对应的 IANA 时区。不能用重试时的当前时区覆盖。
+    var businessTimeZoneIdentifier: String?
 
     init(
         id: UUID = UUID(),
         startedAt: Date = .now,
         updatedAt: Date? = nil,
-        title: String = "新对话"
+        title: String = "新对话",
+        businessDate: Date? = nil,
+        businessTimeZoneIdentifier: String = TimeZone.current.identifier
     ) {
         self.id = id
         self.startedAt = startedAt
         self.updatedAt = updatedAt ?? startedAt
         self.title = title
+        let zone = TimeZone(identifier: businessTimeZoneIdentifier) ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        self.businessDate = businessDate ?? calendar.startOfDay(for: startedAt)
+        self.businessTimeZoneIdentifier = zone.identifier
+    }
+
+    var effectiveBusinessDate: Date {
+        businessDate ?? startedAt
+    }
+
+    var businessTimeZone: TimeZone {
+        businessTimeZoneIdentifier.flatMap(TimeZone.init(identifier:)) ?? .current
+    }
+
+    func setBusinessDate(_ date: Date, timeZone: TimeZone) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        businessDate = calendar.startOfDay(for: date)
+        businessTimeZoneIdentifier = timeZone.identifier
+        touch(at: .now)
     }
 
     func recordUserMessage(_ text: String, at date: Date) {

@@ -5,6 +5,7 @@
 - 后续替代：
   - [ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 修订运行时工具暴露策略（Tool 契约本身仍固定）
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 以版本化通用 CRUD 收敛固定记录 Tool 名称
+  - [ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 引入动态 Skill Registry、首轮直载和单一职责 Tool
 
 ## 背景
 

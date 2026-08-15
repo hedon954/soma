@@ -5,6 +5,8 @@ struct PreparedRemoteAgentSubmission {
     var modelInput: PreparedAgentModelInput
     var mediaMode: AgentMediaMode
     var historyExchangeCount: Int
+    var compactionSummary: String?
+    var compactionStrategy: ConversationCompactionStrategy?
 }
 
 @MainActor
@@ -59,6 +61,12 @@ extension ConversationProcessingService {
                 .selectedHistoricalTurnIDs,
             context: context
         )
+        let compaction = await ConversationCompactionMiddleware.prepare(
+            sessionID: job.sessionID,
+            excludingTurnID: turnID,
+            ai: context.ai,
+            in: context.modelContext
+        )
         let persistentContext = composePersistentContext(
             job: job,
             userMessage: userMessage,
@@ -75,7 +83,10 @@ extension ConversationProcessingService {
         } else {
             nil
         }
-        let agentContext = [persistentContext, weatherGuidance]
+        let compactionContext = compaction.summary.map {
+            "更早对话的可审查滚动摘要：\n\($0)"
+        }
+        let agentContext = [persistentContext, compactionContext, weatherGuidance]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
@@ -93,6 +104,10 @@ extension ConversationProcessingService {
                 [.draft, .active, .paused].contains($0.status)
             }
         ))
+        let selectedSkill = job.selectedSkillID.flatMap {
+            AgentSkillRegistry.descriptor(id: $0, defaults: context.ai.defaults)
+        }
+        let effectiveGroups = selectedSkill?.toolGroups ?? groups
         let userPrompt = ReActAgentPrompt.user(
             text: userMessage.text,
             context: agentContext,
@@ -100,7 +115,16 @@ extension ConversationProcessingService {
             hasVideo: media.hasVideo,
             directVideoCount: media.videos.count,
             imageAttachmentCount: media.imageCount,
-            videoAttachmentCount: media.videoCount
+            videoAttachmentCount: media.videoCount,
+            selectedSkill: selectedSkill.map {
+                AgentModelSkillSnapshot(
+                    id: $0.id,
+                    name: $0.title,
+                    description: $0.summary,
+                    whenToUse: $0.whenToUse,
+                    content: $0.markdown
+                )
+            }
         )
         let modelInput = try AgentModelInputBuilder.build(
             systemPrompt: ReActAgentPrompt.system(defaults: context.ai.defaults),
@@ -109,14 +133,17 @@ extension ConversationProcessingService {
             currentImages: media.frames,
             currentVideos: media.videos,
             skills: AgentSkill.snapshots(defaults: context.ai.defaults),
-            tools: AgentToolExposurePolicy.tools(for: groups),
+            tools: AgentToolExposurePolicy.tools(for: effectiveGroups),
+            selectedSkillID: selectedSkill?.id,
             maxSteps: ReActAgentPreference.maxSteps(defaults: context.ai.defaults),
             deadlinePolicy: context.ai.streamDeadlinePolicy
         )
         return PreparedRemoteAgentSubmission(
             modelInput: modelInput,
             mediaMode: media.mode,
-            historyExchangeCount: preparedHistory.history.count
+            historyExchangeCount: preparedHistory.history.count,
+            compactionSummary: compaction.didUpdate ? compaction.summary : nil,
+            compactionStrategy: compaction.strategy
         )
     }
 }

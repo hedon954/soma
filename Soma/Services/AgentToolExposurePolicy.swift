@@ -2,6 +2,11 @@ import Foundation
 
 enum AgentToolGroup: String, CaseIterable, Sendable {
     case core
+    case exercises
+    case workouts
+    case meals
+    case body
+    /// 仅供旧 Checkpoint 恢复；新请求不再暴露通用 mutate_user_data。
     case records
     case plans
     case gym
@@ -9,26 +14,44 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
     case feedback
 
     static var expandableCases: [AgentToolGroup] {
-        [.records, .plans, .gym, .review, .feedback]
+        [.exercises, .workouts, .meals, .body, .plans, .gym, .review, .feedback]
     }
 
     var tools: [AgentToolName] {
         switch self {
         case .core:
+            [.loadSkill]
+        case .exercises:
             [
-                .loadSkill,
-                .queryUserData,
-                .expandToolGroup
+                .searchExercises,
+                .createExercise,
+                .updateExercise,
+                .archiveExercise,
+                .mergeExercises
+            ]
+        case .workouts:
+            [.listWorkouts, .getWorkout, .createWorkout, .updateWorkout, .deleteWorkout]
+        case .meals:
+            [.listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal]
+        case .body:
+            [
+                .listBodyEntries,
+                .getBodyEntry,
+                .createBodyEntry,
+                .updateBody,
+                .deleteBodyEntry
             ]
         case .records:
-            [.mutateUserData]
+            [.queryUserData, .mutateUserData]
         case .plans:
             [
-                .createTrainingProgram,
-                .createWorkoutTemplateVersion,
-                .archiveTrainingProgram,
-                .deleteTrainingProgram,
-                .startGuidedWorkout
+                .listPrograms,
+                .getProgram,
+                .createProgram,
+                .createProgramVersion,
+                .archiveProgram,
+                .deleteProgram,
+                .startProgram
             ]
         case .gym:
             [.updateGym, .switchGym]
@@ -49,10 +72,27 @@ struct AgentToolExposureSignals: Equatable, Sendable {
 
 enum AgentToolExposurePolicy {
     static func initialGroups(signals: AgentToolExposureSignals) -> Set<AgentToolGroup> {
-        var groups: Set<AgentToolGroup> = [.core]
+        var groups = Set<AgentToolGroup>()
         let lowered = signals.text.lowercased()
         if hasRecordMutationIntent(lowered) {
-            groups.insert(.records)
+            if containsAny(lowered, ["吃", "喝", "餐", "饮食", "热量", "蛋白", "碳水", "脂肪"]) {
+                groups.insert(.meals)
+            }
+            if containsAny(lowered, ["体重", "体脂", "腰围", "体态", "围度"]) {
+                groups.insert(.body)
+            }
+            if containsAny(lowered, ["训练", "练", "组", "次数", "动作", "重量", "kg", "公斤"]) {
+                groups.formUnion([.exercises, .workouts])
+            }
+        }
+        if containsAny(lowered, ["训练趋势", "训练量", "容量", "训练历史"]) {
+            groups.insert(.workouts)
+        }
+        if containsAny(lowered, ["饮食趋势", "摄入趋势", "饮食历史"]) {
+            groups.insert(.meals)
+        }
+        if containsAny(lowered, ["体重趋势", "体态变化", "体脂趋势", "腰围趋势"]) {
+            groups.insert(.body)
         }
         if signals.hasActiveProgram
             || signals.hasActiveGuidedSession
@@ -64,7 +104,7 @@ enum AgentToolExposurePolicy {
                 ]
             )
         {
-            groups.insert(.plans)
+            groups.formUnion([.exercises, .plans])
         }
         if containsAny(lowered, ["健身房", "器械", "场馆", "换馆", "gym"]) {
             groups.insert(.gym)
@@ -84,6 +124,9 @@ enum AgentToolExposurePolicy {
             ]
         ) {
             groups.insert(.feedback)
+        }
+        if !groups.isEmpty {
+            groups.insert(.core)
         }
         return groups
     }
@@ -107,7 +150,7 @@ enum AgentToolExposurePolicy {
               let group = AgentToolGroup(rawValue: groupRaw),
               AgentToolGroup.expandableCases.contains(group)
         else {
-            return .failure("tool_group 仅支持 records、plans、gym、review、feedback。")
+            return .failure("tool_group 不在 App 允许展开的白名单中。")
         }
         if groups.contains(group) {
             return .success("工具组 \(group.rawValue) 已经展开。")

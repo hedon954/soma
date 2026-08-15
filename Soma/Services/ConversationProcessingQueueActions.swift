@@ -12,12 +12,14 @@ extension ConversationProcessingService {
     ) -> Bool {
         let submittedAt = Date.now
         let turnID = UUID()
+        let businessDate = context.businessDate(for: text, turnSentAt: submittedAt)
         let contextEnvelope = AgentTurnContextBuilder.build(
             turnID: turnID,
             userText: text,
             hasCurrentMedia: false,
             turnSentAt: submittedAt,
-            businessSummary: context.structuredContext,
+            businessSummary: context.structuredContext(for: businessDate),
+            effectiveBusinessDate: businessDate,
             sessionID: context.session.id,
             in: context.modelContext
         )
@@ -42,6 +44,9 @@ extension ConversationProcessingService {
                 createdAt: submittedAt,
                 envelope: contextEnvelope
             ),
+            turnSentAt: submittedAt,
+            effectiveBusinessDate: businessDate,
+            businessTimeZone: context.session.businessTimeZone,
             createdAt: submittedAt
         )
         job.executionKind = .deterministicWorkout
@@ -113,12 +118,17 @@ extension ConversationProcessingService {
 
         let submittedAt = Date.now
         let retryTurnID = userMessage.turnID ?? UUID()
+        let businessDate = context.businessDate(
+            for: userMessage.text,
+            turnSentAt: userMessage.date
+        )
         let contextEnvelope = AgentTurnContextBuilder.build(
             turnID: retryTurnID,
             userText: userMessage.text,
             hasCurrentMedia: !userMessage.mediaAttachments.isEmpty,
             turnSentAt: userMessage.date,
-            businessSummary: context.structuredContext,
+            businessSummary: context.structuredContext(for: businessDate),
+            effectiveBusinessDate: businessDate,
             sessionID: context.session.id,
             in: context.modelContext
         )
@@ -136,6 +146,9 @@ extension ConversationProcessingService {
                 createdAt: submittedAt,
                 envelope: contextEnvelope
             ),
+            turnSentAt: userMessage.date,
+            effectiveBusinessDate: businessDate,
+            businessTimeZone: context.session.businessTimeZone,
             createdAt: submittedAt
         )
         do {
@@ -373,12 +386,19 @@ extension ConversationProcessingService {
         )
         responseMessage.agentTraceID = trace.id
         context.modelContext.insert(trace)
+        try? BusinessIDAllocator.assignMissingIDs(in: context.modelContext)
+        let definitions = (
+            try? context.modelContext.fetch(FetchDescriptor<ExerciseDefinition>())
+        ) ?? []
+        let exerciseBusinessID = definitions.first(where: {
+            $0.id == draft.exerciseID
+        })?.businessID ?? 0
         let call = AgentToolCall(
             name: .mutateUserData,
             arguments: AgentToolArguments(
                 operation: "create",
                 payload: AgentMutationPayload(
-                    exerciseID: draft.exerciseID.uuidString,
+                    exerciseID: exerciseBusinessID,
                     setEntries: draft.setEntries.map {
                         AgentWorkoutSetInput(
                             reps: $0.reps,
@@ -416,7 +436,7 @@ extension ConversationProcessingService {
         let result = ConversationRecorder.executeAgentTool(
             call,
             sourceText: userMessage.text,
-            sourceDate: .now,
+            sourceDate: job.stableDefaultOccurredAt,
             sourceSessionID: context.session.id,
             sourceTurnID: job.turnID,
             mediaKind: .none,

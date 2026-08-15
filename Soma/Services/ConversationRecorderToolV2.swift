@@ -44,7 +44,7 @@ extension ConversationRecorder {
         if operation == "create", arguments.recordID != nil {
             return .failure("create 不接受 record_id。")
         }
-        if operation == "update", UUID(uuidString: arguments.recordID ?? "") == nil {
+        if operation == "update", (arguments.recordID ?? 0) <= 0 {
             return .failure("update 必须提供有效的 record_id。")
         }
         let routed = payload.toolArguments(
@@ -129,13 +129,13 @@ extension ConversationRecorder {
         arguments: AgentToolArguments
     ) -> AgentToolResult? {
         if arguments.projection == "detail" {
-            let exactID: String? = switch scope {
+            let exactID: Int64? = switch scope {
             case "exercises", "exercise_history": arguments.exerciseID
             case "programs": arguments.programID
             case "sessions": arguments.sessionID
             default: arguments.recordID
             }
-            guard UUID(uuidString: exactID ?? "") != nil else {
+            guard (exactID ?? 0) > 0 else {
                 return .failure("projection=detail 必须提供当前 scope 对应的精确 ID。")
             }
         }
@@ -276,7 +276,7 @@ extension ConversationRecorder {
     static func mealReference(_ entry: MealEntry) -> AgentRecordReference {
         AgentRecordReference(
             recordType: ConversationIntent.meal.rawValue,
-            recordID: entry.id.uuidString,
+            recordID: entry.businessID ?? 0,
             title: entry.title
         )
     }
@@ -284,7 +284,7 @@ extension ConversationRecorder {
     static func workoutReference(_ entry: WorkoutEntry) -> AgentRecordReference {
         AgentRecordReference(
             recordType: ConversationIntent.workout.rawValue,
-            recordID: entry.id.uuidString,
+            recordID: entry.businessID ?? 0,
             title: entry.exercise
         )
     }
@@ -292,7 +292,7 @@ extension ConversationRecorder {
     static func bodyReference(_ entry: BodyEntry) -> AgentRecordReference {
         AgentRecordReference(
             recordType: ConversationIntent.body.rawValue,
-            recordID: entry.id.uuidString,
+            recordID: entry.businessID ?? 0,
             title: entry.weight.map {
                 "\($0.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
             }
@@ -302,14 +302,14 @@ extension ConversationRecorder {
     static func gymReference(_ gym: GymProfile) -> AgentRecordReference {
         AgentRecordReference(
             recordType: ConversationIntent.gym.rawValue,
-            recordID: gym.id.uuidString,
+            recordID: gym.businessID ?? 0,
             title: gym.name
         )
     }
 
     static func mealResultData(_ entry: MealEntry) -> AgentJSONValue {
         .object([
-            "record_id": .string(entry.id.uuidString),
+            "record_id": .number(Double(entry.businessID ?? 0)),
             "meal_type": .string(entry.mealType.rawValue),
             "title": .string(entry.title),
             "date": .string(entry.date.ISO8601Format()),

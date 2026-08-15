@@ -40,7 +40,7 @@ enum AgentJSONValue: Codable, Equatable, Sendable {
 
 struct AgentRecordReference: Codable, Equatable, Sendable {
     var recordType: String
-    var recordID: String
+    var recordID: Int64
     var title: String?
 
     enum CodingKeys: String, CodingKey {
@@ -66,13 +66,16 @@ struct AgentToolResult: Codable, Equatable, Sendable {
     var recordRefs: [AgentRecordReference]?
     var page: AgentToolPage?
     var recordType: ConversationIntent?
+    var field: String?
+    var expected: String?
+    var retryable: Bool?
 
     var observation: String {
         message
     }
 
     enum CodingKeys: String, CodingKey {
-        case ok, code, message, data, page, observation
+        case ok, code, message, data, page, observation, field, expected, retryable
         case recordRefs = "record_refs"
         case recordType = "record_type"
     }
@@ -84,7 +87,10 @@ struct AgentToolResult: Codable, Equatable, Sendable {
         data: AgentJSONValue? = nil,
         recordRefs: [AgentRecordReference]? = nil,
         page: AgentToolPage? = nil,
-        recordType: ConversationIntent? = nil
+        recordType: ConversationIntent? = nil,
+        field: String? = nil,
+        expected: String? = nil,
+        retryable: Bool? = nil
     ) {
         self.ok = ok
         self.code = code
@@ -93,6 +99,9 @@ struct AgentToolResult: Codable, Equatable, Sendable {
         self.recordRefs = recordRefs
         self.page = page
         self.recordType = recordType
+        self.field = field
+        self.expected = expected
+        self.retryable = retryable
     }
 
     init(from decoder: Decoder) throws {
@@ -110,6 +119,9 @@ struct AgentToolResult: Codable, Equatable, Sendable {
         )
         page = try container.decodeIfPresent(AgentToolPage.self, forKey: .page)
         recordType = try container.decodeIfPresent(ConversationIntent.self, forKey: .recordType)
+        field = try container.decodeIfPresent(String.self, forKey: .field)
+        expected = try container.decodeIfPresent(String.self, forKey: .expected)
+        retryable = try container.decodeIfPresent(Bool.self, forKey: .retryable)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -121,6 +133,9 @@ struct AgentToolResult: Codable, Equatable, Sendable {
         try container.encodeIfPresent(recordRefs, forKey: .recordRefs)
         try container.encodeIfPresent(page, forKey: .page)
         try container.encodeIfPresent(recordType, forKey: .recordType)
+        try container.encodeIfPresent(field, forKey: .field)
+        try container.encodeIfPresent(expected, forKey: .expected)
+        try container.encodeIfPresent(retryable, forKey: .retryable)
     }
 
     static func success(
@@ -142,7 +157,20 @@ struct AgentToolResult: Codable, Equatable, Sendable {
         )
     }
 
-    static func failure(_ message: String, code: String = "invalid_request") -> AgentToolResult {
-        AgentToolResult(ok: false, code: code, message: message)
+    static func failure(
+        _ message: String,
+        code: String = "invalid_request",
+        field: String? = nil,
+        expected: String? = nil,
+        retryable: Bool = true
+    ) -> AgentToolResult {
+        AgentToolResult(
+            ok: false,
+            code: code,
+            message: message,
+            field: field,
+            expected: expected,
+            retryable: retryable
+        )
     }
 }

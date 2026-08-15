@@ -246,8 +246,8 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertTrue(groups.contains(.core))
         XCTAssertTrue(groups.contains(.plans))
         let tools = AgentToolExposurePolicy.tools(for: groups)
-        XCTAssertTrue(tools.contains(.expandToolGroup))
-        XCTAssertTrue(tools.contains(.startGuidedWorkout))
+        XCTAssertFalse(tools.contains(.expandToolGroup))
+        XCTAssertTrue(tools.contains(.startProgram))
         XCTAssertFalse(tools.contains(.updateGym))
     }
 
@@ -273,9 +273,10 @@ final class AgentReliabilityTests: XCTestCase {
                 hasActiveGuidedSession: false
             )
         )
-        XCTAssertTrue(recording.contains(.records))
+        XCTAssertTrue(recording.contains(.exercises))
+        XCTAssertTrue(recording.contains(.workouts))
         XCTAssertTrue(
-            AgentToolExposurePolicy.tools(for: recording).contains(.mutateUserData)
+            AgentToolExposurePolicy.tools(for: recording).contains(.createWorkout)
         )
     }
 
@@ -295,14 +296,19 @@ final class AgentReliabilityTests: XCTestCase {
             XCTAssertFalse(groups.contains(.records), text)
         }
 
-        for text in ["深蹲 4组8次60kg", "体重 70kg", "午餐 两个鸡蛋"] {
+        for (text, expected) in [
+            ("深蹲 4组8次60kg", AgentToolGroup.workouts),
+            ("体重 70kg", AgentToolGroup.body),
+            ("午餐 两个鸡蛋", AgentToolGroup.meals)
+        ] {
             let groups = AgentToolExposurePolicy.initialGroups(signals: .init(
                 text: text,
                 hasVideo: false,
                 hasActiveProgram: false,
                 hasActiveGuidedSession: false
             ))
-            XCTAssertTrue(groups.contains(.records), text)
+            XCTAssertTrue(groups.contains(expected), text)
+            XCTAssertFalse(groups.contains(.records), text)
         }
     }
 
@@ -467,9 +473,9 @@ final class AgentReliabilityTests: XCTestCase {
             imageCount: 0,
             hasVideo: false
         )
-        XCTAssertTrue(prompt.hasPrefix("[SOMA CURRENT TURN v1]"))
-        XCTAssertTrue(prompt.contains("[TRUSTED LOCAL CONTEXT]\n可信摘要"))
-        XCTAssertTrue(prompt.contains("[CURRENT USER INPUT]\n记录深蹲"))
+        XCTAssertTrue(prompt.hasPrefix("[SOMA CURRENT TURN v2]"))
+        XCTAssertTrue(prompt.contains("## 可信本机上下文\n可信摘要"))
+        XCTAssertTrue(prompt.contains("## 当前用户输入\n记录深蹲"))
         XCTAssertTrue(prompt.contains("一般建议直接回答"))
     }
 
@@ -523,8 +529,9 @@ final class AgentReliabilityTests: XCTestCase {
             equipment: [],
             in: context
         )
-        XCTAssertTrue(pack.contains("身体信息：未填写"))
-        XCTAssertTrue(pack.contains("健身房：无"))
+        XCTAssertTrue(pack.isEmpty)
+        XCTAssertFalse(pack.contains("未填写"))
+        XCTAssertFalse(pack.contains("健身房：无"))
         XCTAssertFalse(pack.contains("70kg"))
     }
 

@@ -74,14 +74,15 @@ final class RecordMutationTests: XCTestCase {
             mediaAttachments: [originalMedia]
         )
         context.insert(meal)
+        try BusinessIDAllocator.assign(meal, namespace: "meal", in: context)
         try context.save()
 
-        let result = ConversationRecorder.executeAgentTool(
+        let result = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .updateMeal,
                 arguments: AgentToolArguments(
                     title: "鸡肉荞麦面",
-                    recordID: meal.id.uuidString
+                    recordID: XCTUnwrap(meal.businessID)
                 )
             ),
             sourceText: "不是鱼肉，改成鸡肉",
@@ -93,7 +94,7 @@ final class RecordMutationTests: XCTestCase {
         let meals = try context.fetch(FetchDescriptor<MealEntry>())
 
         XCTAssertTrue(result.ok)
-        XCTAssertEqual(result.recordRefs?.first?.recordID, meal.id.uuidString)
+        XCTAssertEqual(result.recordRefs?.first?.recordID, meal.businessID)
         XCTAssertEqual(meals.count, 1)
         XCTAssertEqual(meals[0].title, "鸡肉荞麦面")
         XCTAssertEqual(meals[0].mediaAttachments, [originalMedia, correctionMedia])
@@ -111,11 +112,12 @@ final class RecordMutationTests: XCTestCase {
             fat: 15
         )
         context.insert(meal)
+        try BusinessIDAllocator.assign(meal, namespace: "meal", in: context)
         try context.save()
-        let call = AgentToolCall(
+        let call = try AgentToolCall(
             name: .deleteRecord,
             arguments: AgentToolArguments(
-                recordID: meal.id.uuidString,
+                recordID: XCTUnwrap(meal.businessID),
                 recordType: "meal"
             )
         )
@@ -538,12 +540,13 @@ final class RecordMutationTests: XCTestCase {
         )
     }
 
-    func testAgentPolicyPrefersExplicitUpdateToolsForCorrections() {
+    func testSystemContractKeepsToolNamesOutOfPrompt() {
         let policy = ReActPromptSection.policy.defaultText
 
-        XCTAssertTrue(policy.contains("record_id"))
-        XCTAssertTrue(policy.contains("mutate_user_data(operation=update)"))
-        XCTAssertTrue(policy.contains("mutate_user_data(operation=delete)"))
+        XCTAssertTrue(policy.contains("明确授权"))
+        XCTAssertTrue(policy.contains("创建、修改、删除"))
+        XCTAssertFalse(policy.contains("mutate_user_data"))
+        XCTAssertFalse(policy.contains("record_id"))
     }
 
     private func mealCall(title: String) -> AgentToolCall {

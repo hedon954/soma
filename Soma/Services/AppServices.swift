@@ -519,6 +519,7 @@ final class AIService {
         context: String,
         route requestedRoute: AIModelRoute? = nil,
         toolSignals: AgentToolExposureSignals? = nil,
+        selectedSkillID: String? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
         firstStepDeadlineEnabled: Bool = true,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
@@ -537,6 +538,7 @@ final class AIService {
             context: context,
             requestedRoute: requestedRoute,
             toolSignals: toolSignals,
+            selectedSkillID: selectedSkillID,
             checkpoint: checkpoint
         ))
         let selectedRoute = prepared.selectedRoute
@@ -847,7 +849,9 @@ final class AIService {
         try Task.checkCancellation()
         let spanID = UUID()
         let startedAt = Date()
-        let skill = call.arguments.skillID.flatMap(AgentSkill.init(rawValue:))
+        let skill = call.arguments.skillID.flatMap {
+            AgentSkillRegistry.descriptor(id: $0, defaults: defaults)
+        }
         trace?(.span(AgentTraceSpan(
             id: spanID,
             step: step,
@@ -917,7 +921,15 @@ final class AIService {
         let spanKind: AgentTraceSpanKind = call.name == .loadSkill
             ? .skill
             : .tool
-        trace?(.span(AgentTraceSpan(
+        let traceMetadata = AgentTraceText.jsonObject([
+            "tool_call_id": native.id ?? "",
+            "deduplicated": wasDeduplicated,
+            "skill_id": call.arguments.skillID.map { $0 as Any } ?? NSNull(),
+            "skill_customized": skill.map { !$0.isBuiltIn as Any } ?? NSNull(),
+            "record_type": result.recordType
+                .map { $0.rawValue as Any } ?? NSNull()
+        ])
+        let completedSpan = AgentTraceSpan(
             id: spanID,
             step: step,
             kind: spanKind,
@@ -927,17 +939,10 @@ final class AIService {
             endedAt: endedAt,
             input: AgentTraceText.json(call),
             output: AgentTraceText.json(result),
-            metadata: AgentTraceText.jsonObject([
-                "tool_call_id": native.id ?? "",
-                "deduplicated": wasDeduplicated,
-                "skill_id": call.arguments.skillID.map { $0 as Any } ?? NSNull(),
-                "skill_customized": skill
-                    .map { $0.isCustomized(in: defaults) as Any } ?? NSNull(),
-                "record_type": result.recordType
-                    .map { $0.rawValue as Any } ?? NSNull()
-            ]),
+            metadata: traceMetadata,
             errorMessage: result.ok ? nil : result.observation
-        )))
+        )
+        trace?(.span(completedSpan))
         state.observations.append(AgentObservation(step: step, action: call, result: result))
         state.messages.append(ChatCompletionParameters.Message(
             role: .tool,
@@ -1046,11 +1051,15 @@ final class AIService {
         else {
             return .failure("load_skill 缺少 skill_id。")
         }
-        guard let skill = AgentSkill(rawValue: skillID) else {
-            let available = AgentSkill.allCases.map(\.rawValue).joined(separator: "、")
+        guard let skill = AgentSkillRegistry.descriptor(
+            id: skillID,
+            defaults: defaults
+        ) else {
+            let available = AgentSkillRegistry.allDescriptors(defaults: defaults)
+                .map(\.id).joined(separator: "、")
             return .failure("未知 Skill：\(skillID)。可用 ID：\(available)。")
         }
-        return .success(skill.text(in: defaults))
+        return .success(skill.markdown)
     }
 
     func agentErrorDescription(_ error: Error) -> String {

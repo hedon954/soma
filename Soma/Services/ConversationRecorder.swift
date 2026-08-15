@@ -3,73 +3,6 @@ import SwiftData
 
 @MainActor
 enum ConversationRecorder {
-    static func apply(
-        _ result: ConversationResult,
-        sourceText: String,
-        sourceDate: Date = .now,
-        sourceSessionID: UUID? = nil,
-        sourceTurnID: UUID? = nil,
-        mediaKind: MediaKind,
-        mediaPath: String?,
-        mediaAttachments: [MediaAttachmentReference] = [],
-        gyms: [GymProfile],
-        equipment: [GymEquipment],
-        in context: ModelContext
-    ) -> String {
-        switch result.intent {
-        case .gym:
-            recordGym(
-                result,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                gyms: gyms,
-                equipment: equipment,
-                in: context
-            )
-        case .meal:
-            recordMeal(
-                result,
-                sourceText: sourceText,
-                sourceDate: sourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .body:
-            recordBody(
-                result,
-                sourceText: sourceText,
-                sourceDate: sourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .workout:
-            recordWorkout(
-                result,
-                sourceText: sourceText,
-                sourceDate: sourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .switchGym:
-            switchGym(result, gyms: gyms, in: context)
-        case .coach:
-            break
-        }
-        try? context.save()
-        return result.reply
-    }
-
     static func executeAgentTool(
         _ call: AgentToolCall,
         sourceText: String,
@@ -82,7 +15,49 @@ enum ConversationRecorder {
         preferredGymID: UUID? = nil,
         in context: ModelContext
     ) -> AgentToolResult {
-        switch call.name {
+        try? BusinessIDAllocator.assignMissingIDs(in: context)
+        let occurredAt: Date?
+        if let raw = call.arguments.occurredAt {
+            guard let parsed = parsedOccurredAt(raw) else {
+                return .failure(
+                    "occurred_at 必须是带时区的 ISO-8601 时间。",
+                    code: "invalid_argument",
+                    field: "occurred_at",
+                    expected: "ISO-8601 timestamp with timezone"
+                )
+            }
+            occurredAt = parsed
+        } else {
+            occurredAt = nil
+        }
+        let resolvedSourceDate = occurredAt ?? sourceDate
+        if call.name.isTypedV3 {
+            return executeTypedAgentTool(
+                call,
+                source: TypedAgentToolSource(
+                    text: sourceText,
+                    date: resolvedSourceDate,
+                    explicitOccurredAt: occurredAt,
+                    sessionID: sourceSessionID,
+                    turnID: sourceTurnID,
+                    mediaKind: mediaKind,
+                    mediaPath: mediaPath,
+                    mediaAttachments: mediaAttachments
+                ),
+                in: context
+            )
+        }
+        return switch call.name {
+        case .searchExercises, .createExercise, .updateExercise,
+             .archiveExercise, .mergeExercises, .listWorkouts,
+             .getWorkout, .createWorkout, .updateWorkout, .deleteWorkout, .listMeals,
+             .getMeal, .createMeal, .updateMeal, .deleteMeal, .listBodyEntries,
+             .getBodyEntry, .createBodyEntry, .deleteBodyEntry,
+             .updateBody,
+             .listPrograms, .getProgram, .createProgram,
+             .createProgramVersion, .archiveProgram, .deleteProgram,
+             .startProgram:
+            .failure("v3 Tool 路由异常。", code: "internal_error")
         case .loadSkill:
             .failure("load_skill 应由 Agent 运行时处理。")
         case .expandToolGroup:
@@ -99,7 +74,7 @@ enum ConversationRecorder {
             mutateUserData(
                 call.arguments,
                 sourceText: sourceText,
-                sourceDate: sourceDate,
+                sourceDate: resolvedSourceDate,
                 sourceSessionID: sourceSessionID,
                 sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
@@ -117,7 +92,7 @@ enum ConversationRecorder {
             recordWorkout(
                 call.arguments,
                 sourceText: sourceText,
-                sourceDate: sourceDate,
+                sourceDate: resolvedSourceDate,
                 sourceSessionID: sourceSessionID,
                 sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
@@ -129,7 +104,7 @@ enum ConversationRecorder {
             recordMeal(
                 call.arguments,
                 sourceText: sourceText,
-                sourceDate: sourceDate,
+                sourceDate: resolvedSourceDate,
                 sourceSessionID: sourceSessionID,
                 sourceTurnID: sourceTurnID,
                 mediaKind: mediaKind,
@@ -141,36 +116,9 @@ enum ConversationRecorder {
             recordBody(
                 call.arguments,
                 sourceText: sourceText,
-                sourceDate: sourceDate,
+                sourceDate: resolvedSourceDate,
                 sourceSessionID: sourceSessionID,
                 sourceTurnID: sourceTurnID,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .updateWorkout:
-            updateWorkout(
-                call.arguments,
-                sourceText: sourceText,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .updateMeal:
-            updateMeal(
-                call.arguments,
-                sourceText: sourceText,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .updateBody:
-            updateBody(
-                call.arguments,
-                sourceText: sourceText,
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
@@ -205,6 +153,22 @@ enum ConversationRecorder {
                 in: context
             )
         }
+    }
+
+    private static func parsedOccurredAt(_ value: String) -> Date? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty,
+              normalized.contains("T"),
+              normalized.hasSuffix("Z")
+              || normalized.dropFirst(10).contains("+")
+              || normalized.dropFirst(10).contains("-")
+        else {
+            return nil
+        }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: normalized)
+            ?? ISO8601DateFormatter().date(from: normalized)
     }
 
     private static func executeTrainingDomainTool(
@@ -273,7 +237,7 @@ enum ConversationRecorder {
                 equipment.filter { $0.gymID == target.id }.map(\.name).joined(separator: "、")
             }.flatMap(\.nilIfEmpty) ?? "无"
             let workout = workouts.first.map {
-                "[id:\($0.id.uuidString)] \(workoutSummary($0))"
+                "[id:\($0.businessID ?? 0)] \(workoutSummary($0))"
             } ?? "暂无"
             let todayMeals = meals.filter {
                 Calendar.current.isDateInToday($0.date)
@@ -284,11 +248,11 @@ enum ConversationRecorder {
                 : "存在未估算记录"
             let weight = body.first.map {
                 let value = $0.weight.map { String(format: "%.1fkg", $0) } ?? "仅体态资料"
-                return "[id:\($0.id.uuidString)] \(value)"
+                return "[id:\($0.businessID ?? 0)] \(value)"
             } ?? "暂无"
             let profile = fetchProfiles(in: context).first.map(profileSummary) ?? "暂无"
             let latestMeal = meals.first.map {
-                "[id:\($0.id.uuidString)] \($0.mealType.rawValue) \($0.title)"
+                "[id:\($0.businessID ?? 0)] \($0.mealType.rawValue) \($0.title)"
             } ?? "暂无"
             return .success(
                 "个人信息：\(profile)；当前健身房：\(gym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)；最近体重：\(weight)。"
@@ -296,17 +260,22 @@ enum ConversationRecorder {
 
         case "workouts":
             let values = filteredByDate(fetchWorkouts(in: context), arguments: arguments, date: \.date)
-                .filter { arguments.recordID == nil || $0.id.uuidString == arguments.recordID }
+                .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
                 .map { entry in
                     var value = [
-                        "record_id": .string(entry.id.uuidString),
+                        "record_id": businessIDValue(entry.businessID),
                         "date": .string(entry.date.ISO8601Format()),
                         "title": .string(entry.exercise),
                         "summary": .string(workoutSummary(entry))
                     ] as [String: AgentJSONValue]
                     if arguments.projection == "detail" {
-                        value["exercise_id"] = entry.exerciseID
-                            .map { .string($0.uuidString) } ?? .null
+                        let definitions = (try? context.fetch(
+                            FetchDescriptor<ExerciseDefinition>()
+                        )) ?? []
+                        let definitionID = entry.exerciseID.flatMap { internalID in
+                            definitions.first(where: { $0.id == internalID })?.businessID
+                        }
+                        value["exercise_id"] = businessIDValue(definitionID)
                         value["set_entries"] = .array(entry.setEntries.map { set in
                             .object([
                                 "reps": set.reps.map { .number(Double($0)) } ?? .null,
@@ -327,10 +296,10 @@ enum ConversationRecorder {
 
         case "meals":
             let values = filteredByDate(fetchMeals(in: context), arguments: arguments, date: \.date)
-                .filter { arguments.recordID == nil || $0.id.uuidString == arguments.recordID }
+                .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
                 .map { entry in
                     var value = [
-                        "record_id": .string(entry.id.uuidString),
+                        "record_id": businessIDValue(entry.businessID),
                         "date": .string(entry.date.ISO8601Format()),
                         "meal_type": .string(entry.mealType.rawValue),
                         "title": .string(entry.title),
@@ -342,7 +311,7 @@ enum ConversationRecorder {
                         value["fat"] = entry.fat.map(AgentJSONValue.number) ?? .null
                         value["note"] = entry.notes.nilIfEmpty
                             .map(AgentJSONValue.string) ?? .null
-                        value["items"] = .array(entry.items.map { item in
+                        let encodedItems: [AgentJSONValue] = entry.items.map { item in
                             .object([
                                 "id": .string(item.id.uuidString),
                                 "name": .string(item.name),
@@ -354,7 +323,8 @@ enum ConversationRecorder {
                                 "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
                                 "fat": item.fat.map(AgentJSONValue.number) ?? .null
                             ])
-                        })
+                        }
+                        value["items"] = .array(encodedItems)
                     }
                     return value
                 }
@@ -366,10 +336,10 @@ enum ConversationRecorder {
                 arguments: arguments,
                 date: \.date
             )
-            .filter { arguments.recordID == nil || $0.id.uuidString == arguments.recordID }
+            .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
             .map { entry in
                 var value = [
-                    "record_id": .string(entry.id.uuidString),
+                    "record_id": businessIDValue(entry.businessID),
                     "date": .string(entry.date.ISO8601Format()),
                     "weight": entry.weight.map(AgentJSONValue.number) ?? .null,
                     "body_fat": entry.bodyFat.map(AgentJSONValue.number) ?? .null,
@@ -386,7 +356,7 @@ enum ConversationRecorder {
         case "profile":
             let values = fetchProfiles(in: context).map {
                 [
-                    "record_id": .string($0.id.uuidString),
+                    "record_id": businessIDValue($0.businessID),
                     "summary": .string(profileSummary($0))
                 ] as [String: AgentJSONValue]
             }
@@ -398,7 +368,7 @@ enum ConversationRecorder {
             let values = gyms.map { gym in
                 let names = equipment.filter { $0.gymID == gym.id }.map(\.name).joined(separator: "、")
                 return [
-                    "record_id": .string(gym.id.uuidString),
+                    "record_id": businessIDValue(gym.businessID),
                     "name": .string(gym.name),
                     "is_current": .bool(gym.isCurrent),
                     "equipment": .string(names.nilIfEmpty ?? "暂无")
@@ -407,7 +377,7 @@ enum ConversationRecorder {
             return pagedResult(values, noun: "健身房", arguments: arguments, limit: limit)
 
         case "exercises":
-            let exactExerciseID = arguments.exerciseID.flatMap(UUID.init(uuidString:))
+            let exactExerciseID = arguments.exerciseID
             let query = arguments.query?.trimmed.nilIfEmpty
             guard exactExerciseID != nil || query != nil else {
                 return .failure("动作库查询必须提供 query 或精确 exercise_id，不再返回全库。")
@@ -419,23 +389,26 @@ enum ConversationRecorder {
                 }
                 .map {
                     [
-                        "exercise_id": .string($0.id.uuidString),
+                        "exercise_id": .number(Double($0.id)),
                         "name": .string($0.name)
                     ] as [String: AgentJSONValue]
                 }
             return pagedResult(values, noun: "动作", arguments: arguments, limit: limit)
 
         case "exercise_history":
-            guard let rawID = arguments.exerciseID,
-                  let exerciseID = UUID(uuidString: rawID)
+            guard let businessID = arguments.exerciseID,
+                  let exercise = try? ExerciseLibraryStore.definition(
+                      businessID: businessID,
+                      in: context
+                  )
             else {
                 return .failure("exercise_history 需要有效的 exercise_id。")
             }
             let values = filteredByDate(fetchWorkouts(in: context), arguments: arguments, date: \.date)
-                .filter { $0.exerciseID == exerciseID }
+                .filter { $0.exerciseID == exercise.id }
                 .map {
                     [
-                        "record_id": .string($0.id.uuidString),
+                        "record_id": businessIDValue($0.businessID),
                         "date": .string($0.date.ISO8601Format()),
                         "summary": .string(workoutSummary($0))
                     ] as [String: AgentJSONValue]
@@ -469,6 +442,7 @@ enum ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
+        try? BusinessIDAllocator.assignMissingIDs(in: context)
         let definition: ExerciseDefinition
         do {
             definition = try resolveExercise(
@@ -552,7 +526,7 @@ enum ConversationRecorder {
             return .success(
                 AgentBusinessKeyDeduper.suspectedDuplicateMessage(
                     kind: "训练",
-                    recordID: duplicate.id
+                    recordID: duplicate.businessID ?? 0
                 ),
                 recordRefs: [workoutReference(duplicate)],
                 recordType: .workout
@@ -569,6 +543,7 @@ enum ConversationRecorder {
                 calorieEstimate: calorieEstimate
             )
             existing.exerciseID = definition.id
+            existing.exerciseDefinition = definition
             existing.exercise = definition.canonicalName
             entry = existing
         } else {
@@ -597,6 +572,12 @@ enum ConversationRecorder {
                 sourceSessionID: sourceSessionID
             )
             context.insert(created)
+            created.exerciseDefinition = definition
+            try? BusinessIDAllocator.assign(
+                created,
+                namespace: "workout",
+                in: context
+            )
             entry = created
         }
         try? context.save()
@@ -650,6 +631,7 @@ enum ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
+        try? BusinessIDAllocator.assignMissingIDs(in: context)
         guard let title = arguments.title?.trimmed.nilIfEmpty else {
             return .failure("record_meal 缺少 title。")
         }
@@ -715,6 +697,11 @@ enum ConversationRecorder {
             entry.replaceItemsAndDeriveTotals(items)
         }
         context.insert(entry)
+        try? BusinessIDAllocator.assign(
+            entry,
+            namespace: "meal",
+            in: context
+        )
         try? context.save()
         let caloriesText = entry.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
@@ -736,6 +723,7 @@ enum ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
+        try? BusinessIDAllocator.assignMissingIDs(in: context)
         if let weight = arguments.weight, !(0 ... 500).contains(weight) {
             return .failure("weight 必须在 0 到 500kg 之间。")
         }
@@ -784,7 +772,7 @@ enum ConversationRecorder {
             return .success(
                 AgentBusinessKeyDeduper.suspectedDuplicateMessage(
                     kind: "身体",
-                    recordID: duplicate.id
+                    recordID: duplicate.businessID ?? 0
                 ),
                 recordRefs: [bodyReference(duplicate)],
                 recordType: .body
@@ -808,6 +796,11 @@ enum ConversationRecorder {
                 sourceSessionID: sourceSessionID
             )
             context.insert(created)
+            try? BusinessIDAllocator.assign(
+                created,
+                namespace: "body",
+                in: context
+            )
             entry = created
         }
         try? context.save()
@@ -825,6 +818,7 @@ extension ConversationRecorder {
     static func updateWorkout(
         _ arguments: AgentToolArguments,
         sourceText: String,
+        occurredAt: Date? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -833,8 +827,11 @@ extension ConversationRecorder {
         guard let id = recordID(from: arguments) else {
             return .failure("update_workout 需要有效的 record_id。")
         }
-        guard let entry = fetchWorkouts(in: context).first(where: { $0.id == id }) else {
+        guard let entry = fetchWorkouts(in: context).first(where: { $0.businessID == id }) else {
             return .failure("没有找到指定训练记录，请重新查询。")
+        }
+        if let occurredAt {
+            entry.date = occurredAt
         }
         let setEntries = workoutSetEntries(from: arguments)
         if let error = workoutSetValidationError(setEntries) {
@@ -858,6 +855,7 @@ extension ConversationRecorder {
                     in: context
                 )
                 entry.exerciseID = definition.id
+                entry.exerciseDefinition = definition
                 entry.exercise = definition.canonicalName
             } catch {
                 return .failure(error.localizedDescription)
@@ -907,7 +905,7 @@ extension ConversationRecorder {
         entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         try? context.save()
         return .success(
-            "已更新训练 [id:\(entry.id.uuidString)]：\(workoutSummary(entry))。",
+            "已更新训练 [id:\(entry.businessID ?? 0)]：\(workoutSummary(entry))。",
             recordRefs: [workoutReference(entry)],
             recordType: .workout
         )
@@ -916,6 +914,7 @@ extension ConversationRecorder {
     static func updateMeal(
         _ arguments: AgentToolArguments,
         sourceText: String,
+        occurredAt: Date? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -924,8 +923,11 @@ extension ConversationRecorder {
         guard let id = recordID(from: arguments) else {
             return .failure("update_meal 需要有效的 record_id。")
         }
-        guard let entry = fetchMeals(in: context).first(where: { $0.id == id }) else {
+        guard let entry = fetchMeals(in: context).first(where: { $0.businessID == id }) else {
             return .failure("没有找到指定饮食记录，请重新查询。")
+        }
+        if let occurredAt {
+            entry.date = occurredAt
         }
         if let calories = arguments.calories, !(0 ... 10000).contains(calories) {
             return .failure("calories 必须在 0 到 10000 之间。")
@@ -993,6 +995,7 @@ extension ConversationRecorder {
     static func updateBody(
         _ arguments: AgentToolArguments,
         sourceText: String,
+        occurredAt: Date? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference],
@@ -1001,8 +1004,11 @@ extension ConversationRecorder {
         guard let id = recordID(from: arguments) else {
             return .failure("update_body 需要有效的 record_id。")
         }
-        guard let entry = fetchBodyEntries(in: context).first(where: { $0.id == id }) else {
+        guard let entry = fetchBodyEntries(in: context).first(where: { $0.businessID == id }) else {
             return .failure("没有找到指定身体记录，请重新查询。")
+        }
+        if let occurredAt {
+            entry.date = occurredAt
         }
         if let weight = arguments.weight, !(0 ... 500).contains(weight) {
             return .failure("weight 必须在 0 到 500kg 之间。")
@@ -1036,7 +1042,7 @@ extension ConversationRecorder {
         )
         try? context.save()
         return .success(
-            "已更新身体记录 [id:\(entry.id.uuidString)]。",
+            "已更新身体记录 [id:\(entry.businessID ?? 0)]。",
             recordRefs: [bodyReference(entry)],
             recordType: .body
         )
@@ -1058,7 +1064,7 @@ extension ConversationRecorder {
 
         switch type {
         case "workout":
-            guard let entry = fetchWorkouts(in: context).first(where: { $0.id == id }) else {
+            guard let entry = fetchWorkouts(in: context).first(where: { $0.businessID == id }) else {
                 return .failure("没有找到指定训练记录，请重新查询。")
             }
             do {
@@ -1067,12 +1073,12 @@ extension ConversationRecorder {
                 return .failure("删除训练记录失败：\(error.localizedDescription)")
             }
         case "meal":
-            guard let entry = fetchMeals(in: context).first(where: { $0.id == id }) else {
+            guard let entry = fetchMeals(in: context).first(where: { $0.businessID == id }) else {
                 return .failure("没有找到指定饮食记录，请重新查询。")
             }
             context.delete(entry)
         case "body":
-            guard let entry = fetchBodyEntries(in: context).first(where: { $0.id == id }) else {
+            guard let entry = fetchBodyEntries(in: context).first(where: { $0.businessID == id }) else {
                 return .failure("没有找到指定身体记录，请重新查询。")
             }
             context.delete(entry)
@@ -1243,8 +1249,8 @@ extension ConversationRecorder {
 
     private static func recordID(
         from arguments: AgentToolArguments
-    ) -> UUID? {
-        arguments.recordID.flatMap(UUID.init(uuidString:))
+    ) -> Int64? {
+        arguments.recordID
     }
 
     private static func resolveExercise(
@@ -1252,19 +1258,19 @@ extension ConversationRecorder {
         allowCreate: Bool,
         in context: ModelContext
     ) throws -> ExerciseDefinition {
-        let rawID = arguments.exerciseID?.trimmed.nilIfEmpty
+        let businessID = arguments.exerciseID
         let rawName = (
             arguments.exerciseName
                 ?? arguments.exercise
         )?.trimmed.nilIfEmpty
-        guard rawID == nil || rawName == nil else {
+        guard businessID == nil || rawName == nil else {
             throw ExerciseLibraryError.ambiguousReference
         }
-        if let rawID {
-            guard let id = UUID(uuidString: rawID) else {
-                throw ExerciseLibraryError.invalidReference
-            }
-            return try ExerciseLibraryStore.definition(id: id, in: context)
+        if let businessID {
+            return try ExerciseLibraryStore.definition(
+                businessID: businessID,
+                in: context
+            )
         }
         guard allowCreate, let rawName else {
             throw ExerciseLibraryError.emptyName
@@ -1273,6 +1279,10 @@ extension ConversationRecorder {
             canonicalName: rawName,
             in: context
         )
+    }
+
+    private static func businessIDValue(_ id: Int64?) -> AgentJSONValue {
+        id.map { .number(Double($0)) } ?? .null
     }
 
     private static func formatWeight(_ weight: Double?) -> String? {
@@ -1409,7 +1419,7 @@ extension ConversationRecorder {
         return parts.isEmpty ? "已建立但尚未填写" : parts.joined(separator: "，")
     }
 
-    private static func recordGym(
+    static func recordGym(
         _ result: ConversationResult,
         mediaKind: MediaKind,
         mediaPath: String?,
@@ -1487,7 +1497,7 @@ extension ConversationRecorder {
         return gym
     }
 
-    private static func recordMeal(
+    static func recordMeal(
         _ result: ConversationResult,
         sourceText: String,
         sourceDate: Date,
@@ -1532,7 +1542,7 @@ extension ConversationRecorder {
         ))
     }
 
-    private static func recordBody(
+    static func recordBody(
         _ result: ConversationResult,
         sourceText: String,
         sourceDate: Date,
@@ -1580,7 +1590,7 @@ extension ConversationRecorder {
         }
     }
 
-    private static func recordWorkout(
+    static func recordWorkout(
         _ result: ConversationResult,
         sourceText: String,
         sourceDate: Date,
@@ -1679,7 +1689,7 @@ extension ConversationRecorder {
         }
     }
 
-    private static func switchGym(
+    static func switchGym(
         _ result: ConversationResult,
         gyms: [GymProfile],
         in context: ModelContext

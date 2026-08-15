@@ -11,6 +11,7 @@
   - [PRD 022](022-react-reliability-and-context-awareness.md) 修订会话投影、本地摘要与长上下文策略
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 修订跨日 Session、可信时间与选择性历史媒体
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 恢复可见历史入口并保留抽屉手势
+  - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 以可审查滚动摘要修订十轮外上下文，并引入 Skill Middleware
 - 关联决策：
   - [ADR 0022](../adr/0022-user-controlled-conversation-sessions.md)
   - [ADR 0023](../adr/0023-ordered-workout-set-evidence.md)

@@ -9,6 +9,7 @@
   - [ADR 0035](../adr/0035-silent-bundled-exercise-content-and-on-demand-images.md)
   - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
   - [ADR 0060](../adr/0060-guided-performance-workout-entry-projection.md)
+  - [ADR 0071](../adr/0071-integer-business-identities-and-explicit-relations.md)
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
@@ -50,7 +51,7 @@ WorkoutSession
 
 | 字段 | 类型 | 规则 |
 | --- | --- | --- |
-| `id` | UUID | 稳定、不可改 |
+| `businessID` | Int64 | 当前数据空间内稳定、不可改；UUID 仅保留为迁移锚点 |
 | `canonicalName` | String | 当前数据空间规范化后唯一 |
 | `movementPattern` | String? | 用户或内容元数据，缺失为空 |
 | `equipmentKind` | String? | 不参与本地语义去重 |
@@ -96,7 +97,7 @@ SwiftData transaction 内迁移：
 - App 启动只遍历已存在的 `ExerciseDefinition` 做 fill-only 激活，绝不按目录创建动作；目录版本
   可以替换旧 bundled 图片引用，但不得覆盖 generated/user 图片；
 - 新动作创建或改名后可做一次确定性目录查找；目录别名只用于内容关联，不参与 Agent 语义身份；
-- `list_exercise_names`、聊天候选与动作列表只读取 active `ExerciseDefinition`；
+- `search_exercises`、聊天候选与动作列表只读取 active `ExerciseDefinition`；
 - 包内资源不复制到 `PrivateMedia`，不进入个人备份或开放导出。
 
 `ExerciseImageReference` 保存：
@@ -169,11 +170,12 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 ### 旧记录兼容
 
-1. `WorkoutEntry` 保留可空 `exerciseID`，并增加可空 `sourceWorkoutSessionID` 与
-   `sourcePerformanceID`。
-2. 按现有名称生成迁移候选；无法可靠确认时保持空并等待 Agent/用户后续归一。
+1. `WorkoutEntry` 保留旧 UUID `exerciseID` 迁移锚点，并增加可空 `sourceWorkoutSessionID` 与
+   `sourcePerformanceID`；当前业务关系是必需的 `ExerciseDefinition` 对象引用。
+2. 启动迁移按规范名回填关系；空名称或无法可靠确认的记录绑定明确标记的“待确认动作”，不能
+   以无动作关系状态进入新运行时。
 3. 不从聚合 `sets × reps × weight` 创建多条 `WorkoutSet`。
-4. 新的自由聊天记录可以继续产生聚合 `WorkoutEntry`，并关联动作 ID。
+4. 新的自由聊天记录可以继续产生聚合 `WorkoutEntry`，但必须关联动作对象和 Int64 ID。
 5. 带练动作全部 Set 都为 completed/skipped 且至少一组 completed 时，按完成组顺序物化一条
    `WorkoutEntry`；跳过组不复制，缺少实际值保持 `nil`，全跳过不创建空记录。
 6. 启动回填和完成路径以 `sourcePerformanceID` 幂等；统计层优先读取投影记录，只有旧
@@ -183,57 +185,25 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 ## 固定 Tool 协议
 
-### `list_exercise_names`
+### 动作与训练记录
 
-请求参数为空：
-
-```json
-{}
-```
-
-响应：
-
-```json
-{
-  "exercises": [
-    {
-      "id": "8FA0C452-DAF8-4A13-8295-462CDB6EFD91",
-      "name": "单侧哑铃卧推"
-    }
-  ]
-}
-```
-
-约束：
-
-- 返回当前数据空间全部 active 动作，按名称稳定排序；
-- 只有 `id` 和 `name`；
-- 空动作库返回空数组；
-- Tool 不接收查询词、不做搜索、不返回训练历史；
-- Tool Schema 由 Runtime 固定。
-
-### `record_workout` 与 `update_workout`
-
-- 复用动作时：`exercise_id` 必填，Tool 忽略模型重复传来的展示名称。
-- 新建动作时：`exercise_id` 为空且 `exercise_name` 必填。
-- 两者同时缺失或同时表达冲突时返回 Tool error。
-- 失效 ID 返回 `exercise_not_found`，错误中不暴露其他空间动作。
-- Tool 成功结果返回最终 `exercise_id` 和 `workout_id`。
-- 相同 Turn 与规范化参数继续由 `AgentMutationReceipt` 幂等。
+- `search_exercises(query)` 返回匹配 active 动作的 Int64 `exercise_id` 和标准名称；已由上下文
+  注入的匹配动作不重复查询。
+- 只有没有语义等价项时才调用 `create_exercise(exercise_name)`。
+- `create_workout` 必须接收有效 `exercise_id`，不允许在同一调用中用名称隐式创建动作。
+- `update_workout` 按 Int64 `record_id` 原位修改；失效 ID 或跨数据空间关系返回结构化错误。
+- create/update 可选 `occurred_at`；省略时使用原始 Turn 冻结的稳定默认时间。
+- Tool 成功结果返回最终 `exercise_id` 和 `workout_id`；幂等签名包含两者和最终发生时间。
 
 ### 计划 Tool
 
 固定能力分为：
 
-- `create_training_program`；
-- `create_workout_template_version`；
-- `update_workout_template`；
-- `archive_training_program`；
-- `query_user_data` 的 exercises/exercise_history/programs/templates/sessions scope。
-- `list_training_programs`：返回可执行计划的稳定 ID 和当前模板摘要；
-- `get_training_program`：按稳定 ID 读取当前模板的动作与处方，供 Agent 审查和版本更新；
-- `start_guided_workout`：只接受列表返回的计划 ID，在设备本地创建不可变 Session 并打开带练。
-- `delete_training_program`：仅在用户明确要求永久删除时清除计划及其模板，既有 Session 快照继续保留。
+- `list_programs`、`get_program`：按 Int64 ID 返回计划摘要与详情；
+- `create_program`：创建计划及首个不可变版本，每个动作都必须绑定有效 Int64 `exercise_id`；
+- `create_program_version`：从现有计划创建不可变新版本，不原地覆盖历史版本；
+- `archive_program`、`delete_program`：分别归档或在明确授权后永久删除计划；
+- `start_program`：只接受列表返回的计划 ID，在设备本地创建不可变 Session 并打开带练。
 
 Tool 可创建、调整计划和在用户明确意图下启动一次带练。完成 Set、控制相机和保存实际值继续由
 本地带练运行时处理，不暴露为模型任意调用。

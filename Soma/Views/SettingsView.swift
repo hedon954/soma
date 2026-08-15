@@ -1032,10 +1032,28 @@ private struct DeveloperSettingsView: View {
                         .padding(.vertical, 4)
                     }
                 }
+                NavigationLink {
+                    FixedAgentContractView()
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(ReActPromptSection.policy.title)
+                                .font(.headline)
+                            Spacer()
+                            Text("只读")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(ReActPromptSection.policy.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
             } header: {
                 Text("系统提示词")
             } footer: {
-                Text("角色与安全策略可以分别自定义和恢复默认。")
+                Text("只允许编辑教练人格；安全、真实性和授权契约始终由 App 固定。")
             }
 
             Section {
@@ -1057,7 +1075,7 @@ private struct DeveloperSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Agent 通过 load_skill 按需加载保存的完整内容。")
+                Text("可编辑内置 Skill、创建本地 Skill，并绑定 App 白名单内的最小工具权限。")
             }
 
             Section {
@@ -1093,166 +1111,12 @@ private struct DeveloperSettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("你保存的角色与安全策略自定义内容会被移除。")
+            Text("你保存的教练人格自定义内容会被移除；固定契约不会改变。")
         }
     }
 }
 
-/// PRD 020：Skill 目录二级页，承接原先平铺在高级设置里的列表。
-private struct AgentSkillsListView: View {
-    @State private var customizedSkills = Set<AgentSkill>()
-    @State private var confirmsResetAll = false
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(AgentSkill.allCases) { skill in
-                    NavigationLink {
-                        AgentSkillEditor(skill: skill)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text(skill.title)
-                                    .font(.headline)
-                                Spacer()
-                                Text(customizedSkills.contains(skill) ? "已自定义" : "默认")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(customizedSkills.contains(skill) ? AppTheme.tint : .secondary)
-                            }
-                            Text(skill.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-            } footer: {
-                Text("系统提示词只披露 Skill 目录；Agent 通过 load_skill 按需加载这里保存的完整内容，加载过程会记录为独立 Span。")
-            }
-
-            Section {
-                Button("全部恢复默认 Skills", systemImage: "arrow.counterclockwise", role: .destructive) {
-                    confirmsResetAll = true
-                }
-            }
-        }
-        .navigationTitle("Skills")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            customizedSkills = Set(AgentSkill.allCases.filter { $0.isCustomized() })
-        }
-        .alert("恢复全部默认 Skills？", isPresented: $confirmsResetAll) {
-            Button("恢复默认", role: .destructive) {
-                AgentSkill.allCases.forEach { $0.reset() }
-                customizedSkills = []
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("你保存的全部自定义 Skill 内容都会被移除。")
-        }
-    }
-}
-
-private enum MarkdownEditorMode: String, CaseIterable, Identifiable {
-    case edit = "编辑"
-    case preview = "预览"
-
-    var id: String {
-        rawValue
-    }
-}
-
-private struct ReActPromptEditor: View {
-    let section: ReActPromptSection
-    @State private var text: String
-    @State private var savedText: String
-    @State private var mode: MarkdownEditorMode = .edit
-    @State private var confirmsReset = false
-
-    init(section: ReActPromptSection) {
-        self.section = section
-        let initial = section.text()
-        _text = State(initialValue: initial)
-        _savedText = State(initialValue: initial)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("显示方式", selection: $mode) {
-                    ForEach(MarkdownEditorMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-
-            Section {
-                if mode == .edit {
-                    TextEditor(text: $text)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 360)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } else {
-                    MarkdownText(text)
-                        .frame(minHeight: 360, alignment: .topLeading)
-                        .padding(.vertical, 6)
-                }
-            } header: {
-                Text(section.title)
-            } footer: {
-                Text(section.summary)
-            }
-
-            Section {
-                Button("恢复这一段的默认值", systemImage: "arrow.counterclockwise") {
-                    confirmsReset = true
-                }
-                .disabled(!section.isCustomized() && text == section.defaultText)
-            }
-        }
-        .navigationTitle(section.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                if isDirty {
-                    Button("保存", action: save)
-                        .disabled(normalizedText.isEmpty)
-                }
-            }
-        }
-        .alert("恢复默认提示词？", isPresented: $confirmsReset) {
-            Button("恢复默认", role: .destructive) {
-                section.reset()
-                text = section.defaultText
-                savedText = section.defaultText
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("“\(section.title)”的自定义内容会被移除。")
-        }
-    }
-
-    private var normalizedText: String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var isDirty: Bool {
-        normalizedText != savedText
-    }
-
-    private func save() {
-        section.save(text)
-        let persisted = section.text()
-        text = persisted
-        savedText = persisted
-    }
-}
-
-private struct AgentSkillEditor: View {
+struct AgentSkillEditor: View {
     let skill: AgentSkill
     @State private var text: String
     @State private var savedText: String
@@ -1341,6 +1205,146 @@ private struct AgentSkillEditor: View {
         let persisted = skill.text()
         text = persisted
         savedText = persisted
+    }
+}
+
+struct AgentCustomSkillEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let originalID: String
+    @State private var name: String
+    @State private var description: String
+    @State private var whenToUse: String
+    @State private var content: String
+    @State private var selectedGroups: Set<AgentToolGroup>
+    @State private var showInQuickBar: Bool
+    @State private var mode: MarkdownEditorMode = .edit
+
+    init(skill: AgentCustomSkill) {
+        originalID = skill.id
+        _name = State(initialValue: skill.name)
+        _description = State(initialValue: skill.description)
+        _whenToUse = State(initialValue: skill.whenToUse)
+        _content = State(initialValue: skill.content)
+        _selectedGroups = State(initialValue: Set(
+            skill.toolGroupIDs.compactMap(AgentToolGroup.init(rawValue:))
+        ))
+        _showInQuickBar = State(initialValue:
+            AgentSkillRegistry.quickSkillIDs().contains(skill.id))
+    }
+
+    var body: some View {
+        Form {
+            Section("目录元数据") {
+                TextField("名称", text: $name)
+                TextField("描述", text: $description, axis: .vertical)
+                TextField("什么时候使用", text: $whenToUse, axis: .vertical)
+                LabeledContent("Skill ID", value: originalID)
+            }
+
+            Section {
+                Picker("显示方式", selection: $mode) {
+                    ForEach(MarkdownEditorMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                if mode == .edit {
+                    TextEditor(text: $content)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 260)
+                } else {
+                    MarkdownText(content)
+                        .frame(minHeight: 260, alignment: .topLeading)
+                }
+            } header: {
+                Text("Markdown 内容")
+            }
+
+            Section {
+                ForEach(allowedGroups, id: \.rawValue) { group in
+                    Toggle(groupTitle(group), isOn: groupBinding(group))
+                }
+            } header: {
+                Text("工具权限")
+            } footer: {
+                Text("只会暴露选中的最小工具组；权限边界由 App 固定。")
+            }
+
+            Section {
+                Toggle("显示在输入框快捷栏", isOn: $showInQuickBar)
+            } footer: {
+                Text("快捷栏最多 6 项；加入时会替换当前最后一项。")
+            }
+        }
+        .navigationTitle("自定义 Skill")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("保存", action: save)
+                    .disabled(!isValid)
+            }
+        }
+    }
+
+    private var allowedGroups: [AgentToolGroup] {
+        AgentToolGroup.allCases.filter {
+            AgentSkillRegistry.allowedCustomToolGroups.contains($0)
+        }
+    }
+
+    private var isValid: Bool {
+        [name, description, whenToUse, content].allSatisfy {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private func groupBinding(_ group: AgentToolGroup) -> Binding<Bool> {
+        Binding(
+            get: { selectedGroups.contains(group) },
+            set: { selected in
+                if selected {
+                    selectedGroups.insert(group)
+                } else {
+                    selectedGroups.remove(group)
+                }
+            }
+        )
+    }
+
+    private func groupTitle(_ group: AgentToolGroup) -> String {
+        switch group {
+        case .exercises: "动作库"
+        case .workouts: "训练记录"
+        case .meals: "饮食记录"
+        case .body: "体重与体态"
+        case .plans: "训练计划与带练"
+        case .gym: "健身房"
+        case .review: "动作复盘"
+        case .core, .records, .feedback: group.rawValue
+        }
+    }
+
+    private func save() {
+        AgentSkillRegistry.save(AgentCustomSkill(
+            id: originalID,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            whenToUse: whenToUse.trimmingCharacters(in: .whitespacesAndNewlines),
+            content: content.trimmingCharacters(in: .whitespacesAndNewlines),
+            toolGroupIDs: selectedGroups.map(\.rawValue).sorted()
+        ))
+        var quick = AgentSkillRegistry.quickSkillIDs().filter { $0 != originalID }
+        if showInQuickBar {
+            if quick.count >= 6 {
+                quick.removeLast()
+            }
+            quick.append(originalID)
+        }
+        AgentSkillRegistry.setQuickSkillIDs(quick)
+        dismiss()
     }
 }
 

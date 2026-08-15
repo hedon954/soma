@@ -9,12 +9,16 @@ enum AgentContextPackBuilder {
         gyms: [GymProfile],
         equipment: [GymEquipment],
         in context: ModelContext,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        businessDate: Date = .now,
+        timeZone: TimeZone = .current
     ) -> String {
-        let calendar = Calendar.current
-        let now = Date()
-        let day7 = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-        let day28 = calendar.date(byAdding: .day, value: -28, to: now) ?? now
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let day7 = calendar.date(byAdding: .day, value: -7, to: businessDate)
+            ?? businessDate
+        let day28 = calendar.date(byAdding: .day, value: -28, to: businessDate)
+            ?? businessDate
 
         let workouts = fetchRecent(
             WorkoutEntry.self,
@@ -53,6 +57,17 @@ enum AgentContextPackBuilder {
         var sections: [String] = []
         sections.append(profileLine(profiles.first))
         sections.append(gymLine(gyms: gyms, equipment: equipment))
+        sections.append(dayWorkoutLine(
+            workouts: workouts,
+            businessDate: businessDate,
+            calendar: calendar,
+            in: context
+        ))
+        sections.append(dayMealLine(
+            meals: meals,
+            businessDate: businessDate,
+            calendar: calendar
+        ))
         sections.append(trainingFrequencyLine(workouts: workouts, since: day7, label: "近7天"))
         sections.append(trainingFrequencyLine(workouts: workouts, since: day28, label: "近28天"))
         if let muscle = muscleDistribution(workouts: workouts, since: day28, in: context) {
@@ -67,7 +82,6 @@ enum AgentContextPackBuilder {
         if let guided = activeGuidedLine(sessions: sessions) {
             sections.append(guided)
         }
-        sections.append(nutritionLine(meals: meals, calendar: calendar))
         if let weight = weightTrendLine(bodies: bodies) {
             sections.append(weight)
         }
@@ -86,7 +100,7 @@ enum AgentContextPackBuilder {
     }
 
     private static func profileLine(_ profile: UserProfile?) -> String {
-        guard let profile else { return "身体信息：未填写" }
+        guard let profile else { return "" }
         var parts: [String] = []
         if !profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append(profile.displayName)
@@ -100,16 +114,17 @@ enum AgentContextPackBuilder {
         if !profile.healthNotes.isEmpty {
             parts.append("限制 \(profile.healthNotes)")
         }
-        return "身体信息：\(parts.isEmpty ? "已建立档案" : parts.joined(separator: "；"))"
+        guard !parts.isEmpty else { return "" }
+        return "身体信息：\(parts.joined(separator: "；"))"
     }
 
     private static func gymLine(gyms: [GymProfile], equipment: [GymEquipment]) -> String {
-        let current = GymSelection.current(in: gyms)
+        guard let current = GymSelection.current(in: gyms) else { return "" }
         let gear = equipment
-            .filter { $0.gymID == current?.id }
+            .filter { $0.gymID == current.id }
             .map(\.name)
-        let gearText = gear.isEmpty ? "无" : gear.prefix(8).joined(separator: "、")
-        return "健身房：\(current?.name ?? "无")；器械：\(gearText)"
+        let gearText = gear.isEmpty ? "" : "；器械：\(gear.prefix(8).joined(separator: "、"))"
+        return "当前健身房：\(current.name)\(gearText)"
     }
 
     private static func trainingFrequencyLine(
@@ -122,7 +137,53 @@ enum AgentContextPackBuilder {
                 .filter { $0.date >= since && $0.externalSource == nil }
                 .map { Calendar.current.startOfDay(for: $0.date) }
         )
-        return "\(label)训练：\(days.count) 天"
+        return days.isEmpty ? "" : "\(label)训练：\(days.count) 天"
+    }
+
+    private static func dayWorkoutLine(
+        workouts: [WorkoutEntry],
+        businessDate: Date,
+        calendar: Calendar,
+        in context: ModelContext
+    ) -> String {
+        let values = workouts.filter {
+            calendar.isDate($0.date, inSameDayAs: businessDate)
+        }
+        guard !values.isEmpty else { return "" }
+        let definitions = (
+            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
+        ) ?? []
+        let exerciseBusinessIDs = Dictionary(
+            uniqueKeysWithValues: definitions.compactMap { definition in
+                definition.businessID.map { (definition.id, $0) }
+            }
+        )
+        let rows = values.prefix(12).map { workout in
+            let detail = workout.setEvidenceSummary
+                ?? workout.durationMinutes.map { "\($0)分钟" }
+                ?? "仅动作"
+            let exerciseID = workout.exerciseID
+                .flatMap { exerciseBusinessIDs[$0] }
+                .map(String.init) ?? "待确认"
+            return "\(workout.exercise)（\(detail)，exercise_id: \(exerciseID)）"
+        }
+        return "Session 业务日训练：\(rows.joined(separator: "；"))"
+    }
+
+    private static func dayMealLine(
+        meals: [MealEntry],
+        businessDate: Date,
+        calendar: Calendar
+    ) -> String {
+        let values = meals.filter {
+            calendar.isDate($0.date, inSameDayAs: businessDate)
+        }
+        guard !values.isEmpty else { return "" }
+        let rows = values.prefix(12).map { meal in
+            let calories = meal.calories.map { "，\($0)kcal" } ?? ""
+            return "\(meal.mealType) \(meal.title)\(calories)"
+        }
+        return "Session 业务日饮食：\(rows.joined(separator: "；"))"
     }
 
     private static func muscleDistribution(
@@ -200,15 +261,6 @@ enum AgentContextPackBuilder {
         }
         let name = active.programNameSnapshot ?? "未命名计划"
         return "进行中带练：\(name) [session_id:\(active.id.uuidString)]"
-    }
-
-    private static func nutritionLine(meals: [MealEntry], calendar: Calendar) -> String {
-        let today = meals.filter { calendar.isDateInToday($0.date) }
-        let known = today.compactMap(\.calories)
-        guard known.count == today.count else {
-            return "今日饮食：存在未估算营养的记录"
-        }
-        return "今日饮食：\(known.reduce(0, +))kcal"
     }
 
     private static func weightTrendLine(bodies: [BodyEntry]) -> String? {

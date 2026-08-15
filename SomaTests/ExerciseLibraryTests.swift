@@ -217,8 +217,8 @@ final class ExerciseLibraryTests: XCTestCase {
         )
 
         XCTAssertTrue(result.ok)
-        XCTAssertTrue(result.observation.contains(squat.id.uuidString))
-        XCTAssertTrue(result.observation.contains(press.id.uuidString))
+        XCTAssertTrue(try result.observation.contains(String(XCTUnwrap(squat.businessID))))
+        XCTAssertTrue(try result.observation.contains(String(XCTUnwrap(press.businessID))))
         XCTAssertTrue(result.observation.contains("杠铃深蹲"))
         XCTAssertTrue(result.observation.contains("单侧哑铃卧推"))
     }
@@ -233,11 +233,11 @@ final class ExerciseLibraryTests: XCTestCase {
             in: context
         )
 
-        let existingResult = ConversationRecorder.executeAgentTool(
+        let existingResult = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .recordWorkout,
                 arguments: AgentToolArguments(
-                    exerciseID: squat.id.uuidString,
+                    exerciseID: XCTUnwrap(squat.businessID),
                     setEntries: [
                         AgentWorkoutSetInput(
                             reps: 5,
@@ -287,13 +287,13 @@ final class ExerciseLibraryTests: XCTestCase {
         let (spaces, defaults) = try makeSpaces()
         defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
         let context = ModelContext(spaces.personalContainer)
-        let missingID = UUID()
+        let missingID: Int64 = 9_999_999
 
         let result = ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .recordWorkout,
                 arguments: AgentToolArguments(
-                    exerciseID: missingID.uuidString
+                    exerciseID: missingID
                 )
             ),
             sourceText: "训练",

@@ -221,12 +221,12 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertEqual(summary.completedVolume, 160)
         XCTAssertEqual(summary.exerciseCount, 1)
 
-        let query = ConversationRecorder.executeAgentTool(
+        let query = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .queryUserData,
                 arguments: AgentToolArguments(
                     scope: "sessions",
-                    sessionID: session.id.uuidString
+                    sessionID: XCTUnwrap(session.businessID)
                 )
             ),
             sourceText: "",
@@ -239,7 +239,7 @@ final class TrainingPlanTests: XCTestCase {
         let queryJSON = try XCTUnwrap(
             String(data: JSONEncoder().encode(queryData), encoding: .utf8)
         )
-        XCTAssertTrue(queryJSON.contains(session.id.uuidString))
+        XCTAssertTrue(try queryJSON.contains(String(XCTUnwrap(session.businessID))))
         XCTAssertTrue(queryJSON.contains("杯式深蹲：2组"))
         XCTAssertTrue(queryJSON.contains("20kg×8次"))
     }
@@ -370,8 +370,8 @@ final class TrainingPlanTests: XCTestCase {
             canonicalName: "站姿推举",
             in: context
         )
-        let item = AgentTemplateExerciseInput(
-            exerciseID: exercise.id.uuidString,
+        let item = try AgentTemplateExerciseInput(
+            exerciseID: XCTUnwrap(exercise.businessID),
             order: 1,
             targetSets: 3,
             targetReps: 6,
@@ -397,11 +397,11 @@ final class TrainingPlanTests: XCTestCase {
         let program = try XCTUnwrap(
             try context.fetch(FetchDescriptor<TrainingProgram>()).first
         )
-        let update = ConversationRecorder.executeAgentTool(
+        let update = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .updateWorkoutTemplate,
                 arguments: AgentToolArguments(
-                    programID: program.id.uuidString,
+                    programID: XCTUnwrap(program.businessID),
                     templateName: "推举日调整",
                     templateExercises: [item]
                 )
@@ -421,11 +421,11 @@ final class TrainingPlanTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        let archive = ConversationRecorder.executeAgentTool(
+        let archive = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .archiveTrainingProgram,
                 arguments: AgentToolArguments(
-                    programID: program.id.uuidString
+                    programID: XCTUnwrap(program.businessID)
                 )
             ),
             sourceText: "归档这个计划",
@@ -440,7 +440,7 @@ final class TrainingPlanTests: XCTestCase {
         let queryJSON = try XCTUnwrap(
             String(data: JSONEncoder().encode(queryData), encoding: .utf8)
         )
-        XCTAssertTrue(queryJSON.contains(program.id.uuidString))
+        XCTAssertTrue(try queryJSON.contains(String(XCTUnwrap(program.businessID))))
         XCTAssertTrue(archive.ok)
         XCTAssertEqual(program.status, .archived)
         XCTAssertEqual(
@@ -479,16 +479,16 @@ final class TrainingPlanTests: XCTestCase {
             in: context
         )
         XCTAssertTrue(listed.ok)
-        XCTAssertTrue(listed.observation.contains(program.id.uuidString))
+        XCTAssertTrue(try listed.observation.contains(String(XCTUnwrap(program.businessID))))
 
         if let route = SomaCaptureRouter.shared.pendingWorkoutSession {
             SomaCaptureRouter.shared.clearWorkoutSession(route.id)
         }
-        let started = ConversationRecorder.executeAgentTool(
+        let started = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .startGuidedWorkout,
                 arguments: .init(
-                    programID: program.id.uuidString,
+                    programID: XCTUnwrap(program.businessID),
                     autoRecordingPolicy: "every_set"
                 )
             ),
@@ -507,10 +507,10 @@ final class TrainingPlanTests: XCTestCase {
             SomaCaptureRouter.shared.clearWorkoutSession(route.id)
         }
 
-        let detail = ConversationRecorder.executeAgentTool(
+        let detail = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .getTrainingProgram,
-                arguments: .init(programID: program.id.uuidString)
+                arguments: .init(programID: XCTUnwrap(program.businessID))
             ),
             sourceText: "查看这个计划详情",
             mediaKind: .none,
@@ -520,10 +520,10 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertTrue(detail.ok)
         XCTAssertTrue(detail.observation.contains("杠铃深蹲"))
 
-        let deleted = ConversationRecorder.executeAgentTool(
+        let deleted = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
                 name: .deleteTrainingProgram,
-                arguments: .init(programID: program.id.uuidString)
+                arguments: .init(programID: XCTUnwrap(program.businessID))
             ),
             sourceText: "永久删除这个计划",
             mediaKind: .none,
@@ -584,12 +584,14 @@ final class TrainingPlanTests: XCTestCase {
         context.insert(session)
         context.insert(performance)
         context.insert(job)
+        performance.exerciseDefinition = exercise
+        try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
         let fingerprint = try TrainingIntelligenceService
             .performanceFingerprint(for: performance)
-        let arguments = AgentToolArguments(
+        let arguments = try AgentToolArguments(
             feedback: "保持肩胛稳定",
-            performanceID: performance.id.uuidString,
+            performanceID: XCTUnwrap(performance.businessID),
             inputFingerprint: fingerprint,
             evidence: "下降阶段躯干保持稳定",
             limitations: "只有正面视角"

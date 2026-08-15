@@ -350,13 +350,22 @@ function executeRuntimeTool(
   if (name === "expand_tool_group") {
     const group = argumentsValue.tool_group;
     const groups: Record<string, string[]> = {
-      records: ["mutate_user_data"],
+      exercises: [
+        "search_exercises", "create_exercise", "update_exercise",
+        "archive_exercise", "merge_exercises",
+      ],
+      workouts: [
+        "list_workouts", "get_workout", "create_workout",
+        "update_workout", "delete_workout",
+      ],
+      meals: ["list_meals", "get_meal", "create_meal", "update_meal", "delete_meal"],
+      body: [
+        "list_body_entries", "get_body_entry", "create_body_entry",
+        "update_body", "delete_body_entry",
+      ],
       plans: [
-        "create_training_program",
-        "create_workout_template_version",
-        "archive_training_program",
-        "delete_training_program",
-        "start_guided_workout",
+        "list_programs", "get_program", "create_program",
+        "create_program_version", "archive_program", "delete_program", "start_program",
       ],
       gym: ["update_gym", "switch_gym"],
       review: ["record_performance_analysis"],
@@ -367,7 +376,7 @@ function executeRuntimeTool(
       return {
         ok: false,
         code: "invalid_request",
-        message: "tool_group 仅支持 records、plans、gym、review、feedback。",
+        message: "tool_group 不在 App 允许展开的白名单中。",
       };
     }
     if (names.every((tool) => activeTools.has(tool))) {

@@ -156,8 +156,9 @@ final class ExternalSyncCursor {
 }
 
 @Model
-final class UserProfile {
+final class UserProfile: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var updatedAt: Date
     var displayName: String
     var biologicalSexRaw: String
@@ -204,8 +205,9 @@ final class UserProfile {
 }
 
 @Model
-final class GymProfile {
+final class GymProfile: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var name: String
     var createdAt: Date
     var notes: String
@@ -286,8 +288,9 @@ enum StructuredDataStore {
 }
 
 @Model
-final class GymEquipment {
+final class GymEquipment: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var gymID: UUID
     var name: String
     var category: String
@@ -331,8 +334,9 @@ final class GymMedia {
 }
 
 @Model
-final class MealEntry {
+final class MealEntry: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var date: Date
     var mealTypeRaw: String
     var title: String
@@ -429,8 +433,9 @@ final class MealEntry {
 }
 
 @Model
-final class BodyEntry {
+final class BodyEntry: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var date: Date
     var weight: Double?
     var bodyFat: Double?
@@ -489,11 +494,13 @@ final class BodyEntry {
 }
 
 @Model
-final class WorkoutEntry {
+final class WorkoutEntry: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var date: Date
     var exercise: String
     var exerciseID: UUID?
+    @Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?
     var sets: Int?
     var reps: Int?
     var weight: Double?

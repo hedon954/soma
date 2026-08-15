@@ -9,6 +9,7 @@ enum AgentTurnContextBuilder {
         hasCurrentMedia: Bool,
         turnSentAt: Date,
         businessSummary: String,
+        effectiveBusinessDate: Date? = nil,
         sessionID: UUID,
         in context: ModelContext,
         timeZone: TimeZone = .current,
@@ -21,6 +22,15 @@ enum AgentTurnContextBuilder {
                 )
             )
         ) ?? []
+        let session = ((try? context.fetch(FetchDescriptor<ConversationSession>())) ?? [])
+            .first { $0.id == sessionID }
+        let effectiveTimeZone = session?.businessTimeZone ?? timeZone
+        let turnBusinessDate = effectiveBusinessDate ?? BusinessDateResolver.turnBusinessDate(
+            in: userText,
+            sessionBusinessDate: session?.effectiveBusinessDate ?? turnSentAt,
+            turnSentAt: turnSentAt,
+            timeZone: effectiveTimeZone
+        )
         let projection = ConversationContextProjection.make(
             messages: messages,
             sessionID: sessionID,
@@ -35,7 +45,8 @@ enum AgentTurnContextBuilder {
             trustedTime: TrustedTurnContext.make(
                 turnSentAt: turnSentAt,
                 attemptStartedAt: turnSentAt,
-                timeZone: timeZone,
+                businessDate: turnBusinessDate,
+                timeZone: effectiveTimeZone,
                 calendar: calendar
             ),
             businessSummary: businessSummary,

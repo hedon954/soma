@@ -113,8 +113,9 @@ enum TrainingPlanCoding {
 }
 
 @Model
-final class TrainingProgram {
+final class TrainingProgram: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var name: String
     var goal: String
     var statusRaw: String
@@ -150,8 +151,9 @@ final class TrainingProgram {
 }
 
 @Model
-final class WorkoutTemplateVersion {
+final class WorkoutTemplateVersion: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var programID: UUID
     var familyID: UUID
     var version: Int
@@ -188,10 +190,12 @@ final class WorkoutTemplateVersion {
 }
 
 @Model
-final class TemplateExercise {
+final class TemplateExercise: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var templateVersionID: UUID
     var exerciseID: UUID
+    @Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?
     var order: Int
     var targetSets: Int?
     var targetReps: Int?
@@ -229,8 +233,9 @@ final class TemplateExercise {
 }
 
 @Model
-final class WorkoutSession {
+final class WorkoutSession: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var startedAt: Date
     var endedAt: Date?
     var gymID: UUID?
@@ -318,10 +323,12 @@ final class WorkoutSession {
 }
 
 @Model
-final class ExercisePerformance {
+final class ExercisePerformance: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var sessionID: UUID
     var exerciseID: UUID
+    @Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?
     var exerciseName: String
     var order: Int
     var prescriptionSnapshotData: Data
@@ -370,8 +377,9 @@ final class ExercisePerformance {
 }
 
 @Model
-final class WorkoutSet {
+final class WorkoutSet: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var performanceID: UUID
     var order: Int
     var kindRaw: String
@@ -445,8 +453,9 @@ final class WorkoutSet {
 }
 
 @Model
-final class RecommendationSnapshot {
+final class RecommendationSnapshot: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var targetKind: String
     var targetID: UUID
     var inputFingerprint: String
@@ -474,8 +483,9 @@ final class RecommendationSnapshot {
 }
 
 @Model
-final class PerformanceAnalysis {
+final class PerformanceAnalysis: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var performanceID: UUID
     var sourceMediaPath: String
     var inputFingerprint: String

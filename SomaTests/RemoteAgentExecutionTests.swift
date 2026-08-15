@@ -31,7 +31,7 @@ struct RemoteAgentExecutionTests {
     @Test
     func suspendedToolEventDecodesFixedRequest() throws {
         let arguments: [String: RemoteJSONValue] = [
-            "exercise_id": .string(UUID().uuidString),
+            "exercise_id": .number(42),
             "set_entries": .array([
                 .object([
                     "reps": .number(5),
@@ -143,11 +143,7 @@ struct RemoteAgentExecutionTests {
         #expect(server.registrationSignatureWasValid)
         #expect(server.jobSignatureWasValid)
         #expect(server.idempotencyKey == clientJobID.uuidString.lowercased())
-        #expect(Set(server.submittedDeviceTools) == Set(
-            AgentToolName.allCases
-                .filter { ![.loadSkill, .expandToolGroup].contains($0) }
-                .map(\.rawValue)
-        ))
+        #expect(Set(server.submittedDeviceTools) == ["query_user_data"])
         #expect(Set(server.submittedDeviceToolSchemas.keys) == Set(server.submittedDeviceTools))
         #expect(Set(server.submittedRemoteTools) == Set([
             "load_skill",

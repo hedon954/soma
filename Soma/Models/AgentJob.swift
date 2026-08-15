@@ -192,6 +192,15 @@ final class AgentJob {
     var firstStepDeadlineConsumed: Bool = false
     var executionKindRaw: String = AgentJobExecutionKind.react.rawValue
     var deterministicPayloadData: Data = Data()
+    /// 原始用户 Turn 的发送时间；排队与重试不得刷新。
+    var turnSentAt: Date?
+    /// 当前 Turn 最终解析出的业务日，只对该 Turn 生效。
+    var effectiveBusinessDate: Date?
+    var businessTimeZoneIdentifier: String?
+    /// 省略 occurred_at 时复用的稳定记录发生时间。
+    var defaultOccurredAt: Date?
+    /// 用户在输入框中单选的 Skill；用于首轮直载和恢复，提交后不随设置变化。
+    var selectedSkillID: String?
 
     init(
         id: UUID = UUID(),
@@ -204,6 +213,10 @@ final class AgentJob {
         userText: String,
         mediaAttachments: [MediaAttachmentReference],
         contextSnapshot: AgentJobContextSnapshot,
+        turnSentAt: Date? = nil,
+        effectiveBusinessDate: Date? = nil,
+        businessTimeZone: TimeZone = .current,
+        selectedSkillID: String? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -218,6 +231,22 @@ final class AgentJob {
         mediaAttachmentsData = AgentJobCoding.encode(mediaAttachments)
         contextSnapshotData = AgentJobCoding.encode(contextSnapshot)
         self.createdAt = createdAt
+        let stableTurnSentAt = turnSentAt
+            ?? contextSnapshot.envelope?.trustedTime.turnSentAt
+            ?? createdAt
+        self.turnSentAt = stableTurnSentAt
+        let stableBusinessDate = effectiveBusinessDate ?? stableTurnSentAt
+        self.effectiveBusinessDate = BusinessDateResolver.startOfDay(
+            stableBusinessDate,
+            in: businessTimeZone
+        )
+        businessTimeZoneIdentifier = businessTimeZone.identifier
+        defaultOccurredAt = BusinessDateResolver.defaultOccurredAt(
+            turnSentAt: stableTurnSentAt,
+            businessDate: stableBusinessDate,
+            timeZone: businessTimeZone
+        )
+        self.selectedSkillID = selectedSkillID
         updatedAt = createdAt
         activeAttemptNumber = 0
         submissionAttemptCount = 0
@@ -308,6 +337,11 @@ final class AgentJob {
     /// 同一 ReAct Loop 的所有业务写入复用第一次执行时间；显示时再按用户时区格式化。
     var frozenExecutionDate: Date {
         loopStartedAt ?? createdAt
+    }
+
+    /// 记录 Tool 的默认发生时间与 Loop 领取时间解耦。
+    var stableDefaultOccurredAt: Date {
+        defaultOccurredAt ?? turnSentAt ?? createdAt
     }
 
     func freezeLoopStartIfNeeded(at date: Date) {

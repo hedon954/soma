@@ -2,51 +2,6 @@ import Foundation
 import Observation
 import SwiftData
 
-struct PreparedConversationMedia {
-    var attachments: [MediaAttachmentReference]
-    var frames: [Data]
-    var videos: [AgentVideoInput] = []
-    var imageCount: Int
-    var videoCount: Int
-    var failedVideoCount: Int = 0
-    var mode: AgentMediaMode = .text
-    var preparationMilliseconds: Int = 0
-
-    var hasVideo: Bool {
-        videoCount > 0
-    }
-
-    var primaryKind: MediaKind {
-        attachments.first?.kind ?? .none
-    }
-
-    var primaryPath: String? {
-        attachments.first?.path
-    }
-
-    var displaySummary: String {
-        let parts = [
-            imageCount > 0 ? "\(imageCount) 张图片" : nil,
-            videoCount > 0 ? "\(videoCount) 个视频" : nil
-        ].compactMap { $0 }
-        return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
-    }
-}
-
-private enum ConversationMediaPreparationError: LocalizedError {
-    case attachmentPersistenceFailed
-    case videoFramesUnavailable
-
-    var errorDescription: String? {
-        switch self {
-        case .attachmentPersistenceFailed:
-            "附件未能完整保存到本机，请检查存储空间后重试"
-        case .videoFramesUnavailable:
-            "视频已保存在本机，但未能提取任何可供模型分析的画面，请换一个可播放的视频后重试"
-        }
-    }
-}
-
 struct ConversationProcessingContext {
     var structuredContext: String
     var session: ConversationSession
@@ -97,6 +52,7 @@ final class ConversationProcessingService {
         context: ConversationProcessingContext,
         includeLocation: Bool,
         locationService: LocationContextService,
+        selectedSkillID: String? = nil,
         forceLocal: Bool = false
     ) -> Bool {
         // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
@@ -113,12 +69,14 @@ final class ConversationProcessingService {
             : text
         let submittedAt = Date.now
         let turnID = UUID()
+        let businessDate = context.businessDate(for: text, turnSentAt: submittedAt)
         let contextEnvelope = AgentTurnContextBuilder.build(
             turnID: turnID,
             userText: text,
             hasCurrentMedia: !persistedAttachments.isEmpty,
             turnSentAt: submittedAt,
-            businessSummary: context.structuredContext,
+            businessSummary: context.structuredContext(for: businessDate),
+            effectiveBusinessDate: businessDate,
             sessionID: context.session.id,
             in: context.modelContext
         )
@@ -146,6 +104,10 @@ final class ConversationProcessingService {
                 createdAt: submittedAt,
                 envelope: contextEnvelope
             ),
+            turnSentAt: submittedAt,
+            effectiveBusinessDate: businessDate,
+            businessTimeZone: context.session.businessTimeZone,
+            selectedSkillID: selectedSkillID,
             createdAt: submittedAt
         )
 
@@ -463,6 +425,26 @@ final class ConversationProcessingService {
                     context: context,
                     client: client
                 )
+                if let summary = prepared.compactionSummary {
+                    projectRemoteSpan(
+                        AgentTraceSpan(
+                            kind: .output,
+                            title: "已压缩更早对话",
+                            status: .succeeded,
+                            startedAt: submissionStartedAt,
+                            endedAt: .now,
+                            output: summary,
+                            metadata: AgentTraceText.jsonObject([
+                                "strategy": prepared.compactionStrategy?.rawValue
+                                    ?? "unknown"
+                            ])
+                        ),
+                        job: job,
+                        responseMessage: responseMessage,
+                        trace: trace,
+                        context: context
+                    )
+                }
                 let submitted = try await client.submit(job: AgentJobSubmission(
                     clientJobID: remoteClientJobID(for: job),
                     turnID: turnID,
@@ -729,7 +711,7 @@ final class ConversationProcessingService {
                 call,
                 turnID: job.turnID,
                 userMessage: userMessage,
-                sourceDate: job.frozenExecutionDate,
+                sourceDate: job.stableDefaultOccurredAt,
                 mediaAttachments: job.mediaAttachments,
                 preferredGymID: currentGymID,
                 context: context
@@ -991,6 +973,12 @@ private extension ConversationProcessingService {
         let projection = prepared.projection
         let history = prepared.history
         let historicalFrameCount = history.reduce(0) { $0 + $1.images.count }
+        let compaction = await ConversationCompactionMiddleware.prepare(
+            sessionID: job.sessionID,
+            excludingTurnID: turnID,
+            ai: context.ai,
+            in: context.modelContext
+        )
         let persistentContext = composePersistentContext(
             job: job,
             userMessage: userMessage,
@@ -1007,7 +995,8 @@ private extension ConversationProcessingService {
         } else {
             nil
         }
-        let agentContext = [persistentContext, weatherGuidance]
+        let compactionContext = compaction.summary.map { "更早对话的可审查滚动摘要：\n\($0)" }
+        let agentContext = [persistentContext, compactionContext, weatherGuidance]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
@@ -1098,6 +1087,12 @@ private extension ConversationProcessingService {
             trace.apply(.span(mediaSpan))
             trace.apply(.span(contextSpan))
             responseMessage.applyAgentEvent(.span(mediaSpan))
+            ConversationCompactionProjection.apply(
+                compaction,
+                at: traceNow,
+                trace: trace,
+                responseMessage: responseMessage
+            )
             responseMessage.applyAgentEvent(.span(contextSpan))
             if media.hasVideo {
                 let modeItemID = UUID()
@@ -1159,6 +1154,7 @@ private extension ConversationProcessingService {
                     context: agentContext,
                     route: route,
                     toolSignals: toolSignals,
+                    selectedSkillID: job.selectedSkillID,
                     checkpoint: resumeCheckpoint,
                     firstStepDeadlineEnabled: firstStepDeadlineEnabled,
                     onCheckpoint: { checkpoint in
@@ -1201,7 +1197,7 @@ private extension ConversationProcessingService {
                         call,
                         turnID: turnID,
                         userMessage: userMessage,
-                        sourceDate: job.frozenExecutionDate,
+                        sourceDate: job.stableDefaultOccurredAt,
                         mediaAttachments: attributedMedia,
                         preferredGymID: resolution.gymID,
                         context: context
@@ -1888,11 +1884,5 @@ extension ConversationProcessingService {
         case .completed, .failed:
             liveAgentActivity = nil
         }
-    }
-}
-
-enum ConversationResumeProjection {
-    static func completedItems(from items: [AgentTurnItem]) -> [AgentTurnItem] {
-        items.filter { $0.status == .succeeded && $0.kind != .error }
     }
 }

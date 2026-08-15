@@ -4,7 +4,9 @@
 - 日期：2026-08-05
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0024](0024-session-context-projection-and-compaction.md) 中「更早对话当前不生成滚动摘要」「structuredContext 仅两行摘要」相关结论
-- 后续替代：[ADR 0056](0056-trusted-selective-multimodal-context.md) 用可信时间、token 预算和短事实引用收敛上下文
+- 后续替代：
+  - [ADR 0056](0056-trusted-selective-multimodal-context.md) 用可信时间、token 预算和短事实引用收敛上下文
+  - [ADR 0070](0070-reviewable-rolling-session-compaction.md) 用可审查的滚动摘要替代十轮外确定性意图 digest
 - 上游依据：[PRD 022](../prd/022-react-reliability-and-context-awareness.md)
 
 ## 背景

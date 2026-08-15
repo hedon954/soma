@@ -18,7 +18,7 @@ extension ConversationRecorder {
         }
         let filteredPrograms: [TrainingProgram] = if let programID = arguments.programID {
             sortedPrograms.filter {
-                $0.id.uuidString == programID
+                $0.businessID == programID
             }
         } else {
             sortedPrograms
@@ -30,7 +30,7 @@ extension ConversationRecorder {
             let goal = optionalText(program.goal)
                 .map(AgentJSONValue.string) ?? .null
             var value: [String: AgentJSONValue] = [
-                "program_id": .string(program.id.uuidString),
+                "program_id": businessIDValue(program.businessID),
                 "name": .string(program.name),
                 "goal": goal,
                 "status": .string(program.status.rawValue)
@@ -48,7 +48,9 @@ extension ConversationRecorder {
                     .map(AgentJSONValue.string) ?? .null
                 let exercises: [AgentJSONValue] = prescriptions.map { item in
                     .object([
-                        "exercise_id": .string(item.exerciseID.uuidString),
+                        "exercise_id": businessIDValue(
+                            exerciseBusinessID(item.exerciseID, in: context)
+                        ),
                         "name": .string(item.exerciseName),
                         "order": .number(Double(item.order)),
                         "target_sets": item.targetSets
@@ -62,7 +64,7 @@ extension ConversationRecorder {
                     ])
                 }
                 value["current_template"] = .object([
-                    "record_id": .string(version.id.uuidString),
+                    "record_id": businessIDValue(version.businessID),
                     "name": .string(version.name),
                     "version": .number(Double(version.version)),
                     "schedule_hint": scheduleHint,
@@ -87,17 +89,22 @@ extension ConversationRecorder {
         let versions = (
             try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
         ) ?? []
-        let filtered: [WorkoutTemplateVersion] = if let rawID = arguments.programID,
-                                                    let programID = UUID(uuidString: rawID)
+        let programs = (
+            try? context.fetch(FetchDescriptor<TrainingProgram>())
+        ) ?? []
+        let filtered: [WorkoutTemplateVersion] = if let businessID = arguments.programID,
+                                                    let program = programs.first(where: {
+                                                        $0.businessID == businessID
+                                                    })
         {
-            versions.filter { $0.programID == programID }
+            versions.filter { $0.programID == program.id }
         } else {
             versions
         }
         let values = filtered
             .filter {
                 arguments.recordID == nil
-                    || $0.id.uuidString == arguments.recordID
+                    || $0.businessID == arguments.recordID
             }
             .sorted { lhs, rhs in
                 lhs.createdAt == rhs.createdAt
@@ -106,8 +113,10 @@ extension ConversationRecorder {
             }
             .map { version in
                 var value = [
-                    "record_id": .string(version.id.uuidString),
-                    "program_id": .string(version.programID.uuidString),
+                    "record_id": businessIDValue(version.businessID),
+                    "program_id": businessIDValue(
+                        programs.first(where: { $0.id == version.programID })?.businessID
+                    ),
                     "name": .string(version.name),
                     "version": .number(Double(version.version))
                 ] as [String: AgentJSONValue]
@@ -120,7 +129,9 @@ extension ConversationRecorder {
                     )
                     let exercises: [AgentJSONValue] = prescriptions.map { item in
                         .object([
-                            "exercise_id": .string(item.exerciseID.uuidString),
+                            "exercise_id": businessIDValue(
+                                exerciseBusinessID(item.exerciseID, in: context)
+                            ),
                             "name": .string(item.exerciseName),
                             "order": .number(Double(item.order))
                         ])
@@ -146,12 +157,8 @@ extension ConversationRecorder {
         let sessions = (
             try? context.fetch(FetchDescriptor<WorkoutSession>())
         ) ?? []
-        let filtered: [WorkoutSession] = if let rawID = arguments.sessionID,
-                                            let sessionID = UUID(
-                                                uuidString: rawID
-                                            )
-        {
-            sessions.filter { $0.id == sessionID }
+        let filtered: [WorkoutSession] = if let sessionID = arguments.sessionID {
+            sessions.filter { $0.businessID == sessionID }
         } else {
             sessions
         }
@@ -178,7 +185,7 @@ extension ConversationRecorder {
                 sets: sets
             )
             return [
-                "session_id": .string(session.id.uuidString),
+                "session_id": businessIDValue(session.businessID),
                 "date": .string(session.startedAt.ISO8601Format()),
                 "status": .string(session.status.rawValue),
                 "summary": .string(summary.text),
@@ -227,5 +234,19 @@ extension ConversationRecorder {
     private static func optionalText(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func exerciseBusinessID(
+        _ internalID: UUID,
+        in context: ModelContext
+    ) -> Int64? {
+        let definitions = (
+            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
+        ) ?? []
+        return definitions.first(where: { $0.id == internalID })?.businessID
+    }
+
+    private static func businessIDValue(_ id: Int64?) -> AgentJSONValue {
+        id.map { .number(Double($0)) } ?? .null
     }
 }

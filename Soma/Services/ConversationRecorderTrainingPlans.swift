@@ -9,7 +9,7 @@ extension ConversationRecorder {
         let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? []
         let values = programs.map { program in
             let template = versions.first { $0.id == program.currentTemplateVersionID }
-            return "[id:\(program.id.uuidString)] \(program.name)"
+            return "[id:\(program.businessID ?? 0)] \(program.name)"
                 + "；目标：\(program.goal.isEmpty ? "未记录" : program.goal)"
                 + "；当前模板：\(template?.name ?? "未找到")"
         }
@@ -20,13 +20,12 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let rawID = arguments.programID,
-              let programID = UUID(uuidString: rawID)
+        guard let programID = arguments.programID, programID > 0
         else {
             return .failure("get_training_program 需要有效的 program_id。")
         }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard let program = programs.first(where: { $0.id == programID }),
+        guard let program = programs.first(where: { $0.businessID == programID }),
               let versionID = program.currentTemplateVersionID,
               let version = ((try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? [])
               .first(where: { $0.id == versionID })
@@ -38,7 +37,7 @@ extension ConversationRecorder {
             "\(prescription.order). \(prescription.exerciseName)：\(prescription.targetSets.map(String.init) ?? "未记录")组 × \(prescription.targetReps.map(String.init) ?? "未记录")次"
         }
         let goal = program.goal.isEmpty ? "未记录" : program.goal
-        let header = "[id:\(program.id.uuidString)] \(program.name)；目标：\(goal)；模板：\(version.name) v\(version.version)"
+        let header = "[id:\(program.businessID ?? 0)] \(program.name)；目标：\(goal)；模板：\(version.name) v\(version.version)"
         return .success(
             "\(header)\n\(exercises.joined(separator: "\n"))"
         )
@@ -72,7 +71,7 @@ extension ConversationRecorder {
                 let current = TrainingPlanStore.prescriptions(for: version, in: context)
                 if TrainingPlanStore.contentFingerprint(current) == contentKey {
                     return .success(
-                        "已有内容相同的训练计划 [id:\(existing.id.uuidString)]：\(existing.name)。"
+                        "已有内容相同的训练计划 [id:\(existing.businessID ?? 0)]：\(existing.name)。"
                     )
                 }
             }
@@ -86,7 +85,7 @@ extension ConversationRecorder {
                 in: context
             )
             return .success(
-                "已创建训练计划 [id:\(program.id.uuidString)]：\(program.name)。"
+                "已创建训练计划 [id:\(program.businessID ?? 0)]：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -97,8 +96,7 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let rawID = arguments.programID,
-              let programID = UUID(uuidString: rawID),
+        guard let programID = arguments.programID, programID > 0,
               let templateName = nonempty(arguments.templateName)
         else {
             return .failure(
@@ -108,7 +106,7 @@ extension ConversationRecorder {
         let programs = (
             try? context.fetch(FetchDescriptor<TrainingProgram>())
         ) ?? []
-        guard let program = programs.first(where: { $0.id == programID }) else {
+        guard let program = programs.first(where: { $0.businessID == programID }) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
@@ -121,7 +119,7 @@ extension ConversationRecorder {
                 in: context
             )
             return .success(
-                "已为计划 [id:\(program.id.uuidString)] 创建模板 v\(version.version) [id:\(version.id.uuidString)]。"
+                "已为计划 [id:\(program.businessID ?? 0)] 创建模板 v\(version.version) [id:\(version.businessID ?? 0)]。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -132,8 +130,7 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let rawID = arguments.programID,
-              let programID = UUID(uuidString: rawID)
+        guard let programID = arguments.programID, programID > 0
         else {
             return .failure(
                 "archive_training_program 需要有效的 program_id。"
@@ -142,7 +139,7 @@ extension ConversationRecorder {
         let programs = (
             try? context.fetch(FetchDescriptor<TrainingProgram>())
         ) ?? []
-        guard let program = programs.first(where: { $0.id == programID }) else {
+        guard let program = programs.first(where: { $0.businessID == programID }) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
@@ -157,13 +154,12 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let rawID = arguments.programID,
-              let programID = UUID(uuidString: rawID)
+        guard let programID = arguments.programID, programID > 0
         else {
             return .failure("delete_training_program 需要有效的 program_id。")
         }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard let program = programs.first(where: { $0.id == programID }) else {
+        guard let program = programs.first(where: { $0.businessID == programID }) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
@@ -178,14 +174,13 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let rawID = arguments.programID,
-              let programID = UUID(uuidString: rawID)
+        guard let programID = arguments.programID, programID > 0
         else {
             return .failure("start_guided_workout 需要 query_user_data 返回的有效 program_id。")
         }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
         guard let program = programs.first(where: {
-            $0.id == programID && $0.status == .active
+            $0.businessID == programID && $0.status == .active
         }) else {
             return .failure("没有找到可执行的训练计划，请重新查询。")
         }
@@ -210,7 +205,7 @@ extension ConversationRecorder {
         }) {
             SomaCaptureRouter.shared.requestWorkoutSession(existing.id)
             return .success(
-                "已有未完成的「\(program.name)」带练 [session_id:\(existing.id.uuidString)]，已继续该 Session。"
+                "已有未完成的「\(program.name)」带练 [session_id:\(existing.businessID ?? 0)]，已继续该 Session。"
             )
         }
         do {
@@ -221,7 +216,7 @@ extension ConversationRecorder {
             )
             SomaCaptureRouter.shared.requestWorkoutSession(session.id)
             return .success(
-                "已开始「\(program.name)」带练 [session_id:\(session.id.uuidString)]。"
+                "已开始「\(program.name)」带练 [session_id:\(session.businessID ?? 0)]。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -233,8 +228,7 @@ extension ConversationRecorder {
         sourceTurnID: UUID?,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let rawID = arguments.performanceID,
-              let performanceID = UUID(uuidString: rawID),
+        guard let performanceID = arguments.performanceID, performanceID > 0,
               let fingerprint = nonempty(arguments.inputFingerprint),
               let evidence = nonempty(arguments.evidence),
               let limitations = nonempty(arguments.limitations),
@@ -248,7 +242,7 @@ extension ConversationRecorder {
             try? context.fetch(FetchDescriptor<ExercisePerformance>())
         ) ?? []
         guard let performance = performances.first(where: {
-            $0.id == performanceID
+            $0.businessID == performanceID
         }), let path = performance.activeVideoPath
         else {
             return .failure("目标 Performance 或其当前视频已不存在。")
@@ -263,11 +257,11 @@ extension ConversationRecorder {
                 try? context.fetch(FetchDescriptor<PerformanceAnalysis>())
             ) ?? []
             if let existing = analyses.first(where: {
-                $0.performanceID == performanceID
+                $0.performanceID == performance.id
                     && $0.inputFingerprint == fingerprint
             }) {
                 return .success(
-                    "该视频复盘已保存 [id:\(existing.id.uuidString)]。"
+                    "该视频复盘已保存 [id:\(existing.businessID ?? 0)]。"
                 )
             }
             let sourceJobID = sourceTurnID.flatMap { turnID in
@@ -276,7 +270,7 @@ extension ConversationRecorder {
                 )?.first { $0.turnID == turnID }?.id
             }
             let analysis = PerformanceAnalysis(
-                performanceID: performanceID,
+                performanceID: performance.id,
                 sourceMediaPath: path,
                 inputFingerprint: fingerprint,
                 evidence: evidence,
@@ -285,9 +279,14 @@ extension ConversationRecorder {
                 sourceJobID: sourceJobID
             )
             context.insert(analysis)
+            try BusinessIDAllocator.assign(
+                analysis,
+                namespace: "performance_analysis",
+                in: context
+            )
             try context.save()
             return .success(
-                "已保存“\(performance.exerciseName)”视频复盘 [id:\(analysis.id.uuidString)]。"
+                "已保存“\(performance.exerciseName)”视频复盘 [id:\(analysis.businessID ?? 0)]。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -303,10 +302,9 @@ extension ConversationRecorder {
         }
         let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
         return try inputs.map { input in
-            guard let id = UUID(uuidString: input.exerciseID),
-                  let definition = definitions.first(where: {
-                      $0.id == id && !$0.isArchived
-                  })
+            guard let definition = definitions.first(where: {
+                $0.businessID == input.exerciseID && !$0.isArchived
+            })
             else {
                 throw ExerciseLibraryError.invalidReference
             }

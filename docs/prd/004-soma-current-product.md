@@ -28,6 +28,7 @@
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md)
   - [PRD 029](029-unified-local-remote-agent-model-input.md)
   - [PRD 028](028-retry-active-runtime-budget.md)
+  - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md)
 
 ## 产品定义
 

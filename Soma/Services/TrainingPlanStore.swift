@@ -133,6 +133,7 @@ enum TrainingPlanStore {
         context.insert(program)
         context.insert(version)
         insert(prescriptions, templateVersionID: version.id, in: context)
+        try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
         return program
     }
@@ -170,6 +171,7 @@ enum TrainingPlanStore {
         insert(prescriptions, templateVersionID: version.id, in: context)
         program.currentTemplateVersionID = version.id
         program.updatedAt = .now
+        try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
         return version
     }
@@ -311,6 +313,7 @@ enum TrainingPlanStore {
             autoRecordingPolicy: autoRecordingPolicy
         )
         context.insert(session)
+        let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
 
         for prescription in values.sorted(by: { $0.order < $1.order }) {
             let performance = ExercisePerformance(
@@ -321,6 +324,9 @@ enum TrainingPlanStore {
                 prescriptionSnapshot: prescription
             )
             context.insert(performance)
+            performance.exerciseDefinition = definitions.first(where: {
+                $0.id == prescription.exerciseID
+            })
             let setCount = prescription.targetSets ?? 0
             for index in 0 ..< setCount {
                 context.insert(WorkoutSet(
@@ -341,6 +347,7 @@ enum TrainingPlanStore {
         {
             session.currentPerformanceID = first.id
         }
+        try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
         return session
     }
@@ -717,8 +724,11 @@ enum TrainingPlanStore {
         templateVersionID: UUID,
         in context: ModelContext
     ) {
+        let definitions = (
+            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
+        ) ?? []
         for prescription in prescriptions {
-            context.insert(TemplateExercise(
+            let item = TemplateExercise(
                 id: prescription.id,
                 templateVersionID: templateVersionID,
                 exerciseID: prescription.exerciseID,
@@ -730,7 +740,11 @@ enum TrainingPlanStore {
                 firstSetIsWarmup: prescription.firstSetIsWarmup,
                 equipmentKind: prescription.equipmentKind,
                 notes: prescription.notes
-            ))
+            )
+            context.insert(item)
+            item.exerciseDefinition = definitions.first(where: {
+                $0.id == prescription.exerciseID
+            })
         }
     }
 

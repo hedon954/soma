@@ -32,6 +32,8 @@ enum ConversationProcessingContextFactory {
                 gyms: gyms,
                 equipment: equipment,
                 sessionID: session.id,
+                businessDate: session.effectiveBusinessDate,
+                timeZone: session.businessTimeZone,
                 in: context
             ),
             session: session,
@@ -62,6 +64,8 @@ enum ConversationProcessingContextFactory {
             gyms: gyms,
             equipment: equipment,
             sessionID: nil,
+            businessDate: .now,
+            timeZone: .current,
             in: context
         )
     }
@@ -70,13 +74,17 @@ enum ConversationProcessingContextFactory {
         gyms: [GymProfile],
         equipment: [GymEquipment],
         sessionID: UUID?,
+        businessDate: Date,
+        timeZone: TimeZone,
         in context: ModelContext
     ) -> String {
         AgentContextPackBuilder.build(
             gyms: gyms,
             equipment: equipment,
             in: context,
-            sessionID: sessionID
+            sessionID: sessionID,
+            businessDate: businessDate,
+            timeZone: timeZone
         )
     }
 }

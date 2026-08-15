@@ -4,17 +4,19 @@ import SwiftOpenAI
 import XCTest
 
 final class AgentV2Tests: XCTestCase {
-    func testActiveToolContractExposesThirteenVersionTwoTools() {
+    func testTypedDomainContractExposesTwentySevenVersionTwoTools() {
         let tools = AgentToolExposurePolicy.tools(
-            for: Set(AgentToolGroup.allCases)
+            for: [.exercises, .workouts, .meals, .body, .plans]
         )
 
-        XCTAssertEqual(tools.count, 13)
+        XCTAssertEqual(tools.count, 27)
         XCTAssertTrue(tools.allSatisfy { $0.schemaVersion == 2 })
         XCTAssertFalse(tools.contains(.recordMeal))
-        XCTAssertFalse(tools.contains(.updateMeal))
+        XCTAssertTrue(tools.contains(.updateMeal))
         XCTAssertFalse(tools.contains(.listExerciseNames))
         XCTAssertFalse(tools.contains(.updateWorkoutTemplate))
+        XCTAssertFalse(tools.contains(.queryUserData))
+        XCTAssertFalse(tools.contains(.mutateUserData))
     }
 
     @MainActor
@@ -63,7 +65,7 @@ final class AgentV2Tests: XCTestCase {
         )
         XCTAssertTrue(result.ok)
         XCTAssertEqual(result.code, "ok")
-        XCTAssertEqual(result.recordRefs?.first?.recordID, meal.id.uuidString)
+        XCTAssertEqual(result.recordRefs?.first?.recordID, meal.businessID)
         XCTAssertNil(meal.calories)
         XCTAssertEqual(meal.protein, 38)
         XCTAssertEqual(meal.carbs, 54)
@@ -161,7 +163,11 @@ final class AgentV2Tests: XCTestCase {
             in: context
         )
         XCTAssertTrue(searchedExercises.ok)
-        XCTAssertTrue(try json(searchedExercises.data).contains(exercise.id.uuidString))
+        XCTAssertTrue(
+            try json(searchedExercises.data).contains(
+                String(XCTUnwrap(exercise.businessID))
+            )
+        )
     }
 
     func testTrustedTimeFreezesLoopStartAndFormatsAtPromptTime() throws {
@@ -179,7 +185,8 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(frozen.turnSentAt, sent)
         XCTAssertEqual(frozen.loopStartedAt, attempt)
         XCTAssertEqual(frozen.timeZoneIdentifier, "Asia/Shanghai")
-        XCTAssertTrue(frozen.promptText.contains("固定开始时间"))
+        XCTAssertTrue(frozen.promptText.contains("当前真实时间"))
+        XCTAssertTrue(frozen.promptText.contains("省略 occurred_at 时的稳定记录时间"))
         let encoded = try JSONEncoder().encode(frozen)
         let json = try XCTUnwrap(String(data: encoded, encoding: .utf8))
         XCTAssertFalse(json.contains("localDate"))
@@ -316,13 +323,13 @@ final class AgentV2Tests: XCTestCase {
     }
 
     func testChatRecordReferencesAreStableAndDeduplicated() {
-        let id = UUID()
+        let id: Int64 = 37
         let output = AgentTraceText.json(AgentToolResult.success(
             "已记录",
             recordRefs: [
                 AgentRecordReference(
                     recordType: ConversationIntent.workout.rawValue,
-                    recordID: id.uuidString,
+                    recordID: id,
                     title: "深蹲"
                 )
             ],
@@ -341,7 +348,7 @@ final class AgentV2Tests: XCTestCase {
             ChatRecordReferenceResolver.references(in: items),
             [AgentRecordReference(
                 recordType: ConversationIntent.workout.rawValue,
-                recordID: id.uuidString,
+                recordID: id,
                 title: "深蹲"
             )]
         )

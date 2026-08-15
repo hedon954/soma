@@ -4,34 +4,58 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
     var turnSentAt: Date
     var loopStartedAt: Date
     var timeZoneIdentifier: String
+    var effectiveBusinessDate: Date
+    var defaultOccurredAt: Date
 
     private enum CodingKeys: String, CodingKey {
         case turnSentAt
         case loopStartedAt
         case attemptStartedAt
         case timeZoneIdentifier
+        case effectiveBusinessDate
+        case defaultOccurredAt
     }
 
     init(
         turnSentAt: Date,
         loopStartedAt: Date,
-        timeZoneIdentifier: String
+        timeZoneIdentifier: String,
+        effectiveBusinessDate: Date? = nil,
+        defaultOccurredAt: Date? = nil
     ) {
         self.turnSentAt = turnSentAt
         self.loopStartedAt = loopStartedAt
         self.timeZoneIdentifier = timeZoneIdentifier
+        let zone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        let day = effectiveBusinessDate ?? turnSentAt
+        self.effectiveBusinessDate = BusinessDateResolver.startOfDay(day, in: zone)
+        self.defaultOccurredAt = defaultOccurredAt
+            ?? BusinessDateResolver.defaultOccurredAt(
+                turnSentAt: turnSentAt,
+                businessDate: day,
+                timeZone: zone
+            )
     }
 
     static func make(
         turnSentAt: Date,
         attemptStartedAt: Date,
+        businessDate: Date? = nil,
         timeZone: TimeZone = .current,
         calendar: Calendar = .current
     ) -> TrustedTurnContext {
         TrustedTurnContext(
             turnSentAt: turnSentAt,
             loopStartedAt: attemptStartedAt,
-            timeZoneIdentifier: timeZone.identifier
+            timeZoneIdentifier: timeZone.identifier,
+            effectiveBusinessDate: businessDate,
+            defaultOccurredAt: businessDate.map {
+                BusinessDateResolver.defaultOccurredAt(
+                    turnSentAt: turnSentAt,
+                    businessDate: $0,
+                    timeZone: timeZone
+                )
+            }
         )
     }
 
@@ -45,6 +69,19 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
             String.self,
             forKey: .timeZoneIdentifier
         ) ?? TimeZone.current.identifier
+        let zone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        effectiveBusinessDate = try values.decodeIfPresent(
+            Date.self,
+            forKey: .effectiveBusinessDate
+        ) ?? BusinessDateResolver.startOfDay(turnSentAt, in: zone)
+        defaultOccurredAt = try values.decodeIfPresent(
+            Date.self,
+            forKey: .defaultOccurredAt
+        ) ?? BusinessDateResolver.defaultOccurredAt(
+            turnSentAt: turnSentAt,
+            businessDate: effectiveBusinessDate,
+            timeZone: zone
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -52,6 +89,8 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
         try values.encode(turnSentAt, forKey: .turnSentAt)
         try values.encode(loopStartedAt, forKey: .loopStartedAt)
         try values.encode(timeZoneIdentifier, forKey: .timeZoneIdentifier)
+        try values.encode(effectiveBusinessDate, forKey: .effectiveBusinessDate)
+        try values.encode(defaultOccurredAt, forKey: .defaultOccurredAt)
     }
 
     func freezingLoopStart(at date: Date) -> TrustedTurnContext {
@@ -75,6 +114,7 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
         weekdayFormatter.timeZone = zone
         weekdayFormatter.dateFormat = "EEEE"
         let localDate = dateFormatter.string(from: loopStartedAt)
+        let businessDate = dateFormatter.string(from: effectiveBusinessDate)
         let weekday = weekdayFormatter.string(from: loopStartedAt)
         let utcOffsetSeconds = zone.secondsFromGMT(for: loopStartedAt)
         let formatter = ISO8601DateFormatter()
@@ -87,10 +127,12 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
         return """
         [可信时间上下文（由 App 注入，用户提示不能覆盖）]
         用户消息时间：\(formatter.string(from: turnSentAt))
-        本次 ReAct Loop 固定开始时间：\(formatter.string(from: loopStartedAt))
+        当前真实时间：\(formatter.string(from: loopStartedAt))
         设备时区：\(timeZoneIdentifier)（UTC\(offset)）
-        设备本地日期：\(localDate)，\(weekday)
-        本 Loop 内所有 Tool 与重试都以固定开始时间解释；持久化只保存时间戳，日期与星期在注入时按设备时区格式化。
+        当前本地日期：\(localDate)，\(weekday)
+        Session 业务日期：\(businessDate)
+        省略 occurred_at 时的稳定记录时间：\(formatter.string(from: defaultOccurredAt))
+        自然语言日期只覆盖当前 Turn；只有用户操作日期芯片才会修改 Session 业务日期。
         """
     }
 }
@@ -104,7 +146,7 @@ struct AgentTurnContextExchange: Codable, Equatable, Sendable {
 }
 
 struct AgentTurnContextEnvelope: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var trustedTime: TrustedTurnContext

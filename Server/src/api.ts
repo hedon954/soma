@@ -675,7 +675,7 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
   const runtime = requiredObject(value, "runtime");
   const deadlines = requiredObject(runtime, "deadlines");
   if (
-    schemaVersion !== 1 ||
+    schemaVersion !== 2 ||
     !Array.isArray(rawMessages) ||
     rawMessages.length < 2 ||
     !Array.isArray(rawSkills) ||
@@ -704,6 +704,9 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
     const skill = asObject(raw, "Skill 快照");
     return {
       id: requiredString(skill, "id"),
+      ...(typeof skill.name === "string" ? { name: skill.name } : {}),
+      ...(typeof skill.description === "string" ? { description: skill.description } : {}),
+      ...(typeof skill.whenToUse === "string" ? { whenToUse: skill.whenToUse } : {}),
       content: requiredString(skill, "content"),
     };
   });
@@ -734,11 +737,14 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
     return result;
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     messages,
     skills,
     tools,
     activeTools: requiredStringArray(value, "activeTools"),
+    ...(typeof value.selectedSkillID === "string"
+      ? { selectedSkillID: value.selectedSkillID }
+      : {}),
     runtime: {
       toolChoice: "auto",
       parallelToolCalls: true,

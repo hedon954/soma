@@ -11,10 +11,7 @@ enum AgentLoopDeadline {
                 try await operation()
             }
             group.addTask {
-                try await Task.sleep(
-                    for: .seconds(seconds),
-                    tolerance: .milliseconds(50)
-                )
+                try await Task.sleep(for: .seconds(seconds))
                 throw AgentStreamTimeoutError(phase: .loopTotal, seconds: seconds)
             }
             guard let first = try await group.next() else {

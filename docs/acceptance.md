@@ -10,6 +10,7 @@
 | --- | --- |
 | 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
 | 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
+| 启动数据迁移 | App 根层先显示迁移门禁，按个人空间、演示空间顺序完成 VersionedSchema 迁移、Int64 分配、动作关系修复和时间回填后才创建业务页面；失败保持可重试错误态，不允许在半迁移容器上继续读写。旧版本覆盖安装夹具验证记录和关系保留。 |
 | 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；显式展开后保留各自比例并可收起，点击任一聊天媒体进入只读全屏查看，图片可缩放、多项可左右切换；视频按模型能力直传或关键帧降级并明示实际模式；`SpeechInputService` 使用系统语音识别；消息正文支持完整 Markdown、原生范围选择与复制，用户绿色气泡的选区在浅色和深色外观下都使用高对比系统前景色。`MarkdownAttributedStringBuilder` 从 `presentationIntent` 重建段落与列表断行，避免教练回复黏连。 |
 | 对话 Session | `ConversationSessionController` 在根层首次加载和 Scene 重新进入前台时解析当前 Session；今天有最后消息则复用，否则新建当天 Session；旧消息按自然日归档，历史会话可回看。 |
 | 发送反馈 | 提交被接受后清空草稿与附件、撤销文本焦点并滚到稳定底部锚点；用户消息和 Agent Event 更新继续保持在底部等待回复。 |
@@ -43,26 +44,26 @@
 | 动态模型 | 模型是纯文本输入框；保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以输入历史式建议列表出现在输入框下方，可点选也可手输。候选行只显示模型 ID，不截断列表，超过五条时列表内部滚动。刷新候选不覆盖已填写的模型，只在为空时补一个默认值。 |
 | 多模态提示位置 | 能力说明只在模型已填写后出现，且只占一行；文案明确说明是多模态能力（支持图片与视频关键帧 / 只能发送文字 / 未标注时由平台在发送时验证）。 |
 | 多模态提醒 | 已知不支持的模型上传前阻止；未知能力由服务端验证，失败时把平台原始原因展示到聊天和 Trace。 |
-| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。每轮只暴露 13 个 Tool 中的 core + 按需 plans/gym/review/feedback，仅 `expand_tool_group` 可中途扩展；v1 合并别名只执行历史调用。普通过程折叠为状态摘要；饮食成功只显示一张可编辑结果卡。原始 JSON 只在开发者 Trace 中保留。 |
+| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。当前 32 个单一职责 Tool 按意图或选中 Skill 取最小子集，通用建议暴露零 Tool；通用 v2 名称只执行历史调用。普通过程折叠为状态摘要；饮食成功只显示一张可编辑结果卡。原始 JSON 只在开发者 Trace 中保留。 |
 | Agent 纠错与删除 | 数据查询返回稳定记录 ID；训练、饮食和身体支持显式 update 工具原位纠错并合并新媒体；delete 工具仅接受用户当前消息的明确意图，且不级联删除聊天和共享媒体。 |
 | 跨消息去重 | 同一现实事件的补图或纠错综合来源、时间、类型、文本、结构化数值、媒体和纠错语义确定性合并；歧义候选保持独立。 |
 | 可继续 Session | 教练页左上角时间按钮、左边界右滑与 VoiceOver 操作打开同一个历史会话抽屉；可新建或选择旧 Session 继续发送，跨天不自动抢走当前选择。 |
 | 输入区降噪 | 位置只在首次发送时确认一次，之后由设置修改；健身房少于两个时不显示场馆切换入口。 |
 | 逐组训练 | 每项训练以有序 `set_entries` 保存单组次数和外部重量，组数取数组长度，容量逐组按完整事实求和；旧标量记录确定性展开。 |
 | 视频输入证明 | 能力注册确认的百炼 Qwen 模型优先接收约 7MB 内的兼容 MP4，首请求不抽帧也不同时发送关键帧；其他模型使用明确关键帧模式。直传在首增量前失败才抽帧并消耗唯一重试，零帧且无直传视频时阻止请求。 |
-| Session 上下文 | `AgentTurnContextEnvelope v2` 为本地/远程统一投影：不可覆盖的发送/尝试时间、约 6,000 token 内最多十个完整来回、短事实引用和更早 digest。当前 Turn 有媒体时只发送当前媒体；明确回指选最近一个，比较最多两个，其他历史只发文字。`query_user_data` 支持真实日期过滤、字段投影与分页。 |
+| Session 上下文 | `AgentTurnContextEnvelope v3` 冻结原始 Turn 时间、Session businessDate、时区和 `defaultOccurredAt`，条件注入身体资料、当前健身房、业务日记录与近期体重。最近十个完整 user-assistant 对保持原生角色；更早历史在 Loop 前滚动替换为摘要并产生 Chat 事件卡。当前 Turn 有媒体时只发送当前媒体；明确回指选最近一个，比较最多两个。 |
 | 双档模型 | 「LLM 配置」顶部是「标准模型 / 小模型」分段，两档共享同一套字段：平台、Base URL、API Key、模型同屏可见可改，标准档追加图片生成模型，小模型档追加启用开关，没有「高级」折叠层；两档保持独立配置且小模型可关闭；媒体、记录、纠错和安全敏感任务使用标准。 |
 | AI 配置门禁 | 聊天不提供远程 Agent 开关或本地模式；标准档没有 API Key 时，发送与重试仍然原子落盘 Turn 与 Job 并进入 `staged`，不产生 Trace 或业务记录；首次未配置时同时打开「LLM 配置」并显示配置提醒。 |
 | 回复文字选择 | Agent Markdown 回复使用系统可选择文本，支持长按选择与复制，并保留段落、列表和链接语义。 |
 | 健身房媒体归档 | 本轮发图创建健身房会保存全部图片；下一轮要求创建或回答名称时，历史消息向模型提供 `recent_gym_turn` 语义引用，模型在 Tool Call 中选择后由 App 解析紧邻上一轮媒体位置，不暴露沙盒路径，也不读取更早或其他 Session 媒体。 |
 | 媒体放大与单张解绑 | 聊天、健身房、训练、饮食和身体详情点击媒体进入统一全屏查看浮层；图片可缩放、多项可左右切换。聊天浮层只读，记录与健身房的删除入口只在浮层内；移除后封面与旧兼容字段同步更新，聊天原附件、其他记录引用和系统相册保持不变。 |
-| 渐进式 Skills | 系统只披露目录；`load_skill` 按需加载八项可编辑 Skill，并生成独立 Span。 |
-| 系统协议边界 | 角色和安全策略可编辑；工具与参数 Schema 由 App 通过 API 注册，不进入提示词且不能被旧自定义值覆盖。 |
+| 渐进式 Skills | System 只披露 `name/description/when_to_use`；`load_skill` 可按需加载。预选快捷 Skill 时首轮直接注入完整 Markdown、专属上下文和白名单内最小 Tool 集；内置 override、自定义 Skill、权限和最多六个快捷按钮可管理。 |
+| 系统协议边界 | 固定身份、安全、真实性和授权契约不可编辑，仅人格可编辑；工具与严格参数 Schema 由 App 通过 API 注册，不进入 System Prompt，Skill 只能在 App 白名单内收窄权限。 |
 | Trace | 一次远程消息生成一条成功或失败 Trace；model、skill、tool、output Span 作为 Event 实时更新 UI，并保存相对耗时、Token、入参与返回。 |
 | 开发者设置 | 直接提供执行日志入口和数量；固定 Tool 协议不作为不可操作的设置项或说明展示。 |
 | 持久 Job/Event | 每条消息拥有稳定 `AgentJob` 与单调语义 Event；Chat、Trace、通知和 Live Activity 维护独立 cursor，UI 读取不删除事件。 |
 | 可选远程执行 | 设置默认关闭并披露数据流；单次可选仅本机。匿名设备签名、幂等 Job、Event 补拉、Worker lease 和设备 Tool handoff 由 `Server/` 提供，BYOK 不上传。 |
-| Backend 输入等价 | iOS 用唯一版本化 Envelope 组装 system/history/current 消息、媒体 ID、当前 Prompt/Skills、完整 Tool 定义、初始集合、步数与时限；本机直接消费，远端只绑定临时 upload。Server 不含第二套 Agent Prompt；runtime Skill/扩展就地执行，并行设备 Tool 全部持久化且结果齐备后按原调用顺序续跑。 |
+| Backend 输入等价 | iOS 用 `AgentModelInputEnvelope v2` 组装 system/history/current 消息、媒体 ID、Skill 快照、选中 Skill、仅当轮有效的 Tool 定义、步数与时限；本机直接消费，远端只绑定临时 upload。Server 不含第二套 Agent Prompt；当前暴露的 runtime Skill 可就地执行，并行设备 Tool 全部持久化且结果齐备后按原调用顺序续跑。 |
 | 系统进度 | Live Activity 只显示通用阶段、操作数和队列数，不含健康文本或虚假百分比；完成通知和系统表面深链到稳定 Turn。 |
 
 ## 已实现：训练智能
@@ -73,7 +74,7 @@
 
 | 要求 | 目标验收 |
 | --- | --- |
-| 动作身份 | `ExerciseDefinition`、`query_user_data(scope=exercises, query=...)`、`mutate_user_data` 与失效 ID 恢复错误；动作库必须搜索并分页，不再向模型返回完整全库。 |
+| 动作身份 | `ExerciseDefinition.businessID: Int64`、必需 SwiftData Relationship、`search_exercises` 和独立 create/update/archive/merge Tool；`create_workout` 与每个计划动作必须接收有效动作 ID。旧 UUID 数据在启动迁移中按规范名回填，空名称进入明确待确认动作。 |
 | 动作历史 | 动作详情按 ID 展示 `WorkoutEntry`；带练终态 Performance 先按来源 ID 物化为记录，旧 Session 尚未物化时才回退到 Session/Set，不能重复显示。合并记录迁移训练、模板、Performance/分析链和媒体，并只撤销本次引用。 |
 | 静默动作内容 | `BundledExerciseCatalog` 提供 40+ 常见动作内容与授权/项目素材；空数据库不产生动作，已知动作创建后只 fill-only 激活自身内容，未使用目录条目不进入列表或 Tool。 |
 | 动作图片 | 列表左侧加载紧凑动作示意图；详情首屏只读展示示意图、名称、折叠教练提示、紧凑单面肌群图与最近训练，编辑与媒体管理（用户上传、显式 AI 动作示意图生成、示范视频、外部链接）在工具栏菜单的子页。肌群图不再 AI 生成；既有 generated/user 肌群图仍可在媒体子页查看删除。generated/user 图片进入合并、备份、恢复、清除与媒体回收。 |
@@ -155,14 +156,14 @@
 | 要求 | 当前证据 |
 | --- | --- |
 | 确定性上下文包 | `AgentContextPackBuilder` 生成有预算摘要；缺失字段不写、超预算确定性截断（`AgentReliabilityTests` 空态用例）。 |
-| 聚合查询 | `query_user_data` 接受 `date_from`/`date_to`/`group_by`/`metric`，由 `AgentUserDataAggregator` 本地聚合。 |
-| 跨轮事实 | `AgentCrossTurnFactSummary` 注入近期 mutation 摘要与十轮外 digest；`AgentJobStore.events` 带谓词拉取。 |
+| 领域查询 | 训练、饮食、身体与计划分别使用 list/get Tool；上下文已预加载的当日事实不再重复查询，趋势仍由 `AgentUserDataAggregator` 本地确定性聚合后注入。 |
+| 跨轮事实 | 最近十对保持原生角色；`ConversationCompactionMiddleware` 将已有摘要与新移出窗口的完整对重写为替代摘要，小模型、标准模型、确定性 digest 三级回退；`AgentJobStore.events` 带谓词拉取。 |
 | 规范化幂等 | `AgentToolCallSignature` 归一 trim/同义字段/数值/nil；`set_entries` 保序；失败 receipt 可重试（`AgentReliabilityTests`）。 |
 | 业务级疑似重复 | 同日同动作同组指纹命中返回既有 ID +「疑似重复」，不静默合并（`AgentBusinessKeyDeduper`）。 |
 | 同气泡续跑 | Job 持久化 `lastCompletedStep`/`loopCheckpoint`；有检查点时复用 `responseMessageID` 且不递增 `attemptNumber`；`DataIntegrityRepair` 不把可恢复中断标为 failed。 |
-| 工具组与并行 | `AgentToolExposurePolicy` 预选 core/plans/gym/review/feedback；`parallelToolCalls=true` 且本机顺序执行；未展开时同 session 连续两轮 system+tools 前缀稳定。 |
+| 工具组与并行 | `AgentToolExposurePolicy` 按 exercises/workouts/meals/body/plans/gym/review/feedback 预选；选中 Skill 使用白名单交集；建议零 Tool。`parallelToolCalls=true` 且本机顺序执行。 |
 | 延迟辅助 | 流式滚动约 10Hz 非动画节流；历史视频帧经 `VideoFrameCache` LRU；step ≥ 2 历史帧占位。Trace 可观测 `time_to_first_delta_ms`/`projection_ms`/`cached_prompt_tokens`。 |
-| 红线不破坏 | 不用 LLM 滚动摘要；不静默跨轮合并；Tool Schema 仍固定；远程 Job 协议不变。 |
+| 红线不破坏 | LLM 摘要只替换更早对话且有确定性兜底，不静默跨轮合并业务记录；Tool Schema 仍固定；本地/远程共用版本化 Envelope。 |
 
 ## 可靠高效 ReAct 与原位审查
 
@@ -174,12 +175,12 @@
 | --- | --- |
 | 欠费人工屏障与 FIFO | `waitingForUser` 不可运行且不被启动、前台、定时器或配置变化释放；`claimNext` 不跳过队首。“按顺序重试全部”统一释放待处理状态但仍由 `claimNext` 串行领取；`LLMOutageStagingTests` 覆盖欠费分类、后发暂存、批量释放顺序、单删和全清。 |
 | 每个 step 精确续跑 | 检查点持久化原生 `assistant.tool_calls` 和逐条 `role=tool` 结果；模型成功后、每个 Tool 成功后都立即落盘。双 Tool 回归证明第二个失败后只重试第二个，恢复请求的 System/User 前缀不变。 |
-| 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；`AgentJob.frozenExecutionDate` 在首次 claim 后固定为 `loopStartedAt`，业务 Tool 不再使用消息时间或重试墙钟。持久 envelope 只存时间戳与 IANA 时区。 |
+| 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；Job 创建时冻结原始 Turn 时间、`effectiveBusinessDate`、时区和 `defaultOccurredAt`，首次 claim 再冻结 `loopStartedAt`。create/update 的 `occurred_at` 省略时复用稳定默认值，排队、跨午夜和重试不使用新墙钟。 |
 | 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁。`AgentLoopDeadline` 以 3/5/10 分钟活动执行预算取消当前窗口，等待用户、网络或前台不计时；自动恢复保留已耗时长，用户显式重试刷新预算但保留固定业务时间与成功 step。 |
 | 确定性快捷训练 | typed 最近训练草稿 trim 后未改且无附件时使用 `deterministicWorkout` Job；空 Key 测试证明不调用 LLM、执行时间实时读取并产生同构 Trace/Event/结果卡。 |
 | 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存/删除写入有界 correction block，下一轮上下文投影最新修订。 |
 | 计划与一级页面 | 计划编辑同屏提供组数、次数、重量、间歇；进展首卡直出当前健身房；设置底部直接嵌入反馈；空 Session 提供确定性和最多六条自定义快捷语。 |
-| Tool 与 Prompt 节制 | `core` 不含 mutation；建议/疑问句不暴露 records，明确写入和结构化事实才预选。System 固定，User 固定 `[SOMA CURRENT TURN v1]` section 顺序，后续只追加 assistant/tool 尾部。 |
+| Tool 与 Prompt 节制 | 建议/疑问句暴露零 Tool，明确领域意图才预选最小集合。System 使用分层 `[SOMA SYSTEM v2]`，User 使用 `[SOMA CURRENT TURN v2]` 固定顺序且空块完全省略；后续只追加 assistant/tool 尾部。 |
 | 动作图覆盖 | 内置专属图条目不少于 100，Bundle 逐资源校验；真机核对得到的 24 个常见动作名称全部有确定目录映射与离线动作图，不把个人训练事实写入仓库。 |
 | Gmail 自动化 | Codex 自动化 `soma-gmail-draft-pr` 每 3 小时运行一次；只处理一封未标记反馈，从最新 `origin/main` 建隔离分支并产出分析、必要 PRD/ADR、实现、测试、Changelog 和 Draft PR。成功建 PR 后才标记邮件；不合并、发布或真机安装。 |
 

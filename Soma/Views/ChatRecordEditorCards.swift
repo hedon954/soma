@@ -46,40 +46,46 @@ struct ChatRecordEditorCards: View {
 
     var body: some View {
         ForEach(references, id: \.recordID) { reference in
-            if let id = UUID(uuidString: reference.recordID) {
-                if reference.recordType == ConversationIntent.workout.rawValue,
-                   let workout = workouts.first(where: { $0.id == id })
-                {
-                    InlineWorkoutCard(
-                        workout: workout,
-                        sourceMessage: sourceMessage,
-                        isEditable: isEditable
-                    )
-                } else if reference.recordType == ConversationIntent.meal.rawValue,
-                          let meal = meals.first(where: { $0.id == id })
-                {
-                    InlineMealCard(
-                        meal: meal,
-                        sourceMessage: sourceMessage,
-                        isEditable: isEditable
-                    )
-                } else if reference.recordType == ConversationIntent.body.rawValue,
-                          let body = bodies.first(where: { $0.id == id })
-                {
-                    InlineBodyCard(
-                        entry: body,
-                        sourceMessage: sourceMessage,
-                        isEditable: isEditable
-                    )
-                } else if reference.recordType == ConversationIntent.gym.rawValue,
-                          let gym = gyms.first(where: { $0.id == id })
-                {
-                    InlineGymCard(
-                        gym: gym,
-                        sourceMessage: sourceMessage,
-                        isEditable: isEditable
-                    )
-                }
+            if reference.recordType == ConversationIntent.workout.rawValue,
+               let workout = workouts.first(where: {
+                   $0.businessID == reference.recordID
+               })
+            {
+                InlineWorkoutCard(
+                    workout: workout,
+                    sourceMessage: sourceMessage,
+                    isEditable: isEditable
+                )
+            } else if reference.recordType == ConversationIntent.meal.rawValue,
+                      let meal = meals.first(where: {
+                          $0.businessID == reference.recordID
+                      })
+            {
+                InlineMealCard(
+                    meal: meal,
+                    sourceMessage: sourceMessage,
+                    isEditable: isEditable
+                )
+            } else if reference.recordType == ConversationIntent.body.rawValue,
+                      let body = bodies.first(where: {
+                          $0.businessID == reference.recordID
+                      })
+            {
+                InlineBodyCard(
+                    entry: body,
+                    sourceMessage: sourceMessage,
+                    isEditable: isEditable
+                )
+            } else if reference.recordType == ConversationIntent.gym.rawValue,
+                      let gym = gyms.first(where: {
+                          $0.businessID == reference.recordID
+                      })
+            {
+                InlineGymCard(
+                    gym: gym,
+                    sourceMessage: sourceMessage,
+                    isEditable: isEditable
+                )
             }
         }
     }

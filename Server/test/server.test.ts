@@ -993,7 +993,7 @@ function makeModelInput(
   toolNames: string[] = [],
 ): AgentJobInput["modelInput"] {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     messages: [
       { role: "system", text: "统一系统提示词", mediaIDs: [] },
       {

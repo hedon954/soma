@@ -4,7 +4,8 @@
 见 [PRD 003](prd/003-streaming-react-agent.md)、
 [PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
 [PRD 022](prd/022-react-reliability-and-context-awareness.md) 和
-[PRD 025](prd/025-trusted-context-direct-video-and-reviewable-meals.md)，详细协议见
+[PRD 025](prd/025-trusted-context-direct-video-and-reviewable-meals.md)、
+[PRD 030](prd/030-agent-prompt-skill-context-and-tool-v3.md)，详细协议见
 [Agent Job 与远程执行协议](engineering/agent-job-protocol.md)。
 
 ## 当前运行时
@@ -37,7 +38,8 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 
 ## 渐进式 Skills
 
-系统提示词只披露八项 Skill 的 ID、名称和摘要。Agent 判断任务匹配后调用 `load_skill`，按需读取当前生效的完整 Markdown 指令：
+系统提示词只披露 Skill 的 `name`、`description` 和 `when_to_use`。内置 Skill 使用带这三个
+frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 
 - 健身房分析
 - 用户健身计划制定
@@ -48,28 +50,33 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 - 运动量分析
 - 运动热量估算
 
-Skill 文本可以在开发者设置中修改和预览。`load_skill` 是本地只读工具，加载过程形成独立 Skill Span。开发者设置同时直接提供执行日志入口；固定 Tool 协议不作为设置项展示。
+未预选快捷 Skill 时，Agent 可调用本地只读 `load_skill` 按需加载，过程形成独立 Skill Span。
+用户在输入框上方单选快捷 Skill 后，首轮直接注入完整 Markdown、专属上下文和白名单内最小 Tool
+集合，省去一次加载调用。设置页支持内置 override、自定义 Skill、Markdown 预览、权限绑定和
+最多六个快捷按钮排序；固定 Tool 协议不能被 Skill 扩权。
 
 ## 本地工具
 
-新模型只看到 13 个 Tool：core 的 `load_skill`、`query_user_data`、`mutate_user_data`、
-`expand_tool_group`，以及按任务展开的 plans、gym、review、feedback 组。六个记录写 Tool、
-`delete_record` 和三个重复查询 Tool 只保留为历史调用兼容别名，不再暴露。
+当前协议使用 32 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 7 个，另有
+`load_skill`、健身房 2 个、复盘和反馈各 1 个。每次请求只把当前意图或选中 Skill 所需的子集
+放入 API `tools` 参数；通用建议为零 Tool。旧通用查询/写入和运行时扩展名称只用于恢复历史
+Checkpoint，不再暴露给新模型。
 
-`query_user_data` 默认返回 3 条、最大 10 条，支持真实日期过滤、搜索、字段投影和 cursor；
-`detail` 必须给精确 ID，动作库不得全量读取。`mutate_user_data` 只合并训练、饮食、身体三类
-CRUD，并严格校验 operation/type/ID/payload 组合。完整当前清单和出入参见
+训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
+归档和合并。所有业务 ID 是 Int64，`create_workout` 必须绑定有效 `exercise_id`，计划动作也必须
+绑定动作库。完整当前清单和出入参见
 [Agent Tool 目录](engineering/agent-tool-catalog.md)。
 
 工具名称、描述和参数 Schema 由 Runtime 固定，通过 API 原生注册，不拼接进系统提示词，也不允许用户修改。工具不会向模型暴露数据库句柄、API Key 或本地文件路径。
 
 ## 数据真实性与安全
 
-- 同一 Turn 的相同成功写入通过规范化签名的持久回执只执行一次；失败回执不挡同键重试。
+- 同一 Turn 的相同成功写入通过包含最终 `occurred_at` 和业务 ID 的规范化签名只执行一次；失败回执不挡同键重试。
 - 新媒体默认创建新记录；纠错必须绑定查询得到的稳定 `record_id`。只有明确回指紧邻 Turn 且
   唯一候选时才更新；多个候选先询问，不再用两小时评分猜记录。
 - 未提供的重量、间歇、时长、评分等字段保持为空，不自动补默认值。
 - 工具错误作为 `role: tool` 结果返回，让模型解释或修正，不静默写入异常数据。
+- Tool 错误包含稳定 `code/field/expected/retryable`；对象 Schema 关闭额外字段并继续执行本地二次校验。
 - 删除工具只处理用户明确指定的单条业务记录；Agent 仍没有账户、云同步或任意代码执行工具。
 - 已成功写入的数据不会因为后续最终回复失败而回滚。
 - 标准档未配置 API Key 时仍原子落盘 Turn 与 Job 并进入暂存，恢复后补偿消费。
@@ -97,7 +104,10 @@ UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有�
 
 ## 关键实现
 
-- Tool Schema、提示词与 Skill：`Soma/Services/ReActAgent.swift`
+- 分层 Prompt：`Soma/Services/ReActAgentPrompt.swift`
+- Tool Schema：`Soma/Services/ReActAgent.swift`
+- Skill 注册表与权限：`Soma/Services/AgentSkillRegistry.swift`
+- 会话滚动压缩：`Soma/Services/ConversationCompactionMiddleware.swift`
 - 流式 ReAct 编排与供应商适配：`Soma/Services/AppServices.swift`
 - 本地工具执行：`Soma/Services/ConversationRecorder.swift`
 - 流式聊天 UI：`Soma/Views/CoachView.swift`
@@ -124,10 +134,11 @@ Live Activity 和通知是独立投影。token delta 继续实时显示，但不
 Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending → committed）去重；
 跨 Turn 业务键命中返回疑似重复而不静默合并。
 
-每轮请求只暴露预选工具组（core + 可选 plans/gym/review/feedback），可用
-`expand_tool_group` 扩展。
+每轮请求只暴露首轮确定的最小 Tool 集；历史 `expand_tool_group` 只用于恢复已持久化 Checkpoint。
 供应商侧允许并行 `tool_calls`，本机仍顺序执行。`AgentContextPackBuilder` 提供确定性上下文包；
-历史投影在约 6,000 token 内保留最多十个完整来回，并附加短事实引用与更早轮次 digest；
+历史始终保留最近十个完整 user-assistant 对。从第十一对开始，Loop 前用“已有摘要 + 新移出
+窗口的完整对”重新生成完整替代摘要，小模型优先、标准模型回退、确定性 digest 兜底；Loop 内
+不再次压缩，压缩会形成可展开 Chat 事件卡。
 当前媒体优先，历史媒体只在明确回指或比较时选择最多一到两个匹配 Turn。
 
 ### 可选远程 Backend
@@ -143,11 +154,15 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 
 训练动作身份已经使用：
 
-- `query_user_data(scope=exercises, query=...)`：按搜索词返回分页动作 `{id,name}`；
-- `mutate_user_data`：使用 `exercise_id` 引用已有动作；只有搜索后没有等价项时使用
-  `exercise_name`；
-- 计划创建、版本更新和归档 Tool；
-- `query_user_data(scope=programs)` 先返回可执行计划 ID；`start_guided_workout` 仅创建本地不可变 Session
-  并路由到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
+- `search_exercises` 按名称返回 `{exercise_id,name}`，已有上下文足够时不得重复搜索；
+- 只有无语义等价项时调用 `create_exercise`，再把返回的 Int64 ID 交给 `create_workout`；
+- `create_program` 与 `create_program_version` 的每个动作都必须绑定有效动作 ID；
+- `list_programs` / `get_program` 提供精确读取，`start_program` 仅创建本地不可变 Session 并路由
+  到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
+
+Session 保存 `businessDate` 与 IANA 时区。Job 创建时冻结原始 Turn 时间、有效业务日期和
+`defaultOccurredAt`；训练、饮食、身体 create/update 可显式传带时区 `occurred_at`，省略时复用
+该稳定默认值。因此排队、跨午夜与失败重试仍记录真实原始时间。自然语言日期只覆盖当前 Turn，
+只有日期芯片会修改 Session 的默认业务日期。
 
 工具合同见 [训练领域模型与运行时协议](engineering/training-domain-model.md)。

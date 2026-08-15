@@ -7,6 +7,7 @@
   - [ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 中 mutation 属于常驻 core 工具组的边界
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中 `mutate_user_data` 对每轮模型默认可见的边界
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
+- 后续替代：[ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 用 Skill 绑定的最小强类型 Tool 集与条件 User Prompt 修订通用分组
 
 ## 背景
 

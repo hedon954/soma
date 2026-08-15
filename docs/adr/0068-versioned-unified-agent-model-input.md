@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-08-15
 - 维护者：Soma maintainers
-- 后续替代：暂无
+- 后续替代：[ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 升级分层 Prompt、Skill 快照和 Tool v3 输入契约
 - 上游依据：
   - [PRD 029](../prd/029-unified-local-remote-agent-model-input.md)
   - [BUG 0018](../bugs/0018-remote-agent-model-input-divergence.md)

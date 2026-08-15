@@ -8,7 +8,9 @@
   - [ADR 0056](0056-trusted-selective-multimodal-context.md) 中每次模型请求刷新 Attempt 时间并持久化格式化日期字段的边界
   - [ADR 0058](0058-first-delta-deadline-and-bounded-retry.md) 中每个模型 step 使用 8/10/20 秒首增量、idle 与单步总时限的边界
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
-- 后续替代：[ADR 0067](0067-separate-business-time-and-active-loop-budget.md) 修订整轮预算的计时来源与用户显式重试窗口
+- 后续替代：
+  - [ADR 0067](0067-separate-business-time-and-active-loop-budget.md) 修订整轮预算的计时来源与用户显式重试窗口
+  - [ADR 0072](0072-session-business-date-and-record-occurrence-time.md) 将记录发生时间从 Loop 时间拆分为稳定的 Turn 业务时间
 
 ## 背景
 

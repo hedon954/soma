@@ -5,6 +5,7 @@
 - 后续修订：
   - [PRD 028](028-retry-active-runtime-budget.md) 将整轮墙钟预算拆为可暂停的实际执行预算，并允许用户显式重试开启新窗口
   - [PRD 029](029-unified-local-remote-agent-model-input.md) 将稳定 Prompt、按意图 Tool 和并行语义统一到本地/远程 Backend
+  - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 以条件上下文、Skill 直载和强类型 Tool 进一步缩短执行路径
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的当前教练、进展、设置、计划与 Agent 失败重试基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的计划处方可发现性、快捷训练记录与内置动作图覆盖

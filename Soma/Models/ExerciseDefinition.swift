@@ -126,9 +126,10 @@ private enum ExerciseDefinitionCoding {
 }
 
 @Model
-final class ExerciseDefinition {
+final class ExerciseDefinition: BusinessIdentifiedModel {
     @Attribute(.unique) var canonicalNameKey: String
     var id: UUID
+    var businessID: Int64?
     var canonicalName: String
     var createdAt: Date
     var updatedAt: Date
@@ -298,8 +299,9 @@ final class ExerciseDefinition {
 }
 
 @Model
-final class ExerciseMergeRecord {
+final class ExerciseMergeRecord: BusinessIdentifiedModel {
     var id: UUID
+    var businessID: Int64?
     var sourceExerciseID: UUID
     var targetExerciseID: UUID
     var sourceName: String
@@ -417,7 +419,7 @@ final class ExerciseMergeRecord {
 }
 
 struct ExerciseNameReference: Codable, Equatable, Identifiable, Sendable {
-    var id: UUID
+    var id: Int64
     var name: String
 }
 
@@ -573,7 +575,7 @@ enum ExerciseLibraryStore {
 
     static func nameReferences(in context: ModelContext) -> [ExerciseNameReference] {
         activeDefinitions(in: context).map {
-            ExerciseNameReference(id: $0.id, name: $0.canonicalName)
+            ExerciseNameReference(id: $0.businessID ?? 0, name: $0.canonicalName)
         }
     }
 
@@ -592,6 +594,20 @@ enum ExerciseLibraryStore {
         return value
     }
 
+    static func definition(
+        businessID: Int64,
+        in context: ModelContext
+    ) throws -> ExerciseDefinition {
+        guard businessID > 0,
+              let value = activeDefinitions(in: context).first(where: {
+                  $0.businessID == businessID
+              })
+        else {
+            throw ExerciseLibraryError.invalidReference
+        }
+        return value
+    }
+
     static func resolveOrCreateExact(
         canonicalName: String,
         in context: ModelContext
@@ -605,6 +621,11 @@ enum ExerciseLibraryStore {
         if let existing = values.first(where: {
             $0.canonicalNameKey == key && !$0.isArchived
         }) {
+            try BusinessIDAllocator.assign(
+                existing,
+                namespace: "exercise",
+                in: context
+            )
             if BundledExerciseCatalog.activateIfAvailable(existing) {
                 try context.save()
             }
@@ -613,6 +634,11 @@ enum ExerciseLibraryStore {
         let value = ExerciseDefinition(canonicalName: name)
         _ = BundledExerciseCatalog.activateIfAvailable(value)
         context.insert(value)
+        try BusinessIDAllocator.assign(
+            value,
+            namespace: "exercise",
+            in: context
+        )
         try context.save()
         return value
     }
@@ -672,6 +698,7 @@ enum ExerciseLibraryStore {
         }
         for workout in affected {
             workout.exerciseID = target.id
+            workout.exerciseDefinition = target
             workout.exercise = target.canonicalName
         }
         let affectedTemplateExercises = (
@@ -679,12 +706,14 @@ enum ExerciseLibraryStore {
         )?.filter { $0.exerciseID == source.id } ?? []
         for templateExercise in affectedTemplateExercises {
             templateExercise.exerciseID = target.id
+            templateExercise.exerciseDefinition = target
         }
         let affectedPerformances = (
             try? context.fetch(FetchDescriptor<ExercisePerformance>())
         )?.filter { $0.exerciseID == source.id } ?? []
         for performance in affectedPerformances {
             performance.exerciseID = target.id
+            performance.exerciseDefinition = target
             performance.exerciseName = target.canonicalName
             if var prescription = performance.prescriptionSnapshot {
                 prescription.exerciseID = target.id
@@ -826,6 +855,7 @@ enum ExerciseLibraryStore {
             && workout.exerciseID == record.targetExerciseID
         {
             workout.exerciseID = source.id
+            workout.exerciseDefinition = source
             workout.exercise = source.canonicalName
         }
         let affectedTemplateIDs = Set(record.affectedTemplateExerciseIDs)
@@ -835,6 +865,7 @@ enum ExerciseLibraryStore {
             && templateExercise.exerciseID == target.id
         {
             templateExercise.exerciseID = source.id
+            templateExercise.exerciseDefinition = source
         }
         let affectedPerformanceIDs = Set(record.affectedPerformanceIDs)
         for performance in (
@@ -843,6 +874,7 @@ enum ExerciseLibraryStore {
             && performance.exerciseID == target.id
         {
             performance.exerciseID = source.id
+            performance.exerciseDefinition = source
             performance.exerciseName = source.canonicalName
             if var prescription = performance.prescriptionSnapshot {
                 prescription.exerciseID = source.id
@@ -902,6 +934,7 @@ enum ExerciseLibraryStore {
             }
             for workout in group {
                 workout.exerciseID = definition.id
+                workout.exerciseDefinition = definition
                 workout.exercise = definition.canonicalName
             }
         }

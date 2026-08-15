@@ -38,79 +38,6 @@ final class SomaTests: XCTestCase {
     }
 
     @MainActor
-    func testConversationProcessingContinuesWithoutCoachView() async throws {
-        let suiteName = "SomaTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let spaces = DataSpaceController(
-            defaults: defaults,
-            isStoredInMemoryOnly: true
-        )
-        let context = ModelContext(spaces.demoContainer)
-        let service = ConversationProcessingService()
-        let transport = MockAgentStreamTransport(responses: [
-            .toolCall(
-                name: "record_workout",
-                argumentsFragments: [
-                    #"{"exercise":"深蹲","set_entries":["#,
-                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60},"#,
-                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60}]}"#
-                ]
-            ),
-            .text(["已记录这次深蹲。"])
-        ])
-        let ai = AIService(
-            defaults: defaults,
-            apiKeyOverride: "test-key",
-            agentStreamLoader: transport.load
-        )
-        ai.configure(
-            provider: .openAI,
-            baseURL: "https://example.com/v1",
-            model: "gpt-4.1-mini"
-        )
-        let session = ConversationSession()
-        context.insert(session)
-
-        XCTAssertTrue(service.submit(
-            text: "刚做完深蹲 4组8次 60kg",
-            attachments: [],
-            context: ConversationProcessingContext(
-                structuredContext: "测试上下文",
-                session: session,
-                dataSpace: .demo,
-                gyms: [],
-                equipment: [],
-                ai: ai,
-                modelContext: context
-            ),
-            includeLocation: false,
-            locationService: LocationContextService()
-        ))
-        XCTAssertTrue(service.isProcessing)
-
-        for _ in 0 ..< 100 where service.isProcessing {
-            try await Task.sleep(for: .milliseconds(25))
-        }
-
-        XCTAssertFalse(service.isProcessing)
-        XCTAssertEqual(
-            try context.fetch(FetchDescriptor<WorkoutEntry>()).count,
-            1
-        )
-        let jobs = try context.fetch(FetchDescriptor<AgentJob>())
-        XCTAssertEqual(jobs.count, 1)
-        XCTAssertEqual(jobs.first?.state, .succeeded)
-        XCTAssertGreaterThan(jobs.first?.lastEventSequence ?? 0, 3)
-        XCTAssertFalse(
-            try context.fetch(FetchDescriptor<PersistentAgentEvent>()).isEmpty
-        )
-        let messages = try context.fetch(FetchDescriptor<CoachMessage>())
-        XCTAssertEqual(messages.count, 2)
-        XCTAssertTrue(messages.allSatisfy { $0.sessionID == session.id })
-    }
-
-    @MainActor
     func testStandardAPIKeyIsRequiredWithoutFeatureToggle() throws {
         let suiteName = "SomaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -339,19 +266,19 @@ final class SomaTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         XCTAssertEqual(ReActPromptSection.allCases.count, 2)
-        ReActPromptSection.policy.save("只记录用户明确给出的数据。", in: defaults)
+        ReActPromptSection.role.save("用一句话给结论。", in: defaults)
 
         let customized = ReActAgentPrompt.system(defaults: defaults)
-        XCTAssertTrue(customized.contains(ReActPromptSection.role.defaultText))
-        XCTAssertTrue(customized.contains("只记录用户明确给出的数据。"))
-        XCTAssertTrue(ReActPromptSection.policy.isCustomized(in: defaults))
+        XCTAssertTrue(customized.contains("用一句话给结论。"))
+        XCTAssertTrue(customized.contains(ReActPromptSection.policy.defaultText))
+        XCTAssertTrue(ReActPromptSection.role.isCustomized(in: defaults))
 
-        ReActPromptSection.policy.reset(in: defaults)
+        ReActPromptSection.role.reset(in: defaults)
 
-        XCTAssertFalse(ReActPromptSection.policy.isCustomized(in: defaults))
+        XCTAssertFalse(ReActPromptSection.role.isCustomized(in: defaults))
         XCTAssertTrue(
             ReActAgentPrompt.system(defaults: defaults)
-                .contains(ReActPromptSection.policy.defaultText)
+                .contains(ReActPromptSection.role.defaultText)
         )
     }
 
@@ -366,7 +293,7 @@ final class SomaTests: XCTestCase {
         XCTAssertEqual(ReActPromptSection.allCases.map(\.rawValue), ["role", "policy"])
         XCTAssertEqual(
             ReActPromptSection.userEditableCases.map(\.rawValue),
-            ["role", "policy"]
+            ["role"]
         )
 
         let systemPrompt = ReActAgentPrompt.system(defaults: defaults)
@@ -1667,7 +1594,7 @@ extension SomaTests {
     }
 }
 
-private final class MockAgentStreamTransport {
+final class MockAgentStreamTransport {
     enum Response {
         case toolCall(name: String, argumentsFragments: [String])
         case toolCalls([(name: String, arguments: String)])

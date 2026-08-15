@@ -5,7 +5,7 @@ final class AgentChatPresentationTests: XCTestCase {
     func testSingleExerciseResultBecomesFriendlySummaryWithoutIdentifier() throws {
         let observation = try AgentTraceText.json([
             ExerciseNameReference(
-                id: XCTUnwrap(UUID(uuidString: "E7061B11-1A7D-471A-B9C8-40EF6CC2575C")),
+                id: 41,
                 name: "杠铃深蹲"
             )
         ])
@@ -16,7 +16,7 @@ final class AgentChatPresentationTests: XCTestCase {
         ))
 
         XCTAssertEqual(presentation?.summary, "动作库中有 1 个动作：杠铃深蹲")
-        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.details, [String]())
         XCTAssertNil(presentation?.disclosureLabel)
     }
 
@@ -24,7 +24,7 @@ final class AgentChatPresentationTests: XCTestCase {
         let names = ["杠铃深蹲", "引体向上", "哑铃卧推", "罗马尼亚硬拉"]
         let observation = AgentTraceText.json(names.enumerated().map { index, name in
             ExerciseNameReference(
-                id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(index)")!,
+                id: Int64(index + 1),
                 name: name
             )
         })
@@ -38,7 +38,7 @@ final class AgentChatPresentationTests: XCTestCase {
             presentation?.summary,
             "动作库中有 4 个动作：杠铃深蹲、引体向上、哑铃卧推、罗马尼亚硬拉"
         )
-        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.details, [String]())
         XCTAssertNil(presentation?.disclosureLabel)
     }
 
@@ -59,7 +59,7 @@ final class AgentChatPresentationTests: XCTestCase {
             "2026年8月3日 引体向上，5组 × 5次 · 自重，间歇 120 秒\n"
                 + "2026年8月3日 杠铃深蹲，2组 × 5次 · 30kg，间歇 60 秒"
         )
-        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.details, [String]())
         XCTAssertNil(presentation?.disclosureLabel)
     }
 
@@ -71,7 +71,7 @@ final class AgentChatPresentationTests: XCTestCase {
         ))
 
         XCTAssertEqual(presentation?.summary, "已创建训练计划：基础力量训练。")
-        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.details, [String]())
     }
 
     func testLongGenericResultShowsTextWithExpandDisclosure() {
@@ -83,7 +83,7 @@ final class AgentChatPresentationTests: XCTestCase {
         ))
 
         XCTAssertEqual(presentation?.summary, observation)
-        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.details, [String]())
         XCTAssertEqual(presentation?.disclosureLabel, "展开")
     }
 
@@ -96,7 +96,7 @@ final class AgentChatPresentationTests: XCTestCase {
         ))
 
         XCTAssertEqual(presentation?.summary, observation)
-        XCTAssertEqual(presentation?.details, [])
+        XCTAssertEqual(presentation?.details, [String]())
         XCTAssertNil(presentation?.disclosureLabel)
         XCTAssertFalse(AgentToolResultDisclosure.shouldCollapse(observation))
     }

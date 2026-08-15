@@ -212,6 +212,9 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             for event in agentEvents ?? [] {
                 context.insert(event.makeModel())
             }
+            try BusinessIDAllocator.assignMissingIDs(in: context)
+            ExerciseLibraryStore.migrateLegacyWorkoutNames(in: context)
+            try SomaDataMigration.repairExerciseRelationships(in: context)
             try context.save()
         }
     }

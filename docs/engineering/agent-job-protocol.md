@@ -188,13 +188,14 @@ POST /v1/agent-jobs/{serverJobID}/ack
 
 - `clientJobID`、`turnID`、`sessionID`；
 - `protocolVersion`；
-- `modelInput: AgentModelInputEnvelope v1`：设备已组装的 system/history/current 消息、当前有效
-  Skill 快照、完整 Tool 定义、初始 Tool 集合、步数与时限；
+- `modelInput: AgentModelInputEnvelope v2`：设备已组装的 system/history/current 消息、Skill
+  元数据与内容快照、可选 `selectedSkillID`、仅当轮有效的 Tool 定义与名称、步数与时限；
 - `mediaBindings[{id,uploadID}]` 与已完成 `uploadIDs`；消息只引用稳定 media ID，Provider 适配器
   在最后一刻换成短期下载 URL；
 - `allowedDeviceTools` 名称清单及逐项对应的
   `allowedDeviceToolSchemas[{name,schemaVersion}]`；两份清单必须一一对应；
-- 允许的固定远程 runtime Tool：`load_skill`、`expand_tool_group`；
+- 允许的固定远程 runtime Tool 只取 Envelope 当前暴露集合中的 `load_skill`；
+  `expand_tool_group` 仅用于恢复旧 Checkpoint，不进入新 Envelope；
 - Live Activity preference。
 
 Server 必须拒绝缺失 Envelope、媒体绑定不闭合、Tool 目录与执行边界不一致的提交。不存在旧
@@ -275,8 +276,9 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 4. 模型每轮使用 Envelope 指定的原生流式 Tool Calling、`tool_choice=auto`、并行调用、步数与
    20/40/60 秒首增量、3/5/10 分钟活动预算。首段文本立即追加，后续文本按自然边界、48 字符
    阈值或 80ms 窗口合并；有完整 Tool Call 批次后才持久化。
-5. Worker 先持久化 assistant 文本与全部原生 `tool_calls`。`load_skill` 和
-   `expand_tool_group` 使用 Envelope 内快照就地执行；业务 Tool 全部进入 `waitingForDevice`。
+5. Worker 先持久化 assistant 文本与全部原生 `tool_calls`。当 Envelope 明确暴露时，
+   `load_skill` 使用其中 Skill 快照就地执行；旧 Checkpoint 中的 `expand_tool_group` 只按已持久化
+   快照恢复。业务 Tool 全部进入 `waitingForDevice`。
 6. 并行 Tool Result 可任意顺序幂等到达；最后一个结果到达前保持等待，齐备后按原调用顺序重建
    `assistant.tool_calls` 与 `role=tool` 消息，再创建新 lease 继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。
@@ -290,8 +292,11 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 - 用户 BYOK 永不进入 Job payload、数据库、对象存储或日志。
 - iOS 使用唯一 `AgentModelInputBuilder` 生成本地与远程模型输入。Server Provider 不保存任何
   Agent Prompt 文案，也不改写消息顺序、Skill 内容、Tool 描述或运行参数。
-- `AgentTurnContextEnvelope v2` 先在设备投影为有界最近会话、短事实与确定性媒体选择，再进入
-  `AgentModelInputEnvelope v1`；较早成功写入不重复长 Tool observation。
+- `AgentTurnContextEnvelope v3` 在设备冻结原始 Turn 时间、Session businessDate、时区和
+  `defaultOccurredAt`，并投影为条件业务上下文、最近十个完整 user-assistant 对、滚动替代摘要与
+  确定性媒体选择，再进入 `AgentModelInputEnvelope v2`；较早成功写入不重复长 Tool observation。
+- 会话压缩只在 ReAct Loop 前发生；小模型失败后回退标准模型，再失败使用确定性 digest。iOS 在
+  本地和远程提交前都投影同样的压缩 Chat 事件，Worker 不重新压缩或改写 Prompt。
 - `GET /v1/capabilities` 在媒体准备前返回远程 Provider 是否启用已验证直传视频；直传时只上传
   规范化 MP4，非直传模型只上传关键帧，同一 Provider 请求不同时包含视频和帧。
 - Job 输入显式携带 `mediaMode=text|images|keyframes|direct_video` 与

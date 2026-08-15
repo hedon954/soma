@@ -8,6 +8,7 @@
   - [ADR 0047](0047-deterministic-context-pack-and-cross-turn-facts.md) 用确定性上下文包与十轮外 digest 修订「不做滚动摘要 / 两行 structuredContext」边界
   - [ADR 0056](0056-trusted-selective-multimodal-context.md) 改为当前媒体优先、明确回指才恢复历史媒体
   - [ADR 0057](0057-direct-video-capability-and-observable-fallback.md) 改为按能力直传且仅失败后延迟抽帧
+  - [ADR 0070](0070-reviewable-rolling-session-compaction.md) 为十轮外对话引入可审查的滚动 LLM 压缩
 
 ## 背景
 

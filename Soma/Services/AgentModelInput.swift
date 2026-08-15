@@ -15,7 +15,15 @@ struct AgentModelMessage: Codable, Equatable, Sendable {
 
 struct AgentModelSkillSnapshot: Codable, Equatable, Sendable {
     var id: String
+    var name: String? = nil
+    var description: String? = nil
+    var whenToUse: String? = nil
     var content: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, content
+        case whenToUse = "when_to_use"
+    }
 }
 
 struct AgentModelTool: Codable, Equatable, Sendable {
@@ -51,13 +59,14 @@ struct AgentModelRuntimeOptions: Codable, Equatable, Sendable {
 
 /// 本地与远程 Provider 共用的版本化模型输入。Server 只能消费本结构，不能重新拼 Prompt。
 struct AgentModelInputEnvelope: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     var schemaVersion = currentSchemaVersion
     var messages: [AgentModelMessage]
     var skills: [AgentModelSkillSnapshot]
     var tools: [AgentModelTool]
     var activeTools: [AgentToolName]
+    var selectedSkillID: String? = nil
     var runtime: AgentModelRuntimeOptions
 }
 
@@ -86,6 +95,7 @@ enum AgentModelInputBuilder {
         currentVideos: [AgentVideoInput],
         skills: [AgentModelSkillSnapshot],
         tools: [AgentToolName],
+        selectedSkillID: String? = nil,
         maxSteps: Int,
         deadlinePolicy: AgentStreamDeadlinePolicy
     ) throws -> PreparedAgentModelInput {
@@ -138,7 +148,7 @@ enum AgentModelInputBuilder {
             envelope: AgentModelInputEnvelope(
                 messages: messages,
                 skills: skills,
-                tools: AgentToolName.allCases.map { name in
+                tools: tools.map { name in
                     let data = try JSONEncoder().encode(name.chatTool)
                     return try AgentModelTool(
                         name: name,
@@ -150,6 +160,7 @@ enum AgentModelInputBuilder {
                     )
                 },
                 activeTools: tools,
+                selectedSkillID: selectedSkillID,
                 runtime: AgentModelRuntimeOptions(
                     maxSteps: maxSteps,
                     deadlines: AgentModelDeadlinePolicy(deadlinePolicy)
@@ -162,8 +173,14 @@ enum AgentModelInputBuilder {
 
 extension AgentSkill {
     static func snapshots(defaults: UserDefaults) -> [AgentModelSkillSnapshot] {
-        allCases.map {
-            AgentModelSkillSnapshot(id: $0.rawValue, content: $0.text(in: defaults))
+        AgentSkillRegistry.allDescriptors(defaults: defaults).map {
+            AgentModelSkillSnapshot(
+                id: $0.id,
+                name: $0.title,
+                description: $0.summary,
+                whenToUse: $0.whenToUse,
+                content: $0.markdown
+            )
         }
     }
 }

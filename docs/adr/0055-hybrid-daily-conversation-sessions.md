@@ -6,7 +6,7 @@
 - 部分替代：
   - [ADR 0015](0015-daily-conversation-session-lifecycle.md) 中只读历史与无手动继续旧会话的边界
   - [ADR 0022](0022-user-controlled-conversation-sessions.md) 中跨日、冷启动和 foreground 永不自动切换的边界
-- 后续替代：暂无
+- 后续替代：[ADR 0072](0072-session-business-date-and-record-occurrence-time.md) 增加可编辑 Session 业务日与当前 Turn 日期覆盖
 - 上游依据：[PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
 
 ## 背景

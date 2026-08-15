@@ -6,7 +6,9 @@
 - 部分替代：
   - [ADR 0024](0024-session-context-projection-and-compaction.md) 中默认重新附加窗口内历史媒体的边界
   - [ADR 0047](0047-deterministic-context-pack-and-cross-turn-facts.md) 中以长 Tool observation 作为跨轮事实摘要的边界
-- 后续替代：[ADR 0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) 改为只保存 UTC 时间戳与时区标识，并让整个 Loop 复用冻结开始时间
+- 后续替代：
+  - [ADR 0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) 改为只保存 UTC 时间戳与时区标识，并让整个 Loop 复用冻结开始时间
+  - [ADR 0070](0070-reviewable-rolling-session-compaction.md) 允许在 Loop 前生成可审查的滚动 LLM 摘要
 - 上游依据：
   - [PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
   - [BUG 0011](../bugs/0011-meal-correction-misattributed-media.md)

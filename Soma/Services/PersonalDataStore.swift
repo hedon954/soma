@@ -9,6 +9,9 @@ struct PersonalDataClearResult: Equatable, Sendable {
 @MainActor
 enum PersonalDataStore {
     static func deleteAllModels(in context: ModelContext) throws {
+        try context.delete(model: ConversationCompactionSummary.self)
+        try context.delete(model: DataMigrationMarker.self)
+        try context.delete(model: BusinessIDSequence.self)
         try context.delete(model: ExternalSyncCursor.self)
         try context.delete(model: UserProfile.self)
         try context.delete(model: GymProfile.self)
@@ -17,7 +20,6 @@ enum PersonalDataStore {
         try context.delete(model: MealEntry.self)
         try context.delete(model: BodyEntry.self)
         try context.delete(model: ExerciseMergeRecord.self)
-        try context.delete(model: ExerciseDefinition.self)
         try context.delete(model: WorkoutEntry.self)
         try context.delete(model: TrainingProgram.self)
         try context.delete(model: WorkoutTemplateVersion.self)
@@ -27,6 +29,7 @@ enum PersonalDataStore {
         try context.delete(model: WorkoutSet.self)
         try context.delete(model: RecommendationSnapshot.self)
         try context.delete(model: PerformanceAnalysis.self)
+        try context.delete(model: ExerciseDefinition.self)
         try context.delete(model: ConversationSession.self)
         try context.delete(model: CoachMessage.self)
         try context.delete(model: AgentTrace.self)

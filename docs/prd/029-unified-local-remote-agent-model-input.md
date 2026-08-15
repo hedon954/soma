@@ -9,6 +9,7 @@
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 的稳定 Prompt、按意图 Tool 暴露与并行调用要求
 - 上游依据：[BUG 0018](../bugs/0018-remote-agent-model-input-divergence.md)
 - 下游落地：[ADR 0068](../adr/0068-versioned-unified-agent-model-input.md)
+- 后续修订：[PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 升级 Envelope、Skill 快照和 Tool v3 契约
 
 ## 背景
 

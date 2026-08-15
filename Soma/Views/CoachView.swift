@@ -62,6 +62,7 @@ struct CoachView: View {
     @State private var showsLocationPrompt = false
     @State private var useLocalForNextMessage = false
     @State private var selectedExerciseSuggestion: ExerciseInputSuggestion?
+    @State private var selectedSkillID: String?
     /// 流式期间合并滚动，避免每个 token 启动一次 250ms 动画反压 MainActor。
     @State private var lastLiveScrollAt = Date.distantPast
     @State private var liveScrollTask: Task<Void, Never>?
@@ -85,6 +86,10 @@ struct CoachView: View {
 
     private var currentGym: GymProfile? {
         GymSelection.current(in: gyms)
+    }
+
+    private var currentSession: ConversationSession? {
+        conversationSessions.activeSession(in: modelContext)
     }
 
     private var locationPreference: ConversationLocationPreference {
@@ -343,6 +348,9 @@ struct CoachView: View {
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
             useLocalForNextMessage: $useLocalForNextMessage,
+            selectedSkillID: $selectedSkillID,
+            businessDate: currentSession?.effectiveBusinessDate ?? .now,
+            onChangeBusinessDate: changeBusinessDate,
             isSending: processor.isProcessing,
             isListening: speechInput.isListening,
             speechMessage: speechInput.errorMessage,
@@ -360,6 +368,12 @@ struct CoachView: View {
 
     private func showMedia() {
         sheet = .media
+    }
+
+    private func changeBusinessDate(_ date: Date) {
+        guard let session = currentSession else { return }
+        session.setBusinessDate(date, timeZone: .current)
+        try? modelContext.save()
     }
 
     private var sessionDrawerGesture: some Gesture {
@@ -675,6 +689,7 @@ struct CoachView: View {
                 context: processingContext,
                 includeLocation: locationPreference == .enabled,
                 locationService: locationContext,
+                selectedSkillID: selectedSkillID,
                 forceLocal: useLocalForNextMessage
             )
         }
@@ -683,6 +698,7 @@ struct CoachView: View {
             attachments = []
             useLocalForNextMessage = false
             selectedExerciseSuggestion = nil
+            selectedSkillID = nil
             composerDismissRequest = UUID()
             scrollRequest = UUID()
             if needsConfigurationGuidance {
@@ -1195,6 +1211,9 @@ private struct CoachComposer: View {
     let pendingCount: Int
     let showsExecutionChoice: Bool
     @Binding var useLocalForNextMessage: Bool
+    @Binding var selectedSkillID: String?
+    let businessDate: Date
+    let onChangeBusinessDate: (Date) -> Void
     let isSending: Bool
     let isListening: Bool
     let speechMessage: String?
@@ -1209,6 +1228,8 @@ private struct CoachComposer: View {
     let onSend: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var focused: Bool
+    @State private var showsBusinessDatePicker = false
+    @State private var pendingBusinessDate = Date.now
 
     /// PRD 020：输入区同一时间最多一层上下文条，优先级为
     /// 附件预览 > 动作建议 > 场馆切换。
@@ -1231,6 +1252,11 @@ private struct CoachComposer: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                businessDateChip
+                skillShortcuts
+            }
+
             // ADR 0045：暂存计数常驻在输入区上方，与上下文条互不挤占。
             if pendingCount > 0 {
                 PendingQueueBanner(
@@ -1312,6 +1338,81 @@ private struct CoachComposer: View {
                 focused = false
             }
         }
+        .sheet(isPresented: $showsBusinessDatePicker) {
+            NavigationStack {
+                DatePicker(
+                    "Session 日期",
+                    selection: $pendingBusinessDate,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .padding()
+                .navigationTitle("默认记录日期")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { showsBusinessDatePicker = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") {
+                            onChangeBusinessDate(pendingBusinessDate)
+                            showsBusinessDatePicker = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    private var businessDateChip: some View {
+        Button {
+            pendingBusinessDate = businessDate
+            showsBusinessDatePicker = true
+        } label: {
+            Label(
+                businessDate.formatted(.dateTime.month().day()),
+                systemImage: "calendar"
+            )
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Session 默认记录日期")
+        .accessibilityValue(businessDate.formatted(date: .long, time: .omitted))
+    }
+
+    private var skillShortcuts: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(AgentSkillRegistry.quickDescriptors()) { skill in
+                    Button {
+                        selectedSkillID = selectedSkillID == skill.id ? nil : skill.id
+                    } label: {
+                        Text(skill.title)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .foregroundStyle(selectedSkillID == skill.id ? .white : .secondary)
+                            .background(
+                                selectedSkillID == skill.id
+                                    ? AppTheme.tint
+                                    : Color(uiColor: .secondarySystemGroupedBackground),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Skill：\(skill.title)")
+                    .accessibilityValue(selectedSkillID == skill.id ? "已选择" : "未选择")
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var gymStrip: some View {

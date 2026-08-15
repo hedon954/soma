@@ -88,9 +88,19 @@ end
 def registered_swiftdata_models
   source = File.read(APP_PATH)
   schema_body = source[/let schema = Schema\(\[(.*?)\]\)/m, 1]
-  abort_with("cannot find ModelContainer Schema registration in SomaApp.swift") unless schema_body
+  return schema_body.scan(/(\w+)\.self/).flatten.sort if schema_body
 
-  schema_body.scan(/(\w+)\.self/).flatten.sort
+  versioned_schema = source[/let schema = Schema\(versionedSchema:\s*(\w+)\.self\)/, 1]
+  abort_with("cannot find ModelContainer Schema registration in SomaApp.swift") unless versioned_schema
+
+  model_source = Dir.glob(MODEL_GLOB).sort.map { |path| File.read(path) }.join("\n")
+  schema_declaration = model_source[/enum\s+#{Regexp.escape(versioned_schema)}\s*:\s*VersionedSchema\s*\{(.*?)\n\}/m, 1]
+  abort_with("cannot find VersionedSchema #{versioned_schema}") unless schema_declaration
+
+  models_body = schema_declaration[/static\s+var\s+models\s*:\s*\[any\s+PersistentModel\.Type\]\s*\{\s*\[(.*?)\]\s*\}/m, 1]
+  abort_with("cannot find model catalog for VersionedSchema #{versioned_schema}") unless models_body
+
+  models_body.scan(/(\w+)\.self/).flatten.sort
 end
 
 def postgres_tables

@@ -108,9 +108,9 @@ enum AgentBusinessKeyDeduper {
 
     static func suspectedDuplicateMessage(
         kind: String,
-        recordID: UUID
+        recordID: Int64
     ) -> String {
-        "疑似重复\(kind)记录 [id:\(recordID.uuidString)]。如需修改请使用对应 update 工具；如确为新记录请说明差异后再写入。"
+        "疑似重复\(kind)记录 [id:\(recordID)]。如需修改请使用对应 update 工具；如确为新记录请说明差异后再写入。"
     }
 
     private static func workoutFingerprint(

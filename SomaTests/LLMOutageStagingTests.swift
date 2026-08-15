@@ -384,7 +384,7 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
-    func testExactQuickWorkoutRunsWithoutLLMAndUsesExecutionTime() async throws {
+    func testExactQuickWorkoutRunsWithoutLLMAndUsesStableTurnTime() async throws {
         let suiteName = "QuickWorkoutTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -399,8 +399,6 @@ final class LLMOutageStagingTests: XCTestCase {
         let processor = ConversationProcessingService(
             backgroundLease: StagingTestBackgroundLease()
         )
-        let startedAt = Date.now
-
         XCTAssertTrue(processor.submitQuickWorkout(
             text: "杠铃深蹲：60kg × 8 × 4组",
             draft: ExerciseQuickRecordDraft(
@@ -434,7 +432,7 @@ final class LLMOutageStagingTests: XCTestCase {
         XCTAssertEqual(job.executionKind, .deterministicWorkout)
         XCTAssertEqual(job.state, .succeeded)
         XCTAssertEqual(workout.setEntries.count, 4)
-        XCTAssertGreaterThanOrEqual(workout.date, startedAt)
+        XCTAssertEqual(workout.date, job.stableDefaultOccurredAt)
         XCTAssertTrue(try context.fetch(FetchDescriptor<AgentTrace>()).allSatisfy {
             $0.provider == "Soma 本机规则"
         })

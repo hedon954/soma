@@ -223,7 +223,7 @@ function makeJobInput(
     sessionID: randomUUID(),
     protocolVersion: 1,
     modelInput: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       messages: [
         { role: "system", text: "统一系统提示词", mediaIDs: [] },
         { role: "user", text: "虚构 PostgreSQL 集成任务", mediaIDs: [] },

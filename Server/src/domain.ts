@@ -58,6 +58,9 @@ export interface AgentModelMessage {
 
 export interface AgentModelSkillSnapshot {
   id: string;
+  name?: string;
+  description?: string;
+  whenToUse?: string;
   content: string;
 }
 
@@ -68,11 +71,12 @@ export interface AgentModelTool {
 }
 
 export interface AgentModelInput {
-  schemaVersion: 1;
+  schemaVersion: 2;
   messages: AgentModelMessage[];
   skills: AgentModelSkillSnapshot[];
   tools: AgentModelTool[];
   activeTools: string[];
+  selectedSkillID?: string;
   runtime: {
     toolChoice: "auto";
     parallelToolCalls: true;

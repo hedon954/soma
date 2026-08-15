@@ -263,6 +263,10 @@ final class DataManagementCoordinator {
                 in: personalContext,
                 mediaPathMapping: prepared.mediaPathMapping
             )
+            try SomaDataMigration.migrateIfNeeded(
+                container: dataSpace.personalContainer,
+                dataSpace: .personal
+            )
         } catch {
             for createdMediaPath in prepared.createdMediaPaths {
                 MediaStore.removeStoredFile(at: createdMediaPath)
