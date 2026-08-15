@@ -420,12 +420,17 @@ export class InMemorySomaStore implements SomaStore {
       return structuredClone(existing);
     }
     const job = this.requiredJob(request.jobID);
-    if (job.leaseEpoch !== leaseEpoch || job.state !== "running") {
+    if (
+      job.leaseEpoch !== leaseEpoch ||
+      (job.state !== "running" && job.state !== "waitingForDevice")
+    ) {
       throw new ProtocolError("invalid_request", "Worker lease 已失效。", 409);
     }
     const saved: ToolRequest = { ...structuredClone(request), id: randomUUID() };
     this.tools.set(key, saved);
-    await this.transition(request.jobID, "waitingForDevice", now, leaseEpoch);
+    if (job.state === "running") {
+      await this.transition(request.jobID, "waitingForDevice", now, leaseEpoch);
+    }
     await this.appendEvent(request.jobID, undefined, {
       kind: "tool",
       phase: "suspended",
@@ -484,9 +489,7 @@ export class InMemorySomaStore implements SomaStore {
     request.resultDigest = submission.digest;
     request.result = structuredClone(submission.result);
     request.completedAt = now;
-    job.state = "queued";
     job.updatedAt = now;
-    this.insertOutbox("job", jobID, { state: "queued" }, now);
     await this.appendEvent(jobID, undefined, {
       kind: "tool",
       phase: "completed",
@@ -497,7 +500,15 @@ export class InMemorySomaStore implements SomaStore {
       },
       createdAt: now,
     });
-    this.emitJobSignal();
+    const hasPending = [...this.tools.values()].some(
+      (candidate) =>
+        candidate.jobID === jobID && candidate.completedAt === undefined,
+    );
+    if (!hasPending) {
+      job.state = "queued";
+      this.insertOutbox("job", jobID, { state: "queued" }, now);
+      this.emitJobSignal();
+    }
     return structuredClone(request);
   }
 

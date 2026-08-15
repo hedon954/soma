@@ -112,13 +112,29 @@ struct RemoteAgentExecutionTests {
         )
         let clientJobID = UUID()
         let turnID = UUID()
+        let modelInput = try AgentModelInputBuilder.build(
+            systemPrompt: "自定义统一系统提示词",
+            history: [AgentConversationExchange(
+                userText: "历史用户消息",
+                assistantText: "历史教练回复",
+                images: [],
+                imageAttachmentCount: 0,
+                videoAttachmentCount: 0
+            )],
+            userPrompt: "[SOMA CURRENT TURN v1]\n当前虚构任务",
+            currentImages: [],
+            currentVideos: [],
+            skills: [.init(id: "training_plan", content: "自定义 Skill 内容")],
+            tools: [.loadSkill, .queryUserData, .expandToolGroup],
+            maxSteps: 37,
+            deadlinePolicy: AgentStreamDeadlinePolicy()
+        )
         let submitted = try await client.submit(job: AgentJobSubmission(
             clientJobID: clientJobID,
             turnID: turnID,
             sessionID: UUID(),
-            text: "虚构远程任务",
-            contextSnapshot: "最小虚构上下文",
-            attachments: [],
+            modelInput: modelInput,
+            mediaMode: .text,
             liveActivityEnabled: true
         ))
 
@@ -127,14 +143,27 @@ struct RemoteAgentExecutionTests {
         #expect(server.registrationSignatureWasValid)
         #expect(server.jobSignatureWasValid)
         #expect(server.idempotencyKey == clientJobID.uuidString.lowercased())
-        #expect(Set(server.submittedDeviceTools) == Set([
+        #expect(Set(server.submittedDeviceTools) == Set(
+            AgentToolName.allCases
+                .filter { ![.loadSkill, .expandToolGroup].contains($0) }
+                .map(\.rawValue)
+        ))
+        #expect(Set(server.submittedDeviceToolSchemas.keys) == Set(server.submittedDeviceTools))
+        #expect(Set(server.submittedRemoteTools) == Set([
             "load_skill",
-            "query_user_data",
             "expand_tool_group"
         ]))
-        #expect(server.submittedDeviceToolSchemas.values.allSatisfy { $0 == 2 })
-        #expect(Set(server.submittedDeviceToolSchemas.keys) == Set(server.submittedDeviceTools))
-        #expect(server.submittedRemoteTools.isEmpty)
+        #expect(server.submittedSystemPrompt == "自定义统一系统提示词")
+        #expect(server.submittedMessageRoles == [
+            "system", "user", "assistant", "user"
+        ])
+        #expect(server.submittedSkillContent == "自定义 Skill 内容")
+        #expect(server.submittedActiveTools == [
+            "load_skill", "query_user_data", "expand_tool_group"
+        ])
+        #expect(server.submittedMaxSteps == 37)
+        #expect(server.submittedToolDefinitionsMatchNames)
+        #expect(server.submittedDeadlines == [20, 40, 60, 180, 300, 600])
         #expect(server.submittedMediaMode == "text")
         #expect(server.submittedRequestAttempt == 1)
     }
@@ -151,6 +180,13 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
     private(set) var submittedRemoteTools: [String] = []
     private(set) var submittedMediaMode: String?
     private(set) var submittedRequestAttempt: Int?
+    private(set) var submittedSystemPrompt: String?
+    private(set) var submittedMessageRoles: [String] = []
+    private(set) var submittedSkillContent: String?
+    private(set) var submittedActiveTools: [String] = []
+    private(set) var submittedMaxSteps: Int?
+    private(set) var submittedToolDefinitionsMatchNames = false
+    private(set) var submittedDeadlines: [Int] = []
     func response(to request: URLRequest) throws -> (HTTPURLResponse, Data) {
         let path = request.url?.path ?? ""
         let responseBody: [String: Any]
@@ -201,6 +237,31 @@ private final class MockRemoteAgentServer: @unchecked Sendable {
             submittedRemoteTools = body["allowedRemoteTools"] as? [String] ?? []
             submittedMediaMode = body["mediaMode"] as? String
             submittedRequestAttempt = body["requestAttempt"] as? Int
+            let modelInput = body["modelInput"] as? [String: Any]
+            let messages = modelInput?["messages"] as? [[String: Any]] ?? []
+            submittedSystemPrompt = messages.first?["text"] as? String
+            submittedMessageRoles = messages.compactMap { $0["role"] as? String }
+            submittedSkillContent = (
+                modelInput?["skills"] as? [[String: Any]]
+            )?.first?["content"] as? String
+            submittedActiveTools = modelInput?["activeTools"] as? [String] ?? []
+            submittedMaxSteps = (
+                modelInput?["runtime"] as? [String: Any]
+            )?["maxSteps"] as? Int
+            let tools = modelInput?["tools"] as? [[String: Any]] ?? []
+            submittedToolDefinitionsMatchNames = !tools.isEmpty && tools.allSatisfy {
+                let function = (
+                    $0["definition"] as? [String: Any]
+                )?["function"] as? [String: Any]
+                return $0["name"] as? String == function?["name"] as? String
+            }
+            let deadlines = (
+                modelInput?["runtime"] as? [String: Any]
+            )?["deadlines"] as? [String: Any]
+            submittedDeadlines = [
+                "textTTFT", "imageTTFT", "directVideoTTFT",
+                "textLoopTotal", "imageLoopTotal", "videoLoopTotal"
+            ].compactMap { deadlines?[$0] as? Int }
             idempotencyKey = request.value(
                 forHTTPHeaderField: "idempotency-key"
             )

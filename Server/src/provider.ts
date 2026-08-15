@@ -1,17 +1,16 @@
 import type {
   AgentEvent,
   AgentJob,
+  AgentModelMessage,
 } from "./domain.js";
 import { ProtocolError } from "./domain.js";
 import type {
   ManagedModelProvider,
   ProviderMedia,
   ProviderStep,
+  ProviderToolCall,
 } from "./worker.js";
-import {
-  deviceToolRegistry,
-  effectiveAllowedDeviceTools,
-} from "./tool-registry.js";
+import { effectiveAllowedDeviceTools } from "./tool-registry.js";
 
 interface ChatCompletionResponse {
   choices?: {
@@ -70,66 +69,67 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       throw new ProtocolError("job_expired", "任务内容已清理。", 410);
     }
     const directVideo = supportsDirectVideo(this.model);
-    const messages: Record<string, unknown>[] = [
-      {
-        role: "system",
-        content:
-          "你是 Soma 的远程执行 Agent。只依据当前任务最小上下文工作；需要设备数据或写入时调用允许的固定设备 Tool。不要输出思维过程。",
-      },
-      userMessage(job.input.text, job.input.contextSnapshot, media, directVideo),
-    ];
+    const hasCompletedModelStep = events.some((event) =>
+      event.kind === "model" && event.phase === "completed"
+    );
+    const messages = modelMessages(
+      job.input.modelInput.messages,
+      media,
+      directVideo,
+      hasCompletedModelStep,
+    );
     for (const event of events) {
       if (
-        event.kind === "tool" &&
-        event.phase === "suspended" &&
-        typeof event.payload.toolCallID === "string" &&
-        typeof event.payload.toolName === "string"
+        event.kind === "model" &&
+        event.phase === "completed" &&
+        Array.isArray(event.payload.toolCalls)
       ) {
+        const toolCalls = event.payload.toolCalls as {
+          id?: unknown;
+          type?: unknown;
+          function?: unknown;
+        }[];
         messages.push({
           role: "assistant",
-          content: null,
-          tool_calls: [
-            {
-              id: event.payload.toolCallID,
-              type: "function",
-              function: {
-                name: event.payload.toolName,
-                arguments: JSON.stringify(event.payload.arguments ?? {}),
-              },
-            },
-          ],
+          content: typeof event.payload.assistantText === "string"
+            ? event.payload.assistantText
+            : null,
+          tool_calls: toolCalls,
         });
-      } else if (
-        event.kind === "tool" &&
-        event.phase === "completed" &&
-        typeof event.payload.toolCallID === "string"
-      ) {
-        messages.push({
-          role: "tool",
-          tool_call_id: event.payload.toolCallID,
-          content: JSON.stringify(event.payload.result ?? {}),
-        });
+        for (const call of toolCalls) {
+          if (typeof call.id !== "string") continue;
+          const result = events.find((candidate) =>
+            candidate.kind === "tool" &&
+            candidate.phase === "completed" &&
+            candidate.payload.toolCallID === call.id
+          );
+          if (result !== undefined) {
+            messages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: JSON.stringify(result.payload.result ?? {}),
+            });
+          }
+        }
       }
     }
-    const allowedDeviceTools = effectiveAllowedDeviceTools(
-      job.input.allowedDeviceTools,
+    const activeTools = effectiveAllowedDeviceTools(
+      job.input.modelInput.activeTools,
       events,
     );
-    const tools = allowedDeviceTools.flatMap((name) => {
-      const definition = deviceToolRegistry.get(name);
-      return definition === undefined
-        ? []
-        : [{
-            type: "function",
-            function: {
-              name,
-              description:
-                definition.description ??
-                "由用户设备执行的 Soma 固定 Tool；只传当前任务明确需要的最小参数。",
-              parameters: definition.parameters,
-            },
-          }];
+    const toolsByName = new Map(
+      job.input.modelInput.tools.map((tool) => [tool.name, tool]),
+    );
+    const tools = activeTools.flatMap((name) => {
+      const tool = toolsByName.get(name);
+      return tool === undefined ? [] : [tool.definition];
     });
+    const toolSchemas = new Map(
+      activeTools.flatMap((name) => {
+        const tool = toolsByName.get(name);
+        return tool === undefined ? [] : [[name, tool.schemaVersion] as const];
+      }),
+    );
     const mediaMode = directVideo && media.some((item) => item.contentType.startsWith("video/"))
       ? "direct_video"
       : media.some((item) => item.contentType.startsWith("image/"))
@@ -141,7 +141,11 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       : 2;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maximumRequestAttempts; attempt += 1) {
-      const deadline = new ProviderRequestDeadline(mediaMode);
+      const deadline = new ProviderRequestDeadline(
+        mediaMode,
+        job.input.modelInput.runtime.deadlines,
+        !hasCompletedModelStep,
+      );
       try {
         const response = await this.fetcher(
           `${this.baseURL.replace(/\/$/, "")}/chat/completions`,
@@ -155,7 +159,9 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
               model: this.model,
               messages,
               tools,
-              tool_choice: "auto",
+              tool_choice: job.input.modelInput.runtime.toolChoice,
+              parallel_tool_calls:
+                job.input.modelInput.runtime.parallelToolCalls,
               stream: true,
               stream_options: { include_usage: true },
             }),
@@ -175,9 +181,15 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
             response,
             onTextDelta,
             () => deadline.markMeaningfulDelta(),
+            toolSchemas,
           );
         } else {
-          step = await this.consumeResponse(response, onTextDelta, deadline);
+          step = await this.consumeResponse(
+            response,
+            onTextDelta,
+            deadline,
+            toolSchemas,
+          );
         }
         deadline.finish();
         return step;
@@ -201,34 +213,20 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     response: Response,
     onTextDelta: ((delta: string) => Promise<void>) | undefined,
     deadline: ProviderRequestDeadline,
+    toolSchemas: Map<string, number>,
   ): Promise<ProviderStep> {
     const payload = (await response.json()) as ChatCompletionResponse;
     const message = payload.choices?.[0]?.message;
-    const tool = message?.tool_calls?.[0]?.function;
-    if (tool?.name !== undefined) {
+    if ((message?.tool_calls?.length ?? 0) > 0) {
       deadline.markMeaningfulDelta();
-      let argumentsValue: Record<string, unknown>;
-      try {
-        argumentsValue = JSON.parse(tool.arguments ?? "{}") as Record<
-          string,
-          unknown
-        >;
-      } catch {
-        throw new ProtocolError(
-          "invalid_request",
-          "Provider 返回了无效 Tool 参数。",
-          502,
-        );
-      }
       return {
-        kind: "deviceTool",
-        ...(message?.tool_calls?.[0]?.id === undefined
-          ? {}
-          : { toolCallID: message.tool_calls[0].id }),
-        toolName: tool.name,
-        schemaVersion: deviceToolRegistry.get(tool.name)?.schemaVersion ?? 1,
-        arguments: argumentsValue,
-        mutation: true,
+        kind: "toolCalls",
+        assistantText: message?.content ?? "",
+        calls: parseResponseToolCalls(message?.tool_calls ?? [], toolSchemas),
+        usage: {
+          input: payload.usage?.prompt_tokens ?? 0,
+          output: payload.usage?.completion_tokens ?? 0,
+        },
       };
     }
     const answer = message?.content?.trim();
@@ -255,6 +253,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     response: Response,
     onTextDelta?: (delta: string) => Promise<void>,
     onMeaningfulDelta?: () => void,
+    toolSchemas: Map<string, number> = new Map(),
   ): Promise<ProviderStep> {
     if (response.body === null) {
       throw new ProtocolError(
@@ -371,30 +370,22 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     await flushBufferedText();
     await emission;
 
-    const tool = [...toolCalls.entries()]
+    const orderedTools = [...toolCalls.entries()]
       .sort(([lhs], [rhs]) => lhs - rhs)
-      .map(([, value]) => value)[0];
-    if (tool !== undefined && tool.name.length > 0) {
-      let argumentsValue: Record<string, unknown>;
-      try {
-        argumentsValue = JSON.parse(tool.arguments || "{}") as Record<
-          string,
-          unknown
-        >;
-      } catch {
-        throw new ProtocolError(
-          "invalid_request",
-          "Provider 返回了无效 Tool 参数。",
-          502,
-        );
-      }
+      .map(([, value]) => value)
+      .filter((tool) => tool.name.length > 0);
+    if (orderedTools.length > 0) {
       return {
-        kind: "deviceTool",
-        ...(tool.id === undefined ? {} : { toolCallID: tool.id }),
-        toolName: tool.name,
-        schemaVersion: deviceToolRegistry.get(tool.name)?.schemaVersion ?? 1,
-        arguments: argumentsValue,
-        mutation: true,
+        kind: "toolCalls",
+        assistantText: answer,
+        calls: parseResponseToolCalls(
+          orderedTools.map((tool) => ({
+            ...(tool.id === undefined ? {} : { id: tool.id }),
+            function: { name: tool.name, arguments: tool.arguments },
+          })),
+          toolSchemas,
+        ),
+        usage,
       };
     }
 
@@ -410,55 +401,87 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
   }
 }
 
-function userMessage(
-  text: string,
-  context: string,
+function modelMessages(
+  input: AgentModelMessage[],
   media: ProviderMedia[],
   directVideo: boolean,
-): Record<string, unknown> {
-  if (media.length === 0) {
+  clearHistoricalMedia: boolean,
+): Record<string, unknown>[] {
+  const mediaByID = new Map(media.map((item) => [item.id, item]));
+  return input.map((message, index) => {
+    const attachments = message.mediaIDs
+      .map((id) => mediaByID.get(id))
+      .filter((item): item is ProviderMedia => item !== undefined);
+    if (
+      attachments.length === 0 ||
+      (clearHistoricalMedia && index > 0 && index < input.length - 1)
+    ) {
+      const text = attachments.length > 0
+        ? `${message.text}\n（历史视觉帧已在后续步骤清除，仅保留文字上下文。）`
+        : message.text;
+      return { role: message.role, content: text };
+    }
     return {
-      role: "user",
-      content: `${text}\n\n[MINIMAL CONTEXT]\n${context}`,
+      role: message.role,
+      content: [
+        { type: "text", text: message.text },
+        ...attachments.map((item) => {
+          if (directVideo && item.contentType.startsWith("video/")) {
+            return {
+              type: "video_url",
+              video_url: { url: item.url, fps: 2 },
+            };
+          }
+          return {
+            type: "image_url",
+            image_url: { url: item.url, detail: "auto" },
+          };
+        }),
+      ],
     };
-  }
-  const videos = directVideo
-    ? media.filter((item) => item.contentType.startsWith("video/"))
-    : [];
-  const images = videos.length > 0
-    ? []
-    : media.filter((item) => item.contentType.startsWith("image/"));
-  const parts: Record<string, unknown>[] = [
-    {
-      type: "text",
-      text: [
-        text,
-        "",
-        "[MINIMAL CONTEXT]",
-        context,
-        "",
-        videos.length > 0
-          ? `附件包含 ${videos.length} 个完整视频。`
-          : `附件包含 ${images.length} 张图片或视频关键帧。`,
-        videos.length > 0
-          ? "请依据完整视频分析，并明确无法可靠观察的部分。"
-          : "只依据可见内容分析；关键帧不足以证明完整动作轨迹。",
-      ].join("\n"),
-    },
-    ...images.map((item) => ({
-      type: "image_url",
-      image_url: { url: item.url },
-    })),
-    ...videos.map((item) => ({
-      type: "video_url",
-      video_url: { url: item.url },
-    })),
-  ];
-  return { role: "user", content: parts };
+  });
+}
+
+function parseResponseToolCalls(
+  values: {
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }[],
+  schemas: Map<string, number>,
+): ProviderToolCall[] {
+  return values.map((value) => {
+    const name = value.function?.name;
+    if (name === undefined || !schemas.has(name)) {
+      throw new ProtocolError(
+        "tool_schema_unsupported",
+        "Provider 返回了未暴露的 Tool。",
+        409,
+      );
+    }
+    let argumentsValue: Record<string, unknown>;
+    try {
+      argumentsValue = JSON.parse(value.function?.arguments ?? "{}") as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      throw new ProtocolError(
+        "invalid_request",
+        "Provider 返回了无效 Tool 参数。",
+        502,
+      );
+    }
+    return {
+      ...(value.id === undefined ? {} : { toolCallID: value.id }),
+      toolName: name,
+      schemaVersion: schemas.get(name) ?? 1,
+      arguments: argumentsValue,
+    };
+  });
 }
 
 type ProviderMediaMode = "text" | "images" | "direct_video";
-type ProviderTimeoutPhase = "first_delta" | "idle" | "total";
+type ProviderTimeoutPhase = "first_delta" | "total";
 
 class ProviderRequestDeadline {
   readonly controller = new AbortController();
@@ -467,11 +490,30 @@ class ProviderRequestDeadline {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly totalTimer: ReturnType<typeof setTimeout>;
   private readonly firstDeltaSeconds: number;
+  private readonly totalSeconds: number;
 
-  constructor(mode: ProviderMediaMode) {
-    this.firstDeltaSeconds = mode === "direct_video" ? 20 : mode === "images" ? 10 : 8;
-    this.timer = this.abortAfter(this.firstDeltaSeconds, "first_delta");
-    this.totalTimer = setTimeout(() => this.abort("total"), 180_000);
+  constructor(
+    mode: ProviderMediaMode,
+    policy: NonNullable<AgentJob["input"]>["modelInput"]["runtime"]["deadlines"],
+    enforceFirstDelta: boolean,
+  ) {
+    this.firstDeltaSeconds = mode === "direct_video"
+      ? policy.directVideoTTFT
+      : mode === "images"
+        ? policy.imageTTFT
+        : policy.textTTFT;
+    this.timer = enforceFirstDelta
+      ? this.abortAfter(this.firstDeltaSeconds, "first_delta")
+      : undefined;
+    this.totalSeconds = mode === "direct_video"
+      ? policy.videoLoopTotal
+      : mode === "images"
+        ? policy.imageLoopTotal
+        : policy.textLoopTotal;
+    this.totalTimer = setTimeout(
+      () => this.abort("total"),
+      this.totalSeconds * 1_000,
+    );
   }
 
   get signal(): AbortSignal {
@@ -481,7 +523,7 @@ class ProviderRequestDeadline {
   markMeaningfulDelta(): void {
     this.receivedMeaningfulDelta = true;
     if (this.timer !== undefined) clearTimeout(this.timer);
-    this.timer = this.abortAfter(30, "idle");
+    this.timer = undefined;
   }
 
   finish(): void {
@@ -491,7 +533,9 @@ class ProviderRequestDeadline {
 
   error(error: unknown): unknown {
     if (!this.controller.signal.aborted) return error;
-    const seconds = this.phase === "first_delta" ? this.firstDeltaSeconds : this.phase === "idle" ? 30 : 180;
+    const seconds = this.phase === "first_delta"
+      ? this.firstDeltaSeconds
+      : this.totalSeconds;
     return new ProtocolError(
       "provider_timeout",
       `模型请求在 ${this.phase} 阶段超过 ${seconds} 秒。`,

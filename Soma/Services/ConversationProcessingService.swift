@@ -60,7 +60,7 @@ struct ConversationProcessingContext {
 @MainActor
 @Observable
 final class ConversationProcessingService {
-    private static let maximumAnalysisImageCount = 12
+    static let maximumAnalysisImageCount = 12
     /// 配合 step 检查点分段续跑；到期前会落盘检查点。
     private static let executionLeaseDuration: TimeInterval = 45
     private let runnerOwner = UUID().uuidString.lowercased()
@@ -456,18 +456,19 @@ final class ConversationProcessingService {
                 : "正在同步后台进度…"
             if job.remoteJobID == nil {
                 let submissionStartedAt = Date.now
-                let snapshot = job.contextSnapshot?.envelope?.promptText(
-                    at: .now,
-                    includeRecentExchanges: true
-                ) ?? job.contextSnapshot?.structuredContext
-                    ?? context.structuredContext
+                let prepared = try await prepareRemoteSubmission(
+                    job: job,
+                    userMessage: userMessage,
+                    turnID: turnID,
+                    context: context,
+                    client: client
+                )
                 let submitted = try await client.submit(job: AgentJobSubmission(
                     clientJobID: remoteClientJobID(for: job),
                     turnID: turnID,
                     sessionID: context.session.id,
-                    text: userMessage.text,
-                    contextSnapshot: snapshot,
-                    attachments: job.mediaAttachments,
+                    modelInput: prepared.modelInput,
+                    mediaMode: prepared.mediaMode,
                     liveActivityEnabled: UserDefaults.standard.bool(
                         forKey: AgentSystemPreference.liveActivitiesKey
                     ),
@@ -489,12 +490,11 @@ final class ConversationProcessingService {
                         endedAt: submissionEndedAt,
                         metadata: AgentTraceText.jsonObject([
                             "attachment_count": job.mediaAttachments.count,
+                            "history_exchange_count": prepared.historyExchangeCount,
                             "video_count": job.mediaAttachments.count {
                                 $0.kind == .video
                             },
-                            "media_mode": job.remoteRequestAttempt > 1
-                                ? "keyframes"
-                                : "negotiated",
+                            "media_mode": prepared.mediaMode.rawValue,
                             "request_attempt": job.remoteRequestAttempt,
                             "duration_ms": Int(
                                 submissionEndedAt.timeIntervalSince(
@@ -758,6 +758,16 @@ final class ConversationProcessingService {
                 trace: trace,
                 context: context
             )
+            return
+        }
+
+        if projectRemoteRuntimeTool(
+            event,
+            job: job,
+            responseMessage: responseMessage,
+            trace: trace,
+            context: context
+        ) {
             return
         }
 
@@ -1449,7 +1459,7 @@ extension ConversationProcessingService {
         try? context.modelContext.save()
     }
 
-    private func composePersistentContext(
+    func composePersistentContext(
         job: AgentJob,
         userMessage: CoachMessage,
         turnID: UUID,
@@ -1768,18 +1778,6 @@ extension ConversationProcessingService {
         }
     }
 
-    private func mediaDisplaySummary(
-        _ attachments: [MediaAttachmentReference]
-    ) -> String {
-        let imageCount = attachments.count { $0.kind == .image }
-        let videoCount = attachments.count { $0.kind == .video }
-        let parts = [
-            imageCount > 0 ? "\(imageCount) 张图片" : nil,
-            videoCount > 0 ? "\(videoCount) 个视频" : nil
-        ].compactMap { $0 }
-        return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
-    }
-
     private func mediaAttachmentBytes(
         _ attachments: [MediaAttachmentReference]
     ) -> Int {
@@ -1799,7 +1797,7 @@ extension ConversationProcessingService {
 
     /// 首个请求发出前的本地准备（上下文投影 + 历史媒体重新抽帧）需要单独计时，
     /// 否则一次「慢」无法区分是供应商排队还是我们自己的准备开销。
-    private func prepareHistory(
+    func prepareHistory(
         excludingTurnID turnID: UUID,
         currentFrameCount: Int,
         currentText: String,

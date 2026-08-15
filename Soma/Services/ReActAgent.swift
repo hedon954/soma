@@ -1,7 +1,7 @@
 import Foundation
 import SwiftOpenAI
 
-enum AgentToolName: String, Codable, CaseIterable {
+enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case loadSkill = "load_skill"
     case queryUserData = "query_user_data"
     case mutateUserData = "mutate_user_data"

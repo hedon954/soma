@@ -7,6 +7,18 @@ struct PreparedAgentHistory {
 }
 
 extension ConversationProcessingService {
+    func mediaDisplaySummary(
+        _ attachments: [MediaAttachmentReference]
+    ) -> String {
+        let imageCount = attachments.count { $0.kind == .image }
+        let videoCount = attachments.count { $0.kind == .video }
+        let parts = [
+            imageCount > 0 ? "\(imageCount) 张图片" : nil,
+            videoCount > 0 ? "\(videoCount) 个视频" : nil
+        ].compactMap { $0 }
+        return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
+    }
+
     func prepareStoredMedia(
         _ attachments: [MediaAttachmentReference],
         frameLimit: Int,

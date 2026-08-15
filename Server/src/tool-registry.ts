@@ -46,7 +46,7 @@ export function effectiveAllowedDeviceTools(
   for (const event of events) {
     if (
       event.kind !== "tool" ||
-      event.phase !== "suspended" ||
+      !["started", "suspended"].includes(event.phase) ||
       event.payload.toolName !== "expand_tool_group" ||
       typeof event.payload.toolCallID !== "string" ||
       !completed.has(event.payload.toolCallID)
@@ -470,6 +470,7 @@ export function validateDeviceTool(input: {
   schemaVersion: number;
   arguments: Record<string, unknown>;
   allowedNames: string[];
+  parameters?: DeviceToolDefinition["parameters"];
 }): DeviceToolDefinition {
   const definition = deviceToolRegistry.get(input.name);
   if (
@@ -483,11 +484,12 @@ export function validateDeviceTool(input: {
       409,
     );
   }
+  const parameters = input.parameters ?? definition.parameters;
   const keys = Object.keys(input.arguments);
   const unknown = keys.find(
-    (key) => definition.parameters.properties[key] === undefined,
+    (key) => parameters.properties[key] === undefined,
   );
-  const missing = definition.parameters.required?.find(
+  const missing = parameters.required?.find(
     (key) => input.arguments[key] === undefined,
   );
   if (unknown !== undefined || missing !== undefined) {

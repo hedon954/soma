@@ -59,7 +59,7 @@ struct RemoteAgentSettingsView: View {
                     LabeledContent("硬性内容上限", value: "7 天")
                     LabeledContent("非内容运行元数据", value: "30 天")
                     Label(
-                        "仅发送当前消息、所选图片或视频关键帧，以及提交时的最小上下文快照",
+                        "发送当前消息、有界会话历史、所选媒体，以及当前有效的提示词、Skills 与 Tool 契约",
                         systemImage: "checkmark.shield"
                     )
                     Label(
@@ -92,7 +92,7 @@ struct RemoteAgentSettingsView: View {
                 enabled = true
             }
         } message: {
-            Text("Soma 会把当前任务的文字、所选图片或视频关键帧和最小上下文发送到你配置的服务，由 Soma 管理的模型凭据执行。原始视频和你的个人 API Key 不会上传。")
+            Text("Soma 会把本机已组装的完整模型输入发送到你配置的服务，包括当前消息、有界会话历史、所选媒体，以及当前有效的提示词、Skills 与 Tool 契约。服务只为本次任务临时保留这些内容；你的个人 API Key 不会上传。")
         }
         .alert("关闭并清除？", isPresented: $showsDisableConfirmation) {
             Button("取消", role: .cancel) {}

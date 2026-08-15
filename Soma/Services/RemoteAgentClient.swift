@@ -61,76 +61,48 @@ struct RemoteAgentClient: AgentExecutionBackend {
         job: AgentJobSubmission
     ) async throws -> RemoteAgentJobSnapshot {
         var uploadIDs: [String] = []
-        var mediaMode = "text"
         do {
-            let capabilities = try await capabilities()
-            for attachment in job.attachments {
-                if attachment.kind == .video {
-                    guard let sourceURL = MediaStore.url(at: attachment.path)
-                    else {
-                        throw RemoteAgentError.server(
-                            code: "media_missing",
-                            message: "一项待发送视频已不在本机。"
-                        )
-                    }
-                    if capabilities.directVideo, job.requestAttempt == 1 {
-                        let capability = DirectVideoCapability(
-                            maximumRawBytes: 7 * 1024 * 1024,
-                            preferredMIMEType: "video/mp4"
-                        )
-                        guard let input = await DirectVideoPreparer.input(
-                            for: sourceURL,
-                            capability: capability
-                        ) else {
-                            throw RemoteAgentError.server(
-                                code: "direct_video_unavailable",
-                                message: "视频无法压缩到直传安全大小，请改用本机分析。"
-                            )
-                        }
-                        try await uploadIDs.append(uploadVideo(input))
-                        mediaMode = "direct_video"
-                    } else {
-                        let frames = await VideoFrameExtractor.frames(from: sourceURL)
-                        guard !frames.isEmpty else {
-                            throw RemoteAgentError.server(
-                                code: "video_frames_unavailable",
-                                message: "无法读取视频关键帧；可改为本次仅本机后重试。"
-                            )
-                        }
-                        for frame in frames {
-                            try await uploadIDs.append(uploadJPEGFrame(frame))
-                        }
-                        mediaMode = "keyframes"
-                    }
-                } else if attachment.kind == .image {
-                    try await uploadIDs.append(upload(attachment))
-                    if mediaMode == "text" {
-                        mediaMode = "images"
-                    }
+            var mediaBindings: [[String: Any]] = []
+            for payload in job.modelInput.media {
+                let uploadID: String = switch payload {
+                case let .image(_, data):
+                    try await uploadJPEGFrame(data)
+                case let .video(_, input):
+                    try await uploadVideo(input)
                 }
+                uploadIDs.append(uploadID)
+                mediaBindings.append([
+                    "id": payload.id,
+                    "uploadID": uploadID
+                ])
             }
-            let groups = AgentToolExposurePolicy.initialGroups(signals: .init(
-                text: job.text,
-                hasVideo: job.attachments.contains(where: { $0.kind == .video }),
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            ))
-            let exposedTools = AgentToolExposurePolicy.tools(for: groups)
+            let runtimeToolNames: Set<AgentToolName> = [
+                .loadSkill,
+                .expandToolGroup
+            ]
+            let remoteTools = job.modelInput.envelope.tools.filter {
+                runtimeToolNames.contains($0.name)
+            }
+            let deviceTools = job.modelInput.envelope.tools.filter {
+                !runtimeToolNames.contains($0.name)
+            }
+            let inputData = try JSONEncoder().encode(job.modelInput.envelope)
+            let inputObject = try JSONSerialization.jsonObject(with: inputData)
             let body = try encodeBody([
                 "clientJobID": job.clientJobID.uuidString.lowercased(),
                 "turnID": job.turnID.uuidString.lowercased(),
                 "sessionID": job.sessionID.uuidString.lowercased(),
                 "protocolVersion": 1,
-                "text": job.text,
-                "contextSnapshot": job.contextSnapshot,
+                "modelInput": inputObject,
+                "mediaBindings": mediaBindings,
                 "uploadIDs": uploadIDs,
-                "mediaMode": mediaMode,
+                "mediaMode": job.mediaMode.rawValue,
                 "requestAttempt": job.requestAttempt,
-                "allowedRemoteTools": [],
-                "allowedDeviceTools": exposedTools.map(\.rawValue),
-                "allowedDeviceToolSchemas": exposedTools.map {
+                "allowedRemoteTools": remoteTools.map(\.name.rawValue),
+                "allowedDeviceTools": deviceTools.map(\.name.rawValue),
+                "allowedDeviceToolSchemas": deviceTools.map {
                     [
-                        "name": $0.rawValue,
+                        "name": $0.name.rawValue,
                         "schemaVersion": $0.schemaVersion
                     ] as [String: Any]
                 },
@@ -152,6 +124,10 @@ struct RemoteAgentClient: AgentExecutionBackend {
             }
             throw error
         }
+    }
+
+    func supportsDirectVideo() async throws -> Bool {
+        try await capabilities().directVideo
     }
 
     func events(
@@ -318,21 +294,6 @@ struct RemoteAgentClient: AgentExecutionBackend {
                 "bytes": bytes,
                 "sha256": digest
             ])
-        )
-    }
-
-    private func upload(
-        _ attachment: MediaAttachmentReference
-    ) async throws -> String {
-        guard let sourceURL = MediaStore.url(at: attachment.path) else {
-            throw RemoteAgentError.server(
-                code: "media_missing",
-                message: "一项待发送媒体已不在本机。"
-            )
-        }
-        return try await uploadFile(
-            sourceURL,
-            contentType: mediaType(for: sourceURL, kind: attachment.kind)
         )
     }
 

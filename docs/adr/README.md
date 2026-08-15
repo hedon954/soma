@@ -71,6 +71,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) | 已采纳 | mutation 按明确写意图暴露，System/User Prompt 使用版本化稳定前缀 |
 | [0066](0066-bundled-action-illustration-coverage.md) | 已采纳 | 静默内置目录至少维持一百个 common action 专属离线图 |
 | [0067](0067-separate-business-time-and-active-loop-budget.md) | 已采纳 | 固定业务时间与活动执行预算解耦，等待不耗时且手动重试刷新预算窗口 |
+| [0068](0068-versioned-unified-agent-model-input.md) | 已采纳 | 设备生成版本化统一模型输入，本地与远程 Provider 只消费同一 Envelope |
 
 新决策使用 [ADR 模板](template.md)。
 

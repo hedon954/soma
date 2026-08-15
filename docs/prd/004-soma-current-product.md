@@ -26,6 +26,7 @@
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md)
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md)
+  - [PRD 029](029-unified-local-remote-agent-model-input.md)
   - [PRD 028](028-retry-active-runtime-budget.md)
 
 ## 产品定义
@@ -236,8 +237,9 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
   附件，不读取历史聊天、Agent 回复、身体数据、Trace、位置或日志。远程 Agent 只能请求设备
   执行该 Tool，不能在服务器代发。
 - Soma 提供一般健身建议，不做医疗诊断。
-- 远程模式只上传当前文字、所选图片或视频关键帧和最小上下文；原始训练视频、用户 BYOK、
-  完整 SwiftData、Keychain 与原始坐标不上传。终态消费后清理内容，所有内容最长保留 7 天，
+- 远程模式上传设备已组装的有界模型输入：当前文字、最近会话、所选标准化媒体、当前有效
+  Prompt/Skills 与固定 Tool 契约；确认支持的 Provider 可接收规范化视频副本。用户 BYOK、完整
+  SwiftData、Keychain、未选媒体与原始坐标不上传。终态消费后清理内容，所有内容最长保留 7 天，
   非内容元数据最长 30 天。
 
 ## 明确不在当前实现

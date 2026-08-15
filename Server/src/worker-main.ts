@@ -56,17 +56,23 @@ const worker = new AgentWorker(
         job.deviceID,
         job.input.uploadIDs,
       );
+      const uploadsByID = new Map(uploads.map((upload) => [upload.id, upload]));
       const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
       return Promise.all(
-        uploads
-          .filter((upload) => upload.completedAt !== undefined)
-          .map(async (upload) => ({
+        job.input.mediaBindings.map(async (binding) => {
+          const upload = uploadsByID.get(binding.uploadID);
+          if (upload === undefined || upload.completedAt === undefined) {
+            throw new Error("任务媒体绑定引用了不可用的上传。");
+          }
+          return {
+            id: binding.id,
             contentType: upload.contentType,
             url: await objects.createDownloadURL(
               upload.objectKey,
               expiresAt,
             ),
-          })),
+          };
+        }),
       );
     },
   },

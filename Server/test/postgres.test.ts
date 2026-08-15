@@ -222,8 +222,40 @@ function makeJobInput(
     turnID: randomUUID(),
     sessionID: randomUUID(),
     protocolVersion: 1,
-    text: "虚构 PostgreSQL 集成任务",
-    contextSnapshot: "最小虚构上下文",
+    modelInput: {
+      schemaVersion: 1,
+      messages: [
+        { role: "system", text: "统一系统提示词", mediaIDs: [] },
+        { role: "user", text: "虚构 PostgreSQL 集成任务", mediaIDs: [] },
+      ],
+      skills: [],
+      tools: [{
+        name: "list_exercise_names",
+        schemaVersion: 1,
+        definition: {
+          type: "function",
+          function: {
+            name: "list_exercise_names",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      }],
+      activeTools: ["list_exercise_names"],
+      runtime: {
+        toolChoice: "auto",
+        parallelToolCalls: true,
+        maxSteps: 100,
+        deadlines: {
+          textTTFT: 20,
+          imageTTFT: 40,
+          directVideoTTFT: 60,
+          textLoopTotal: 180,
+          imageLoopTotal: 300,
+          videoLoopTotal: 600,
+        },
+      },
+    },
+    mediaBindings: [],
     uploadIDs: [],
     allowedRemoteTools: [],
     allowedDeviceTools: ["list_exercise_names"],

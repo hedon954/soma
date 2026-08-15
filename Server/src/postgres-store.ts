@@ -484,7 +484,8 @@ export class PostgresSomaStore implements SomaStore {
         `UPDATE agent_jobs SET
            state = 'waitingForDevice',
            updated_at = $3
-         WHERE id = $1 AND lease_epoch = $2 AND state = 'running'`,
+         WHERE id = $1 AND lease_epoch = $2
+           AND state IN ('running', 'waitingForDevice')`,
         [request.jobID, leaseEpoch, now],
       );
       if (updated.rowCount !== 1) {
@@ -612,17 +613,13 @@ export class PostgresSomaStore implements SomaStore {
           now,
         ],
       );
-      await client.query(
+      const sequenceResult = await client.query<{ last_sequence: number }>(
         `UPDATE agent_jobs SET
-           state = 'queued',
            updated_at = $2,
            last_sequence = last_sequence + 1
-         WHERE id = $1`,
+         WHERE id = $1
+         RETURNING last_sequence`,
         [jobID, now],
-      );
-      const sequenceResult = await client.query<{ last_sequence: number }>(
-        "SELECT last_sequence FROM agent_jobs WHERE id = $1",
-        [jobID],
       );
       const sequence = requiredRow(sequenceResult.rows[0]).last_sequence;
       await client.query(
@@ -644,12 +641,6 @@ export class PostgresSomaStore implements SomaStore {
       await client.query(
         `INSERT INTO transactional_outbox
          (id, topic, aggregate_id, payload_json, created_at)
-         VALUES ($1, 'job', $2, $3, $4)`,
-        [randomUUID(), jobID, { state: "queued" }, now],
-      );
-      await client.query(
-        `INSERT INTO transactional_outbox
-         (id, topic, aggregate_id, payload_json, created_at)
          VALUES ($1, 'apns', $2, $3, $4)`,
         [
           randomUUID(),
@@ -661,9 +652,27 @@ export class PostgresSomaStore implements SomaStore {
       await client.query("SELECT pg_notify('soma_agent_event', $1)", [
         JSON.stringify({ jobID, sequence }),
       ]);
-      await client.query("SELECT pg_notify('soma_agent_job_ready', $1)", [
-        jobID,
-      ]);
+      const pending = await client.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM agent_tool_requests
+         WHERE job_id = $1 AND completed_at IS NULL`,
+        [jobID],
+      );
+      if (Number(requiredRow(pending.rows[0]).count) === 0) {
+        await client.query(
+          `UPDATE agent_jobs SET state = 'queued', updated_at = $2
+           WHERE id = $1`,
+          [jobID, now],
+        );
+        await client.query(
+          `INSERT INTO transactional_outbox
+           (id, topic, aggregate_id, payload_json, created_at)
+           VALUES ($1, 'job', $2, $3, $4)`,
+          [randomUUID(), jobID, { state: "queued" }, now],
+        );
+        await client.query("SELECT pg_notify('soma_agent_job_ready', $1)", [
+          jobID,
+        ]);
+      }
       return mapTool(requiredRow(updated.rows[0]));
     });
   }

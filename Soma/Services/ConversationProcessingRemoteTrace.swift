@@ -119,6 +119,42 @@ extension ConversationProcessingService {
         )
     }
 
+    func projectRemoteRuntimeTool(
+        _ event: RemoteAgentEvent,
+        job: AgentJob,
+        responseMessage: CoachMessage,
+        trace: AgentTrace,
+        context: ConversationProcessingContext
+    ) -> Bool {
+        guard event.kind == "tool",
+              event.phase == "completed",
+              let nameRaw = event.payload["toolName"]?.stringValue,
+              let name = AgentToolName(rawValue: nameRaw),
+              [.loadSkill, .expandToolGroup].contains(name)
+        else {
+            return false
+        }
+        let result = event.payload["result"]?.objectValue
+        let ok = result?["ok"]?.boolValue ?? false
+        projectRemoteSpan(
+            AgentTraceSpan(
+                sequence: event.sequence,
+                step: event.sequence,
+                kind: name == .loadSkill ? .skill : .tool,
+                title: name.displayTitle,
+                status: ok ? .succeeded : .failed,
+                startedAt: event.createdAt,
+                endedAt: event.createdAt,
+                errorMessage: ok ? nil : result?["message"]?.stringValue
+            ),
+            job: job,
+            responseMessage: responseMessage,
+            trace: trace,
+            context: context
+        )
+        return true
+    }
+
     func remoteResponseMessage(
         for job: AgentJob,
         turnID: UUID,
@@ -168,7 +204,7 @@ extension ConversationProcessingService {
             endpoint: endpoint.absoluteString,
             dataSpaceRaw: dataSpace.rawValue,
             userInput: input,
-            contextSnapshot: "由用户启用的后台持续处理；仅发送当前任务最小上下文。",
+            contextSnapshot: "由用户启用的后台持续处理；发送设备组装的版本化有界模型输入。",
             mediaKind: .none,
             imageCount: 0,
             imageAttachmentCount: 0,

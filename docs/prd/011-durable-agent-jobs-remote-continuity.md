@@ -12,6 +12,7 @@
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 取消“无 Key 不落盘”，改为暂存并在 LLM 恢复后补偿消费
   - [PRD 022](022-react-reliability-and-context-awareness.md) 修订本地中断恢复为同气泡 step 检查点续跑
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 统一本地/远程上下文并增加首增量门禁
+  - [PRD 029](029-unified-local-remote-agent-model-input.md) 统一完整模型输入、Skills、Tool 与并行恢复语义
 - 上游依据：
   - [持久 Agent Job、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)
   - [BUG 0004](../bugs/0004-agent-background-stream-interruption.md)
@@ -137,8 +138,10 @@ Soma 不承诺：
 
 - 用户本次发送的文字；
 - 明确选中的压缩媒体或上传文件；
-- 本次执行所需的最小上下文快照；
-- 固定 Tool Schema 与等待执行的 Tool 请求；
+- 有界最近会话、可信时间、事实摘要与确定性媒体选择；
+- 当前有效 Prompt 与 Skill 快照；
+- 固定 Tool 完整定义、初始暴露集合与等待执行的 Tool 请求；
+- 完成 ReAct 所需的消息、步数与时限状态；
 - Job、Event、错误和计费所需的非密钥元数据；
 - APNs 与 ActivityKit 的设备/活动 token。
 

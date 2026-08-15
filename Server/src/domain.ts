@@ -36,8 +36,8 @@ export interface AgentJobInput {
   turnID: string;
   sessionID: string;
   protocolVersion: number;
-  text: string;
-  contextSnapshot: string;
+  modelInput: AgentModelInput;
+  mediaBindings: AgentMediaBinding[];
   uploadIDs: string[];
   mediaMode?: "text" | "images" | "keyframes" | "direct_video";
   requestAttempt?: number;
@@ -48,6 +48,49 @@ export interface AgentJobInput {
     schemaVersion: number;
   }[];
   liveActivityEnabled: boolean;
+}
+
+export interface AgentModelMessage {
+  role: "system" | "user" | "assistant";
+  text: string;
+  mediaIDs: string[];
+}
+
+export interface AgentModelSkillSnapshot {
+  id: string;
+  content: string;
+}
+
+export interface AgentModelTool {
+  name: string;
+  schemaVersion: number;
+  definition: Record<string, unknown>;
+}
+
+export interface AgentModelInput {
+  schemaVersion: 1;
+  messages: AgentModelMessage[];
+  skills: AgentModelSkillSnapshot[];
+  tools: AgentModelTool[];
+  activeTools: string[];
+  runtime: {
+    toolChoice: "auto";
+    parallelToolCalls: true;
+    maxSteps: number;
+    deadlines: {
+      textTTFT: number;
+      imageTTFT: number;
+      directVideoTTFT: number;
+      textLoopTotal: number;
+      imageLoopTotal: number;
+      videoLoopTotal: number;
+    };
+  };
+}
+
+export interface AgentMediaBinding {
+  id: string;
+  uploadID: string;
 }
 
 export interface AgentJob {

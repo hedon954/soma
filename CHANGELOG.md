@@ -5,6 +5,21 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Changed
+
+- 本机与后台持续处理现在消费由 iOS 生成的同一份版本化模型输入，包括自定义 Prompt、Skills、
+  有界历史、媒体、Tool 定义、并行调用、步数与超时；Server 不再维护简化 Prompt。
+
+### Fixed
+
+- 修复远程 Agent 丢失历史媒体与自定义 Skill、把 runtime Tool 错交设备，以及并行
+  `tool_calls` 只保留第一项的问题；所有设备结果到齐后才按原顺序续跑。
+
+### Privacy
+
+- 后台持续处理的授权说明现在明确披露：当前有效 Prompt、Skills 与有界会话历史会随具体 Job
+  临时发送；BYOK、完整数据库、未选媒体和原始坐标仍不上传。
+
 ## [0.0.5] - 2026-08-15
 
 这次更新让欠费后的消息严格等待用户恢复，并把 ReAct 重试收敛为失败 step 原位续跑；同时加入

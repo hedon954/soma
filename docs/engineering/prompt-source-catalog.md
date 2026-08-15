@@ -14,9 +14,8 @@
 | 最近会话、事实引用与媒体选择 | `Soma/Services/AgentTurnContextBuilder.swift`、`ConversationContextProjection.swift` | `ConversationProcessingService.runAttempt` | 不可编辑，确定性投影 |
 | 位置、健身房和天气 Turn 上下文 | `Soma/Services/ConversationProcessingService.swift` → `turnContext`；`WeatherContextProvider.swift` | `composePersistentContext` | 不可编辑，按授权临时生成 |
 | 版本化当前 Turn User Prompt | `Soma/Services/ReActAgent.swift` → `ReActAgentPrompt.user`、`historicalUser` | `AIService.runAgent` | 不可编辑；固定 v1 section 顺序，动态输入与媒体位于后部 |
-| 本地 Agent system/user/history 消息 | `Soma/Services/AppServices.swift` → `agentInitialMessages` 及相邻 helper | `AIService.runAgent` | 不可编辑；system 中可编辑部分来自上方 ReAct 节 |
+| 本地/远程 Agent system/user/history 消息与媒体 ID | `Soma/Services/AgentModelInput.swift` → `AgentModelInputBuilder` | `AIService.prepareAgentRun`、`ConversationProcessingService.prepareRemoteSubmission` | 不可编辑；两种 Backend 消费同一版本化 Envelope |
 | 中断恢复的压缩观察提示 | `Soma/Services/AppServices.swift` → `compactedCheckpointPrompt` | `AIService.runAgent` | 不可编辑，只包含已持久化短观察 |
-| 远程 Agent system/user 消息 | `Server/src/provider.ts` → `OpenAICompatibleManagedProvider.run`、`userMessage` | 远程 Worker provider step | 不可编辑，Server 固定 |
 | 训练计划优化提示 | `Soma/Services/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.optimize` 内 `prompt` | `AIService.runAgent` | 不可编辑，由计划与真实历史生成 |
 | 动作说明生成提示 | `Soma/Services/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.generateContent` 内 `prompt` | `AIService.runAgent` | 不可编辑，要求固定 JSON 输出 |
 | 计划训练视频复盘提示 | `Soma/Services/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.performanceReviewPrompt` | `ConversationProcessingService.submit` | 不可编辑，绑定 Performance ID 与输入指纹 |

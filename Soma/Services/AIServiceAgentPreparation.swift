@@ -24,6 +24,7 @@ struct PreparedAgentRun {
     var userPrompt: String
     var traceInput: String
     var currentModelStep: Int
+    var modelInput: AgentModelInputEnvelope
     var toolState: AgentToolLoopState
     var assistantPassages: [String]
     var checkpointBatches: [AgentCheckpointToolBatch]
@@ -70,12 +71,24 @@ extension AIService {
         let historyForPrompt = request.checkpoint == nil
             ? request.history
             : request.history.map(removingImages)
-        var messages = agentInitialMessages(
+        var exposedGroups = restoredToolGroups(request)
+        if exposedGroups.isEmpty {
+            exposedGroups = [.core]
+        }
+        let exposedTools = AgentToolExposurePolicy.tools(for: exposedGroups)
+        let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
+        let modelInput = try AgentModelInputBuilder.build(
             systemPrompt: systemPrompt,
             history: historyForPrompt,
             userPrompt: userPrompt,
-            currentImages: request.images
+            currentImages: request.images,
+            currentVideos: request.videos,
+            skills: AgentSkill.snapshots(defaults: defaults),
+            tools: exposedTools,
+            maxSteps: maxSteps,
+            deadlinePolicy: streamDeadlinePolicy
         )
+        var messages = chatMessages(from: modelInput)
         let isLegacyCheckpoint = request.checkpoint != nil
             && request.checkpoint?.toolBatches == nil
         if let checkpoint = request.checkpoint,
@@ -87,13 +100,9 @@ extension AIService {
                 content: .text(compactedCheckpointPrompt(checkpoint))
             ))
         }
-        var exposedGroups = restoredToolGroups(request)
-        if exposedGroups.isEmpty {
-            exposedGroups = [.core]
-        }
         var toolState = AgentToolLoopState(
             messages: messages,
-            tools: AgentToolExposurePolicy.tools(for: exposedGroups).map(\.chatTool),
+            tools: exposedTools.map(\.chatTool),
             exposedGroups: exposedGroups
         )
         let batches = request.checkpoint?.toolBatches ?? []
@@ -112,12 +121,13 @@ extension AIService {
             ),
             currentModelStep: request.checkpoint?.nextModelStep
                 ?? max(1, (request.checkpoint?.lastCompletedStep ?? 0) + 1),
+            modelInput: modelInput.envelope,
             toolState: toolState,
             assistantPassages: request.checkpoint?.assistantPassages ?? [],
             checkpointBatches: batches,
             completedOperationCount: request.checkpoint?.lastCompletedStep ?? 0,
             clearedHistoryFrames: request.checkpoint != nil,
-            maxSteps: ReActAgentPreference.maxSteps(defaults: defaults)
+            maxSteps: maxSteps
         )
     }
 

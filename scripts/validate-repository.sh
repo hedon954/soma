@@ -141,6 +141,7 @@ plutil -lint Soma/Resources/Info.plist Soma/Soma.entitlements ExportOptions.plis
 ./scripts/check-document-lifecycle-links.rb
 ./scripts/check-secrets.sh
 ruby ./scripts/check-agent-tool-registry.rb
+ruby ./scripts/check-agent-model-input-parity.rb
 ruby ./scripts/check-database-schema-doc.rb
 
 echo "Repository contract passed."

@@ -10,7 +10,10 @@
   - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
   - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
   - [ADR 0062](../adr/0062-user-resumed-llm-interruption-barrier.md)
-- 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
+  - [ADR 0068](../adr/0068-versioned-unified-agent-model-input.md)
+- 关联：
+  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
+  - [PRD 029](../prd/029-unified-local-remote-agent-model-input.md)
 
 本文固定 iOS 本地 Outbox、服务器 Job/Event、匿名设备鉴权、本地 Tool handoff、APNs 与
 Live Activity 的协议。实现可以替换部署平台，但不能改变幂等、游标、隐私和真值边界。
@@ -185,15 +188,17 @@ POST /v1/agent-jobs/{serverJobID}/ack
 
 - `clientJobID`、`turnID`、`sessionID`；
 - `protocolVersion`；
-- 用户输入 envelope；
-- 已完成 upload IDs；
-- `AgentTurnContextEnvelope v2` 快照：可信发送/尝试时间、业务摘要、最多十个完整来回的预算历史、
-  短事实引用及确定性媒体选择；
+- `modelInput: AgentModelInputEnvelope v1`：设备已组装的 system/history/current 消息、当前有效
+  Skill 快照、完整 Tool 定义、初始 Tool 集合、步数与时限；
+- `mediaBindings[{id,uploadID}]` 与已完成 `uploadIDs`；消息只引用稳定 media ID，Provider 适配器
+  在最后一刻换成短期下载 URL；
 - `allowedDeviceTools` 名称清单及逐项对应的
-  `allowedDeviceToolSchemas[{name,schemaVersion}]`；迁移期缺少版本清单的历史 Job 按 v1
-  兼容，当前提交必须让两份清单一一对应；
-- 允许的固定远程 Tool（当前为空）；
+  `allowedDeviceToolSchemas[{name,schemaVersion}]`；两份清单必须一一对应；
+- 允许的固定远程 runtime Tool：`load_skill`、`expand_tool_group`；
 - Live Activity preference。
+
+Server 必须拒绝缺失 Envelope、媒体绑定不闭合、Tool 目录与执行边界不一致的提交。不存在旧
+`text + contextSnapshot` 请求的兼容 Prompt。
 
 请求头 `Idempotency-Key` 必须等于 `clientJobID`。相同 key 与相同 body digest 返回同一 Job；
 相同 key 但不同 digest 返回 `idempotency_conflict`。
@@ -267,12 +272,13 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 2. Worker 通过行锁/lease 原子领取 queued Job；健康路径由通知唤醒，低频 timeout 只恢复丢失
    通知、进程重启和过期 lease。
 3. 每次 lease 包含 owner、epoch 和过期时间；失去 lease 的 Worker 不得继续追加 Event。
-4. 模型每轮使用原生流式 Tool Calling：只在 ReAct Loop 第一次模型处理使用文字/图片/直传视频
-   20/40/60 秒首增量门禁；后续 step 不设单步时限。整个 Loop 从冻结 `loopStartedAt` 起使用
-   3/5/10 分钟墙钟预算，恢复不得重置。首段文本立即追加，后续文本按自然边界、48 字符阈值或
-   80ms 窗口合并；有完整 Tool Call 后才追加 tool request。
-5. 远程 Tool 由 Worker 执行；设备 Tool 进入 `waitingForDevice` 并释放计算资源。
-6. Tool Result 到达后在同一事务通知 Worker，创建新 lease 并从持久历史继续。
+4. 模型每轮使用 Envelope 指定的原生流式 Tool Calling、`tool_choice=auto`、并行调用、步数与
+   20/40/60 秒首增量、3/5/10 分钟活动预算。首段文本立即追加，后续文本按自然边界、48 字符
+   阈值或 80ms 窗口合并；有完整 Tool Call 批次后才持久化。
+5. Worker 先持久化 assistant 文本与全部原生 `tool_calls`。`load_skill` 和
+   `expand_tool_group` 使用 Envelope 内快照就地执行；业务 Tool 全部进入 `waitingForDevice`。
+6. 并行 Tool Result 可任意顺序幂等到达；最后一个结果到达前保持等待，齐备后按原调用顺序重建
+   `assistant.tool_calls` 与 `role=tool` 消息，再创建新 lease 继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。
 8. 崩溃恢复只读取已提交 Event 和 Tool Result，不重用进程内半成品。
 
@@ -282,8 +288,10 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 
 - 远程模式使用 Soma 管理的 Provider 凭据，凭据只在服务器 secret manager。
 - 用户 BYOK 永不进入 Job payload、数据库、对象存储或日志。
-- 上下文快照按任务最小化，但与本地共享同一个 Envelope v2 投影，不能丢失最近会话文本；较早
-  成功写入只保留操作、类型、稳定 ID、标题和时间，不重复长 Tool observation。
+- iOS 使用唯一 `AgentModelInputBuilder` 生成本地与远程模型输入。Server Provider 不保存任何
+  Agent Prompt 文案，也不改写消息顺序、Skill 内容、Tool 描述或运行参数。
+- `AgentTurnContextEnvelope v2` 先在设备投影为有界最近会话、短事实与确定性媒体选择，再进入
+  `AgentModelInputEnvelope v1`；较早成功写入不重复长 Tool observation。
 - `GET /v1/capabilities` 在媒体准备前返回远程 Provider 是否启用已验证直传视频；直传时只上传
   规范化 MP4，非直传模型只上传关键帧，同一 Provider 请求不同时包含视频和帧。
 - Job 输入显式携带 `mediaMode=text|images|keyframes|direct_video` 与
@@ -367,12 +375,14 @@ DELETE /v1/agent-jobs/{serverJobID}/live-activity-token
 - App 重启、后台 lease、重复 ACK、取消竞态；
 - Tool Schema、Receipt、跨数据空间和 projection；
 - SSE block 解码、远端 text delta 持久重放和终态不重复拼接。
+- 自定义 Prompt/Skill、消息角色、Tool 目录、初始集合、步数与时限的远程提交对照。
 
 ### 服务端
 
 - API transaction、Worker lease/epoch、进程崩溃恢复；
 - 重复 submit、重复 Tool Result、Event gap、取消/完成竞态；
 - Provider 原生流、文本 chunk 顺序，以及 Job/Event/Tool Result 即时唤醒；
+- runtime Skill 不产生设备请求；并行 Tool 全部持久化、结果齐备后才续跑；
 - 错误设备、签名重放、越权 Job、上传 digest/大小/type；
 - TTL、终态 ACK、对象清理与内容日志扫描。
 

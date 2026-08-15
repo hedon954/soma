@@ -1039,54 +1039,6 @@ final class AIService {
         }
     }
 
-    func agentInitialMessages(
-        systemPrompt: String,
-        history: [AgentConversationExchange],
-        userPrompt: String,
-        currentImages: [Data]
-    ) -> [ChatCompletionParameters.Message] {
-        var messages = [
-            ChatCompletionParameters.Message(role: .system, content: .text(systemPrompt))
-        ]
-        for (index, exchange) in history.enumerated() {
-            let historicalPrompt = ReActAgentPrompt.historicalUser(
-                text: exchange.userText,
-                imageCount: exchange.images.count,
-                imageAttachmentCount: exchange.imageAttachmentCount,
-                videoAttachmentCount: exchange.videoAttachmentCount,
-                canReferenceImagesAsRecentGymTurn: index == history.count - 1
-                    && exchange.imageAttachmentCount > 0
-            )
-            messages.append(ChatCompletionParameters.Message(
-                role: .user,
-                content: agentUserContent(
-                    prompt: historicalPrompt,
-                    images: exchange.images,
-                    maximumImageCount: exchange.images.count
-                )
-            ))
-            guard let assistantText = exchange.assistantText?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .nilIfEmpty
-            else {
-                continue
-            }
-            messages.append(ChatCompletionParameters.Message(
-                role: .assistant,
-                content: .text(assistantText)
-            ))
-        }
-        messages.append(ChatCompletionParameters.Message(
-            role: .user,
-            content: agentUserContent(
-                prompt: userPrompt,
-                images: currentImages,
-                maximumImageCount: 12
-            )
-        ))
-        return messages
-    }
-
     private func loadSkill(_ call: AgentToolCall) -> AgentToolResult {
         guard let skillID = call.arguments.skillID?
             .trimmingCharacters(in: .whitespacesAndNewlines),

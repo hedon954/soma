@@ -62,6 +62,7 @@
 | 开发者设置 | 直接提供执行日志入口和数量；固定 Tool 协议不作为不可操作的设置项或说明展示。 |
 | 持久 Job/Event | 每条消息拥有稳定 `AgentJob` 与单调语义 Event；Chat、Trace、通知和 Live Activity 维护独立 cursor，UI 读取不删除事件。 |
 | 可选远程执行 | 设置默认关闭并披露数据流；单次可选仅本机。匿名设备签名、幂等 Job、Event 补拉、Worker lease 和设备 Tool handoff 由 `Server/` 提供，BYOK 不上传。 |
+| Backend 输入等价 | iOS 用唯一版本化 Envelope 组装 system/history/current 消息、媒体 ID、当前 Prompt/Skills、完整 Tool 定义、初始集合、步数与时限；本机直接消费，远端只绑定临时 upload。Server 不含第二套 Agent Prompt；runtime Skill/扩展就地执行，并行设备 Tool 全部持久化且结果齐备后按原调用顺序续跑。 |
 | 系统进度 | Live Activity 只显示通用阶段、操作数和队列数，不含健康文本或虚假百分比；完成通知和系统表面深链到稳定 Turn。 |
 
 ## 已实现：训练智能

@@ -11,6 +11,8 @@ import {
   protocolVersion,
   ProtocolError,
   type AgentJobInput,
+  type AgentMediaBinding,
+  type AgentModelInput,
 } from "./domain.js";
 import {
   feedbackFilename,
@@ -581,7 +583,11 @@ async function requiredJob(
 
 function parseJobInput(rawBody: Buffer): AgentJobInput {
   const value = parseObject(rawBody);
+  const modelInput = parseModelInput(requiredObject(value, "modelInput"));
+  const mediaBindings = parseMediaBindings(value.mediaBindings);
+  const uploadIDs = requiredStringArray(value, "uploadIDs");
   const allowedDeviceTools = requiredStringArray(value, "allowedDeviceTools");
+  const allowedRemoteTools = requiredStringArray(value, "allowedRemoteTools");
   const allowedDeviceToolSchemas = optionalToolSchemas(
     value,
     "allowedDeviceToolSchemas",
@@ -615,21 +621,158 @@ function parseJobInput(rawBody: Buffer): AgentJobInput {
   if (!Number.isInteger(requestAttempt) || requestAttempt < 1 || requestAttempt > 2) {
     throw new ProtocolError("invalid_request", "requestAttempt 无效。", 400);
   }
+  const toolNames = modelInput.tools.map((tool) => tool.name);
+  const allowedNames = [...allowedRemoteTools, ...allowedDeviceTools];
+  if (
+    new Set(toolNames).size !== toolNames.length ||
+    new Set(modelInput.activeTools).size !== modelInput.activeTools.length ||
+    new Set(modelInput.skills.map((skill) => skill.id)).size !==
+      modelInput.skills.length ||
+    new Set(allowedNames).size !== allowedNames.length ||
+    toolNames.length !== allowedNames.length ||
+    toolNames.some((name) => !allowedNames.includes(name)) ||
+    modelInput.activeTools.some((name) => !toolNames.includes(name))
+  ) {
+    throw new ProtocolError(
+      "invalid_request",
+      "模型 Tool 清单与执行边界不一致。",
+      400,
+    );
+  }
+  if (
+    mediaBindings.length !== uploadIDs.length ||
+    new Set(mediaBindings.map((binding) => binding.id)).size !== mediaBindings.length ||
+    new Set(mediaBindings.map((binding) => binding.uploadID)).size !== mediaBindings.length ||
+    mediaBindings.some((binding) => !uploadIDs.includes(binding.uploadID)) ||
+    modelInput.messages.some((message) =>
+      message.mediaIDs.some((id) => !mediaBindings.some((binding) => binding.id === id))
+    )
+  ) {
+    throw new ProtocolError("invalid_request", "模型媒体绑定无效。", 400);
+  }
   return {
     clientJobID: requiredString(value, "clientJobID"),
     turnID: requiredString(value, "turnID"),
     sessionID: requiredString(value, "sessionID"),
     protocolVersion: requiredNumber(value, "protocolVersion"),
-    text: requiredString(value, "text"),
-    contextSnapshot: requiredString(value, "contextSnapshot"),
-    uploadIDs: requiredStringArray(value, "uploadIDs"),
+    modelInput,
+    mediaBindings,
+    uploadIDs,
     mediaMode: mediaMode as NonNullable<AgentJobInput["mediaMode"]>,
     requestAttempt,
-    allowedRemoteTools: requiredStringArray(value, "allowedRemoteTools"),
+    allowedRemoteTools,
     allowedDeviceTools,
     allowedDeviceToolSchemas,
     liveActivityEnabled: requiredBoolean(value, "liveActivityEnabled"),
   };
+}
+
+function parseModelInput(value: Record<string, unknown>): AgentModelInput {
+  const schemaVersion = requiredNumber(value, "schemaVersion");
+  const rawMessages = value.messages;
+  const rawSkills = value.skills;
+  const rawTools = value.tools;
+  const runtime = requiredObject(value, "runtime");
+  const deadlines = requiredObject(runtime, "deadlines");
+  if (
+    schemaVersion !== 1 ||
+    !Array.isArray(rawMessages) ||
+    rawMessages.length < 2 ||
+    !Array.isArray(rawSkills) ||
+    !Array.isArray(rawTools) ||
+    runtime.toolChoice !== "auto" ||
+    runtime.parallelToolCalls !== true
+  ) {
+    throw new ProtocolError("invalid_request", "模型输入协议无效。", 400);
+  }
+  const messages = rawMessages.map((raw) => {
+    const message = asObject(raw, "模型消息");
+    const role = requiredString(message, "role");
+    if (!['system', 'user', 'assistant'].includes(role)) {
+      throw new ProtocolError("invalid_request", "模型消息角色无效。", 400);
+    }
+    return {
+      role: role as "system" | "user" | "assistant",
+      text: requiredString(message, "text"),
+      mediaIDs: requiredStringArray(message, "mediaIDs"),
+    };
+  });
+  if (messages[0]?.role !== "system" || messages.at(-1)?.role !== "user") {
+    throw new ProtocolError("invalid_request", "模型消息顺序无效。", 400);
+  }
+  const skills = rawSkills.map((raw) => {
+    const skill = asObject(raw, "Skill 快照");
+    return {
+      id: requiredString(skill, "id"),
+      content: requiredString(skill, "content"),
+    };
+  });
+  const tools = rawTools.map((raw) => {
+    const tool = asObject(raw, "模型 Tool");
+    const name = requiredString(tool, "name");
+    const definition = requiredObject(tool, "definition");
+    const functionValue = requiredObject(definition, "function");
+    if (requiredString(functionValue, "name") !== name) {
+      throw new ProtocolError("invalid_request", "模型 Tool 定义名称无效。", 400);
+    }
+    requiredObject(functionValue, "parameters");
+    return {
+      name,
+      schemaVersion: requiredNumber(tool, "schemaVersion"),
+      definition,
+    };
+  });
+  const maxSteps = requiredNumber(runtime, "maxSteps");
+  if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 500) {
+    throw new ProtocolError("invalid_request", "模型步数上限无效。", 400);
+  }
+  const deadline = (key: string): number => {
+    const result = requiredNumber(deadlines, key);
+    if (result <= 0 || result > 3_600) {
+      throw new ProtocolError("invalid_request", "模型超时策略无效。", 400);
+    }
+    return result;
+  };
+  return {
+    schemaVersion: 1,
+    messages,
+    skills,
+    tools,
+    activeTools: requiredStringArray(value, "activeTools"),
+    runtime: {
+      toolChoice: "auto",
+      parallelToolCalls: true,
+      maxSteps,
+      deadlines: {
+        textTTFT: deadline("textTTFT"),
+        imageTTFT: deadline("imageTTFT"),
+        directVideoTTFT: deadline("directVideoTTFT"),
+        textLoopTotal: deadline("textLoopTotal"),
+        imageLoopTotal: deadline("imageLoopTotal"),
+        videoLoopTotal: deadline("videoLoopTotal"),
+      },
+    },
+  };
+}
+
+function parseMediaBindings(value: unknown): AgentMediaBinding[] {
+  if (!Array.isArray(value)) {
+    throw new ProtocolError("invalid_request", "mediaBindings 无效。", 400);
+  }
+  return value.map((raw) => {
+    const binding = asObject(raw, "媒体绑定");
+    return {
+      id: requiredString(binding, "id"),
+      uploadID: requiredString(binding, "uploadID"),
+    };
+  });
+}
+
+function asObject(value: unknown, label: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProtocolError("invalid_request", `${label}无效。`, 400);
+  }
+  return value as Record<string, unknown>;
 }
 
 function optionalToolSchemas(

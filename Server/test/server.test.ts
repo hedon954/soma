@@ -233,11 +233,13 @@ test("worker survives process replacement and device tool result is idempotent",
   const firstWorker = new AgentWorker(
     store,
     new DeterministicTestProvider({
-      kind: "deviceTool",
-      toolName: "record_workout",
-      schemaVersion: 1,
-      arguments: { exercise_id: randomUUID() },
-      mutation: true,
+      kind: "toolCalls",
+      assistantText: "",
+      calls: [{
+        toolName: "record_workout",
+        schemaVersion: 1,
+        arguments: { exercise_id: randomUUID() },
+      }],
     }),
     "worker-before-restart",
   );
@@ -262,6 +264,106 @@ test("worker survives process replacement and device tool result is idempotent",
 
   assert.equal(completed?.state, "completed");
   assert.equal((await store.pendingToolRequests(deviceID)).length, 0);
+});
+
+test("worker executes submitted custom skills without delegating runtime tools", async () => {
+  const store = new InMemorySomaStore();
+  const deviceID = randomUUID();
+  const input = makeJobInput({
+    allowedRemoteTools: ["load_skill", "expand_tool_group"],
+  });
+  input.modelInput.skills = [{
+    id: "training_plan",
+    content: "设备提交的自定义训练计划 Skill",
+  }];
+  input.modelInput.activeTools = ["load_skill", "expand_tool_group"];
+  const job = await store.submitJob({
+    deviceID,
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  let run = 0;
+  const worker = new AgentWorker(store, {
+    async run() {
+      run += 1;
+      return run === 1
+        ? {
+            kind: "toolCalls" as const,
+            assistantText: "",
+            calls: [{
+              toolName: "load_skill",
+              schemaVersion: 2,
+              arguments: { skill_id: "training_plan" },
+            }],
+          }
+        : { kind: "completed" as const, answer: "已使用自定义 Skill。" };
+    },
+  });
+
+  const queued = await worker.runOnce();
+  assert.equal(queued?.state, "queued");
+  assert.equal((await store.pendingToolRequests(deviceID)).length, 0);
+  const events = await store.events(job.id, 0, 100);
+  const result = events.find((event) =>
+    event.kind === "tool" && event.phase === "completed"
+  );
+  assert.equal(
+    (result?.payload.result as { message?: string } | undefined)?.message,
+    "设备提交的自定义训练计划 Skill",
+  );
+  assert.equal((await worker.runOnce())?.state, "completed");
+});
+
+test("parallel device tools remain waiting until every result arrives", async () => {
+  const store = new InMemorySomaStore();
+  const deviceID = randomUUID();
+  const input = makeJobInput({
+    allowedDeviceTools: ["list_exercise_names", "list_training_programs"],
+  });
+  const job = await store.submitJob({
+    deviceID,
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  const worker = new AgentWorker(
+    store,
+    new DeterministicTestProvider({
+      kind: "toolCalls",
+      assistantText: "",
+      calls: [
+        {
+          toolCallID: "call-first",
+          toolName: "list_exercise_names",
+          schemaVersion: 1,
+          arguments: {},
+        },
+        {
+          toolCallID: "call-second",
+          toolName: "list_training_programs",
+          schemaVersion: 1,
+          arguments: {},
+        },
+      ],
+    }),
+  );
+
+  assert.equal((await worker.runOnce())?.state, "waitingForDevice");
+  assert.equal((await store.pendingToolRequests(deviceID)).length, 2);
+  await store.submitToolResult(deviceID, job.id, {
+    toolCallID: "call-second",
+    digest: sha256("second"),
+    result: { ok: true, code: "ok", message: "second" },
+  }, new Date());
+  assert.equal((await store.getJob(deviceID, job.id))?.state, "waitingForDevice");
+  assert.equal((await store.pendingToolRequests(deviceID)).length, 1);
+  await store.submitToolResult(deviceID, job.id, {
+    toolCallID: "call-first",
+    digest: sha256("first"),
+    result: { ok: true, code: "ok", message: "first" },
+  }, new Date());
+  assert.equal((await store.getJob(deviceID, job.id))?.state, "queued");
 });
 
 test("first terminal state wins cancellation race", async () => {
@@ -495,7 +597,13 @@ test("managed provider streams text before completion and limits media", async (
   const store = new InMemorySomaStore();
   const job = await store.submitJob({
     deviceID: randomUUID(),
-    input: makeJobInput(),
+    input: makeJobInput({
+      allowedDeviceTools: ["list_exercise_names"],
+      modelInput: makeModelInput(
+        ["current-image-0"],
+        ["list_exercise_names"],
+      ),
+    }),
     bodyDigest: sha256("media"),
     now: new Date(),
   });
@@ -531,8 +639,8 @@ test("managed provider streams text before completion and limits media", async (
     job,
     [],
     [
-      { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
-      { contentType: "video/mp4", url: "https://signed.invalid/original.mp4" },
+      { id: "current-image-0", contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+      { id: "unused-video", contentType: "video/mp4", url: "https://signed.invalid/original.mp4" },
     ],
     async (delta) => {
       deltas.push(delta);
@@ -541,6 +649,11 @@ test("managed provider streams text before completion and limits media", async (
 
   const messages = captured?.messages as Record<string, unknown>[];
   const content = messages[1]?.content as Record<string, unknown>[];
+  assert.equal(messages[0]?.content, "统一系统提示词");
+  const tools = captured?.tools as Record<string, unknown>[];
+  assert.match(JSON.stringify(tools), /统一 list_exercise_names 定义/);
+  assert.equal(captured?.tool_choice, "auto");
+  assert.equal(captured?.parallel_tool_calls, true);
   assert.equal(
     content.filter((part) => part.type === "image_url").length,
     1,
@@ -563,7 +676,9 @@ test("verified Qwen provider sends the video without duplicate frames", async ()
   const store = new InMemorySomaStore();
   const job = await store.submitJob({
     deviceID: randomUUID(),
-    input: makeJobInput(),
+    input: makeJobInput({
+      modelInput: makeModelInput(["current-video-0"]),
+    }),
     bodyDigest: sha256("direct-video"),
     now: new Date(),
   });
@@ -590,8 +705,8 @@ test("verified Qwen provider sends the video without duplicate frames", async ()
   );
 
   await provider.run(job, [], [
-    { contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
-    { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+    { id: "current-video-0", contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+    { id: "unused-frame", contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
   ]);
 
   const messages = captured?.messages as Record<string, unknown>[];
@@ -622,7 +737,7 @@ test("direct video failure preserves the only retry for keyframes", async () => 
   );
 
   await assert.rejects(directProvider.run(directJob, [], [
-    { contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+    { id: "current-image-0", contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
   ]));
   assert.equal(directCalls, 1);
 
@@ -644,7 +759,7 @@ test("direct video failure preserves the only retry for keyframes", async () => 
   );
 
   await assert.rejects(fallbackProvider.run(fallbackJob, [], [
-    { contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+    { id: "current-image-0", contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
   ]));
   assert.equal(fallbackCalls, 1);
 });
@@ -846,21 +961,107 @@ test("migration defines database uniqueness and transactional outbox", async () 
 function makeJobInput(
   overrides: Partial<AgentJobInput> = {},
 ): AgentJobInput {
-  return {
+  const allowedRemoteTools = overrides.allowedRemoteTools ?? [];
+  const allowedDeviceTools = overrides.allowedDeviceTools ?? [];
+  const input: AgentJobInput = {
     clientJobID: randomUUID(),
     turnID: randomUUID(),
     sessionID: randomUUID(),
     protocolVersion: 1,
-    text: "虚构远程任务",
-    contextSnapshot: "最小虚构上下文",
+    modelInput: overrides.modelInput ?? makeModelInput(
+      [],
+      [...allowedRemoteTools, ...allowedDeviceTools],
+    ),
+    mediaBindings: [],
     uploadIDs: [],
     mediaMode: "text",
     requestAttempt: 1,
-    allowedRemoteTools: [],
-    allowedDeviceTools: [],
+    allowedRemoteTools,
+    allowedDeviceTools,
+    allowedDeviceToolSchemas: allowedDeviceTools.map((name) => ({
+      name,
+      schemaVersion: testToolSchemaVersion(name),
+    })),
     liveActivityEnabled: true,
     ...overrides,
   };
+  return input;
+}
+
+function makeModelInput(
+  mediaIDs: string[] = [],
+  toolNames: string[] = [],
+): AgentJobInput["modelInput"] {
+  return {
+    schemaVersion: 1,
+    messages: [
+      { role: "system", text: "统一系统提示词", mediaIDs: [] },
+      {
+        role: "user",
+        text: "[SOMA CURRENT TURN v1]\n虚构远程任务\n关键帧不足以证明完整动作轨迹。",
+        mediaIDs,
+      },
+    ],
+    skills: [{ id: "training_plan", content: "自定义训练计划 Skill" }],
+    tools: toolNames.map((name) => ({
+      name,
+      schemaVersion: testToolSchemaVersion(name),
+      definition: {
+        type: "function",
+        function: {
+          name,
+          description: `统一 ${name} 定义`,
+          parameters: testToolParameters(name),
+        },
+      },
+    })),
+    activeTools: toolNames,
+    runtime: {
+      toolChoice: "auto",
+      parallelToolCalls: true,
+      maxSteps: 100,
+      deadlines: {
+        textTTFT: 20,
+        imageTTFT: 40,
+        directVideoTTFT: 60,
+        textLoopTotal: 180,
+        imageLoopTotal: 300,
+        videoLoopTotal: 600,
+      },
+    },
+  };
+}
+
+function testToolSchemaVersion(name: string): number {
+  return [
+    "record_workout",
+    "list_exercise_names",
+    "list_training_programs",
+  ].includes(name) ? 1 : 2;
+}
+
+function testToolParameters(name: string): Record<string, unknown> {
+  if (name === "record_workout") {
+    return {
+      type: "object",
+      properties: { exercise_id: { type: "string" } },
+    };
+  }
+  if (name === "load_skill") {
+    return {
+      type: "object",
+      properties: { skill_id: { type: "string" } },
+      required: ["skill_id"],
+    };
+  }
+  if (name === "expand_tool_group") {
+    return {
+      type: "object",
+      properties: { tool_group: { type: "string" } },
+      required: ["tool_group"],
+    };
+  }
+  return { type: "object", properties: {} };
 }
 
 async function registerDevice(

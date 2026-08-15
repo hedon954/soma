@@ -228,9 +228,8 @@ struct AgentJobSubmission: Sendable {
     var clientJobID: UUID
     var turnID: UUID
     var sessionID: UUID
-    var text: String
-    var contextSnapshot: String
-    var attachments: [MediaAttachmentReference]
+    var modelInput: PreparedAgentModelInput
+    var mediaMode: AgentMediaMode
     var liveActivityEnabled: Bool
     var requestAttempt: Int = 1
 }

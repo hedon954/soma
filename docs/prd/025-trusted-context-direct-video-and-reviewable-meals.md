@@ -9,7 +9,9 @@
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 的远程上下文与流式体验边界
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的 Agent 过程卡与记录详情呈现
   - [PRD 022](022-react-reliability-and-context-awareness.md) 的上下文包与 Tool 暴露边界
-- 后续修订：[PRD 027](027-reliable-efficient-react-and-in-context-review.md) 固定 Loop 时间戳、重构分层超时，并将可审查卡扩展为最新回复原位 CRUD
+- 后续修订：
+  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 固定 Loop 时间戳、重构分层超时，并将可审查卡扩展为最新回复原位 CRUD
+  - [PRD 029](029-unified-local-remote-agent-model-input.md) 把上下文等价扩展为完整 Prompt、Skills、Tool 和恢复消息等价
 - 上游依据：
   - [BUG 0011](../bugs/0011-meal-correction-misattributed-media.md)
   - [BUG 0012](../bugs/0012-direct-video-and-first-delta-timeout.md)
