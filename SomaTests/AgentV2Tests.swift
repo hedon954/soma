@@ -4,52 +4,53 @@ import SwiftOpenAI
 import XCTest
 
 final class AgentV2Tests: XCTestCase {
-    func testTypedDomainContractExposesTwentySevenVersionTwoTools() {
+    func testTypedDomainContractExposesTwentySevenVersionedTools() {
         let tools = AgentToolExposurePolicy.tools(
             for: [.exercises, .workouts, .meals, .body, .plans]
         )
 
         XCTAssertEqual(tools.count, 27)
-        XCTAssertTrue(tools.allSatisfy { $0.schemaVersion == 2 })
-        XCTAssertFalse(tools.contains(.recordMeal))
+        XCTAssertEqual(
+            Set(tools.filter { $0.schemaVersion == 3 }),
+            [
+                .getProgram, .createProgram, .createProgramVersion,
+                .createExercise, .createWorkout
+            ]
+        )
+        XCTAssertTrue(tools.filter { $0.schemaVersion != 3 }.allSatisfy {
+            $0.schemaVersion == 2
+        })
         XCTAssertTrue(tools.contains(.updateMeal))
-        XCTAssertFalse(tools.contains(.listExerciseNames))
-        XCTAssertFalse(tools.contains(.updateWorkoutTemplate))
-        XCTAssertFalse(tools.contains(.queryUserData))
-        XCTAssertFalse(tools.contains(.mutateUserData))
     }
 
     @MainActor
     func testMutateMealKeepsUnknownNutritionNilAndDerivesCompleteFields() throws {
         let context = try makeContext()
-        let result = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .mutateUserData,
-                arguments: AgentToolArguments(
-                    operation: "create",
-                    payload: AgentMutationPayload(
-                        mealType: MealType.lunch.rawValue,
-                        title: "鸡肉荞麦面",
-                        items: [
-                            AgentMealItemInput(
-                                name: "鸡肉",
-                                portionDescription: "一份",
-                                calories: 220,
-                                protein: 30,
-                                carbs: 2,
-                                fat: 9
-                            ),
-                            AgentMealItemInput(
-                                name: "荞麦面",
-                                portionDescription: "一碗",
-                                protein: 8,
-                                carbs: 52,
-                                fat: 2
-                            )
-                        ]
-                    ),
-                    recordType: "meal"
-                )
+        let result = ConversationRecorder.mutateUserData(
+            AgentToolArguments(
+                operation: "create",
+                payload: AgentMutationPayload(
+                    mealType: MealType.lunch.rawValue,
+                    title: "鸡肉荞麦面",
+                    items: [
+                        AgentMealItemInput(
+                            name: "鸡肉",
+                            portionDescription: "一份",
+                            calories: 220,
+                            protein: 30,
+                            carbs: 2,
+                            fat: 9
+                        ),
+                        AgentMealItemInput(
+                            name: "荞麦面",
+                            portionDescription: "一碗",
+                            protein: 8,
+                            carbs: 52,
+                            fat: 2
+                        )
+                    ]
+                ),
+                recordType: "meal"
             ),
             sourceText: "记录这份午餐",
             sourceDate: Date(timeIntervalSince1970: 1_786_000_000),
@@ -73,14 +74,11 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(meal.nutritionSource, .derivedFromItems)
         XCTAssertEqual(meal.items.count, 2)
 
-        let mismatched = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .mutateUserData,
-                arguments: AgentToolArguments(
-                    operation: "create",
-                    payload: AgentMutationPayload(title: "错误字段", weight: 70),
-                    recordType: "meal"
-                )
+        let mismatched = ConversationRecorder.mutateUserData(
+            AgentToolArguments(
+                operation: "create",
+                payload: AgentMutationPayload(title: "错误字段", weight: 70),
+                recordType: "meal"
             ),
             sourceText: "",
             mediaKind: .none,
@@ -110,20 +108,15 @@ final class AgentV2Tests: XCTestCase {
         context.insert(exercise)
         try context.save()
 
-        let first = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .queryUserData,
-                arguments: AgentToolArguments(
-                    scope: "meals",
-                    limit: 1,
-                    fields: ["title"],
-                    dateFrom: "2026-08-02",
-                    dateTo: "2026-08-03"
-                )
+        let first = ConversationRecorder.queryUserData(
+            AgentToolArguments(
+                scope: "meals",
+                limit: 1,
+                fields: ["title"],
+                dateFrom: "2026-08-02",
+                dateTo: "2026-08-03"
             ),
-            sourceText: "",
-            mediaKind: .none,
-            mediaPath: nil,
+            preferredGymID: nil,
             in: context
         )
         let firstJSON = try json(first.data)
@@ -133,21 +126,16 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertFalse(firstJSON.contains("calories"))
         XCTAssertNotNil(first.page?.nextCursor)
 
-        let second = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .queryUserData,
-                arguments: AgentToolArguments(
-                    scope: "meals",
-                    limit: 1,
-                    cursor: first.page?.nextCursor,
-                    fields: ["title"],
-                    dateFrom: "2026-08-02",
-                    dateTo: "2026-08-03"
-                )
+        let second = ConversationRecorder.queryUserData(
+            AgentToolArguments(
+                scope: "meals",
+                limit: 1,
+                cursor: first.page?.nextCursor,
+                fields: ["title"],
+                dateFrom: "2026-08-02",
+                dateTo: "2026-08-03"
             ),
-            sourceText: "",
-            mediaKind: .none,
-            mediaPath: nil,
+            preferredGymID: nil,
             in: context
         )
         XCTAssertTrue(try json(second.data).contains("虚构午餐 1"))
@@ -380,11 +368,9 @@ final class AgentV2Tests: XCTestCase {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        ConversationRecorder.executeAgentTool(
-            AgentToolCall(name: .queryUserData, arguments: arguments),
-            sourceText: "",
-            mediaKind: .none,
-            mediaPath: nil,
+        ConversationRecorder.queryUserData(
+            arguments,
+            preferredGymID: nil,
             in: context
         )
     }

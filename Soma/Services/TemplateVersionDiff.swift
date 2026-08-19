@@ -67,8 +67,8 @@ enum TemplateVersionDiff {
             }
             appendNumericChange(
                 label: "组数",
-                old: old.targetSets.map(String.init),
-                new: new.targetSets.map(String.init),
+                old: String(old.plannedSets.count),
+                new: String(new.plannedSets.count),
                 into: &fieldChanges
             )
             appendNumericChange(
@@ -93,6 +93,16 @@ enum TemplateVersionDiff {
                 fieldChanges.append(
                     new.firstSetIsWarmup ? "首组改为热身" : "取消首组热身"
                 )
+            }
+            if old.laterality != new.laterality {
+                fieldChanges.append(
+                    "侧别 \(lateralityName(old.laterality))→\(lateralityName(new.laterality))"
+                )
+            }
+            if plannedSetSignatures(old.plannedSets)
+                != plannedSetSignatures(new.plannedSets)
+            {
+                fieldChanges.append("逐组处方已调整")
             }
             if !fieldChanges.isEmpty {
                 let joined = fieldChanges.joined(separator: "，")
@@ -149,5 +159,34 @@ enum TemplateVersionDiff {
             return "自重"
         }
         return "\(value.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
+    }
+
+    private static func lateralityName(_ value: ExerciseLaterality) -> String {
+        value.displayName
+    }
+
+    private static func plannedSetSignatures(
+        _ values: [TemplateSetPrescriptionValue]
+    ) -> [String] {
+        let sorted = values.sorted { $0.order < $1.order }
+        var result: [String] = []
+        result.reserveCapacity(sorted.count)
+        for value in sorted {
+            let components: [String] = [
+                String(value.order),
+                value.kind.rawValue,
+                value.targetKind.rawValue,
+                value.targetReps.map { String($0) } ?? "",
+                value.targetDurationSeconds.map { String($0) } ?? "",
+                value.targetWeightKG.map { String($0) } ?? "",
+                value.leftWeightKG.map { String($0) } ?? "",
+                value.rightWeightKG.map { String($0) } ?? "",
+                value.restBetweenSidesSeconds.map { String($0) } ?? "",
+                value.restAfterSetSeconds.map { String($0) } ?? "",
+                value.notes
+            ]
+            result.append(components.joined(separator: "|"))
+        }
+        return result
     }
 }

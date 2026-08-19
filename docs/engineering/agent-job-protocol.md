@@ -195,7 +195,6 @@ POST /v1/agent-jobs/{serverJobID}/ack
 - `allowedDeviceTools` 名称清单及逐项对应的
   `allowedDeviceToolSchemas[{name,schemaVersion}]`；两份清单必须一一对应；
 - 允许的固定远程 runtime Tool 只取 Envelope 当前暴露集合中的 `load_skill`；
-  `expand_tool_group` 仅用于恢复旧 Checkpoint，不进入新 Envelope；
 - Live Activity preference。
 
 Server 必须拒绝缺失 Envelope、媒体绑定不闭合、Tool 目录与执行边界不一致的提交。不存在旧
@@ -277,8 +276,7 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
    20/40/60 秒首增量、3/5/10 分钟活动预算。首段文本立即追加，后续文本按自然边界、48 字符
    阈值或 80ms 窗口合并；有完整 Tool Call 批次后才持久化。
 5. Worker 先持久化 assistant 文本与全部原生 `tool_calls`。当 Envelope 明确暴露时，
-   `load_skill` 使用其中 Skill 快照就地执行；旧 Checkpoint 中的 `expand_tool_group` 只按已持久化
-   快照恢复。业务 Tool 全部进入 `waitingForDevice`。
+   `load_skill` 使用其中 Skill 快照就地执行。业务 Tool 全部进入 `waitingForDevice`。
 6. 并行 Tool Result 可任意顺序幂等到达；最后一个结果到达前保持等待，齐备后按原调用顺序重建
    `assistant.tool_calls` 与 `role=tool` 消息，再创建新 lease 继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。

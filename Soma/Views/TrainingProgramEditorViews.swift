@@ -4,38 +4,32 @@ import SwiftUI
 struct TrainingPrescriptionDraft: Identifiable {
     var id: UUID
     var exerciseID: UUID
-    var sets: String
-    var reps: String
-    var weight: String
-    var rest: String
-    var firstSetIsWarmup: Bool
+    var laterality: ExerciseLaterality
+    var plannedSets: [TrainingSetPrescriptionDraft]
 
     init(
         id: UUID = UUID(),
         exerciseID: UUID,
-        sets: String = "",
-        reps: String = "",
-        weight: String = "",
-        rest: String = "",
-        firstSetIsWarmup: Bool = false
+        laterality: ExerciseLaterality = .none,
+        plannedSets: [TrainingSetPrescriptionDraft] = [
+            TrainingSetPrescriptionDraft(order: 1)
+        ]
     ) {
         self.id = id
         self.exerciseID = exerciseID
-        self.sets = sets
-        self.reps = reps
-        self.weight = weight
-        self.rest = rest
-        self.firstSetIsWarmup = firstSetIsWarmup
+        self.laterality = laterality
+        self.plannedSets = plannedSets
     }
 
     init(_ prescription: TemplateExercisePrescription) {
         self.init(
             exerciseID: prescription.exerciseID,
-            sets: prescription.targetSets.map(String.init) ?? "",
-            reps: prescription.targetReps.map(String.init) ?? "",
-            weight: prescription.targetWeightKG.map { $0.formatted() } ?? "",
-            rest: prescription.targetRestSeconds.map(String.init) ?? "",
-            firstSetIsWarmup: prescription.firstSetIsWarmup
+            laterality: prescription.laterality,
+            plannedSets: prescription.plannedSets.isEmpty
+                ? [TrainingSetPrescriptionDraft(order: 1)]
+                : prescription.plannedSets
+                .sorted { $0.order < $1.order }
+                .map(TrainingSetPrescriptionDraft.init)
         )
     }
 
@@ -43,15 +37,122 @@ struct TrainingPrescriptionDraft: Identifiable {
         order: Int,
         names: [UUID: String]
     ) -> TemplateExercisePrescription {
-        TemplateExercisePrescription(
+        let sets = plannedSets.enumerated().map { index, draft in
+            draft.prescription(
+                order: index + 1,
+                laterality: laterality
+            )
+        }
+        let first = sets.first
+        return TemplateExercisePrescription(
             exerciseID: exerciseID,
             exerciseName: names[exerciseID] ?? "已删除动作",
             order: order,
-            targetSets: Int(sets),
-            targetReps: Int(reps),
-            targetWeightKG: Double(weight),
-            targetRestSeconds: Int(rest),
-            firstSetIsWarmup: firstSetIsWarmup
+            targetSets: sets.count,
+            targetReps: first?.targetKind == .repetitions
+                ? first?.targetReps
+                : nil,
+            targetWeightKG: first?.targetWeightKG,
+            targetRestSeconds: first?.restAfterSetSeconds,
+            firstSetIsWarmup: first?.kind == .warmup,
+            laterality: laterality,
+            plannedSets: sets
+        )
+    }
+}
+
+struct TrainingSetPrescriptionDraft: Identifiable, Equatable {
+    var id: UUID
+    var order: Int
+    var kind: WorkoutSetKind
+    var targetKind: WorkoutTargetKind
+    var reps: String
+    var durationSeconds: String
+    var weight: String
+    var leftWeight: String
+    var rightWeight: String
+    var restBetweenSidesSeconds: String
+    var restAfterSetSeconds: String
+    var notes: String
+
+    init(
+        id: UUID = UUID(),
+        order: Int,
+        kind: WorkoutSetKind = .working,
+        targetKind: WorkoutTargetKind = .repetitions,
+        reps: String = "",
+        durationSeconds: String = "",
+        weight: String = "",
+        leftWeight: String = "",
+        rightWeight: String = "",
+        restBetweenSidesSeconds: String = "",
+        restAfterSetSeconds: String = "",
+        notes: String = ""
+    ) {
+        self.id = id
+        self.order = order
+        self.kind = kind
+        self.targetKind = targetKind
+        self.reps = reps
+        self.durationSeconds = durationSeconds
+        self.weight = weight
+        self.leftWeight = leftWeight
+        self.rightWeight = rightWeight
+        self.restBetweenSidesSeconds = restBetweenSidesSeconds
+        self.restAfterSetSeconds = restAfterSetSeconds
+        self.notes = notes
+    }
+
+    init(_ value: TemplateSetPrescriptionValue) {
+        self.init(
+            id: value.id,
+            order: value.order,
+            kind: value.kind,
+            targetKind: value.targetKind,
+            reps: value.targetReps.map(String.init) ?? "",
+            durationSeconds: value.targetDurationSeconds.map(String.init) ?? "",
+            weight: value.targetWeightKG.map { $0.formatted() } ?? "",
+            leftWeight: value.leftWeightKG.map { $0.formatted() } ?? "",
+            rightWeight: value.rightWeightKG.map { $0.formatted() } ?? "",
+            restBetweenSidesSeconds: value.restBetweenSidesSeconds.map(String.init) ?? "",
+            restAfterSetSeconds: value.restAfterSetSeconds.map(String.init) ?? "",
+            notes: value.notes
+        )
+    }
+
+    func prescription(
+        order: Int,
+        laterality: ExerciseLaterality
+    ) -> TemplateSetPrescriptionValue {
+        let weights: (
+            shared: Double?,
+            left: Double?,
+            right: Double?
+        ) = switch laterality {
+        case .none:
+            (Double(weight), nil, nil)
+        case .both:
+            (nil, Double(leftWeight), Double(rightWeight))
+        case .left:
+            (nil, Double(leftWeight), nil)
+        case .right:
+            (nil, nil, Double(rightWeight))
+        }
+        return TemplateSetPrescriptionValue(
+            id: id,
+            order: order,
+            kind: kind,
+            targetKind: targetKind,
+            targetReps: targetKind == .repetitions ? Int(reps) : nil,
+            targetDurationSeconds: targetKind == .duration
+                ? Int(durationSeconds)
+                : nil,
+            targetWeightKG: weights.shared,
+            leftWeightKG: weights.left,
+            rightWeightKG: weights.right,
+            restBetweenSidesSeconds: Int(restBetweenSidesSeconds),
+            restAfterSetSeconds: Int(restAfterSetSeconds),
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 }
@@ -62,7 +163,7 @@ struct TrainingProgramCreationView: View {
 
     let definitions: [ExerciseDefinition]
     @State private var name = ""
-    @State private var goal = ""
+    @State private var overview = ""
     @State private var scheduleHint = ""
     @State private var rows: [TrainingPrescriptionDraft] = []
     @State private var errorMessage: String?
@@ -75,12 +176,15 @@ struct TrainingProgramCreationView: View {
 
     var body: some View {
         Form {
-            // PRD 020：创建时只要求计划名称；目标与安排提示折叠为可选区。
             Section("计划") {
                 TextField("计划名称", text: $name)
+                TextField(
+                    "计划概览（可选）",
+                    text: $overview,
+                    axis: .vertical
+                )
+                .lineLimit(3 ... 7)
                 DisclosureGroup("更多（可选）", isExpanded: $detailsExpanded) {
-                    TextField("训练目标（可选）", text: $goal, axis: .vertical)
-                        .lineLimit(2 ... 4)
                     TextField("安排提示（可选）", text: $scheduleHint)
                 }
             }
@@ -125,7 +229,7 @@ struct TrainingProgramCreationView: View {
         do {
             _ = try TrainingPlanStore.createProgram(
                 name: normalizedName,
-                goal: goal.trimmingCharacters(in: .whitespacesAndNewlines),
+                goal: overview.trimmingCharacters(in: .whitespacesAndNewlines),
                 templateName: normalizedName,
                 scheduleHint: scheduleHint.trimmingCharacters(
                     in: .whitespacesAndNewlines
@@ -286,7 +390,7 @@ private struct TrainingPrescriptionRowsSection: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("展开编辑组数、次数、重量和间歇")
+                        .accessibilityHint("查看或编辑该动作的处方；相同组已收成一句")
 
                         Menu {
                             Button("删除动作", systemImage: "trash", role: .destructive) {
@@ -340,7 +444,16 @@ private struct TrainingPrescriptionRowsSection: View {
                     allowsMultipleSelection: true
                 ) { exercises in
                     rows.append(contentsOf: exercises.map {
-                        TrainingPrescriptionDraft(exerciseID: $0.id)
+                        TrainingPrescriptionDraft(
+                            exerciseID: $0.id,
+                            laterality: $0.laterality,
+                            plannedSets: [
+                                TrainingSetPrescriptionDraft(
+                                    order: 1,
+                                    targetKind: $0.targetKind
+                                )
+                            ]
+                        )
                     })
                 }
             } label: {
@@ -365,7 +478,7 @@ private struct TrainingPrescriptionRowsSection: View {
     }
 }
 
-private struct TrainingExercisePickerView: View {
+struct TrainingExercisePickerView: View {
     @Environment(\.dismiss) private var dismiss
     let definitions: [ExerciseDefinition]
     let allowsMultipleSelection: Bool
@@ -459,141 +572,43 @@ private struct TrainingExercisePickerView: View {
     }
 }
 
-private struct TrainingPrescriptionEditorView: View {
-    @Environment(\.dismiss) private var dismiss
-    let exercise: ExerciseDefinition?
-    let definitions: [ExerciseDefinition]
-    let recent: RecentExercisePrescription?
-    let onSave: (TrainingPrescriptionDraft) -> Void
-    @State private var draft: TrainingPrescriptionDraft
-
-    init(
-        initialDraft: TrainingPrescriptionDraft,
-        exercise: ExerciseDefinition?,
-        definitions: [ExerciseDefinition],
-        recent: RecentExercisePrescription?,
-        onSave: @escaping (TrainingPrescriptionDraft) -> Void
-    ) {
-        self.exercise = exercise
-        self.definitions = definitions
-        self.recent = recent
-        self.onSave = onSave
-        _draft = State(initialValue: initialDraft)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 14) {
-                    ExerciseArtworkView(
-                        reference: exercise?.preferredActionIllustration
-                            ?? BundledExerciseCatalog.fallbackActionIllustration
-                    )
-                    .frame(width: 76, height: 76)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    Text(exercise?.canonicalName ?? "已归档动作")
-                        .font(.title3.bold())
-                }
-            }
-
-            // 高频处方必须同屏可见，避免用户误以为计划不支持重量与间歇。
-            Section("本次处方") {
-                Grid(horizontalSpacing: 12, verticalSpacing: 14) {
-                    GridRow {
-                        metric("组数", text: $draft.sets, keyboard: .numberPad)
-                        metric("次数", text: $draft.reps, keyboard: .numberPad)
-                    }
-                    GridRow {
-                        metric("重量 kg", text: $draft.weight, keyboard: .decimalPad)
-                        metric("间歇秒", text: $draft.rest, keyboard: .numberPad)
-                    }
-                }
-                Toggle("第 1 组是热身组", isOn: $draft.firstSetIsWarmup)
-            }
-        }
-        .navigationTitle("编辑动作")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    NavigationLink {
-                        TrainingExercisePickerView(
-                            definitions: definitions,
-                            allowsMultipleSelection: false
-                        ) { exercises in
-                            guard let replacement = exercises.first else { return }
-                            draft.exerciseID = replacement.id
-                        }
-                    } label: {
-                        Label("更换动作", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("更多操作")
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("完成") {
-                    onSave(draft)
-                    dismiss()
-                }
-            }
-        }
-    }
-
-    private func metric(
-        _ label: String,
-        text: Binding<String>,
-        keyboard: UIKeyboardType
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("可选", text: text)
-                .keyboardType(keyboard)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel(label)
-        }
-    }
-}
-
 private extension TrainingPrescriptionDraft {
     var prescriptionSummary: String {
-        var values: [String] = []
-        if !weight.isEmpty {
-            values.append(Double(weight) == 0 ? "自重" : "\(weight) kg")
-        }
-        if !reps.isEmpty {
-            values.append("\(reps) 次")
-        }
-        if !sets.isEmpty {
-            values.append("\(sets) 组")
-        }
-        if !rest.isEmpty {
-            values.append("间歇 \(rest) 秒")
-        }
-        if firstSetIsWarmup {
-            values.append("首组热身")
-        }
-        return values.isEmpty ? "按状态完成 · 点击设置" : values.joined(separator: " · ")
+        WorkoutPrescriptionFormatter.exerciseSummary(
+            prescription(order: 1, names: [:])
+        )
     }
 
     mutating func apply(_ recent: RecentExercisePrescription) {
-        if let setCount = recent.setCount {
-            sets = String(setCount)
+        let count = max(recent.setCount ?? plannedSets.count, 1)
+        let seed = plannedSets.last ?? TrainingSetPrescriptionDraft(order: 1)
+        if plannedSets.count < count {
+            plannedSets.append(contentsOf: (plannedSets.count ..< count).map { index in
+                var copy = seed
+                copy.id = UUID()
+                copy.order = index + 1
+                return copy
+            })
+        } else if plannedSets.count > count {
+            plannedSets.removeLast(plannedSets.count - count)
         }
-        if let reps = recent.reps {
-            self.reps = String(reps)
+        for index in plannedSets.indices {
+            plannedSets[index].order = index + 1
+            if let reps = recent.reps {
+                plannedSets[index].targetKind = .repetitions
+                plannedSets[index].reps = String(reps)
+            }
+            if let weightKG = recent.weightKG {
+                plannedSets[index].weight = weightKG.formatted()
+            }
+            if let restSeconds = recent.restSeconds {
+                plannedSets[index].restAfterSetSeconds = String(restSeconds)
+            }
         }
-        if let weightKG = recent.weightKG {
-            weight = weightKG.formatted()
-        }
-        if let restSeconds = recent.restSeconds {
-            rest = String(restSeconds)
-        }
-        if let firstSetIsWarmup = recent.firstSetIsWarmup {
-            self.firstSetIsWarmup = firstSetIsWarmup
+        if let firstSetIsWarmup = recent.firstSetIsWarmup,
+           let firstIndex = plannedSets.indices.first
+        {
+            plannedSets[firstIndex].kind = firstSetIsWarmup ? .warmup : .working
         }
     }
 }

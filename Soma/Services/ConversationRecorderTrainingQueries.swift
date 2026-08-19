@@ -53,8 +53,7 @@ extension ConversationRecorder {
                         ),
                         "name": .string(item.exerciseName),
                         "order": .number(Double(item.order)),
-                        "target_sets": item.targetSets
-                            .map { .number(Double($0)) } ?? .null,
+                        "target_sets": .number(Double(item.plannedSets.count)),
                         "target_reps": item.targetReps
                             .map { .number(Double($0)) } ?? .null,
                         "target_weight_kg": item.targetWeightKG

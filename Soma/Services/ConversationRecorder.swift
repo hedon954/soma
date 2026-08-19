@@ -12,7 +12,7 @@ enum ConversationRecorder {
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference] = [],
-        preferredGymID: UUID? = nil,
+        preferredGymID _: UUID? = nil,
         in context: ModelContext
     ) -> AgentToolResult {
         try? BusinessIDAllocator.assignMissingIDs(in: context)
@@ -60,76 +60,8 @@ enum ConversationRecorder {
             .failure("v3 Tool 路由异常。", code: "internal_error")
         case .loadSkill:
             .failure("load_skill 应由 Agent 运行时处理。")
-        case .expandToolGroup:
-            .failure("expand_tool_group 应由 Agent 运行时处理。")
         case .submitFeedback:
             .failure("submit_feedback 应由 Agent 运行时异步处理。")
-        case .queryUserData:
-            queryUserData(
-                call.arguments,
-                preferredGymID: preferredGymID,
-                in: context
-            )
-        case .mutateUserData:
-            mutateUserData(
-                call.arguments,
-                sourceText: sourceText,
-                sourceDate: resolvedSourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .listExerciseNames:
-            listExerciseNames(in: context)
-        case .listTrainingPrograms:
-            listTrainingPrograms(in: context)
-        case .getTrainingProgram:
-            getTrainingProgram(call.arguments, in: context)
-        case .recordWorkout:
-            recordWorkout(
-                call.arguments,
-                sourceText: sourceText,
-                sourceDate: resolvedSourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .recordMeal:
-            recordMeal(
-                call.arguments,
-                sourceText: sourceText,
-                sourceDate: resolvedSourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .recordBody:
-            recordBody(
-                call.arguments,
-                sourceText: sourceText,
-                sourceDate: resolvedSourceDate,
-                sourceSessionID: sourceSessionID,
-                sourceTurnID: sourceTurnID,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: mediaAttachments,
-                in: context
-            )
-        case .deleteRecord:
-            deleteRecord(
-                call.arguments,
-                sourceText: sourceText,
-                in: context
-            )
         case .updateGym:
             updateGym(
                 call.arguments,
@@ -140,22 +72,16 @@ enum ConversationRecorder {
             )
         case .switchGym:
             switchGym(call.arguments, in: context)
-        case .createTrainingProgram,
-             .createWorkoutTemplateVersion,
-             .updateWorkoutTemplate,
-             .archiveTrainingProgram,
-             .deleteTrainingProgram,
-             .startGuidedWorkout,
-             .recordPerformanceAnalysis:
-            executeTrainingDomainTool(
-                call,
+        case .recordPerformanceAnalysis:
+            recordPerformanceAnalysis(
+                call.arguments,
                 sourceTurnID: sourceTurnID,
                 in: context
             )
         }
     }
 
-    private static func parsedOccurredAt(_ value: String) -> Date? {
+    static func parsedOccurredAt(_ value: String) -> Date? {
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty,
               normalized.contains("T"),
@@ -171,46 +97,12 @@ enum ConversationRecorder {
             ?? ISO8601DateFormatter().date(from: normalized)
     }
 
-    private static func executeTrainingDomainTool(
-        _ call: AgentToolCall,
-        sourceTurnID: UUID?,
-        in context: ModelContext
-    ) -> AgentToolResult {
-        switch call.name {
-        case .createTrainingProgram:
-            createTrainingProgram(call.arguments, in: context)
-        case .createWorkoutTemplateVersion, .updateWorkoutTemplate:
-            createWorkoutTemplateVersion(call.arguments, in: context)
-        case .archiveTrainingProgram:
-            archiveTrainingProgram(call.arguments, in: context)
-        case .deleteTrainingProgram:
-            deleteTrainingProgram(call.arguments, in: context)
-        case .startGuidedWorkout:
-            startGuidedWorkout(call.arguments, in: context)
-        case .recordPerformanceAnalysis:
-            recordPerformanceAnalysis(
-                call.arguments,
-                sourceTurnID: sourceTurnID,
-                in: context
-            )
-        default:
-            .failure("训练域工具路由异常：\(call.name.rawValue)")
-        }
-    }
-
-    private static func listExerciseNames(
-        in context: ModelContext
-    ) -> AgentToolResult {
-        .success(AgentTraceText.json(
-            ExerciseLibraryStore.nameReferences(in: context)
-        ))
-    }
-
     static func queryUserData(
         _ arguments: AgentToolArguments,
         preferredGymID: UUID?,
         in context: ModelContext
     ) -> AgentToolResult {
+        try? BusinessIDAllocator.assignMissingIDs(in: context)
         let scope = arguments.scope?.lowercased() ?? "overview"
         let limit = min(max(arguments.limit ?? 3, 1), 10)
         if let failure = queryValidationFailure(scope: scope, arguments: arguments) {
@@ -434,12 +326,12 @@ enum ConversationRecorder {
     static func recordWorkout(
         _ arguments: AgentToolArguments,
         sourceText: String,
-        sourceDate: Date,
-        sourceSessionID: UUID?,
-        sourceTurnID: UUID?,
+        sourceDate: Date = .now,
+        sourceSessionID: UUID? = nil,
+        sourceTurnID: UUID? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
-        mediaAttachments: [MediaAttachmentReference],
+        mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
         try? BusinessIDAllocator.assignMissingIDs(in: context)
@@ -490,39 +382,16 @@ enum ConversationRecorder {
             legacyKind: mediaKind,
             legacyPath: mediaPath
         )
-        let input = WorkoutMergeInput(
-            date: sourceDate,
-            sessionID: sourceSessionID,
-            turnID: sourceTurnID,
-            exercise: exercise,
+        if let duplicate = AgentBusinessKeyDeduper.matchingWorkout(
             exerciseID: definition.id,
+            date: sourceDate,
             setEntries: setEntries,
             sets: arguments.sets,
             reps: arguments.reps,
             weight: arguments.weight,
-            restSeconds: arguments.restSeconds,
-            durationMinutes: durationMinutes,
-            sourceText: sourceText,
-            media: resolvedMedia,
-            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
-        )
-        let existing = RecordMergePolicy.workoutCandidate(
-            for: input,
-            entries: fetchWorkouts(in: context)
-        )
-        if existing == nil,
-           !input.isCorrection,
-           let duplicate = AgentBusinessKeyDeduper.matchingWorkout(
-               exerciseID: definition.id,
-               date: sourceDate,
-               setEntries: setEntries,
-               sets: arguments.sets,
-               reps: arguments.reps,
-               weight: arguments.weight,
-               excludingTurnID: sourceTurnID,
-               in: context
-           )
-        {
+            excludingTurnID: sourceTurnID,
+            in: context
+        ) {
             return .success(
                 AgentBusinessKeyDeduper.suspectedDuplicateMessage(
                     kind: "训练",
@@ -532,55 +401,39 @@ enum ConversationRecorder {
                 recordType: .workout
             )
         }
-        let entry: WorkoutEntry
-        if let existing {
-            RecordMergePolicy.mergeWorkout(
-                existing,
-                input: input,
-                formScore: arguments.formScore,
-                intensity: arguments.intensity?.trimmed.nilIfEmpty,
-                feedback: arguments.feedback?.trimmed.nilIfEmpty,
-                calorieEstimate: calorieEstimate
-            )
-            existing.exerciseID = definition.id
-            existing.exerciseDefinition = definition
-            existing.exercise = definition.canonicalName
-            entry = existing
-        } else {
-            let created = WorkoutEntry(
-                date: sourceDate,
-                exercise: exercise,
-                exerciseID: definition.id,
-                sets: arguments.sets,
-                reps: arguments.reps,
-                weight: arguments.weight,
-                setEntries: setEntries,
-                restSeconds: arguments.restSeconds,
-                durationMinutes: durationMinutes,
-                notes: sourceText,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: resolvedMedia,
-                formScore: arguments.formScore,
-                intensity: arguments.intensity?.trimmed.nilIfEmpty,
-                feedback: arguments.feedback?.trimmed.nilIfEmpty,
-                estimatedCalories: calorieEstimate?.calories,
-                calorieMET: calorieEstimate?.met,
-                calorieDurationMinutes: calorieEstimate?.durationMinutes,
-                calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
-                sourceTurnID: sourceTurnID,
-                sourceSessionID: sourceSessionID
-            )
-            context.insert(created)
-            created.exerciseDefinition = definition
-            try? BusinessIDAllocator.assign(
-                created,
-                namespace: "workout",
-                in: context
-            )
-            entry = created
-        }
+        let created = WorkoutEntry(
+            date: sourceDate,
+            exercise: exercise,
+            exerciseID: definition.id,
+            sets: arguments.sets,
+            reps: arguments.reps,
+            weight: arguments.weight,
+            setEntries: setEntries,
+            restSeconds: arguments.restSeconds,
+            durationMinutes: durationMinutes,
+            notes: sourceText,
+            mediaKind: mediaKind,
+            mediaPath: mediaPath,
+            mediaAttachments: resolvedMedia,
+            formScore: arguments.formScore,
+            intensity: arguments.intensity?.trimmed.nilIfEmpty,
+            feedback: arguments.feedback?.trimmed.nilIfEmpty,
+            estimatedCalories: calorieEstimate?.calories,
+            calorieMET: calorieEstimate?.met,
+            calorieDurationMinutes: calorieEstimate?.durationMinutes,
+            calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
+            sourceTurnID: sourceTurnID,
+            sourceSessionID: sourceSessionID
+        )
+        context.insert(created)
+        created.exerciseDefinition = definition
+        try? BusinessIDAllocator.assign(
+            created,
+            namespace: "workout",
+            in: context
+        )
         try? context.save()
+        let entry = created
         var summary = [exercise]
         if let setEntries, !setEntries.isEmpty {
             summary.append(workoutSetSummary(setEntries))
@@ -614,7 +467,7 @@ enum ConversationRecorder {
             return "；未估算热量（需要最近体重或个人信息中的参考体重）"
         }()
         return .success(
-            "\(existing == nil ? "已记录" : "已合并更新")训练：\(summary.joined(separator: "，"))\(calorieSummary)。",
+            "已记录训练：\(summary.joined(separator: "，"))\(calorieSummary)。",
             recordRefs: [workoutReference(entry)],
             recordType: .workout
         )
@@ -623,12 +476,12 @@ enum ConversationRecorder {
     static func recordMeal(
         _ arguments: AgentToolArguments,
         sourceText: String,
-        sourceDate: Date,
-        sourceSessionID: UUID?,
-        sourceTurnID: UUID?,
+        sourceDate: Date = .now,
+        sourceSessionID: UUID? = nil,
+        sourceTurnID: UUID? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
-        mediaAttachments: [MediaAttachmentReference],
+        mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
         try? BusinessIDAllocator.assignMissingIDs(in: context)
@@ -658,18 +511,7 @@ enum ConversationRecorder {
             legacyKind: mediaKind,
             legacyPath: mediaPath
         )
-        if let sourceTurnID,
-           let existing = fetchMeals(in: context).first(where: {
-               $0.sourceTurnID == sourceTurnID
-           })
-        {
-            return .success(
-                "当前 Turn 已写入同一餐，本次重复调用已忽略。",
-                recordRefs: [mealReference(existing)],
-                recordType: .meal
-            )
-        }
-        let entry = MealEntry(
+        let created = MealEntry(
             date: sourceDate,
             mealType: mealType,
             title: title,
@@ -694,20 +536,20 @@ enum ConversationRecorder {
            arguments.fat == nil,
            !items.isEmpty
         {
-            entry.replaceItemsAndDeriveTotals(items)
+            created.replaceItemsAndDeriveTotals(items)
         }
-        context.insert(entry)
+        context.insert(created)
         try? BusinessIDAllocator.assign(
-            entry,
+            created,
             namespace: "meal",
             in: context
         )
         try? context.save()
-        let caloriesText = entry.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
+        let caloriesText = created.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
             "已记录\(mealType.rawValue)：\(title)，\(caloriesText)。",
-            data: mealResultData(entry),
-            recordRefs: [mealReference(entry)],
+            data: mealResultData(created),
+            recordRefs: [mealReference(created)],
             recordType: .meal
         )
     }
@@ -715,12 +557,12 @@ enum ConversationRecorder {
     static func recordBody(
         _ arguments: AgentToolArguments,
         sourceText: String,
-        sourceDate: Date,
-        sourceSessionID: UUID?,
-        sourceTurnID: UUID?,
+        sourceDate: Date = .now,
+        sourceSessionID: UUID? = nil,
+        sourceTurnID: UUID? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
-        mediaAttachments: [MediaAttachmentReference],
+        mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
         try? BusinessIDAllocator.assignMissingIDs(in: context)
@@ -744,31 +586,13 @@ enum ConversationRecorder {
             legacyKind: mediaKind,
             legacyPath: mediaPath
         )
-        let input = BodyMergeInput(
-            date: sourceDate,
-            sessionID: sourceSessionID,
-            turnID: sourceTurnID,
+        if let duplicate = AgentBusinessKeyDeduper.matchingBody(
             weight: arguments.weight,
             bodyFat: arguments.bodyFat,
-            waist: arguments.waist,
-            sourceText: sourceText,
-            media: resolvedMedia,
-            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
-        )
-        let existing = RecordMergePolicy.bodyCandidate(
-            for: input,
-            entries: fetchBodyEntries(in: context)
-        )
-        if existing == nil,
-           !input.isCorrection,
-           let duplicate = AgentBusinessKeyDeduper.matchingBody(
-               weight: arguments.weight,
-               bodyFat: arguments.bodyFat,
-               date: sourceDate,
-               excludingTurnID: sourceTurnID,
-               in: context
-           )
-        {
+            date: sourceDate,
+            excludingTurnID: sourceTurnID,
+            in: context
+        ) {
             return .success(
                 AgentBusinessKeyDeduper.suspectedDuplicateMessage(
                     kind: "身体",
@@ -778,37 +602,29 @@ enum ConversationRecorder {
                 recordType: .body
             )
         }
-        let entry: BodyEntry
-        if let existing {
-            RecordMergePolicy.mergeBody(existing, input: input, analysis: analysis)
-            entry = existing
-        } else {
-            let created = BodyEntry(
-                date: sourceDate,
-                weight: arguments.weight,
-                bodyFat: arguments.bodyFat,
-                waist: arguments.waist,
-                notes: sourceText,
-                imagePath: mediaKind == .image ? mediaPath : nil,
-                mediaAttachments: resolvedMedia,
-                analysis: analysis,
-                sourceTurnID: sourceTurnID,
-                sourceSessionID: sourceSessionID
-            )
-            context.insert(created)
-            try? BusinessIDAllocator.assign(
-                created,
-                namespace: "body",
-                in: context
-            )
-            entry = created
-        }
+        let created = BodyEntry(
+            date: sourceDate,
+            weight: arguments.weight,
+            bodyFat: arguments.bodyFat,
+            waist: arguments.waist,
+            notes: sourceText,
+            imagePath: mediaKind == .image ? mediaPath : nil,
+            mediaAttachments: resolvedMedia,
+            analysis: analysis,
+            sourceTurnID: sourceTurnID,
+            sourceSessionID: sourceSessionID
+        )
+        context.insert(created)
+        try? BusinessIDAllocator.assign(
+            created,
+            namespace: "body",
+            in: context
+        )
         try? context.save()
         let weightSummary = arguments.weight.map { String(format: "%.1fkg", $0) } ?? "未提供体重"
-        let action = existing == nil ? "已记录" : "已合并更新"
         return .success(
-            "\(action)身体数据：\(weightSummary)。",
-            recordRefs: [bodyReference(entry)],
+            "已记录身体数据：\(weightSummary)。",
+            recordRefs: [bodyReference(created)],
             recordType: .body
         )
     }
@@ -1520,11 +1336,6 @@ extension ConversationRecorder {
             legacyKind: mediaPath == nil ? .none : .image,
             legacyPath: mediaPath
         )
-        if let sourceTurnID,
-           fetchMeals(in: context).contains(where: { $0.sourceTurnID == sourceTurnID })
-        {
-            return
-        }
         context.insert(MealEntry(
             date: sourceDate,
             mealType: type,
@@ -1558,36 +1369,18 @@ extension ConversationRecorder {
             legacyKind: mediaPath == nil ? .none : .image,
             legacyPath: mediaPath
         )
-        let input = BodyMergeInput(
+        let analysis = "\(body.postureNote)\n\(body.safetyNote)"
+        context.insert(BodyEntry(
             date: sourceDate,
-            sessionID: sourceSessionID,
-            turnID: sourceTurnID,
             weight: body.estimatedWeight,
             bodyFat: body.estimatedBodyFat,
-            waist: nil,
-            sourceText: sourceText,
-            media: resolvedMedia,
-            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
-        )
-        let analysis = "\(body.postureNote)\n\(body.safetyNote)"
-        if let existing = RecordMergePolicy.bodyCandidate(
-            for: input,
-            entries: fetchBodyEntries(in: context)
-        ) {
-            RecordMergePolicy.mergeBody(existing, input: input, analysis: analysis)
-        } else {
-            context.insert(BodyEntry(
-                date: sourceDate,
-                weight: body.estimatedWeight,
-                bodyFat: body.estimatedBodyFat,
-                notes: sourceText,
-                imagePath: mediaPath,
-                mediaAttachments: resolvedMedia,
-                analysis: analysis,
-                sourceTurnID: sourceTurnID,
-                sourceSessionID: sourceSessionID
-            ))
-        }
+            notes: sourceText,
+            imagePath: mediaPath,
+            mediaAttachments: resolvedMedia,
+            analysis: analysis,
+            sourceTurnID: sourceTurnID,
+            sourceSessionID: sourceSessionID
+        ))
     }
 
     static func recordWorkout(
@@ -1633,60 +1426,30 @@ extension ConversationRecorder {
             legacyKind: mediaKind,
             legacyPath: mediaPath
         )
-        let input = WorkoutMergeInput(
+        context.insert(WorkoutEntry(
             date: sourceDate,
-            sessionID: sourceSessionID,
-            turnID: sourceTurnID,
             exercise: definition?.canonicalName ?? workout.exercise,
             exerciseID: definition?.id,
-            setEntries: setEntries,
             sets: workout.sets,
             reps: workout.reps,
             weight: workout.weight,
+            setEntries: setEntries,
             restSeconds: workout.restSeconds,
             durationMinutes: durationMinutes,
-            sourceText: sourceText,
-            media: resolvedMedia,
-            isCorrection: RecordMergePolicy.isCorrectionOrSupplement(sourceText)
-        )
-        if let existing = RecordMergePolicy.workoutCandidate(
-            for: input,
-            entries: fetchWorkouts(in: context)
-        ) {
-            RecordMergePolicy.mergeWorkout(
-                existing,
-                input: input,
-                formScore: workout.formScore,
-                intensity: workout.intensity,
-                feedback: workout.feedback,
-                calorieEstimate: calorieEstimate
-            )
-        } else {
-            context.insert(WorkoutEntry(
-                date: sourceDate,
-                exercise: definition?.canonicalName ?? workout.exercise,
-                exerciseID: definition?.id,
-                sets: workout.sets,
-                reps: workout.reps,
-                weight: workout.weight,
-                setEntries: setEntries,
-                restSeconds: workout.restSeconds,
-                durationMinutes: durationMinutes,
-                notes: sourceText,
-                mediaKind: mediaKind,
-                mediaPath: mediaPath,
-                mediaAttachments: resolvedMedia,
-                formScore: workout.formScore,
-                intensity: workout.intensity,
-                feedback: workout.feedback,
-                estimatedCalories: calorieEstimate?.calories,
-                calorieMET: calorieEstimate?.met,
-                calorieDurationMinutes: calorieEstimate?.durationMinutes,
-                calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
-                sourceTurnID: sourceTurnID,
-                sourceSessionID: sourceSessionID
-            ))
-        }
+            notes: sourceText,
+            mediaKind: mediaKind,
+            mediaPath: mediaPath,
+            mediaAttachments: resolvedMedia,
+            formScore: workout.formScore,
+            intensity: workout.intensity,
+            feedback: workout.feedback,
+            estimatedCalories: calorieEstimate?.calories,
+            calorieMET: calorieEstimate?.met,
+            calorieDurationMinutes: calorieEstimate?.durationMinutes,
+            calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
+            sourceTurnID: sourceTurnID,
+            sourceSessionID: sourceSessionID
+        ))
     }
 
     static func switchGym(
@@ -1723,134 +1486,5 @@ private extension String {
 
     var nilIfEmpty: String? {
         isEmpty ? nil : self
-    }
-}
-
-@MainActor
-enum DataIntegrityRepair {
-    static func removeUnsupportedInferences(in context: ModelContext) {
-        let workouts = (try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? []
-        var changed = false
-
-        for workout in workouts
-            where workout.mediaKind == .none && !workout.notes.trimmed.isEmpty
-        {
-            let source = workout.notes.lowercased()
-            let hasCompactSets = source.range(
-                of: #"\d+\s*[x×*]\s*\d+"#,
-                options: .regularExpression
-            ) != nil
-
-            if workout.sets != nil,
-               !hasCompactSets,
-               !source.contains("组")
-            {
-                workout.sets = nil
-                changed = true
-            }
-            if workout.reps != nil,
-               !hasCompactSets,
-               !source.contains("次")
-            {
-                workout.reps = nil
-                changed = true
-            }
-            if workout.weight != nil, !hasExplicitWeight(in: source) {
-                workout.weight = nil
-                changed = true
-            }
-            if workout.restSeconds != nil, !hasExplicitRest(in: source) {
-                workout.restSeconds = nil
-                changed = true
-            }
-            if workout.durationMinutes != nil, !hasExplicitDuration(in: source) {
-                workout.durationMinutes = nil
-                changed = true
-            }
-            if workout.formScore != nil {
-                workout.formScore = nil
-                changed = true
-            }
-            if workout.intensity != nil,
-               !["偏轻", "适中", "偏重"].contains(where: source.contains)
-            {
-                workout.intensity = nil
-                changed = true
-            }
-            if let feedback = workout.feedback,
-               isPlaceholderFeedback(feedback)
-            {
-                workout.feedback = nil
-                changed = true
-            }
-        }
-
-        let bodyEntries = (try? context.fetch(FetchDescriptor<BodyEntry>())) ?? []
-        for entry in bodyEntries
-            where entry.imagePath == nil && !entry.notes.trimmed.isEmpty
-        {
-            if entry.weight != nil, !hasExplicitWeight(in: entry.notes.lowercased()) {
-                entry.weight = nil
-                changed = true
-            }
-        }
-
-        if changed {
-            try? context.save()
-        }
-    }
-
-    static func migrateLegacyWorkoutSets(in context: ModelContext) {
-        let workouts = (try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? []
-        var changed = false
-        for workout in workouts
-            where workout.setEntriesData.isEmpty && workout.sets != nil
-        {
-            guard let count = workout.sets, count > 0 else { continue }
-            let reps = workout.reps
-            let weight = workout.weight
-            workout.setEntries = (0 ..< count).map { _ in
-                WorkoutSetEvidence(reps: reps, externalWeightKG: weight)
-            }
-            changed = true
-        }
-        if changed {
-            try? context.save()
-        }
-    }
-
-    private static func hasExplicitWeight(in source: String) -> Bool {
-        source.contains("自重")
-            || source.range(
-                of: #"\d+(?:\.\d+)?\s*(?:kg|公斤)"#,
-                options: .regularExpression
-            ) != nil
-    }
-
-    private static func hasExplicitRest(in source: String) -> Bool {
-        source.contains("间歇")
-            || source.contains("休息")
-            || source.contains("rest")
-    }
-
-    private static func hasExplicitDuration(in source: String) -> Bool {
-        source.contains("分钟")
-            || source.contains("小时")
-            || source.range(
-                of: #"\d+(?:\.\d+)?\s*(?:min|mins|hour|hours)"#,
-                options: .regularExpression
-            ) != nil
-    }
-
-    private static func isPlaceholderFeedback(_ feedback: String) -> Bool {
-        let normalized = feedback.trimmed.lowercased()
-        return [
-            "用户记录",
-            "来自用户记录",
-            "已记录",
-            "来自对话",
-            "user record",
-            "recorded"
-        ].contains(normalized)
     }
 }

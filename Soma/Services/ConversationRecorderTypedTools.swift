@@ -209,24 +209,92 @@ extension ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
-        guard (arguments.exerciseID ?? 0) > 0 else {
+        let items: [AgentWorkoutCreateInput]
+        if let batch = arguments.workouts, !batch.isEmpty {
+            items = batch
+        } else if let legacy = AgentWorkoutCreateInput.fromLegacyCreate(arguments) {
+            items = [legacy]
+        } else {
             return .failure(
-                "create_workout 必须绑定有效的 exercise_id；动作不存在时先调用 create_exercise。",
-                code: "missing_foreign_key",
-                field: "exercise_id",
-                expected: "existing positive Int64 exercise_id"
+                "create_workout 必须提供 workouts；每条绑定有效的 exercise_id。动作不存在时先调用 create_exercise。",
+                code: "invalid_argument",
+                field: "workouts",
+                expected: "1 to \(AgentBatchWriteLimit.maxItems) workout objects with existing exercise_id"
             )
         }
-        return recordWorkout(
-            arguments,
-            sourceText: sourceText,
-            sourceDate: sourceDate,
-            sourceSessionID: sourceSessionID,
-            sourceTurnID: sourceTurnID,
-            mediaKind: mediaKind,
-            mediaPath: mediaPath,
-            mediaAttachments: mediaAttachments,
-            in: context
+        guard (1 ... AgentBatchWriteLimit.maxItems).contains(items.count) else {
+            return .failure(
+                "workouts 必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 条训练记录。",
+                code: "invalid_argument",
+                field: "workouts",
+                expected: "1 to \(AgentBatchWriteLimit.maxItems) items"
+            )
+        }
+
+        var resolvedDates: [Date] = []
+        resolvedDates.reserveCapacity(items.count)
+        for (index, item) in items.enumerated() {
+            guard item.exerciseID > 0 else {
+                return .failure(
+                    "create_workout 每条记录必须绑定有效的 exercise_id。",
+                    code: "missing_foreign_key",
+                    field: "workouts[\(index)].exercise_id",
+                    expected: "existing positive Int64 exercise_id"
+                )
+            }
+            do {
+                _ = try ExerciseLibraryStore.definition(
+                    businessID: item.exerciseID,
+                    in: context
+                )
+            } catch {
+                return .failure(
+                    error.localizedDescription,
+                    code: "missing_foreign_key",
+                    field: "workouts[\(index)].exercise_id",
+                    expected: "existing positive Int64 exercise_id"
+                )
+            }
+            if let raw = item.occurredAt {
+                guard let parsed = parsedOccurredAt(raw) else {
+                    return .failure(
+                        "occurred_at 必须是带时区的 ISO-8601 时间。",
+                        code: "invalid_argument",
+                        field: "workouts[\(index)].occurred_at",
+                        expected: "ISO-8601 timestamp with timezone"
+                    )
+                }
+                resolvedDates.append(parsed)
+            } else {
+                resolvedDates.append(sourceDate)
+            }
+        }
+
+        var messages: [String] = []
+        var refs: [AgentRecordReference] = []
+        for (index, item) in items.enumerated() {
+            let result = recordWorkout(
+                item.toolArguments(),
+                sourceText: sourceText,
+                sourceDate: resolvedDates[index],
+                sourceSessionID: sourceSessionID,
+                sourceTurnID: sourceTurnID,
+                mediaKind: mediaKind,
+                mediaPath: mediaPath,
+                mediaAttachments: mediaAttachments,
+                in: context
+            )
+            guard result.ok else { return result }
+            messages.append(result.message)
+            refs.append(contentsOf: result.recordRefs ?? [])
+        }
+        let message = messages.count == 1
+            ? messages[0]
+            : "已记录 \(messages.count) 条训练。\n" + messages.joined(separator: "\n")
+        return .success(
+            message,
+            recordRefs: refs.isEmpty ? nil : refs,
+            recordType: .workout
         )
     }
 
@@ -310,23 +378,65 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let name = arguments.exerciseName?.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ), !name.isEmpty else {
+        let names: [String]
+        if let batch = arguments.exerciseNames {
+            names = batch
+        } else if let single = arguments.exerciseName {
+            names = [single]
+        } else {
             return .failure(
-                "exercise_name 不能为空。",
+                "exercise_names 不能为空。",
                 code: "invalid_argument",
-                field: "exercise_name",
-                expected: "canonical exercise name"
+                field: "exercise_names",
+                expected: "1 to \(AgentBatchWriteLimit.maxItems) canonical exercise names"
+            )
+        }
+        guard (1 ... AgentBatchWriteLimit.maxItems).contains(names.count) else {
+            return .failure(
+                "exercise_names 必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 个名称。",
+                code: "invalid_argument",
+                field: "exercise_names",
+                expected: "1 to \(AgentBatchWriteLimit.maxItems) canonical exercise names"
+            )
+        }
+        var seen = Set<String>()
+        var unique: [String] = []
+        for raw in names {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = ExerciseLibraryStore.canonicalNameKey(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            unique.append(trimmed)
+        }
+        guard !unique.isEmpty else {
+            return .failure(
+                "exercise_names 不能全为空。",
+                code: "invalid_argument",
+                field: "exercise_names",
+                expected: "non-empty canonical exercise names"
             )
         }
         do {
-            let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
-                canonicalName: name,
-                in: context
-            )
+            var items: [AgentJSONValue] = []
+            var summaries: [String] = []
+            for name in unique {
+                let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
+                    canonicalName: name,
+                    in: context
+                )
+                let id = exercise.businessID ?? 0
+                items.append(.object([
+                    "exercise_id": .number(Double(id)),
+                    "name": .string(exercise.canonicalName)
+                ]))
+                summaries.append("[exercise_id:\(id)]：\(exercise.canonicalName)")
+            }
+            let message = unique.count == 1
+                ? "动作已就绪 \(summaries[0])。"
+                : "已就绪 \(unique.count) 个动作：\(summaries.joined(separator: "；"))。"
             return .success(
-                "动作已就绪 [exercise_id:\(exercise.businessID ?? 0)]：\(exercise.canonicalName)。"
+                message,
+                data: .object(["items": .array(items)])
             )
         } catch {
             return .failure(error.localizedDescription)

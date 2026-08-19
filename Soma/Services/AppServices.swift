@@ -518,7 +518,6 @@ final class AIService {
         history: [AgentConversationExchange] = [],
         context: String,
         route requestedRoute: AIModelRoute? = nil,
-        toolSignals: AgentToolExposureSignals? = nil,
         selectedSkillID: String? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
         firstStepDeadlineEnabled: Bool = true,
@@ -537,7 +536,6 @@ final class AIService {
             history: history,
             context: context,
             requestedRoute: requestedRoute,
-            toolSignals: toolSignals,
             selectedSkillID: selectedSkillID,
             checkpoint: checkpoint
         ))
@@ -873,23 +871,12 @@ final class AIService {
                 wasDeduplicated = true
             } else if !call.name.isMutation,
                       call.name != .loadSkill,
-                      call.name != .expandToolGroup,
                       let prior = state.executedReads[call.signature]
             {
                 result = .success("已查过相同只读调用，复用结果：\n\(prior.observation)")
                 wasDeduplicated = true
             } else if call.name == .loadSkill {
                 result = loadSkill(call)
-                wasDeduplicated = false
-            } else if call.name == .expandToolGroup {
-                result = AgentToolExposurePolicy.expanding(
-                    call.arguments.toolGroup,
-                    into: &state.exposedGroups
-                )
-                if result.ok {
-                    state.tools = AgentToolExposurePolicy.tools(for: state.exposedGroups)
-                        .map(\.chatTool)
-                }
                 wasDeduplicated = false
             } else {
                 result = try await execute(call)
@@ -972,9 +959,7 @@ final class AIService {
                 ))
                 if call.name.isMutation {
                     state.executedMutations.insert(call.signature)
-                } else if call.name != .loadSkill,
-                          call.name != .expandToolGroup
-                {
+                } else if call.name != .loadSkill {
                     state.executedReads[call.signature] = result
                 }
                 state.messages.append(ChatCompletionParameters.Message(
@@ -1466,7 +1451,7 @@ enum DemoSeeder {
                     sequence: 3,
                     kind: .tool,
                     status: .succeeded,
-                    title: AgentToolName.queryUserData.displayTitle,
+                    title: AgentToolName.listWorkouts.displayTitle,
                     startedAt: startedAt.addingTimeInterval(0.5),
                     endedAt: startedAt.addingTimeInterval(0.8),
                     output: AgentTraceText.json(AgentToolResult.success(
@@ -1596,17 +1581,17 @@ enum DemoSeeder {
                 startedAt: startedAt.addingTimeInterval(0.49),
                 endedAt: startedAt.addingTimeInterval(1.12),
                 input: "继续处理上一轮 assistant.tool_calls 与 role=tool 结果。",
-                output: "生成 1 个原生 tool_call：query_user_data",
+                output: "生成 1 个原生 tool_call：list_workouts",
                 metadata: #"{"stream":true,"prompt_tokens":1458,"completion_tokens":55,"total_tokens":1513}"#
             ),
             AgentTraceSpan(
                 step: 2,
                 kind: .tool,
-                title: AgentToolName.queryUserData.rawValue,
+                title: AgentToolName.listWorkouts.rawValue,
                 status: .succeeded,
                 startedAt: startedAt.addingTimeInterval(1.13),
                 endedAt: startedAt.addingTimeInterval(1.14),
-                input: #"{"name":"query_user_data","arguments":{"scope":"workouts","limit":5}}"#,
+                input: #"{"name":"list_workouts","arguments":{"limit":5}}"#,
                 output: #"{"ok":true,"observation":"最近 7 天训练 3 次，最近一次为杠铃深蹲 4×8。"}"#
             ),
             AgentTraceSpan(

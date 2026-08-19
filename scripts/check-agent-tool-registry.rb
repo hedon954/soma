@@ -1,9 +1,11 @@
 #!/usr/bin/env ruby
 
-require "set"
-
 root = File.expand_path("..", __dir__)
-swift = File.read(File.join(root, "Soma/Services/ReActAgent.swift"))
+swift_source_paths = [
+  "Soma/Services/ReActAgent.swift",
+  "Soma/Services/AgentToolCallSignature.swift",
+].freeze
+swift = swift_source_paths.map { |path| File.read(File.join(root, path)) }.join("\n")
 server = File.read(File.join(root, "Server/src/tool-registry.ts"))
 
 enum_body = swift[/enum AgentToolName:.*?\{(.*?)\n\s+var isMutation/m, 1]
@@ -29,14 +31,37 @@ mutation_body = swift[/var isMutation: Bool \{\s*switch self \{(.*?)\n\s*\}\s*\}
 schema_body = swift[/var schemaVersion: Int \{\s*switch self \{(.*?)\n\s*\}\s*\}/m, 1]
 abort "Cannot locate Swift Agent Tool contracts" unless mutation_body && schema_body
 
-false_cases = mutation_body[/case (.*?):\s*false/m, 1]
-  .to_s.scan(/\.(\w+)/).flatten.to_set
-version_two_cases = schema_body[/case (.*?):\s*2/m, 1]
-  .to_s.scan(/\.(\w+)/).flatten.to_set
+def switch_overrides(body, value_pattern)
+  overrides = {}
+  body.scan(/case\s+(.*?):\s*(#{value_pattern})/m) do |cases, value|
+    case_names = cases.scan(/\.(\w+)/).flatten
+    abort "Cannot parse Swift switch case: #{cases.inspect}" if case_names.empty?
+
+    case_names.each do |case_name|
+      abort "Duplicate Swift switch case: #{case_name}" if overrides.key?(case_name)
+
+      overrides[case_name] = value
+    end
+  end
+  overrides
+end
+
+mutation_overrides = switch_overrides(mutation_body, "true|false")
+mutation_default = mutation_body[/default:\s*(true|false)/, 1]
+abort "Cannot locate Swift mutation default" unless mutation_default
+
+schema_overrides = switch_overrides(schema_body, "\\d+")
+schema_default = schema_body[/default:\s*(\d+)/, 1]
+unless schema_default || schema_overrides.size == swift_cases.size
+  abort "Cannot locate Swift schema default"
+end
 
 swift_contracts = swift_cases.to_h do |case_name, raw_name|
-  [raw_name, [version_two_cases.include?(case_name) ? 2 : 1,
-              !false_cases.include?(case_name)]]
+  schema_version = schema_overrides.fetch(case_name) {
+    schema_default || abort("Cannot locate schema version for #{case_name}")
+  }.to_i
+  mutation = mutation_overrides.fetch(case_name, mutation_default) == "true"
+  [raw_name, [schema_version, mutation]]
 end
 
 drift = swift_contracts.filter do |name, contract|

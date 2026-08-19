@@ -48,8 +48,8 @@ struct RemoteAgentExecutionTests {
             payloadVersion: 1,
             payload: [
                 "toolCallID": .string(UUID().uuidString),
-                "toolName": .string("record_workout"),
-                "schemaVersion": .number(1),
+                "toolName": .string("create_workout"),
+                "schemaVersion": .number(3),
                 "arguments": .object(arguments),
                 "mutation": .bool(true)
             ],
@@ -57,8 +57,8 @@ struct RemoteAgentExecutionTests {
         )
 
         let request = try #require(RemoteDeviceToolRequest(event: event))
-        #expect(request.name == AgentToolName.recordWorkout.rawValue)
-        #expect(request.schemaVersion == 1)
+        #expect(request.name == AgentToolName.createWorkout.rawValue)
+        #expect(request.schemaVersion == 3)
         #expect(request.mutation)
 
         let data = try JSONEncoder().encode(request.arguments)
@@ -125,7 +125,7 @@ struct RemoteAgentExecutionTests {
             currentImages: [],
             currentVideos: [],
             skills: [.init(id: "training_plan", content: "自定义 Skill 内容")],
-            tools: [.loadSkill, .queryUserData, .expandToolGroup],
+            tools: [.loadSkill, .listWorkouts],
             maxSteps: 37,
             deadlinePolicy: AgentStreamDeadlinePolicy()
         )
@@ -143,11 +143,10 @@ struct RemoteAgentExecutionTests {
         #expect(server.registrationSignatureWasValid)
         #expect(server.jobSignatureWasValid)
         #expect(server.idempotencyKey == clientJobID.uuidString.lowercased())
-        #expect(Set(server.submittedDeviceTools) == ["query_user_data"])
+        #expect(Set(server.submittedDeviceTools) == ["list_workouts"])
         #expect(Set(server.submittedDeviceToolSchemas.keys) == Set(server.submittedDeviceTools))
         #expect(Set(server.submittedRemoteTools) == Set([
-            "load_skill",
-            "expand_tool_group"
+            "load_skill"
         ]))
         #expect(server.submittedSystemPrompt == "自定义统一系统提示词")
         #expect(server.submittedMessageRoles == [
@@ -155,7 +154,7 @@ struct RemoteAgentExecutionTests {
         ])
         #expect(server.submittedSkillContent == "自定义 Skill 内容")
         #expect(server.submittedActiveTools == [
-            "load_skill", "query_user_data", "expand_tool_group"
+            "load_skill", "list_workouts"
         ])
         #expect(server.submittedMaxSteps == 37)
         #expect(server.submittedToolDefinitionsMatchNames)

@@ -327,6 +327,25 @@ final class ConversationSessionController {
         hasManualSessionOverride = true
     }
 
+    func activateFallbackAfterDeletion(
+        dataSpace: DataSpace,
+        in context: ModelContext
+    ) {
+        let remaining = (
+            try? context.fetch(
+                FetchDescriptor<ConversationSession>(
+                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+                )
+            )
+        ) ?? []
+        if let newest = remaining.first {
+            activate(newest, dataSpace: dataSpace)
+            hasManualSessionOverride = true
+            return
+        }
+        _ = createSession(dataSpace: dataSpace, in: context)
+    }
+
     private func activate(
         _ session: ConversationSession,
         dataSpace: DataSpace

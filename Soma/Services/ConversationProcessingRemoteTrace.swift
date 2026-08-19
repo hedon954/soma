@@ -130,7 +130,7 @@ extension ConversationProcessingService {
               event.phase == "completed",
               let nameRaw = event.payload["toolName"]?.stringValue,
               let name = AgentToolName(rawValue: nameRaw),
-              [.loadSkill, .expandToolGroup].contains(name)
+              name == .loadSkill
         else {
             return false
         }

@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 struct PersonalDataSnapshot: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
 
     var schemaVersion = Self.currentSchemaVersion
     var createdAt: Date
@@ -19,9 +19,11 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
     var trainingPrograms: [TrainingProgramDTO]?
     var workoutTemplateVersions: [WorkoutTemplateVersionDTO]?
     var templateExercises: [TemplateExerciseDTO]?
+    var templateSetPrescriptions: [TemplateSetPrescriptionDTO]?
     var workoutSessions: [WorkoutSessionDTO]?
     var exercisePerformances: [ExercisePerformanceDTO]?
     var workoutSets: [WorkoutSetDTO]?
+    var workoutEfforts: [WorkoutEffortDTO]?
     var recommendationSnapshots: [RecommendationSnapshotDTO]?
     var performanceAnalyses: [PerformanceAnalysisDTO]?
     var sessions: [ConversationSessionDTO]
@@ -49,6 +51,8 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             .forEach { paths.insert($0) }
         (workoutSets ?? []).compactMap(\.recordedVideoPath)
             .forEach { paths.insert($0) }
+        (workoutEfforts ?? []).compactMap(\.recordedVideoPath)
+            .forEach { paths.insert($0) }
         (performanceAnalyses ?? []).map(\.sourceMediaPath)
             .filter { !$0.isEmpty }
             .forEach { paths.insert($0) }
@@ -64,6 +68,22 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             throw DataArchiveError.unsupportedSchema(schemaVersion)
         }
         guard mutationReceipts.allSatisfy(\.hasDecodableResult) else {
+            throw DataArchiveError.invalidSnapshot
+        }
+        guard (workoutSessions ?? []).allSatisfy({
+            TrainingPlanCoding.decode(
+                [TemplateExercisePrescription].self,
+                from: $0.prescriptionSnapshotData
+            ) != nil
+        }) else {
+            throw DataArchiveError.invalidSnapshot
+        }
+        guard (exercisePerformances ?? []).allSatisfy({
+            TrainingPlanCoding.decode(
+                TemplateExercisePrescription.self,
+                from: $0.prescriptionSnapshotData
+            ) != nil
+        }) else {
             throw DataArchiveError.invalidSnapshot
         }
     }
@@ -102,6 +122,9 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             ).map(WorkoutTemplateVersionDTO.init),
             templateExercises: context.fetch(FetchDescriptor<TemplateExercise>())
                 .map(TemplateExerciseDTO.init),
+            templateSetPrescriptions: context.fetch(
+                FetchDescriptor<TemplateSetPrescription>()
+            ).map(TemplateSetPrescriptionDTO.init),
             workoutSessions: context.fetch(FetchDescriptor<WorkoutSession>())
                 .map(WorkoutSessionDTO.init),
             exercisePerformances: context.fetch(
@@ -109,6 +132,8 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             ).map(ExercisePerformanceDTO.init),
             workoutSets: context.fetch(FetchDescriptor<WorkoutSet>())
                 .map(WorkoutSetDTO.init),
+            workoutEfforts: context.fetch(FetchDescriptor<WorkoutEffort>())
+                .map(WorkoutEffortDTO.init),
             recommendationSnapshots: context.fetch(
                 FetchDescriptor<RecommendationSnapshot>()
             ).map(RecommendationSnapshotDTO.init),
@@ -138,84 +163,122 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         try validate()
         try context.transaction {
             try PersonalDataStore.deleteAllModels(in: context)
-            externalSyncCursors.forEach { context.insert($0.makeModel()) }
-            userProfiles.forEach { context.insert($0.makeModel()) }
-            for gymProfile in gymProfiles {
-                context.insert(gymProfile.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for gymEquipment in gymEquipment {
-                context.insert(gymEquipment.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for gymMedia in gymMedia {
-                context.insert(gymMedia.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for meal in meals {
-                context.insert(meal.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for bodyEntry in bodyEntries {
-                context.insert(bodyEntry.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for definition in exerciseDefinitions ?? [] {
-                context.insert(definition.makeModel(
-                    mediaPathMapping: mediaPathMapping
-                ))
-            }
-            for mergeRecord in exerciseMergeRecords ?? [] {
-                context.insert(mergeRecord.makeModel(
-                    mediaPathMapping: mediaPathMapping
-                ))
-            }
-            for workout in workouts {
-                context.insert(workout.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for program in trainingPrograms ?? [] {
-                context.insert(program.makeModel())
-            }
-            for version in workoutTemplateVersions ?? [] {
-                context.insert(version.makeModel())
-            }
-            for item in templateExercises ?? [] {
-                context.insert(item.makeModel())
-            }
-            for session in workoutSessions ?? [] {
-                context.insert(session.makeModel())
-            }
-            for performance in exercisePerformances ?? [] {
-                context.insert(performance.makeModel(
-                    mediaPathMapping: mediaPathMapping
-                ))
-            }
-            for set in workoutSets ?? [] {
-                context.insert(set.makeModel(
-                    mediaPathMapping: mediaPathMapping
-                ))
-            }
-            for recommendation in recommendationSnapshots ?? [] {
-                context.insert(recommendation.makeModel())
-            }
-            for analysis in performanceAnalyses ?? [] {
-                context.insert(analysis.makeModel(
-                    mediaPathMapping: mediaPathMapping
-                ))
-            }
-            sessions.forEach { context.insert($0.makeModel()) }
-            for message in messages {
-                context.insert(message.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            traces.forEach { context.insert($0.makeModel()) }
-            for receipt in mutationReceipts {
-                try context.insert(receipt.makeModel())
-            }
-            for job in agentJobs ?? [] {
-                context.insert(job.makeModel(mediaPathMapping: mediaPathMapping))
-            }
-            for event in agentEvents ?? [] {
-                context.insert(event.makeModel())
-            }
-            try BusinessIDAllocator.assignMissingIDs(in: context)
+            insertProfileModels(
+                in: context,
+                mediaPathMapping: mediaPathMapping
+            )
+            try insertTrainingModels(
+                in: context,
+                mediaPathMapping: mediaPathMapping
+            )
+            try insertConversationModels(
+                in: context,
+                mediaPathMapping: mediaPathMapping
+            )
+            try BusinessIDAllocator.repairAndAssignAllIDs(in: context)
             ExerciseLibraryStore.migrateLegacyWorkoutNames(in: context)
             try SomaDataMigration.repairExerciseRelationships(in: context)
+            try SomaDataMigration.repairTrainingRelationships(in: context)
             try context.save()
+        }
+    }
+
+    @MainActor
+    private func insertProfileModels(
+        in context: ModelContext,
+        mediaPathMapping: [String: String]
+    ) {
+        externalSyncCursors.forEach { context.insert($0.makeModel()) }
+        userProfiles.forEach { context.insert($0.makeModel()) }
+        for profile in gymProfiles {
+            context.insert(profile.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for equipment in gymEquipment {
+            context.insert(equipment.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for media in gymMedia {
+            context.insert(media.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for meal in meals {
+            context.insert(meal.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for entry in bodyEntries {
+            context.insert(entry.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+    }
+
+    @MainActor
+    private func insertTrainingModels(
+        in context: ModelContext,
+        mediaPathMapping: [String: String]
+    ) throws {
+        for definition in exerciseDefinitions ?? [] {
+            context.insert(definition.makeModel(
+                mediaPathMapping: mediaPathMapping
+            ))
+        }
+        for mergeRecord in exerciseMergeRecords ?? [] {
+            context.insert(mergeRecord.makeModel(
+                mediaPathMapping: mediaPathMapping
+            ))
+        }
+        for workout in workouts {
+            context.insert(workout.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for program in trainingPrograms ?? [] {
+            context.insert(program.makeModel())
+        }
+        for version in workoutTemplateVersions ?? [] {
+            context.insert(version.makeModel())
+        }
+        for item in templateExercises ?? [] {
+            context.insert(item.makeModel())
+        }
+        for item in templateSetPrescriptions ?? [] {
+            context.insert(item.makeModel())
+        }
+        for session in workoutSessions ?? [] {
+            try context.insert(session.makeModel())
+        }
+        for performance in exercisePerformances ?? [] {
+            try context.insert(performance.makeModel(
+                mediaPathMapping: mediaPathMapping
+            ))
+        }
+        for set in workoutSets ?? [] {
+            context.insert(set.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for effort in workoutEfforts ?? [] {
+            context.insert(effort.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for recommendation in recommendationSnapshots ?? [] {
+            context.insert(recommendation.makeModel())
+        }
+        for analysis in performanceAnalyses ?? [] {
+            context.insert(analysis.makeModel(
+                mediaPathMapping: mediaPathMapping
+            ))
+        }
+    }
+
+    @MainActor
+    private func insertConversationModels(
+        in context: ModelContext,
+        mediaPathMapping: [String: String]
+    ) throws {
+        sessions.forEach { context.insert($0.makeModel()) }
+        for message in messages {
+            context.insert(message.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        traces.forEach { context.insert($0.makeModel()) }
+        for receipt in mutationReceipts {
+            try context.insert(receipt.makeModel())
+        }
+        for job in agentJobs ?? [] {
+            context.insert(job.makeModel(mediaPathMapping: mediaPathMapping))
+        }
+        for event in agentEvents ?? [] {
+            context.insert(event.makeModel())
         }
     }
 }
@@ -249,6 +312,7 @@ struct ExternalSyncCursorDTO: Codable, Equatable, Sendable {
 
 struct UserProfileDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var updatedAt: Date
     var displayName: String
     var biologicalSexRaw: String
@@ -261,6 +325,7 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
 
     init(_ model: UserProfile) {
         id = model.id
+        businessID = model.businessID
         updatedAt = model.updatedAt
         displayName = model.displayName
         biologicalSexRaw = model.biologicalSexRaw
@@ -285,6 +350,7 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
             healthNotes: healthNotes
         )
         model.id = id
+        model.businessID = businessID
         model.biologicalSexRaw = biologicalSexRaw
         return model
     }
@@ -292,6 +358,7 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
 
 struct GymProfileDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var name: String
     var createdAt: Date
     var notes: String
@@ -306,6 +373,7 @@ struct GymProfileDTO: Codable, Equatable, Sendable {
 
     init(_ model: GymProfile) {
         id = model.id
+        businessID = model.businessID
         name = model.name
         createdAt = model.createdAt
         notes = model.notes
@@ -333,6 +401,7 @@ struct GymProfileDTO: Codable, Equatable, Sendable {
             matchRadiusMeters: matchRadiusMeters
         )
         model.id = id
+        model.businessID = businessID
         model.createdAt = createdAt
         return model
     }
@@ -340,6 +409,7 @@ struct GymProfileDTO: Codable, Equatable, Sendable {
 
 struct GymEquipmentDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var gymID: UUID
     var name: String
     var category: String
@@ -350,6 +420,7 @@ struct GymEquipmentDTO: Codable, Equatable, Sendable {
 
     init(_ model: GymEquipment) {
         id = model.id
+        businessID = model.businessID
         gymID = model.gymID
         name = model.name
         category = model.category
@@ -369,6 +440,7 @@ struct GymEquipmentDTO: Codable, Equatable, Sendable {
             imagePath: mapped(imagePath, with: mediaPathMapping)
         )
         model.id = id
+        model.businessID = businessID
         model.createdAt = createdAt
         return model
     }
@@ -400,6 +472,7 @@ struct GymMediaDTO: Codable, Equatable, Sendable {
 
 struct MealEntryDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var date: Date
     var mealTypeRaw: String
     var title: String
@@ -417,6 +490,7 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
 
     init(_ model: MealEntry) {
         id = model.id
+        businessID = model.businessID
         date = model.date
         mealTypeRaw = model.mealTypeRaw
         title = model.title
@@ -453,6 +527,7 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
             sourceSessionID: sourceSessionID
         )
         model.id = id
+        model.businessID = businessID
         model.mealTypeRaw = mealTypeRaw
         return model
     }
@@ -460,6 +535,7 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
 
 struct BodyEntryDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var date: Date
     var weight: Double?
     var bodyFat: Double?
@@ -474,6 +550,7 @@ struct BodyEntryDTO: Codable, Equatable, Sendable {
 
     init(_ model: BodyEntry) {
         id = model.id
+        businessID = model.businessID
         date = model.date
         weight = model.weight
         bodyFat = model.bodyFat
@@ -502,12 +579,14 @@ struct BodyEntryDTO: Codable, Equatable, Sendable {
             sourceSessionID: sourceSessionID
         )
         model.id = id
+        model.businessID = businessID
         return model
     }
 }
 
 struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var date: Date
     var exercise: String
     var exerciseID: UUID?
@@ -526,15 +605,18 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var calorieMET: Double?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool
+    var calorieAlgorithmVersion: String?
     var externalSource: String?
     var externalID: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
     var sourceWorkoutSessionID: UUID?
     var sourcePerformanceID: UUID?
+    var projectionKey: String?
 
     init(_ model: WorkoutEntry) {
         id = model.id
+        businessID = model.businessID
         date = model.date
         exercise = model.exercise
         exerciseID = model.exerciseID
@@ -553,12 +635,14 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         calorieMET = model.calorieMET
         calorieDurationMinutes = model.calorieDurationMinutes
         calorieDurationEstimated = model.calorieDurationEstimated
+        calorieAlgorithmVersion = model.calorieAlgorithmVersion
         externalSource = model.externalSource
         externalID = model.externalID
         sourceTurnID = model.sourceTurnID
         sourceSessionID = model.sourceSessionID
         sourceWorkoutSessionID = model.sourceWorkoutSessionID
         sourcePerformanceID = model.sourcePerformanceID
+        projectionKey = model.projectionKey
     }
 
     func makeModel(mediaPathMapping: [String: String]) -> WorkoutEntry {
@@ -582,14 +666,20 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
             calorieMET: calorieMET,
             calorieDurationMinutes: calorieDurationMinutes,
             calorieDurationEstimated: calorieDurationEstimated,
+            calorieAlgorithmVersion: calorieAlgorithmVersion,
             externalSource: externalSource,
             externalID: externalID,
             sourceTurnID: sourceTurnID,
             sourceSessionID: sourceSessionID,
             sourceWorkoutSessionID: sourceWorkoutSessionID,
-            sourcePerformanceID: sourcePerformanceID
+            sourcePerformanceID: sourcePerformanceID,
+            projectionKey: projectionKey
         )
         model.id = id
+        model.businessID = businessID
+        if model.projectionKey == nil || model.projectionKey?.isEmpty == true {
+            model.projectionKey = SomaDataMigration.entryKey(for: id)
+        }
         return model
     }
 }

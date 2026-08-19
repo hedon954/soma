@@ -12,15 +12,6 @@ enum RecordDeletionPolicy {
 }
 
 enum RecordMergePolicy {
-    static func isCorrectionOrSupplement(_ text: String) -> Bool {
-        let normalized = text.lowercased()
-        return [
-            "不是", "应该是", "其实是", "改成", "更正", "纠正", "刚才", "上一条",
-            "前一条", "补充", "再加", "漏了", "这张也是", "同一", "更新一下",
-            "not ", "actually", "correction", "update the previous"
-        ].contains(where: normalized.contains)
-    }
-
     static func normalizedSimilarity(_ lhs: String, _ rhs: String) -> Double {
         let left = normalizedCharacters(lhs)
         let right = normalizedCharacters(rhs)
@@ -57,77 +48,6 @@ enum RecordMergePolicy {
         guard !new.isEmpty else { return old }
         guard !old.isEmpty else { return new }
         return old == new || old.contains(new) ? old : "\(old)\n\(new)"
-    }
-
-    static func mealCandidate(
-        for input: MealMergeInput,
-        entries: [MealEntry]
-    ) -> MealEntry? {
-        if let exact = sameTurnCandidate(
-            turnID: input.turnID,
-            entries: entries,
-            sourceTurnID: \.sourceTurnID
-        ) {
-            return exact
-        }
-        let eligible = input.isCorrection
-            ? entries
-            : entries.filter {
-                sharesMedia($0.mediaAttachments, input.media)
-            }
-        return uniqueBestCandidate(
-            eligible,
-            score: { mealScore($0, input: input) },
-            threshold: input.isCorrection ? 7 : 10
-        )
-    }
-
-    static func workoutCandidate(
-        for input: WorkoutMergeInput,
-        entries: [WorkoutEntry]
-    ) -> WorkoutEntry? {
-        let localEntries = entries.filter { $0.externalSource == nil }
-        if let exact = sameTurnCandidate(
-            turnID: input.turnID,
-            entries: localEntries,
-            sourceTurnID: \.sourceTurnID
-        ) {
-            return exact
-        }
-        let eligible = input.isCorrection
-            ? localEntries
-            : localEntries.filter {
-                sharesMedia($0.mediaAttachments, input.media)
-            }
-        return uniqueBestCandidate(
-            eligible,
-            score: { workoutScore($0, input: input) },
-            threshold: input.isCorrection ? 8 : 10
-        )
-    }
-
-    static func bodyCandidate(
-        for input: BodyMergeInput,
-        entries: [BodyEntry]
-    ) -> BodyEntry? {
-        let localEntries = entries.filter { $0.externalSource == nil }
-        if let exact = sameTurnCandidate(
-            turnID: input.turnID,
-            entries: localEntries,
-            sourceTurnID: \.sourceTurnID
-        ) {
-            return exact
-        }
-        let eligible = input.isCorrection
-            ? localEntries
-            : localEntries.filter {
-                sharesMedia($0.mediaAttachments, input.media)
-            }
-        return uniqueBestCandidate(
-            eligible,
-            score: { bodyScore($0, input: input) },
-            threshold: input.isCorrection ? 7 : 8
-        )
     }
 
     static func mergeMeal(
@@ -332,9 +252,6 @@ enum RecordMergePolicy {
         _ entry: MealEntry,
         input: MealMergeInput
     ) -> Int {
-        if let turnID = input.turnID, entry.sourceTurnID == turnID {
-            return 100
-        }
         let interval = abs(entry.date.timeIntervalSince(input.date))
         guard interval <= 2 * 60 * 60, entry.mealType == input.mealType else {
             return 0
@@ -361,9 +278,6 @@ enum RecordMergePolicy {
         _ entry: WorkoutEntry,
         input: WorkoutMergeInput
     ) -> Int {
-        if let turnID = input.turnID, entry.sourceTurnID == turnID {
-            return 100
-        }
         let interval = abs(entry.date.timeIntervalSince(input.date))
         guard interval <= 2 * 60 * 60 else { return 0 }
         if let entryExerciseID = entry.exerciseID,
@@ -402,9 +316,6 @@ enum RecordMergePolicy {
         _ entry: BodyEntry,
         input: BodyMergeInput
     ) -> Int {
-        if let turnID = input.turnID, entry.sourceTurnID == turnID {
-            return 100
-        }
         let interval = abs(entry.date.timeIntervalSince(input.date))
         guard interval <= 6 * 60 * 60 else { return 0 }
         var score = timeScore(interval)
@@ -417,29 +328,6 @@ enum RecordMergePolicy {
             score += 3
         }
         return score
-    }
-
-    private static func uniqueBestCandidate<T>(
-        _ values: [T],
-        score: (T) -> Int,
-        threshold: Int
-    ) -> T? {
-        let ranked = values
-            .map { ($0, score($0)) }
-            .filter { $0.1 >= threshold }
-            .sorted { $0.1 > $1.1 }
-        guard let first = ranked.first else { return nil }
-        guard ranked.count == 1 || first.1 - ranked[1].1 >= 2 else { return nil }
-        return first.0
-    }
-
-    private static func sameTurnCandidate<T>(
-        turnID: UUID?,
-        entries: [T],
-        sourceTurnID: KeyPath<T, UUID?>
-    ) -> T? {
-        guard let turnID else { return nil }
-        return entries.first { $0[keyPath: sourceTurnID] == turnID }
     }
 
     private static func timeScore(_ interval: TimeInterval) -> Int {
@@ -481,15 +369,6 @@ enum RecordMergePolicy {
         guard !existing.isEmpty, !incoming.isEmpty else { return 0 }
         let existingKeys = Set(existing.map(mediaKey))
         return incoming.contains(where: { existingKeys.contains(mediaKey($0)) }) ? 4 : 1
-    }
-
-    private static func sharesMedia(
-        _ existing: [MediaAttachmentReference],
-        _ incoming: [MediaAttachmentReference]
-    ) -> Bool {
-        guard !existing.isEmpty, !incoming.isEmpty else { return false }
-        let existingKeys = Set(existing.map(mediaKey))
-        return incoming.contains { existingKeys.contains(mediaKey($0)) }
     }
 
     private static func mediaKey(_ attachment: MediaAttachmentReference) -> String {

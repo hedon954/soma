@@ -216,7 +216,6 @@ export class AgentWorker {
               job,
               call.toolName,
               call.arguments,
-              activeRuntimeTools,
             );
             await this.store.appendEvent(job.id, lease.epoch, {
               kind: "tool",
@@ -321,7 +320,6 @@ function executeRuntimeTool(
   job: AgentJob,
   name: string,
   argumentsValue: Record<string, unknown>,
-  activeTools: Set<string>,
 ): Record<string, unknown> {
   if (job.input === undefined) {
     return { ok: false, code: "invalid_request", message: "任务内容已清理。" };
@@ -346,52 +344,6 @@ function executeRuntimeTool(
           message: `未知 Skill：${normalizedID}。可用 ID：${job.input.modelInput.skills.map((item) => item.id).join("、")}。`,
         }
       : { ok: true, code: "ok", message: skill.content };
-  }
-  if (name === "expand_tool_group") {
-    const group = argumentsValue.tool_group;
-    const groups: Record<string, string[]> = {
-      exercises: [
-        "search_exercises", "create_exercise", "update_exercise",
-        "archive_exercise", "merge_exercises",
-      ],
-      workouts: [
-        "list_workouts", "get_workout", "create_workout",
-        "update_workout", "delete_workout",
-      ],
-      meals: ["list_meals", "get_meal", "create_meal", "update_meal", "delete_meal"],
-      body: [
-        "list_body_entries", "get_body_entry", "create_body_entry",
-        "update_body", "delete_body_entry",
-      ],
-      plans: [
-        "list_programs", "get_program", "create_program",
-        "create_program_version", "archive_program", "delete_program", "start_program",
-      ],
-      gym: ["update_gym", "switch_gym"],
-      review: ["record_performance_analysis"],
-      feedback: ["submit_feedback"],
-    };
-    const names = typeof group === "string" ? groups[group] : undefined;
-    if (names === undefined) {
-      return {
-        ok: false,
-        code: "invalid_request",
-        message: "tool_group 不在 App 允许展开的白名单中。",
-      };
-    }
-    if (names.every((tool) => activeTools.has(tool))) {
-      return {
-        ok: true,
-        code: "ok",
-        message: `工具组 ${String(group)} 已经展开。`,
-      };
-    }
-    for (const tool of names) activeTools.add(tool);
-    return {
-      ok: true,
-      code: "ok",
-      message: `已展开工具组 ${String(group)}：${names.join(", ")}。后续步骤可使用这些工具。`,
-    };
   }
   throw new ProtocolError(
     "tool_schema_unsupported",

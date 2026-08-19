@@ -3,6 +3,7 @@ import Foundation
 struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
     var canonicalNameKey: String
     var id: UUID
+    var businessID: Int64?
     var canonicalName: String
     var createdAt: Date
     var updatedAt: Date
@@ -17,6 +18,8 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
     var guidanceVideos: [ExerciseVideoSource]
     var contentRevisionsData: Data?
     var imageReferences: [ExerciseImageReference]?
+    var lateralityRaw: String?
+    var targetKindRaw: String?
 
     var referencedMediaPaths: [String] {
         userDemoVideos.map(\.path)
@@ -27,6 +30,7 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
     init(_ model: ExerciseDefinition) {
         canonicalNameKey = model.canonicalNameKey
         id = model.id
+        businessID = model.businessID
         canonicalName = model.canonicalName
         createdAt = model.createdAt
         updatedAt = model.updatedAt
@@ -41,6 +45,8 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
         guidanceVideos = model.guidanceVideos
         contentRevisionsData = model.contentRevisionsData
         imageReferences = model.imageReferences
+        lateralityRaw = model.lateralityRaw.isEmpty ? nil : model.lateralityRaw
+        targetKindRaw = model.targetKindRaw.isEmpty ? nil : model.targetKindRaw
     }
 
     func makeModel(
@@ -81,6 +87,13 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
             }
             return value
         }
+        definition.businessID = businessID
+        if let lateralityRaw {
+            definition.lateralityRaw = lateralityRaw
+        }
+        if let targetKindRaw {
+            definition.targetKindRaw = targetKindRaw
+        }
         definition.updatedAt = updatedAt
         return definition
     }
@@ -88,6 +101,7 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
 
 struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
     var id: UUID
+    var businessID: Int64?
     var sourceExerciseID: UUID
     var targetExerciseID: UUID
     var sourceName: String
@@ -110,6 +124,7 @@ struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
 
     init(_ model: ExerciseMergeRecord) {
         id = model.id
+        businessID = model.businessID
         sourceExerciseID = model.sourceExerciseID
         targetExerciseID = model.targetExerciseID
         sourceName = model.sourceName
@@ -163,6 +178,7 @@ struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
             createdAt: createdAt
         )
         record.id = id
+        record.businessID = businessID
         record.undoneAt = undoneAt
         return record
     }

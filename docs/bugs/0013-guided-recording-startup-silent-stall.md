@@ -1,9 +1,12 @@
 # BUG 0013：带练录像启动无终态且失败提示不可见
 
-- 状态：已修复；真实录像 Delegate 时序与系统中断待维护者真机复验
+- 状态：首次修复不足；写文件回调截止已落地，完整相机 activation 由 BUG 0020 继续修复
 - 发现日期：2026-08-12
 - 影响范围：计划带练自动/手动录像、相机错误恢复与诊断
 - 上游依据：[BUG 0010](0010-guided-recording-state-and-cue-gaps.md) 的启动回调与错误投影修复
+- 后续修订：
+  - [BUG 0019](0019-guided-recording-attempt-terminal-and-duplicate-alerts.md) 记录启动成功后系统提前终结、成功 key 误判、陈旧活动状态与多 Alert 源造成的重复提示
+  - [BUG 0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) 记录旧“启动截止时间”只覆盖写文件回调、没有覆盖权限后配置与 `startRunning()`，以及不可见预览、静默暂停和极短文件误报完整成功
 - 下游落地：[PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
 
 ## 症状

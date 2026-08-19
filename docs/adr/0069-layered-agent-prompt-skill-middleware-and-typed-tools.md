@@ -1,6 +1,6 @@
 # ADR 0069：分层 Agent Prompt、Skill Middleware 与强类型 Tool
 
-- 状态：已采纳
+- 状态：部分已替代；分层 Prompt、Skill Middleware 与强类型 Tool 继续有效，`create_exercise` / `create_workout` 的单条广告 Schema 由 ADR 0078 修订，未选 Skill 的 Turn 信号剪枝由 ADR 0081 替代
 - 日期：2026-08-15
 - 维护者：Soma maintainers
 - 部分替代：
@@ -8,7 +8,9 @@
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中用通用查询与通用记录 CRUD 缩减 Tool 的边界
   - [ADR 0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) 中固定 v1 User section 与通用 Tool 分组边界
   - [ADR 0068](0068-versioned-unified-agent-model-input.md) 中 v1 Prompt、Skill 快照和 Tool 协议版本
-- 后续替代：暂无
+- 后续替代：
+  - [ADR 0078](0078-batch-create-exercise-and-workout.md) 将 `create_exercise` / `create_workout` 广告为批量数组，并禁止模型指定新建 `record_id`
+  - [ADR 0081](0081-default-full-tool-registration-and-selected-skill-subset.md) 取消按当前 Turn 信号剪枝与普通建议空 Tool 集
 - 上游依据：[PRD 030](../prd/030-agent-prompt-skill-context-and-tool-v3.md)
 
 ## 背景

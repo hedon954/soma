@@ -25,7 +25,7 @@
 - 新增设备生成的版本化 `AgentModelInputEnvelope`，本地和远程共用 `AgentModelInputBuilder`。
 - Envelope 传递原生消息序列、媒体 ID、当前 Skill 快照、完整 Tool 定义、初始集合和运行参数。
 - 删除 Server 固定 Prompt 与最小上下文拼接，Provider 只消费 Envelope。
-- Server 就地执行 `load_skill`/`expand_tool_group`，业务 Tool 继续设备 handoff。
+- Server 就地执行 `load_skill`，业务 Tool 继续设备 handoff。
 - 持久化全部并行 Tool Call；所有结果到齐才排队续跑，并按原调用顺序恢复消息。
 - 更新首次授权文案，明确 Prompt、Skills 与有界历史也会随远程 Job 临时发送。
 

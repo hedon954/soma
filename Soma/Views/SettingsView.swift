@@ -677,7 +677,7 @@ private struct HealthDataIntegrationsView: View {
     }
 }
 
-private struct PersonalBodyInfoView: View {
+struct PersonalBodyInfoView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \UserProfile.updatedAt, order: .reverse) private var profiles: [UserProfile]
     @Query(sort: \BodyEntry.date, order: .reverse) private var bodyEntries: [BodyEntry]
@@ -1323,7 +1323,7 @@ struct AgentCustomSkillEditor: View {
         case .plans: "训练计划与带练"
         case .gym: "健身房"
         case .review: "动作复盘"
-        case .core, .records, .feedback: group.rawValue
+        case .core, .feedback: group.rawValue
         }
     }
 

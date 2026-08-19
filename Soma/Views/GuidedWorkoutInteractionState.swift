@@ -176,8 +176,9 @@ enum WorkoutCameraSurfacePresentation: Equatable {
             return .failed(message)
         }
         switch cameraState {
-        case .idle, .requestingPermission:
-            return .loading("相机准备中…")
+        case .idle, .requestingPermission, .configuring, .startingSession,
+             .startingRecording:
+            return .loading(cameraState.message)
         case .previewing, .recording:
             return isPreviewReady
                 ? .visible
@@ -185,6 +186,81 @@ enum WorkoutCameraSurfacePresentation: Equatable {
         case .unavailable:
             preconditionFailure("已在上方处理")
         }
+    }
+}
+
+enum GuidedCameraSurfacePlacement: Equatable {
+    case hidden
+    case phasePictureInPicture
+    case setHero
+
+    static func resolve(
+        phase: GuidedWorkoutPhase,
+        cameraState: WorkoutCameraState,
+        isStarting: Bool,
+        sessionIsActive: Bool
+    ) -> GuidedCameraSurfacePlacement {
+        guard sessionIsActive,
+              isStarting || cameraState != .idle
+        else { return .hidden }
+        switch phase {
+        case .setInProgress:
+            return .setHero
+        case .ready, .exerciseIntroduction, .preSetCountdown,
+             .setConfirmation, .resting:
+            return .phasePictureInPicture
+        case .sessionReview, .completed:
+            return .hidden
+        }
+    }
+}
+
+struct GuidedRecordingControlPresentation: Equatable {
+    enum Intent: Equatable {
+        case start
+        case cancelStarting
+        case stop
+    }
+
+    let intent: Intent
+    let systemImage: String
+    let accessibilityLabel: String
+    let hint: String
+    let isEnabled: Bool
+
+    static func resolve(
+        surfaceIsVisible _: Bool,
+        isRecording: Bool,
+        isStarting: Bool,
+        canStart: Bool,
+        errorMessage: String?
+    ) -> GuidedRecordingControlPresentation {
+        if isStarting {
+            return GuidedRecordingControlPresentation(
+                intent: .cancelStarting,
+                systemImage: "xmark.circle.fill",
+                accessibilityLabel: "取消开启录像",
+                hint: "点击取消本次开启",
+                isEnabled: true
+            )
+        }
+        if isRecording {
+            return GuidedRecordingControlPresentation(
+                intent: .stop,
+                systemImage: "stop.circle.fill",
+                accessibilityLabel: "停止当前录像",
+                hint: "点击停止并保存当前录像",
+                isEnabled: true
+            )
+        }
+        return GuidedRecordingControlPresentation(
+            intent: .start,
+            systemImage: "video.badge.plus",
+            accessibilityLabel: "录制当前组",
+            hint: errorMessage.flatMap { $0.isEmpty ? nil : $0 }
+                ?? "点击启动相机并录制当前组",
+            isEnabled: canStart
+        )
     }
 }
 

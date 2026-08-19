@@ -1,10 +1,138 @@
 import AVFoundation
 import SwiftUI
 
+enum GuidedWorkoutProgressSetState: Equatable {
+    case pending
+    case current
+    case completed
+    case partial
+    case skipped
+    case failed
+}
+
+struct GuidedWorkoutProgressExercise: Identifiable, Equatable {
+    struct SetSegment: Identifiable, Equatable {
+        let id: UUID
+        let state: GuidedWorkoutProgressSetState
+        let completionFraction: Double
+
+        init(
+            id: UUID,
+            state: GuidedWorkoutProgressSetState,
+            completionFraction: Double = 0
+        ) {
+            self.id = id
+            self.state = state
+            self.completionFraction = min(max(completionFraction, 0), 1)
+        }
+    }
+
+    let id: UUID
+    let sets: [SetSegment]
+
+    static func completionFraction(
+        set: WorkoutSet,
+        efforts: [WorkoutEffort]
+    ) -> Double {
+        if set.status == .completed {
+            return 1
+        }
+        guard !efforts.isEmpty else { return 0 }
+        let terminalCount = efforts.count {
+            $0.status == .completed
+        }
+        return Double(terminalCount) / Double(efforts.count)
+    }
+}
+
+enum GuidedCameraStatusPresentation: Equatable {
+    case preparing(String)
+    case ready(String)
+    case recording(String)
+    case warning(String)
+
+    static func resolve(
+        cameraState: WorkoutCameraState,
+        isStarting: Bool,
+        isQueued: Bool,
+        automaticRecordingPaused: Bool,
+        statusMessage: String?
+    ) -> GuidedCameraStatusPresentation? {
+        if case let .unavailable(message) = cameraState {
+            return .warning(
+                automaticRecordingPaused ? (statusMessage ?? message) : message
+            )
+        }
+        if isStarting
+            || cameraState == .requestingPermission
+            || cameraState == .configuring
+            || cameraState == .startingSession
+            || cameraState == .startingRecording
+        {
+            return .preparing(statusMessage ?? "正在启动相机，请稍候…")
+        }
+        if let statusMessage, !statusMessage.isEmpty,
+           automaticRecordingPaused
+        {
+            return .warning(statusMessage)
+        }
+        if cameraState == .recording {
+            return .recording(statusMessage ?? "正在录像。")
+        }
+        if cameraState == .previewing {
+            return .ready(statusMessage ?? (isQueued
+                    ? "相机已就绪，下一组将自动开始录像。"
+                    : "相机已就绪，可随时开始录像。"))
+        }
+        if let statusMessage, !statusMessage.isEmpty {
+            return .warning(statusMessage)
+        }
+        if isQueued {
+            return .preparing("已预约下一组录像，正在等待相机就绪。")
+        }
+        return nil
+    }
+
+    var message: String {
+        switch self {
+        case let .preparing(message), let .ready(message),
+             let .recording(message), let .warning(message):
+            message
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .preparing:
+            "camera.aperture"
+        case .ready:
+            "viewfinder"
+        case .recording:
+            "record.circle.fill"
+        case .warning:
+            "exclamationmark.triangle.fill"
+        }
+    }
+
+    var offersSettingsRecovery: Bool {
+        guard case let .warning(message) = self else { return false }
+        return message.contains("系统设置")
+    }
+}
+
 struct GuidedWorkoutChrome: View {
     let session: WorkoutSession
     let completedExerciseCount: Int
     let exerciseCount: Int
+    var progressExercises: [GuidedWorkoutProgressExercise] = []
+    var isRecording = false
+    var isStartingRecording = false
+    var isRecordingQueued = false
+    var automaticRecordingPaused = false
+    var cameraState: WorkoutCameraState = .idle
+    var recordingStatusMessage: String?
+    var onRecord: () -> Void = {}
+    var onOpenCameraSettings: () -> Void = {}
     let onPause: () -> Void
     let onEnd: () -> Void
 
@@ -25,6 +153,23 @@ struct GuidedWorkoutChrome: View {
                 }
                 .foregroundStyle(.primary)
                 .accessibilityLabel(session.status == .paused ? "继续训练" : "暂停训练")
+
+                Button(action: onRecord) {
+                    VStack(spacing: 3) {
+                        Image(systemName: recordingSystemImage)
+                            .font(.headline)
+                            .frame(width: 42, height: 42)
+                            .background(.thinMaterial, in: Circle())
+                        Text(recordingLabel)
+                            .font(.caption2)
+                    }
+                }
+                .foregroundStyle(
+                    isRecording || isStartingRecording || isRecordingQueued
+                        ? .red
+                        : .green
+                )
+                .accessibilityLabel(recordingAccessibilityLabel)
 
                 Spacer()
                 TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -52,17 +197,228 @@ struct GuidedWorkoutChrome: View {
                 .accessibilityLabel("更多训练操作")
             }
 
+            segmentedProgress
+
+            if let cameraStatus {
+                HStack(spacing: 10) {
+                    Label(cameraStatus.message, systemImage: cameraStatus.systemImage)
+                        .font(.caption)
+                        .foregroundStyle(cameraStatusForeground(cameraStatus))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if cameraStatus.offersSettingsRecovery {
+                        Button("打开设置", action: onOpenCameraSettings)
+                            .font(.caption.bold())
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    } else if case .warning = cameraStatus,
+                              !isStartingRecording,
+                              !isRecording
+                    {
+                        Button("手动重试", action: onRecord)
+                            .font(.caption.bold())
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityHint("重新启动相机并预约下一组录像")
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(
+                    cameraStatusBackground(cameraStatus),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
+    private var cameraStatus: GuidedCameraStatusPresentation? {
+        GuidedCameraStatusPresentation.resolve(
+            cameraState: cameraState,
+            isStarting: isStartingRecording,
+            isQueued: isRecordingQueued,
+            automaticRecordingPaused: automaticRecordingPaused,
+            statusMessage: recordingStatusMessage
+        )
+    }
+
+    private func cameraStatusForeground(
+        _ status: GuidedCameraStatusPresentation
+    ) -> Color {
+        switch status {
+        case .warning:
+            .orange
+        case .recording:
+            .red
+        case .preparing, .ready:
+            .secondary
+        }
+    }
+
+    private func cameraStatusBackground(
+        _ status: GuidedCameraStatusPresentation
+    ) -> Color {
+        switch status {
+        case .warning:
+            .orange.opacity(0.09)
+        case .recording:
+            .red.opacity(0.07)
+        case .preparing, .ready:
+            .secondary.opacity(0.08)
+        }
+    }
+
+    @ViewBuilder
+    private var segmentedProgress: some View {
+        if progressExercises.isEmpty {
             ProgressView(
                 value: Double(completedExerciseCount),
                 total: Double(max(exerciseCount, 1))
             )
             .tint(.green)
+        } else {
+            HStack(spacing: 5) {
+                ForEach(progressExercises) { exercise in
+                    HStack(spacing: 1.5) {
+                        let segments = exercise.sets.isEmpty
+                            ? [GuidedWorkoutProgressExercise.SetSegment(
+                                id: exercise.id,
+                                state: .pending
+                            )]
+                            : exercise.sets
+                        ForEach(segments) { segment in
+                            GeometryReader { proxy in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(color(for: segment.state))
+                                    if segment.completionFraction > 0,
+                                       segment.state != .skipped,
+                                       segment.state != .failed
+                                    {
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(Color.green)
+                                            .frame(
+                                                width: proxy.size.width
+                                                    * segment.completionFraction
+                                            )
+                                    }
+                                    segmentStatusOverlay(segment.state)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+            }
+            .frame(height: 10)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("训练进度")
+            .accessibilityValue(progressAccessibilityValue)
         }
+    }
+
+    private func color(
+        for state: GuidedWorkoutProgressSetState
+    ) -> Color {
+        switch state {
+        case .pending:
+            Color.secondary.opacity(0.18)
+        case .current:
+            Color.green.opacity(0.55)
+        case .completed:
+            Color.green
+        case .partial:
+            Color.secondary.opacity(0.18)
+        case .skipped:
+            Color.secondary.opacity(0.45)
+        case .failed:
+            Color.red.opacity(0.18)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentStatusOverlay(
+        _ state: GuidedWorkoutProgressSetState
+    ) -> some View {
+        switch state {
+        case .current:
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(Color.green, lineWidth: 1.5)
+        case .partial:
+            Image(systemName: "circle.lefthalf.filled")
+                .font(.system(size: 7, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .skipped:
+            Image(systemName: "forward.end.fill")
+                .font(.system(size: 6, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed:
+            Image(systemName: "exclamationmark")
+                .font(.system(size: 7, weight: .black))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .pending, .completed:
+            EmptyView()
+        }
+    }
+
+    private var progressAccessibilityValue: String {
+        let allSets = progressExercises.flatMap(\.sets)
+        let terminalSets = allSets.count {
+            $0.state == .completed
+                || $0.state == .partial
+                || $0.state == .skipped
+                || $0.state == .failed
+        }
+        return "已完成 \(completedExerciseCount)/\(max(exerciseCount, 1)) 个动作，已结束 \(terminalSets)/\(allSets.count) 组"
     }
 
     private func elapsedText(at date: Date) -> String {
         let total = max(Int(date.timeIntervalSince(session.startedAt)), 0)
         return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private var recordingSystemImage: String {
+        if isStartingRecording {
+            return "xmark.circle.fill"
+        }
+        if isRecording {
+            return "stop.circle.fill"
+        }
+        return isRecordingQueued ? "video.circle.fill" : "video.badge.plus"
+    }
+
+    private var recordingLabel: String {
+        if isStartingRecording {
+            return "取消"
+        }
+        if isRecording {
+            return "停止"
+        }
+        if isRecordingQueued {
+            return "已预约"
+        }
+        return automaticRecordingPaused ? "重试" : "录像"
+    }
+
+    private var recordingAccessibilityLabel: String {
+        if isStartingRecording {
+            return "取消开启录像"
+        }
+        if isRecording {
+            return "停止当前录像"
+        }
+        if isRecordingQueued {
+            return "取消下一动作侧录像"
+        }
+        if automaticRecordingPaused {
+            return "手动重试录像"
+        }
+        return "下一动作侧开始录像"
     }
 }
 
@@ -74,10 +430,17 @@ struct GuidedCompactSetView: View {
     let set: WorkoutSet?
     let sets: [WorkoutSet]
     let targetText: String
+    var effortSide: WorkoutEffortSide = .none
+    var isAutomaticDuration = false
+    var remainingDurationSeconds: Int?
+    var durationDeadlineAt: Date?
+    var completionErrorMessage: String?
     let coachingNote: String
     let isLandscape: Bool
     let showsCamera: Bool
+    let isRecording: Bool
     let isStartingRecording: Bool
+    var isCompletingEffort = false
     let canStartRecording: Bool
     let cameraErrorMessage: String?
     let onExpandCamera: () -> Void
@@ -136,7 +499,7 @@ struct GuidedCompactSetView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 26))
 
-                    if showsCamera {
+                    if showsCamera, isRecording {
                         Button(action: onExpandCamera) {
                             WorkoutCameraSurface(
                                 camera: camera,
@@ -161,16 +524,36 @@ struct GuidedCompactSetView: View {
                         .buttonStyle(.plain)
                         .contentShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
                         .padding(12)
-                        .accessibilityLabel(camera.state == .recording
-                            ? "正在录制，放大相机"
-                            : "放大相机预览")
+                        .accessibilityLabel("正在录制，放大相机")
+                    } else if showsCamera {
+                        WorkoutCameraSurface(
+                            camera: camera,
+                            showsSafeFrame: false,
+                            compact: true,
+                            recordingErrorMessage: cameraErrorMessage
+                        )
+                        .allowsHitTesting(false)
+                        .frame(width: WorkoutCaptureLayout.compactPreviewWidth(
+                            availableWidth: proxy.size.width,
+                            isLandscape: isLandscape
+                        ))
+                        .aspectRatio(
+                            WorkoutCaptureLayout.previewAspectRatio(
+                                isLandscape: isLandscape
+                            ),
+                            contentMode: .fit
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
+                        .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
+                        .padding(12)
+                        .accessibilityLabel("相机启动与取景状态")
                     }
                 }
             }
         }
     }
 
-    /// PRD 020：执行面以「完成本组」为唯一主操作；录制与跳过收入次级菜单，
+    /// 执行面以「完成本组」为唯一主操作；录像保持常驻可见，跳过留在次级菜单，
     /// 教练提示按需展开，组进度以文字呈现。
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -198,6 +581,7 @@ struct GuidedCompactSetView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .disabled(isCompletingEffort)
                 .accessibilityLabel("本组目标 \(targetText)")
                 .accessibilityHint("点击编辑本组实际次数和重量")
 
@@ -215,21 +599,27 @@ struct GuidedCompactSetView: View {
                             .background(.thinMaterial, in: Circle())
                     }
                     .foregroundStyle(showsCoachingNote ? .green : .secondary)
+                    .disabled(isCompletingEffort)
                     .accessibilityLabel("教练提示")
                     .accessibilityValue(showsCoachingNote ? "已展开" : "已收起")
 
+                    Button(action: onRecord) {
+                        Image(systemName: recordingControl.systemImage)
+                            .font(.subheadline)
+                            .frame(width: 36, height: 36)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .foregroundStyle(
+                        isRecording || isStartingRecording ? .red : .green
+                    )
+                    .disabled(
+                        isCompletingEffort || !recordingControl.isEnabled
+                    )
+                    .accessibilityLabel(recordingControl.accessibilityLabel)
+                    .accessibilityHint(recordingControl.hint)
+
                     Menu {
-                        if !showsCamera {
-                            Button(action: onRecord) {
-                                if isStartingRecording {
-                                    Label("正在开启相机…", systemImage: "camera.fill")
-                                } else {
-                                    Label("录制本组", systemImage: "record.circle")
-                                }
-                            }
-                            .disabled(!canStartRecording || isStartingRecording)
-                        }
-                        Button("跳过本组", systemImage: "forward.end", action: onSkip)
+                        Button(skipButtonTitle, systemImage: "forward.end", action: onSkip)
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.subheadline)
@@ -237,8 +627,9 @@ struct GuidedCompactSetView: View {
                             .background(.thinMaterial, in: Circle())
                     }
                     .foregroundStyle(.secondary)
+                    .disabled(isCompletingEffort)
                     .accessibilityLabel("本组更多操作")
-                    .accessibilityHint(recordingButtonHint)
+                    .accessibilityHint(skipButtonTitle)
                 }
             }
 
@@ -262,34 +653,90 @@ struct GuidedCompactSetView: View {
                     .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: AppTheme.cardRadius))
             }
 
-            Button(action: onComplete) {
-                Text("完成：\(targetText)")
-                    .font(.headline)
+            if isCompletingEffort {
+                completionProgress
+            } else if isAutomaticDuration {
+                if let completionErrorMessage {
+                    VStack(spacing: 10) {
+                        Label(
+                            completionErrorMessage,
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                        Button("重试完成并保存", action: onComplete)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                    }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 12)
+                } else {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Label(
+                            "剩余 \(durationRemaining(at: context.date)) 秒，到时自动完成",
+                            systemImage: "timer"
+                        )
+                        .font(.headline.monospacedDigit())
+                        .foregroundStyle(.green)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+            } else {
+                Button(action: onComplete) {
+                    Text("完成：\(targetText)")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
         }
+    }
+
+    private var completionProgress: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text("正在保存本组…")
+                .font(.headline)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("正在保存本组")
     }
 
     private var setProgressText: String {
         guard let set else { return "本组目标" }
         let base = "第 \(set.order)/\(max(sets.count, 1)) 组"
-        return set.kind == .warmup ? "\(base) · 热身" : base
+        let side = WorkoutPrescriptionFormatter.sideName(effortSide)
+        let kind = set.kind == .warmup ? " · 热身" : ""
+        return side.isEmpty ? "\(base)\(kind)" : "\(base) · \(side)\(kind)"
     }
 
-    private var recordingButtonHint: String {
-        if isStartingRecording {
-            return "正在开启相机"
+    private var recordingControl: GuidedRecordingControlPresentation {
+        GuidedRecordingControlPresentation.resolve(
+            surfaceIsVisible: showsCamera,
+            isRecording: isRecording,
+            isStarting: isStartingRecording,
+            canStart: canStartRecording,
+            errorMessage: cameraErrorMessage
+        )
+    }
+
+    private var skipButtonTitle: String {
+        let side = WorkoutPrescriptionFormatter.sideName(effortSide)
+        return side.isEmpty ? "跳过本组" : "跳过\(side)"
+    }
+
+    private func durationRemaining(at date: Date) -> Int {
+        guard let durationDeadlineAt else {
+            return remainingDurationSeconds ?? 0
         }
-        if !canStartRecording {
-            return "当前已有录像进行中"
-        }
-        if let cameraErrorMessage, !cameraErrorMessage.isEmpty {
-            return cameraErrorMessage
-        }
-        return "只有开始录像后才会调用相机"
+        return max(Int(ceil(durationDeadlineAt.timeIntervalSince(date))), 0)
     }
 }
 
@@ -301,6 +748,11 @@ struct GuidedExpandedCaptureView: View {
     let set: WorkoutSet?
     let sets: [WorkoutSet]
     let targetText: String
+    var effortSide: WorkoutEffortSide = .none
+    var isAutomaticDuration = false
+    var remainingDurationSeconds: Int?
+    var durationDeadlineAt: Date?
+    var isCompletingEffort = false
     let coachingNote: String
     let isLandscape: Bool
     let cameraErrorMessage: String?
@@ -371,6 +823,7 @@ struct GuidedExpandedCaptureView: View {
                         .background(.thinMaterial, in: Circle())
                 }
                 .accessibilityLabel("暂停训练")
+                .disabled(isCompletingEffort)
 
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     HStack(spacing: 7) {
@@ -391,6 +844,7 @@ struct GuidedExpandedCaptureView: View {
                     .background(.thinMaterial, in: Circle())
             }
             .foregroundStyle(.primary)
+            .disabled(isCompletingEffort)
             .accessibilityLabel("更多训练操作")
         }
     }
@@ -443,15 +897,42 @@ struct GuidedExpandedCaptureView: View {
                     .font(.subheadline)
                     .foregroundStyle(.green)
                     .buttonStyle(.plain)
+                    .disabled(isCompletingEffort)
             }
-            Button(action: onComplete) {
-                Text("完成本组")
-                    .font(.headline)
+            if isCompletingEffort {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("正在保存本组…")
+                        .font(.headline)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, isLandscape ? 8 : 14)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("正在保存本组")
+            } else if isAutomaticDuration {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Label(
+                        "剩余 \(durationRemaining(at: context.date)) 秒",
+                        systemImage: "timer"
+                    )
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.green)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, isLandscape ? 4 : 7)
+                    .padding(.vertical, isLandscape ? 8 : 14)
+                    .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                }
+            } else {
+                Button(action: onComplete) {
+                    Text(effortSide == .none
+                        ? "完成本组"
+                        : "完成\(WorkoutPrescriptionFormatter.sideName(effortSide))")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, isLandscape ? 4 : 7)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
         }
         .padding(isLandscape ? 14 : 0)
         .background {
@@ -465,6 +946,13 @@ struct GuidedExpandedCaptureView: View {
     private func elapsedText(at date: Date) -> String {
         let total = max(Int(date.timeIntervalSince(sessionStartedAt)), 0)
         return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private func durationRemaining(at date: Date) -> Int {
+        guard let durationDeadlineAt else {
+            return remainingDurationSeconds ?? 0
+        }
+        return max(Int(ceil(durationDeadlineAt.timeIntervalSince(date))), 0)
     }
 }
 
@@ -561,6 +1049,10 @@ struct GuidedSetProgressRail: View {
                             Image(systemName: "checkmark")
                                 .font(.caption.bold())
                                 .foregroundStyle(.white)
+                        } else if set.status == .partial {
+                            Image(systemName: "circle.lefthalf.filled")
+                                .font(.caption.bold())
+                                .foregroundStyle(.green)
                         } else {
                             Text("\(set.order)")
                                 .font(.caption.bold())
@@ -574,7 +1066,11 @@ struct GuidedSetProgressRail: View {
                 }
                 if index < sets.count - 1 {
                     Rectangle()
-                        .fill(set.status == .completed ? Color.green : Color.secondary.opacity(0.25))
+                        .fill(
+                            set.status == .completed
+                                ? Color.green
+                                : Color.secondary.opacity(0.25)
+                        )
                         .frame(height: 2)
                         .padding(.bottom, 22)
                 }
@@ -588,6 +1084,9 @@ struct GuidedSetProgressRail: View {
         if set.status == .completed {
             return .green
         }
+        if set.status == .partial {
+            return Color.secondary.opacity(0.12)
+        }
         if set.id == currentSetID {
             return .green.opacity(0.85)
         }
@@ -596,6 +1095,7 @@ struct GuidedSetProgressRail: View {
 
     private var progressAccessibilityLabel: String {
         let completed = sets.count { $0.status == .completed }
-        return "已完成 \(completed) 组，共 \(sets.count) 组"
+        let partial = sets.count { $0.status == .partial }
+        return "已完整完成 \(completed) 组，部分完成 \(partial) 组，共 \(sets.count) 组"
     }
 }

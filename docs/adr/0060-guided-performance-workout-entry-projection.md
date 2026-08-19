@@ -1,11 +1,11 @@
 # ADR 0060：带练动作终态物化为训练记录并组成计划执行
 
-- 状态：已采纳
+- 状态：部分已替代；动作终态投影继续有效，一对一关系与左右/时长证据由 ADR 0073 修订
 - 日期：2026-08-12
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0029](0029-versioned-training-plans-and-session-facts.md) 中计划执行只由
   `ExercisePerformance/WorkoutSet` 表达、不进入 `WorkoutEntry` 的边界
-- 后续替代：暂无
+- 后续替代：[ADR 0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) 用显式一对一关系与唯一 projection key 加固投影，并扩展左右、时长、休息与录像证据
 - 上游依据：
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [BUG 0014](../bugs/0014-guided-performance-missing-workout-entry.md)

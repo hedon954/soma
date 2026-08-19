@@ -52,15 +52,15 @@ final class AgentReliabilityTests: XCTestCase {
 
     func testNormalizedSignaturesCollapseSynonymsAndNilDefaults() {
         let withExercise = AgentToolCall(
-            name: .recordWorkout,
+            name: .createWorkout,
             arguments: AgentToolArguments(exercise: " 深蹲 ", sets: 4, reps: 8)
         )
         let withExerciseName = AgentToolCall(
-            name: .recordWorkout,
+            name: .createWorkout,
             arguments: AgentToolArguments(exerciseName: "深蹲", sets: 4, reps: 8)
         )
         let withExplicitNilNote = AgentToolCall(
-            name: .recordWorkout,
+            name: .createWorkout,
             arguments: AgentToolArguments(
                 exerciseName: "深蹲",
                 sets: 4,
@@ -74,7 +74,7 @@ final class AgentReliabilityTests: XCTestCase {
 
     func testNormalizedSignaturesPreserveSetEntryOrder() {
         let ascending = AgentToolCall(
-            name: .recordWorkout,
+            name: .createWorkout,
             arguments: AgentToolArguments(
                 exerciseName: "卧推",
                 setEntries: [
@@ -84,7 +84,7 @@ final class AgentReliabilityTests: XCTestCase {
             )
         )
         let descending = AgentToolCall(
-            name: .recordWorkout,
+            name: .createWorkout,
             arguments: AgentToolArguments(
                 exerciseName: "卧推",
                 setEntries: [
@@ -101,7 +101,7 @@ final class AgentReliabilityTests: XCTestCase {
         let context = try makeContext()
         let turnID = UUID()
         let call = AgentToolCall(
-            name: .recordMeal,
+            name: .createMeal,
             arguments: AgentToolArguments(title: "鸡胸", calories: 300)
         )
         var attempts = 0
@@ -194,15 +194,12 @@ final class AgentReliabilityTests: XCTestCase {
     func testBusinessKeyFlagsCrossTurnDuplicateWithoutMerging() throws {
         let context = try makeContext()
         let date = Date(timeIntervalSince1970: 1_785_386_220)
-        let first = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(
-                    exerciseName: "深蹲",
-                    sets: 4,
-                    reps: 8,
-                    weight: 60
-                )
+        let first = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exerciseName: "深蹲",
+                sets: 4,
+                reps: 8,
+                weight: 60
             ),
             sourceText: "深蹲 4x8 60kg",
             sourceDate: date,
@@ -211,15 +208,12 @@ final class AgentReliabilityTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        let second = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(
-                    exerciseName: "深蹲",
-                    sets: 4,
-                    reps: 8,
-                    weight: 60
-                )
+        let second = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exerciseName: "深蹲",
+                sets: 4,
+                reps: 8,
+                weight: 60
             ),
             sourceText: "深蹲 4x8 60kg",
             sourceDate: date.addingTimeInterval(600),
@@ -234,82 +228,23 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
     }
 
-    func testToolExposureKeepsCoreAndExpandsPlansOnKeyword() {
-        let groups = AgentToolExposurePolicy.initialGroups(
-            signals: AgentToolExposureSignals(
-                text: "开始执行今天的训练计划",
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            )
-        )
-        XCTAssertTrue(groups.contains(.core))
-        XCTAssertTrue(groups.contains(.plans))
+    func testUnselectedSkillRegistersFullCurrentProtocolAndOmitsLegacyNames() {
+        let groups = AgentToolExposurePolicy.groups(selectedSkill: nil)
+        XCTAssertEqual(groups, AgentToolExposurePolicy.currentProtocolGroups)
         let tools = AgentToolExposurePolicy.tools(for: groups)
-        XCTAssertFalse(tools.contains(.expandToolGroup))
+        XCTAssertEqual(tools.count, 32)
+        XCTAssertTrue(tools.contains(.loadSkill))
         XCTAssertTrue(tools.contains(.startProgram))
-        XCTAssertFalse(tools.contains(.updateGym))
+        XCTAssertTrue(tools.contains(.updateGym))
+        XCTAssertTrue(tools.contains(.createWorkout))
     }
 
-    func testGeneralAdviceDoesNotExposeMutationToolUntilNeeded() {
-        let advice = AgentToolExposurePolicy.initialGroups(
-            signals: AgentToolExposureSignals(
-                text: "深蹲时怎样保持躯干稳定？",
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            )
+    func testGeneralAdviceWithoutSkillStillRegistersCurrentMutationTools() {
+        let tools = AgentToolExposurePolicy.tools(
+            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
         )
-        XCTAssertFalse(advice.contains(.records))
-        XCTAssertFalse(
-            AgentToolExposurePolicy.tools(for: advice).contains(.mutateUserData)
-        )
-
-        let recording = AgentToolExposurePolicy.initialGroups(
-            signals: AgentToolExposureSignals(
-                text: "记录深蹲 4组8次60kg",
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            )
-        )
-        XCTAssertTrue(recording.contains(.exercises))
-        XCTAssertTrue(recording.contains(.workouts))
-        XCTAssertTrue(
-            AgentToolExposurePolicy.tools(for: recording).contains(.createWorkout)
-        )
-    }
-
-    func testQuestionKeywordsDoNotAccidentallyExposeMutationTools() {
-        for text in [
-            "每周练几次比较好？",
-            "体重怎么下降？",
-            "晚餐吃什么？",
-            "体重 70kg 正常吗？"
-        ] {
-            let groups = AgentToolExposurePolicy.initialGroups(signals: .init(
-                text: text,
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            ))
-            XCTAssertFalse(groups.contains(.records), text)
-        }
-
-        for (text, expected) in [
-            ("深蹲 4组8次60kg", AgentToolGroup.workouts),
-            ("体重 70kg", AgentToolGroup.body),
-            ("午餐 两个鸡蛋", AgentToolGroup.meals)
-        ] {
-            let groups = AgentToolExposurePolicy.initialGroups(signals: .init(
-                text: text,
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            ))
-            XCTAssertTrue(groups.contains(expected), text)
-            XCTAssertFalse(groups.contains(.records), text)
-        }
+        XCTAssertTrue(tools.contains(.createWorkout))
+        XCTAssertTrue(tools.contains(.createMeal))
     }
 
     @MainActor
@@ -479,44 +414,29 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("一般建议直接回答"))
     }
 
-    func testToolExposureSelectsProductFeedbackButNotWorkoutFeedback() {
-        let productGroups = AgentToolExposurePolicy.initialGroups(
-            signals: AgentToolExposureSignals(
-                text: "我想反馈一个问题：这个按钮无法点击",
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            )
+    func testUnselectedSkillIncludesFeedbackWhileSelectedSkillDoesNot() throws {
+        let defaultTools = AgentToolExposurePolicy.tools(
+            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
         )
-        XCTAssertTrue(productGroups.contains(.feedback))
-        XCTAssertTrue(
-            AgentToolExposurePolicy.tools(for: productGroups)
-                .contains(.submitFeedback)
-        )
+        XCTAssertTrue(defaultTools.contains(.submitFeedback))
 
-        let workoutGroups = AgentToolExposurePolicy.initialGroups(
-            signals: AgentToolExposureSignals(
-                text: "请给我的深蹲动作一些反馈",
-                hasVideo: false,
-                hasActiveProgram: false,
-                hasActiveGuidedSession: false
-            )
+        let selected = try XCTUnwrap(
+            AgentSkillRegistry.descriptor(id: AgentSkill.movementAnalysis.rawValue)
         )
-        XCTAssertFalse(workoutGroups.contains(.feedback))
+        let selectedTools = AgentToolExposurePolicy.tools(
+            for: AgentToolExposurePolicy.groups(selectedSkill: selected)
+        )
+        XCTAssertFalse(selectedTools.contains(.submitFeedback))
+        XCTAssertFalse(selectedTools.contains(.loadSkill))
+        XCTAssertTrue(selectedTools.contains(.recordPerformanceAnalysis))
     }
 
     func testPrefixStabilityForExposedTools() {
-        let signals = AgentToolExposureSignals(
-            text: "记录深蹲",
-            hasVideo: false,
-            hasActiveProgram: false,
-            hasActiveGuidedSession: false
-        )
         let first = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.initialGroups(signals: signals)
+            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
         ).map(\.rawValue)
         let second = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.initialGroups(signals: signals)
+            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
         ).map(\.rawValue)
         XCTAssertEqual(first, second)
     }

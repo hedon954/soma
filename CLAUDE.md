@@ -22,6 +22,9 @@
   “部分替代”或“上游依据”链接旧文。
 - 双向关系必须同时出现在文档头部，并同步对应目录的 README 索引；不能只在正文里单向提及。
 - 一份新文影响多个旧决策时逐项链接；旧文只标记被改变的部分，不因局部修订隐藏仍有效内容。
+- 生命周期索引只覆盖已经进入 Git 的决策。工作区中尚未提交、又被后续实现替换的代码、测试和
+  文档直接删除，不留“曾经有过 / 现已删除 / 不再兼容 / 隐藏路径”等过渡说明。只有 HEAD 里
+  已有的 PRD、ADR、Bug 或工程协议被这次提交改变时，才建立后续修订或替代关系。
 - `scripts/check-document-lifecycle-links.rb` 是双向关系的自动门禁。新增生命周期链接时必须让
   `make check` 验证反向边存在。
 - 长期依据见 [ADR 0034](docs/adr/0034-bidirectional-document-lifecycle-links.md)。
@@ -87,7 +90,8 @@ App → Views → Services → Models
   删除已经执行的 migration；部署前依次运行 `make db-migrate-status` 与 `make db-migrate`。
 - 新增或修改 SwiftData 持久字段、`ModelContainer` 注册模型或 PostgreSQL migration 时，
   必须同步 `docs/engineering/database-schema.md`，并通过数据库结构文档门禁。SwiftData 不使用
-  SQL migration 命令；不兼容变更必须通过 `VersionedSchema` / `SchemaMigrationPlan` 明确迁移并测试。
+  SQL migration 命令。当前只打开 `SomaDataSchema` 当前模型、不带历史 VersionedSchema 计划；
+  不兼容变更必须新增 ADR，并明确启动门禁回填或数据重建。
 - 长期改变数据模型、Agent 协议、隐私边界、外部同步或分发方式前新增 ADR。
 - 远程 Agent 必须通过 `AgentExecutionBackend` 边界接入；View、业务 Tool 和本地
   SwiftData 不感知具体执行位置。

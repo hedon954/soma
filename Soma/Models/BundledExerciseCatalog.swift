@@ -9,6 +9,8 @@ struct BundledExerciseContent: Equatable, Sendable {
     var movementPatterns: [String]
     var actionIllustrationResourceName: String
     var muscleMapResourceName: String
+    var laterality: ExerciseLaterality?
+    var targetKind: WorkoutTargetKind?
 }
 
 /// App 包内的静默内容目录。目录不是用户动作库，不会自行创建 `ExerciseDefinition`。
@@ -176,7 +178,7 @@ enum BundledExerciseCatalog {
         item("锤式弯举", ["哑铃垂式弯举"], "free_Hammer_Curls.jpg", armCurl),
         item("绳索下压", ["肱三头肌下压"], "free_Triceps_Pushdown.jpg", triceps),
         item("绳索过顶臂屈伸", [], "free_Triceps_Overhead_Extension_with_Rope.jpg", triceps),
-        item("平板支撑", [], "free_Plank.jpg", core),
+        item("平板支撑", [], "free_Plank.jpg", core, laterality: ExerciseLaterality.none, targetKind: .duration),
         item("卷腹", [], "free_Crunches.jpg", core)
     ]
 
@@ -232,6 +234,14 @@ enum BundledExerciseCatalog {
         }
         if definition.movementPatterns.isEmpty {
             definition.movementPatterns = content.movementPatterns
+            changed = true
+        }
+        if !definition.hasExplicitLaterality, let laterality = content.laterality {
+            definition.laterality = laterality
+            changed = true
+        }
+        if !definition.hasExplicitTargetKind, let targetKind = content.targetKind {
+            definition.targetKind = targetKind
             changed = true
         }
 
@@ -291,7 +301,9 @@ enum BundledExerciseCatalog {
         _ name: String,
         _ aliases: [String],
         _ actionIllustration: String,
-        _ profile: Profile
+        _ profile: Profile,
+        laterality: ExerciseLaterality? = nil,
+        targetKind: WorkoutTargetKind? = nil
     ) -> BundledExerciseContent {
         BundledExerciseContent(
             canonicalName: name,
@@ -301,7 +313,9 @@ enum BundledExerciseCatalog {
             secondaryMuscles: profile.secondaryMuscles,
             movementPatterns: profile.movementPatterns,
             actionIllustrationResourceName: actionIllustration,
-            muscleMapResourceName: profile.muscleMap
+            muscleMapResourceName: profile.muscleMap,
+            laterality: laterality,
+            targetKind: targetKind
         )
     }
 

@@ -235,6 +235,8 @@ struct ExerciseDetailView: View {
 
             Section("标准动作") {
                 LabeledContent("名称", value: exercise.canonicalName)
+                LabeledContent("完成方式", value: exercise.targetKind.displayName)
+                LabeledContent("左右方式", value: exercise.laterality.displayName)
                 if !exercise.primaryMuscles.isEmpty {
                     LabeledContent(
                         "主要肌群",

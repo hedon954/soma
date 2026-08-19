@@ -21,18 +21,18 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0015](0015-daily-conversation-session-lifecycle.md) | 部分已替代并恢复 | 旧消息归档保留；每日解析由 0055 恢复，手动继续旧会话仍有效 |
 | [0016](0016-conversation-turn-attempt-and-footprint-projection.md) | 部分已替代 | Turn 可包含多次 Attempt；本地分析器路径由 0027 替代；同气泡续跑由 0048 修订 |
 | [0017](0017-location-and-weather-context.md) | 部分已替代 | 位置作为最小、受控、非阻塞的 Turn 上下文；天气 Provider 由 ADR 0020 替代 |
-| [0018](0018-provenance-aware-record-merge.md) | 部分已替代 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并；规范化幂等与疑似重复由 0049 补充 |
+| [0018](0018-provenance-aware-record-merge.md) | 部分已替代 | 业务记录按来源、时间、内容、数值和纠错语义确定性合并；规范化幂等与疑似重复由 0049 补充；同一 Turn 无条件合并由 0077 收窄，create 路径合并由 0079 删除 |
 | [0019](0019-cost-aware-github-actions-gates.md) | 已采纳 | 日常 Actions 只跑快速门禁，完整验证与 CodeQL 收敛到 release tag |
 | [0020](0020-open-meteo-transient-weather-provider.md) | 已采纳 | 使用 Open-Meteo 获取公里级、临时、非阻塞的天气上下文 |
 | [0021](0021-portable-export-encrypted-backup-and-erasure.md) | 已采纳 | 分离开放年月日导出、外部加密备份恢复与个人数据清除 |
-| [0022](0022-user-controlled-conversation-sessions.md) | 部分已替代 | 用户新建、选择和继续保留；跨日默认恢复由 0055 修订 |
+| [0022](0022-user-controlled-conversation-sessions.md) | 部分已替代 | 用户新建、选择和继续保留；跨日默认恢复由 0055 修订；对话删除由 0080 落地 |
 | [0023](0023-ordered-workout-set-evidence.md) | 已采纳 | 训练使用有序逐组次数与重量，组数和容量由逐组事实派生 |
 | [0024](0024-session-context-projection-and-compaction.md) | 部分已替代 | 最近十个完整来回保留；十轮外滚动压缩由 0070 修订 |
 | [0025](0025-tiered-model-profiles-and-routing.md) | 部分已替代 | 双档配置与本地保守路由保留；远程启用前提由 0027 替代，模型选择控件由 0046 替代 |
 | [0026](0026-bounded-gym-media-attribution.md) | 已采纳 | 只在紧邻命名确认时把上一轮健身房照片归入档案 |
 | [0027](0027-required-ai-configuration-and-send-gate.md) | 部分已替代 | 聊天始终使用 AI；发送前硬门禁由 0045 改为暂存补偿，页面命名由 0046 改为「LLM 配置」 |
 | [0028](0028-semantic-exercise-identity.md) | 部分已替代 | 稳定动作身份保留；搜索分页由 0059 修订，Int64 表示和关系由 0071 修订 |
-| [0029](0029-versioned-training-plans-and-session-facts.md) | 部分已替代 | 计划版本与事实分层保留；Int64 身份和动作关系由 0071 修订 |
+| [0029](0029-versioned-training-plans-and-session-facts.md) | 部分已替代 | 计划版本与事实分层保留；Int64/关系由 0071 修订，聚合处方与 Set 证据由 0073 修订 |
 | [0030](0030-deterministic-guided-workout-and-session-recording.md) | 部分已替代 | 确定性状态机和录像目标保留；UI 与录像几何由 0038 修订 |
 | [0031](0031-durable-agent-jobs-event-log-and-projections.md) | 部分已替代 | Agent 使用持久 Job、语义 Event Log 与独立投影；本地同气泡检查点续跑由 0048 修订 |
 | [0032](0032-optional-remote-agent-execution.md) | 已采纳 | 以匿名设备身份提供可选远程持续执行与本地 Tool handoff |
@@ -42,7 +42,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 部分已替代 | Local/Remote 流式等价保留；Provider 时限由 0058 扩展 |
 | [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订 |
-| [0039](0039-event-driven-guided-recording-cues-and-review.md) | 已采纳 | 录像策略与实际活动分离，按 Set 保存证据，并以事件驱动语音、复盘和删除 |
+| [0039](0039-event-driven-guided-recording-cues-and-review.md) | 部分已替代 | 事件驱动录像/语音保留；Effort/自动分享由 0073 修订，lazy activation 与部分录像证据由 0074 修订 |
 | [0040](0040-agent-guided-workout-launch.md) | 已采纳 | Agent 用固定计划 Tool 在设备本地创建快照并路由到既有带练 |
 | [0041](0041-training-primary-tab.md) | 已采纳 | 训练计划与带练迁移为一级训练 Tab，进展保留审查与趋势 |
 | [0042](0042-contextual-widget-snapshot-and-privacy.md) | 暂缓 | 主屏最小快照方案，待支持 App Groups 的 Team 后恢复 |
@@ -53,7 +53,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0047](0047-deterministic-context-pack-and-cross-turn-facts.md) | 部分已替代 | 确定性当轮上下文包保留；十轮外 digest 由 0070 的滚动摘要替代 |
 | [0048](0048-loop-checkpoint-and-same-bubble-resume.md) | 已采纳 | 本地 ReAct 在 step 边界落检查点，中断后同气泡续跑且不递增 attemptNumber |
 | [0049](0049-normalized-idempotency-and-business-dedup.md) | 已采纳 | 规范化幂等签名、pending 账本与跨 Turn 疑似重复反馈 |
-| [0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) | 部分已替代 | 每轮工具组预选、expand_tool_group 逃生、并行 tool_calls 与历史帧 clearing；feedback 组由 0054 增加 |
+| [0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) | 部分已替代 | 每轮工具组预选、expand_tool_group 逃生、并行 tool_calls 与历史帧 clearing；feedback 组由 0054 增加；按信号预选由 0081 替代 |
 | [0051](0051-authenticated-in-app-feedback-email-delivery.md) | 部分已替代 | 应用内多模态反馈经认证 Server 和临时上传投递到固定维护者邮箱；邮件供应商由 0052 替代 |
 | [0052](0052-gmail-self-delivery-for-in-app-feedback.md) | 部分已替代 | Gmail OAuth 从 `hedonwang@gmail.com` 向同一邮箱自发自收；个人阶段的凭据位置由 0053 临时替代 |
 | [0053](0053-personal-only-direct-qq-mail-feedback.md) | 已采纳，仅限个人使用阶段 | App 直连 QQ SMTP 并投递到固定 Gmail；外部分发由 online check 强制迁移凭据 |
@@ -63,19 +63,28 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0057](0057-direct-video-capability-and-observable-fallback.md) | 已采纳 | 按 provider/model 能力直传视频，失败后才按需抽帧并诚实降级 |
 | [0058](0058-first-delta-deadline-and-bounded-retry.md) | 已采纳 | 8/10/20 秒首增量门禁、单次重试、idle/total timeout 与取消传播 |
 | [0059](0059-precise-tools-and-reviewable-meal-items.md) | 部分已替代 | 可审查饮食分项保留；通用查询与 CRUD 由 0069 的强类型 Tool 替代 |
-| [0060](0060-guided-performance-workout-entry-projection.md) | 已采纳 | 终态带练动作物化为训练记录，以来源 ID 组成计划执行并避免重复统计 |
+| [0060](0060-guided-performance-workout-entry-projection.md) | 部分已替代 | 终态动作投影保留；一对一 projection key 与左右/时长证据由 0073 修订 |
 | [0061](0061-discoverable-conversation-session-entry.md) | 已采纳 | 会话抽屉同时保留左上角时间按钮、左缘手势与 VoiceOver 操作 |
 | [0062](0062-user-resumed-llm-interruption-barrier.md) | 已采纳 | 明确欠费只由用户释放，后续消息受严格 FIFO 屏障约束 |
 | [0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) | 部分已替代 | 失败 step 同气泡续跑和冻结业务时间保留；墙钟预算由 0067 改为活动执行预算 |
-| [0064](0064-deterministic-quick-write-and-latest-inline-review.md) | 已采纳 | 未修改 typed 快捷训练直写本地，最新 AI 回复提供原位记录 CRUD 与修订上下文 |
-| [0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) | 部分已替代 | 明确副作用意图和原生协议保留；Prompt v2 与 Skill 最小工具集由 0069 修订 |
+| [0064](0064-deterministic-quick-write-and-latest-inline-review.md) | 部分已替代 | 未修改 typed 快捷训练直写本地，最新 AI 回复提供原位记录 CRUD 与修订上下文；原位卡与 Event Cards 共存、保存确认由 0077 修订 |
+| [0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) | 部分已替代 | 明确副作用意图和原生协议保留；Prompt v2 与 Skill 最小工具集由 0069 修订；按意图预选 Tool 由 0081 替代 |
 | [0066](0066-bundled-action-illustration-coverage.md) | 已采纳 | 静默内置目录至少维持一百个 common action 专属离线图 |
 | [0067](0067-separate-business-time-and-active-loop-budget.md) | 部分已替代 | 活动执行预算保持；记录发生时间由 0072 从 Loop 时间拆分 |
 | [0068](0068-versioned-unified-agent-model-input.md) | 部分已替代 | 设备生成统一输入保持；Prompt、Skill 与 Tool v3 由 0069 升级 |
-| [0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) | 已采纳 | 分层 Prompt、动态 Skill Middleware 与按领域强类型 Tool |
+| [0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) | 部分已替代 | 分层 Prompt、动态 Skill Middleware 与按领域强类型 Tool；批量 create 与本机分配记录 ID 由 0078 修订；未选 Skill 剪枝由 0081 替代 |
 | [0070](0070-reviewable-rolling-session-compaction.md) | 已采纳 | 十轮外对话在 Loop 前形成可追溯、可回退的替代式滚动摘要 |
-| [0071](0071-integer-business-identities-and-explicit-relations.md) | 已采纳 | 本机业务身份使用 Int64，训练动作建立明确关系，并以启动门禁迁移旧库 |
+| [0071](0071-integer-business-identities-and-explicit-relations.md) | 部分已替代 | 本机业务身份、训练关系与启动迁移门禁；历史 VersionedSchema 打开路径由 0075 替代 |
 | [0072](0072-session-business-date-and-record-occurrence-time.md) | 已采纳 | Session 业务日与记录发生时间分离，Tool 可显式覆盖 occurred_at |
+| [0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) | 部分已替代 | 独立逻辑组、Effort 归属与自动收口保留；相机 activation 由 0074 细化，历史 VersionedSchema 链由 0075 替代，侧别/完成方式改由 0076 归动作定义 |
+| [0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) | 已采纳，实施与真机验收中 | 相机完整 activation 有界、camera-ready preflight、部分录像证据和系统中断恢复 |
+| [0075](0075-current-swiftdata-schema-without-historical-versions.md) | 已采纳 | 只打开当前 SomaDataSchema，不维护历史 VersionedSchema 链；启动门禁继续做业务回填 |
+| [0076](0076-exercise-owned-laterality-and-target-kind.md) | 已采纳 | 侧别与按次数/按时长归 `ExerciseDefinition`；组与记录只编辑动作定义下有意义的参数 |
+| [0077](0077-same-turn-identity-merge-and-additive-inline-review.md) | 部分已替代 | 原位审查卡不得替换 Event Cards，保存需可见确认；同一 Turn 按身份合并由 0079 删除 |
+| [0078](0078-batch-create-exercise-and-workout.md) | 部分已替代 | `create_exercise` / `create_workout` 一次写入多条；新建训练记录 ID 由本机分配；整批重试身份合并由 0079 删除 |
+| [0079](0079-create-inserts-update-by-id.md) | 已采纳 | 训练、饮食、身体的 create 每次都新增；纠正只走 update；删除 create 路径上的同一 Turn/身份/纠错词合并 |
+| [0080](0080-conversation-session-swipe-delete.md) | 已采纳 | 历史抽屉左滑删除对话聊天图；不删除训练、饮食、身体等业务记录；在途 Job 拒绝删除 |
+| [0081](0081-default-full-tool-registration-and-selected-skill-subset.md) | 已采纳 | 未选 Skill 注册当前协议全部 Tool；选中快捷 Skill 只注册白名单绑定子集；Loop 开始时判断一次 |
 
 新决策使用 [ADR 模板](template.md)。
 

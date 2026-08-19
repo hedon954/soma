@@ -150,6 +150,13 @@ enum DataArchiveTestSupport {
             targetWeightKG: 60,
             targetRestSeconds: 90
         )
+        let setPrescription = TemplateSetPrescription(
+            templateExerciseID: templateExercise.id,
+            order: 1,
+            targetReps: 8,
+            targetWeightKG: 60,
+            restAfterSetSeconds: 90
+        )
         let workoutSession = WorkoutSession(
             startedAt: fixedDate.addingTimeInterval(3600),
             sourceTemplateFamilyID: template.familyID,
@@ -157,7 +164,11 @@ enum DataArchiveTestSupport {
             prescriptionSnapshot: [prescription],
             status: .completed,
             guidedPhase: .completed,
-            autoRecordingPolicy: .enabled
+            autoRecordingPolicy: .enabled,
+            queuedRecordingEffortID: UUID(),
+            automaticRecordingPaused: true,
+            automaticRecordingPauseCode: .permissionDenied,
+            automaticRecordingPauseReason: "没有相机权限；可在系统设置中开启。"
         )
         let performance = ExercisePerformance(
             sessionID: workoutSession.id,
@@ -166,7 +177,8 @@ enum DataArchiveTestSupport {
             order: 1,
             prescriptionSnapshot: prescription,
             status: .completed,
-            activeVideoPath: workoutMediaPath
+            activeVideoPath: workoutMediaPath,
+            activeVideoKind: .partial
         )
         workout.sourceWorkoutSessionID = workoutSession.id
         workout.sourcePerformanceID = performance.id
@@ -181,14 +193,32 @@ enum DataArchiveTestSupport {
             actualRestSeconds: 90,
             status: .completed,
             startedAt: fixedDate.addingTimeInterval(3600),
-            completedAt: fixedDate.addingTimeInterval(3660)
+            completedAt: fixedDate.addingTimeInterval(3660),
+            recordedVideoPath: workoutMediaPath,
+            recordedVideoKind: .partial
+        )
+        let workoutEffort = WorkoutEffort(
+            workoutSetID: workoutSet.id,
+            order: 1,
+            plannedReps: 8,
+            plannedWeightKG: 60,
+            actualReps: 8,
+            actualWeightKG: 60,
+            actualRestSeconds: 90,
+            status: .completed,
+            startedAt: fixedDate.addingTimeInterval(3600),
+            completedAt: fixedDate.addingTimeInterval(3660),
+            recordedVideoPath: workoutMediaPath,
+            recordedVideoKind: .partial
         )
         context.insert(program)
         context.insert(template)
         context.insert(templateExercise)
+        context.insert(setPrescription)
         context.insert(workoutSession)
         context.insert(performance)
         context.insert(workoutSet)
+        context.insert(workoutEffort)
         context.insert(RecommendationSnapshot(
             targetKind: "template",
             targetID: template.id,
@@ -229,6 +259,25 @@ enum DataArchiveTestSupport {
             ],
             createdAt: fixedDate
         ))
+        insertConversationFixtures(
+            in: context,
+            sessionID: sessionID,
+            turnID: turnID
+        )
+        try BusinessIDAllocator.repairAndAssignAllIDs(in: context)
+        try context.save()
+        return try PersonalDataSnapshot.capture(
+            from: context,
+            now: fixedDate.addingTimeInterval(7200)
+        )
+    }
+
+    @MainActor
+    private static func insertConversationFixtures(
+        in context: ModelContext,
+        sessionID: UUID,
+        turnID: UUID
+    ) {
         context.insert(ConversationSession(
             id: sessionID,
             startedAt: fixedDate,
@@ -280,11 +329,6 @@ enum DataArchiveTestSupport {
             result: .success("已记录", recordType: .meal),
             createdAt: fixedDate
         ))
-        try context.save()
-        return try PersonalDataSnapshot.capture(
-            from: context,
-            now: fixedDate.addingTimeInterval(7200)
-        )
     }
 
     static func temporaryDirectory() throws -> URL {

@@ -1,8 +1,6 @@
 # 计划带练视觉 QA
 
 - 日期：2026-08-03
-- 视觉来源：`.codex/plans/assets/guided-workout-compact.png`、
-  `guided-workout-expanded-portrait.png`、`guided-workout-expanded-landscape.png`
 - 实现范围：计划 GUI、紧凑带练、竖屏放大录像、横屏分栏录像、休息与恢复
 
 ## 对照结果

@@ -1,13 +1,15 @@
 # ADR 0065：Tool 按副作用意图暴露，Prompt 使用版本化稳定前缀
 
-- 状态：已采纳
+- 状态：部分已替代；原生 Tool Calling 与稳定 Prompt 前缀继续有效，按意图预选 Tool 由 ADR 0081 替代
 - 日期：2026-08-13
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 中 mutation 属于常驻 core 工具组的边界
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中 `mutate_user_data` 对每轮模型默认可见的边界
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
-- 后续替代：[ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 用 Skill 绑定的最小强类型 Tool 集与条件 User Prompt 修订通用分组
+- 后续替代：
+  - [ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 用 Skill 绑定的最小强类型 Tool 集与条件 User Prompt 修订通用分组
+  - [ADR 0081](0081-default-full-tool-registration-and-selected-skill-subset.md) 取消按副作用意图预选；未选 Skill 注册完整当前协议 Tool
 
 ## 背景
 

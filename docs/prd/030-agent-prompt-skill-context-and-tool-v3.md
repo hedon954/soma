@@ -1,6 +1,6 @@
 # PRD 030：Agent Prompt、Skill、上下文与强类型 Tool v3
 
-- 状态：已采纳，实施中
+- 状态：已实施，部分修订；远端部署、旧版本覆盖迁移与真机 Agent 交互仍待维护者验收
 - 日期：2026-08-15
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的教练身份、Prompt、Skill、记录身份与会话时间基线
@@ -9,13 +9,15 @@
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 的十轮上下文、通用 CRUD Tool 与可信时间
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 的稳定 Prompt、意图 Tool 和固定业务时间
   - [PRD 029](029-unified-local-remote-agent-model-input.md) 的统一模型输入协议
-- 后续修订：暂无
+- 后续修订：[PRD 032](032-default-full-tools-and-selected-skill-subset.md) 将未选 Skill 改为全量当前协议 Tool，并取消通用建议空 Tool 集
 - 上游依据：用户对真实模型 Prompt、无意义 Tool 调用和跨天记录时间的审查
 - 下游落地：
   - [ADR 0069](../adr/0069-layered-agent-prompt-skill-middleware-and-typed-tools.md)
   - [ADR 0070](../adr/0070-reviewable-rolling-session-compaction.md)
   - [ADR 0071](../adr/0071-integer-business-identities-and-explicit-relations.md)
   - [ADR 0072](../adr/0072-session-business-date-and-record-occurrence-time.md)
+  - [ADR 0078](../adr/0078-batch-create-exercise-and-workout.md)
+  - [ADR 0079](../adr/0079-create-inserts-update-by-id.md)
 
 ## 背景
 
@@ -32,10 +34,12 @@ Session 日期、原始消息时间或用户修正的发生时间。
 
 1. Soma 以专业训练、饮食和体态教练身份工作；用户可调整表达人格，但不能移除安全、真实性、
    写入授权和 Prompt Injection 边界。
-2. 普通建议直接回答。选中快捷 Skill 后，首轮已经拥有完整 Skill、必要本机事实和最小 Tool，
-   不再先调用 `load_skill` 或重复查询。
+2. 普通建议仍应直接回答。选中快捷 Skill 后，首轮已经拥有完整 Skill、必要本机事实和绑定
+   Tool，不再先调用 `load_skill` 或重复查询。未选 Skill 时的 Tool 注册见
+   [PRD 032](032-default-full-tools-and-selected-skill-subset.md)：发送完整当前协议 Tool，
+   不再把建议变成空集。
 3. Session 最近十个完整来回保持原生角色；更早对话形成可展开、可追溯、可降级的滚动摘要。
-4. 模型调用单一职责 Tool，训练记录和计划动作只引用短整型动作 ID。
+4. 模型调用单一职责 Tool；训练记录和计划动作只引用短整型动作 ID。一堂课的多个新动作、多条训练记录应一次批量写入，新建记录 ID 由本机分配。
 5. 用户继续旧 Session、跨午夜排队或重试时，记录仍落在真实业务日期与原始 Turn 时间；需要时
    可明确修正 `occurred_at`。
 6. 安装过旧版本的用户打开 App 后会先看到可恢复的数据迁移进度；个人与演示空间全部完成迁移
@@ -85,10 +89,13 @@ Session 日期、原始消息时间或用户修正的发生时间。
 ### Tool 与远程协议
 
 - 训练、饮食、身体分别使用 list/get/create/update/delete Tool；动作使用 search/create/update/
-  archive/merge；计划使用 list/get/create/new-version/archive/delete/start。
+  archive/merge；计划使用 list/get/create/new-version/archive/delete/start。`create_exercise`
+  接收 `exercise_names`，`create_workout` 接收 `workouts`；每条训练必须带有效 `exercise_id`，
+  不得指定新建 `record_id`。create 每次都新增；纠正、补图和改已有记录必须使用对应 update
+  工具和查询得到的 `record_id`。同一 ReAct Loop 可多次创建。
 - Schema 禁止额外字段；Provider 支持时启用 strict，设备始终二次校验并返回结构化错误。
-- 通用建议发送空业务 Tool 集；选中 Skill 时只发送绑定集合。未选 Skill 的模糊任务可使用轻量
-  runtime capability Tool。
+- 选中 Skill 时只发送绑定集合。未选 Skill 时发送当前协议全部 Tool，见
+  [PRD 032](032-default-full-tools-and-selected-skill-subset.md)。
 - iOS 继续是模型输入唯一组装方。Server 只验证、消费并执行同一 Envelope；版本不匹配时拒绝，
   不回退到旧 Prompt 或 Tool。
 
@@ -109,11 +116,12 @@ Session 日期、原始消息时间或用户修正的发生时间。
 
 ## 验收
 
-- 一般建议一次模型调用且零 Tool；已有动作 ID 的记录意图一次模型调用和一次写 Tool。
+- 已有动作 ID 的多条训练记录一次模型调用和一次 `create_workout`。未选 Skill 的 Tool 集合验收见
+  [PRD 032](032-default-full-tools-and-selected-skill-subset.md)。
 - Prompt 快照证明空块完全省略、Tool 不进入 System、最近历史角色顺序正确。
 - 压缩替换、双模型回退、确定性兜底、超预算和 Chat 事件卡均有确定性测试。
 - 旧 UUID 数据迁移后统计、媒体、导出、计划快照和两个数据空间不丢失；训练关系完整。
-- 旧版本启动夹具证明迁移完成前业务 Root、Agent runner 和写入入口均不可用；迁移失败可重试，
+- 启动迁移门禁证明迁移完成前业务 Root、Agent runner 和写入入口均不可用；迁移失败可重试，
   再次启动不会重复已经提交的数据空间。
 - 新旧 Session、自然语言日期、日期芯片、跨午夜排队和重试时间均有固定 Clock 测试。
 - 本地与远程 Envelope、Skill 快照、Tool Schema 和 assistant/tool 恢复链等价。

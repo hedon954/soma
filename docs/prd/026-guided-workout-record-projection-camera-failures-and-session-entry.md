@@ -1,6 +1,6 @@
 # PRD 026：带练记录投影、录像失败可见性与会话入口恢复
 
-- 状态：已实现；真实录像写入、系统中断与历史个人数据补投影待维护者真机验收
+- 状态：已实现，部分修订；真实录像写入与系统中断仍待维护者真机验收，attempt 单终态、显式投影关系和自动完成由 PRD 031 修订
 - 日期：2026-08-12
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的教练会话入口、训练记录与计划执行基线
@@ -8,7 +8,7 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 的录像启动失败与完成复盘
   - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 的录像失败 toast
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的历史入口降噪规则
-- 后续修订：暂无
+- 后续修订：[PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 以 attempt 单终态修复重复录像警告，以显式一对一关系加固动作记录投影，并改为自动完成 Session
 - 上游依据：
   - [BUG 0013](../bugs/0013-guided-recording-startup-silent-stall.md)
   - [BUG 0014](../bugs/0014-guided-performance-missing-workout-entry.md)

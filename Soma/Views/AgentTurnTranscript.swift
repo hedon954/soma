@@ -8,20 +8,38 @@ struct AgentTurnTranscript: View {
     var isEditable = false
 
     private var visibleItems: [AgentTurnItem] {
-        items.filter {
-            $0.kind != .text
-                || !AgentVisibleTextSanitizer.sanitize($0.text).isEmpty
-        }
+        AgentTurnVisibleItems.make(from: items)
+    }
+
+    private var segments: [AgentTurnTranscriptSegment] {
+        AgentTurnTranscriptSegments.make(from: items)
     }
 
     private var recordReferences: [AgentRecordReference] {
         ChatRecordReferenceResolver.references(in: items)
     }
 
-    /// ADR 0014：按 Item 顺序渲染。Skill/Tool 与文本在一次 Turn 里是交替发生的，
-    /// 按 kind 归类展示会打乱「先说什么、再做什么」的真实时序。
+    /// ADR 0014 / ADR 0077：按 Item 顺序渲染全部 Event Card，不按 kind 重排。
+    /// 连续 Skill/Tool 收成一条可展开过程；失败卡单独露出。原位卡放在回复末尾。
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            ForEach(segments) { segment in
+                switch segment {
+                case let .process(_, processItems):
+                    if processItems.count > 1 {
+                        AgentProcessGroupCard(items: processItems)
+                    } else if let item = processItems.first {
+                        AgentTurnItemCard(item: item)
+                    }
+                case let .item(item):
+                    AgentTurnItemCard(item: item)
+                }
+            }
+
+            if isLive, !visibleItems.contains(where: { $0.status == .running }) {
+                AgentTurnWaitingCard()
+            }
+
             if !recordReferences.isEmpty {
                 ChatRecordEditorCards(
                     references: recordReferences,
@@ -29,28 +47,92 @@ struct AgentTurnTranscript: View {
                     isEditable: isEditable
                 )
             }
-
-            ForEach(displayItems) { item in
-                AgentTurnItemCard(item: item)
-            }
-
-            if isLive, !visibleItems.contains(where: { $0.status == .running }) {
-                AgentTurnWaitingCard()
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
 
-    private var displayItems: [AgentTurnItem] {
-        guard !recordReferences.isEmpty else { return visibleItems }
-        return visibleItems.filter {
-            $0.kind == .text || $0.kind == .error || $0.status == .failed
+private struct AgentProcessGroupCard: View {
+    let items: [AgentTurnItem]
+    @State private var isExpanded = false
+
+    private var isRunning: Bool {
+        items.contains { $0.status == .running }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .center, spacing: 10) {
+                    groupStatusIcon
+                        .frame(width: 22, height: 22)
+
+                    Text(AgentTurnTranscriptSegments.processSummary(for: items))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.tint)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("执行过程，\(AgentTurnTranscriptSegments.processSummary(for: items))")
+            .accessibilityValue(isExpanded ? "已展开" : "已收起")
+            .accessibilityHint(isExpanded ? "隐藏逐步结果" : "显示逐步结果")
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(items) { item in
+                        Divider()
+                            .padding(.vertical, 6)
+                        AgentTurnItemCard(item: item, showsChrome: false)
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppTheme.tint.opacity(0.12), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var groupStatusIcon: some View {
+        if isRunning {
+            ProgressView()
+                .controlSize(.small)
+                .tint(AppTheme.tint)
+        } else {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.tint)
         }
     }
 }
 
 private struct AgentTurnItemCard: View {
     let item: AgentTurnItem
+    var showsChrome = true
+    @State private var isExpanded = false
 
     var body: some View {
         switch item.kind {
@@ -76,43 +158,81 @@ private struct AgentTurnItemCard: View {
     }
 
     private var operationCard: some View {
-        HStack(alignment: .top, spacing: 10) {
+        let expandable = toolPresentation?.disclosureLabel != nil
+        return VStack(alignment: .leading, spacing: 8) {
+            if expandable {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    processHeader(expandable: true)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(processAccessibilityLabel)
+                .accessibilityValue(isExpanded ? "已展开" : "已收起")
+                .accessibilityHint(isExpanded ? "隐藏完整结果" : "显示完整结果")
+            } else {
+                processHeader(expandable: false)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(processAccessibilityLabel)
+            }
+
+            if isExpanded, let toolPresentation, !toolPresentation.details.isEmpty {
+                AgentOperationResult(
+                    presentation: toolPresentation,
+                    tint: kindColor
+                )
+            }
+        }
+        .padding(.horizontal, showsChrome ? 12 : 0)
+        .padding(.vertical, showsChrome ? 8 : 2)
+        .background {
+            if showsChrome {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            }
+        }
+        .overlay {
+            if showsChrome {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(kindColor.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func processHeader(expandable: Bool) -> some View {
+        HStack(alignment: .center, spacing: 10) {
             statusIcon
                 .frame(width: 22, height: 22)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(1)
 
-                if let toolPresentation {
-                    AgentOperationResult(
-                        presentation: toolPresentation,
-                        tint: kindColor,
-                        accessibilityContext: item.title
-                    )
-                } else if let statusDetail {
-                    Text(statusDetail)
+                if showsCompactSubtitle, let subtitle = compactSubtitle {
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(item.status == .failed ? .red : .secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(
+                            item.status == .failed || item.status == .cancelled ? nil : 1
+                        )
                 }
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+
+            if expandable {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(kindColor)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(kindColor.opacity(0.12), lineWidth: 1)
-        }
-        .accessibilityElement(children: .contain)
+        .contentShape(Rectangle())
     }
 
     private var errorCard: some View {
@@ -172,13 +292,15 @@ private struct AgentTurnItemCard: View {
         return AgentToolResultPresentation.make(for: item)
     }
 
-    private var statusDetail: String? {
+    private var compactSubtitle: String? {
         if let error = item.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
            !error.isEmpty
         {
             return error
         }
-
+        if let summary = toolPresentation?.summary, !summary.isEmpty {
+            return summary
+        }
         switch item.status {
         case .running:
             return item.kind == .skill ? "正在加载" : "正在执行"
@@ -190,89 +312,47 @@ private struct AgentTurnItemCard: View {
             return "已完成"
         }
     }
+
+    /// 展开后完整结果已可见，避免状态行再重复第一行摘要。
+    private var showsCompactSubtitle: Bool {
+        !(isExpanded && toolPresentation?.disclosureLabel != nil)
+    }
+
+    private var processAccessibilityLabel: String {
+        compactSubtitle.map { "\(item.title)，\($0)" } ?? item.title
+    }
 }
 
 private struct AgentOperationResult: View {
     let presentation: AgentToolResultPresentation
     let tint: Color
-    let accessibilityContext: String
-
-    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(presentation.summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineSpacing(2)
-                .lineLimit(summaryLineLimit)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-
-            if isExpanded, !presentation.details.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(presentation.details.indices, id: \.self) { index in
-                        if index > presentation.details.startIndex {
-                            Divider()
-                        }
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: presentation.detailSystemImage)
-                                .font(.caption)
-                                .foregroundStyle(tint)
-                                .frame(width: 16, height: 18)
-                            Text(presentation.details[index])
-                                .font(.caption)
-                                .foregroundStyle(.primary)
-                                .lineSpacing(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                        }
-                        .padding(.vertical, 8)
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(presentation.details.indices, id: \.self) { index in
+                if index > presentation.details.startIndex {
+                    Divider()
                 }
-                .padding(.horizontal, 10)
-                .background(
-                    Color.primary.opacity(0.035),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-            }
-
-            if let disclosureLabel = presentation.disclosureLabel {
-                Divider()
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(isExpanded ? "收起" : disclosureLabel)
-                        Spacer(minLength: 8)
-                        Image(systemName: "chevron.down")
-                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    }
-                    .font(.caption.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                    .contentShape(Rectangle())
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: presentation.detailSystemImage)
+                        .font(.caption)
+                        .foregroundStyle(tint)
+                        .frame(width: 16, height: 18)
+                    Text(presentation.details[index])
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(tint)
-                .accessibilityLabel(
-                    "\(isExpanded ? "收起" : "展开")\(accessibilityContext)结果"
-                )
-                .accessibilityValue(isExpanded ? "已展开" : "已收起")
-                .accessibilityHint(isExpanded ? "隐藏完整结果" : "显示完整结果")
+                .padding(.vertical, 8)
             }
         }
-    }
-
-    private var summaryLineLimit: Int? {
-        // 正文直接展示；仅在声明了展开入口且未展开时截断。
-        if presentation.disclosureLabel != nil, !isExpanded {
-            AgentToolResultDisclosure.collapsedLineLimit
-        } else {
-            nil
-        }
+        .padding(.horizontal, 10)
+        .background(
+            Color.primary.opacity(0.035),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
     }
 }
 
@@ -303,7 +383,7 @@ private struct AgentTurnWaitingCard: View {
                     kind: .tool,
                     status: .succeeded,
                     title: "读取用户数据",
-                    input: #"{"name":"query_user_data","arguments":{"scope":"workouts"}}"#,
+                    input: #"{"name":"list_workouts","arguments":{"limit":5}}"#,
                     output: AgentTraceText.json(AgentToolResult.success(
                         """
                         [id:00000000-0000-0000-0000-000000000001] 2026年8月3日 引体向上，5组 × 5次 · 0kg，间歇 120 秒
@@ -315,7 +395,7 @@ private struct AgentTurnWaitingCard: View {
                     kind: .tool,
                     status: .succeeded,
                     title: "创建训练计划",
-                    input: #"{"name":"create_training_program","arguments":{}}"#,
+                    input: #"{"name":"create_program","arguments":{}}"#,
                     output: AgentTraceText.json(AgentToolResult.success(
                         "已创建训练计划 [id:00000000-0000-0000-0000-000000000003]：基础力量训练。"
                     ))

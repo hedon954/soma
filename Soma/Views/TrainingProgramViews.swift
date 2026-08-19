@@ -148,7 +148,7 @@ struct TrainingProgramLibraryView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(program.name)
                 .font(.headline)
-            Text(program.goal.isEmpty ? "未记录目标" : program.goal)
+            Text(program.overview.isEmpty ? "未填写计划概览" : program.overview)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -176,6 +176,10 @@ private struct TrainingProgramDetailView: View {
     private var definitions: [ExerciseDefinition]
     @Query(sort: \WorkoutEntry.date, order: .reverse)
     private var workouts: [WorkoutEntry]
+    @Query(sort: \BodyEntry.date, order: .reverse)
+    private var bodyEntries: [BodyEntry]
+    @Query(sort: \UserProfile.updatedAt, order: .reverse)
+    private var userProfiles: [UserProfile]
     @Query(sort: \RecommendationSnapshot.createdAt, order: .reverse)
     private var recommendations: [RecommendationSnapshot]
     @Query(sort: \WorkoutSession.startedAt, order: .reverse)
@@ -184,7 +188,8 @@ private struct TrainingProgramDetailView: View {
     let program: TrainingProgram
     @State private var showsEditor = false
     @State private var showsStart = false
-    @State private var autoRecordingPolicy = AutoRecordingPolicy.disabled
+    @State private var showsOverviewEditor = false
+    @State private var overviewDraft = ""
     @State private var startedSession: WorkoutSession?
     @State private var errorMessage: String?
     @State private var isOptimizing = false
@@ -192,7 +197,6 @@ private struct TrainingProgramDetailView: View {
     @State private var statsExpanded = false
     @State private var versionsExpanded = false
     @State private var adviceExpanded = false
-    @State private var recordingOptionsExpanded = false
 
     private var versions: [WorkoutTemplateVersion] {
         allVersions.filter { $0.programID == program.id }
@@ -211,10 +215,12 @@ private struct TrainingProgramDetailView: View {
         )
     }
 
-    private var readiness: [TrainingReadinessIssue] {
+    private func readiness(
+        for policy: AutoRecordingPolicy
+    ) -> [TrainingReadinessIssue] {
         TrainingPlanStore.readiness(
             prescriptions: prescriptions,
-            autoRecordingPolicy: autoRecordingPolicy,
+            autoRecordingPolicy: policy,
             in: modelContext
         )
     }
@@ -237,6 +243,11 @@ private struct TrainingProgramDetailView: View {
                 && $0.targetID == program.id
                 && $0.inputFingerprint == recommendationFingerprint
         }
+    }
+
+    private var hasCalorieReferenceWeight: Bool {
+        bodyEntries.contains { ($0.weight ?? 0) > 0 }
+            || userProfiles.contains { ($0.referenceWeight ?? 0) > 0 }
     }
 
     private var programSessions: [WorkoutSession] {
@@ -315,27 +326,42 @@ private struct TrainingProgramDetailView: View {
 
     var body: some View {
         List {
-            Section("计划") {
-                LabeledContent("目标", value: program.goal.isEmpty ? "未记录" : program.goal)
-                if let currentVersion {
-                    LabeledContent("当前模板", value: "\(currentVersion.name) · v\(currentVersion.version)")
-                    if !currentVersion.scheduleHint.isEmpty {
-                        LabeledContent("安排", value: currentVersion.scheduleHint)
+            Section {
+                Button {
+                    overviewDraft = program.overview
+                    showsOverviewEditor = true
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(program.overview.isEmpty
+                            ? "点击补充这份计划的整体思路与安排。"
+                            : program.overview)
+                            .font(.body)
+                            .foregroundStyle(program.overview.isEmpty ? .secondary : .primary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Image(systemName: "pencil")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.tint)
+                            .accessibilityHidden(true)
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(program.overview.isEmpty ? "编辑计划概览，当前未填写" : "编辑计划概览，\(program.overview)")
             }
+
+            planOverviewSection
 
             Section("动作") {
                 if prescriptions.isEmpty {
-                    Text("当前模板没有动作。")
+                    Text("这份计划还没有动作。")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(prescriptions.sorted(by: { $0.order < $1.order })) { item in
                     prescriptionRow(item)
                 }
             }
-
-            planOverviewSection
 
             programStatsSection
 
@@ -483,20 +509,62 @@ private struct TrainingProgramDetailView: View {
         } message: {
             Text("将删除「\(program.name)」及其全部模板版本。已完成的训练历史不会被删除。")
         }
+        .confirmationDialog(
+            "选择录像方式",
+            isPresented: $showsStart,
+            titleVisibility: .visible
+        ) {
+            Button("每个动作录第一组") {
+                start(with: .enabled)
+            }
+            Button("每一组都录") {
+                start(with: .everySet)
+            }
+            Button("不录像") {
+                start(with: .disabled)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("选择后立即开始训练。首组策略会跳过热身组；训练中仍可随时主动录像。")
+        }
         .safeAreaInset(edge: .bottom) {
             if program.status == .active, !prescriptions.isEmpty {
-                Button {
-                    autoRecordingPolicy = .disabled
-                    WorkoutInterfaceOrientationPolicy.shared
-                        .setGuidedWorkoutActive(true)
-                    showsStart = true
-                } label: {
-                    Label("开始训练", systemImage: "play.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: 8) {
+                    if !hasCalorieReferenceWeight {
+                        NavigationLink {
+                            PersonalBodyInfoView()
+                        } label: {
+                            Label(
+                                "补充体重后可估算本次消耗",
+                                systemImage: "flame"
+                            )
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .foregroundStyle(.orange)
+                        .accessibilityHint("训练不会被阻断")
+                    }
+
+                    Button {
+                        let blocking = readiness(for: .disabled).filter {
+                            $0.severity == .blocking
+                        }
+                        guard blocking.isEmpty else {
+                            errorMessage = blocking.map(\.message)
+                                .joined(separator: "\n")
+                            return
+                        }
+                        WorkoutInterfaceOrientationPolicy.shared
+                            .setGuidedWorkoutActive(true)
+                        showsStart = true
+                    } label: {
+                        Label("开始训练", systemImage: "play.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
                 .padding(.horizontal)
                 .padding(.vertical, 10)
                 .background(.bar)
@@ -512,66 +580,30 @@ private struct TrainingProgramDetailView: View {
                 )
             }
         }
-        .sheet(isPresented: $showsStart) {
+        .sheet(isPresented: $showsOverviewEditor) {
             NavigationStack {
                 Form {
-                    // PRD 020：录像选项默认折叠且默认关闭；语音提示改为设置项。
                     Section {
-                        DisclosureGroup(isExpanded: $recordingOptionsExpanded) {
-                            Picker("自动录像", selection: $autoRecordingPolicy) {
-                                Text("关闭").tag(AutoRecordingPolicy.disabled)
-                                Text("每个动作录一组").tag(AutoRecordingPolicy.enabled)
-                                Text("每一组都录").tag(AutoRecordingPolicy.everySet)
-                            }
-                        } label: {
-                            LabeledContent(
-                                "录像",
-                                value: autoRecordingPolicy == .disabled
-                                    ? "关闭"
-                                    : (autoRecordingPolicy == .enabled
-                                        ? "每个动作录一组"
-                                        : "每一组都录")
-                            )
-                        }
+                        TextEditor(text: $overviewDraft)
+                            .frame(minHeight: 180)
+                            .accessibilityLabel("计划概览")
                     } footer: {
-                        if recordingOptionsExpanded {
-                            Text("只在实际开始录像时调用相机。单组模式在首组为热身时录第 2 组，否则录第 1 组；训练中也可随时手动录制当前组。")
-                        }
-                    }
-                    if !readiness.isEmpty {
-                        Section("开始前检查") {
-                            ForEach(readiness) { issue in
-                                Label(
-                                    issue.message,
-                                    systemImage: issue.severity == .blocking
-                                        ? "xmark.octagon.fill"
-                                        : "exclamationmark.triangle.fill"
-                                )
-                                .foregroundStyle(
-                                    issue.severity == .blocking
-                                        ? Color.red
-                                        : Color.orange
-                                )
-                            }
-                        }
+                        Text("用于说明整份计划的训练思路、节奏与注意事项。")
                     }
                 }
-                .navigationTitle("准备训练")
+                .navigationTitle("编辑计划概览")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") { showsStart = false }
+                        Button("取消") { showsOverviewEditor = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("开始") {
-                            start()
+                        Button("保存") {
+                            saveOverview()
                         }
-                        .disabled(readiness.contains {
-                            $0.severity == .blocking
-                        })
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
         }
         .onChange(of: showsStart) {
             guard !showsStart, startedSession == nil else { return }
@@ -613,14 +645,29 @@ private struct TrainingProgramDetailView: View {
         return changeLog.summary
     }
 
-    private func start() {
+    private func start(with policy: AutoRecordingPolicy) {
         do {
             startedSession = try TrainingPlanStore.startSession(
                 program: program,
-                autoRecordingPolicy: autoRecordingPolicy,
+                autoRecordingPolicy: policy,
                 in: modelContext
             )
             showsStart = false
+        } catch {
+            WorkoutInterfaceOrientationPolicy.shared
+                .setGuidedWorkoutActive(false)
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveOverview() {
+        do {
+            try TrainingPlanStore.updateOverview(
+                overviewDraft.trimmingCharacters(in: .whitespacesAndNewlines),
+                for: program,
+                in: modelContext
+            )
+            showsOverviewEditor = false
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -680,7 +727,7 @@ private struct TrainingProgramDetailView: View {
                 Text(prescriptionSummary(item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
             }
         }
         .accessibilityElement(children: .combine)
@@ -694,7 +741,9 @@ private struct TrainingProgramDetailView: View {
                 return TrainingPlanOverview.ExerciseInput(
                     primaryMuscles: definition?.primaryMuscles ?? [],
                     secondaryMuscles: definition?.secondaryMuscles ?? [],
-                    targetSets: item.targetSets
+                    // V5 的独立组处方才是组数真值；`targetSets` 仅保留给
+                    // V4 解码兼容，不能让 Agent 创建的计划退化成 1 组。
+                    targetSets: item.plannedSets.count
                 )
             }
         )
@@ -729,23 +778,7 @@ private struct TrainingProgramDetailView: View {
     private func prescriptionSummary(
         _ item: TemplateExercisePrescription
     ) -> String {
-        var values: [String] = []
-        if let sets = item.targetSets {
-            values.append("\(sets) 组")
-        }
-        if let reps = item.targetReps {
-            values.append("每组 \(reps) 次")
-        }
-        if let weight = item.targetWeightKG {
-            values.append("\(weight.formatted()) kg")
-        }
-        if let rest = item.targetRestSeconds {
-            values.append("间歇 \(rest) 秒")
-        }
-        if item.firstSetIsWarmup {
-            values.append("首组热身")
-        }
-        return values.isEmpty ? "处方值未记录" : values.joined(separator: " · ")
+        WorkoutPrescriptionFormatter.exerciseSummary(item)
     }
 
     private func definition(for id: UUID) -> ExerciseDefinition? {

@@ -115,7 +115,7 @@ final class RecordMutationTests: XCTestCase {
         try BusinessIDAllocator.assign(meal, namespace: "meal", in: context)
         try context.save()
         let call = try AgentToolCall(
-            name: .deleteRecord,
+            name: .deleteMeal,
             arguments: AgentToolArguments(
                 recordID: XCTUnwrap(meal.businessID),
                 recordType: "meal"
@@ -226,30 +226,17 @@ final class RecordMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkoutAndBodyCorrectionsDoNotCreateDuplicateRecords() throws {
+    func testCreateDoesNotAbsorbCorrectionsAndUpdateUsesRecordID() throws {
         let context = try makeContext()
         let sessionID = UUID()
         let date = Date(timeIntervalSince1970: 1_785_386_220)
-        let firstWorkout = AgentToolCall(
-            name: .recordWorkout,
-            arguments: AgentToolArguments(
+        let firstWorkout = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
                 exercise: "杠铃深蹲",
                 sets: 4,
                 reps: 8,
                 weight: 60
-            )
-        )
-        let correctedWorkout = AgentToolCall(
-            name: .recordWorkout,
-            arguments: AgentToolArguments(
-                exercise: "高杠深蹲",
-                sets: 4,
-                reps: 8,
-                weight: 62.5
-            )
-        )
-        _ = ConversationRecorder.executeAgentTool(
-            firstWorkout,
+            ),
             sourceText: "深蹲 4组8次 60kg",
             sourceDate: date,
             sourceSessionID: sessionID,
@@ -258,8 +245,13 @@ final class RecordMutationTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        _ = ConversationRecorder.executeAgentTool(
-            correctedWorkout,
+        _ = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exercise: "高杠深蹲",
+                sets: 4,
+                reps: 8,
+                weight: 62.5
+            ),
             sourceText: "刚才说错了，是高杠深蹲 62.5kg",
             sourceDate: date.addingTimeInterval(120),
             sourceSessionID: sessionID,
@@ -268,9 +260,9 @@ final class RecordMutationTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        _ = ConversationRecorder.executeAgentTool(
+        let firstBody = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .recordBody,
+                name: .createBodyEntry,
                 arguments: AgentToolArguments(weight: 70.2, bodyFat: 18)
             ),
             sourceText: "今天体重 70.2kg，体脂 18%",
@@ -283,7 +275,7 @@ final class RecordMutationTests: XCTestCase {
         )
         _ = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .recordBody,
+                name: .createBodyEntry,
                 arguments: AgentToolArguments(weight: 70.2, bodyFat: 17.8)
             ),
             sourceText: "更正一下，体脂是 17.8%",
@@ -295,15 +287,239 @@ final class RecordMutationTests: XCTestCase {
             in: context
         )
 
-        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 2)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 2)
+
+        let workoutID = try XCTUnwrap(firstWorkout.recordRefs?.first?.recordID)
+        let bodyID = try XCTUnwrap(firstBody.recordRefs?.first?.recordID)
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .updateWorkout,
+                arguments: AgentToolArguments(
+                    sets: 4,
+                    reps: 8,
+                    weight: 62.5,
+                    recordID: workoutID
+                )
+            ),
+            sourceText: "刚才说错了，是 62.5kg",
+            sourceDate: date.addingTimeInterval(180),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .updateBody,
+                arguments: AgentToolArguments(bodyFat: 17.8, recordID: bodyID)
+            ),
+            sourceText: "更正一下，体脂是 17.8%",
+            sourceDate: date.addingTimeInterval(180),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 2)
         XCTAssertEqual(
-            try context.fetch(FetchDescriptor<WorkoutEntry>()).first?.representativeWeight,
+            try context.fetch(FetchDescriptor<WorkoutEntry>()).first {
+                $0.businessID == workoutID
+            }?.representativeWeight,
             62.5
         )
-        XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 2)
         XCTAssertEqual(
-            try context.fetch(FetchDescriptor<BodyEntry>()).first?.bodyFat,
+            try context.fetch(FetchDescriptor<BodyEntry>()).first {
+                $0.businessID == bodyID
+            }?.bodyFat,
             17.8
+        )
+    }
+
+    @MainActor
+    func testSameTurnDifferentExercisesStayIndependentRecords() throws {
+        let context = try makeContext()
+        let turnID = UUID()
+        let date = Date(timeIntervalSince1970: 1_785_386_220)
+        let deadlift = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exercise: "杠铃硬拉",
+                sets: 4,
+                reps: 5,
+                weight: 60,
+                restSeconds: 120
+            ),
+            sourceText: "今天练了杠铃硬拉和辅助引体向上",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        let pullUp = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exercise: "辅助引体向上",
+                sets: 5,
+                reps: 5,
+                weight: 29,
+                restSeconds: 60
+            ),
+            sourceText: "今天练了杠铃硬拉和辅助引体向上",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
+            .sorted { $0.exercise < $1.exercise }
+
+        XCTAssertTrue(deadlift.ok)
+        XCTAssertTrue(pullUp.ok)
+        XCTAssertEqual(workouts.count, 2)
+        XCTAssertEqual(Set(workouts.map(\.exercise)), ["杠铃硬拉", "辅助引体向上"])
+        XCTAssertEqual(
+            workouts.first { $0.exercise == "杠铃硬拉" }?.representativeWeight,
+            60
+        )
+        XCTAssertEqual(
+            workouts.first { $0.exercise == "辅助引体向上" }?.representativeWeight,
+            29
+        )
+        XCTAssertEqual(deadlift.recordRefs?.first?.recordID, workouts.first {
+            $0.exercise == "杠铃硬拉"
+        }?.businessID)
+        XCTAssertEqual(pullUp.recordRefs?.first?.recordID, workouts.first {
+            $0.exercise == "辅助引体向上"
+        }?.businessID)
+        XCTAssertNotEqual(
+            deadlift.recordRefs?.first?.recordID,
+            pullUp.recordRefs?.first?.recordID
+        )
+    }
+
+    @MainActor
+    func testSameTurnRepeatedCreatesStayIndependentRecords() throws {
+        let context = try makeContext()
+        let turnID = UUID()
+        let date = Date(timeIntervalSince1970: 1_785_386_220)
+        _ = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exercise: "杠铃深蹲",
+                sets: 4,
+                reps: 8,
+                weight: 60
+            ),
+            sourceText: "深蹲 4组8次 60kg，接着又做了一组 62.5",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exercise: "杠铃深蹲",
+                sets: 4,
+                reps: 8,
+                weight: 62.5
+            ),
+            sourceText: "深蹲 4组8次 60kg，接着又做了一组 62.5",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            mealCall(title: "鸡肉荞麦面"),
+            sourceText: "午餐荞麦面，下午加了酸奶",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            mealCall(title: "鸡肉荞麦面"),
+            sourceText: "午餐荞麦面，下午加了酸奶",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createBodyEntry,
+                arguments: AgentToolArguments(weight: 70.2)
+            ),
+            sourceText: "体重 70.2kg",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createBodyEntry,
+                arguments: AgentToolArguments(weight: 70.2)
+            ),
+            sourceText: "体重 70.2kg",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 2)
+        XCTAssertEqual(
+            try Set(
+                context.fetch(FetchDescriptor<WorkoutEntry>()).compactMap(\.representativeWeight)
+            ),
+            [60, 62.5]
+        )
+        XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 2)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 2)
+    }
+
+    @MainActor
+    func testSameTurnDifferentMealsStayIndependentRecords() throws {
+        let context = try makeContext()
+        let turnID = UUID()
+        let date = Date(timeIntervalSince1970: 1_785_386_220)
+        _ = ConversationRecorder.executeAgentTool(
+            mealCall(title: "鸡肉荞麦面"),
+            sourceText: "午餐荞麦面，下午加了酸奶",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        _ = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createMeal,
+                arguments: AgentToolArguments(
+                    mealType: MealType.snack.rawValue,
+                    title: "原味酸奶",
+                    calories: 120
+                )
+            ),
+            sourceText: "午餐荞麦面，下午加了酸奶",
+            sourceDate: date,
+            sourceTurnID: turnID,
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 2)
+        XCTAssertEqual(
+            try Set(context.fetch(FetchDescriptor<MealEntry>()).map(\.title)),
+            ["鸡肉荞麦面", "原味酸奶"]
         )
     }
 
@@ -379,14 +595,11 @@ final class RecordMutationTests: XCTestCase {
                 mediaPath: nil,
                 in: context
             )
-            let workout = ConversationRecorder.executeAgentTool(
-                AgentToolCall(
-                    name: .recordWorkout,
-                    arguments: AgentToolArguments(
-                        exercise: "俯卧撑",
-                        sets: 4,
-                        reps: 12
-                    )
+            let workout = ConversationRecorder.recordWorkout(
+                AgentToolArguments(
+                    exercise: "俯卧撑",
+                    sets: 4,
+                    reps: 12
                 ),
                 sourceText: "做了俯卧撑 4 组 12 次",
                 sourceDate: date.addingTimeInterval(offset),
@@ -398,7 +611,7 @@ final class RecordMutationTests: XCTestCase {
             )
             let body = ConversationRecorder.executeAgentTool(
                 AgentToolCall(
-                    name: .recordBody,
+                    name: .createBodyEntry,
                     arguments: AgentToolArguments(weight: 70.2)
                 ),
                 sourceText: "体重 70.2kg",
@@ -425,7 +638,7 @@ final class RecordMutationTests: XCTestCase {
 
     @MainActor
     func testDifferingNearbyEventsRemainIndependentWithoutCorrectionEvidence() throws {
-        // 业务键不同时仍保持独立；纠错合并仍只在有纠错语义时发生。
+        // 业务键不同时 create 保持独立；纠正应走更新工具，不再靠创建路径猜测合并。
         let context = try makeContext()
         let sessionID = UUID()
         let date = Date(timeIntervalSince1970: 1_785_386_220)
@@ -450,11 +663,8 @@ final class RecordMutationTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        _ = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(exercise: "俯卧撑", sets: 4, reps: 12)
-            ),
+        _ = ConversationRecorder.recordWorkout(
+            AgentToolArguments(exercise: "俯卧撑", sets: 4, reps: 12),
             sourceText: "做了俯卧撑 4 组 12 次",
             sourceDate: date,
             sourceSessionID: sessionID,
@@ -463,11 +673,8 @@ final class RecordMutationTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        _ = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(exercise: "俯卧撑", sets: 3, reps: 10)
-            ),
+        _ = ConversationRecorder.recordWorkout(
+            AgentToolArguments(exercise: "俯卧撑", sets: 3, reps: 10),
             sourceText: "又做了俯卧撑 3 组 10 次",
             sourceDate: date.addingTimeInterval(300),
             sourceSessionID: sessionID,
@@ -478,7 +685,7 @@ final class RecordMutationTests: XCTestCase {
         )
         _ = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .recordBody,
+                name: .createBodyEntry,
                 arguments: AgentToolArguments(weight: 70.2)
             ),
             sourceText: "体重 70.2kg",
@@ -491,7 +698,7 @@ final class RecordMutationTests: XCTestCase {
         )
         _ = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .recordBody,
+                name: .createBodyEntry,
                 arguments: AgentToolArguments(weight: 70.5)
             ),
             sourceText: "体重 70.5kg",
@@ -540,18 +747,119 @@ final class RecordMutationTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCancelledAutomaticRecoveryDoesNotOfferManualRetry() {
+        let turnID = UUID()
+        let cancelled = CoachMessage(
+            isFromCoach: true,
+            text: "网络暂时不可用，任务已保留，将在网络恢复后继续。",
+            agentStatus: .cancelled,
+            turnID: turnID,
+            attemptNumber: 1
+        )
+        XCTAssertFalse(ConversationTurnProjection.canRetry(cancelled, in: [cancelled]))
+
+        let job = AgentJob(
+            turnID: turnID,
+            sessionID: UUID(),
+            userMessageID: UUID(),
+            dataSpace: .personal,
+            userText: "记录深蹲",
+            mediaAttachments: [],
+            contextSnapshot: AgentJobContextSnapshot(
+                structuredContext: "",
+                includeLocation: false
+            )
+        )
+        XCTAssertTrue(job.state.awaitsAutomaticRecovery)
+        XCTAssertFalse(
+            ConversationTurnProjection.canRetry(cancelled, in: [cancelled], job: job)
+        )
+    }
+
+    @MainActor
+    func testFailedBubbleOffersManualRetryOnlyAfterAutomaticRecoveryStops() throws {
+        let turnID = UUID()
+        let failed = CoachMessage(
+            isFromCoach: true,
+            text: "这次没有处理成功",
+            agentStatus: .failed,
+            turnID: turnID,
+            attemptNumber: 1
+        )
+        let job = AgentJob(
+            turnID: turnID,
+            sessionID: UUID(),
+            userMessageID: UUID(),
+            dataSpace: .personal,
+            userText: "记录深蹲",
+            mediaAttachments: [],
+            contextSnapshot: AgentJobContextSnapshot(
+                structuredContext: "",
+                includeLocation: false
+            )
+        )
+        try job.transition(to: .waitingForNetwork)
+        XCTAssertFalse(
+            ConversationTurnProjection.canRetry(failed, in: [failed], job: job)
+        )
+
+        try job.transition(to: .waitingForUser)
+        XCTAssertFalse(job.state.awaitsAutomaticRecovery)
+        XCTAssertTrue(
+            ConversationTurnProjection.canRetry(failed, in: [failed], job: job)
+        )
+    }
+
+    @MainActor
+    func testAutomaticRecoveryClearsFailureCardsAndHidesRetry() {
+        let turnID = UUID()
+        let message = CoachMessage(
+            isFromCoach: true,
+            text: "半截回复",
+            agentStatus: .failed,
+            turnID: turnID,
+            attemptNumber: 1
+        )
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: "保存训练记录",
+            status: .succeeded,
+            startedAt: .now,
+            endedAt: .now
+        )))
+        message.applyAgentEvent(.failed(
+            message: "网络中断",
+            cancelled: false,
+            at: .now
+        ))
+        XCTAssertTrue(message.agentTurnItems.contains { $0.kind == .error })
+
+        let waitingText = "网络暂时不可用，任务已保留，将在网络恢复后继续。"
+        message.presentAutomaticRecovery(waitingText: waitingText)
+
+        XCTAssertEqual(message.agentStatus, .cancelled)
+        XCTAssertEqual(message.text, waitingText)
+        XCTAssertFalse(message.agentTurnItems.contains { $0.kind == .error })
+        XCTAssertTrue(message.agentTurnItems.contains {
+            $0.kind == .tool && $0.status == .succeeded
+        })
+        XCTAssertFalse(ConversationTurnProjection.canRetry(message, in: [message]))
+    }
+
     func testSystemContractKeepsToolNamesOutOfPrompt() {
         let policy = ReActPromptSection.policy.defaultText
 
         XCTAssertTrue(policy.contains("明确授权"))
         XCTAssertTrue(policy.contains("创建、修改、删除"))
+        XCTAssertTrue(policy.contains("不能把创建当更新"))
         XCTAssertFalse(policy.contains("mutate_user_data"))
         XCTAssertFalse(policy.contains("record_id"))
     }
 
     private func mealCall(title: String) -> AgentToolCall {
         AgentToolCall(
-            name: .recordMeal,
+            name: .createMeal,
             arguments: AgentToolArguments(
                 mealType: MealType.lunch.rawValue,
                 title: title,
@@ -574,6 +882,7 @@ final class RecordMutationTests: XCTestCase {
             BodyEntry.self,
             WorkoutEntry.self,
             ExerciseDefinition.self,
+            BusinessIDSequence.self,
             CoachMessage.self,
             AgentMutationReceipt.self
         ])

@@ -2,7 +2,11 @@
 
 - 状态：部分已替代
 - 日期：2026-07-30
-- 后续替代：[ADR 0049](0049-normalized-idempotency-and-business-dedup.md) 补充规范化幂等键与跨 Turn 疑似重复反馈（纠错合并规则仍生效）
+- 后续替代：
+  - [ADR 0049](0049-normalized-idempotency-and-business-dedup.md) 补充规范化幂等键与跨 Turn 疑似重复反馈（纠错合并规则仍生效）
+  - [ADR 0077](0077-same-turn-identity-merge-and-additive-inline-review.md) 将「同一 sourceTurnID 永远更新原记录」收窄为必须匹配动作或餐次身份
+  - [ADR 0079](0079-create-inserts-update-by-id.md) 删除 create 路径上的候选匹配与同一 Turn 合并；纠正只走更新工具
+- 下游落地：[BUG 0023](../bugs/0023-same-turn-multi-exercise-merged-into-one.md)
 - 关联：
   - [ADR 0006](0006-data-truth-and-derived-metrics.md)
   - [ADR 0012](0012-ordered-mixed-media-collections.md)
@@ -34,7 +38,8 @@ ADR 0016 的幂等回执只能阻止同一 Turn 的相同 Tool Call 重放，无
   - 组次、重量、热量、宏量营养、体重等结构化数值；
   - 用户是否表达“不是、改成、补充、刚才”等纠错/补充语义；
   - 媒体是否重合或作为邻近补图出现。
-- 同一 `sourceTurnID` 永远更新原记录。
+- 同一 `sourceTurnID` 永远更新原记录。该无条件规则已由 [ADR 0077](0077-same-turn-identity-merge-and-additive-inline-review.md)
+  收窄：必须同时匹配动作或餐次身份；不同动作各自成条。
 - 跨 Turn 只有唯一候选达到高阈值时才合并；歧义时新增，避免误吞两次真实事件。
 - 合并媒体时按 `kind + path` 有序去重并追加，不复制文件。
 - 纠错命中时，新提供的非空事实覆盖旧 AI 估算；没有新证据的字段继续保留，不能用 `nil`

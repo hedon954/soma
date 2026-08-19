@@ -130,7 +130,9 @@ private let extendedActionIllustrations: [String: String] = [
 private func entry(
     _ name: String,
     _ aliases: [String],
-    _ profile: ExtendedProfile
+    _ profile: ExtendedProfile,
+    laterality: ExerciseLaterality? = nil,
+    targetKind: WorkoutTargetKind? = nil
 ) -> BundledExerciseContent {
     BundledExerciseContent(
         canonicalName: name,
@@ -140,7 +142,9 @@ private func entry(
         secondaryMuscles: profile.secondary,
         movementPatterns: profile.patterns,
         actionIllustrationResourceName: extendedActionIllustrations[name] ?? "",
-        muscleMapResourceName: profile.map
+        muscleMapResourceName: profile.map,
+        laterality: laterality,
+        targetKind: targetKind
     )
 }
 
@@ -552,7 +556,7 @@ private let extendedCoreEntries: [BundledExerciseContent] = [
     entry("V字两头起", ["两头起", "V-Up"], coreFlexProfile),
     entry("自行车卷腹", ["交替卷腹", "空中蹬车"], obliqueProfile),
     entry("俄罗斯转体", [], obliqueProfile),
-    entry("侧平板支撑", ["侧桥", "侧平板"], obliqueProfile),
+    entry("侧平板支撑", ["侧桥", "侧平板"], obliqueProfile, laterality: .both, targetKind: .duration),
     entry("帕洛夫推", ["Pallof Press", "抗旋转推", "弹力带站姿抗旋"], obliqueProfile),
     entry("绳索砍伐", ["伐木动作", "木刀砍"], obliqueProfile),
     entry("悬垂举腿", ["悬垂抬腿", "悬垂直腿上摆"], legRaiseProfile),

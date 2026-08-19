@@ -1,11 +1,12 @@
 # PRD 013：低摩擦训练计划编排与沉浸式带练
 
-- 状态：部分修订；开始前校准、紧凑取景与完成反馈由 PRD 014 修订
+- 状态：部分修订；开始前校准、紧凑取景与完成反馈由 PRD 014 修订，一步开练、独立组/Effort 与自动推进由 PRD 031 修订
 - 日期：2026-08-03
 - 修订自：
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的程序化带练与自动录像交互
   - [PRD 012](012-gui-training-program-authoring.md) 的计划 GUI 编排交互
 - 后续修订：
+  - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 取消二级开始页与手动休息推进，并以独立逻辑组/Effort 扩展左右和时长训练
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 改为按需启动相机，扩展录像策略、语音和完成复盘
   - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口迁移到一级训练 Tab
 - 上游依据：

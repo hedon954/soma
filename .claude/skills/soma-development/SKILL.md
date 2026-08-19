@@ -13,7 +13,9 @@ the current PRD defines scope, and Accepted ADRs define durable boundaries.
 1. Read `docs/prd/004-soma-current-product.md` and the relevant acceptance rows.
 2. Read `docs/adr/README.md` and every ADR touched by the change.
 3. Search `docs/bugs/README.md` for known failure mechanisms in the touched area.
-4. When a new document revises or replaces an older one, add reciprocal lifecycle links in both
+4. Lifecycle links apply only to documents already in Git. If an uncommitted implementation or
+   draft was superseded in the same working tree, delete it; do not leave transition notes.
+   When a committed document is revised or replaced, add reciprocal lifecycle links in both
    documents and update their directory README; never leave a one-way supersession reference.
 5. Write down the user-visible success path, empty state, failure state, privacy impact, and
    data that must survive navigation or restart.

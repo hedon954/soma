@@ -58,9 +58,8 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 ## 本地工具
 
 当前协议使用 32 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 7 个，另有
-`load_skill`、健身房 2 个、复盘和反馈各 1 个。每次请求只把当前意图或选中 Skill 所需的子集
-放入 API `tools` 参数；通用建议为零 Tool。旧通用查询/写入和运行时扩展名称只用于恢复历史
-Checkpoint，不再暴露给新模型。
+`load_skill`、健身房 2 个、复盘和反馈各 1 个。未选快捷 Skill 时，本轮把这 32 个全部放入 API
+`tools` 参数；选中 Skill 时只放入该 Skill 绑定且通过 App 白名单的子集。未知名称解码失败。
 
 训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
 归档和合并。所有业务 ID 是 Int64，`create_workout` 必须绑定有效 `exercise_id`，计划动作也必须
@@ -72,8 +71,8 @@ Checkpoint，不再暴露给新模型。
 ## 数据真实性与安全
 
 - 同一 Turn 的相同成功写入通过包含最终 `occurred_at` 和业务 ID 的规范化签名只执行一次；失败回执不挡同键重试。
-- 新媒体默认创建新记录；纠错必须绑定查询得到的稳定 `record_id`。只有明确回指紧邻 Turn 且
-  唯一候选时才更新；多个候选先询问，不再用两小时评分猜记录。
+- 新媒体默认创建新记录；纠错必须绑定查询得到的稳定 `record_id`。同一 ReAct Loop 的多次
+  create 都新增独立记录，不能把创建当更新。
 - 未提供的重量、间歇、时长、评分等字段保持为空，不自动补默认值。
 - 工具错误作为 `role: tool` 结果返回，让模型解释或修正，不静默写入异常数据。
 - Tool 错误包含稳定 `code/field/expected/retryable`；对象 Schema 关闭额外字段并继续执行本地二次校验。
@@ -134,7 +133,7 @@ Live Activity 和通知是独立投影。token delta 继续实时显示，但不
 Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending → committed）去重；
 跨 Turn 业务键命中返回疑似重复而不静默合并。
 
-每轮请求只暴露首轮确定的最小 Tool 集；历史 `expand_tool_group` 只用于恢复已持久化 Checkpoint。
+每轮请求只暴露 Loop 开始时确定的 Tool 集，整轮固定。未选 Skill 时是当前协议全部工具；选中快捷 Skill 时只注册该 Skill 绑定的子集。
 供应商侧允许并行 `tool_calls`，本机仍顺序执行。`AgentContextPackBuilder` 提供确定性上下文包；
 历史始终保留最近十个完整 user-assistant 对。从第十一对开始，Loop 前用“已有摘要 + 新移出
 窗口的完整对”重新生成完整替代摘要，小模型优先、标准模型回退、确定性 digest 兜底；Loop 内
@@ -155,7 +154,8 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 训练动作身份已经使用：
 
 - `search_exercises` 按名称返回 `{exercise_id,name}`，已有上下文足够时不得重复搜索；
-- 只有无语义等价项时调用 `create_exercise`，再把返回的 Int64 ID 交给 `create_workout`；
+- 只有无语义等价项时一次调用 `create_exercise(exercise_names)`，再把返回的 Int64 ID 交给一次
+  `create_workout(workouts)`；不要指定新建 `record_id`；
 - `create_program` 与 `create_program_version` 的每个动作都必须绑定有效动作 ID；
 - `list_programs` / `get_program` 提供精确读取，`start_program` 仅创建本地不可变 Session 并路由
   到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。

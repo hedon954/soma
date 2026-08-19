@@ -7,6 +7,7 @@
   - [ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 修订 Turn/Attempt 关系
   - [ADR 0022](0022-user-controlled-conversation-sessions.md) 替代每日自动切换和只读历史边界
   - [ADR 0055](0055-hybrid-daily-conversation-sessions.md) 恢复自动按日解析并保留显式继续旧会话
+  - [ADR 0080](0080-conversation-session-swipe-delete.md) 落地对话 Session 左滑删除聊天图，不删除业务记录
 
 ## 背景
 
@@ -71,8 +72,8 @@ Agent 上下文，也无法表达“重新进入 App 后开始今天的新谈话
 - 旧版同一天内如果实际上存在多次独立谈话，因为没有历史边界证据，只能归入同一个
   Session。
 - 当前规则只在进入前台时切分；持续前台跨午夜仍沿用原 Session。
-- 如果未来允许用户删除 Session、跨设备同步或恢复后台 Agent，需要新的删除、同步与冲突
-  决策。
+- 如果未来允许跨设备同步或恢复后台 Agent，需要新的同步与冲突决策。对话 Session 的本机
+  左滑删除由 [ADR 0080](0080-conversation-session-swipe-delete.md) 定义，不级联业务记录。
 
 ## 验证
 

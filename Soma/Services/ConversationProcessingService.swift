@@ -684,7 +684,7 @@ final class ConversationProcessingService {
                 responseMessage: responseMessage
             )
             guard let name = AgentToolName(rawValue: request.name),
-                  [1, name.schemaVersion].contains(request.schemaVersion),
+                  name.supportedSchemaVersions.contains(request.schemaVersion),
                   name.isMutation == request.mutation,
                   job.turnID == userMessage.turnID,
                   job.state == .running || job.state == .remoteRunning
@@ -694,6 +694,11 @@ final class ConversationProcessingService {
                 )
             }
             let argumentData = try JSONEncoder().encode(request.arguments)
+            try AgentToolSchemaValidator.validate(
+                argumentData,
+                for: name,
+                schemaVersion: request.schemaVersion
+            )
             let arguments = try JSONDecoder().decode(
                 AgentToolArguments.self,
                 from: argumentData
@@ -873,27 +878,23 @@ final class ConversationProcessingService {
                 responseMessage: responseMessage
             )
             let message = "后台任务已取消。"
+            stopAutomaticRetry()
             trace.apply(.failed(
                 message: message,
-                cancelled: true,
+                cancelled: false,
                 at: event.createdAt
             ))
-            if job.state.canTransition(to: .cancelled) {
-                try job.transition(to: .cancelled, at: event.createdAt)
-            }
             responseMessage.text = message
-            responseMessage.agentStatus = .cancelled
+            responseMessage.agentStatus = .failed
             responseMessage.applyAgentEvent(.failed(
                 message: message,
-                cancelled: true,
+                cancelled: false,
                 at: event.createdAt
             ))
-            _ = try? AgentJobStore.append(
-                kind: .cancelled,
-                payload: .init(message: message, cancelled: true),
-                to: job,
-                in: context.modelContext,
-                at: event.createdAt
+            try? AgentJobStore.waitForUser(
+                job,
+                message: message,
+                in: context.modelContext
             )
         } else if event.kind == "error" || event.phase == "failed" {
             updateRemoteModelSpan(
@@ -1116,20 +1117,6 @@ private extension ConversationProcessingService {
             }
             try? context.modelContext.save()
 
-            let activePrograms = (
-                try? context.modelContext.fetch(FetchDescriptor<TrainingProgram>())
-            ) ?? []
-            let activeSessions = (
-                try? context.modelContext.fetch(FetchDescriptor<WorkoutSession>())
-            ) ?? []
-            let toolSignals = AgentToolExposureSignals(
-                text: userMessage.text,
-                hasVideo: media.hasVideo,
-                hasActiveProgram: activePrograms.contains { $0.status == .active },
-                hasActiveGuidedSession: activeSessions.contains {
-                    [.draft, .active, .paused].contains($0.status)
-                }
-            )
             let resumeCheckpoint = resumable ? job.loopCheckpoint : nil
             let firstStepDeadlineEnabled = !job.firstStepDeadlineConsumed
             job.firstStepDeadlineConsumed = true
@@ -1153,7 +1140,6 @@ private extension ConversationProcessingService {
                     history: history,
                     context: agentContext,
                     route: route,
-                    toolSignals: toolSignals,
                     selectedSkillID: job.selectedSkillID,
                     checkpoint: resumeCheckpoint,
                     firstStepDeadlineEnabled: firstStepDeadlineEnabled,
@@ -1334,8 +1320,7 @@ extension ConversationProcessingService {
                 )
             }
             let waitingText = "网络暂时不可用，任务已保留，将在网络恢复后继续。"
-            responseMessage.text = waitingText
-            responseMessage.agentStatus = .cancelled
+            responseMessage.presentAutomaticRecovery(waitingText: waitingText)
             _ = try? AgentJobStore.append(
                 kind: .waitingForNetwork,
                 payload: .init(message: waitingText),
@@ -1358,8 +1343,8 @@ extension ConversationProcessingService {
                 .signal(for: error)
                 .isMissingConfiguration
             job.submissionAttemptCount += 1
-            responseMessage.text = message + "LLM 恢复后会自动继续。"
-            responseMessage.agentStatus = .cancelled
+            let waitingText = message + "LLM 恢复后会自动继续。"
+            responseMessage.presentAutomaticRecovery(waitingText: waitingText)
             if let activeTrace, activeTrace.status == .running {
                 activeTrace.apply(.failed(
                     message: reason,
@@ -1387,6 +1372,7 @@ extension ConversationProcessingService {
             context.session.touch(at: .now)
             return
         case let .waitForUser(message):
+            stopAutomaticRetry()
             job.submissionAttemptCount += 1
             responseMessage.text = message
             responseMessage.agentStatus = .failed
@@ -1412,6 +1398,7 @@ extension ConversationProcessingService {
         case .fail:
             break
         }
+        stopAutomaticRetry()
         let recovery = if performedRecordType != nil {
             "\n\nAgent 已完成的本地记录仍然保留，但生成最终回复时中断。"
         } else if !media.attachments.isEmpty {
@@ -1611,6 +1598,10 @@ extension ConversationProcessingService {
     ) {
         guard !isProcessing else { return }
         let now = Date.now
+        _ = try? AgentJobStore.promoteFailedResponsesToManualRetry(
+            dataSpace: dataSpace,
+            in: modelContext
+        )
         let jobs = (
             try? modelContext.fetch(
                 FetchDescriptor<AgentJob>(
@@ -1618,8 +1609,6 @@ extension ConversationProcessingService {
                 )
             )
         ) ?? []
-        let messages = (try? modelContext.fetch(FetchDescriptor<CoachMessage>())) ?? []
-        let messageByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
         guard let job = jobs.first(where: {
             $0.dataSpace == dataSpace && !$0.state.isTerminal
         }) else {
@@ -1627,17 +1616,6 @@ extension ConversationProcessingService {
         }
         // FIFO 只看队头。等待用户、配置或退避时，任何后续消息都不能越过。
         if job.state == .waitingForUser || job.state == .staged {
-            return
-        }
-        if let responseID = job.responseMessageID,
-           messageByID[responseID]?.agentStatus == .failed,
-           job.state.canTransition(to: .waitingForUser)
-        {
-            try? AgentJobStore.waitForUser(
-                job,
-                message: "上次处理已失败，等待手动重试。",
-                in: modelContext
-            )
             return
         }
         if job.executionKind == .react,
@@ -1662,6 +1640,7 @@ extension ConversationProcessingService {
             )
             return
         }
+        let messages = (try? modelContext.fetch(FetchDescriptor<CoachMessage>())) ?? []
         guard let userMessage = messages.first(where: { $0.id == job.userMessageID }),
               var context = ConversationProcessingContextFactory.make(
                   sessionID: job.sessionID,
@@ -1702,6 +1681,11 @@ extension ConversationProcessingService {
         )
     }
 
+    func stopAutomaticRetry() {
+        retryTask?.cancel()
+        retryTask = nil
+    }
+
     private func scheduleRetry(
         at date: Date?,
         dataSpace: DataSpace,
@@ -1710,7 +1694,7 @@ extension ConversationProcessingService {
         locationService: LocationContextService?
     ) {
         guard let date, let locationService else { return }
-        retryTask?.cancel()
+        stopAutomaticRetry()
         retryTask = Task { [weak self] in
             let delay = max(0, date.timeIntervalSinceNow)
             if delay > 0 {

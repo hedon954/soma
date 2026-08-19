@@ -193,6 +193,10 @@ extension ConversationProcessingService {
                 dataSpace: dataSpace,
                 in: modelContext
             )
+            _ = try AgentJobStore.promoteFailedResponsesToManualRetry(
+                dataSpace: dataSpace,
+                in: modelContext
+            )
             if releaseStaged {
                 _ = try AgentJobStore.releaseStagedJobs(
                     dataSpace: dataSpace,
@@ -394,21 +398,21 @@ extension ConversationProcessingService {
             $0.id == draft.exerciseID
         })?.businessID ?? 0
         let call = AgentToolCall(
-            name: .mutateUserData,
+            name: .createWorkout,
             arguments: AgentToolArguments(
-                operation: "create",
-                payload: AgentMutationPayload(
-                    exerciseID: exerciseBusinessID,
-                    setEntries: draft.setEntries.map {
-                        AgentWorkoutSetInput(
-                            reps: $0.reps,
-                            externalWeightKG: $0.externalWeightKG
-                        )
-                    },
-                    restSeconds: draft.restSeconds,
-                    durationMinutes: draft.durationMinutes
-                ),
-                recordType: "workout"
+                workouts: [
+                    AgentWorkoutCreateInput(
+                        exerciseID: exerciseBusinessID,
+                        setEntries: draft.setEntries.map {
+                            AgentWorkoutSetInput(
+                                reps: $0.reps,
+                                externalWeightKG: $0.externalWeightKG
+                            )
+                        },
+                        restSeconds: draft.restSeconds,
+                        durationMinutes: draft.durationMinutes
+                    )
+                ]
             )
         )
         let spanID = UUID()

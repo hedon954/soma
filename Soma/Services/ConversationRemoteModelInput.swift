@@ -90,24 +90,10 @@ extension ConversationProcessingService {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
-        let activePrograms = (
-            try? context.modelContext.fetch(FetchDescriptor<TrainingProgram>())
-        ) ?? []
-        let activeSessions = (
-            try? context.modelContext.fetch(FetchDescriptor<WorkoutSession>())
-        ) ?? []
-        let groups = AgentToolExposurePolicy.initialGroups(signals: .init(
-            text: userMessage.text,
-            hasVideo: media.hasVideo,
-            hasActiveProgram: activePrograms.contains { $0.status == .active },
-            hasActiveGuidedSession: activeSessions.contains {
-                [.draft, .active, .paused].contains($0.status)
-            }
-        ))
         let selectedSkill = job.selectedSkillID.flatMap {
             AgentSkillRegistry.descriptor(id: $0, defaults: context.ai.defaults)
         }
-        let effectiveGroups = selectedSkill?.toolGroups ?? groups
+        let effectiveGroups = AgentToolExposurePolicy.groups(selectedSkill: selectedSkill)
         let userPrompt = ReActAgentPrompt.user(
             text: userMessage.text,
             context: agentContext,

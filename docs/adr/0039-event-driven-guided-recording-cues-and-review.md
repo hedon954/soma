@@ -1,12 +1,14 @@
 # ADR 0039：带练录像、语音与复盘由确定性事件驱动
 
-- 状态：已采纳
+- 状态：部分已替代；事件驱动录像与语音继续有效，Effort 证据、attempt 终态和自动分享由 ADR 0073 修订
 - 日期：2026-08-04
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0030](0030-deterministic-guided-workout-and-session-recording.md) 的单一自动录像策略与每动作单段证据
   - [ADR 0038](0038-focused-guided-workout-and-capture-geometry.md) 的开始前相机校准与紧凑预览完整适配
-- 后续替代：暂无
+- 后续替代：
+  - [ADR 0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) 将录像归属从逻辑 Set 下沉到原子 Effort，以 attempt 单终态收敛 Delegate，并把复盘改为自动完成后的分享预览
+  - [ADR 0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) 部分替代“只在开始写文件时才准备相机”的 lazy activation：明确选择自动录像后在动作介绍阶段完成可见 preflight，完整 request 从准备前开始计时，并区分完整录像与部分证据
 - 上游依据：
   - [PRD 014](../prd/014-guided-workout-recording-cues-and-review.md)
   - [带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)

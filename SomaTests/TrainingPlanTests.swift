@@ -34,7 +34,12 @@ final class TrainingPlanTests: XCTestCase {
                     exerciseID: squat.id,
                     exerciseName: squat.canonicalName,
                     order: 2,
-                    firstSetIsWarmup: true
+                    firstSetIsWarmup: true,
+                    plannedSets: [TemplateSetPrescriptionValue(
+                        order: 1,
+                        kind: .warmup,
+                        targetReps: 8
+                    )]
                 )
             ],
             source: "gui",
@@ -221,17 +226,12 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertEqual(summary.completedVolume, 160)
         XCTAssertEqual(summary.exerciseCount, 1)
 
-        let query = try ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .queryUserData,
-                arguments: AgentToolArguments(
-                    scope: "sessions",
-                    sessionID: XCTUnwrap(session.businessID)
-                )
+        let query = try ConversationRecorder.queryUserData(
+            AgentToolArguments(
+                scope: "sessions",
+                sessionID: XCTUnwrap(session.businessID)
             ),
-            sourceText: "",
-            mediaKind: .none,
-            mediaPath: nil,
+            preferredGymID: nil,
             in: context
         )
         XCTAssertTrue(query.ok)
@@ -338,27 +338,30 @@ final class TrainingPlanTests: XCTestCase {
             canonicalName: "俯卧撑",
             in: context
         )
-        let program = try TrainingPlanStore.createProgram(
-            name: "自重",
-            templateName: "自重",
-            prescriptions: [
-                TemplateExercisePrescription(
-                    exerciseID: exercise.id,
-                    exerciseName: exercise.canonicalName,
-                    order: 1
-                )
-            ],
-            in: context
-        )
-
-        let session = try TrainingPlanStore.startSession(
-            program: program,
-            in: context
-        )
-
-        XCTAssertNil(session.prescriptionSnapshot.first?.targetSets)
+        XCTAssertThrowsError(
+            try TrainingPlanStore.createProgram(
+                name: "自重",
+                templateName: "自重",
+                prescriptions: [
+                    TemplateExercisePrescription(
+                        exerciseID: exercise.id,
+                        exerciseName: exercise.canonicalName,
+                        order: 1
+                    )
+                ],
+                in: context
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? TrainingPlanError,
+                .invalidValue("目标次数")
+            )
+        }
         XCTAssertTrue(
-            try context.fetch(FetchDescriptor<WorkoutSet>()).isEmpty
+            try context.fetch(FetchDescriptor<TrainingProgram>()).isEmpty
+        )
+        XCTAssertTrue(
+            try context.fetch(FetchDescriptor<TemplateSetPrescription>()).isEmpty
         )
     }
 
@@ -381,7 +384,7 @@ final class TrainingPlanTests: XCTestCase {
         )
         let create = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .createTrainingProgram,
+                name: .createProgram,
                 arguments: AgentToolArguments(
                     programName: "推举计划",
                     goal: "提升力量",
@@ -399,7 +402,7 @@ final class TrainingPlanTests: XCTestCase {
         )
         let update = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .updateWorkoutTemplate,
+                name: .createProgramVersion,
                 arguments: AgentToolArguments(
                     programID: XCTUnwrap(program.businessID),
                     templateName: "推举日调整",
@@ -411,19 +414,14 @@ final class TrainingPlanTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-        let query = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .queryUserData,
-                arguments: AgentToolArguments(scope: "programs")
-            ),
-            sourceText: "",
-            mediaKind: .none,
-            mediaPath: nil,
+        let query = ConversationRecorder.queryUserData(
+            AgentToolArguments(scope: "programs"),
+            preferredGymID: nil,
             in: context
         )
         let archive = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .archiveTrainingProgram,
+                name: .archiveProgram,
                 arguments: AgentToolArguments(
                     programID: XCTUnwrap(program.businessID)
                 )
@@ -472,7 +470,7 @@ final class TrainingPlanTests: XCTestCase {
             in: context
         )
         let listed = ConversationRecorder.executeAgentTool(
-            AgentToolCall(name: .listTrainingPrograms, arguments: .init()),
+            AgentToolCall(name: .listPrograms, arguments: .init()),
             sourceText: "我有哪些计划？",
             mediaKind: .none,
             mediaPath: nil,
@@ -486,7 +484,7 @@ final class TrainingPlanTests: XCTestCase {
         }
         let started = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .startGuidedWorkout,
+                name: .startProgram,
                 arguments: .init(
                     programID: XCTUnwrap(program.businessID),
                     autoRecordingPolicy: "every_set"
@@ -509,7 +507,7 @@ final class TrainingPlanTests: XCTestCase {
 
         let detail = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .getTrainingProgram,
+                name: .getProgram,
                 arguments: .init(programID: XCTUnwrap(program.businessID))
             ),
             sourceText: "查看这个计划详情",
@@ -522,7 +520,7 @@ final class TrainingPlanTests: XCTestCase {
 
         let deleted = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .deleteTrainingProgram,
+                name: .deleteProgram,
                 arguments: .init(programID: XCTUnwrap(program.businessID))
             ),
             sourceText: "永久删除这个计划",

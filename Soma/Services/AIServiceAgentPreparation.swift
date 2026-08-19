@@ -11,7 +11,6 @@ struct AgentRunPreparationRequest {
     var history: [AgentConversationExchange]
     var context: String
     var requestedRoute: AIModelRoute?
-    var toolSignals: AgentToolExposureSignals?
     var selectedSkillID: String?
     var checkpoint: AgentLoopCheckpoint?
 }
@@ -85,9 +84,7 @@ extension AIService {
             : request.history.map(removingImages)
         var exposedGroups = restoredToolGroups(request)
         if exposedGroups.isEmpty {
-            exposedGroups = selectedSkill?.toolGroups
-                ?? request.toolSignals.map(AgentToolExposurePolicy.initialGroups)
-                ?? []
+            exposedGroups = AgentToolExposurePolicy.groups(selectedSkill: selectedSkill)
         }
         let exposedTools = AgentToolExposurePolicy.tools(for: exposedGroups)
         let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)

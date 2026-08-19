@@ -1,7 +1,7 @@
 # 训练领域模型与运行时协议
 
-- 状态：已实现协议
-- 日期：2026-07-31
+- 状态：独立组、Effort、attempt 与自动收口实施中；SwiftData 打开路径见 ADR 0075，侧别与完成方式见 ADR 0076
+- 日期：2026-08-16
 - 上游依据：
   - [ADR 0028](../adr/0028-semantic-exercise-identity.md)
   - [ADR 0029](../adr/0029-versioned-training-plans-and-session-facts.md)
@@ -10,8 +10,12 @@
   - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
   - [ADR 0060](../adr/0060-guided-performance-workout-entry-projection.md)
   - [ADR 0071](../adr/0071-integer-business-identities-and-explicit-relations.md)
+  - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
+  - [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)
+  - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
+  - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯
@@ -30,19 +34,22 @@ ExerciseDefinition
 TrainingProgram
   └─ WorkoutTemplateVersion
        └─ TemplateExercise
+            └─ TemplateSetPrescription（独立逻辑组）
             ↓ 开始时快照
 WorkoutSession
   └─ ExercisePerformance
-       ├─ WorkoutSet
+       ├─ WorkoutSet（逻辑组）
+       │    └─ WorkoutEffort（none / left / right 原子执行）
        └─ WorkoutEntry（终态、至少一组完成时的可审查投影）
 ```
 
 - `ExerciseDefinition` 是动作身份事实。
 - `WorkoutTemplateVersion` 是可修改的计划处方。
 - `WorkoutSession` 是一次执行容器。
-- `WorkoutSet.actual*` 是完成统计的事实。
+- `TemplateSetPrescription` 是完全独立的计划逻辑组，不依赖动作级统一默认值。
+- `WorkoutSet` 是用户看到的逻辑组；`WorkoutEffort.actual*` 是左右、次数/时长和录像的原子事实。
 - `WorkoutEntry` 是完成动作进入统一 CRUD、导出和趋势的业务投影，通过 Session/Performance 来源
-  ID 与原始事实关联。
+  ID、唯一 projection key 和一对一关系与原始事实关联。
 - `RecommendationSnapshot` 是建议，不是计划或实际结果。
 
 ## SwiftData 目标模型
@@ -55,7 +62,8 @@ WorkoutSession
 | `canonicalName` | String | 当前数据空间规范化后唯一 |
 | `movementPattern` | String? | 用户或内容元数据，缺失为空 |
 | `equipmentKind` | String? | 不参与本地语义去重 |
-| `laterality` | enum? | bilateral/left/right/alternating |
+| `laterality` | enum? | 空为未配置；展示默认全身。取值 none/both/left/right |
+| `targetKind` | enum? | 空为未配置；展示默认按次数。取值 repetitions/duration |
 | `angleOrVariation` | String? | 只保存明确事实 |
 | `status` | enum | active/archived |
 | `createdAt/updatedAt` | Date | 本地时间事实 |
@@ -115,58 +123,70 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 ### 计划
 
-`TrainingProgram` 保存名称、目标、状态和当前版本引用。
+`TrainingProgram` 保存名称、可编辑 `overview`、状态和当前版本引用。V5 使用
+`@Attribute(originalName: "goal")` 无损延续旧字段，`goal` 只作为兼容访问器，不再形成第二份事实。
 
-`WorkoutTemplateVersion` 保存：
+`WorkoutTemplateVersion` 保存稳定 template family ID、单调 version、名称、schedule hint、创建来源
+与时间。模板名称和 schedule hint 是版本事实，但不在计划详情首屏显示为“当前模板”。
 
-- 稳定 template family ID；
-- 单调 version；
-- 名称与 schedule hint；
-- 创建来源和时间；
-- 是否为当前版本。
+`TemplateExercise` 保存动作关系、顺序、从 `ExerciseDefinition` 复制的 `lateralityRaw`、器械与动作
+备注。用户面对的侧别在动作定义上修改。laterality 只允许：
 
-`TemplateExercise` 保存：
+- `.none`：全身，不区分左右；
+- `.both`：左右分别执行且固定先左后右；
+- `.left/.right`：只执行对应一侧。
 
-- `exerciseID`、顺序；
-- 目标组数、次数、重量和间歇，缺失保持 `nil`；
-- `firstSetIsWarmup`；
-- 可选 progression rule 与用户备注。
+V4 的 `targetSets/targetReps/targetWeightKG/targetRestSeconds/firstSetIsWarmup` 只用于旧 Tool、旧备份和
+迁移兼容；V5 新处方读取持久的 `TemplateSetPrescription`。
 
-任何处方字段改变都创建新版本。排序变化也属于版本变化。
+每条 `TemplateSetPrescription` 保存：
+
+| 类别 | 字段与规则 |
+| --- | --- |
+| 身份 | `id/businessID/templateExerciseID/order`；每组独立，复制后不共享默认值 |
+| 类型 | `kindRaw`: warmup/working；旧枚举中的其他值继续兼容但本版编辑器不扩展 |
+| 目标 | `targetKindRaw`: repetitions/duration；只允许对应的 reps 或 durationSeconds |
+| 重量 | none/单侧使用 `targetWeightKG`；both 可用 `leftWeightKG/rightWeightKG` |
+| 间歇 | `restBetweenSidesSeconds` 只对 both 有意义；`restAfterSetSeconds` 属于本逻辑组之后 |
+| 备注 | 可选组备注，空字符串不能被理解为模型已知事实 |
+
+任何动作、独立组或排序变化都创建新版本。开始训练时将独立组编码进
+`TemplateExercisePrescription.plannedSets`，之后修改模板不影响既有 Session。
 
 ### 执行事实
 
-`WorkoutSession`：
+`WorkoutSession` 保存不可变处方快照、状态以及当前 `performance/set/effort`。V5 新增
+`currentEffortID`、`phaseDeadlineAt` 与 `transitionRevision`；`restTargetEndAt` 继续用于兼容休息通知
+和旧恢复路径。来源 Turn/Job、场馆、模板 family/version 与开始/结束时间保持原语义。
 
-- `id`、`startedAt`、`endedAt`；
-- `gymID`；
-- `sourceTemplateFamilyID` 与 version；
-- 不可变 `prescriptionSnapshot`；
-- `status`: draft/active/paused/completed/abandoned；
-- 当前带练恢复位置；
-- 休息目标结束时间 `restTargetEndAt`，用于前后台和重启后按绝对时间恢复；
-- 来源 Turn/Job。
+`ExercisePerformance` 保存动作关系、顺序、本动作独立组快照、状态、备注和旧视频入口；
+`projectedWorkout` 是终态业务投影的一对一关系，`workoutProjectionSuppressed` 继续表达用户明确
+删除后不可复活。
 
-`ExercisePerformance`：
+`WorkoutSet` 表示逻辑组：
 
-- `sessionID`、`exerciseID`、顺序；
-- 本动作处方快照；
-- 备注、录像引用和分析引用；
-- 状态。
-
-`WorkoutSet`：
-
-| 类别 | 字段 |
+| 类别 | 字段与规则 |
 | --- | --- |
-| 身份 | `id`、`performanceID`、`order` |
-| 类型 | warmup/working/drop/failure/custom |
-| 侧别 | bilateral/left/right/alternating |
-| 计划 | `plannedReps/Weight/Rest` |
-| 实际 | `actualReps/Weight/Rest` |
-| 状态 | pending/inProgress/completed/skipped/failed |
-| 时间 | `startedAt/completedAt` |
+| 身份/关系 | `id/businessID/performanceID/performance/order` |
+| 类型 | `kindRaw`、`laterality`、`plannedTargetKindRaw` |
+| 计划 | reps/duration/weight、组后 rest、both 的 sides rest；V4 字段继续兼容 |
+| 实际 | V4 聚合 reps/duration/weight/rest；V5 新运行时以 Effort 为准 |
+| 状态/时间 | pending/inProgress/completed/skipped/failed、startedAt/completedAt |
+| 录像 | `recordedVideoPath` 只作为 V4 兼容投影，V5 事实归 Effort |
 
-只有 `completed` 且组数、次数、外部重量完整有效的实际值参与训练容量。计划值不得回填实际值。
+`WorkoutEffort` 表示原子执行：
+
+| 类别 | 字段与规则 |
+| --- | --- |
+| 身份/关系 | `id/businessID/workoutSetID/workoutSet/order` |
+| 侧别 | none/left/right；both 由同一 Set 下 left、right 两条表达 |
+| 目标 | repetitions/duration，以及对应 planned reps/seconds/weight |
+| 实际 | actual reps/seconds/weight/rest；缺失保持 `nil` |
+| 状态/时间 | pending/inProgress/completed/skipped/failed、startedAt/completedAt |
+| 录像 | 每条 Effort 自己的 `recordedVideoPath` |
+
+只有 completed Effort 的有效实际次数与外部重量参与容量。duration Effort、计划值、跳过和失败
+Effort 不被伪造成重量容量；逻辑组数按 Set 计算，不因 both 拥有两条 Effort 翻倍。
 
 ### 旧记录兼容
 
@@ -182,6 +202,16 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
    Performance 尚未投影时才回退原始 Set。
 7. 用户单独删除投影训练记录时，来源 Performance 设置 `workoutProjectionSuppressed`；原始执行
    证据继续保留，确定性回填不得重新创建该记录。
+8. V5 将旧动作级 `targetSets` 展开为独立组，旧 Session Set 展开为单个 `.none` Effort；不按
+   动作名猜左右，不把旧次数猜成时长。
+9. 旧运行时将休息存到下一组时，迁移只对可证明归属的顺序做左移；无法证明时保持 `nil`。
+10. 非空旧 Session/Performance 快照无法解码时迁移失败，不能静默变成空处方。
+11. 投影 `WorkoutEntry` 增加 `projectionKey` 和 `sourcePerformance` 关系。带练投影使用
+    `guided-performance:<uuid>`，其余记录使用 `entry:<uuid>`。已安装 V5 unique 索引保留，
+    启动迁移即使 marker 已完成也要先补齐空 key。重复旧投影只保留一条 canonical 关系，其他
+    历史记录保留但不能继续冒充该 Performance 的唯一投影。
+12. `WorkoutSetEvidence` 可保存 logicalSetIndex、side、kind、targetKind、reps/duration、外部重量、
+    休息和录像路径；旧只有 reps/weight 的载荷继续可解码。
 
 ## 固定 Tool 协议
 
@@ -189,8 +219,10 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 - `search_exercises(query)` 返回匹配 active 动作的 Int64 `exercise_id` 和标准名称；已由上下文
   注入的匹配动作不重复查询。
-- 只有没有语义等价项时才调用 `create_exercise(exercise_name)`。
-- `create_workout` 必须接收有效 `exercise_id`，不允许在同一调用中用名称隐式创建动作。
+- 只有没有语义等价项时才调用 `create_exercise(exercise_names)`；一次最多 20 个名称，已存在
+  名称复用原 ID。
+- `create_workout` 接收 `workouts` 数组，每条必须带有效 `exercise_id`，不允许用名称隐式创建
+  动作，也不允许指定 `record_id`。一次最多 20 条。每次数组项都新增记录，不按同一 Turn 合并。
 - `update_workout` 按 Int64 `record_id` 原位修改；失效 ID 或跨数据空间关系返回结构化错误。
 - create/update 可选 `occurred_at`；省略时使用原始 Turn 冻结的稳定默认时间。
 - Tool 成功结果返回最终 `exercise_id` 和 `workout_id`；幂等签名包含两者和最终发生时间。
@@ -204,6 +236,11 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 - `create_program_version`：从现有计划创建不可变新版本，不原地覆盖历史版本；
 - `archive_program`、`delete_program`：分别归档或在明确授权后永久删除计划；
 - `start_program`：只接受列表返回的计划 ID，在设备本地创建不可变 Session 并打开带练。
+
+V5 计划 Tool 使用嵌套 `set_prescriptions` 表达独立组、laterality、target kind、逐侧重量与两类
+间歇。递归验证必须拒绝 unknown 字段、非法枚举/范围和 reps/duration 同时有效。新调用只暴露
+新 schema；已经持久化的旧 schema Tool Call/Checkpoint 由版本化 decoder 确定性展开，不能因为
+升级丢失用户已授权工作。
 
 Tool 可创建、调整计划和在用户明确意图下启动一次带练。完成 Set、控制相机和保存实际值继续由
 本地带练运行时处理，不暴露为模型任意调用。
@@ -230,7 +267,9 @@ Tool 可创建、调整计划和在用户明确意图下启动一次带练。完
 - 模板至少有一个动作；
 - 动作 ID 仍存在；
 - 顺序没有重复；
-- `firstSetIsWarmup == true` 且需要自动录像时存在第 2 组；
+- 每个动作至少有一条有效独立组，order 不重复；
+- repetitions/duration union 合法，both 的左右配置与间歇合法；
+- 每动作首工作组自动录像时至少存在一条 `kind == working` 的逻辑组；
 - 当前健身房缺少已知必要器械；
 - 用户明确记录的不适/禁忌动作；
 - 数值范围合法，但缺失值不自动补齐。
@@ -244,22 +283,25 @@ Tool 可创建、调整计划和在用户明确意图下启动一次带练。完
 ready
   → exerciseIntroduction
   → preSetCountdown
-  → setInProgress
-  → resting | setConfirmation（仅中断恢复或显式纠错）
+  → setInProgress（由 currentEffortID 指向当前原子执行）
+  → resting（左右间歇或组间间歇）| setConfirmation（仅中断恢复或显式纠错）
   → nextSet | nextExercise
-  → sessionReview
+  → sessionReview（动作记录已收口后的本地分享预览）
   → completed
 ```
 
-`preSetCountdown` 的可见组件拥有基于 `phaseStartedAt + 3 秒` 的截止时间任务；它不能依赖外层
-View 是否因 SwiftData 字段变化而重建。截止后只在 Session 仍处于倒计时阶段时进入
-`setInProgress`，因此页面取消和重复回调都不会重复启动同一组。`setInProgress` 先保存并投影，
-相机准备和开始在专用队列继续；相机不能成为训练界面出现的前置条件。
+`preSetCountdown` 使用持久 `phaseDeadlineAt`；它不能只依赖外层 View 是否因 SwiftData 字段变化
+而重建。截止后只有 Session 阶段、当前 Effort 与 `transitionRevision` 仍匹配时才能进入
+`setInProgress`，因此页面取消和重复回调不会重复启动同一 Effort。状态机先保存执行事实，相机
+准备和开始在专用队列继续；相机不能成为训练界面出现的前置条件。
 
-所有状态变化都保存 `sessionID + performanceID + setID` 恢复点。系统中断后：
+所有状态变化都保存 `sessionID + performanceID + setID + effortID + transitionRevision` 恢复点。
+deadline 到期只能在 revision 与当前阶段仍匹配时提交一次转换。系统中断后：
 
-- `inProgress` 且未确认的 Set 回到确认或重新开始，不自动完成；
-- 休息根据持久 `restTargetEndAt` 重算剩余时间，`±15 秒`直接调整目标结束时间；
+- `setInProgress` 且未确认的次数 Effort 回到确认或重新开始，不自动完成；
+- 休息根据持久 deadline 重算剩余时间，`±15 秒`直接调整目标结束时间；归零自动进入下一 Effort
+  或 Set 的三秒倒计时；
+- duration Effort 到期自动保存实际秒数；repetitions Effort 继续等待用户确认；
 - 已确认实际值不丢失；
 - abandoned 与 completed 是终态。
 
@@ -273,21 +315,23 @@ View 是否因 SwiftData 字段变化而重建。截止后只在 Session 仍处�
 - `paused`；
 - `cancelled`。
 
-对每个 `ExercisePerformance` 只计算一次目标组：
+对每个 `ExercisePerformance` 只计算一次目标逻辑组：
 
 ```text
-firstSetIsWarmup == false → order 1
-firstSetIsWarmup == true  → order 2
+plannedSets.first(where: kind == working)
 ```
 
-非自动目标组仍可由用户点击“录制本组”。相机流程：
+主界面始终保留录像按钮；非自动目标 Effort 也可主动录像。相机流程：
 
-1. `setInProgress` 根据 policy 或手动操作发起录像请求，之前不准备相机；
+1. `setInProgress` 根据 policy 或手动操作建立唯一 attempt，绑定当前 Effort，之前不准备相机；
 2. `prepare`、`startRunning` 和 `startRecording` 在专用队列执行，训练事实先保存；
 3. 只有 `didStartRecordingTo` 回调后才把录像标为 active 并展示取景器；
-4. 用户确认、跳过、暂停或相机中断时停止；
-5. 完成文件原子移入 `PrivateMedia`，写入当前 `WorkoutSet.recordedVideoPath`；
-6. `ExercisePerformance.activeVideoPath` 保留第一段作为旧复盘入口，逐组引用保存全部录像。
+4. 用户确认、跳过、暂停、后台或相机中断时终结 attempt；saved/failed/cancelled 只能提交一次；
+5. `AVErrorRecordingSuccessfullyFinishedKey == true` 且文件有效时保留文件，即使 error 非空；
+6. 完成文件原子移入 `PrivateMedia`，写入当前 `WorkoutEffort.recordedVideoPath`；
+7. Coordinator 消费 attempt 终态并成为唯一 Alert 源；已终结 attempt 的 stop 幂等，不产生第二个
+   `stop-missing`；
+8. `WorkoutSet.recordedVideoPath` 与 `ExercisePerformance.activeVideoPath` 只保留兼容投影。
 
 预览和保存文件共享 `WorkoutCaptureGeometry`：
 
@@ -310,10 +354,24 @@ firstSetIsWarmup == true  → order 2
 
 默认无音轨。任何失败都产生可理解状态但不改变 Set 事实。
 
-语音提示由阶段事件驱动，覆盖动作进入、准备组、`3/2/1`、开始组、完成与休息、后续组和训练
-完成；新阶段会取消过期播报，避免迟到或重复。Session Review 由本地事实生成时长、完成/跳过组、
-有效容量、录像数和动作明细，不自动调用模型。删除 Session 时显式删除 Performance、Set、分析
-和对应私有录像。
+语音提示由阶段事件驱动，并由同一个 `WorkoutPrescriptionFormatter` 描述动作组数和每组次数/
+秒数；异构组逐组摘要，both 明确“左右各做，左侧先开始”。新阶段取消过期播报。
+
+最后一个 Effort 结束后不等待“保存并结束”：先物化最后一条动作 `WorkoutEntry`，再验证全部
+Performance 终态、完成 Session、结束系统投影并进入本地分享预览。任一步失败保留已保存事实并
+可重试，不提前展示成功页。删除 Session 时显式删除 Performance、Set、Effort、分析、来源投影
+记录和对应私有录像。
+
+## 动作记录与热量收口
+
+- Performance 全部 Effort 终态且至少一个完成时创建唯一 `WorkoutEntry`；全跳过不建空记录。
+- 投影按 Effort 写 `WorkoutSetEvidence`，保留逻辑组索引、侧别、次数/时长、重量、休息和录像。
+- 投影在同一事务分配 business ID、绑定动作关系、设置 projection key 和一对一关系；删除 suppression
+  与统计择一规则继续有效。
+- 动作热量优先使用 Effort 实际时长；次数训练无实际时长时才使用明确标为估算的回退。
+- 参考体重取 Session 开始时间之前最近的有效 BodyEntry，再回退 UserProfile 参考体重。
+- Session 热量求和来源动作记录，不能再按 elapsed time 重算；缺体重返回 missing requirement，
+  热量保持 `nil`，训练继续。
 
 训练 Live Activity 与休息通知只保存 Session ID、通用阶段、完成/总组数和可选休息结束时间，
 不展示动作名称、重量、用户文字或媒体；点击后通过 `soma://workout/session/{id}` 回到对应 Session。
@@ -343,12 +401,12 @@ firstSetIsWarmup == true  → order 2
 
 | 层 | 必须覆盖 |
 | --- | --- |
-| Model | 名称唯一、ID 引用、版本快照、Set 真值、级联删除 |
-| Tool | ID/name 协议、失效 ID、跨空间、幂等、计划版本 |
-| Migration | 旧记录不丢失、不虚构 Set、统计不重复 |
+| Model | 名称唯一、ID/关系、独立组、Set/Effort 真值、一对一投影、级联删除 |
+| Tool | ID/name、nested set schema、严格 union、旧 schema 恢复、跨空间、幂等、计划版本 |
+| Migration | 当前 schema 无 plan 打开、启动门禁展开旧聚合处方/Effort、projection key 预修复、旧快照/备份、休息归属、统计不重复、双空间 marker |
 | Candidate | 本地搜索、最近值、nil、只修改草稿 |
 | Catalog/Image | 空库静默、按动作激活、fill-only、资源加载、显式生成、上传、删除、合并与备份 |
-| Coordinator | 暂停、恢复、跳过、替换、异常退出 |
-| Camera | 权限、目标组、中断、重录、磁盘、热压力 |
+| Coordinator | laterality 顺序、duration/休息自动推进、revision 去重、暂停恢复、跳过替换、自动收口 |
+| Camera | attempt 单终态、成功 key、幂等 stop、单 Alert、权限、目标 Effort、中断、重录、磁盘、热压力 |
 | Privacy | 远程选择、无麦克风、备份、恢复、清除 |
-| UI | VoiceOver、Dynamic Type、键盘、长名称、空态 |
+| UI | 一步开始、嵌套进度、常驻录像、分享预览、缺体重、VoiceOver、Dynamic Type、长概览/名称、空态 |

@@ -77,8 +77,7 @@ struct RemoteAgentClient: AgentExecutionBackend {
                 ])
             }
             let runtimeToolNames: Set<AgentToolName> = [
-                .loadSkill,
-                .expandToolGroup
+                .loadSkill
             ]
             let remoteTools = job.modelInput.envelope.tools.filter {
                 runtimeToolNames.contains($0.name)

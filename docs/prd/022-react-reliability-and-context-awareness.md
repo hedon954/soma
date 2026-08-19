@@ -1,10 +1,11 @@
 # PRD 022：ReAct 可靠性与上下文感知
 
-- 状态：已实现，待真机验收
+- 状态：已实现，部分修订；待真机验收
 - 后续修订：
   - [PRD 024](024-chat-agent-feedback-tool.md) 为工具组新增当前 Turn 产品反馈能力
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 收敛上下文、Tool Schema 与首增量恢复策略
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 收敛 step 续跑、固定 Loop 时间、分层超时、按意图 Tool 与稳定 Prompt 前缀
+  - [PRD 032](032-default-full-tools-and-selected-skill-subset.md) 取消按信号预选工具组：未选 Skill 注册完整当前协议 Tool
 - 日期：2026-08-05
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的 Agent 处理与本地摘要边界
@@ -54,8 +55,9 @@
    不递增 `attemptNumber`。真正失败或用户手动重试才新开 Attempt。
 5. 写工具幂等键使用规范化语义签名；回执走 pending → committed / failed。
 6. 跨 Turn 业务键命中时返回「疑似重复 + 既有 ID」，不静默合并。
-7. 每轮按信号预选工具组（core + 可选 plans/gym/review），整轮固定；
-   仅 `expand_tool_group` 可中途扩展。打开并行 tool_calls，本地仍顺序执行。
+7. 每轮工具注册整轮固定，并行 `tool_calls`，本地仍顺序执行。按信号预选工具组由
+   [PRD 032](032-default-full-tools-and-selected-skill-subset.md) 替代为：未选 Skill 注册
+   完整当前协议 Tool，选中 Skill 只注册绑定子集。
 
 ## 数据与隐私
 

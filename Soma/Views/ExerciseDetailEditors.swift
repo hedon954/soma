@@ -19,6 +19,8 @@ struct ExerciseContentEditorView: View {
     @State private var primaryMuscles: String
     @State private var secondaryMuscles: String
     @State private var movementPatterns: String
+    @State private var laterality: ExerciseLaterality
+    @State private var targetKind: WorkoutTargetKind
     @State private var mergeTargetID: UUID?
     @State private var errorMessage: String?
     @State private var isGeneratingContent = false
@@ -37,6 +39,8 @@ struct ExerciseContentEditorView: View {
         _movementPatterns = State(initialValue: exercise.movementPatterns.joined(
             separator: "、"
         ))
+        _laterality = State(initialValue: exercise.laterality)
+        _targetKind = State(initialValue: exercise.targetKind)
     }
 
     private var mergeTargets: [ExerciseDefinition] {
@@ -62,6 +66,18 @@ struct ExerciseContentEditorView: View {
                 TextField("主要肌群，用顿号分隔", text: $primaryMuscles)
                 TextField("辅助肌群，用顿号分隔", text: $secondaryMuscles)
                 TextField("动作模式，用顿号分隔", text: $movementPatterns)
+                Picker("完成方式", selection: $targetKind) {
+                    ForEach(WorkoutTargetKind.allCases, id: \.self) { value in
+                        Text(value.displayName).tag(value)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Picker("左右方式", selection: $laterality) {
+                    ForEach(ExerciseLaterality.allCases, id: \.self) { value in
+                        Text(value.displayName).tag(value)
+                    }
+                }
+                .pickerStyle(.menu)
                 Button("保存修改", action: save)
                     .disabled(exercise.isArchived)
                 Button {
@@ -190,6 +206,8 @@ struct ExerciseContentEditorView: View {
                 secondaryMuscles: split(secondaryMuscles),
                 movementPatterns: split(movementPatterns)
             ))
+            exercise.laterality = laterality
+            exercise.targetKind = targetKind
             try modelContext.save()
         } catch {
             errorMessage = error.localizedDescription

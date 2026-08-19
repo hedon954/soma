@@ -643,19 +643,18 @@ final class SomaTests: XCTestCase {
         accumulator.append(ToolCall(
             index: 0,
             id: "call_1",
-            function: FunctionCall(arguments: #"{"scope":"work"#, name: "query_user_data")
+            function: FunctionCall(arguments: #"{"limit":"#, name: "list_workouts")
         ))
         accumulator.append(ToolCall(
             index: 0,
             id: nil,
-            function: FunctionCall(arguments: #"outs","limit":5}"#, name: "")
+            function: FunctionCall(arguments: #"5}"#, name: "")
         ))
 
         let resolved = try accumulator.resolved(fallbackID: "fallback")
 
         XCTAssertEqual(resolved.native.id, "call_1")
-        XCTAssertEqual(resolved.local.name, .queryUserData)
-        XCTAssertEqual(resolved.local.arguments.scope, "workouts")
+        XCTAssertEqual(resolved.local.name, .listWorkouts)
         XCTAssertEqual(resolved.local.arguments.limit, 5)
     }
 
@@ -668,16 +667,16 @@ final class SomaTests: XCTestCase {
         }
 
         XCTAssertEqual(Set(names), Set(AgentToolName.allCases.map(\.rawValue)))
-        XCTAssertTrue(names.contains("record_workout"))
+        XCTAssertTrue(names.contains("create_workout"))
         XCTAssertTrue(names.contains("update_workout"))
         XCTAssertTrue(names.contains("update_meal"))
         XCTAssertTrue(names.contains("update_body"))
-        XCTAssertTrue(names.contains("delete_record"))
+        XCTAssertTrue(names.contains("delete_workout"))
         XCTAssertTrue(names.contains("load_skill"))
-        XCTAssertTrue(names.contains("list_training_programs"))
-        XCTAssertTrue(names.contains("get_training_program"))
-        XCTAssertTrue(names.contains("delete_training_program"))
-        XCTAssertTrue(names.contains("start_guided_workout"))
+        XCTAssertTrue(names.contains("list_programs"))
+        XCTAssertTrue(names.contains("get_program"))
+        XCTAssertTrue(names.contains("delete_program"))
+        XCTAssertTrue(names.contains("start_program"))
         let encoded = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertTrue(encoded.contains("set_entries"))
         XCTAssertTrue(encoded.contains("external_weight_kg"))
@@ -700,9 +699,8 @@ final class SomaTests: XCTestCase {
         )
         let context = ModelContext(container)
         context.insert(UserProfile(referenceWeight: 70))
-        let call = AgentToolCall(
-            name: .recordWorkout,
-            arguments: AgentToolArguments(
+        let result = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
                 exercise: "杠铃深蹲",
                 setEntries: (0 ..< 4).map { _ in
                     AgentWorkoutSetInput(reps: 8, externalWeightKG: 62.5)
@@ -713,11 +711,7 @@ final class SomaTests: XCTestCase {
                 formScore: 86,
                 intensity: "适中",
                 feedback: "动作稳定"
-            )
-        )
-
-        let result = ConversationRecorder.executeAgentTool(
-            call,
+            ),
             sourceText: "深蹲 4组8次 62.5kg",
             mediaKind: .none,
             mediaPath: nil,
@@ -753,18 +747,13 @@ final class SomaTests: XCTestCase {
             configurations: configuration
         )
         let context = ModelContext(container)
-        let call = AgentToolCall(
-            name: .recordWorkout,
-            arguments: AgentToolArguments(
+        let result = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
                 exercise: "俯卧撑",
                 setEntries: (0 ..< 4).map { _ in
                     AgentWorkoutSetInput(reps: 12, externalWeightKG: nil)
                 }
-            )
-        )
-
-        let result = ConversationRecorder.executeAgentTool(
-            call,
+            ),
             sourceText: "俯卧撑 12x4",
             mediaKind: .none,
             mediaPath: nil,
@@ -800,19 +789,14 @@ final class SomaTests: XCTestCase {
         )
         let context = ModelContext(container)
         context.insert(UserProfile(referenceWeight: 70))
-        let call = AgentToolCall(
-            name: .recordWorkout,
-            arguments: AgentToolArguments(
+        let result = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
                 exercise: "杠铃卧推",
                 sets: 4,
                 reps: 8,
                 weight: 60,
                 restSeconds: 90
-            )
-        )
-
-        let result = ConversationRecorder.executeAgentTool(
-            call,
+            ),
             sourceText: "杠铃卧推 4x8 60kg，组间 90 秒",
             mediaKind: .none,
             mediaPath: nil,
@@ -869,7 +853,7 @@ final class SomaTests: XCTestCase {
         )
         let mealResult = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .recordMeal,
+                name: .createMeal,
                 arguments: AgentToolArguments(
                     mealType: MealType.lunch.rawValue,
                     title: "鸡胸肉杂粮饭",
@@ -887,7 +871,7 @@ final class SomaTests: XCTestCase {
         )
         let bodyResult = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .recordBody,
+                name: .createBodyEntry,
                 arguments: AgentToolArguments(
                     postureNote: "正面站姿整体对称",
                     safetyNote: "拍摄条件不同会影响比较"
@@ -1078,14 +1062,11 @@ extension SomaTests {
             MediaAttachmentReference(kind: .image, path: "PrivateMedia/side.jpg")
         ]
 
-        let result = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(
-                    exercise: "杠铃深蹲",
-                    sets: 3,
-                    reps: 5
-                )
+        let result = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exercise: "杠铃深蹲",
+                sets: 3,
+                reps: 5
             ),
             sourceText: "三组动作，从正面和侧面拍了照片与视频",
             mediaKind: .image,
@@ -1172,7 +1153,7 @@ extension SomaTests {
             id: toolID,
             step: 1,
             kind: .tool,
-            title: AgentToolName.queryUserData.displayTitle,
+            title: AgentToolName.listWorkouts.displayTitle,
             status: .running,
             startedAt: startedAt,
             endedAt: startedAt
@@ -1181,7 +1162,7 @@ extension SomaTests {
             id: toolID,
             step: 1,
             kind: .tool,
-            title: AgentToolName.queryUserData.displayTitle,
+            title: AgentToolName.listWorkouts.displayTitle,
             status: .succeeded,
             startedAt: startedAt,
             endedAt: startedAt.addingTimeInterval(0.1),
@@ -1242,7 +1223,7 @@ extension SomaTests {
         message.applyAgentEvent(.span(AgentTraceSpan(
             id: toolID,
             kind: .tool,
-            title: AgentToolName.recordMeal.displayTitle,
+            title: AgentToolName.createMeal.displayTitle,
             status: .running,
             startedAt: startedAt,
             endedAt: startedAt
@@ -1317,8 +1298,8 @@ extension SomaTests {
 
         let transport = MockAgentStreamTransport(responses: [
             .toolCall(
-                name: "query_user_data",
-                argumentsFragments: [#"{"scope":"work"#, #"outs","limit":3}"#]
+                name: "list_workouts",
+                argumentsFragments: [#"{"limit":3}"#]
             ),
             .text(["你最近完成了深蹲，", "今天建议轻量恢复。"])
         ])
@@ -1341,7 +1322,7 @@ extension SomaTests {
             context: "当前健身房：我的健身房"
         ) { call in
             toolExecutions += 1
-            XCTAssertEqual(call.name, .queryUserData)
+            XCTAssertEqual(call.name, .listWorkouts)
             return .success("最近训练：昨天杠铃深蹲 4×8。")
         }
 
@@ -1371,8 +1352,8 @@ extension SomaTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let firstTransport = MockAgentStreamTransport(responses: [
             .toolCalls([
-                ("query_user_data", #"{"scope":"workouts","limit":1}"#),
-                ("query_user_data", #"{"scope":"meals","limit":1}"#)
+                ("list_workouts", #"{"limit":1}"#),
+                ("list_meals", #"{"limit":1}"#)
             ])
         ])
         let firstService = AIService(
@@ -1386,7 +1367,7 @@ extension SomaTests {
             model: "gpt-4.1-mini"
         )
         var checkpoint: AgentLoopCheckpoint?
-        var firstAttemptScopes: [String] = []
+        var firstAttemptNames: [AgentToolName] = []
 
         do {
             _ = try await firstService.runAgent(
@@ -1396,8 +1377,8 @@ extension SomaTests {
                 context: "测试上下文",
                 onCheckpoint: { checkpoint = $0 }
             ) { call in
-                firstAttemptScopes.append(call.arguments.scope ?? "")
-                if call.arguments.scope == "meals" {
+                firstAttemptNames.append(call.name)
+                if call.name == .listMeals {
                     throw URLError(.networkConnectionLost)
                 }
                 return .success("训练查询成功")
@@ -1408,7 +1389,7 @@ extension SomaTests {
         }
 
         let saved = try XCTUnwrap(checkpoint)
-        XCTAssertEqual(firstAttemptScopes, ["workouts", "meals"])
+        XCTAssertEqual(firstAttemptNames, [.listWorkouts, .listMeals])
         XCTAssertEqual(saved.lastCompletedStep, 2, "模型 invoke 与第一个工具各完成一步")
         XCTAssertEqual(saved.nextModelStep, 1)
         XCTAssertEqual(saved.toolBatches?.last?.completedResults.count, 1)
@@ -1426,7 +1407,7 @@ extension SomaTests {
             baseURL: "https://example.com/v1",
             model: "gpt-4.1-mini"
         )
-        var retryScopes: [String] = []
+        var retryNames: [AgentToolName] = []
         let outcome = try await retryService.runAgent(
             text: "总结最近记录",
             images: [],
@@ -1435,11 +1416,11 @@ extension SomaTests {
             checkpoint: saved,
             firstStepDeadlineEnabled: false
         ) { call in
-            retryScopes.append(call.arguments.scope ?? "")
+            retryNames.append(call.name)
             return .success("饮食查询成功")
         }
 
-        XCTAssertEqual(retryScopes, ["meals"])
+        XCTAssertEqual(retryNames, [.listMeals])
         XCTAssertEqual(outcome.observations.count, 2)
         XCTAssertEqual(outcome.finalAnswer, "已根据两项查询完成总结。")
         XCTAssertEqual(firstTransport.requests.count, 1)

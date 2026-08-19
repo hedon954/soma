@@ -55,11 +55,16 @@ struct GuidedSetCountdownView: View {
     let set: WorkoutSet?
     let targetText: String
     let phaseStartedAt: Date?
+    var deadlineAt: Date?
     let onTick: (Int) -> Void
     let onFinished: @MainActor () async -> Void
 
     private var clock: GuidedSetCountdownClock {
-        GuidedSetCountdownClock(startedAt: phaseStartedAt ?? .now)
+        GuidedSetCountdownClock(
+            startedAt: deadlineAt?.addingTimeInterval(
+                -GuidedSetCountdownClock.duration
+            ) ?? phaseStartedAt ?? .now
+        )
     }
 
     var body: some View {
@@ -79,7 +84,7 @@ struct GuidedSetCountdownView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task(id: phaseStartedAt) {
+        .task(id: deadlineAt ?? phaseStartedAt) {
             do {
                 var announced: Set<Int> = []
                 while !clock.isDue(at: .now) {
@@ -124,6 +129,8 @@ struct GuidedPausedView: View {
 
 struct GuidedSetRecoveryView: View {
     let targetText: String
+    var effortSide: WorkoutEffortSide = .none
+    var isCompletingEffort = false
     let onCompleted: () -> Void
     let onRedo: () -> Void
     let onSkip: () -> Void
@@ -137,25 +144,43 @@ struct GuidedSetRecoveryView: View {
                 .font(.largeTitle.bold())
             Text("Soma 不会自动把中断的组记为完成。")
                 .foregroundStyle(.secondary)
-            Button("已完成：\(targetText)", action: onCompleted)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            if isCompletingEffort {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("正在保存本组…")
+                }
+                .font(.headline)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("正在保存本组")
+            } else {
+                Button("已完成：\(targetText)", action: onCompleted)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
             HStack(spacing: 24) {
                 Button("重新开始", action: onRedo)
-                Button("跳过本组", action: onSkip)
+                Button(skipTitle, action: onSkip)
             }
+            .disabled(isCompletingEffort)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var skipTitle: String {
+        let side = WorkoutPrescriptionFormatter.sideName(effortSide)
+        return side.isEmpty ? "跳过本组" : "跳过\(side)"
     }
 }
 
 struct GuidedRestView: View {
     let nextSet: WorkoutSet?
+    var nextEffort: WorkoutEffort?
     let remainingSeconds: () -> Int
     let onTick: (Int) -> Void
     let onAdjust: (Int) -> Void
     let onFinish: () -> Void
+    @State private var automaticallyFinishedTargetID: UUID?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
@@ -167,10 +192,15 @@ struct GuidedRestView: View {
                     .font(.system(size: 84, weight: .bold, design: .rounded))
                     .monospacedDigit()
                 if let nextSet {
-                    Text("下一组 · 第 \(nextSet.order) 组")
+                    Text(nextEffort?.side == .right
+                        ? "下一侧 · 右侧"
+                        : "下一组 · 第 \(nextSet.order) 组")
                         .font(.title3.bold())
-                    Text(nextSetTarget(nextSet))
-                        .foregroundStyle(.secondary)
+                    Text(WorkoutPrescriptionFormatter.setTarget(
+                        set: nextSet,
+                        effort: nextEffort
+                    ))
+                    .foregroundStyle(.secondary)
                 }
                 HStack(spacing: 16) {
                     Button("-15 秒") { onAdjust(-15) }
@@ -178,7 +208,7 @@ struct GuidedRestView: View {
                     Button("+15 秒") { onAdjust(15) }
                         .buttonStyle(.bordered)
                 }
-                Button(remainingSeconds() == 0 ? "开始下一组" : "跳过休息") {
+                Button("跳过休息") {
                     onFinish()
                 }
                 .buttonStyle(.borderedProminent)
@@ -187,17 +217,29 @@ struct GuidedRestView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task(id: nextSet?.id) {
+        .task(id: nextEffort?.id ?? nextSet?.id) {
             var announced: Set<Int> = []
             while !Task.isCancelled {
                 let value = remainingSeconds()
                 if value == 0 {
+                    let targetID = nextEffort?.id ?? nextSet?.id
+                    guard automaticallyFinishedTargetID != targetID else {
+                        return
+                    }
+                    automaticallyFinishedTargetID = targetID
+                    onFinish()
                     return
                 }
                 if (1 ... 3).contains(value), announced.insert(value).inserted {
                     onTick(value)
                 }
-                try? await Task.sleep(for: .milliseconds(200))
+                do {
+                    try await Task.sleep(for: .milliseconds(200))
+                } catch is CancellationError {
+                    return
+                } catch {
+                    return
+                }
             }
         }
     }
@@ -208,17 +250,6 @@ struct GuidedRestView: View {
             seconds / 60,
             seconds % 60
         )
-    }
-
-    private func nextSetTarget(_ set: WorkoutSet) -> String {
-        var values: [String] = []
-        if let weight = set.plannedWeightKG {
-            values.append(weight == 0 ? "自重" : "\(weight.formatted()) kg")
-        }
-        if let reps = set.plannedReps {
-            values.append("\(reps) 次")
-        }
-        return values.isEmpty ? "按状态完成" : values.joined(separator: " × ")
     }
 }
 
@@ -242,7 +273,10 @@ struct GuidedSessionReviewView: View {
 
                 HStack(spacing: 10) {
                     metric("时长", summary.durationText)
-                    metric("完成", "\(summary.completedSets) 组")
+                    metric(
+                        "完整 / 部分",
+                        "\(summary.completedSets) / \(summary.partialSets) 组"
+                    )
                     metric("录像", "\(summary.recordedVideoCount) 组")
                 }
 
@@ -262,10 +296,15 @@ struct GuidedSessionReviewView: View {
                                 Spacer()
                                 Image(systemName: exercise.completedSets > 0
                                     ? "checkmark.circle.fill"
-                                    : "minus.circle")
-                                    .foregroundStyle(exercise.completedSets > 0
-                                        ? .green
-                                        : .secondary)
+                                    : (exercise.partialSets > 0
+                                        ? "circle.lefthalf.filled"
+                                        : "minus.circle"))
+                                    .foregroundStyle(
+                                        exercise.completedSets > 0
+                                            || exercise.partialSets > 0
+                                            ? .green
+                                            : .secondary
+                                    )
                             }
                             .padding(14)
                             .background(
@@ -277,7 +316,7 @@ struct GuidedSessionReviewView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Button("保存并结束", action: onFinish)
+                Button("查看分享", action: onFinish)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
@@ -302,8 +341,14 @@ struct GuidedSessionReviewView: View {
 
     private func exerciseDetail(_ exercise: TrainingExerciseSummary) -> String {
         var values = ["完成 \(exercise.completedSets) 组"]
+        if exercise.partialSets > 0 {
+            values.append("部分 \(exercise.partialSets) 组")
+        }
         if exercise.skippedSets > 0 {
             values.append("跳过 \(exercise.skippedSets) 组")
+        }
+        if exercise.failedSets > 0 {
+            values.append("失败 \(exercise.failedSets) 组")
         }
         if exercise.completedVolume > 0 {
             values.append(
@@ -314,18 +359,76 @@ struct GuidedSessionReviewView: View {
     }
 }
 
+enum GuidedSessionFinalizationState: Equatable {
+    case saving
+    case failed(String)
+
+    var canRetry: Bool {
+        if case .failed = self {
+            return true
+        }
+        return false
+    }
+
+    var failureMessage: String? {
+        guard case let .failed(message) = self else { return nil }
+        return message
+    }
+}
+
+struct GuidedSessionFinalizationView: View {
+    let state: GuidedSessionFinalizationState
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            switch state {
+            case .saving:
+                ProgressView()
+                    .controlSize(.large)
+                Text("正在保存训练…")
+                    .font(.headline)
+            case let .failed(message):
+                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.orange)
+                Text("训练尚未保存完成")
+                    .font(.title2.bold())
+                Text(message)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                Button("重试保存", action: onRetry)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .accessibilityHint("重新保存训练记录并打开分享界面")
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct GuidedSetActualEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var reps: String
+    @Binding var duration: String
     @Binding var weight: String
     let targetText: String
+    let targetKind: WorkoutTargetKind
+    let side: WorkoutEffortSide
+    var onSave: () -> Void = {}
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("本组实际完成") {
-                    TextField("次数", text: $reps)
-                        .keyboardType(.numberPad)
+                Section(sectionTitle) {
+                    if targetKind == .repetitions {
+                        TextField("次数", text: $reps)
+                            .keyboardType(.numberPad)
+                    } else {
+                        TextField("时长（秒）", text: $duration)
+                            .keyboardType(.numberPad)
+                    }
                     TextField("重量 kg，0 表示自重", text: $weight)
                         .keyboardType(.decimalPad)
                 }
@@ -337,11 +440,19 @@ struct GuidedSetActualEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                    Button("完成") {
+                        onSave()
+                        dismiss()
+                    }
                 }
             }
         }
         .presentationDetents([.medium])
+    }
+
+    private var sectionTitle: String {
+        let sideName = WorkoutPrescriptionFormatter.sideName(side)
+        return sideName.isEmpty ? "本组实际完成" : "\(sideName)实际完成"
     }
 }
 

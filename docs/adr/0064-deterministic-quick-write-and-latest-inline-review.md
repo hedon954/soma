@@ -1,11 +1,13 @@
 # ADR 0064：精确结构化快捷输入直写本地，最新回复提供原位审查
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-08-13
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0027](0027-required-ai-configuration-and-send-gate.md) 中所有教练发送都必须先具备可用 LLM 的边界
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中记录结果只投影为只读结果卡、修改进入详情页的边界
+- 后续修订：[ADR 0077](0077-same-turn-identity-merge-and-additive-inline-review.md) 原位卡与 Event Cards 共存，保存必须有可见确认
+- 下游落地：[BUG 0023](../bugs/0023-same-turn-multi-exercise-merged-into-one.md)
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
 
 ## 背景

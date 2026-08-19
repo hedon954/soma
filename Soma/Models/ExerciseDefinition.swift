@@ -144,6 +144,8 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
     var guidanceVideosData: Data
     var contentRevisionsData: Data = Data()
     var imageReferencesData: Data = Data()
+    var lateralityRaw: String = ""
+    var targetKindRaw: String = ""
 
     init(
         id: UUID = UUID(),
@@ -270,6 +272,30 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
         }
         set {
             imageReferencesData = ExerciseDefinitionCoding.encode(newValue)
+            updatedAt = .now
+        }
+    }
+
+    var hasExplicitLaterality: Bool {
+        ExerciseLaterality(rawValue: lateralityRaw) != nil
+    }
+
+    var laterality: ExerciseLaterality {
+        get { ExerciseLaterality(rawValue: lateralityRaw) ?? .none }
+        set {
+            lateralityRaw = newValue.rawValue
+            updatedAt = .now
+        }
+    }
+
+    var hasExplicitTargetKind: Bool {
+        WorkoutTargetKind(rawValue: targetKindRaw) != nil
+    }
+
+    var targetKind: WorkoutTargetKind {
+        get { WorkoutTargetKind(rawValue: targetKindRaw) ?? .repetitions }
+        set {
+            targetKindRaw = newValue.rawValue
             updatedAt = .now
         }
     }

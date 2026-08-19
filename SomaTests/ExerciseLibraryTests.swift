@@ -207,8 +207,8 @@ final class ExerciseLibraryTests: XCTestCase {
 
         let result = ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .listExerciseNames,
-                arguments: AgentToolArguments()
+                name: .searchExercises,
+                arguments: AgentToolArguments(query: "铃", limit: 20)
             ),
             sourceText: "",
             mediaKind: .none,
@@ -217,10 +217,11 @@ final class ExerciseLibraryTests: XCTestCase {
         )
 
         XCTAssertTrue(result.ok)
-        XCTAssertTrue(try result.observation.contains(String(XCTUnwrap(squat.businessID))))
-        XCTAssertTrue(try result.observation.contains(String(XCTUnwrap(press.businessID))))
-        XCTAssertTrue(result.observation.contains("杠铃深蹲"))
-        XCTAssertTrue(result.observation.contains("单侧哑铃卧推"))
+        let payload = try AgentTraceText.json(XCTUnwrap(result.data))
+        XCTAssertTrue(try payload.contains(String(XCTUnwrap(squat.businessID))))
+        XCTAssertTrue(try payload.contains(String(XCTUnwrap(press.businessID))))
+        XCTAssertTrue(payload.contains("杠铃深蹲"))
+        XCTAssertTrue(payload.contains("单侧哑铃卧推"))
     }
 
     @MainActor
@@ -233,36 +234,30 @@ final class ExerciseLibraryTests: XCTestCase {
             in: context
         )
 
-        let existingResult = try ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(
-                    exerciseID: XCTUnwrap(squat.businessID),
-                    setEntries: [
-                        AgentWorkoutSetInput(
-                            reps: 5,
-                            externalWeightKG: 60
-                        )
-                    ]
-                )
+        let existingResult = try ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exerciseID: XCTUnwrap(squat.businessID),
+                setEntries: [
+                    AgentWorkoutSetInput(
+                        reps: 5,
+                        externalWeightKG: 60
+                    )
+                ]
             ),
             sourceText: "杠铃深蹲 60kg 5次",
             mediaKind: .none,
             mediaPath: nil,
             in: context
         )
-        let newResult = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(
-                    exerciseName: "单侧哑铃弓步前蹲",
-                    setEntries: [
-                        AgentWorkoutSetInput(
-                            reps: 8,
-                            externalWeightKG: 20
-                        )
-                    ]
-                )
+        let newResult = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exerciseName: "单侧哑铃弓步前蹲",
+                setEntries: [
+                    AgentWorkoutSetInput(
+                        reps: 8,
+                        externalWeightKG: 20
+                    )
+                ]
             ),
             sourceText: "单侧哑铃弓步前蹲",
             sourceDate: .now.addingTimeInterval(3600),
@@ -289,12 +284,9 @@ final class ExerciseLibraryTests: XCTestCase {
         let context = ModelContext(spaces.personalContainer)
         let missingID: Int64 = 9_999_999
 
-        let result = ConversationRecorder.executeAgentTool(
-            AgentToolCall(
-                name: .recordWorkout,
-                arguments: AgentToolArguments(
-                    exerciseID: missingID
-                )
+        let result = ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exerciseID: missingID
             ),
             sourceText: "训练",
             mediaKind: .none,

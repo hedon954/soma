@@ -2,7 +2,6 @@ import Foundation
 import SwiftOpenAI
 
 enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
-    // v3 单一职责工具；旧工具保留解码兼容，但不再进入默认暴露集合。
     case searchExercises = "search_exercises"
     case createExercise = "create_exercise"
     case updateExercise = "update_exercise"
@@ -28,29 +27,13 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case deleteProgram = "delete_program"
     case startProgram = "start_program"
     case loadSkill = "load_skill"
-    case queryUserData = "query_user_data"
-    case mutateUserData = "mutate_user_data"
-    case listExerciseNames = "list_exercise_names"
-    case listTrainingPrograms = "list_training_programs"
-    case getTrainingProgram = "get_training_program"
-    case recordWorkout = "record_workout"
-    case recordMeal = "record_meal"
-    case recordBody = "record_body"
     case updateWorkout = "update_workout"
     case updateMeal = "update_meal"
     case updateBody = "update_body"
-    case deleteRecord = "delete_record"
     case updateGym = "update_gym"
     case switchGym = "switch_gym"
-    case createTrainingProgram = "create_training_program"
-    case createWorkoutTemplateVersion = "create_workout_template_version"
-    case updateWorkoutTemplate = "update_workout_template"
-    case archiveTrainingProgram = "archive_training_program"
-    case deleteTrainingProgram = "delete_training_program"
-    case startGuidedWorkout = "start_guided_workout"
     case recordPerformanceAnalysis = "record_performance_analysis"
     case submitFeedback = "submit_feedback"
-    case expandToolGroup = "expand_tool_group"
 
     var isTypedV3: Bool {
         switch self {
@@ -80,12 +63,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .getBodyEntry,
              .listPrograms,
              .getProgram,
-             .loadSkill,
-             .queryUserData,
-             .listExerciseNames,
-             .listTrainingPrograms,
-             .getTrainingProgram,
-             .expandToolGroup:
+             .loadSkill:
             false
         default:
             true
@@ -94,14 +72,18 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
 
     var schemaVersion: Int {
         switch self {
-        case .searchExercises,
+        case .getProgram,
+             .createProgram,
+             .createProgramVersion,
              .createExercise,
+             .createWorkout:
+            3
+        case .searchExercises,
              .updateExercise,
              .archiveExercise,
              .mergeExercises,
              .listWorkouts,
              .getWorkout,
-             .createWorkout,
              .deleteWorkout,
              .listMeals,
              .getMeal,
@@ -112,21 +94,10 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .createBodyEntry,
              .deleteBodyEntry,
              .listPrograms,
-             .getProgram,
-             .createProgram,
-             .createProgramVersion,
              .archiveProgram,
              .deleteProgram,
              .startProgram,
              .loadSkill,
-             .queryUserData,
-             .mutateUserData,
-             .expandToolGroup,
-             .createTrainingProgram,
-             .createWorkoutTemplateVersion,
-             .archiveTrainingProgram,
-             .deleteTrainingProgram,
-             .startGuidedWorkout,
              .updateWorkout,
              .updateMeal,
              .updateBody,
@@ -135,8 +106,17 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .recordPerformanceAnalysis,
              .submitFeedback:
             2
+        }
+    }
+
+    /// 新计划、批量动作/训练写入只广告 schema 3；升级前持久化的远程 Job 仍可按原版本交回设备执行。
+    var supportedSchemaVersions: Set<Int> {
+        switch self {
+        case .getProgram, .createProgram, .createProgramVersion,
+             .createExercise, .createWorkout:
+            [1, 2, 3]
         default:
-            1
+            [1, schemaVersion]
         }
     }
 
@@ -167,29 +147,13 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         case .deleteProgram: "删除训练计划"
         case .startProgram: "开始计划带练"
         case .loadSkill: "加载 Skill"
-        case .queryUserData: "读取用户数据"
-        case .mutateUserData: "修改用户数据"
-        case .listExerciseNames: "读取动作库"
-        case .listTrainingPrograms: "读取训练计划"
-        case .getTrainingProgram: "读取计划详情"
-        case .recordWorkout: "记录训练"
-        case .recordMeal: "记录饮食"
-        case .recordBody: "记录身体信息"
         case .updateWorkout: "更新训练"
         case .updateMeal: "更新饮食"
         case .updateBody: "更新身体信息"
-        case .deleteRecord: "删除记录"
         case .updateGym: "更新健身房"
         case .switchGym: "切换健身房"
-        case .createTrainingProgram: "创建训练计划"
-        case .createWorkoutTemplateVersion: "创建计划版本"
-        case .updateWorkoutTemplate: "更新训练模板"
-        case .archiveTrainingProgram: "归档训练计划"
-        case .deleteTrainingProgram: "永久删除训练计划"
-        case .startGuidedWorkout: "开始计划带练"
         case .recordPerformanceAnalysis: "保存视频复盘"
         case .submitFeedback: "提交产品反馈"
-        case .expandToolGroup: "展开工具组"
         }
     }
 }
@@ -209,6 +173,60 @@ struct AgentWorkoutSetInput: Codable, Equatable {
         case reps
         case externalWeightKG = "external_weight_kg"
     }
+}
+
+/// schema 3 `create_workout` 的一条训练；`record_id` 由本机分配，模型不得指定。
+struct AgentWorkoutCreateInput: Codable, Equatable {
+    var exerciseID: Int64
+    var occurredAt: String? = nil
+    var setEntries: [AgentWorkoutSetInput]? = nil
+    var restSeconds: Int? = nil
+    var durationMinutes: Int? = nil
+    var formScore: Int? = nil
+    var intensity: String? = nil
+    var feedback: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case intensity, feedback
+        case exerciseID = "exercise_id"
+        case occurredAt = "occurred_at"
+        case setEntries = "set_entries"
+        case restSeconds = "rest_seconds"
+        case durationMinutes = "duration_minutes"
+        case formScore = "form_score"
+    }
+
+    func toolArguments() -> AgentToolArguments {
+        AgentToolArguments(
+            occurredAt: occurredAt,
+            exerciseID: exerciseID,
+            setEntries: setEntries,
+            restSeconds: restSeconds,
+            durationMinutes: durationMinutes,
+            formScore: formScore,
+            intensity: intensity,
+            feedback: feedback
+        )
+    }
+
+    static func fromLegacyCreate(_ arguments: AgentToolArguments) -> AgentWorkoutCreateInput? {
+        guard let exerciseID = arguments.exerciseID, exerciseID > 0 else {
+            return nil
+        }
+        return AgentWorkoutCreateInput(
+            exerciseID: exerciseID,
+            setEntries: arguments.setEntries,
+            restSeconds: arguments.restSeconds,
+            durationMinutes: arguments.durationMinutes,
+            formScore: arguments.formScore,
+            intensity: arguments.intensity,
+            feedback: arguments.feedback
+        )
+    }
+}
+
+enum AgentBatchWriteLimit {
+    static let maxItems = 20
 }
 
 struct AgentMealItemInput: Codable, Equatable {
@@ -306,9 +324,36 @@ extension AgentMutationPayload {
     }
 }
 
+struct AgentTemplateSetPrescriptionInput: Codable, Equatable {
+    var order: Int
+    var kind: WorkoutSetKind
+    var targetKind: WorkoutTargetKind
+    var targetReps: Int? = nil
+    var targetDurationSeconds: Int? = nil
+    var targetWeightKG: Double? = nil
+    var leftWeightKG: Double? = nil
+    var rightWeightKG: Double? = nil
+    var restBetweenSidesSeconds: Int? = nil
+    var restAfterSetSeconds: Int? = nil
+    var notes: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case order, kind, notes
+        case targetKind = "target_kind"
+        case targetReps = "target_reps"
+        case targetDurationSeconds = "target_duration_seconds"
+        case targetWeightKG = "target_weight_kg"
+        case leftWeightKG = "left_weight_kg"
+        case rightWeightKG = "right_weight_kg"
+        case restBetweenSidesSeconds = "rest_between_sides_seconds"
+        case restAfterSetSeconds = "rest_after_set_seconds"
+    }
+}
+
 struct AgentTemplateExerciseInput: Codable, Equatable {
     var exerciseID: Int64
     var order: Int
+    /// schema 2 compatibility fields. New calls use `laterality + set_prescriptions`.
     var targetSets: Int? = nil
     var targetReps: Int? = nil
     var targetWeightKG: Double? = nil
@@ -316,9 +361,11 @@ struct AgentTemplateExerciseInput: Codable, Equatable {
     var firstSetIsWarmup: Bool? = nil
     var equipmentKind: String? = nil
     var notes: String? = nil
+    var laterality: ExerciseLaterality? = nil
+    var setPrescriptions: [AgentTemplateSetPrescriptionInput]? = nil
 
     enum CodingKeys: String, CodingKey {
-        case order, notes
+        case order, notes, laterality
         case exerciseID = "exercise_id"
         case targetSets = "target_sets"
         case targetReps = "target_reps"
@@ -326,6 +373,7 @@ struct AgentTemplateExerciseInput: Codable, Equatable {
         case targetRestSeconds = "target_rest_seconds"
         case firstSetIsWarmup = "first_set_is_warmup"
         case equipmentKind = "equipment_kind"
+        case setPrescriptions = "set_prescriptions"
     }
 }
 
@@ -342,7 +390,6 @@ struct AgentToolArguments: Codable, Equatable {
     var dateTo: String?
     var groupBy: String?
     var metric: String?
-    var toolGroup: String?
     var operation: String?
     var payload: AgentMutationPayload?
     var occurredAt: String?
@@ -389,10 +436,13 @@ struct AgentToolArguments: Codable, Equatable {
     var limitations: String?
     var programName: String?
     var goal: String?
+    var overview: String?
     var templateName: String?
     var scheduleHint: String?
     var templateExercises: [AgentTemplateExerciseInput]?
     var autoRecordingPolicy: String?
+    var exerciseNames: [String]?
+    var workouts: [AgentWorkoutCreateInput]?
 
     enum CodingKeys: String, CodingKey {
         case scope, query, sort, limit, cursor, projection, fields, summary, equipment
@@ -404,7 +454,6 @@ struct AgentToolArguments: Codable, Equatable {
         case dateFrom = "date_from"
         case dateTo = "date_to"
         case groupBy = "group_by"
-        case toolGroup = "tool_group"
         case gymName = "gym_name"
         case mediaSource = "media_source"
         case exerciseID = "exercise_id"
@@ -425,11 +474,13 @@ struct AgentToolArguments: Codable, Equatable {
         case inputFingerprint = "input_fingerprint"
         case evidence, limitations
         case programName = "program_name"
-        case goal
+        case goal, overview
         case templateName = "template_name"
         case scheduleHint = "schedule_hint"
         case templateExercises = "template_exercises"
         case autoRecordingPolicy = "auto_recording_policy"
+        case exerciseNames = "exercise_names"
+        case workouts
     }
 
     init(
@@ -445,7 +496,6 @@ struct AgentToolArguments: Codable, Equatable {
         dateTo: String? = nil,
         groupBy: String? = nil,
         metric: String? = nil,
-        toolGroup: String? = nil,
         operation: String? = nil,
         payload: AgentMutationPayload? = nil,
         occurredAt: String? = nil,
@@ -488,10 +538,13 @@ struct AgentToolArguments: Codable, Equatable {
         limitations: String? = nil,
         programName: String? = nil,
         goal: String? = nil,
+        overview: String? = nil,
         templateName: String? = nil,
         scheduleHint: String? = nil,
         templateExercises: [AgentTemplateExerciseInput]? = nil,
-        autoRecordingPolicy: String? = nil
+        autoRecordingPolicy: String? = nil,
+        exerciseNames: [String]? = nil,
+        workouts: [AgentWorkoutCreateInput]? = nil
     ) {
         self.skillID = skillID
         self.scope = scope
@@ -505,7 +558,6 @@ struct AgentToolArguments: Codable, Equatable {
         self.dateTo = dateTo
         self.groupBy = groupBy
         self.metric = metric
-        self.toolGroup = toolGroup
         self.operation = operation
         self.payload = payload
         self.occurredAt = occurredAt
@@ -548,10 +600,13 @@ struct AgentToolArguments: Codable, Equatable {
         self.limitations = limitations
         self.programName = programName
         self.goal = goal
+        self.overview = overview
         self.templateName = templateName
         self.scheduleHint = scheduleHint
         self.templateExercises = templateExercises
         self.autoRecordingPolicy = autoRecordingPolicy
+        self.exerciseNames = exerciseNames
+        self.workouts = workouts
     }
 }
 
@@ -562,183 +617,6 @@ struct AgentToolCall: Codable, Equatable {
     /// ADR 0049：规范化语义键，避免字面 JSON 差异（同义字段、缺省与 null）绕过幂等。
     var signature: String {
         AgentToolCallSignature.canonical(name: name, arguments: arguments)
-    }
-}
-
-enum AgentToolCallSignature {
-    static func canonical(name: AgentToolName, arguments: AgentToolArguments) -> String {
-        var object: [String: Any] = ["name": name.rawValue]
-        var args: [String: Any] = [:]
-        func put(_ key: String, _ value: String?) {
-            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !trimmed.isEmpty {
-                args[key] = trimmed
-            }
-        }
-        func put(_ key: String, _ value: Int?) {
-            if let value {
-                args[key] = value
-            }
-        }
-        func put(_ key: String, _ value: Int64?) {
-            if let value {
-                args[key] = value
-            }
-        }
-        func put(_ key: String, _ value: Double?) {
-            if let value {
-                args[key] = (value * 1000).rounded() / 1000
-            }
-        }
-
-        put("skill_id", arguments.skillID)
-        put("scope", arguments.scope)
-        put("query", arguments.query)
-        put("sort", arguments.sort)
-        put("limit", arguments.limit)
-        put("cursor", arguments.cursor)
-        put("projection", arguments.projection)
-        put("date_from", arguments.dateFrom)
-        put("date_to", arguments.dateTo)
-        put("group_by", arguments.groupBy)
-        put("metric", arguments.metric)
-        put("tool_group", arguments.toolGroup)
-        put("operation", arguments.operation)
-        put("occurred_at", arguments.occurredAt)
-        put("gym_name", arguments.gymName)
-        put("summary", arguments.summary)
-        put("media_source", arguments.mediaSource)
-        // exercise / exercise_name 同义，统一到 exercise_name。
-        let exerciseName = nonempty(arguments.exerciseName) ?? nonempty(arguments.exercise)
-        put("exercise_name", exerciseName)
-        put("exercise_id", arguments.exerciseID)
-        put("target_exercise_id", arguments.targetExerciseID)
-        put("sets", arguments.sets)
-        put("reps", arguments.reps)
-        put("weight", arguments.weight)
-        put("rest_seconds", arguments.restSeconds)
-        put("duration_minutes", arguments.durationMinutes)
-        put("form_score", arguments.formScore)
-        put("intensity", arguments.intensity)
-        put("feedback", arguments.feedback)
-        put("meal_type", arguments.mealType)
-        put("title", arguments.title)
-        put("calories", arguments.calories)
-        put("protein", arguments.protein)
-        put("carbs", arguments.carbs)
-        put("fat", arguments.fat)
-        put("note", arguments.note)
-        put("body_fat", arguments.bodyFat)
-        put("waist", arguments.waist)
-        put("posture_note", arguments.postureNote)
-        put("safety_note", arguments.safetyNote)
-        put("record_id", arguments.recordID)
-        put("record_type", arguments.recordType)
-        put("program_id", arguments.programID)
-        put("session_id", arguments.sessionID)
-        put("performance_id", arguments.performanceID)
-        put("input_fingerprint", arguments.inputFingerprint)
-        put("evidence", arguments.evidence)
-        put("limitations", arguments.limitations)
-        put("program_name", arguments.programName)
-        put("goal", arguments.goal)
-        put("template_name", arguments.templateName)
-        put("schedule_hint", arguments.scheduleHint)
-        put("auto_recording_policy", arguments.autoRecordingPolicy)
-
-        if let fields = arguments.fields, !fields.isEmpty {
-            args["fields"] = fields.map {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines)
-            }.filter { !$0.isEmpty }
-        }
-        if let payload = arguments.payload,
-           let data = try? JSONEncoder().encode(payload),
-           let value = try? JSONSerialization.jsonObject(with: data)
-        {
-            args["payload"] = value
-        }
-
-        if let setEntries = arguments.setEntries, !setEntries.isEmpty {
-            // 逐组顺序是事实（ADR 0023），不得排序打散。
-            args["set_entries"] = setEntries.map { entry -> [String: Any] in
-                var item: [String: Any] = [:]
-                if let reps = entry.reps {
-                    item["reps"] = reps
-                }
-                if let weight = entry.externalWeightKG {
-                    item["external_weight_kg"] = (weight * 1000).rounded() / 1000
-                }
-                return item
-            }
-        }
-        if let equipment = arguments.equipment, !equipment.isEmpty {
-            args["equipment"] = equipment
-                .map { item -> [String: Any] in
-                    var row: [String: Any] = [
-                        "name": item.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                        "category": item.category.trimmingCharacters(in: .whitespacesAndNewlines),
-                        "capabilities": item.capabilities
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                    ]
-                    if let confidence = item.confidence {
-                        row["confidence"] = (confidence * 1000).rounded() / 1000
-                    }
-                    return row
-                }
-                .sorted {
-                    ($0["name"] as? String ?? "") < ($1["name"] as? String ?? "")
-                }
-        }
-        if let exercises = arguments.templateExercises, !exercises.isEmpty {
-            args["template_exercises"] = exercises
-                .sorted { $0.order < $1.order }
-                .map { item -> [String: Any] in
-                    var row: [String: Any] = [
-                        "exercise_id": item.exerciseID,
-                        "order": item.order
-                    ]
-                    if let value = item.targetSets {
-                        row["target_sets"] = value
-                    }
-                    if let value = item.targetReps {
-                        row["target_reps"] = value
-                    }
-                    if let value = item.targetWeightKG {
-                        row["target_weight_kg"] = (value * 1000).rounded() / 1000
-                    }
-                    if let value = item.targetRestSeconds {
-                        row["target_rest_seconds"] = value
-                    }
-                    if let value = item.firstSetIsWarmup {
-                        row["first_set_is_warmup"] = value
-                    }
-                    if let value = nonempty(item.equipmentKind) {
-                        row["equipment_kind"] = value
-                    }
-                    if let value = nonempty(item.notes) {
-                        row["notes"] = value
-                    }
-                    return row
-                }
-        }
-        if !args.isEmpty {
-            object["arguments"] = args
-        }
-        guard JSONSerialization.isValidJSONObject(object),
-              let data = try? JSONSerialization.data(
-                  withJSONObject: object,
-                  options: [.sortedKeys]
-              ),
-              let text = String(data: data, encoding: .utf8)
-        else {
-            return name.rawValue
-        }
-        return text
-    }
-
-    private static func nonempty(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -954,34 +832,6 @@ struct AgentStreamingToolCall {
     }
 }
 
-private enum AgentToolSchemaValidator {
-    static func validateTopLevelKeys(
-        _ argumentData: Data,
-        for name: AgentToolName
-    ) throws {
-        guard let raw = try JSONSerialization.jsonObject(with: argumentData)
-            as? [String: Any]
-        else {
-            throw ReActAgentError.invalidToolCall("\(name.rawValue) 参数必须是 JSON object。")
-        }
-        let encoded = try JSONEncoder().encode(name.chatTool)
-        guard let tool = try JSONSerialization.jsonObject(with: encoded)
-            as? [String: Any],
-            let function = tool["function"] as? [String: Any],
-            let parameters = function["parameters"] as? [String: Any],
-            let properties = parameters["properties"] as? [String: Any]
-        else {
-            throw ReActAgentError.invalidToolCall("\(name.rawValue) 本地 Schema 无法读取。")
-        }
-        let unknown = Set(raw.keys).subtracting(properties.keys)
-        guard unknown.isEmpty else {
-            throw ReActAgentError.invalidToolCall(
-                "\(name.rawValue) 包含未声明参数：\(unknown.sorted().joined(separator: "、"))。"
-            )
-        }
-    }
-}
-
 extension AgentToolName {
     var chatTool: ChatCompletionParameters.Tool {
         ChatCompletionParameters.Tool(function: .init(
@@ -997,7 +847,7 @@ extension AgentToolName {
         case .searchExercises:
             "按名称搜索未归档动作，返回 Int64 exercise_id；记录训练或计划前使用，已注入的动作无需重复搜索。"
         case .createExercise:
-            "仅在动作库没有语义等价项时创建标准动作，返回新的 Int64 exercise_id。"
+            "仅在动作库没有语义等价项时批量创建标准动作，返回各 Int64 exercise_id；已存在名称复用原 ID，不要指定动作或记录 ID。"
         case .updateExercise:
             "按 Int64 exercise_id 修正动作标准名称。"
         case .archiveExercise:
@@ -1009,7 +859,7 @@ extension AgentToolName {
         case .getWorkout:
             "按 Int64 record_id 读取一条训练详情。"
         case .createWorkout:
-            "创建一条绑定有效 Int64 exercise_id 的训练记录；occurred_at 省略时使用 Job 的稳定默认时间。"
+            "一次创建一条或多条绑定有效 Int64 exercise_id 的训练记录；同一轮可多次写入，每次都新增。不要指定 record_id，由本机分配。修改已有训练必须先读取再用 update_workout。"
         case .deleteWorkout:
             "删除指定 Int64 训练记录；仅在当前用户消息明确授权删除时使用。"
         case .listMeals:
@@ -1017,7 +867,7 @@ extension AgentToolName {
         case .getMeal:
             "按 Int64 record_id 读取一条饮食详情。"
         case .createMeal:
-            "创建饮食记录；未知营养字段省略，occurred_at 省略时使用 Job 的稳定默认时间。"
+            "创建一餐新记录；同一轮可多次调用，每次都新增。未知营养字段省略。纠正、补图或同一餐新视角必须先读取再用 update_meal，不要用本工具代替更新。"
         case .deleteMeal:
             "删除指定 Int64 饮食记录；仅在当前用户消息明确授权删除时使用。"
         case .listBodyEntries:
@@ -1025,17 +875,17 @@ extension AgentToolName {
         case .getBodyEntry:
             "按 Int64 record_id 读取一条身体记录详情。"
         case .createBodyEntry:
-            "创建体重或体态记录；不得从外观猜数值，occurred_at 省略时使用 Job 的稳定默认时间。"
+            "创建一条新的体重或体态记录；同一轮可多次写入，每次都新增。不得从外观猜数值。补充已有记录的多角度照片必须先读取再用 update_body。"
         case .deleteBodyEntry:
             "删除指定 Int64 身体记录；仅在当前用户消息明确授权删除时使用。"
         case .listPrograms:
             "读取可执行训练计划摘要。"
         case .getProgram:
-            "按 Int64 program_id 读取计划当前版本和动作处方。"
+            "按 Int64 program_id 读取计划概览、当前版本和独立逐组处方。"
         case .createProgram:
-            "创建训练计划和首个不可变版本；每个动作必须使用有效 Int64 exercise_id。"
+            "创建训练计划和首个不可变版本；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。"
         case .createProgramVersion:
-            "为已有计划创建新的不可变版本，不改写历史版本和已开始 Session。"
+            "用完整独立逐组处方为已有计划创建不可变新版本，不改写历史版本和已开始 Session。"
         case .archiveProgram:
             "归档训练计划，保留模板版本和训练历史。"
         case .deleteProgram:
@@ -1044,30 +894,12 @@ extension AgentToolName {
             "按 Int64 program_id 创建不可变训练 Session 并开始带练。"
         case .loadSkill:
             "按需加载一项专业健身 Skill 的完整 Markdown 指令。可用 Skill：\(AgentSkill.catalogForToolDescription)。"
-        case .queryUserData:
-            "按范围、ID、日期、搜索、投影、字段和分页精确读取本机数据。detail 必须提供精确 ID；动作库必须提供 query。不得猜测未返回的数据。"
-        case .mutateUserData:
-            "统一新增、更新或删除训练、饮食、身体记录。更新必须使用 query_user_data 返回的稳定 record_id；删除还要求当前用户消息明确授权。未知字段保持省略。"
-        case .listExerciseNames:
-            "返回当前数据空间动作库中全部未归档动作的稳定 ID 和标准名称。记录训练前先调用，由模型完成语义匹配；匹配已有动作时使用 exercise_id，没有语义等价项时使用标准 exercise_name 新建。"
-        case .listTrainingPrograms:
-            "返回当前数据空间可执行训练计划的稳定 ID、名称、目标和当前模板摘要。用户要求开始带练前必须先调用；随后把返回的 program_id 交给 start_guided_workout。"
-        case .getTrainingProgram:
-            "读取一个训练计划的当前模板、动作顺序和处方详情。修改计划前先调用，并使用 list_training_programs 返回的 program_id。"
-        case .recordWorkout:
-            "新增一条训练。先调用 list_exercise_names；匹配已有动作时只传 exercise_id，确实没有语义等价动作时只传标准 exercise_name。未知训练字段必须省略。"
-        case .recordMeal:
-            "新增一餐。热量和宏量营养估算必须在 note 中说明不确定性。补图、纠错或同一餐的新视角应先查询并使用 update_meal；本工具仍有本地合并安全网。"
-        case .recordBody:
-            "新增一条体重或体态记录。补充同一时段的多角度照片时先查询并使用 update_body；不得从外观猜测体重、体脂或腰围，本工具仍有本地合并安全网。"
         case .updateWorkout:
-            "按 query_user_data 返回的 record_id 更新一条训练记录，并把本次新媒体合并到原记录。修改动作身份时使用 list_exercise_names 返回的 exercise_id。"
+            "按 list_workouts 或 get_workout 返回的 Int64 record_id 更新一条训练记录，并把本次新媒体合并到原记录。"
         case .updateMeal:
-            "按 query_user_data 返回的 record_id 更新一条饮食记录，并把本次新媒体合并到原记录。用户纠正食材、餐名或营养估算时优先使用。"
+            "按 list_meals 或 get_meal 返回的 Int64 record_id 更新一条饮食记录，并把本次新媒体合并到原记录。用户纠正食材、餐名或营养估算时优先使用。"
         case .updateBody:
-            "按 query_user_data 返回的 record_id 更新一条身体记录，并把本次新媒体合并到原记录。不得补写没有证据的指标。"
-        case .deleteRecord:
-            "删除一条训练、饮食或身体记录。只有用户在当前消息明确要求删除时才能调用；先查询并使用准确 record_id。聊天原文和共享媒体不会删除。"
+            "按 list_body_entries 或 get_body_entry 返回的 Int64 record_id 更新一条身体记录，并把本次新媒体合并到原记录。不得补写没有证据的指标。"
         case .updateGym:
             """
             新建或更新电子健身房及其可见器械，并把本次用于识别的照片保存到健身房档案。\
@@ -1076,24 +908,10 @@ extension AgentToolName {
             """
         case .switchGym:
             "把一个已经存在或明确命名的健身房设为当前健身房。"
-        case .createTrainingProgram:
-            "创建训练计划及首个不可变模板版本。动作必须使用 query_user_data(scope=exercises) 返回的 exercise_id；缺失处方字段保持省略。"
-        case .createWorkoutTemplateVersion:
-            "为已有训练计划创建新的不可变模板版本。任何动作、顺序或处方修改都创建新版本，不改写旧版本。"
-        case .updateWorkoutTemplate:
-            "更新训练模板；实现为给已有计划创建一个新版本，不修改已开始训练的快照。"
-        case .archiveTrainingProgram:
-            "归档已有训练计划；保留模板版本和历史训练。"
-        case .deleteTrainingProgram:
-            "永久删除一个训练计划及其模板，已开始的训练 Session 快照和训练历史会保留。只有用户当前消息明确要求永久删除时才能调用；先查询并使用准确 program_id。"
-        case .startGuidedWorkout:
-            "按 query_user_data(scope=programs) 返回的 program_id 在本机创建一次不可变训练 Session，并立即打开带练。只在用户当前消息明确要求开始、执行或带练该计划时调用；未提供录像偏好时保持关闭。"
         case .recordPerformanceAnalysis:
             "把用户主动请求的视频复盘保存到指定 Performance。只记录画面可见证据、明确局限和一般训练建议；不得诊断伤病或修改训练事实。"
         case .submitFeedback:
             "向 Soma 维护者提交产品反馈。只有当前用户消息明确要求提交产品反馈时才能调用；发送内容固定为当前消息原文和当前附件，不得用于动作评价、饮食建议、身体观察或一般教练反馈。"
-        case .expandToolGroup:
-            "旧 Checkpoint 兼容工具；新请求由 App 在首轮绑定最小工具集。"
         }
     }
 
@@ -1106,8 +924,11 @@ extension AgentToolName {
             ], required: ["query"])
         case .createExercise:
             object([
-                "exercise_name": string("简洁、明确、去重后的标准动作名称")
-            ], required: ["exercise_name"])
+                "exercise_names": array(
+                    string("简洁、明确、去重后的标准动作名称"),
+                    description: "一次创建 1 到 20 个新动作；已存在名称返回原 exercise_id"
+                )
+            ], required: ["exercise_names"])
         case .updateExercise:
             object([
                 "exercise_id": integer("要更新的动作 Int64 ID"),
@@ -1145,87 +966,17 @@ extension AgentToolName {
                 )],
                 required: ["skill_id"]
             )
-        case .queryUserData:
-            object([
-                "scope": string(
-                    "查询范围",
-                    values: [
-                        "overview", "profile", "workouts", "meals", "body",
-                        "gyms", "exercises", "exercise_history", "programs",
-                        "templates", "sessions", "aggregate"
-                    ]
-                ),
-                "record_id": integer("detail 查询指定记录时使用的 Int64 ID"),
-                "exercise_id": integer("查询指定动作历史时使用的 Int64 ID"),
-                "program_id": integer("查询指定计划模板时使用的 Int64 ID"),
-                "session_id": integer("查询指定计划训练时使用的 Int64 ID"),
-                "query": string("动作库或文本字段的必填搜索词"),
-                "date_from": string("ISO8601 或 yyyy-MM-dd 起始日期（含）"),
-                "date_to": string("ISO8601 或 yyyy-MM-dd 结束日期（含）"),
-                "sort": string("排序", values: ["newest", "oldest", "name"]),
-                "cursor": string("上一页返回的不透明分页 cursor"),
-                "projection": string("返回粒度", values: ["summary", "detail"]),
-                "fields": array(string("按 scope 允许返回的字段"), description: "字段投影"),
-                "group_by": string(
-                    "聚合分组",
-                    values: ["day", "week", "muscle_group", "exercise"]
-                ),
-                "metric": string(
-                    "聚合指标",
-                    values: ["sets", "volume", "calories", "frequency"]
-                ),
-                "limit": integer("最多返回多少条，默认 3，最大 10")
-            ], required: ["scope"])
-        case .mutateUserData:
-            object([
-                "operation": string("操作", values: ["create", "update", "delete"]),
-                "record_type": string("记录类型", values: ["workout", "meal", "body"]),
-                "record_id": integer("update/delete 必填的稳定 Int64 ID"),
-                "payload": mutationPayload()
-            ], required: ["operation", "record_type"])
-        case .expandToolGroup:
-            object([
-                "tool_group": string(
-                    "要展开的工具组",
-                    values: AgentToolGroup.expandableCases.map(\.rawValue)
-                )
-            ], required: ["tool_group"])
-        case .listPrograms, .listTrainingPrograms:
+        case .listPrograms:
             object([:])
-        case .getProgram, .getTrainingProgram:
+        case .getProgram:
             object([
                 "program_id": integer("训练计划 Int64 ID")
             ], required: ["program_id"])
-        case .listExerciseNames:
-            object([:])
         case .createWorkout:
             object([
-                "exercise_id": integer("必须存在且未归档的动作 Int64 ID"),
-                "occurred_at": string("可选带时区 ISO-8601 发生时间；省略时使用 Job 冻结的默认记录时间"),
-                "set_entries": workoutSetEntries(
-                    "按实际顺序保存每组事实；次数或重量未知时省略对应字段"
-                ),
-                "rest_seconds": integer("用户明确提供的组间休息秒数"),
-                "duration_minutes": integer("用户明确提供的训练时长分钟数"),
-                "form_score": integer("有充分视频证据时的动作评分"),
-                "intensity": string("有证据的负荷判断"),
-                "feedback": string("有证据的动作反馈")
-            ], required: ["exercise_id"])
-        case .recordWorkout:
-            object([
-                "exercise_id": integer("动作搜索返回的已有动作 Int64 ID"),
-                "exercise_name": string("仅在没有语义等价动作时使用的新标准动作名称"),
-                "occurred_at": string("可选 ISO-8601 发生时间；省略时使用当前 Job 冻结的默认记录时间"),
-                "set_entries": workoutSetEntries(
-                    "按实际顺序保存每组事实；次数或重量未知时省略对应字段"
-                ),
-                "rest_seconds": integer("用户明确提供的组间休息秒数"),
-                "duration_minutes": integer("用户明确提供的训练时长分钟数"),
-                "form_score": integer("有充分视频证据时的动作评分"),
-                "intensity": string("有证据的负荷判断"),
-                "feedback": string("有证据的动作反馈")
-            ])
-        case .createMeal, .recordMeal:
+                "workouts": workoutCreateItems()
+            ], required: ["workouts"])
+        case .createMeal:
             object([
                 "occurred_at": string("可选 ISO-8601 发生时间；省略时使用当前 Job 冻结的默认记录时间"),
                 "meal_type": string("早餐、午餐、晚餐或加餐"),
@@ -1237,7 +988,7 @@ extension AgentToolName {
                 "items": mealItemArray(),
                 "note": string("估算依据、不确定性或用户原始补充")
             ], required: ["title"])
-        case .createBodyEntry, .recordBody:
+        case .createBodyEntry:
             object([
                 "occurred_at": string("可选 ISO-8601 发生时间；省略时使用当前 Job 冻结的默认记录时间"),
                 "weight": number("明确读到或用户提供的体重 kg"),
@@ -1283,14 +1034,6 @@ extension AgentToolName {
                 "posture_note": string("中性、非诊断的可见体态观察"),
                 "safety_note": string("局限性与安全提醒")
             ], required: ["record_id"])
-        case .deleteRecord:
-            object([
-                "record_type": string(
-                    "记录类型",
-                    values: ["workout", "meal", "body"]
-                ),
-                "record_id": integer("记录 Int64 ID")
-            ], required: ["record_type", "record_id"])
         case .updateGym:
             object([
                 "gym_name": string("场馆名称；省略则使用当前健身房"),
@@ -1311,30 +1054,30 @@ extension AgentToolName {
             ])
         case .switchGym:
             object(["gym_name": string("目标健身房名称")], required: ["gym_name"])
-        case .createProgram, .createTrainingProgram:
+        case .createProgram:
             object([
                 "program_name": string("训练计划名称"),
-                "goal": string("用户明确提供的计划目标"),
+                "overview": string("用户明确提供、可编辑的计划概览"),
                 "template_name": string("首个训练模板名称"),
                 "schedule_hint": string("用户明确提供的安排提示"),
-                "template_exercises": templateExerciseArray()
+                "template_exercises": templateExerciseArrayV3()
             ], required: ["program_name", "template_name", "template_exercises"])
-        case .createProgramVersion, .createWorkoutTemplateVersion, .updateWorkoutTemplate:
+        case .createProgramVersion:
             object([
                 "program_id": integer("训练计划 Int64 ID"),
                 "template_name": string("新版本训练模板名称"),
                 "schedule_hint": string("用户明确提供的安排提示"),
-                "template_exercises": templateExerciseArray()
+                "template_exercises": templateExerciseArrayV3()
             ], required: ["program_id", "template_name", "template_exercises"])
-        case .archiveProgram, .archiveTrainingProgram:
+        case .archiveProgram:
             object([
                 "program_id": integer("训练计划 Int64 ID")
             ], required: ["program_id"])
-        case .deleteProgram, .deleteTrainingProgram:
+        case .deleteProgram:
             object([
                 "program_id": integer("训练计划 Int64 ID")
             ], required: ["program_id"])
-        case .startProgram, .startGuidedWorkout:
+        case .startProgram:
             object([
                 "program_id": integer("训练计划 Int64 ID"),
                 "auto_recording_policy": string(
@@ -1371,32 +1114,6 @@ extension AgentToolName {
             required: required.isEmpty ? nil : required,
             additionalProperties: false
         )
-    }
-
-    private func mutationPayload() -> JSONSchema {
-        object([
-            "exercise_id": integer("动作 Int64 ID"),
-            "exercise_name": string("没有匹配动作时的新标准名称"),
-            "set_entries": workoutSetEntries("有序训练组"),
-            "rest_seconds": integer("组间休息秒数"),
-            "duration_minutes": integer("训练时长分钟数"),
-            "form_score": integer("有充分视频证据时的动作评分"),
-            "intensity": string("负荷判断"),
-            "feedback": string("动作反馈"),
-            "meal_type": string("早餐、午餐、晚餐或加餐"),
-            "title": string("餐食标题"),
-            "calories": integer("估算千卡；未知时省略"),
-            "protein": number("蛋白质克数；未知时省略"),
-            "carbs": number("碳水克数；未知时省略"),
-            "fat": number("脂肪克数；未知时省略"),
-            "items": mealItemArray(),
-            "note": string("说明和估算局限"),
-            "weight": number("明确提供的体重 kg"),
-            "body_fat": number("明确提供的体脂率"),
-            "waist": number("明确提供的腰围 cm"),
-            "posture_note": string("非诊断体态观察"),
-            "safety_note": string("局限和安全提醒")
-        ])
     }
 
     private func mealItemArray() -> JSONSchema {
@@ -1440,23 +1157,59 @@ extension AgentToolName {
         )
     }
 
-    private func templateExerciseArray() -> JSONSchema {
+    private func workoutCreateItems() -> JSONSchema {
         array(
             object([
-                "exercise_id": integer("动作 Int64 ID"),
+                "exercise_id": integer("必须存在且未归档的动作 Int64 ID"),
+                "occurred_at": string("可选带时区 ISO-8601 发生时间；省略时使用 Job 冻结的默认记录时间"),
+                "set_entries": workoutSetEntries(
+                    "按实际顺序保存每组事实；次数或重量未知时省略对应字段"
+                ),
+                "rest_seconds": integer("用户明确提供的组间休息秒数"),
+                "duration_minutes": integer("用户明确提供的训练时长分钟数"),
+                "form_score": integer("有充分视频证据时的动作评分"),
+                "intensity": string("有证据的负荷判断"),
+                "feedback": string("有证据的动作反馈")
+            ], required: ["exercise_id"]),
+            description: "一次课的多条训练记录，每条绑定已有动作 ID；不要指定 record_id。最多 20 条。"
+        )
+    }
+
+    private func templateExerciseArrayV3() -> JSONSchema {
+        array(
+            object([
+                "exercise_id": integer("动作 Int64 ID，必须大于 0"),
                 "order": integer("从 1 开始且不重复的动作顺序"),
-                "target_sets": integer("用户明确设定的目标组数"),
-                "target_reps": integer("用户明确设定的每组目标次数"),
-                "target_weight_kg": number("用户明确设定的外部重量 kg"),
-                "target_rest_seconds": integer("用户明确设定的组间休息秒数"),
-                "first_set_is_warmup": JSONSchema(
-                    type: .boolean,
-                    description: "第 1 组是否为热身组"
+                "laterality": string(
+                    "none=左右同时或不区分；both=先左后右；left/right=仅单侧",
+                    values: ExerciseLaterality.allCases.map(\.rawValue)
                 ),
                 "equipment_kind": string("用户明确指定的必要器械"),
-                "notes": string("用户明确提供的动作备注")
-            ], required: ["exercise_id", "order"]),
-            description: "按顺序排列的动作处方"
+                "notes": string("用户明确提供的动作备注"),
+                "set_prescriptions": array(
+                    object([
+                        "order": integer("从 1 开始且不重复的逻辑组顺序"),
+                        "kind": string(
+                            "组类型",
+                            values: [WorkoutSetKind.warmup.rawValue, WorkoutSetKind.working.rawValue]
+                        ),
+                        "target_kind": string(
+                            "目标类型；repetitions 只提供 target_reps，duration 只提供 target_duration_seconds",
+                            values: WorkoutTargetKind.allCases.map(\.rawValue)
+                        ),
+                        "target_reps": integer("次数目标，1 到 1000"),
+                        "target_duration_seconds": integer("时长目标秒数，1 到 86400"),
+                        "target_weight_kg": number("不区分侧别或双侧共用的外部重量，0 到 1000 kg"),
+                        "left_weight_kg": number("左侧外部重量，0 到 1000 kg"),
+                        "right_weight_kg": number("右侧外部重量，0 到 1000 kg"),
+                        "rest_between_sides_seconds": integer("左右之间间歇，0 到 3600 秒"),
+                        "rest_after_set_seconds": integer("本逻辑组结束后的间歇，0 到 3600 秒"),
+                        "notes": string("本组备注")
+                    ], required: ["order", "kind", "target_kind"]),
+                    description: "每组互相独立；至少一组"
+                )
+            ], required: ["exercise_id", "order", "laterality", "set_prescriptions"]),
+            description: "按顺序排列的动作；每个动作包含独立逻辑组"
         )
     }
 }
@@ -1712,7 +1465,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             1. 识别可见食物、烹饪方式和可判断的份量；餐具尺寸未知、食物被遮挡或混合时说明不确定性。
             2. 热量、蛋白质、碳水和脂肪优先给合理区间；写入单值时使用区间中位估计，并在 note 中保留估算依据和误差来源。
             3. 不把照片外不可见的油、酱料或配料当作确定事实，可作为可能的偏差来源提示。
-            4. 只有证据足够时调用 create_meal，按可见食物写入有序 items；无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
+            4. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。纠正、补图或改已有餐必须先 list/get 再用 update_meal。无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
             5. 记录成功后最多补充两句不重复结果卡数据的教练说明。提供平衡饮食建议，不使用羞辱性语言，不把估算当作医学或营养治疗结论。
             """
         case .postureAnalysis:
@@ -1726,7 +1479,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             2. 比较多张照片前检查机位、距离、光线、服装、站姿和时间是否接近；条件不同必须提示可比性有限。
             3. 体重、体脂和腰围只有在文字、秤面或用户输入明确可读时才记录；不得从外观猜测数值。
             4. 姿势差异不是疾病诊断。疼痛、活动受限或持续不对称需要由合格专业人员评估。
-            5. 信息足够时调用 create_body_entry，并把观察局限写入 posture_note 或 safety_note。
+            5. 信息足够时调用 create_body_entry 新增记录；纠正或给已有测量补图必须先读取再用 update_body，并把观察局限写入 posture_note 或 safety_note。
             """
         case .trendAnalysis:
             """
@@ -1761,7 +1514,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             目标：在训练记录信息足够时生成可解释、可复现的热量估算，数值计算由 App 内置规则完成，不由模型自由心算。
 
             执行规则：
-            1. 记录训练时先 search_exercises，必要时 create_exercise，再用有效 exercise_id 调用 create_workout。App 以用户最近身体记录的体重为优先，其次使用身体信息中的参考体重；不得从照片、身高或外观推测体重。
+            1. 记录训练时先 search_exercises，必要时一次 create_exercise，再用有效 exercise_id 一次 create_workout 写入全部动作。新建训练记录编号由本机分配。App 以用户最近身体记录的体重为优先，其次使用身体信息中的参考体重；不得从照片、身高或外观推测体重。
             2. 用户明确提供训练时长时原样传入 duration_minutes，不得改写。
                禁止用「组数 × 次数 × 间歇秒数 / 60」估算时长（例如 4×8×90/60=48 是错误的）。
                如果没有时长，但明确提供组数、次数和间歇，不要自行填写 duration_minutes；

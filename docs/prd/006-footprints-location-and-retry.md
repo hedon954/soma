@@ -10,6 +10,7 @@
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 收敛一次性位置确认与 Session 上下文
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 扩展终止后恢复和远程等待
   - [PRD 016](016-training-primary-tab.md) 仅替代“所有能力不新增第三个顶层 Tab”的范围
+- 下游落地：[ADR 0079](../adr/0079-create-inserts-update-by-id.md)
 - 关联决策：
   - [ADR 0016](../adr/0016-conversation-turn-attempt-and-footprint-projection.md)
   - [ADR 0017](../adr/0017-location-and-weather-context.md)
@@ -48,11 +49,10 @@ Session 对话中，不适合快速回顾。用户还需要在 Agent 失败后�
 - 已成功的 Tool 写入即使遇到最终回复失败也继续保留；此时 Turn 仍不进入足迹，等待重试。
 - 跨 Attempt 的相同成功写入必须命中持久化幂等回执，不能重复创建训练、饮食、身体或健身房
   数据。
-- 后续补图或纠错即使来自新 Turn，也要按来源、时间、类型、内容、结构化数值和纠错语义
-  综合判断同一现实事件；唯一高置信命中时更新原记录并合并媒体。
+- 后续补图或纠错即使来自新 Turn，也必须先查询再调用更新工具，按稳定记录 ID 原位修改并合并媒体。
 - `update_workout`、`update_meal` 和 `update_body` 必须按查询得到的 ID 原位更新；当前
   Turn 的新媒体并入原记录。`delete_record` 只删除指定业务记录，不删除聊天 Turn 或共享媒体。
-- Agent 误用 `record_*` 表达纠错时，本地多维合并仍作为安全网；歧义候选不得自动更新。
+- 一次 ReAct Loop 允许多次 create，每次都新增独立记录。纠正不能用 create 代替 update。
 - 标准档没有 API Key 时在发送前阻止，不创建 Turn；已创建 Turn 的足迹资格仍只由持久化
   Attempt 状态决定，不能依赖是否存在一条教练文本来猜测。
 
@@ -113,9 +113,7 @@ Session 对话中，不适合快速回顾。用户还需要在 Agent 失败后�
 - 首次失败后点击重试，不新增用户气泡；重试成功后足迹只出现一次。
 - 第一次 Attempt 已成功写入业务数据但最终失败时，重试不会重复写入。
 - 查询结果包含业务记录 ID；显式更新按 ID 修改原记录，显式删除只有在用户当前消息明确
-  要求时成功。
-- 对同一餐、训练、身体或健身房进行补图/纠错时更新原记录，媒体有序合并；相邻但证据不同
-  的真实事件仍保持独立。
+  要求时成功。补图/纠错走更新工具；create 每次新增独立记录。
 - 重试图片与视频时从沙盒媒体恢复输入，不依赖 Photos 临时 URL。
 - 位置关闭、拒绝、超时和精度不足时都能正常完成 Agent。
 - 唯一命中已绑定健身房时，本次上下文使用命中场馆，全局当前健身房不改变。

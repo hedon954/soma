@@ -33,7 +33,7 @@
 2. 本机 Provider 直接消费该 Envelope；远程 Client 原样编码同一 Envelope，并只把媒体 ID 绑定到
    临时 upload ID。Server 不得拥有另一套 Prompt 文案、摘要格式、Tool 描述或默认超时。
 3. Server 按提交顺序重建原生消息；首轮后只清除历史视觉 parts 并保留与本机一致的文字占位。
-4. `load_skill` 与 `expand_tool_group` 是运行时 Tool：远端用设备提交的 Skill 快照和 Tool 目录执行，
+4. `load_skill` 是运行时 Tool：远端用设备提交的 Skill 快照就地执行，
    不进入 `waitingForDevice`。读取或写入业务事实的 Tool 仍必须交给设备执行。
 5. 同一模型 step 返回多个 `tool_calls` 时必须全部持久化。所有设备 Tool Result 到齐前 Job 保持
    `waitingForDevice`；续跑时按原 assistant 调用顺序追加 `role=tool` 结果。

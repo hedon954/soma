@@ -17,9 +17,11 @@ extension PersonalDataSnapshot {
         normalized.trainingPrograms?.sort(by: stableIDSort)
         normalized.workoutTemplateVersions?.sort(by: stableIDSort)
         normalized.templateExercises?.sort(by: stableIDSort)
+        normalized.templateSetPrescriptions?.sort(by: stableIDSort)
         normalized.workoutSessions?.sort(by: stableIDSort)
         normalized.exercisePerformances?.sort(by: stableIDSort)
         normalized.workoutSets?.sort(by: stableIDSort)
+        normalized.workoutEfforts?.sort(by: stableIDSort)
         normalized.recommendationSnapshots?.sort(by: stableIDSort)
         normalized.performanceAnalyses?.sort(by: stableIDSort)
         normalized.sessions.sort(by: stableIDSort)
@@ -59,9 +61,11 @@ extension WorkoutEntryDTO: StableArchiveIdentifiable {}
 extension TrainingProgramDTO: StableArchiveIdentifiable {}
 extension WorkoutTemplateVersionDTO: StableArchiveIdentifiable {}
 extension TemplateExerciseDTO: StableArchiveIdentifiable {}
+extension TemplateSetPrescriptionDTO: StableArchiveIdentifiable {}
 extension WorkoutSessionDTO: StableArchiveIdentifiable {}
 extension ExercisePerformanceDTO: StableArchiveIdentifiable {}
 extension WorkoutSetDTO: StableArchiveIdentifiable {}
+extension WorkoutEffortDTO: StableArchiveIdentifiable {}
 extension RecommendationSnapshotDTO: StableArchiveIdentifiable {}
 extension PerformanceAnalysisDTO: StableArchiveIdentifiable {}
 extension ConversationSessionDTO: StableArchiveIdentifiable {}

@@ -148,18 +148,42 @@ struct BodyRecordDetailView: View {
 private struct WorkoutRecordEditor: View {
     private struct EditableSet: Identifiable, Equatable {
         let id = UUID()
+        var logicalSetIndex: String
+        var side: WorkoutEffortSide?
+        var kind: WorkoutSetKind?
+        var targetKind: WorkoutTargetKind
         var reps: String
+        var durationSeconds: String
         var weight: String
+        var restSeconds: String
+        var recordedVideoPath: String?
 
         init(_ evidence: WorkoutSetEvidence) {
+            logicalSetIndex = EditorValue.string(evidence.logicalSetIndex)
+            side = evidence.side
+            kind = evidence.kind
+            targetKind = evidence.targetKind
+                ?? (evidence.durationSeconds == nil ? .repetitions : .duration)
             reps = EditorValue.string(evidence.reps)
+            durationSeconds = EditorValue.string(evidence.durationSeconds)
             weight = EditorValue.string(evidence.externalWeightKG)
+            restSeconds = EditorValue.string(evidence.restSeconds)
+            recordedVideoPath = evidence.recordedVideoPath
         }
 
         var evidence: WorkoutSetEvidence {
             WorkoutSetEvidence(
-                reps: EditorValue.int(reps),
-                externalWeightKG: EditorValue.double(weight)
+                logicalSetIndex: EditorValue.int(logicalSetIndex),
+                side: side,
+                kind: kind,
+                targetKind: targetKind,
+                reps: targetKind == .repetitions
+                    ? EditorValue.int(reps)
+                    : nil,
+                durationSeconds: EditorValue.int(durationSeconds),
+                externalWeightKG: EditorValue.double(weight),
+                restSeconds: EditorValue.int(restSeconds),
+                recordedVideoPath: recordedVideoPath
             )
         }
     }
@@ -211,6 +235,13 @@ private struct WorkoutRecordEditor: View {
         return definitions.first {
             !$0.isArchived && $0.canonicalNameKey == key
         }
+    }
+
+    private var hasCalorieReferenceWeight: Bool {
+        WorkoutCalorieCalculator.referenceWeight(
+            at: date,
+            in: modelContext
+        ) != nil
     }
 
     var body: some View {
@@ -293,34 +324,65 @@ private struct WorkoutRecordEditor: View {
 
             Section {
                 ForEach(setRows.indices, id: \.self) { index in
-                    HStack(spacing: 8) {
-                        Text("第 \(index + 1) 组")
-                            .font(.subheadline.weight(.medium))
-                            .frame(minWidth: 52, alignment: .leading)
-                        TextField("次数", text: $setRows[index].reps)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .accessibilityLabel("第 \(index + 1) 组次数")
-                        Text("次")
-                            .foregroundStyle(.secondary)
-                        TextField("重量", text: $setRows[index].weight)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .accessibilityLabel("第 \(index + 1) 组外部重量")
-                        Text("kg")
-                            .foregroundStyle(.secondary)
-                        Button(role: .destructive) {
-                            setRows.remove(at: index)
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(
+                                ExerciseLoggingProfile.setTitle(
+                                    displayIndex: index + 1,
+                                    logicalSetIndex: EditorValue.int(
+                                        setRows[index].logicalSetIndex
+                                    ),
+                                    side: setRows[index].side
+                                )
+                            )
+                            .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Button(role: .destructive) {
+                                setRows.remove(at: index)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("删除第 \(index + 1) 组")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("删除第 \(index + 1) 组")
+
+                        HStack(alignment: .top, spacing: 12) {
+                            if setTargetKind(at: index) == .duration {
+                                evidenceField(
+                                    "时长",
+                                    text: $setRows[index].durationSeconds,
+                                    unit: "秒",
+                                    keyboard: .numberPad
+                                )
+                            } else {
+                                evidenceField(
+                                    "次数",
+                                    text: $setRows[index].reps,
+                                    unit: "次",
+                                    keyboard: .numberPad
+                                )
+                            }
+                            evidenceField(
+                                "重量",
+                                text: $setRows[index].weight,
+                                unit: "kg",
+                                keyboard: .decimalPad
+                            )
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
                 Button {
                     guard setRows.count < 100 else { return }
-                    setRows.append(EditableSet(WorkoutSetEvidence()))
+                    let targetKind = setTargetKind(at: setRows.count - 1)
+                    setRows.append(EditableSet(WorkoutSetEvidence(
+                        logicalSetIndex: ExerciseLoggingProfile.nextLogicalSetIndex(
+                            existing: setRows.map {
+                                EditorValue.int($0.logicalSetIndex)
+                            }
+                        ),
+                        targetKind: targetKind
+                    )))
                 } label: {
                     Label("添加一组", systemImage: "plus.circle")
                 }
@@ -329,7 +391,7 @@ private struct WorkoutRecordEditor: View {
             } header: {
                 Text("训练数据")
             } footer: {
-                Text("组数由上方数组自动计算；每一组的次数和外部重量都可不同，留空代表没有数据。")
+                Text("次数、时长和重量留空代表没有数据。完成方式和左右方式在动作中统一设置。")
             }
 
             // PRD 020：热量估算、AI 解析与原始记录默认折叠，展开后仍可完整编辑。
@@ -339,6 +401,19 @@ private struct WorkoutRecordEditor: View {
                     numericField("MET", text: $calorieMET, keyboard: .decimalPad)
                     numericField("计算时长", unit: "分钟", text: $calorieDurationMinutes, keyboard: .decimalPad)
                     Toggle("计算时长来自推算", isOn: $calorieDurationEstimated)
+
+                    if !hasCalorieReferenceWeight {
+                        NavigationLink {
+                            PersonalBodyInfoView()
+                        } label: {
+                            Label(
+                                "补充体重以估算训练消耗",
+                                systemImage: "flame"
+                            )
+                            .foregroundStyle(.orange)
+                        }
+                        .accessibilityHint("已有训练事实不会被改写")
+                    }
                 } label: {
                     LabeledContent(
                         "热量估算",
@@ -392,15 +467,21 @@ private struct WorkoutRecordEditor: View {
                 }
             }
         }
-        .onAppear(perform: sanitizeMistakenDurationIfNeeded)
+        .onAppear {
+            syncTargetKindFromExercise()
+            sanitizeMistakenDurationIfNeeded()
+        }
     }
 
     private var isValid: Bool {
         !exercise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && setRows.count <= 100
             && setRows.allSatisfy {
-                EditorValue.validInt($0.reps, range: 1 ... 1000)
+                EditorValue.validInt($0.logicalSetIndex, range: 1 ... 100)
+                    && EditorValue.validInt($0.reps, range: 1 ... 1000)
+                    && EditorValue.validInt($0.durationSeconds, range: 1 ... 86400)
                     && EditorValue.validDouble($0.weight, range: 0 ... 1000)
+                    && EditorValue.validInt($0.restSeconds, range: 0 ... 3600)
             }
             && EditorValue.validInt(restSeconds, range: 0 ... 3600)
             && EditorValue.validInt(durationMinutes, range: 0 ... 1440)
@@ -441,6 +522,45 @@ private struct WorkoutRecordEditor: View {
         )
     }
 
+    private func evidenceField(
+        _ title: String,
+        text: Binding<String>,
+        unit: String,
+        keyboard: UIKeyboardType
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                TextField("可选", text: text)
+                    .keyboardType(keyboard)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(title)
+                Text(unit)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func setTargetKind(at index: Int) -> WorkoutTargetKind {
+        let row = setRows.indices.contains(index) ? setRows[index] : nil
+        return ExerciseLoggingProfile.resolvedTargetKind(
+            exercise: linkedExercise,
+            evidenceTargetKind: row?.targetKind,
+            reps: row.flatMap { EditorValue.int($0.reps) },
+            durationSeconds: row.flatMap { EditorValue.int($0.durationSeconds) }
+        )
+    }
+
+    private func syncTargetKindFromExercise() {
+        let kind = ExerciseLoggingProfile.resolvedTargetKind(exercise: linkedExercise)
+        for index in setRows.indices {
+            setRows[index].targetKind = kind
+        }
+    }
+
     private func sanitizeMistakenDurationIfNeeded() {
         let weight = WorkoutCalorieCalculator.currentReferenceWeight(in: modelContext)
         guard WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
@@ -478,6 +598,15 @@ private struct WorkoutRecordEditor: View {
         exercise = definition?.canonicalName ?? normalizedExercise
         notes = normalizedNotes
         workout.date = date
+        if let definition {
+            let kind = ExerciseLoggingProfile.resolvedTargetKind(exercise: definition)
+            for index in setRows.indices {
+                setRows[index].targetKind = kind
+                if EditorValue.int(setRows[index].logicalSetIndex) == nil {
+                    setRows[index].logicalSetIndex = String(index + 1)
+                }
+            }
+        }
         workout.setEntries = setRows.map(\.evidence)
         workout.restSeconds = EditorValue.int(restSeconds)
         let sets = workout.setCount

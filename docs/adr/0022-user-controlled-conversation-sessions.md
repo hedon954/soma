@@ -1,12 +1,13 @@
 # ADR 0022：由用户控制可继续的对话 Session
 
-- 状态：已接受
+- 状态：部分已替代
 - 日期：2026-07-30
 - 维护者：Soma maintainers
 - 替代：[ADR 0015](0015-daily-conversation-session-lifecycle.md) 的每日自动切换和只读历史边界
 - 后续替代：
   - [ADR 0055](0055-hybrid-daily-conversation-sessions.md) 恢复自动按日解析并保留当前前台生命周期内的手动覆盖
   - [ADR 0061](0061-discoverable-conversation-session-entry.md) 恢复可见时间按钮并保留抽屉手势
+  - [ADR 0080](0080-conversation-session-swipe-delete.md) 落地历史抽屉左滑删除对话聊天图，并明确不删除业务记录
 
 ## 背景
 
@@ -49,7 +50,7 @@ ADR 0015 通过自然日解决了无限聊天和上下文串联问题，但现�
 
 - 不熟悉边缘手势的用户需要一次发现过程。
 - Session 激活状态需要按演示/个人空间隔离并处理失效 ID。
-- 当前仍不支持删除、合并或并发处理多个 Session。
+- 当前仍不支持合并或并发处理多个 Session；对话删除见 [ADR 0080](0080-conversation-session-swipe-delete.md)。
 
 ## 验证
 

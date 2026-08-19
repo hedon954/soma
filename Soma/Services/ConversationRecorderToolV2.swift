@@ -5,12 +5,12 @@ extension ConversationRecorder {
     static func mutateUserData(
         _ arguments: AgentToolArguments,
         sourceText: String,
-        sourceDate: Date,
-        sourceSessionID: UUID?,
-        sourceTurnID: UUID?,
+        sourceDate: Date = .now,
+        sourceSessionID: UUID? = nil,
+        sourceTurnID: UUID? = nil,
         mediaKind: MediaKind,
         mediaPath: String?,
-        mediaAttachments: [MediaAttachmentReference],
+        mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
         guard let operation = arguments.operation?.lowercased(),

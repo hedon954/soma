@@ -38,6 +38,7 @@ import {
 } from "../src/security.js";
 import { InMemorySomaStore } from "../src/store.js";
 import {
+  deviceToolRegistry,
   effectiveAllowedDeviceTools,
   validateDeviceTool,
 } from "../src/tool-registry.js";
@@ -222,7 +223,7 @@ test("worker survives process replacement and device tool result is idempotent",
   const store = new InMemorySomaStore();
   const deviceID = randomUUID();
   const input = makeJobInput({
-    allowedDeviceTools: ["record_workout"],
+    allowedDeviceTools: ["create_workout"],
   });
   const job = await store.submitJob({
     deviceID,
@@ -236,9 +237,9 @@ test("worker survives process replacement and device tool result is idempotent",
       kind: "toolCalls",
       assistantText: "",
       calls: [{
-        toolName: "record_workout",
-        schemaVersion: 1,
-        arguments: { exercise_id: randomUUID() },
+        toolName: "create_workout",
+        schemaVersion: 3,
+        arguments: { workouts: [{ exercise_id: 1 }] },
       }],
     }),
     "worker-before-restart",
@@ -266,17 +267,90 @@ test("worker survives process replacement and device tool result is idempotent",
   assert.equal((await store.pendingToolRequests(deviceID)).length, 0);
 });
 
+test("queued schema 2 plan tool remains executable after schema 3 becomes current", async () => {
+  const store = new InMemorySomaStore();
+  const deviceID = randomUUID();
+  const input = makeJobInput({ allowedDeviceTools: ["create_program"] });
+  const legacyParameters = {
+    type: "object",
+    properties: {
+      program_name: { type: "string" },
+      goal: { type: "string" },
+      template_name: { type: "string" },
+      template_exercises: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            exercise_id: { type: "integer" },
+            order: { type: "integer" },
+            target_sets: { type: "integer" },
+            target_reps: { type: "integer" },
+          },
+          required: ["exercise_id", "order"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["program_name", "template_name", "template_exercises"],
+    additionalProperties: false,
+  };
+  input.modelInput.tools = [{
+    name: "create_program",
+    schemaVersion: 2,
+    definition: {
+      type: "function",
+      function: {
+        name: "create_program",
+        parameters: legacyParameters,
+      },
+    },
+  }];
+  input.allowedDeviceToolSchemas = [{ name: "create_program", schemaVersion: 2 }];
+  const job = await store.submitJob({
+    deviceID,
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  const worker = new AgentWorker(store, new DeterministicTestProvider({
+    kind: "toolCalls",
+    assistantText: "",
+    calls: [{
+      toolName: "create_program",
+      schemaVersion: 2,
+      arguments: {
+        program_name: "虚构旧计划",
+        goal: "兼容恢复",
+        template_name: "A",
+        template_exercises: [{
+          exercise_id: 42,
+          order: 1,
+          target_sets: 3,
+          target_reps: 8,
+        }],
+      },
+    }],
+  }));
+
+  assert.equal((await worker.runOnce())?.state, "waitingForDevice");
+  const request = (await store.pendingToolRequests(deviceID))[0];
+  assert.equal(request?.jobID, job.id);
+  assert.equal(request?.schemaVersion, 2);
+  assert.equal(request?.toolName, "create_program");
+});
+
 test("worker executes submitted custom skills without delegating runtime tools", async () => {
   const store = new InMemorySomaStore();
   const deviceID = randomUUID();
   const input = makeJobInput({
-    allowedRemoteTools: ["load_skill", "expand_tool_group"],
+    allowedRemoteTools: ["load_skill"],
   });
   input.modelInput.skills = [{
     id: "training_plan",
     content: "设备提交的自定义训练计划 Skill",
   }];
-  input.modelInput.activeTools = ["load_skill", "expand_tool_group"];
+  input.modelInput.activeTools = ["load_skill"];
   const job = await store.submitJob({
     deviceID,
     input,
@@ -319,7 +393,7 @@ test("parallel device tools remain waiting until every result arrives", async ()
   const store = new InMemorySomaStore();
   const deviceID = randomUUID();
   const input = makeJobInput({
-    allowedDeviceTools: ["list_exercise_names", "list_training_programs"],
+    allowedDeviceTools: ["search_exercises", "list_programs"],
   });
   const job = await store.submitJob({
     deviceID,
@@ -335,14 +409,14 @@ test("parallel device tools remain waiting until every result arrives", async ()
       calls: [
         {
           toolCallID: "call-first",
-          toolName: "list_exercise_names",
-          schemaVersion: 1,
-          arguments: {},
+          toolName: "search_exercises",
+          schemaVersion: 2,
+          arguments: { query: "深蹲" },
         },
         {
           toolCallID: "call-second",
-          toolName: "list_training_programs",
-          schemaVersion: 1,
+          toolName: "list_programs",
+          schemaVersion: 2,
           arguments: {},
         },
       ],
@@ -506,17 +580,13 @@ test("APNs retry remains in outbox with backoff until accepted", async () => {
 test("tool validation rejects paths URLs and unsupported schemas", () => {
   assert.equal(
     validateDeviceTool({
-      name: "mutate_user_data",
+      name: "create_meal",
       schemaVersion: 2,
       arguments: {
-        operation: "create",
-        record_type: "meal",
-        payload: {
-          title: "虚构午餐",
-          items: [{ name: "豆腐", protein: 12 }],
-        },
+        title: "虚构午餐",
+        items: [{ name: "豆腐", protein: 12 }],
       },
-      allowedNames: ["mutate_user_data"],
+      allowedNames: ["create_meal"],
     }).mutation,
     true,
   );
@@ -539,10 +609,10 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
   );
   assert.throws(() =>
     validateDeviceTool({
-      name: "record_workout",
-      schemaVersion: 1,
+      name: "create_workout",
+      schemaVersion: 3,
       arguments: { local_path: "/private/file" },
-      allowedNames: ["record_workout"],
+      allowedNames: ["create_workout"],
     }),
   );
   assert.throws(() =>
@@ -555,42 +625,177 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
   );
 });
 
-test("completed expansion exposes only the requested remote tool group", () => {
+test("plan schema 3 validates nested prescriptions and keeps schema 2 registered", () => {
+  assert.equal(deviceToolRegistry.get("get_program")?.schemaVersion, 3);
+  assert.equal(deviceToolRegistry.get("create_program")?.schemaVersion, 3);
+  assert.equal(deviceToolRegistry.get("create_program_version")?.schemaVersion, 3);
+  assert.equal(deviceToolRegistry.get("start_program")?.schemaVersion, 2);
+
+  assert.equal(validateDeviceTool({
+    name: "create_program",
+    schemaVersion: 3,
+    arguments: validPlanV3Arguments(),
+    allowedNames: ["create_program"],
+  }).schemaVersion, 3);
+  assert.equal(validateDeviceTool({
+    name: "create_program",
+    schemaVersion: 2,
+    arguments: {
+      program_name: "虚构旧计划",
+      goal: "旧目标",
+      template_name: "A",
+      template_exercises: [{
+        exercise_id: 7,
+        order: 1,
+        target_sets: 2,
+        target_reps: 8,
+      }],
+    },
+    allowedNames: ["create_program"],
+  }).schemaVersion, 2);
+
+  const invalidValues: Record<string, unknown>[] = [
+    {
+      ...validPlanV3Arguments(),
+      template_exercises: [{
+        ...validPlanV3Exercise(),
+        set_prescriptions: [{
+          ...validPlanV3Set(),
+          hidden_guess: true,
+        }],
+      }],
+    },
+    {
+      ...validPlanV3Arguments(),
+      template_exercises: [{
+        ...validPlanV3Exercise(),
+        set_prescriptions: [{ order: 1, kind: "working", target_kind: "repetitions" }],
+      }],
+    },
+    {
+      ...validPlanV3Arguments(),
+      template_exercises: [{
+        ...validPlanV3Exercise(),
+        laterality: "alternating",
+      }],
+    },
+    {
+      ...validPlanV3Arguments(),
+      template_exercises: [{
+        ...validPlanV3Exercise(),
+        set_prescriptions: [{ ...validPlanV3Set(), target_reps: 0 }],
+      }],
+    },
+    {
+      ...validPlanV3Arguments(),
+      template_exercises: [{
+        ...validPlanV3Exercise(),
+        set_prescriptions: [{
+          ...validPlanV3Set(),
+          target_duration_seconds: 30,
+        }],
+      }],
+    },
+    {
+      ...validPlanV3Arguments(),
+      template_exercises: [{
+        ...validPlanV3Exercise(),
+        order: "1",
+      }],
+    },
+  ];
+  for (const argumentsValue of invalidValues) {
+    assert.throws(() => validateDeviceTool({
+      name: "create_program",
+      schemaVersion: 3,
+      arguments: argumentsValue,
+      allowedNames: ["create_program"],
+    }));
+  }
+});
+
+test("batch create schema 3 validates arrays and keeps schema 2 registered", () => {
+  assert.equal(deviceToolRegistry.get("create_exercise")?.schemaVersion, 3);
+  assert.equal(deviceToolRegistry.get("create_workout")?.schemaVersion, 3);
+
+  assert.equal(validateDeviceTool({
+    name: "create_exercise",
+    schemaVersion: 3,
+    arguments: { exercise_names: ["虚构硬拉", "虚构弹力带抗旋"] },
+    allowedNames: ["create_exercise"],
+  }).schemaVersion, 3);
+  assert.equal(validateDeviceTool({
+    name: "create_exercise",
+    schemaVersion: 2,
+    arguments: { exercise_name: "虚构硬拉" },
+    allowedNames: ["create_exercise"],
+  }).schemaVersion, 2);
+  assert.equal(validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 3,
+    arguments: {
+      workouts: [{
+        exercise_id: 7,
+        set_entries: [{ reps: 5, external_weight_kg: 60 }],
+      }],
+    },
+    allowedNames: ["create_workout"],
+  }).schemaVersion, 3);
+  assert.equal(validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 2,
+    arguments: {
+      exercise_id: 7,
+      set_entries: [{ reps: 8, external_weight_kg: 20 }],
+    },
+    allowedNames: ["create_workout"],
+  }).schemaVersion, 2);
+
+  assert.throws(() => validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 3,
+    arguments: { exercise_id: 7 },
+    allowedNames: ["create_workout"],
+  }));
+  assert.throws(() => validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 3,
+    arguments: { workouts: [{ exercise_id: 7, record_id: 99 }] },
+    allowedNames: ["create_workout"],
+  }));
+  assert.throws(() => validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 3,
+    arguments: { workouts: [] },
+    allowedNames: ["create_workout"],
+  }));
+});
+
+test("envelope active tools stay as submitted", () => {
   const toolCallID = randomUUID();
   const now = new Date();
-  const expanded = effectiveAllowedDeviceTools(
-    ["load_skill", "query_user_data", "mutate_user_data", "expand_tool_group"],
+  const active = effectiveAllowedDeviceTools(
+    ["load_skill", "list_workouts"],
     [
       {
         id: randomUUID(),
         jobID: randomUUID(),
         sequence: 1,
         kind: "tool",
-        phase: "suspended",
+        phase: "completed",
         payloadVersion: 1,
         payload: {
           toolCallID,
-          toolName: "expand_tool_group",
-          arguments: { tool_group: "gym" },
+          toolName: "update_gym",
+          arguments: {},
         },
-        createdAt: now,
-      },
-      {
-        id: randomUUID(),
-        jobID: randomUUID(),
-        sequence: 2,
-        kind: "tool",
-        phase: "completed",
-        payloadVersion: 1,
-        payload: { toolCallID, result: { ok: true } },
         createdAt: now,
       },
     ],
   );
 
-  assert.ok(expanded.includes("update_gym"));
-  assert.ok(expanded.includes("switch_gym"));
-  assert.ok(!expanded.includes("submit_feedback"));
+  assert.deepEqual(active, ["load_skill", "list_workouts"]);
+  assert.ok(!active.includes("update_gym"));
 });
 
 test("managed provider streams text before completion and limits media", async () => {
@@ -598,10 +803,10 @@ test("managed provider streams text before completion and limits media", async (
   const job = await store.submitJob({
     deviceID: randomUUID(),
     input: makeJobInput({
-      allowedDeviceTools: ["list_exercise_names"],
+      allowedDeviceTools: ["search_exercises"],
       modelInput: makeModelInput(
         ["current-image-0"],
-        ["list_exercise_names"],
+        ["search_exercises"],
       ),
     }),
     bodyDigest: sha256("media"),
@@ -651,7 +856,7 @@ test("managed provider streams text before completion and limits media", async (
   const content = messages[1]?.content as Record<string, unknown>[];
   assert.equal(messages[0]?.content, "统一系统提示词");
   const tools = captured?.tools as Record<string, unknown>[];
-  assert.match(JSON.stringify(tools), /统一 list_exercise_names 定义/);
+  assert.match(JSON.stringify(tools), /统一 search_exercises 定义/);
   assert.equal(captured?.tool_choice, "auto");
   assert.equal(captured?.parallel_tool_calls, true);
   assert.equal(
@@ -1033,18 +1238,99 @@ function makeModelInput(
 }
 
 function testToolSchemaVersion(name: string): number {
-  return [
-    "record_workout",
-    "list_exercise_names",
-    "list_training_programs",
-  ].includes(name) ? 1 : 2;
+  if ([
+    "get_program",
+    "create_program",
+    "create_program_version",
+    "create_exercise",
+    "create_workout",
+  ].includes(name)) {
+    return 3;
+  }
+  return 2;
 }
 
 function testToolParameters(name: string): Record<string, unknown> {
-  if (name === "record_workout") {
+  if (name === "get_program") {
     return {
       type: "object",
-      properties: { exercise_id: { type: "string" } },
+      properties: { program_id: { type: "integer" } },
+      required: ["program_id"],
+      additionalProperties: false,
+    };
+  }
+  if (["create_program", "create_program_version"].includes(name)) {
+    return {
+      type: "object",
+      properties: {
+        ...(name === "create_program"
+          ? { program_name: { type: "string" } }
+          : { program_id: { type: "integer" } }),
+        template_name: { type: "string" },
+        template_exercises: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              exercise_id: { type: "integer" },
+              order: { type: "integer" },
+              laterality: { type: "string", enum: ["none", "both", "left", "right"] },
+              set_prescriptions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    order: { type: "integer" },
+                    kind: { type: "string", enum: ["warmup", "working"] },
+                    target_kind: { type: "string", enum: ["repetitions", "duration"] },
+                    target_reps: { type: "integer" },
+                    target_duration_seconds: { type: "integer" },
+                  },
+                  required: ["order", "kind", "target_kind"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["exercise_id", "order", "laterality", "set_prescriptions"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: [
+        name === "create_program" ? "program_name" : "program_id",
+        "template_name",
+        "template_exercises",
+      ],
+      additionalProperties: false,
+    };
+  }
+  if (name === "create_workout") {
+    return {
+      type: "object",
+      properties: {
+        workouts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { exercise_id: { type: "integer" } },
+            required: ["exercise_id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["workouts"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "search_exercises") {
+    return {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        limit: { type: "integer" },
+      },
+      required: ["query"],
+      additionalProperties: false,
     };
   }
   if (name === "load_skill") {
@@ -1054,14 +1340,38 @@ function testToolParameters(name: string): Record<string, unknown> {
       required: ["skill_id"],
     };
   }
-  if (name === "expand_tool_group") {
-    return {
-      type: "object",
-      properties: { tool_group: { type: "string" } },
-      required: ["tool_group"],
-    };
-  }
   return { type: "object", properties: {} };
+}
+
+function validPlanV3Set(): Record<string, unknown> {
+  return {
+    order: 1,
+    kind: "working",
+    target_kind: "repetitions",
+    target_reps: 8,
+    left_weight_kg: 20,
+    right_weight_kg: 22.5,
+    rest_between_sides_seconds: 15,
+    rest_after_set_seconds: 90,
+  };
+}
+
+function validPlanV3Exercise(): Record<string, unknown> {
+  return {
+    exercise_id: 7,
+    order: 1,
+    laterality: "both",
+    set_prescriptions: [validPlanV3Set()],
+  };
+}
+
+function validPlanV3Arguments(): Record<string, unknown> {
+  return {
+    program_name: "虚构逐组计划",
+    overview: "左右独立，保持缺失事实为空。",
+    template_name: "A",
+    template_exercises: [validPlanV3Exercise()],
+  };
 }
 
 async function registerDevice(

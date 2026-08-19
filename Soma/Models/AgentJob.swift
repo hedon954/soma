@@ -49,22 +49,41 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// 网络、供应商或前台恢复仍由系统续跑，教练气泡不应展示手动重试。
+    var awaitsAutomaticRecovery: Bool {
+        switch self {
+        case .queued,
+             .waitingForNetwork,
+             .staged,
+             .running,
+             .remoteRunning,
+             .waitingForForeground,
+             .waitingForDevice:
+            true
+        case .waitingForUser, .succeeded, .failed, .cancelled:
+            false
+        }
+    }
+
     func canTransition(to next: AgentJobState) -> Bool {
         guard self != next, !isTerminal else { return false }
         return switch (self, next) {
         case (.queued, .running),
              (.queued, .waitingForNetwork),
              (.queued, .staged),
+             (.queued, .waitingForUser),
              (.queued, .failed),
              (.queued, .cancelled),
              (.waitingForNetwork, .queued),
              (.waitingForNetwork, .running),
              (.waitingForNetwork, .staged),
+             (.waitingForNetwork, .waitingForUser),
              (.waitingForNetwork, .failed),
              (.waitingForNetwork, .cancelled),
              (.staged, .queued),
              (.staged, .running),
              (.staged, .waitingForNetwork),
+             (.staged, .waitingForUser),
              (.staged, .failed),
              (.staged, .cancelled),
              (.waitingForUser, .queued),
@@ -93,6 +112,7 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
             true
         case (.remoteRunning, .running),
              (.remoteRunning, .staged),
+             (.remoteRunning, .waitingForUser),
              (.remoteRunning, .waitingForDevice),
              (.remoteRunning, .succeeded),
              (.remoteRunning, .failed),
@@ -667,6 +687,7 @@ enum AgentJobStore {
                     )
                     job.leaseOwner = nil
                     job.leaseExpiresAt = nil
+                    job.nextRetryAt = nil
                     changed = true
                 }
                 continue
@@ -679,6 +700,39 @@ enum AgentJobStore {
             try context.save()
         }
         return resumed
+    }
+
+    /// 教练气泡一旦进入失败态并展示重试，Job 就不能再被自动领取或补偿。
+    @discardableResult
+    static func promoteFailedResponsesToManualRetry(
+        dataSpace: DataSpace,
+        now: Date = .now,
+        in context: ModelContext
+    ) throws -> [UUID] {
+        let jobs = (
+            try? context.fetch(
+                FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
+            )
+        ) ?? []
+        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
+        let messageByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+        var promoted: [UUID] = []
+        for job in jobs where job.dataSpace == dataSpace && !job.state.isTerminal {
+            guard let responseID = job.responseMessageID,
+                  messageByID[responseID]?.agentStatus == .failed
+            else {
+                continue
+            }
+            guard job.state.canTransition(to: .waitingForUser) else { continue }
+            try waitForUser(
+                job,
+                message: "上次处理已失败，等待手动重试。",
+                now: now,
+                in: context
+            )
+            promoted.append(job.id)
+        }
+        return promoted
     }
 
     /// ADR 0045：把 Job 暂存到 LLM 恢复为止。`retryDelay` 为 nil 表示只等配置变更信号，

@@ -1,10 +1,12 @@
 # PRD 010：动作库、训练计划、程序化带练与视频复盘
 
 - 状态：部分修订；训练计划 GUI、带练体验与录像反馈由 PRD 012/013/014 扩展，
-  版本历史含义、归档恢复与通用肌群图由 PRD 019 修订
+  版本历史含义、归档恢复与通用肌群图由 PRD 019 修订，独立逐组处方与自动完成由 PRD 031 修订
 - 日期：2026-07-31
 - 修订自：[PRD 004](004-soma-current-product.md) 的训练记录与动作分析范围
 - 后续修订：
+  - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 将动作级聚合处方拆为独立逻辑组与原子执行，并收敛开练、自动推进和完成分享
+  - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md) 将侧别与完成方式归动作定义
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 将动作与计划 Tool 身份迁移为 Int64，并建立必需动作关系
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 让计划处方直接可见、精确快捷记录直写本地，并将专属动作图覆盖提升到至少一百个
   - [PRD 012](012-gui-training-program-authoring.md) 增加从零选择动作并创建计划的 GUI 路径
@@ -46,6 +48,8 @@
 ### 动作身份
 
 - 每个动作是当前数据空间中的 `ExerciseDefinition`，拥有稳定 `id` 和可编辑标准名称。
+- 动作统一保存侧别（全身 / 左右分开 / 只左边 / 只右边）和完成方式（按次数 / 按时长）；
+  计划和训练记录只编辑该定义下有意义的组参数。
 - Agent 在 `record_workout` 前调用固定 Tool `list_exercise_names`。
 - `list_exercise_names` 返回当前数据空间全部已有动作的 `{ id, name }`；名称只是展示和语义
   选择依据，写入引用必须使用 ID。

@@ -10,6 +10,10 @@ struct WorkoutCalorieEstimate: Equatable {
 }
 
 enum WorkoutCalorieCalculator {
+    /// Persisted with newly materialized deterministic calorie estimates so a
+    /// future rule change never makes historical values ambiguous.
+    static let algorithmVersion = "soma-met-2024-v1"
+
     /// MET values follow the 2024 Adult Compendium of Physical Activities.
     /// The 4-second fallback is the midpoint of a controlled 1–2s concentric
     /// plus 2–3s eccentric repetition; it is used only when the user supplied
@@ -61,6 +65,71 @@ enum WorkoutCalorieCalculator {
             durationMinutes: duration.minutes,
             durationWasEstimated: duration.estimated
         )
+    }
+
+    /// Guided workouts already have atom-level evidence, so they do not need
+    /// to squeeze seconds into the legacy integer `durationMinutes` field.
+    static func estimateGuidedWorkout(
+        exercise: String,
+        intensity: String? = nil,
+        evidence: [WorkoutSetEvidence],
+        weightKG: Double?
+    ) -> WorkoutCalorieEstimate? {
+        guard let duration = guidedDuration(from: evidence),
+              let weightKG,
+              weightKG > 0
+        else {
+            return nil
+        }
+        let activity = activity(for: exercise, intensity: intensity)
+        let calories = activity.met * weightKG * duration.minutes / 60
+        guard calories.isFinite, calories > 0 else { return nil }
+        return WorkoutCalorieEstimate(
+            calories: max(Int(calories.rounded()), 1),
+            met: activity.met,
+            activityLabel: activity.label,
+            durationMinutes: duration.minutes,
+            durationWasEstimated: duration.estimated
+        )
+    }
+
+    static func guidedDuration(
+        from evidence: [WorkoutSetEvidence]
+    ) -> (minutes: Double, estimated: Bool)? {
+        guard !evidence.isEmpty else { return nil }
+        var totalSeconds = 0.0
+        var usedRepetitionEstimate = false
+        for item in evidence {
+            switch item.targetKind {
+            case .duration:
+                guard let seconds = item.durationSeconds, seconds > 0 else {
+                    return nil
+                }
+                totalSeconds += Double(seconds)
+            case .repetitions:
+                guard let reps = item.reps, reps > 0 else { return nil }
+                if let seconds = item.durationSeconds, seconds > 0 {
+                    totalSeconds += Double(seconds)
+                } else {
+                    totalSeconds += Double(reps) * estimatedSecondsPerResistanceRep
+                    usedRepetitionEstimate = true
+                }
+            case .none:
+                if let seconds = item.durationSeconds, seconds > 0 {
+                    totalSeconds += Double(seconds)
+                } else if let reps = item.reps, reps > 0 {
+                    totalSeconds += Double(reps) * estimatedSecondsPerResistanceRep
+                    usedRepetitionEstimate = true
+                } else {
+                    return nil
+                }
+            }
+            if let restSeconds = item.restSeconds, restSeconds >= 0 {
+                totalSeconds += Double(restSeconds)
+            }
+        }
+        guard totalSeconds > 0 else { return nil }
+        return (totalSeconds / 60, usedRepetitionEstimate)
     }
 
     static func estimatedResistanceDuration(
@@ -172,13 +241,25 @@ enum WorkoutCalorieCalculator {
 
     @MainActor
     static func currentReferenceWeight(in context: ModelContext) -> Double? {
-        let recentBodyEntries = (try? context.fetch(FetchDescriptor<BodyEntry>(
+        referenceWeight(at: .now, in: context)
+    }
+
+    /// Uses only body measurements known at or before the session start. A
+    /// profile reference weight is the explicit fallback when no dated body
+    /// measurement exists.
+    @MainActor
+    static func referenceWeight(
+        at date: Date,
+        in context: ModelContext
+    ) -> Double? {
+        let bodyEntries = (try? context.fetch(FetchDescriptor<BodyEntry>(
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         ))) ?? []
-        if let weight = recentBodyEntries.compactMap(\.weight).first, weight > 0 {
+        if let weight = bodyEntries.first(where: {
+            $0.date <= date && ($0.weight ?? 0) > 0
+        })?.weight {
             return weight
         }
-
         let profiles = (try? context.fetch(FetchDescriptor<UserProfile>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         ))) ?? []

@@ -6,6 +6,7 @@ struct ConversationSessionDrawer: View {
     let isProcessing: Bool
     let onNewSession: () -> Void
     let onSelectSession: (ConversationSession) -> Void
+    let onDeleteSession: (ConversationSession) -> Void
 
     @Query(sort: \ConversationSession.updatedAt, order: .reverse)
     private var sessions: [ConversationSession]
@@ -41,24 +42,40 @@ struct ConversationSessionDrawer: View {
                 )
                 .frame(maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        ForEach(visibleSessions) { session in
-                            Button {
-                                onSelectSession(session)
-                            } label: {
-                                sessionRow(session)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint(
-                                session.id == currentSessionID
-                                    ? "当前对话"
-                                    : "切换后可继续对话"
-                            )
+                List {
+                    ForEach(visibleSessions) { session in
+                        Button {
+                            onSelectSession(session)
+                        } label: {
+                            sessionRow(session)
                         }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(
+                            top: 3,
+                            leading: 10,
+                            bottom: 3,
+                            trailing: 10
+                        ))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                onDeleteSession(session)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .accessibilityLabel("删除对话")
+                            .tint(.red)
+                        }
+                        .accessibilityHint(
+                            session.id == currentSessionID
+                                ? "当前对话"
+                                : "切换后可继续对话"
+                        )
                     }
-                    .padding(.horizontal, 10)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
 
             if isProcessing {

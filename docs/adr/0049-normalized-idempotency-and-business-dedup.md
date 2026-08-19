@@ -4,6 +4,7 @@
 - 日期：2026-08-05
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0018](0018-provenance-aware-record-merge.md) 中「仅靠纠错语义/共享媒体做跨 Turn 合并，缺少显式疑似重复反馈」的缺口
+- 后续修订：[ADR 0079](0079-create-inserts-update-by-id.md) 删除 create 路径上的纠错词合并；跨 Turn 疑似重复反馈与回执幂等仍有效
 - 上游依据：[PRD 022](../prd/022-react-reliability-and-context-awareness.md)
 
 ## 背景

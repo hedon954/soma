@@ -1,10 +1,11 @@
 # ADR 0029：计划版本、执行快照与逐组事实分层
 
-- 状态：已采纳
+- 状态：部分已替代；计划版本与事实分层继续有效，聚合处方和 Set 证据表示由 ADR 0073 修订
 - 日期：2026-07-31
 - 维护者：Soma maintainers
 - 部分替代：无
 - 后续替代：
+  - [ADR 0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) 将动作级统一处方拆为独立逻辑组，并以原子 Effort 保存左右、时长、状态与录像证据
   - [ADR 0071](0071-integer-business-identities-and-explicit-relations.md) 将训练领域身份迁移为 Int64，并建立必需动作关系
   - [ADR 0060](0060-guided-performance-workout-entry-projection.md) 将终态 Performance
     物化为可审查训练记录，并以来源 ID 组成计划执行

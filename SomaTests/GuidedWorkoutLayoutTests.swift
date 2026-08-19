@@ -4,6 +4,15 @@ import SwiftUI
 import XCTest
 
 final class GuidedWorkoutLayoutTests: XCTestCase {
+    func testSessionFinalizationFailureOffersRetryInsteadOfInfiniteProgress() {
+        let failure = GuidedSessionFinalizationState.failed("虚构保存失败，请重试。")
+
+        XCTAssertTrue(failure.canRetry)
+        XCTAssertEqual(failure.failureMessage, "虚构保存失败，请重试。")
+        XCTAssertFalse(GuidedSessionFinalizationState.saving.canRetry)
+        XCTAssertNil(GuidedSessionFinalizationState.saving.failureMessage)
+    }
+
     @MainActor
     func testPreviewUsesOneSharedCaptureExactLayerAcrossHosts() {
         let camera = WorkoutCameraService()
@@ -38,6 +47,33 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         XCTAssertTrue(layer.superlayer === expandedHost.layer)
     }
 
+    @MainActor
+    func testPreviewHostDetachOnlyTearsDownTheMatchingHost() {
+        let camera = WorkoutCameraService()
+        let layer = camera.sharedPreviewLayer
+        let compactHostID = UUID()
+        let expandedHostID = UUID()
+
+        camera.attachPreviewLayer(
+            layer,
+            hostID: compactHostID,
+            videoGravity: .resizeAspect
+        )
+        camera.attachPreviewLayer(
+            layer,
+            hostID: expandedHostID,
+            videoGravity: .resizeAspectFill
+        )
+
+        camera.detachPreviewLayer(layer, hostID: compactHostID)
+        XCTAssertEqual(camera.activePreviewHostIDForTesting, expandedHostID)
+
+        camera.detachPreviewLayer(layer, hostID: expandedHostID)
+        XCTAssertNil(camera.activePreviewHostIDForTesting)
+        XCTAssertFalse(camera.isPreviewReady)
+        XCTAssertNil(camera.previewIssueMessage)
+    }
+
     func testRecordingWithoutVisiblePreviewShowsActionableState() {
         XCTAssertEqual(
             WorkoutCameraSurfacePresentation.resolve(
@@ -66,6 +102,155 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             ),
             .failed("录像启动失败；训练仍可继续。")
         )
+    }
+
+    func testGuidedCameraStatusKeepsPreparationReadyAndFailureVisible() {
+        for state: WorkoutCameraState in [
+            .requestingPermission,
+            .configuring,
+            .startingSession,
+            .startingRecording
+        ] {
+            XCTAssertEqual(
+                GuidedCameraStatusPresentation.resolve(
+                    cameraState: state,
+                    isStarting: true,
+                    isQueued: true,
+                    automaticRecordingPaused: false,
+                    statusMessage: nil
+                ),
+                .preparing("正在启动相机，请稍候…")
+            )
+        }
+        XCTAssertEqual(
+            GuidedCameraStatusPresentation.resolve(
+                cameraState: .previewing,
+                isStarting: false,
+                isQueued: true,
+                automaticRecordingPaused: false,
+                statusMessage: nil
+            ),
+            .ready("相机已就绪，下一组将自动开始录像。")
+        )
+        XCTAssertEqual(
+            GuidedCameraStatusPresentation.resolve(
+                cameraState: .unavailable("虚构相机错误"),
+                isStarting: false,
+                isQueued: false,
+                automaticRecordingPaused: true,
+                statusMessage: "自动录像已暂停，请手动重试。"
+            ),
+            .warning("自动录像已暂停，请手动重试。")
+        )
+        XCTAssertEqual(
+            GuidedCameraStatusPresentation.resolve(
+                cameraState: .unavailable("相机连接已中断"),
+                isStarting: false,
+                isQueued: false,
+                automaticRecordingPaused: false,
+                statusMessage: "相机已就绪"
+            ),
+            .warning("相机连接已中断")
+        )
+        XCTAssertEqual(
+            GuidedCameraStatusPresentation.resolve(
+                cameraState: .recording,
+                isStarting: false,
+                isQueued: false,
+                automaticRecordingPaused: false,
+                statusMessage: nil
+            ),
+            .recording("正在录像。")
+        )
+    }
+
+    func testCameraSurfaceExplainsEveryActivationStage() {
+        for state: WorkoutCameraState in [
+            .requestingPermission,
+            .configuring,
+            .startingSession,
+            .startingRecording
+        ] {
+            XCTAssertEqual(
+                WorkoutCameraSurfacePresentation.resolve(
+                    cameraState: state,
+                    isPreviewReady: false,
+                    previewIssueMessage: nil,
+                    recordingErrorMessage: nil
+                ),
+                .loading(state.message)
+            )
+        }
+    }
+
+    func testCameraSurfacePlacementKeepsPreflightVisibleAcrossPhases() {
+        for phase: GuidedWorkoutPhase in [
+            .ready,
+            .exerciseIntroduction,
+            .preSetCountdown,
+            .setConfirmation,
+            .resting
+        ] {
+            XCTAssertEqual(
+                GuidedCameraSurfacePlacement.resolve(
+                    phase: phase,
+                    cameraState: .previewing,
+                    isStarting: false,
+                    sessionIsActive: true
+                ),
+                .phasePictureInPicture
+            )
+        }
+        XCTAssertEqual(
+            GuidedCameraSurfacePlacement.resolve(
+                phase: .setInProgress,
+                cameraState: .startingRecording,
+                isStarting: true,
+                sessionIsActive: true
+            ),
+            .setHero
+        )
+        XCTAssertEqual(
+            GuidedCameraSurfacePlacement.resolve(
+                phase: .exerciseIntroduction,
+                cameraState: .idle,
+                isStarting: false,
+                sessionIsActive: true
+            ),
+            .hidden
+        )
+    }
+
+    func testVisiblePreviewDoesNotTurnStartControlIntoStopControl() {
+        let previewing = GuidedRecordingControlPresentation.resolve(
+            surfaceIsVisible: true,
+            isRecording: false,
+            isStarting: false,
+            canStart: true,
+            errorMessage: nil
+        )
+        XCTAssertEqual(previewing.intent, .start)
+        XCTAssertEqual(previewing.systemImage, "video.badge.plus")
+        XCTAssertEqual(previewing.accessibilityLabel, "录制当前组")
+
+        let recording = GuidedRecordingControlPresentation.resolve(
+            surfaceIsVisible: true,
+            isRecording: true,
+            isStarting: false,
+            canStart: false,
+            errorMessage: nil
+        )
+        XCTAssertEqual(recording.intent, .stop)
+        XCTAssertEqual(recording.systemImage, "stop.circle.fill")
+        XCTAssertEqual(recording.accessibilityLabel, "停止当前录像")
+        XCTAssertTrue(recording.isEnabled)
+    }
+
+    func testPersistedPermissionFailureOffersSettingsRecovery() {
+        let status = GuidedCameraStatusPresentation.warning(
+            "没有相机权限；可在系统设置中开启。"
+        )
+        XCTAssertTrue(status.offersSettingsRecovery)
     }
 
     @MainActor
@@ -186,6 +371,7 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             set: nil,
             targetText: "5 次",
             phaseStartedAt: .now.addingTimeInterval(-4),
+            deadlineAt: nil,
             onTick: { _ in },
             onFinished: { completed.fulfill() }
         )
@@ -253,6 +439,10 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             set: sets[1],
             sets: sets,
             targetText: "自重 × 5",
+            effortSide: .none,
+            isAutomaticDuration: false,
+            remainingDurationSeconds: nil,
+            durationDeadlineAt: nil,
             coachingNote: "保持躯干稳定，在可控范围内完成本组。",
             isLandscape: true,
             cameraErrorMessage: nil,
@@ -332,6 +522,10 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             set: sets[0],
             sets: sets,
             targetText: "自重 × 5 次",
+            effortSide: .none,
+            isAutomaticDuration: false,
+            remainingDurationSeconds: nil,
+            durationDeadlineAt: nil,
             coachingNote: "先让肩胛下沉，再把肘部拉向身体两侧。",
             isLandscape: false,
             cameraErrorMessage: "相机画面未能显示；训练可以继续，请收起后重新进入取景。",

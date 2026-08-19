@@ -1,5 +1,100 @@
 import Foundation
 
+enum AgentTurnVisibleItems {
+    /// ADR 0014 / ADR 0077：空文字卡去掉；Skill/Tool/错误和有内容的文字全部保留。
+    static func make(from items: [AgentTurnItem]) -> [AgentTurnItem] {
+        items.filter {
+            $0.kind != .text
+                || !AgentVisibleTextSanitizer.sanitize($0.text).isEmpty
+        }
+    }
+}
+
+/// PRD 020：连续 Skill/Tool 收成一条可展开过程；文字和失败卡仍按原顺序打断该组。
+enum AgentTurnTranscriptSegment: Equatable, Identifiable {
+    case process(id: UUID, items: [AgentTurnItem])
+    case item(AgentTurnItem)
+
+    var id: UUID {
+        switch self {
+        case let .process(id, _):
+            id
+        case let .item(item):
+            item.id
+        }
+    }
+
+    var items: [AgentTurnItem] {
+        switch self {
+        case let .process(_, items):
+            items
+        case let .item(item):
+            [item]
+        }
+    }
+}
+
+enum AgentTurnTranscriptSegments {
+    static func make(from items: [AgentTurnItem]) -> [AgentTurnTranscriptSegment] {
+        var segments: [AgentTurnTranscriptSegment] = []
+        var process: [AgentTurnItem] = []
+
+        func flushProcess() {
+            guard !process.isEmpty else { return }
+            segments.append(.process(id: process[0].id, items: process))
+            process = []
+        }
+
+        for item in AgentTurnVisibleItems.make(from: items) {
+            if Self.isGroupableProcess(item) {
+                process.append(item)
+            } else {
+                flushProcess()
+                segments.append(.item(item))
+            }
+        }
+        flushProcess()
+        return segments
+    }
+
+    static func processSummary(for items: [AgentTurnItem]) -> String {
+        guard !items.isEmpty else { return "执行过程" }
+        if items.contains(where: { $0.status == .running }) {
+            return items.count == 1
+                ? (items[0].title.isEmpty ? "正在执行" : items[0].title)
+                : "正在执行 \(items.count) 步"
+        }
+
+        var groups: [(title: String, count: Int)] = []
+        for item in items {
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = title.isEmpty ? "执行" : title
+            if let last = groups.last, last.title == label {
+                groups[groups.count - 1].count += 1
+            } else {
+                groups.append((label, 1))
+            }
+        }
+        return groups.map { group in
+            group.count == 1 ? group.title : "\(group.title) ×\(group.count)"
+        }.joined(separator: " · ")
+    }
+
+    static func isGroupableProcess(_ item: AgentTurnItem) -> Bool {
+        switch item.kind {
+        case .skill, .tool:
+            item.status != .failed && item.status != .cancelled
+        case .text, .error:
+            false
+        }
+    }
+}
+
+enum AgentProcessCardPolicy {
+    /// PRD 020：Skill/Tool 过程卡默认折叠为可展开状态行；折叠不等于删除。
+    static let defaultsCollapsed = true
+}
+
 enum AgentToolResultDisclosure {
     static let collapsedLineLimit = 4
     /// 约 4 行 caption 正文；未超过行数且未超过该字数时不显示展开按钮。
@@ -17,6 +112,7 @@ struct AgentToolResultPresentation: Equatable {
     var details: [String]
     var disclosureLabel: String?
     var detailSystemImage = "checkmark.circle"
+    var defaultsCollapsed = AgentProcessCardPolicy.defaultsCollapsed
 
     static func make(for item: AgentTurnItem) -> AgentToolResultPresentation? {
         guard
@@ -30,18 +126,47 @@ struct AgentToolResultPresentation: Equatable {
         let observation = result.observation
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if context.name == .listExerciseNames
-            || context.scope == "exercises"
-            || AgentToolPresentationFormatter.exerciseNames(in: observation) != nil
-        {
+        if AgentToolPresentationFormatter.exerciseNames(in: observation) != nil {
             return exerciseLibraryPresentation(observation)
         }
 
-        if context.name == .queryUserData, let scope = context.scope {
+        if context.name == .searchExercises {
+            return searchExercisesPresentation(result)
+        }
+
+        if let scope = context.scope ?? queryScope(for: context.name) {
             return queryPresentation(observation, scope: scope)
         }
 
         return genericPresentation(observation)
+    }
+
+    private static func queryScope(for name: AgentToolName?) -> String? {
+        switch name {
+        case .listWorkouts, .getWorkout: "workouts"
+        case .listMeals, .getMeal: "meals"
+        case .listBodyEntries, .getBodyEntry: "body"
+        case .listPrograms, .getProgram: "programs"
+        default: nil
+        }
+    }
+
+    private static func searchExercisesPresentation(
+        _ result: AgentToolResult
+    ) -> AgentToolResultPresentation {
+        let image = "figure.strengthtraining.traditional"
+        let summary = AgentToolPresentationFormatter.friendlyLines(result.observation)
+            .first
+            ?? "已完成"
+        let names = AgentToolPresentationFormatter.names(in: result.data)
+        guard !names.isEmpty else {
+            return compactPresentation(summary, systemImage: image)
+        }
+        return collapsedPresentation(
+            summary: summary,
+            details: names,
+            systemImage: image
+        )
     }
 
     private static func exerciseLibraryPresentation(
@@ -50,15 +175,17 @@ struct AgentToolResultPresentation: Equatable {
         let names = AgentToolPresentationFormatter.exerciseNames(in: observation) ?? []
         let image = "figure.strengthtraining.traditional"
         guard !names.isEmpty else {
-            return AgentToolResultPresentation(
-                summary: "动作库目前为空",
-                details: [],
-                disclosureLabel: nil,
-                detailSystemImage: image
+            return compactPresentation("动作库目前为空", systemImage: image)
+        }
+        if names.count == 1 {
+            return compactPresentation(
+                "动作库中有 1 个动作：\(names[0])",
+                systemImage: image
             )
         }
-        return contentPresentation(
-            "动作库中有 \(names.count) 个动作：\(names.joined(separator: "、"))",
+        return collapsedPresentation(
+            summary: "动作库中有 \(names.count) 个动作",
+            details: names,
             systemImage: image
         )
     }
@@ -75,8 +202,9 @@ struct AgentToolResultPresentation: Equatable {
             guard details.count > 1 else {
                 return genericPresentation(observation)
             }
-            return contentPresentation(
-                details.joined(separator: "\n"),
+            return collapsedPresentation(
+                summary: "已读取个人资料和近期记录",
+                details: details,
                 systemImage: "person.text.rectangle"
             )
         }
@@ -86,8 +214,9 @@ struct AgentToolResultPresentation: Equatable {
         guard details.count > 1 else {
             return genericPresentation(observation, systemImage: kind.systemImage)
         }
-        return contentPresentation(
-            details.joined(separator: "\n"),
+        return collapsedPresentation(
+            summary: "找到 \(details.count) 条\(kind.name)",
+            details: details,
             systemImage: kind.systemImage
         )
     }
@@ -120,26 +249,44 @@ struct AgentToolResultPresentation: Equatable {
         let lines = AgentToolPresentationFormatter.friendlyLines(observation)
         let text = lines.joined(separator: "\n")
         guard !text.isEmpty else {
-            return AgentToolResultPresentation(
-                summary: "已完成",
-                details: [],
-                disclosureLabel: nil,
-                detailSystemImage: systemImage
-            )
+            return compactPresentation("已完成", systemImage: systemImage)
         }
-        return contentPresentation(text, systemImage: systemImage)
+        let needsDisclosure = lines.count > 1 || AgentToolResultDisclosure.shouldCollapse(text)
+        guard needsDisclosure else {
+            return compactPresentation(text, systemImage: systemImage)
+        }
+        return collapsedPresentation(
+            summary: lines[0],
+            details: lines,
+            systemImage: systemImage
+        )
     }
 
-    /// 直接展示结果正文；过长时由 UI 截断并提供「展开」。
-    private static func contentPresentation(
-        _ text: String,
+    private static func compactPresentation(
+        _ summary: String,
         systemImage: String
     ) -> AgentToolResultPresentation {
         AgentToolResultPresentation(
-            summary: text,
+            summary: summary,
             details: [],
-            disclosureLabel: AgentToolResultDisclosure.shouldCollapse(text) ? "展开" : nil,
-            detailSystemImage: systemImage
+            disclosureLabel: nil,
+            detailSystemImage: systemImage,
+            defaultsCollapsed: AgentProcessCardPolicy.defaultsCollapsed
+        )
+    }
+
+    /// 默认只露一行状态；展开后显示完整结果。过程卡本身始终保留。
+    private static func collapsedPresentation(
+        summary: String,
+        details: [String],
+        systemImage: String
+    ) -> AgentToolResultPresentation {
+        AgentToolResultPresentation(
+            summary: summary,
+            details: details,
+            disclosureLabel: "展开",
+            detailSystemImage: systemImage,
+            defaultsCollapsed: AgentProcessCardPolicy.defaultsCollapsed
         )
     }
 }
@@ -212,6 +359,22 @@ private enum AgentToolPresentationFormatter {
             return nil
         }
         return references.map(\.name).filter { !$0.isEmpty }
+    }
+
+    static func names(in data: AgentJSONValue?) -> [String] {
+        guard case let .object(object) = data,
+              case let .array(items) = object["items"]
+        else {
+            return []
+        }
+        return items.compactMap { item in
+            guard case let .object(object) = item,
+                  case let .string(name) = object["name"]
+            else {
+                return nil
+            }
+            return name
+        }.filter { !$0.isEmpty }
     }
 
     static func friendlySegments(

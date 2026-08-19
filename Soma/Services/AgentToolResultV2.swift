@@ -48,6 +48,11 @@ struct AgentRecordReference: Codable, Equatable, Sendable {
         case recordType = "record_type"
         case recordID = "record_id"
     }
+
+    /// 原位卡按类型+业务 ID 去重；同一 Turn 里训练/饮食编号可能碰巧相同。
+    var identityKey: String {
+        "\(recordType):\(recordID)"
+    }
 }
 
 struct AgentToolPage: Codable, Equatable, Sendable {

@@ -110,8 +110,8 @@ test(
       {
         jobID: job.id,
         toolCallID,
-        toolName: "list_exercise_names",
-        schemaVersion: 1,
+        toolName: "search_exercises",
+        schemaVersion: 2,
         arguments: {},
         mutation: false,
         expiresAt: new Date(now.getTime() + 60_000),
@@ -124,7 +124,7 @@ test(
       store.saveToolRequest(
         {
           ...tool,
-          toolName: "record_workout",
+          toolName: "create_workout",
         },
         now,
         lease.epoch,
@@ -230,17 +230,17 @@ function makeJobInput(
       ],
       skills: [],
       tools: [{
-        name: "list_exercise_names",
-        schemaVersion: 1,
+        name: "search_exercises",
+        schemaVersion: 2,
         definition: {
           type: "function",
           function: {
-            name: "list_exercise_names",
+            name: "search_exercises",
             parameters: { type: "object", properties: {} },
           },
         },
       }],
-      activeTools: ["list_exercise_names"],
+      activeTools: ["search_exercises"],
       runtime: {
         toolChoice: "auto",
         parallelToolCalls: true,
@@ -258,7 +258,7 @@ function makeJobInput(
     mediaBindings: [],
     uploadIDs: [],
     allowedRemoteTools: [],
-    allowedDeviceTools: ["list_exercise_names"],
+    allowedDeviceTools: ["search_exercises"],
     liveActivityEnabled: true,
     ...overrides,
   };

@@ -6,6 +6,7 @@
   - [PRD 028](028-retry-active-runtime-budget.md) 将整轮墙钟预算拆为可暂停的实际执行预算，并允许用户显式重试开启新窗口
   - [PRD 029](029-unified-local-remote-agent-model-input.md) 将稳定 Prompt、按意图 Tool 和并行语义统一到本地/远程 Backend
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 以条件上下文、Skill 直载和强类型 Tool 进一步缩短执行路径
+  - [PRD 032](032-default-full-tools-and-selected-skill-subset.md) 取消建议零 Tool 与按意图预选；未选 Skill 注册完整当前协议 Tool
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的当前教练、进展、设置、计划与 Agent 失败重试基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的计划处方可发现性、快捷训练记录与内置动作图覆盖
@@ -20,6 +21,8 @@
   - [ADR 0064](../adr/0064-deterministic-quick-write-and-latest-inline-review.md)
   - [ADR 0065](../adr/0065-intent-scoped-tools-and-prefix-stable-prompts.md)
   - [ADR 0066](../adr/0066-bundled-action-illustration-coverage.md)
+  - [ADR 0077](../adr/0077-same-turn-identity-merge-and-additive-inline-review.md)
+  - [ADR 0079](../adr/0079-create-inserts-update-by-id.md)
 - 上游依据：
   - [BUG 0015](../bugs/0015-billing-retry-loop-and-queue-order.md)
   - [BUG 0016](../bugs/0016-batched-tool-retry-repeats-completed-work.md)
@@ -54,6 +57,8 @@
    step 继续。
 2. 重试复用同一 AI 气泡，移除旧失败态和半截文本；同一失败 step 被新状态覆盖，不堆叠失败卡。
 3. Tool 副作用仍以幂等账本保护；已成功写入不得因为后续 LLM 失败而伪装成未发生。
+4. Loop 内的传输抖动、供应商暂存和前台续跑保持无感：不展示重试按钮。一旦教练气泡进入失败态
+   并向用户展示重试，停止自动领取和退避，等待手动恢复。
 
 ### 3. 一次 Loop 只有一个可信时间基准
 
@@ -93,6 +98,10 @@
 4. 每次保存或删除向来源 AI Message 写入有界的“用户最新修订”块；下一轮上下文投影把它紧邻
    原回复提供给模型。不得改写历史 tool_call_id、Tool observation 或用户原文。
 5. 卡片按稳定 record ID 读取当前 SwiftData 事实；模型文本不是卡片事实来源。
+6. 每个成功写入的动作、餐次各有一张卡；一次批量 `create_workout` 的 N 个 `record_refs`
+   对应 N 张卡。原位卡出现在过程与文字之后，不得过滤 Skill/Tool。连续成功过程卡默认收成
+   一条可展开摘要；单卡本身也默认折叠。审查卡使用紧凑行内编辑，时长类动作显示秒而不是空次数。
+7. 保存成功后按钮变为「已保存」并给出成功触觉；校验失败保持可再试。
 
 ### 7. 训练计划与一级页面减摩擦
 
@@ -107,8 +116,8 @@
 
 1. OpenAI-compatible 原生 Tool Calling 保持不变：App 把固定 JSON Schema 置于 `tools`，模型以
    `tool_calls` 返回，设备确定性执行并以 `role: tool` 回传结果。
-2. `core` 只保留读技能、读数据和展开能力；写记录移入 `records`，只有明确记录／修改意图才
-   预选。建议类问题不得默认暴露 mutation。
+2. 选中快捷 Skill 时只注册绑定 Tool。未选 Skill 时注册当前协议全部 Tool，见
+   [PRD 032](032-default-full-tools-and-selected-skill-subset.md)；不再按记录意图隐藏写入工具。
 3. System Prompt 只保存稳定身份、产品契约和 Tool 使用原则；User Prompt 使用固定版本与固定
    section 顺序：执行约束、可信本地上下文、当前输入、当前媒体清单。
 4. 稳定 System、Tool 顺序和 User section 前缀置前；当前文本、动态媒体与按需扩展置后。后续
@@ -134,10 +143,12 @@
 
 - 欠费状态跨重启不请求模型；队列完整列表、单删、全清、按顺序重试全部、共享 LLM 配置和
   FIFO 有确定性测试。
+- 自动恢复不展示重试按钮；失败气泡展示重试后 Job 进入 `waitingForUser` 且不能被补偿领取。
 - step 续跑、同气泡覆盖、冻结时间与跨午夜通过测试；序列化中不再出现格式化日期字段。
 - 精确快捷建议在空 API Key 下创建训练记录，且 Trace 显示本地 Tool、记录时间为实时发送时间。
-- 最新卡片可以保存／删除，旧卡片锁定；下一轮上下文包含有界修订块。
-- 通用建议不暴露 `mutate_user_data`，记录意图才暴露；Prompt section 顺序有快照式测试。
+- 最新卡片可以保存／删除，旧卡片锁定；下一轮上下文包含有界修订块。多动作同一条消息必须
+  形成多条记录和多张卡；Event Cards 与保存确认同时可见。
+- 未选 Skill 注册完整当前协议 Tool，选中 Skill 只注册绑定集合；Prompt section 顺序有快照式测试。
 - 专属动作图条目不少于 100，所有声明资源能在 App Bundle 找到。
 - `make verify` 通过；模拟器检查浅色／深色、长文本、滚动和安全区。反馈邮件自动化与真机交互
   分别报告为独立验收，不用本地 build 冒充。

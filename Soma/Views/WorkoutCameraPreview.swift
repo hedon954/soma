@@ -26,7 +26,12 @@ struct WorkoutCameraPreview: UIViewRepresentable {
         coordinator: Coordinator
     ) {
         uiView.onPreviewLayerReady = nil
-        if let layer = coordinator.camera?.sharedPreviewLayer {
+        if let camera = coordinator.camera {
+            let layer = camera.sharedPreviewLayer
+            camera.detachPreviewLayer(
+                layer,
+                hostID: uiView.previewHostID
+            )
             uiView.removePreviewLayerIfOwned(layer)
         }
     }

@@ -12,6 +12,10 @@ struct WorkoutSharePosterModel: Equatable, Identifiable {
     var volumeValue: String
     var exerciseCount: Int
     var completedSets: Int
+    var partialSets: Int = 0
+    var failedSets: Int = 0
+    var estimatedCalories: Int?
+    var referenceWeightMissing = false
     var intensities: [MuscleGroup: Double]
     var exercises: [ExerciseLine]
 
@@ -19,6 +23,7 @@ struct WorkoutSharePosterModel: Equatable, Identifiable {
         var id: UUID
         var name: String
         var setCount: Int
+        var partialSetCount: Int = 0
         /// Load only, without the set-count prefix (e.g. `自重 × 5`).
         var loadSummary: String
     }
@@ -31,39 +36,76 @@ enum WorkoutSharePosterBuilder {
         in context: ModelContext
     ) -> WorkoutSharePosterModel {
         let summary = TrainingPlanStore.summary(for: session.id, in: context)
-        let performances = ((try? context.fetch(FetchDescriptor<ExercisePerformance>())) ?? [])
+        let relatedPerformances = session.performances
+        let performances = (relatedPerformances.isEmpty
+            ? ((try? context.fetch(FetchDescriptor<ExercisePerformance>())) ?? [])
             .filter { $0.sessionID == session.id }
+            : relatedPerformances)
             .sorted { $0.order < $1.order }
         let sets = (try? context.fetch(FetchDescriptor<WorkoutSet>())) ?? []
         let definitions = Dictionary(
             uniqueKeysWithValues: ((try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? [])
                 .map { ($0.id, $0) }
         )
-
+        let projectedWorkouts = ((try? context.fetch(
+            FetchDescriptor<WorkoutEntry>()
+        )) ?? [])
+        let workoutsByProjectionKey = Dictionary(grouping: projectedWorkouts) {
+            $0.projectionKey
+        }.reduce(into: [String: WorkoutEntry]()) { result, element in
+            let (key, candidates) = element
+            // A missing key is legacy/non-projected data. More than one row
+            // for the same key is ambiguous, so never pick one by fetch order.
+            guard let key, candidates.count == 1,
+                  let candidate = candidates.first
+            else { return }
+            result[key] = candidate
+        }
+        let workoutsByPerformanceID = performances.reduce(
+            into: [UUID: WorkoutEntry]()
+        ) { result, performance in
+            guard !performance.workoutProjectionSuppressed else { return }
+            let key = SomaDataMigration.projectionKey(for: performance.id)
+            if let related = performance.projectedWorkout,
+               related.projectionKey == key
+            {
+                result[performance.id] = related
+            } else if let keyed = workoutsByProjectionKey[key] {
+                result[performance.id] = keyed
+            }
+        }
         let intensityInputs: [(primary: [String], secondary: [String], sets: Int)] = performances.map { performance in
-            let completed = sets.filter {
-                $0.performanceID == performance.id && $0.status == .completed
+            let evidenced = sets.filter {
+                $0.performanceID == performance.id
+                    && ($0.status == .completed || $0.status == .partial)
             }.count
             let definition = definitions[performance.exerciseID]
             return (
                 primary: definition?.primaryMuscles ?? [],
                 secondary: definition?.secondaryMuscles ?? [],
-                sets: max(completed, 1)
+                sets: max(evidenced, 1)
             )
         }
         let intensities = MuscleMapView.intensities(exercises: intensityInputs)
         let focusMuscles = topMuscleNames(from: intensities, limit: 3)
 
         let exerciseLines: [WorkoutSharePosterModel.ExerciseLine] = performances.compactMap { performance in
-            let completed = sets
-                .filter { $0.performanceID == performance.id && $0.status == .completed }
+            let evidenced = sets
+                .filter {
+                    $0.performanceID == performance.id
+                        && ($0.status == .completed || $0.status == .partial)
+                }
                 .sorted { $0.order < $1.order }
-            guard !completed.isEmpty else { return nil }
-            let load = loadSummary(for: completed)
+            guard !evidenced.isEmpty else { return nil }
+            let projected = workoutsByPerformanceID[performance.id]
+            let load = projected.map {
+                evidenceLoadSummary($0.setEntries)
+            } ?? loadSummary(for: evidenced)
             return WorkoutSharePosterModel.ExerciseLine(
                 id: performance.id,
                 name: performance.exerciseName,
-                setCount: completed.count,
+                setCount: evidenced.count,
+                partialSetCount: evidenced.count { $0.status == .partial },
                 loadSummary: load
             )
         }
@@ -88,6 +130,15 @@ enum WorkoutSharePosterBuilder {
             volumeValue: volumeValue,
             exerciseCount: summary.exerciseCount,
             completedSets: summary.completedSets,
+            partialSets: summary.partialSets,
+            failedSets: summary.failedSets,
+            // The summary applies the same canonical performance projection
+            // and requires calorie evidence for every evidenced performance.
+            estimatedCalories: summary.estimatedCalories,
+            referenceWeightMissing: WorkoutCalorieCalculator.referenceWeight(
+                at: session.startedAt,
+                in: context
+            ) == nil,
             intensities: intensities,
             exercises: exerciseLines
         )
@@ -148,8 +199,32 @@ enum WorkoutSharePosterBuilder {
         return "\(sets.count)组 · \(loadSummary(for: sets))"
     }
 
+    static func evidenceLoadSummary(
+        _ evidence: [WorkoutSetEvidence]
+    ) -> String {
+        guard !evidence.isEmpty else { return "—" }
+        let grouped = Dictionary(grouping: evidence) {
+            $0.logicalSetIndex ?? 0
+        }
+        let tokens = grouped.keys.sorted().map { key in
+            let values = grouped[key, default: []]
+            return values.map(evidenceLoadToken).joined(separator: " / ")
+        }
+        let visible = tokens.prefix(4).joined(separator: " · ")
+        return tokens.count > 4 ? "\(visible) 等" : visible
+    }
+
     private static func loadToken(for set: WorkoutSet) -> String {
         let weight = set.actualWeightKG ?? set.plannedWeightKG
+        if set.plannedTargetKind == .duration {
+            let seconds = set.actualDurationSeconds
+                ?? set.plannedDurationSeconds
+            let duration = seconds.map { "\($0)秒" } ?? "时长未记录"
+            if let weight, weight > 0 {
+                return "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg · \(duration)"
+            }
+            return duration
+        }
         let reps = set.actualReps ?? set.plannedReps
         let repsText = reps.map(String.init) ?? "—"
         if let weight, weight > 0 {
@@ -158,6 +233,33 @@ enum WorkoutSharePosterBuilder {
         }
         // Bodyweight or missing external load — never show "— × N".
         return "自重 × \(repsText)"
+    }
+
+    private static func evidenceLoadToken(
+        _ evidence: WorkoutSetEvidence
+    ) -> String {
+        var tokens: [String] = []
+        switch evidence.side {
+        case .some(.left):
+            tokens.append("左")
+        case .some(.right):
+            tokens.append("右")
+        case nil, .some(.none):
+            break
+        }
+        if let weight = evidence.externalWeightKG, weight > 0 {
+            tokens.append(
+                "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
+            )
+        } else {
+            tokens.append("自重")
+        }
+        if let reps = evidence.reps {
+            tokens.append("× \(reps)")
+        } else if let duration = evidence.durationSeconds {
+            tokens.append("· \(duration)秒")
+        }
+        return tokens.joined(separator: " ")
     }
 }
 
@@ -222,7 +324,20 @@ struct WorkoutSharePosterView: View {
 
                 VStack(alignment: .leading, spacing: 16) {
                     metric(model.volumeValue, unit: "kg", label: "有效容量")
-                    metric("\(model.completedSets)", unit: "组", label: "完成组")
+                    metric(
+                        model.partialSets > 0 || model.failedSets > 0
+                            ? "\(model.completedSets)/\(model.partialSets)/\(model.failedSets)"
+                            : "\(model.completedSets)",
+                        unit: "组",
+                        label: model.partialSets > 0 || model.failedSets > 0
+                            ? "完整 / 部分 / 失败"
+                            : "完成组"
+                    )
+                    metric(
+                        model.estimatedCalories.map(String.init) ?? "—",
+                        unit: "kcal",
+                        label: "预计消耗"
+                    )
                     metric(model.durationText, unit: nil, label: "总耗时")
                 }
                 .frame(width: 104, alignment: .leading)
@@ -259,12 +374,16 @@ struct WorkoutSharePosterView: View {
                         Text("\(exercise.setCount)")
                             .font(.system(size: 22, weight: .bold).monospacedDigit())
                             .foregroundStyle(ink)
-                        Text("组")
+                        Text(exercise.partialSetCount > 0
+                            ? "组 · \(exercise.partialSetCount) 部分"
+                            : "组")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(muted)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(exercise.setCount)组")
+                    .accessibilityLabel(
+                        "\(exercise.setCount)组，其中 \(exercise.partialSetCount) 组部分完成"
+                    )
                 }
             }
         }
@@ -334,6 +453,7 @@ struct WorkoutShareSheet: View {
     @State private var errorMessage: String?
     @State private var saveMessage: String?
     @State private var isSaving = false
+    @State private var isRendering = false
 
     var body: some View {
         NavigationStack {
@@ -355,7 +475,26 @@ struct WorkoutShareSheet: View {
                             }
                             .accessibilityLabel("训练分享海报")
                             .accessibilityHint("长按可拷贝图片")
-                    } else if errorMessage == nil {
+                    } else if let errorMessage {
+                        ContentUnavailableView {
+                            Label(
+                                "无法生成分享图",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                        } description: {
+                            Text(errorMessage)
+                        } actions: {
+                            Button("重新生成") {
+                                Task { await renderPoster() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button("返回训练历史") {
+                                dismiss()
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 36)
+                    } else {
                         ProgressView("正在生成海报…")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 80)
@@ -376,6 +515,25 @@ struct WorkoutShareSheet: View {
                         .buttonStyle(.borderedProminent)
                         .tint(AppTheme.tint)
                         .disabled(isSaving)
+                    }
+
+                    if model.referenceWeightMissing {
+                        NavigationLink {
+                            PersonalBodyInfoView()
+                        } label: {
+                            Label(
+                                "补充体重后，之后的训练可估算消耗",
+                                systemImage: "flame"
+                            )
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(
+                                Color.orange.opacity(0.1),
+                                in: RoundedRectangle(cornerRadius: 12)
+                            )
+                        }
+                        .foregroundStyle(.orange)
                     }
 
                     Text("海报在本机渲染，不含照片、视频或位置。")
@@ -414,28 +572,13 @@ struct WorkoutShareSheet: View {
                         ) {
                             Label("分享", systemImage: "square.and.arrow.up")
                         }
-                    } else if errorMessage == nil {
+                    } else if isRendering {
                         ProgressView()
                     }
                 }
             }
             .task {
                 await renderPoster()
-            }
-            .alert(
-                "无法生成分享图",
-                isPresented: Binding(
-                    get: { errorMessage != nil },
-                    set: {
-                        if !$0 {
-                            errorMessage = nil
-                        }
-                    }
-                )
-            ) {
-                Button("好", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
             }
             .alert(
                 "保存图片",
@@ -457,6 +600,10 @@ struct WorkoutShareSheet: View {
 
     @MainActor
     private func renderPoster() async {
+        guard !isRendering else { return }
+        isRendering = true
+        errorMessage = nil
+        defer { isRendering = false }
         let poster = WorkoutSharePosterView(model: model)
             .environment(\.colorScheme, .light)
         let renderer = ImageRenderer(content: poster)

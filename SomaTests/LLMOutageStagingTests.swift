@@ -272,6 +272,80 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
+    func testFailedResponsePromotesOutOfAutomaticRecovery() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let job = makeJob()
+        let response = CoachMessage(
+            isFromCoach: true,
+            text: "这次没有处理成功",
+            agentStatus: .failed,
+            turnID: job.turnID
+        )
+        context.insert(response)
+        context.insert(job)
+        try context.save()
+        job.responseMessageID = response.id
+        try job.transition(to: .running)
+        try job.transition(to: .waitingForNetwork)
+
+        let promoted = try AgentJobStore.promoteFailedResponsesToManualRetry(
+            dataSpace: .personal,
+            in: context
+        )
+
+        XCTAssertEqual(promoted, [job.id])
+        XCTAssertEqual(job.state, .waitingForUser)
+        XCTAssertNil(job.nextRetryAt)
+        XCTAssertTrue(
+            ConversationTurnProjection.canRetry(response, in: [response], job: job)
+        )
+        XCTAssertNil(try AgentJobStore.claimNext(
+            dataSpace: .personal,
+            owner: "runner",
+            in: context
+        ))
+    }
+
+    @MainActor
+    func testCancelledAutomaticRecoveryStaysClaimable() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let job = makeJob()
+        let response = CoachMessage(
+            isFromCoach: true,
+            text: "网络暂时不可用，任务已保留，将在网络恢复后继续。",
+            agentStatus: .cancelled,
+            turnID: job.turnID
+        )
+        context.insert(response)
+        context.insert(job)
+        try context.save()
+        job.responseMessageID = response.id
+        try job.transition(to: .running)
+        try job.transition(to: .waitingForNetwork)
+        job.nextRetryAt = nil
+        try context.save()
+
+        XCTAssertTrue(try AgentJobStore.promoteFailedResponsesToManualRetry(
+            dataSpace: .personal,
+            in: context
+        ).isEmpty)
+        XCTAssertEqual(job.state, .waitingForNetwork)
+        XCTAssertFalse(
+            ConversationTurnProjection.canRetry(response, in: [response], job: job)
+        )
+        XCTAssertEqual(
+            try AgentJobStore.claimNext(
+                dataSpace: .personal,
+                owner: "runner",
+                in: context
+            )?.id,
+            job.id
+        )
+    }
+
+    @MainActor
     func testMissingAPIKeyStagesMessageInsteadOfRejectingSend() throws {
         let suiteName = "LLMOutageStagingTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -452,6 +526,7 @@ final class LLMOutageStagingTests: XCTestCase {
         try ModelContainer(
             for: AgentJob.self,
             PersistentAgentEvent.self,
+            CoachMessage.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }

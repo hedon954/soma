@@ -12,6 +12,7 @@
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 修订跨日 Session、可信时间与选择性历史媒体
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 恢复可见历史入口并保留抽屉手势
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 以可审查滚动摘要修订十轮外上下文，并引入 Skill Middleware
+- 下游落地：[ADR 0080](../adr/0080-conversation-session-swipe-delete.md)
 - 关联决策：
   - [ADR 0022](../adr/0022-user-controlled-conversation-sessions.md)
   - [ADR 0023](../adr/0023-ordered-workout-set-evidence.md)
@@ -48,6 +49,9 @@ Soma 已经具备本地 Session、混合媒体、位置上下文、动态模型�
 - Session 改为用户主导：跨天或重新进入前台不再强制创建新 Session。首次使用没有 Session
   时创建一个；用户点击“新对话”时才主动切换。
 - 当前 Session 尚为空时再次点击“新对话”复用该空 Session，不制造连续空记录。
+- 历史抽屉 Session 行支持系统尾随左滑删除；只删除该对话的聊天图，不删除训练、饮食、身体
+  记录或健身房。删除当前对话后激活剩余最近活动的 Session，若已无对话则新建空 Session。
+- 该对话仍有非终态 Agent Job，或处理器正在处理该 Session 时，拒绝删除并提示用户。
 - Agent 正在处理时允许查看其他 Session，但在途 Turn 始终写回它最初所属的 Session；
   全局处理完成前不允许从另一个 Session 再发送。
 - 隐藏手势不牺牲无障碍：教练页提供不可见的 VoiceOver 自定义操作“打开历史对话”。
@@ -195,7 +199,7 @@ Soma 已经具备本地 Session、混合媒体、位置上下文、动态模型�
 
 ## 明确不在当前范围
 
-- 删除、合并、分享或跨设备同步 Session；
+- 合并、分享或跨设备同步 Session；对话历史的本机左滑删除见 [ADR 0080](../adr/0080-conversation-session-swipe-delete.md)；
 - 发送最近十个来回之外的历史聊天，或突破十二张视觉帧额度重发媒体；
 - 为只接受公网 URL 的供应商建立视频 CDN、对象存储或临时公开上传服务；
 - 后台持续定位或再次在聊天输入区放置位置开关；
@@ -206,6 +210,7 @@ Soma 已经具备本地 Session、混合媒体、位置上下文、动态模型�
 
 - 教练页没有历史时钟；从左边界右滑可打开抽屉，VoiceOver 自定义操作也能打开。
 - 新建两个非空 Session 后可来回切换并继续发送；跨天进入前台仍停留在用户选择的 Session。
+- 历史抽屉可左滑删除对话；业务记录保留，在途处理拒绝删除，删除当前项后切换到剩余最近对话。
 - 切换 Session 时，在途回复只出现在原 Session；空 Session 不重复堆积。
 - 首次发送只出现一次位置用途确认；允许、拒绝和系统拒绝后都不再自动弹出，设置页可修改。
 - 0/1 个健身房时输入区没有场馆胶囊，2 个及以上时可以切换。

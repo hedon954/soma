@@ -48,4 +48,110 @@ final class WorkoutCalorieCalculatorTests: XCTestCase {
         XCTAssertEqual(entry.calorieDurationMinutes ?? 0, 398.0 / 60.0, accuracy: 0.001)
         XCTAssertTrue(entry.calorieDurationEstimated)
     }
+
+    func testGuidedDurationUsesActualSecondsAndActualRest() throws {
+        let evidence = [
+            WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                side: WorkoutEffortSide.none,
+                targetKind: .duration,
+                durationSeconds: 30,
+                restSeconds: 20
+            ),
+            WorkoutSetEvidence(
+                logicalSetIndex: 2,
+                side: WorkoutEffortSide.none,
+                targetKind: .duration,
+                durationSeconds: 40
+            )
+        ]
+
+        let duration = try XCTUnwrap(
+            WorkoutCalorieCalculator.guidedDuration(from: evidence)
+        )
+        XCTAssertEqual(duration.minutes, 1.5, accuracy: 0.001)
+        XCTAssertFalse(duration.estimated)
+
+        let estimate = try XCTUnwrap(
+            WorkoutCalorieCalculator.estimateGuidedWorkout(
+                exercise: "平板支撑",
+                evidence: evidence,
+                weightKG: 70
+            )
+        )
+        XCTAssertEqual(estimate.durationMinutes, 1.5, accuracy: 0.001)
+        XCTAssertFalse(estimate.durationWasEstimated)
+    }
+
+    func testGuidedRepetitionsUseFourSecondFallback() throws {
+        let evidence = [
+            WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                side: .left,
+                targetKind: .repetitions,
+                reps: 10,
+                restSeconds: 15
+            ),
+            WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                side: .right,
+                targetKind: .repetitions,
+                reps: 10,
+                restSeconds: 30
+            )
+        ]
+
+        let duration = try XCTUnwrap(
+            WorkoutCalorieCalculator.guidedDuration(from: evidence)
+        )
+        XCTAssertEqual(duration.minutes, 125.0 / 60.0, accuracy: 0.001)
+        XCTAssertTrue(duration.estimated)
+    }
+
+    func testGuidedRepetitionsPreferActualElapsedDuration() throws {
+        let evidence = [
+            WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                side: .left,
+                targetKind: .repetitions,
+                reps: 10,
+                durationSeconds: 22,
+                restSeconds: 15
+            ),
+            WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                side: .right,
+                targetKind: .repetitions,
+                reps: 10,
+                durationSeconds: 28,
+                restSeconds: 30
+            )
+        ]
+
+        let duration = try XCTUnwrap(
+            WorkoutCalorieCalculator.guidedDuration(from: evidence)
+        )
+        XCTAssertEqual(duration.minutes, 95.0 / 60.0, accuracy: 0.001)
+        XCTAssertFalse(duration.estimated)
+    }
+
+    func testGuidedCaloriesStayUnknownWhenCompletedEvidenceHasNoTargetFact() {
+        XCTAssertNil(WorkoutCalorieCalculator.estimateGuidedWorkout(
+            exercise: "深蹲",
+            evidence: [WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                targetKind: .repetitions
+            )],
+            weightKG: 70
+        ))
+        XCTAssertNil(WorkoutCalorieCalculator.estimateGuidedWorkout(
+            exercise: "深蹲",
+            evidence: [WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                targetKind: .repetitions,
+                reps: 10
+            )],
+            weightKG: nil
+        ))
+    }
 }

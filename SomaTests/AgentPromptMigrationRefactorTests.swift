@@ -71,9 +71,9 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
             .toolCall(
                 name: "create_workout",
                 argumentsFragments: [
-                    #"{"exercise_id":\#(exerciseID),"set_entries":["#,
+                    #"{"workouts":[{"exercise_id":\#(exerciseID),"set_entries":["#,
                     #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60},"#,
-                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60}]}"#
+                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60}]}]}"#
                 ]
             ),
             .text(["已记录这次深蹲。"])
@@ -141,7 +141,7 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertTrue(system.hasPrefix("[SOMA SYSTEM v2]"))
         XCTAssertTrue(system.contains("## 固定安全、真实性与授权契约"))
         XCTAssertFalse(system.contains("create_workout"))
-        XCTAssertFalse(system.contains("query_user_data"))
+        XCTAssertFalse(system.contains("list_workouts"))
         XCTAssertFalse(system.contains("additionalProperties"))
         XCTAssertTrue(user.hasPrefix("[SOMA CURRENT TURN v2]"))
         XCTAssertFalse(user.contains("## 可信本机上下文"))
@@ -149,25 +149,30 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertFalse(user.contains("未填写"))
     }
 
-    func testAdviceUsesNoToolsAndSelectedSkillUsesExactMinimalTools() throws {
-        let adviceGroups = AgentToolExposurePolicy.initialGroups(signals: .init(
-            text: "怎样安排今天的恢复？",
-            hasVideo: false,
-            hasActiveProgram: false,
-            hasActiveGuidedSession: false
-        ))
-        XCTAssertTrue(adviceGroups.isEmpty)
-        XCTAssertTrue(AgentToolExposurePolicy.tools(for: adviceGroups).isEmpty)
+    func testUnselectedSkillRegistersAllCurrentProtocolTools() {
+        let tools = AgentToolExposurePolicy.tools(
+            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
+        )
+        XCTAssertEqual(tools.count, 32)
+        XCTAssertEqual(
+            tools,
+            AgentToolExposurePolicy.tools(for: AgentToolExposurePolicy.currentProtocolGroups)
+        )
+        XCTAssertTrue(tools.contains(.loadSkill))
+        XCTAssertTrue(tools.contains(.createWorkout))
+        XCTAssertTrue(tools.contains(.submitFeedback))
+    }
 
+    func testSelectedSkillUsesExactBoundTools() throws {
         let selected = try XCTUnwrap(
             AgentSkillRegistry.descriptor(id: AgentSkill.nutritionAnalysis.rawValue)
         )
-        let tools = AgentToolExposurePolicy.tools(for: selected.toolGroups)
+        let tools = AgentToolExposurePolicy.tools(
+            for: AgentToolExposurePolicy.groups(selectedSkill: selected)
+        )
         XCTAssertEqual(Set(tools), [
             .listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal
         ])
-        XCTAssertFalse(tools.contains(.queryUserData))
-        XCTAssertFalse(tools.contains(.mutateUserData))
         XCTAssertFalse(tools.contains(.loadSkill))
     }
 
@@ -191,7 +196,9 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertTrue(json.contains(#""strict":true"#))
         XCTAssertTrue(json.contains(#""additionalProperties":false"#))
         XCTAssertTrue(json.contains(#""exercise_id""#))
+        XCTAssertTrue(json.contains(#""required":["workouts"]"#))
         XCTAssertTrue(json.contains(#""required":["exercise_id"]"#))
+        XCTAssertFalse(json.contains(#""record_id""#))
     }
 
     func testCustomSkillPermissionsAndQuickButtonsStayInsideAllowedGroups() throws {
@@ -207,7 +214,7 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
             toolGroupIDs: [
                 AgentToolGroup.exercises.rawValue,
                 AgentToolGroup.workouts.rawValue,
-                AgentToolGroup.records.rawValue,
+                "records",
                 AgentToolGroup.feedback.rawValue,
                 AgentToolGroup.core.rawValue
             ]

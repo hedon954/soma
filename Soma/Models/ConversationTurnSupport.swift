@@ -188,16 +188,41 @@ enum ConversationTurnProjection {
 
     static func canRetry(
         _ message: CoachMessage,
-        in messages: [CoachMessage]
+        in messages: [CoachMessage],
+        job: AgentJob? = nil
     ) -> Bool {
         guard message.isFromCoach,
               [.failed, .cancelled].contains(message.agentStatus),
               let turnID = message.turnID,
-              latestAttempt(for: turnID, in: messages)?.id == message.id
+              latestAttempt(for: turnID, in: messages)?.id == message.id,
+              !successfulTurnIDs(in: messages).contains(turnID)
         else {
             return false
         }
-        return !successfulTurnIDs(in: messages).contains(turnID)
+        if let job {
+            return !job.state.awaitsAutomaticRecovery
+        }
+        // 没有 Job 时，取消态表示系统仍会续跑；只有失败态才交给用户手动重试。
+        return message.agentStatus == .failed
+    }
+}
+
+extension CoachMessage {
+    /// Loop 内自动恢复：清掉失败卡，保留已成功 step，不进入手动重试。
+    func presentAutomaticRecovery(waitingText: String) {
+        var kept = agentTurnItems.filter {
+            $0.status == .succeeded && $0.kind != .error
+        }
+        if !kept.isEmpty {
+            kept.append(AgentTurnItem(
+                kind: .text,
+                status: .succeeded,
+                text: waitingText
+            ))
+        }
+        replaceAgentTurnItems(kept)
+        text = waitingText
+        agentStatus = .cancelled
     }
 }
 

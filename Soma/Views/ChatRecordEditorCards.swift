@@ -16,8 +16,7 @@ enum ChatRecordReferenceResolver {
                 continue
             }
             for reference in toolResult.recordRefs ?? [] {
-                let key = "\(reference.recordType):\(reference.recordID)"
-                guard seen.insert(key).inserted else { continue }
+                guard seen.insert(reference.identityKey).inserted else { continue }
                 result.append(reference)
             }
         }
@@ -45,7 +44,7 @@ struct ChatRecordEditorCards: View {
     let isEditable: Bool
 
     var body: some View {
-        ForEach(references, id: \.recordID) { reference in
+        ForEach(references, id: \.identityKey) { reference in
             if reference.recordType == ConversationIntent.workout.rawValue,
                let workout = workouts.first(where: {
                    $0.businessID == reference.recordID
@@ -91,41 +90,6 @@ struct ChatRecordEditorCards: View {
     }
 }
 
-private struct InlineRecordShell<Content: View>: View {
-    let title: String
-    let icon: String
-    let isEditable: Bool
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .foregroundStyle(AppTheme.tint)
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Label(
-                    isEditable ? "可直接修订" : "已锁定",
-                    systemImage: isEditable ? "pencil.line" : "lock.fill"
-                )
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-            }
-            content
-        }
-        .padding(14)
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .stroke(AppTheme.tint.opacity(0.12), lineWidth: 1)
-        }
-    }
-}
-
 private struct InlineWorkoutCard: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var definitions: [ExerciseDefinition]
@@ -136,8 +100,35 @@ private struct InlineWorkoutCard: View {
     @State private var sets: String
     @State private var reps: String
     @State private var weight: String
+    @State private var duration: String
     @State private var rest: String
     @State private var showsDelete = false
+
+    private var linkedDefinition: ExerciseDefinition? {
+        if let exerciseID = workout.exerciseID {
+            return definitions.first { $0.id == exerciseID }
+        }
+        return nil
+    }
+
+    private var usesDuration: Bool {
+        ExerciseLoggingProfile.resolvedTargetKind(
+            exercise: linkedDefinition,
+            evidenceTargetKind: workout.setEntries.compactMap(\.targetKind).first,
+            reps: workout.representativeReps,
+            durationSeconds: representativeDuration
+        ) == .duration
+    }
+
+    private var representativeDuration: Int? {
+        let entries = workout.setEntries
+        guard !entries.isEmpty else { return nil }
+        let values = entries.compactMap(\.durationSeconds)
+        guard values.count == entries.count, Set(values).count == 1 else {
+            return nil
+        }
+        return values.first
+    }
 
     init(workout: WorkoutEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.workout = workout
@@ -146,26 +137,39 @@ private struct InlineWorkoutCard: View {
         _exercise = State(initialValue: workout.exercise)
         _sets = State(initialValue: workout.setCount.map(String.init) ?? "")
         _reps = State(initialValue: workout.representativeReps.map(String.init) ?? "")
+        let durationValues = workout.setEntries.compactMap(\.durationSeconds)
+        let sharedDuration = durationValues.count == workout.setEntries.count
+            && Set(durationValues).count == 1
+            ? durationValues.first
+            : nil
+        _duration = State(initialValue: sharedDuration.map(String.init) ?? "")
         _weight = State(initialValue: workout.representativeWeight.map { $0.formatted() } ?? "")
         _rest = State(initialValue: workout.restSeconds.map(String.init) ?? "")
     }
 
     var body: some View {
-        InlineRecordShell(title: "训练记录", icon: "figure.strengthtraining.traditional", isEditable: isEditable) {
+        InlineRecordShell(
+            title: exercise.isEmpty ? "训练记录" : exercise,
+            titleText: isEditable ? $exercise : nil,
+            icon: "figure.strengthtraining.traditional",
+            isEditable: isEditable,
+            onSave: save,
+            onDelete: { showsDelete = true }
+        ) {
             if isEditable {
-                TextField("动作", text: $exercise)
-                    .font(.body.weight(.medium))
-                HStack {
-                    compactNumber("组数", text: $sets)
-                    compactNumber("次数", text: $reps)
-                    compactNumber("重量 kg", text: $weight, decimal: true)
-                    compactNumber("间歇 s", text: $rest)
+                HStack(spacing: 6) {
+                    compactMetric("组", text: $sets)
+                    if usesDuration {
+                        compactMetric("秒", text: $duration)
+                    } else {
+                        compactMetric("次", text: $reps)
+                    }
+                    compactMetric("kg", text: $weight, decimal: true)
+                    compactMetric("间歇", text: $rest)
                 }
-                actionRow(save: save, delete: { showsDelete = true })
             } else {
-                Text(workout.exercise).font(.body.weight(.medium))
                 Text(workout.setEvidenceSummary ?? "组次与重量未填写")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -174,9 +178,9 @@ private struct InlineWorkoutCard: View {
         }
     }
 
-    private func save() {
+    private func save() -> Bool {
         let normalized = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
+        guard !normalized.isEmpty else { return false }
         let nameKey = ExerciseLibraryStore.canonicalNameKey(normalized)
         if let exerciseID = workout.exerciseID,
            let current = definitions.first(where: { $0.id == exerciseID }),
@@ -193,7 +197,19 @@ private struct InlineWorkoutCard: View {
         )
         exercise = definition?.canonicalName ?? normalized
         workout.setEntries = (0 ..< (Int(sets) ?? 0)).map { _ in
-            WorkoutSetEvidence(reps: Int(reps), externalWeightKG: Double(weight))
+            if usesDuration {
+                WorkoutSetEvidence(
+                    targetKind: .duration,
+                    durationSeconds: Int(duration),
+                    externalWeightKG: Double(weight)
+                )
+            } else {
+                WorkoutSetEvidence(
+                    targetKind: .repetitions,
+                    reps: Int(reps),
+                    externalWeightKG: Double(weight)
+                )
+            }
         }
         workout.restSeconds = Int(rest)
         let estimate = WorkoutCalorieCalculator.estimate(
@@ -210,9 +226,12 @@ private struct InlineWorkoutCard: View {
         workout.calorieDurationMinutes = estimate?.durationMinutes
         workout.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         sourceMessage?.recordManualCorrection(
-            "训练记录 \(workout.id.uuidString) 已改为 \(workout.exercise)，\(sets)组，\(reps)次，\(weight)kg，间歇\(rest)秒"
+            usesDuration
+                ? "训练记录 \(workout.id.uuidString) 已改为 \(workout.exercise)，\(sets)组，\(duration)秒，\(weight)kg，间歇\(rest)秒"
+                : "训练记录 \(workout.id.uuidString) 已改为 \(workout.exercise)，\(sets)组，\(reps)次，\(weight)kg，间歇\(rest)秒"
         )
         try? modelContext.save()
+        return true
     }
 
     private func deleteRecord() {
@@ -248,24 +267,30 @@ private struct InlineMealCard: View {
     }
 
     var body: some View {
-        InlineRecordShell(title: "饮食记录", icon: "fork.knife", isEditable: isEditable) {
+        InlineRecordShell(
+            title: title.isEmpty ? "饮食记录" : "\(type.rawValue) · \(title)",
+            titleText: isEditable ? $title : nil,
+            icon: "fork.knife",
+            isEditable: isEditable,
+            onSave: save,
+            onDelete: { showsDelete = true }
+        ) {
             if isEditable {
                 Picker("餐次", selection: $type) {
                     ForEach(MealType.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                TextField("餐食", text: $title)
-                HStack {
-                    compactNumber("kcal", text: $calories)
-                    compactNumber("蛋白 g", text: $protein, decimal: true)
-                    compactNumber("碳水 g", text: $carbs, decimal: true)
-                    compactNumber("脂肪 g", text: $fat, decimal: true)
+                .labelsHidden()
+                HStack(spacing: 6) {
+                    compactMetric("kcal", text: $calories)
+                    compactMetric("蛋白", text: $protein, decimal: true)
+                    compactMetric("碳水", text: $carbs, decimal: true)
+                    compactMetric("脂肪", text: $fat, decimal: true)
                 }
-                actionRow(save: save, delete: { showsDelete = true })
             } else {
-                Text("\(meal.mealType.rawValue) · \(meal.title)").font(.body.weight(.medium))
                 Text(meal.calories.map { "\($0) kcal" } ?? "热量未填写")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .confirmationDialog("删除这条饮食记录？", isPresented: $showsDelete) {
@@ -273,9 +298,9 @@ private struct InlineMealCard: View {
         }
     }
 
-    private func save() {
+    private func save() -> Bool {
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
+        guard !normalized.isEmpty else { return false }
         meal.mealType = type
         meal.title = normalized
         meal.calories = Int(calories)
@@ -287,6 +312,7 @@ private struct InlineMealCard: View {
             "饮食记录 \(meal.id.uuidString) 已改为 \(type.rawValue) \(normalized)，\(calories)kcal，蛋白\(protein)g，碳水\(carbs)g，脂肪\(fat)g"
         )
         try? modelContext.save()
+        return true
     }
 
     private func deleteRecord() {
@@ -318,18 +344,32 @@ private struct InlineBodyCard: View {
     }
 
     var body: some View {
-        InlineRecordShell(title: "身体记录", icon: "scalemass", isEditable: isEditable) {
+        InlineRecordShell(
+            title: "身体记录",
+            icon: "scalemass",
+            isEditable: isEditable,
+            onSave: save,
+            onDelete: { showsDelete = true }
+        ) {
             if isEditable {
-                HStack {
-                    compactNumber("体重 kg", text: $weight, decimal: true)
-                    compactNumber("体脂 %", text: $bodyFat, decimal: true)
-                    compactNumber("腰围 cm", text: $waist, decimal: true)
+                HStack(spacing: 6) {
+                    compactMetric("kg", text: $weight, decimal: true)
+                    compactMetric("%", text: $bodyFat, decimal: true)
+                    compactMetric("腰围", text: $waist, decimal: true)
                 }
-                TextField("备注", text: $notes, axis: .vertical).lineLimit(1 ... 3)
-                actionRow(save: save, delete: { showsDelete = true })
+                TextField("备注", text: $notes, axis: .vertical)
+                    .font(.caption)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1 ... 2)
             } else {
-                Text([entry.weight.map { "\($0.formatted()) kg" }, entry.bodyFat.map { "体脂 \($0.formatted())%" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(.body.weight(.medium))
+                Text(
+                    [
+                        entry.weight.map { "\($0.formatted()) kg" },
+                        entry.bodyFat.map { "体脂 \($0.formatted())%" }
+                    ].compactMap { $0 }.joined(separator: " · ")
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .confirmationDialog("删除这条身体记录？", isPresented: $showsDelete) {
@@ -337,7 +377,7 @@ private struct InlineBodyCard: View {
         }
     }
 
-    private func save() {
+    private func save() -> Bool {
         entry.weight = Double(weight)
         entry.bodyFat = Double(bodyFat)
         entry.waist = Double(waist)
@@ -346,6 +386,7 @@ private struct InlineBodyCard: View {
             "身体记录 \(entry.id.uuidString) 已改为体重\(weight)kg、体脂\(bodyFat)%、腰围\(waist)cm"
         )
         try? modelContext.save()
+        return true
     }
 
     private func deleteRecord() {
@@ -376,18 +417,26 @@ private struct InlineGymCard: View {
     }
 
     var body: some View {
-        InlineRecordShell(title: "健身房记录", icon: "building.2", isEditable: isEditable) {
+        InlineRecordShell(
+            title: name.isEmpty ? "健身房记录" : name,
+            titleText: isEditable ? $name : nil,
+            icon: "building.2",
+            isEditable: isEditable,
+            onSave: save,
+            onDelete: { showsDelete = true }
+        ) {
             if isEditable {
-                TextField("名称", text: $name)
-                TextField("说明", text: $notes, axis: .vertical).lineLimit(1 ... 3)
-                Toggle("设为当前健身房", isOn: $isCurrent)
+                TextField("说明", text: $notes, axis: .vertical)
+                    .font(.caption)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1 ... 2)
+                Toggle("当前健身房", isOn: $isCurrent)
+                    .font(.caption)
                     .disabled(gym.isCurrent)
-                actionRow(save: save, delete: { showsDelete = true })
-            } else {
-                Text(gym.name).font(.body.weight(.medium))
-                if !gym.notes.isEmpty {
-                    Text(gym.notes).font(.subheadline).foregroundStyle(.secondary)
-                }
+            } else if !gym.notes.isEmpty {
+                Text(gym.notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .confirmationDialog("删除这个健身房？", isPresented: $showsDelete) {
@@ -395,9 +444,9 @@ private struct InlineGymCard: View {
         }
     }
 
-    private func save() {
+    private func save() -> Bool {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
+        guard !normalized.isEmpty else { return false }
         gym.name = normalized
         gym.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         if isCurrent {
@@ -407,6 +456,7 @@ private struct InlineGymCard: View {
             "健身房记录 \(gym.id.uuidString) 已改为 \(normalized)，当前状态 \(gym.isCurrent ? "已选择" : "未选择")"
         )
         try? modelContext.save()
+        return true
     }
 
     private func deleteRecord() {
@@ -419,41 +469,4 @@ private struct InlineGymCard: View {
             in: modelContext
         )
     }
-}
-
-private func compactNumber(
-    _ title: String,
-    text: Binding<String>,
-    decimal: Bool = false
-) -> some View {
-    VStack(alignment: .leading, spacing: 3) {
-        Text(title)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-        TextField("-", text: text)
-            .keyboardType(decimal ? .decimalPad : .numberPad)
-            .textFieldStyle(.roundedBorder)
-            .font(.caption)
-            .accessibilityLabel(title)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-}
-
-private func actionRow(
-    save: @escaping () -> Void,
-    delete: @escaping () -> Void
-) -> some View {
-    HStack {
-        Button(role: .destructive, action: delete) {
-            Label("删除", systemImage: "trash")
-        }
-        .buttonStyle(.plain)
-        Spacer()
-        Button("保存", action: save)
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-    }
-    .font(.caption.weight(.semibold))
 }

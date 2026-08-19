@@ -10,8 +10,8 @@ extension ConversationRecorder {
         let values = programs.map { program in
             let template = versions.first { $0.id == program.currentTemplateVersionID }
             return "[id:\(program.businessID ?? 0)] \(program.name)"
-                + "；目标：\(program.goal.isEmpty ? "未记录" : program.goal)"
-                + "；当前模板：\(template?.name ?? "未找到")"
+                + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
+                + "；模板：\(template?.name ?? "未找到")"
         }
         return .success(values.isEmpty ? "暂无可执行训练计划。" : values.joined(separator: "\n"))
     }
@@ -34,12 +34,27 @@ extension ConversationRecorder {
         }
         let prescriptions = TrainingPlanStore.prescriptions(for: version, in: context)
         let exercises = prescriptions.map { prescription in
-            "\(prescription.order). \(prescription.exerciseName)：\(prescription.targetSets.map(String.init) ?? "未记录")组 × \(prescription.targetReps.map(String.init) ?? "未记录")次"
+            let sets = prescription.plannedSets.sorted { $0.order < $1.order }
+                .map { set in
+                    let target = switch set.targetKind {
+                    case .repetitions: "\(set.targetReps.map(String.init) ?? "未记录") 次"
+                    case .duration: "\(set.targetDurationSeconds.map(String.init) ?? "未记录") 秒"
+                    }
+                    return "第 \(set.order) 组 \(target)"
+                }
+                .joined(separator: "；")
+            return "\(prescription.order). \(prescription.exerciseName)（\(prescription.laterality.rawValue)）：\(sets)"
         }
-        let goal = program.goal.isEmpty ? "未记录" : program.goal
-        let header = "[id:\(program.businessID ?? 0)] \(program.name)；目标：\(goal)；模板：\(version.name) v\(version.version)"
+        let overview = program.overview.isEmpty ? "未记录" : program.overview
+        let header = "[id:\(program.businessID ?? 0)] \(program.name)；概览：\(overview)；模板：\(version.name) v\(version.version)"
         return .success(
-            "\(header)\n\(exercises.joined(separator: "\n"))"
+            "\(header)\n\(exercises.joined(separator: "\n"))",
+            data: programData(
+                program: program,
+                version: version,
+                prescriptions: prescriptions,
+                in: context
+            )
         )
     }
 
@@ -77,7 +92,7 @@ extension ConversationRecorder {
             }
             let program = try TrainingPlanStore.createProgram(
                 name: name,
-                goal: normalized(arguments.goal),
+                goal: normalized(arguments.overview ?? arguments.goal),
                 templateName: templateName,
                 scheduleHint: normalized(arguments.scheduleHint),
                 prescriptions: prescriptions,
@@ -176,7 +191,7 @@ extension ConversationRecorder {
     ) -> AgentToolResult {
         guard let programID = arguments.programID, programID > 0
         else {
-            return .failure("start_guided_workout 需要 query_user_data 返回的有效 program_id。")
+            return .failure("start_program 需要 list_programs 或 get_program 返回的有效 program_id。")
         }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
         guard let program = programs.first(where: {
@@ -308,6 +323,34 @@ extension ConversationRecorder {
             else {
                 throw ExerciseLibraryError.invalidReference
             }
+            if let setInputs = input.setPrescriptions {
+                guard let laterality = input.laterality else {
+                    throw TrainingPlanError.invalidValue("动作侧别")
+                }
+                return TemplateExercisePrescription(
+                    exerciseID: definition.id,
+                    exerciseName: definition.canonicalName,
+                    order: input.order,
+                    equipmentKind: nonempty(input.equipmentKind),
+                    notes: normalized(input.notes),
+                    laterality: laterality,
+                    plannedSets: setInputs.map { set in
+                        TemplateSetPrescriptionValue(
+                            order: set.order,
+                            kind: set.kind,
+                            targetKind: set.targetKind,
+                            targetReps: set.targetReps,
+                            targetDurationSeconds: set.targetDurationSeconds,
+                            targetWeightKG: set.targetWeightKG,
+                            leftWeightKG: set.leftWeightKG,
+                            rightWeightKG: set.rightWeightKG,
+                            restBetweenSidesSeconds: set.restBetweenSidesSeconds,
+                            restAfterSetSeconds: set.restAfterSetSeconds,
+                            notes: normalized(set.notes)
+                        )
+                    }
+                )
+            }
             return TemplateExercisePrescription(
                 exerciseID: definition.id,
                 exerciseName: definition.canonicalName,
@@ -321,6 +364,78 @@ extension ConversationRecorder {
                 notes: normalized(input.notes)
             )
         }
+    }
+
+    private static func programData(
+        program: TrainingProgram,
+        version: WorkoutTemplateVersion,
+        prescriptions: [TemplateExercisePrescription],
+        in context: ModelContext
+    ) -> AgentJSONValue {
+        let definitions = (try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? []
+        let definitionIDs = Dictionary(uniqueKeysWithValues: definitions.compactMap { definition in
+            definition.businessID.map { (definition.id, $0) }
+        })
+        return .object([
+            "program_id": .number(Double(program.businessID ?? 0)),
+            "program_name": .string(program.name),
+            "overview": .string(program.overview),
+            "template": .object([
+                "version": .number(Double(version.version)),
+                "template_name": .string(version.name),
+                "schedule_hint": .string(version.scheduleHint),
+                "template_exercises": .array(
+                    prescriptions.sorted { $0.order < $1.order }.map { prescription in
+                        var exercise: [String: AgentJSONValue] = [
+                            "exercise_id": .number(Double(definitionIDs[prescription.exerciseID] ?? 0)),
+                            "exercise_name": .string(prescription.exerciseName),
+                            "order": .number(Double(prescription.order)),
+                            "laterality": .string(prescription.laterality.rawValue),
+                            "set_prescriptions": .array(
+                                prescription.plannedSets.sorted { $0.order < $1.order }
+                                    .map(setData)
+                            )
+                        ]
+                        if let equipment = nonempty(prescription.equipmentKind) {
+                            exercise["equipment_kind"] = .string(equipment)
+                        }
+                        if let notes = nonempty(prescription.notes) {
+                            exercise["notes"] = .string(notes)
+                        }
+                        return .object(exercise)
+                    }
+                )
+            ])
+        ])
+    }
+
+    private static func setData(_ set: TemplateSetPrescriptionValue) -> AgentJSONValue {
+        var value: [String: AgentJSONValue] = [
+            "order": .number(Double(set.order)),
+            "kind": .string(set.kind.rawValue),
+            "target_kind": .string(set.targetKind.rawValue)
+        ]
+        func put(_ key: String, _ number: Int?) {
+            if let number {
+                value[key] = .number(Double(number))
+            }
+        }
+        func put(_ key: String, _ number: Double?) {
+            if let number {
+                value[key] = .number(number)
+            }
+        }
+        put("target_reps", set.targetReps)
+        put("target_duration_seconds", set.targetDurationSeconds)
+        put("target_weight_kg", set.targetWeightKG)
+        put("left_weight_kg", set.leftWeightKG)
+        put("right_weight_kg", set.rightWeightKG)
+        put("rest_between_sides_seconds", set.restBetweenSidesSeconds)
+        put("rest_after_set_seconds", set.restAfterSetSeconds)
+        if let notes = nonempty(set.notes) {
+            value["notes"] = .string(notes)
+        }
+        return .object(value)
     }
 
     private static func normalized(_ value: String?) -> String {

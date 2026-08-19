@@ -80,12 +80,44 @@ struct MediaAttachmentReference: Codable, Hashable, Identifiable, Sendable {
 }
 
 struct WorkoutSetEvidence: Codable, Equatable, Hashable, Sendable {
+    var logicalSetIndex: Int?
+    var side: WorkoutEffortSide?
+    var kind: WorkoutSetKind?
+    var targetKind: WorkoutTargetKind?
     var reps: Int?
+    var durationSeconds: Int?
     var externalWeightKG: Double?
+    var restSeconds: Int?
+    var recordedVideoPath: String?
+    var recordedVideoKind: WorkoutRecordingEvidenceKind?
 
-    init(reps: Int? = nil, externalWeightKG: Double? = nil) {
+    init(
+        logicalSetIndex: Int? = nil,
+        side: WorkoutEffortSide? = nil,
+        kind: WorkoutSetKind? = nil,
+        targetKind: WorkoutTargetKind? = nil,
+        reps: Int? = nil,
+        durationSeconds: Int? = nil,
+        externalWeightKG: Double? = nil,
+        restSeconds: Int? = nil,
+        recordedVideoPath: String? = nil,
+        recordedVideoKind: WorkoutRecordingEvidenceKind? = nil
+    ) {
+        self.logicalSetIndex = logicalSetIndex
+        self.side = side
+        self.kind = kind
+        self.targetKind = targetKind
         self.reps = reps
+        self.durationSeconds = durationSeconds
         self.externalWeightKG = externalWeightKG
+        self.restSeconds = restSeconds
+        self.recordedVideoPath = recordedVideoPath
+        self.recordedVideoKind = recordedVideoKind
+    }
+
+    var resolvedRecordedVideoKind: WorkoutRecordingEvidenceKind? {
+        guard recordedVideoPath != nil else { return nil }
+        return recordedVideoKind ?? .complete
     }
 }
 
@@ -518,12 +550,15 @@ final class WorkoutEntry: BusinessIdentifiedModel {
     var calorieMET: Double?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool = false
+    var calorieAlgorithmVersion: String?
     var externalSource: String?
     var externalID: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
     var sourceWorkoutSessionID: UUID?
     var sourcePerformanceID: UUID?
+    @Attribute(.unique) var projectionKey: String?
+    @Relationship(deleteRule: .nullify) var sourcePerformance: ExercisePerformance?
 
     var setEntries: [WorkoutSetEvidence] {
         get {
@@ -545,7 +580,9 @@ final class WorkoutEntry: BusinessIdentifiedModel {
 
     var setCount: Int? {
         let entries = setEntries
-        return entries.isEmpty ? sets : entries.count
+        guard !entries.isEmpty else { return sets }
+        let logicalIndexes = Set(entries.compactMap(\.logicalSetIndex))
+        return logicalIndexes.isEmpty ? entries.count : logicalIndexes.count
     }
 
     var representativeReps: Int? {
@@ -609,19 +646,27 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         if let reps = representativeReps,
            let weight = representativeWeight
         {
-            return "\(entries.count)组 × \(reps)次 · \(weight.formatted())kg"
+            return "\(setCount ?? entries.count)组 × \(reps)次 · \(weight.formatted())kg"
         }
         return entries.enumerated().map { index, entry in
-            switch (entry.externalWeightKG, entry.reps) {
-            case let (.some(weight), .some(reps)):
-                "\(weight.formatted())kg × \(reps)次"
-            case let (.some(weight), .none):
-                "第\(index + 1)组 \(weight.formatted())kg"
-            case let (.none, .some(reps)):
-                "第\(index + 1)组 \(reps)次"
-            case (.none, .none):
-                "第\(index + 1)组"
+            var parts = ["第\(entry.logicalSetIndex ?? index + 1)组"]
+            switch entry.side {
+            case .some(.left):
+                parts.append("左侧")
+            case .some(.right):
+                parts.append("右侧")
+            case nil, .some(.none):
+                break
             }
+            if let weight = entry.externalWeightKG {
+                parts.append("\(weight.formatted())kg")
+            }
+            if let reps = entry.reps {
+                parts.append("\(reps)次")
+            } else if let seconds = entry.durationSeconds {
+                parts.append("\(seconds)秒")
+            }
+            return parts.joined(separator: " ")
         }.joined(separator: "，")
     }
 
@@ -666,12 +711,14 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         calorieMET: Double? = nil,
         calorieDurationMinutes: Double? = nil,
         calorieDurationEstimated: Bool = false,
+        calorieAlgorithmVersion: String? = nil,
         externalSource: String? = nil,
         externalID: String? = nil,
         sourceTurnID: UUID? = nil,
         sourceSessionID: UUID? = nil,
         sourceWorkoutSessionID: UUID? = nil,
-        sourcePerformanceID: UUID? = nil
+        sourcePerformanceID: UUID? = nil,
+        projectionKey: String? = nil
     ) {
         id = UUID()
         self.date = date
@@ -700,12 +747,14 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         self.calorieMET = calorieMET
         self.calorieDurationMinutes = calorieDurationMinutes
         self.calorieDurationEstimated = calorieDurationEstimated
+        self.calorieAlgorithmVersion = calorieAlgorithmVersion
         self.externalSource = externalSource
         self.externalID = externalID
         self.sourceTurnID = sourceTurnID
         self.sourceSessionID = sourceSessionID
         self.sourceWorkoutSessionID = sourceWorkoutSessionID
         self.sourcePerformanceID = sourcePerformanceID
+        self.projectionKey = projectionKey ?? SomaDataMigration.entryKey(for: id)
     }
 }
 

@@ -59,6 +59,7 @@ struct CoachView: View {
     @State private var composerDismissRequest = UUID()
     @State private var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
+    @State private var showsSessionDeleteBlockedAlert = false
     @State private var showsLocationPrompt = false
     @State private var useLocalForNextMessage = false
     @State private var selectedExerciseSuggestion: ExerciseInputSuggestion?
@@ -151,14 +152,15 @@ struct CoachView: View {
                     currentSessionID: conversationSessions.activeSessionID,
                     isProcessing: processor.isProcessing,
                     onNewSession: createSession,
-                    onSelectSession: selectSession
+                    onSelectSession: selectSession,
+                    onDeleteSession: deleteSession
                 )
                 .frame(width: drawerWidth)
                 .offset(x: sessionDrawerPresented ? 0 : -drawerWidth)
             }
             .clipped()
             .animation(.snappy(duration: 0.24), value: sessionDrawerPresented)
-            .simultaneousGesture(sessionDrawerGesture)
+            .simultaneousGesture(sessionDrawerGesture(drawerWidth: drawerWidth))
         }
         .appPageBackground()
         .navigationTitle("Soma")
@@ -175,6 +177,11 @@ struct CoachView: View {
         }
         .accessibilityAction(named: "打开历史对话") {
             openSessionDrawer()
+        }
+        .alert("无法删除对话", isPresented: $showsSessionDeleteBlockedAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text("这条对话正在处理或仍有未完成的任务，暂不能删除。")
         }
         .alert("允许随消息记录位置？", isPresented: $showsLocationPrompt) {
             Button("不允许", role: .cancel) {
@@ -320,7 +327,8 @@ struct CoachView: View {
                         canRetry: !processor.isProcessing
                             && ConversationTurnProjection.canRetry(
                                 message,
-                                in: messages
+                                in: messages,
+                                job: agentJobs.last { $0.responseMessageID == message.id }
                             ),
                         onRetry: { retry(message) },
                         onDiscardPending: message.turnID.map(stagedTurnIDs.contains) == true
@@ -376,14 +384,17 @@ struct CoachView: View {
         try? modelContext.save()
     }
 
-    private var sessionDrawerGesture: some Gesture {
+    private func sessionDrawerGesture(drawerWidth: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .global)
             .onEnded { value in
                 let horizontal = value.translation.width
                 guard abs(horizontal) > abs(value.translation.height) else {
                     return
                 }
-                if sessionDrawerPresented, horizontal < -60 {
+                if sessionDrawerPresented,
+                   horizontal < -60,
+                   value.startLocation.x > drawerWidth
+                {
                     closeSessionDrawer()
                 } else if !sessionDrawerPresented,
                           value.startLocation.x <= 28,
@@ -419,14 +430,45 @@ struct CoachView: View {
         switchToSession(session)
     }
 
+    private func deleteSession(_ session: ConversationSession) {
+        let wasCurrent = conversationSessions.activeSessionID == session.id
+        do {
+            let outcome = try ConversationSessionDeletion.delete(
+                session,
+                dataSpace: dataSpace.activeSpace,
+                processingSessionID: processor.isProcessing
+                    ? processor.sessionID
+                    : nil,
+                controller: conversationSessions,
+                in: modelContext
+            )
+            switch outcome {
+            case .deleted:
+                if wasCurrent {
+                    prepareComposerForSessionChange()
+                }
+            case .refusedBusy:
+                showsSessionDeleteBlockedAlert = true
+            case .notFound:
+                break
+            }
+        } catch {
+            showsSessionDeleteBlockedAlert = true
+        }
+    }
+
     private func switchToSession(_: ConversationSession) {
+        prepareComposerForSessionChange()
+        closeSessionDrawer()
+    }
+
+    private func prepareComposerForSessionChange() {
         draft = ""
         attachments = []
         useLocalForNextMessage = false
         speechInput.stop()
         composerDismissRequest = UUID()
         scrollRequest = UUID()
-        closeSessionDrawer()
     }
 
     private func appendPickedMedia(_ media: [PickedMedia]) {
