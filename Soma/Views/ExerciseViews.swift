@@ -170,6 +170,7 @@ struct ExerciseDetailView: View {
     @State private var showsContentEditor = false
     @State private var showsMediaEditor = false
     @State private var showsDemoVideoPicker = false
+    @Namespace private var mediaZoomNamespace
     @State private var presentedDemoVideo: MediaAttachmentReference?
     @State private var demoVideoError: String?
 
@@ -286,6 +287,7 @@ struct ExerciseDetailView: View {
                                         )
                                 }
                                 .buttonStyle(.plain)
+                                .mediaZoomSource(id: video.id, in: mediaZoomNamespace)
                                 .accessibilityLabel("播放我的示范视频")
                             }
                         }
@@ -371,15 +373,14 @@ struct ExerciseDetailView: View {
                 addDemoVideos(media)
             }
         }
-        .fullScreenCover(item: $presentedDemoVideo) { selected in
-            MediaViewer(
-                attachments: exercise.userDemoVideos,
-                initialAttachmentID: selected.id,
-                deletionTitle: "删除这段示范视频？",
-                deletionMessage: "视频会从动作库移除；若没有其他记录引用，文件将在数据清理时回收。",
-                onDelete: removeDemoVideo
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedDemoVideo,
+            attachments: exercise.userDemoVideos,
+            namespace: mediaZoomNamespace,
+            deletionTitle: "删除这段示范视频？",
+            deletionMessage: "视频会从动作库移除；若没有其他记录引用，文件将在数据清理时回收。",
+            onDelete: removeDemoVideo
+        )
         .alert(
             "无法完成操作",
             isPresented: Binding(

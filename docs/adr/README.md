@@ -41,8 +41,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 部分已替代 | 静默内置内容与按需动作插画保留；通用肌群图素材与生成由 0044 替代 |
 | [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 部分已替代 | Local/Remote 流式等价保留；Provider 时限由 0058 扩展 |
-| [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订 |
-| [0039](0039-event-driven-guided-recording-cues-and-review.md) | 部分已替代 | 事件驱动录像/语音保留；Effort/自动分享由 0073 修订，lazy activation 与部分录像证据由 0074 修订 |
+| [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订；预览 letterbox 由 0086 改为 fill |
+| [0039](0039-event-driven-guided-recording-cues-and-review.md) | 部分已替代 | 事件驱动录像/语音保留；Effort/自动分享由 0073 修订，lazy activation 与部分录像证据由 0074 修订，放大 letterbox 由 0086 改为 fill |
 | [0040](0040-agent-guided-workout-launch.md) | 已采纳 | Agent 用固定计划 Tool 在设备本地创建快照并路由到既有带练 |
 | [0041](0041-training-primary-tab.md) | 已采纳 | 训练计划与带练迁移为一级训练 Tab，进展保留审查与趋势 |
 | [0042](0042-contextual-widget-snapshot-and-privacy.md) | 暂缓 | 主屏最小快照方案，待支持 App Groups 的 Team 后恢复 |
@@ -89,6 +89,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0083](0083-local-diagnostics-log-and-silent-crash-reporting.md) | 已采纳，个人使用阶段 | 本机滚动诊断日志、启动哨兵与 MetricKit 崩溃证据；报告默认静默上报并留盘重试，可一键关闭 |
 | [0084](0084-inline-meal-breakdown-and-derived-totals.md) | 已采纳 | 饮食原位审查分为可编辑菜品清单卡与只读派生汇总卡；缺项保持为空，记录时间使用钟点 |
 | [0085](0085-record-cards-follow-the-producing-step.md) | 已采纳 | 原位卡插在产生它的那一步之后，文字与卡片交替出现；重复引用只渲染一张卡，无法归位的兜底在末尾 |
+| [0086](0086-preview-and-history-thumbs-use-aspect-fill.md) | 已采纳 | 带练紧凑/放大预览与历史录像缩略统一 aspect fill；保存文件仍使用锁定的捕获几何 |
 
 新决策使用 [ADR 模板](template.md)。
 

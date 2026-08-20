@@ -27,7 +27,7 @@ struct InlineMealCards: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             itemsCard
             MealTotalsCard(
                 meal: meal,
@@ -65,9 +65,9 @@ struct InlineMealCards: View {
                         drafts.append(MealItemDraft())
                     } label: {
                         Label("添加菜品", systemImage: "plus.circle")
-                            .font(.caption.weight(.semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(AppTheme.tint)
-                            .padding(.vertical, 9)
+                            .padding(.vertical, 6)
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -143,27 +143,30 @@ struct InlineMealCards: View {
 }
 
 /// 一行菜品：左侧图标块，右侧名称与热量，第二行是份量与宏量。数值直接可点可改。
-private struct MealItemDraftRow: View {
+struct MealItemDraftRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var draft: MealItemDraft
-    let onDelete: () -> Void
+    var showsDelete = true
+    var onDelete: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             MealItemIcon()
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 titleLine
                 metrics
             }
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "minus.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if showsDelete, let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "minus.circle")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("删除\(draft.name.isEmpty ? "这一项菜品" : draft.name)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("删除\(draft.name.isEmpty ? "这一项菜品" : draft.name)")
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
     }
 
     /// 辅助字号下菜名会占满整行，热量必须换行放，否则数字和单位会叠在一起。
@@ -187,7 +190,7 @@ private struct MealItemDraftRow: View {
         InlineTextValue(
             placeholder: "菜品",
             text: $draft.name,
-            font: .subheadline.weight(.semibold),
+            font: .footnote.weight(.semibold),
             accessibilityTitle: "菜品名称"
         )
     }
@@ -196,7 +199,7 @@ private struct MealItemDraftRow: View {
         InlineTextValue(
             placeholder: "-",
             text: $draft.calories,
-            font: .subheadline.weight(.semibold).monospacedDigit(),
+            font: .footnote.weight(.semibold).monospacedDigit(),
             keyboard: .numberPad,
             suffix: "千卡",
             accessibilityTitle: "热量，千卡"
@@ -233,7 +236,7 @@ private struct MealItemDraftRow: View {
         InlineTextValue(
             placeholder: "份量",
             text: $draft.portion,
-            font: .caption,
+            font: .caption2,
             tint: .secondary,
             accessibilityTitle: "份量"
         )
@@ -255,7 +258,7 @@ private struct MealItemDraftRow: View {
             InlineTextValue(
                 placeholder: "-",
                 text: text,
-                font: .caption.monospacedDigit(),
+                font: .caption2.monospacedDigit(),
                 tint: .secondary,
                 keyboard: .decimalPad,
                 accessibilityTitle: "\(title)，克"
@@ -264,64 +267,64 @@ private struct MealItemDraftRow: View {
     }
 }
 
-private struct MealItemReadOnlyRow: View {
+struct MealItemReadOnlyRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let item: MealItem
 
     private var caption: String {
         [
             item.portionDescription,
-            item.protein.map { "蛋白 \($0.formatted()) 克" },
-            item.carbs.map { "碳水 \($0.formatted()) 克" },
-            item.fat.map { "脂肪 \($0.formatted()) 克" }
+            item.protein.map { "蛋白 \($0.formatted())" },
+            item.carbs.map { "碳水 \($0.formatted())" },
+            item.fat.map { "脂肪 \($0.formatted())" }
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             MealItemIcon()
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 let layout: AnyLayout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3))
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
                     : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
                 layout {
                     Text(item.name)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                     Spacer(minLength: 4)
                     Text(item.calories.map { "\($0) 千卡" } ?? "未估算")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .font(.footnote.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
                 if !caption.isEmpty {
                     Text(caption)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
     }
 }
 
-private struct MealItemIcon: View {
+struct MealItemIcon: View {
     var body: some View {
         Image(systemName: "takeoutbag.and.cup.and.straw.fill")
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(AppTheme.tint)
-            .frame(width: 28, height: 28)
+            .frame(width: 22, height: 22)
             .background(
                 AppTheme.tint.opacity(0.12),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .accessibilityHidden(true)
     }
 }
 
 /// 看起来是文字、点一下就能改的行内数值。聚焦时给一层浅底，明确当前在编辑哪个值。
-private struct InlineTextValue: View {
+struct InlineTextValue: View {
     let placeholder: String
     @Binding var text: String
     var font: Font = .caption
@@ -374,17 +377,17 @@ private struct MealTotalsCard: View {
             isEditable: false,
             showsLockWhenReadOnly: false
         ) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(header)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(totals.calories.map(String.init) ?? "—")
-                            .font(.system(.title, design: .rounded, weight: .bold))
+                            .font(.system(.title2, design: .rounded, weight: .bold))
                             .monospacedDigit()
                         Text(totals.calories == nil ? "千卡未估算" : "千卡")
-                            .font(.footnote)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -397,9 +400,9 @@ private struct MealTotalsCard: View {
                     MealRecordDetailView(meal: meal)
                 } label: {
                     Text("查看详情")
-                        .font(.footnote.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
+                        .padding(.vertical, 6)
                         .background(
                             AppTheme.tint.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -426,7 +429,7 @@ private struct MealTotalsCard: View {
             Text(value.map {
                 "\($0.formatted(.number.precision(.fractionLength(0 ... 1)))) 克"
             } ?? "未估算")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .font(.caption.weight(.semibold).monospacedDigit())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

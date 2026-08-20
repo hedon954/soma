@@ -967,7 +967,7 @@ struct WorkoutCameraSurface: View {
             Color.black
             WorkoutCameraPreview(
                 camera: camera,
-                videoGravity: compact ? .resizeAspectFill : .resizeAspect
+                videoGravity: .resizeAspectFill
             )
             switch presentation {
             case let .loading(message):

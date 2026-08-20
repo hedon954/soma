@@ -15,7 +15,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: icon)
                     .font(.subheadline.weight(.semibold))
@@ -58,8 +58,8 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
             }
             content
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous)

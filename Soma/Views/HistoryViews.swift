@@ -10,6 +10,7 @@ struct WorkoutHistoryView: View {
     @State private var loaded: [WorkoutEntry] = []
     @State private var hasMore = true
     @State private var isLoading = false
+    @State private var collapsedDays: Set<Date> = []
 
     private var dayGroups: [WorkoutHistoryDayGroup] {
         WorkoutHistoryQuery.groupedByDay(loaded)
@@ -23,25 +24,8 @@ struct WorkoutHistoryView: View {
         WorkoutHistoryQuery.filterChoices(from: allWorkouts.map(\.date))
     }
 
-    /// PRD 020：筛选扁平化为「全部 + 按月」，不再嵌套年/月/日三级菜单。
-    private var filterMenu: some View {
-        Menu {
-            Button("全部") { filter = .all }
-            ForEach(filterChoices.years, id: \.self) { year in
-                if let months = filterChoices.monthsByYear[year] {
-                    Section("\(String(year))年") {
-                        ForEach(months, id: \.self) { month in
-                            Button("\(month)月") {
-                                filter = .yearMonth(year: year, month: month)
-                            }
-                        }
-                    }
-                }
-            }
-        } label: {
-            Label(filter.label, systemImage: "line.3.horizontal.decrease.circle")
-        }
-        .accessibilityLabel("筛选训练记录")
+    private var monthChips: [(filter: WorkoutHistoryDateFilter, title: String)] {
+        HistoryMonthFilterChips.chips(from: filterChoices)
     }
 
     var body: some View {
@@ -60,32 +44,47 @@ struct WorkoutHistoryView: View {
                 .listRowSeparator(.hidden)
             } else {
                 ForEach(dayGroups) { group in
+                    let isExpanded = !collapsedDays.contains(group.day)
                     Section {
-                        ForEach(group.workouts) { workout in
-                            NavigationLink {
-                                WorkoutRecordDetailView(workout: workout)
-                            } label: {
-                                WorkoutHistoryRow(
-                                    workout: workout,
-                                    exercise: resolvedExercise(for: workout)
+                        HistoryDayHeader(
+                            title: group.title,
+                            summary: group.actionCountText,
+                            metric: group.totalKnownVolumeKG.map(HistoryDayMetrics.kilograms),
+                            metricUnit: group.totalKnownVolumeKG == nil ? nil : "kg",
+                            isExpanded: isExpanded,
+                            toggle: { toggleDay(group.day) }
+                        )
+                        .historyDayCardRow(edge: isExpanded ? .top : .single)
+
+                        if isExpanded {
+                            ForEach(
+                                Array(group.workouts.enumerated()),
+                                id: \.element.id
+                            ) { index, workout in
+                                NavigationLink {
+                                    WorkoutRecordDetailView(workout: workout)
+                                } label: {
+                                    WorkoutHistoryRow(
+                                        workout: workout,
+                                        exercise: resolvedExercise(for: workout)
+                                    )
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        delete(workout)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .accessibilityLabel("删除训练记录")
+                                    .tint(.red)
+                                }
+                                .historyDayCardRow(
+                                    edge: index == group.workouts.count - 1 ? .bottom : .middle
                                 )
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    delete(workout)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .accessibilityLabel("删除训练记录")
-                                .tint(.red)
-                            }
                         }
-                    } header: {
-                        Text(group.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
                     }
+                    .listSectionSeparator(.hidden)
                 }
 
                 if hasMore {
@@ -103,15 +102,16 @@ struct WorkoutHistoryView: View {
             }
         }
         .listStyle(.plain)
+        .listSectionSpacing(12)
         .scrollContentBackground(.hidden)
         .appPageBackground()
-        .navigationTitle("训练记录")
-        .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                filterMenu
-            }
-        }
+        .historyListChrome(
+            title: "训练记录",
+            systemImage: "figure.strengthtraining.traditional",
+            selected: filter,
+            chips: monthChips,
+            onSelect: { filter = $0 }
+        )
         .onAppear {
             if loaded.isEmpty {
                 reload()
@@ -119,6 +119,14 @@ struct WorkoutHistoryView: View {
         }
         .onChange(of: filter) { _, _ in
             reload()
+        }
+    }
+
+    private func toggleDay(_ day: Date) {
+        if collapsedDays.contains(day) {
+            collapsedDays.remove(day)
+        } else {
+            collapsedDays.insert(day)
         }
     }
 
@@ -176,43 +184,155 @@ struct WorkoutHistoryView: View {
 
 struct MealHistoryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
+    @Query(sort: \MealEntry.date, order: .reverse) private var allMeals: [MealEntry]
+
+    @State private var filter = WorkoutHistoryDateFilter.all
+    @State private var loaded: [MealEntry] = []
+    @State private var hasMore = true
+    @State private var isLoading = false
+    @State private var collapsedDays: Set<Date> = []
+
+    private var dayGroups: [MealHistoryDayGroup] {
+        MealHistoryQuery.groupedByDay(loaded)
+    }
+
+    private var monthChips: [(filter: WorkoutHistoryDateFilter, title: String)] {
+        HistoryMonthFilterChips.chips(
+            from: WorkoutHistoryQuery.filterChoices(from: allMeals.map(\.date))
+        )
+    }
 
     var body: some View {
         List {
-            if meals.isEmpty {
+            if loaded.isEmpty, !isLoading {
                 ContentUnavailableView(
-                    "暂无饮食记录",
+                    filter == .all ? "暂无饮食记录" : "没有符合筛选的记录",
                     systemImage: "fork.knife",
-                    description: Text("把食物照片或描述发给教练，AI 会自动记录到这里。")
+                    description: Text(
+                        filter == .all
+                            ? "把食物照片或描述发给教练，AI 会自动记录到这里。"
+                            : "试试调整筛选月份。"
+                    )
                 )
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             } else {
-                ForEach(meals) { meal in
-                    NavigationLink {
-                        MealRecordDetailView(meal: meal)
-                    } label: {
-                        MealHistoryRow(meal: meal)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            modelContext.delete(meal)
-                            try? modelContext.save()
-                        } label: {
-                            Image(systemName: "trash")
+                ForEach(dayGroups) { group in
+                    let isExpanded = !collapsedDays.contains(group.day)
+                    Section {
+                        HistoryDayHeader(
+                            title: group.title,
+                            summary: group.mealCountText,
+                            metric: group.totalKnownCalories.map(HistoryDayMetrics.calories),
+                            metricUnit: group.totalKnownCalories == nil ? nil : "kcal",
+                            isExpanded: isExpanded,
+                            toggle: { toggleDay(group.day) }
+                        )
+                        .historyDayCardRow(edge: isExpanded ? .top : .single)
+
+                        if isExpanded {
+                            ForEach(
+                                Array(group.meals.enumerated()),
+                                id: \.element.id
+                            ) { index, meal in
+                                NavigationLink {
+                                    MealRecordDetailView(meal: meal)
+                                } label: {
+                                    MealHistoryRow(meal: meal)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        delete(meal)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .accessibilityLabel("删除饮食记录")
+                                    .tint(.red)
+                                }
+                                .historyDayCardRow(
+                                    edge: index == group.meals.count - 1 ? .bottom : .middle
+                                )
+                            }
                         }
-                        .accessibilityLabel("删除饮食记录")
-                        .tint(.red)
+                    }
+                    .listSectionSeparator(.hidden)
+                }
+
+                if hasMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(.vertical, 12)
+                        Spacer()
+                    }
+                    .listRowSeparator(.hidden)
+                    .onAppear {
+                        loadMore()
                     }
                 }
             }
         }
         .listStyle(.plain)
+        .listSectionSpacing(12)
         .scrollContentBackground(.hidden)
         .appPageBackground()
-        .navigationTitle("饮食记录")
-        .navigationBarTitleDisplayMode(.large)
+        .historyListChrome(
+            title: "饮食记录",
+            systemImage: "fork.knife",
+            selected: filter,
+            chips: monthChips,
+            onSelect: { filter = $0 }
+        )
+        .onAppear {
+            if loaded.isEmpty {
+                reload()
+            }
+        }
+        .onChange(of: filter) { _, _ in
+            reload()
+        }
+    }
+
+    private func toggleDay(_ day: Date) {
+        if collapsedDays.contains(day) {
+            collapsedDays.remove(day)
+        } else {
+            collapsedDays.insert(day)
+        }
+    }
+
+    private func reload() {
+        loaded = []
+        hasMore = true
+        isLoading = false
+        loadMore()
+    }
+
+    private func loadMore() {
+        guard hasMore, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        let descriptor = MealHistoryQuery.fetchDescriptor(
+            filter: filter,
+            offset: loaded.count
+        )
+        do {
+            let page = try modelContext.fetch(descriptor)
+            loaded.append(contentsOf: page)
+            hasMore = page.count >= MealHistoryQuery.pageSize
+        } catch {
+            hasMore = false
+        }
+    }
+
+    private func delete(_ meal: MealEntry) {
+        loaded.removeAll { $0.id == meal.id }
+        modelContext.delete(meal)
+        try? modelContext.save()
+        if loaded.count < MealHistoryQuery.pageSize, hasMore {
+            loadMore()
+        }
     }
 }
 
@@ -283,13 +403,21 @@ private struct WorkoutHistoryRow: View {
 
             Spacer(minLength: 8)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var workoutThumbnail: some View {
-        if let exercise {
+        if let video = workout.mediaAttachments.first(where: { $0.kind == .video }) {
+            MediaThumbnail(
+                kind: .video,
+                path: video.path,
+                fallbackIcon: "figure.strengthtraining.traditional",
+                width: 42,
+                height: 74
+            )
+        } else if let exercise {
             ExerciseArtworkView(
                 reference: exercise.preferredActionIllustration,
                 contentMode: .fill
@@ -345,7 +473,9 @@ private struct MealHistoryRow: View {
             MediaThumbnail(
                 kind: meal.mediaAttachments.first?.kind ?? .none,
                 path: meal.mediaAttachments.first?.path,
-                fallbackIcon: meal.mealType.icon
+                fallbackIcon: meal.mealType.icon,
+                width: meal.mediaAttachments.first?.kind == .video ? 42 : 58,
+                height: meal.mediaAttachments.first?.kind == .video ? 74 : 58
             )
 
             VStack(alignment: .leading, spacing: 5) {
@@ -368,7 +498,7 @@ private struct MealHistoryRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
     }
 
@@ -412,7 +542,7 @@ private struct BodyHistoryRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
     }
 

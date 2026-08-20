@@ -9,7 +9,8 @@
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 中饮食原位审查只有一张汇总卡的边界
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 中 Skill 自带工具权限、快捷按钮只能排序的边界
   - [PRD 032](032-default-full-tools-and-selected-skill-subset.md) 中由选中 Skill 决定本轮工具子集的边界
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 压紧聊天饮食卡密度，详情复用同一菜品行，并把执行日志 LLM 入参从时间线内联展开改为独立页
 - 上游依据：
   - 维护者一次提出的七项优化：消息时间与位置、日期入口位置、快捷按钮 CRUD、流式闪退与自动上报、LLM 工具列表日志、带练录像失败原因、Keep 风格饮食双卡片
   - [BUG 0024](../bugs/0024-streaming-cross-actor-swiftdata-crash.md)

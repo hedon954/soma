@@ -1629,11 +1629,13 @@ extension WorkoutCameraService {
             }
         }
         let resources = captureResources
+        let skipMovieOutputGeometry = state == .startingRecording
+            || state == .recording
         resources.queue.async {
-            // BUG 0025：录像已经开始后改写 movieOutput 视频连接的旋转或镜像，会让
-            // AVFoundation 结束这次录制并只留下几帧可播放文件。录像开始前几何已经锁定，
-            // 录像中再写既违规又没有意义，所以这里直接跳过。
-            guard !resources.movieOutput.isRecording else {
+            // BUG 0025：录像已经开始或即将开始后改写 movieOutput 视频连接的旋转或镜像，
+            // 会让 AVFoundation 结束这次录制并只留下几帧可播放文件。录像开始前几何已经
+            // 锁定，录像中再写既违规又没有意义，所以这里直接跳过。
+            guard !skipMovieOutputGeometry, !resources.movieOutput.isRecording else {
                 WorkoutRecordingDiagnostics.breadcrumb(
                     stage: "capture-geometry-skipped-while-recording"
                 )

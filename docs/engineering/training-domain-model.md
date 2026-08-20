@@ -13,6 +13,7 @@
   - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
   - [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)
   - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
+  - [ADR 0086](../adr/0086-preview-and-history-thumbs-use-aspect-fill.md)
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
@@ -337,8 +338,7 @@ plannedSets.first(where: kind == working)
 
 - `AVCaptureDevice.RotationCoordinator` 分别提供 horizon-level preview/capture 角度；
 - Rotation Coordinator 在 Capture Session 准备后创建，不依赖 SwiftUI 预览先出现；
-- 紧凑小窗使用 `.resizeAspectFill` 贴合窗口并允许边缘裁切，放大取景使用 `.resizeAspect` 展示
-  完整画幅；
+- 紧凑小窗和放大取景都使用 `.resizeAspectFill` 按取景比例铺满并允许边缘裁切；完整原片在媒体查看器中 `scaledToFit` 查看；
 - 预览与 Movie Output 显式采用相同镜像策略；
 - 开始录像时锁定本段方向、角度和镜像，停止后再恢复设备方向监听；
 - 带练可使用 portrait、landscape left/right，其他 App 页面保持 portrait；

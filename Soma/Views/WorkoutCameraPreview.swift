@@ -81,7 +81,7 @@ final class CameraPreviewView: UIView {
 
     func installPreviewLayer(
         _ previewLayer: AVCaptureVideoPreviewLayer,
-        videoGravity: AVLayerVideoGravity = .resizeAspect
+        videoGravity: AVLayerVideoGravity = .resizeAspectFill
     ) {
         if hostedPreviewLayer === previewLayer {
             if previewLayer.superlayer === layer {

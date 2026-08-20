@@ -293,6 +293,7 @@ struct ExerciseMediaEditorView: View {
     @State private var showsVideoPicker = false
     @State private var guidanceTitle = ""
     @State private var guidanceURL = ""
+    @Namespace private var mediaZoomNamespace
     @State private var presentedVideo: MediaAttachmentReference?
 
     var body: some View {
@@ -355,6 +356,7 @@ struct ExerciseMediaEditorView: View {
                         } label: {
                             Label("我的示范视频", systemImage: "play.rectangle")
                         }
+                        .mediaZoomSource(id: video.id, in: mediaZoomNamespace)
                         Spacer()
                         Button(role: .destructive) {
                             removeUserVideo(video)
@@ -427,15 +429,14 @@ struct ExerciseMediaEditorView: View {
                 addUserImages(media, kind: kind)
             }
         }
-        .fullScreenCover(item: $presentedVideo) { selected in
-            MediaViewer(
-                attachments: exercise.userDemoVideos,
-                initialAttachmentID: selected.id,
-                deletionTitle: "删除这段示范视频？",
-                deletionMessage: "视频会从动作库移除；若没有其他记录引用，文件将在数据清理时回收。",
-                onDelete: removeUserVideo
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedVideo,
+            attachments: exercise.userDemoVideos,
+            namespace: mediaZoomNamespace,
+            deletionTitle: "删除这段示范视频？",
+            deletionMessage: "视频会从动作库移除；若没有其他记录引用，文件将在数据清理时回收。",
+            onDelete: removeUserVideo
+        )
         .alert(
             "无法完成操作",
             isPresented: Binding(

@@ -214,6 +214,7 @@ private struct FootprintRow: View {
 private struct FootprintMediaGrid: View {
     let attachments: [MediaAttachmentReference]
 
+    @Namespace private var mediaZoomNamespace
     @State private var presentedAttachment: MediaAttachmentReference?
 
     private var columnCount: Int {
@@ -248,17 +249,17 @@ private struct FootprintMediaGrid: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .mediaZoomSource(id: attachment.id, in: mediaZoomNamespace)
                 .accessibilityLabel(
                     attachment.kind == .video ? "播放视频" : "查看照片"
                 )
             }
         }
-        .fullScreenCover(item: $presentedAttachment) { attachment in
-            MediaViewer(
-                attachments: attachments,
-                initialAttachmentID: attachment.id
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedAttachment,
+            attachments: attachments,
+            namespace: mediaZoomNamespace
+        )
     }
 
     @ViewBuilder

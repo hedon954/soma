@@ -9,6 +9,7 @@
 - 后续替代：
   - [ADR 0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) 将录像归属从逻辑 Set 下沉到原子 Effort，以 attempt 单终态收敛 Delegate，并把复盘改为自动完成后的分享预览
   - [ADR 0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) 部分替代“只在开始写文件时才准备相机”的 lazy activation：明确选择自动录像后在动作介绍阶段完成可见 preflight，完整 request 从准备前开始计时，并区分完整录像与部分证据
+  - [ADR 0086](0086-preview-and-history-thumbs-use-aspect-fill.md) 将放大取景也改为 `.resizeAspectFill`，与紧凑小窗统一
 - 上游依据：
   - [PRD 014](../prd/014-guided-workout-recording-cues-and-review.md)
   - [带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)

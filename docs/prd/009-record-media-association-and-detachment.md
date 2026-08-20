@@ -3,7 +3,8 @@
 - 状态：已实现，待真机媒体验收
 - 日期：2026-07-31
 - 修订自：[PRD 004](004-soma-current-product.md) 的记录媒体审查范围
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将全屏查看从黑底弹出改为从缩略图 zoom 过渡
 - 关联决策：[ADR 0026](../adr/0026-bounded-gym-media-attribution.md)
 
 ## 问题

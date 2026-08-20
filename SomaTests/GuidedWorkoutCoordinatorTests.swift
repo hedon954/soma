@@ -694,7 +694,7 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testSetBecomesVisibleBeforeCameraStartupCompletes() async throws {
+    func testAutomaticRecordingStartsOnCountdownHostBeforeSetPhase() async throws {
         let fixture = try makeFixture(firstSetIsWarmup: false, setCount: 1)
         defer {
             fixture.defaults.removePersistentDomain(
@@ -718,11 +718,14 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
             await Task.yield()
         }
 
-        XCTAssertEqual(fixture.session.guidedPhase, .setInProgress)
+        // PRD 034 / BUG 0025：自动录像必须在倒计时 PIP 宿主上完成 startRecording
+        // 之后才切到 setInProgress，否则会拆宿主并改写 movieOutput。
+        XCTAssertEqual(fixture.session.guidedPhase, .preSetCountdown)
         XCTAssertEqual(fixture.sets[0].status, .inProgress)
 
         recorder.resumeStart()
         try await startTask.value
+        XCTAssertEqual(fixture.session.guidedPhase, .setInProgress)
     }
 
     @MainActor

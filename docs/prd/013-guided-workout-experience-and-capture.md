@@ -9,6 +9,7 @@
   - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 取消二级开始页与手动休息推进，并以独立逻辑组/Effort 扩展左右和时长训练
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 改为按需启动相机，扩展录像策略、语音和完成复盘
   - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口迁移到一级训练 Tab
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将放大取景改为 fill 裁切，并要求倒计时结束先完成录像启动再切组阶段
 - 上游依据：
   - [训练计划编排、沉浸式带练与真实取景调研](../research/2026-08-03-guided-workout-flow-and-capture.md)
   - [BUG 0006](../bugs/0006-workout-camera-preview-recording-mismatch.md)

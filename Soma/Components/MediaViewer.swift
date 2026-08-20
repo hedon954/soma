@@ -7,23 +7,35 @@ struct MediaViewer: View {
     let deletionTitle: String?
     let deletionMessage: String?
     let onDelete: ((MediaAttachmentReference) -> Void)?
+    var zoomNamespace: Namespace.ID?
+    var zoomSourceID: String?
 
     @State private var attachments: [MediaAttachmentReference]
     @State private var selectedAttachmentID: String
     @State private var pendingDeletion: MediaAttachmentReference?
+    @State private var chromeOpacity: Double
 
     init(
         attachments: [MediaAttachmentReference],
         initialAttachmentID: String,
         deletionTitle: String? = nil,
         deletionMessage: String? = nil,
-        onDelete: ((MediaAttachmentReference) -> Void)? = nil
+        onDelete: ((MediaAttachmentReference) -> Void)? = nil,
+        zoomNamespace: Namespace.ID? = nil,
+        zoomSourceID: String? = nil
     ) {
         self.deletionTitle = deletionTitle
         self.deletionMessage = deletionMessage
         self.onDelete = onDelete
+        self.zoomNamespace = zoomNamespace
+        self.zoomSourceID = zoomSourceID
         _attachments = State(initialValue: attachments)
         _selectedAttachmentID = State(initialValue: initialAttachmentID)
+        if #available(iOS 18.0, *) {
+            _chromeOpacity = State(initialValue: 1)
+        } else {
+            _chromeOpacity = State(initialValue: 0)
+        }
     }
 
     var body: some View {
@@ -89,9 +101,20 @@ struct MediaViewer: View {
 
                 Spacer()
             }
+            .opacity(chromeOpacity)
         }
         .preferredColorScheme(.dark)
         .statusBarHidden()
+        .mediaZoomDestination(
+            sourceID: zoomSourceID ?? selectedAttachmentID,
+            namespace: zoomNamespace
+        )
+        .onAppear {
+            guard chromeOpacity == 0 else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                chromeOpacity = 1
+            }
+        }
         .alert(
             deletionTitle ?? "",
             isPresented: Binding(
@@ -136,6 +159,89 @@ struct MediaViewer: View {
             return
         }
         selectedAttachmentID = attachments[min(removedIndex, attachments.count - 1)].id
+    }
+}
+
+extension View {
+    func mediaViewerCover(
+        item: Binding<MediaAttachmentReference?>,
+        attachments: [MediaAttachmentReference],
+        namespace: Namespace.ID,
+        deletionTitle: String? = nil,
+        deletionMessage: String? = nil,
+        onDelete: ((MediaAttachmentReference) -> Void)? = nil
+    ) -> some View {
+        fullScreenCover(
+            item: Binding(
+                get: { item.wrappedValue },
+                set: { newValue in
+                    MediaViewerPresentation.setPresentedAttachment(
+                        newValue,
+                        on: item
+                    )
+                }
+            )
+        ) { attachment in
+            MediaViewer(
+                attachments: attachments,
+                initialAttachmentID: attachment.id,
+                deletionTitle: deletionTitle,
+                deletionMessage: deletionMessage,
+                onDelete: onDelete,
+                zoomNamespace: namespace,
+                zoomSourceID: attachment.id
+            )
+        }
+    }
+
+    @ViewBuilder
+    func mediaZoomSource(id: String, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+}
+
+enum MediaViewerPresentation {
+    static func setPresentedAttachment(
+        _ attachment: MediaAttachmentReference?,
+        on item: Binding<MediaAttachmentReference?>
+    ) {
+        if #available(iOS 18.0, *) {
+            item.wrappedValue = attachment
+            return
+        }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            item.wrappedValue = attachment
+        }
+    }
+}
+
+private struct MediaZoomDestinationModifier: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), let namespace {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func mediaZoomDestination(
+        sourceID: String,
+        namespace: Namespace.ID?
+    ) -> some View {
+        modifier(
+            MediaZoomDestinationModifier(sourceID: sourceID, namespace: namespace)
+        )
     }
 }
 

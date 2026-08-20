@@ -8,6 +8,8 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 的录像策略入口、次级手动录像入口、语音内容与完成复盘操作
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的计划详情顺序、隐藏录像入口与准备页渐进披露规则
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 的录像警告、动作记录投影与用户确认结束边界
+- 后续修订：
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将倒计时结束改为先完成 `startRecording` 再进入 `.setInProgress`，预览与历史缩略改为 fill
 - 上游依据：[BUG 0019](../bugs/0019-guided-recording-attempt-terminal-and-duplicate-alerts.md)
 - 下游落地：
   - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)

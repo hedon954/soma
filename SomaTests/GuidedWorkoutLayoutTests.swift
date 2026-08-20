@@ -27,7 +27,7 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         compactHost.removePreviewLayerIfOwned(layer)
 
         XCTAssertTrue(layer.superlayer === expandedHost.layer)
-        XCTAssertEqual(layer.videoGravity, .resizeAspect)
+        XCTAssertEqual(layer.videoGravity, .resizeAspectFill)
     }
 
     @MainActor

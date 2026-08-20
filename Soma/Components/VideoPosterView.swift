@@ -17,7 +17,7 @@ struct VideoPosterView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                Color.black.opacity(0.82)
+                AppTheme.softTint
             }
             Image(systemName: "play.circle.fill")
                 .font(badgeFont)

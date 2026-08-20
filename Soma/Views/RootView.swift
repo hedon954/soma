@@ -29,11 +29,17 @@ struct RootView: View {
     @Environment(DataManagementCoordinator.self) private var dataManagement
     @Query(sort: \AgentJob.createdAt) private var agentJobs: [AgentJob]
     @State private var selectedTab: AppTab = .coach
+    @State private var tabStackIDs: [AppTab: UUID] = [
+        .coach: UUID(),
+        .training: UUID(),
+        .insights: UUID(),
+        .settings: UUID()
+    ]
     @State private var sheet: RootSheet?
     @State private var routedWorkoutSession: WorkoutSession?
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             NavigationStack {
                 CoachView {
                     sheet = .settings(
@@ -42,23 +48,27 @@ struct RootView: View {
                     )
                 }
             }
+            .id(tabStackIDs[.coach])
             .tabItem { Label("教练", systemImage: "bubble.left.and.bubble.right.fill") }
             .tag(AppTab.coach)
 
             NavigationStack {
                 TrainingProgramLibraryView()
             }
+            .id(tabStackIDs[.training])
             .tabItem { Label("训练", systemImage: "figure.strengthtraining.traditional") }
             .tag(AppTab.training)
 
             NavigationStack {
                 InsightsView()
             }
+            .id(tabStackIDs[.insights])
             .tabItem { Label("进展", systemImage: "chart.line.uptrend.xyaxis") }
             .tag(AppTab.insights)
 
             // PRD 020 修订：设置从各页右上角 gear 收敛为底部第 4 个 Tab。
             SettingsView(isEmbeddedInTab: true)
+                .id(tabStackIDs[.settings])
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(AppTab.settings)
         }
@@ -205,5 +215,21 @@ struct RootView: View {
         }
         routedWorkoutSession = session
         captureRouter.clearWorkoutSession(route.id)
+    }
+
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { selectedTab },
+            set: { incoming in
+                if let currentID = tabStackIDs[incoming] {
+                    tabStackIDs[incoming] = AppTabReselect.stackID(
+                        selected: selectedTab,
+                        incoming: incoming,
+                        current: currentID
+                    )
+                }
+                selectedTab = incoming
+            }
+        )
     }
 }

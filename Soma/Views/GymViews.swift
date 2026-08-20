@@ -122,6 +122,7 @@ struct GymDetailView: View {
     @State private var editingGym: GymProfile?
     @State private var editingEquipment: GymEquipment?
     @State private var deletingEquipment: GymEquipment?
+    @Namespace private var mediaZoomNamespace
     @State private var presentedPhoto: MediaAttachmentReference?
     @State private var confirmsGymDeletion = false
 
@@ -239,23 +240,22 @@ struct GymDetailView: View {
         .sheet(item: $editingEquipment) { item in
             GymEquipmentEditor(item: item)
         }
-        .fullScreenCover(item: $presentedPhoto) { selected in
-            MediaViewer(
-                attachments: photos,
-                initialAttachmentID: selected.id,
-                deletionTitle: "从健身房中移除这张照片？",
-                deletionMessage: "只会从健身房档案解除关联；聊天中的原始照片和系统相册不会删除。",
-                onDelete: {
-                    MediaAssociationStore.detachGymPhoto(
-                        at: $0.path,
-                        from: gym,
-                        equipment: allEquipment,
-                        media: allMedia,
-                        in: modelContext
-                    )
-                }
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedPhoto,
+            attachments: photos,
+            namespace: mediaZoomNamespace,
+            deletionTitle: "从健身房中移除这张照片？",
+            deletionMessage: "只会从健身房档案解除关联；聊天中的原始照片和系统相册不会删除。",
+            onDelete: {
+                MediaAssociationStore.detachGymPhoto(
+                    at: $0.path,
+                    from: gym,
+                    equipment: allEquipment,
+                    media: allMedia,
+                    in: modelContext
+                )
+            }
+        )
         .alert("删除这个健身房？", isPresented: $confirmsGymDeletion) {
             Button("删除", role: .destructive) {
                 StructuredDataStore.deleteGym(
@@ -319,6 +319,7 @@ struct GymDetailView: View {
                                     LocalImageView(path: photo.path)
                                 }
                                 .buttonStyle(.plain)
+                                .mediaZoomSource(id: photo.id, in: mediaZoomNamespace)
                                 .accessibilityLabel("放大查看这张健身房照片")
                                 .containerRelativeFrame(.horizontal, count: 1, spacing: 10)
                                 .frame(height: 176)

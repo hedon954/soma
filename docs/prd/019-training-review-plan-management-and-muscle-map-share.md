@@ -9,6 +9,7 @@
 - 后续修订：
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 将录像失败从自动消失 toast 修订为有诊断日志的系统警告框
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 将计划详情的版本历史与统计改为默认折叠展示
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将训练筛选改为标题下月份芯片，按天分组可折叠，并让饮食历史共用同一套呈现
 - 上游依据：无
 - 关联决策：[ADR 0044](../adr/0044-programmatic-muscle-map-and-training-share-poster.md)
 
@@ -32,8 +33,8 @@ v0.0.1 交付后，维护者按真实一周训练走查发现九类问题，集�
 
 ## 用户结果
 
-1. 训练记录按自然日分组展示，可按年、年月或年月日筛选，滚动时分页加载；空筛选结果
-   有明确空态。
+1. 训练与饮食记录按自然日分组展示，标题下用「全部 + 实际有数据的月份」芯片筛选，点日期可折叠当天，
+   滚动时分页加载；空筛选结果有明确空态（芯片与折叠由 PRD 034 修订）。
 2. 训练记录通过 `exerciseID` 关联动作库：列表显示动作插画、规范名与主要肌群；详情展示
    关联动作元数据（插画、程序化受力图、教练提示）并可进入动作详情；视频仍在记录详情播放。
 3. 教练回复保留模型原文的段落、编号列表和换行，长回复可读。

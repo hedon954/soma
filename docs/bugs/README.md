@@ -35,7 +35,7 @@
 | [0022](0022-installed-v5-schema-checksum-blocks-container-open.md) | 已修复，待真机复验 | 已安装 store 上改当前 schema 后容器无法打开 | 只打开当前 SomaDataSchema、不带 migrationPlan；真机只点重试迁移 |
 | [0023](0023-same-turn-multi-exercise-merged-into-one.md) | 已修复，待真机复验 | 同一条消息的多个动作被合并成一条训练记录，Event Cards 被结果卡替换 | create 每次新增独立记录；原位卡不隐藏 Tool Event；保存有确认 |
 | [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 已修复，待真机连续对话复验 | 流式回复期间在非主线程投影 Event，写 SwiftData 与 AttributeGraph 导致频繁闪退 | chunk 回调保持 `@MainActor`、投影主 actor 断言、文字增量合批与 segment 身份唯一 |
-| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 已修复，待真机复验 | 录像开始后预览交接重放几何改写视频连接，录像提前结束且只提示固定文案 | 录像中禁止改写 movieOutput 连接的静态门禁；错误码与中断原因映射为具体原因加技术标识 |
+| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 已修复，待真机复验 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

@@ -63,6 +63,17 @@ struct WorkoutHistoryDayGroup: Identifiable {
         formatter.dateFormat = "M月d日 EEEE"
         return formatter.string(from: day)
     }
+
+    var actionCountText: String {
+        "\(workouts.count) 个动作"
+    }
+
+    /// 只累加完整有效容量；缺重量或次数的动作不计入、也不补零。
+    var totalKnownVolumeKG: Double? {
+        let volumes = workouts.compactMap(\.estimatedVolume)
+        guard !volumes.isEmpty else { return nil }
+        return volumes.reduce(0, +)
+    }
 }
 
 enum WorkoutHistoryQuery {
@@ -103,16 +114,13 @@ enum WorkoutHistoryQuery {
         _ workouts: [WorkoutEntry],
         calendar: Calendar = .current
     ) -> [WorkoutHistoryDayGroup] {
-        var buckets: [Date: [WorkoutEntry]] = [:]
-        for workout in workouts {
-            let day = calendar.startOfDay(for: workout.date)
-            buckets[day, default: []].append(workout)
-        }
-        return buckets.keys.sorted(by: >).map { day in
-            WorkoutHistoryDayGroup(
-                day: day,
-                workouts: (buckets[day] ?? []).sorted { $0.date > $1.date }
-            )
+        HistoryDayGrouping.grouped(
+            workouts,
+            date: \.date,
+            calendar: calendar
+        )
+        .map { day, items in
+            WorkoutHistoryDayGroup(day: day, workouts: items)
         }
     }
 
@@ -135,5 +143,115 @@ enum WorkoutHistoryQuery {
             }
         }
         return descriptor
+    }
+}
+
+struct MealHistoryDayGroup: Identifiable {
+    let day: Date
+    let meals: [MealEntry]
+
+    var id: Date {
+        day
+    }
+
+    var title: String {
+        WorkoutHistoryDayGroup(day: day, workouts: []).title
+    }
+
+    var mealCountText: String {
+        "\(meals.count) 餐"
+    }
+
+    /// 只累加已有热量；缺项保持为空，不把未估算写成 0。
+    var totalKnownCalories: Int? {
+        let values = meals.compactMap(\.calories)
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +)
+    }
+}
+
+enum MealHistoryQuery {
+    static let pageSize = WorkoutHistoryQuery.pageSize
+
+    static func groupedByDay(
+        _ meals: [MealEntry],
+        calendar: Calendar = .current
+    ) -> [MealHistoryDayGroup] {
+        HistoryDayGrouping.grouped(
+            meals,
+            date: \.date,
+            calendar: calendar
+        )
+        .map { day, items in
+            MealHistoryDayGroup(day: day, meals: items)
+        }
+    }
+
+    static func fetchDescriptor(
+        filter: WorkoutHistoryDateFilter,
+        offset: Int,
+        limit: Int = pageSize,
+        calendar: Calendar = .current
+    ) -> FetchDescriptor<MealEntry> {
+        var descriptor = FetchDescriptor<MealEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        descriptor.fetchOffset = max(0, offset)
+        if let interval = filter.dateInterval(calendar: calendar) {
+            let start = interval.start
+            let end = interval.end
+            descriptor.predicate = #Predicate<MealEntry> { meal in
+                meal.date >= start && meal.date < end
+            }
+        }
+        return descriptor
+    }
+}
+
+enum HistoryDayGrouping {
+    static func grouped<Item>(
+        _ items: [Item],
+        date: KeyPath<Item, Date>,
+        calendar: Calendar = .current
+    ) -> [(day: Date, items: [Item])] {
+        var buckets: [Date: [Item]] = [:]
+        for item in items {
+            let day = calendar.startOfDay(for: item[keyPath: date])
+            buckets[day, default: []].append(item)
+        }
+        return buckets.keys.sorted(by: >).map { day in
+            (
+                day: day,
+                items: (buckets[day] ?? []).sorted {
+                    $0[keyPath: date] > $1[keyPath: date]
+                }
+            )
+        }
+    }
+}
+
+enum HistoryMonthFilterChips {
+    static func chips(
+        from choices: (
+            years: [Int],
+            monthsByYear: [Int: [Int]],
+            daysByYearMonth: [Int: [Int: [Int]]]
+        ),
+        calendar: Calendar = .current,
+        now: Date = Date()
+    ) -> [(filter: WorkoutHistoryDateFilter, title: String)] {
+        let currentYear = calendar.component(.year, from: now)
+        let spansYears = choices.years.count > 1
+        var result: [(WorkoutHistoryDateFilter, String)] = [(.all, "全部")]
+        for year in choices.years {
+            for month in choices.monthsByYear[year] ?? [] {
+                let title = spansYears || year != currentYear
+                    ? "\(year)年\(month)月"
+                    : "\(month)月"
+                result.append((.yearMonth(year: year, month: month), title))
+            }
+        }
+        return result
     }
 }

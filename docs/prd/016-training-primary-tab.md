@@ -7,7 +7,8 @@
   - [PRD 004](004-soma-current-product.md) 的进展内计划入口
   - [PRD 006](006-footprints-location-and-retry.md) 的“第三个 Tab”限制
   - [PRD 010](010-exercise-library-plans-guided-training.md)、[PRD 012](012-gui-training-program-authoring.md)、[PRD 013](013-guided-workout-experience-and-capture.md) 的进展内计划入口
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 明确换 Tab 保留子页面、再点当前 Tab 才回到该 Tab 根页面
 - 上游依据：[ADR 0041](../adr/0041-training-primary-tab.md)
 
 ## 用户结果

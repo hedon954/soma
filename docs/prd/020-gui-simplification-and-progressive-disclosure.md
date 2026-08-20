@@ -14,6 +14,7 @@
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 用 typed 饮食结果卡收敛过程卡并扩展饮食详情审查
   - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 取消 LLM 配置页的「高级」折叠层，并把输入区动作候选从两步按钮改为一步输入历史式建议
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 增加聊天原位编辑卡、当前健身房卡、设置页内嵌反馈与新 Session 快捷语；原位卡不得隐藏 Event Cards 由 [ADR 0077](../adr/0077-same-turn-identity-merge-and-additive-inline-review.md) 收紧
+  - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将训练「全部 + 按月」菜单改为标题下芯片，执行日志超长 payload 进入独立页
 - 下游落地：
   - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md) 将训练记录逐组编辑收敛为动作定义下的次数或时长与重量
   - [ADR 0077](../adr/0077-same-turn-identity-merge-and-additive-inline-review.md) 原位审查卡不得隐藏 Event Cards
@@ -103,7 +104,7 @@ v0.0.2 交付后逐屏审计发现，GUI 的问题不是功能过多，而是呈
 - 首屏区块收敛为：紧凑 AI 上下文入口、记录入口（高频三项 + 更多）、
   训练连续性热力图、容量/体重趋势卡；“最近 7 天”摘要并入趋势卡头部。
 - 训练历史行只保留缩略图、动作名、时间与一组主指标；评分、热量与肌群在详情查看。
-- 训练历史筛选扁平化为“全部 + 按月”；分组、分页与删除语义不变。
+- 训练与饮食历史筛选为标题下「全部 + 按月」芯片，按天分组且可折叠当天；分页与删除语义不变（PRD 034 修订）。
 - 训练/饮食/身体记录详情将次要 Section（热量估算、AI 解析/观察、原始记录、宏量）
   默认折叠；关联动作的受力图默认紧凑，点击放大。
 - 训练记录逐组编辑只露出动作定义要求的次数或时长与重量；不展示逻辑组、组类型、

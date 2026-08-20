@@ -234,7 +234,6 @@ final class GuidedWorkoutCoordinator {
                 TimeInterval(effort.plannedDurationSeconds ?? 0)
             )
             : nil
-        setPhase(.setInProgress, deadline: deadline, for: session)
         // BUG 0025：语音播报会激活并释放 AVAudioSession。在录像刚开始的窗口内做这件事，
         // 可能把这次录制打断，所以播报排到录像启动之后。
         let announcement = WorkoutPrescriptionFormatter.effortAnnouncement(
@@ -268,6 +267,10 @@ final class GuidedWorkoutCoordinator {
                 automatic: true
             )
         }
+        // BUG 0025：自动录像必须在倒计时 PIP 宿主上真正 startRecording 之后
+        // 才切到 setInProgress，避免预览交接在 isRecording 仍为 false 时改写几何。
+        setPhase(.setInProgress, deadline: deadline, for: session)
+        try context.save()
         cues.announce(announcement)
     }
 

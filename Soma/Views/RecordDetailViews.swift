@@ -5,6 +5,8 @@ struct MediaThumbnail: View {
     let kind: MediaKind
     let path: String?
     var fallbackIcon: String
+    var width: CGFloat = 58
+    var height: CGFloat = 58
 
     var body: some View {
         Group {
@@ -21,7 +23,8 @@ struct MediaThumbnail: View {
                 }
             }
         }
-        .frame(width: 58, height: 58)
+        .frame(width: width, height: height)
+        .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
@@ -42,8 +45,10 @@ private struct RecordVideoPreview: View {
 
     var body: some View {
         VideoPosterView(path: path, badgeFont: .largeTitle)
+            .scaledToFill()
             .frame(maxWidth: .infinity)
             .frame(height: 270)
+            .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
@@ -51,6 +56,7 @@ private struct RecordVideoPreview: View {
 private struct RecordMediaGallery: View {
     let attachments: [MediaAttachmentReference]
     let onDelete: (MediaAttachmentReference) -> Void
+    @Namespace private var mediaZoomNamespace
     @State private var selectedAttachmentID = ""
     @State private var presentedAttachment: MediaAttachmentReference?
 
@@ -72,6 +78,7 @@ private struct RecordMediaGallery: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .mediaZoomSource(id: attachment.id, in: mediaZoomNamespace)
                 .accessibilityLabel(
                     attachment.kind == .video
                         ? "放大查看这个视频"
@@ -92,15 +99,14 @@ private struct RecordMediaGallery: View {
         }
         .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .automatic : .never))
         .frame(height: 270)
-        .fullScreenCover(item: $presentedAttachment) { selected in
-            MediaViewer(
-                attachments: attachments,
-                initialAttachmentID: selected.id,
-                deletionTitle: "从记录中移除此媒体？",
-                deletionMessage: "只会从这条记录解除关联；聊天中的原始附件和系统相册不会删除。",
-                onDelete: onDelete
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedAttachment,
+            attachments: attachments,
+            namespace: mediaZoomNamespace,
+            deletionTitle: "从记录中移除此媒体？",
+            deletionMessage: "只会从这条记录解除关联；聊天中的原始附件和系统相册不会删除。",
+            onDelete: onDelete
+        )
         .onAppear {
             normalizeSelection()
         }
@@ -641,7 +647,7 @@ private struct MealRecordEditor: View {
     @State private var protein: String
     @State private var carbs: String
     @State private var fat: String
-    @State private var items: [MealItem]
+    @State private var drafts: [MealItemDraft]
     @State private var notes: String
     @State private var macrosExpanded = false
     @State private var notesExpanded = false
@@ -654,7 +660,7 @@ private struct MealRecordEditor: View {
         _protein = State(initialValue: EditorValue.string(meal.protein))
         _carbs = State(initialValue: EditorValue.string(meal.carbs))
         _fat = State(initialValue: EditorValue.string(meal.fat))
-        _items = State(initialValue: meal.items)
+        _drafts = State(initialValue: MealItemDraft.drafts(for: meal))
         _notes = State(initialValue: meal.notes)
     }
 
@@ -686,18 +692,22 @@ private struct MealRecordEditor: View {
             }
 
             Section("食物项") {
-                if items.isEmpty {
+                if drafts.isEmpty {
                     Text("尚未拆分食物项")
                         .foregroundStyle(.secondary)
                 }
-                ForEach($items) { $item in
-                    MealItemEditorRow(item: $item)
+                ForEach(Array($drafts.enumerated()), id: \.element.id) { index, $draft in
+                    if index > 0 {
+                        Divider()
+                    }
+                    MealItemDraftRow(draft: $draft) {
+                        drafts.removeAll { $0.id == draft.id }
+                    }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 }
-                .onDelete { items.remove(atOffsets: $0) }
-                .onMove { items.move(fromOffsets: $0, toOffset: $1) }
 
                 Button {
-                    items.append(MealItem(name: ""))
+                    drafts.append(MealItemDraft())
                 } label: {
                     Label("添加食物", systemImage: "plus")
                 }
@@ -759,10 +769,11 @@ private struct MealRecordEditor: View {
                         .disabled(!isValid)
                 }
             }
-            ToolbarItem(placement: .topBarLeading) {
-                EditButton()
-            }
         }
+    }
+
+    private var editedItems: [MealItem] {
+        drafts.compactMap(\.item)
     }
 
     private var isValid: Bool {
@@ -771,7 +782,6 @@ private struct MealRecordEditor: View {
             && EditorValue.validDouble(protein, range: 0 ... 2000)
             && EditorValue.validDouble(carbs, range: 0 ... 2000)
             && EditorValue.validDouble(fat, range: 0 ... 2000)
-            && items.allSatisfy { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     private var isDirty: Bool {
@@ -782,7 +792,7 @@ private struct MealRecordEditor: View {
             || EditorValue.double(protein) != meal.protein
             || EditorValue.double(carbs) != meal.carbs
             || EditorValue.double(fat) != meal.fat
-            || items != meal.items
+            || editedItems != meal.items
             || notes.trimmingCharacters(in: .whitespacesAndNewlines) != meal.notes
     }
 
@@ -796,19 +806,14 @@ private struct MealRecordEditor: View {
         meal.date = date
         meal.mealType = mealType
         meal.title = normalizedTitle
-        let normalizedItems = items.map { item in
-            var item = item
-            item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            item.portionDescription = item.portionDescription
-                .flatMap(EditorValue.optionalText)
-            return item
-        }
+        let normalizedItems = editedItems
         let editedTotals = EditorValue.int(calories) != meal.calories
             || EditorValue.double(protein) != meal.protein
             || EditorValue.double(carbs) != meal.carbs
             || EditorValue.double(fat) != meal.fat
         if normalizedItems != meal.items {
             meal.replaceItemsAndDeriveTotals(normalizedItems)
+            drafts = MealItemDraft.drafts(for: meal)
         }
         if editedTotals {
             meal.calories = EditorValue.int(calories)
@@ -819,67 +824,6 @@ private struct MealRecordEditor: View {
         }
         meal.notes = normalizedNotes
         try? modelContext.save()
-    }
-}
-
-private struct MealItemEditorRow: View {
-    @Binding var item: MealItem
-    @State private var nutritionExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("食物名称", text: $item.name)
-            TextField(
-                "份量说明（可选）",
-                text: Binding(
-                    get: { item.portionDescription ?? "" },
-                    set: { item.portionDescription = EditorValue.optionalText($0) }
-                )
-            )
-            .foregroundStyle(.secondary)
-
-            DisclosureGroup("分项营养", isExpanded: $nutritionExpanded) {
-                mealItemNumberField("大卡", value: $item.calories, unit: "kcal")
-                mealItemNumberField("蛋白质", value: $item.protein, unit: "g")
-                mealItemNumberField("碳水", value: $item.carbs, unit: "g")
-                mealItemNumberField("脂肪", value: $item.fat, unit: "g")
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private func mealItemNumberField(
-        _ title: String,
-        value: Binding<Int?>,
-        unit: String
-    ) -> some View {
-        RecordFieldRow(
-            title: title,
-            placeholder: "未估算",
-            unit: unit,
-            text: Binding(
-                get: { EditorValue.string(value.wrappedValue) },
-                set: { value.wrappedValue = EditorValue.int($0) }
-            ),
-            keyboard: .numberPad
-        )
-    }
-
-    private func mealItemNumberField(
-        _ title: String,
-        value: Binding<Double?>,
-        unit: String
-    ) -> some View {
-        RecordFieldRow(
-            title: title,
-            placeholder: "未估算",
-            unit: unit,
-            text: Binding(
-                get: { EditorValue.string(value.wrappedValue) },
-                set: { value.wrappedValue = EditorValue.double($0) }
-            ),
-            keyboard: .decimalPad
-        )
     }
 }
 

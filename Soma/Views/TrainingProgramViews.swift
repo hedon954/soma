@@ -967,6 +967,7 @@ struct PerformanceReviewView: View {
     @State private var isEditingAnalysis = false
     @State private var isAnalyzing = false
     @State private var showsVideoPicker = false
+    @Namespace private var mediaZoomNamespace
     @State private var presentedVideo: MediaAttachmentReference?
     @State private var errorMessage: String?
 
@@ -1005,6 +1006,10 @@ struct PerformanceReviewView: View {
                                     systemImage: "play.rectangle.fill"
                                 )
                             }
+                            .mediaZoomSource(
+                                id: MediaAttachmentReference(kind: .video, path: path).id,
+                                in: mediaZoomNamespace
+                            )
                         }
                     }
                     Button("添加或替换分析用录像") {
@@ -1016,6 +1021,7 @@ struct PerformanceReviewView: View {
                     } label: {
                         Label("查看本组录像", systemImage: "play.rectangle.fill")
                     }
+                    .mediaZoomSource(id: videoAttachment.id, in: mediaZoomNamespace)
                     Button("替换或重新录制") {
                         showsVideoPicker = true
                     }
@@ -1122,12 +1128,11 @@ struct PerformanceReviewView: View {
                 replaceVideo(with: media)
             }
         }
-        .fullScreenCover(item: $presentedVideo) { video in
-            MediaViewer(
-                attachments: [video],
-                initialAttachmentID: video.id
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedVideo,
+            attachments: presentedVideo.map { [$0] } ?? [],
+            namespace: mediaZoomNamespace
+        )
         .alert(
             "无法完成复盘",
             isPresented: Binding(

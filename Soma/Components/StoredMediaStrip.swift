@@ -111,6 +111,7 @@ enum FoldedMediaLayout {
 struct StoredMediaStrip: View {
     let attachments: [MediaAttachmentReference]
 
+    @Namespace private var mediaZoomNamespace
     @State private var isExpanded = false
     @State private var presentedAttachment: MediaAttachmentReference?
 
@@ -141,12 +142,11 @@ struct StoredMediaStrip: View {
         }
         .frame(maxWidth: 278, alignment: .trailing)
         .animation(.snappy(duration: 0.28), value: isExpanded)
-        .fullScreenCover(item: $presentedAttachment) { attachment in
-            MediaViewer(
-                attachments: attachments,
-                initialAttachmentID: attachment.id
-            )
-        }
+        .mediaViewerCover(
+            item: $presentedAttachment,
+            attachments: attachments,
+            namespace: mediaZoomNamespace
+        )
     }
 
     private var foldedCard: some View {
@@ -252,6 +252,10 @@ struct StoredMediaStrip: View {
                 alignment: .topLeading
             )
             .contentShape(Rectangle())
+            .mediaZoomSource(
+                id: foldedAttachment(offset: 0).id,
+                in: mediaZoomNamespace
+            )
             .onTapGesture {
                 presentedAttachment = foldedAttachment(offset: 0)
             }
@@ -313,6 +317,7 @@ struct StoredMediaStrip: View {
             content()
         }
         .buttonStyle(.plain)
+        .mediaZoomSource(id: attachment.id, in: mediaZoomNamespace)
         .accessibilityLabel(
             attachment.kind == .video
                 ? "播放视频附件"
@@ -351,7 +356,9 @@ struct StoredMediaStrip: View {
               image.size.width > 0,
               image.size.height > 0
         else {
-            return 1
+            return attachment.kind == .video
+                ? WorkoutCaptureLayout.previewAspectRatio(isLandscape: false)
+                : 1
         }
 
         return image.size.width / image.size.height
