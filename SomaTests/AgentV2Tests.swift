@@ -91,6 +91,63 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertTrue(mismatched.message.contains("weight"))
     }
 
+    /// 反馈回归：模型写入必须保留 Turn 的实际时刻，并把菜品拆解作为营养汇总的唯一事实源。
+    @MainActor
+    func testCreateMealKeepsOccurredAtAndDerivesTotalsFromDishItems() throws {
+        let context = try makeContext()
+        let occurredAt = Date(timeIntervalSince1970: 1_787_026_695)
+        let result = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createMeal,
+                arguments: AgentToolArguments(
+                    mealType: MealType.lunch.rawValue,
+                    title: "虚构午餐",
+                    calories: 999,
+                    protein: 99,
+                    carbs: 99,
+                    fat: 99,
+                    items: [
+                        AgentMealItemInput(
+                            name: "虚构豆腐",
+                            portionDescription: "一份",
+                            calories: 180,
+                            protein: 18,
+                            carbs: 8,
+                            fat: 9
+                        ),
+                        AgentMealItemInput(
+                            name: "虚构杂粮饭",
+                            portionDescription: "一碗",
+                            calories: 220,
+                            protein: 6,
+                            carbs: 45,
+                            fat: 2
+                        )
+                    ]
+                )
+            ),
+            sourceText: "记录这份虚构午餐",
+            sourceDate: occurredAt,
+            sourceSessionID: UUID(),
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        let meal = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<MealEntry>()).first
+        )
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(meal.date, occurredAt)
+        XCTAssertEqual(meal.items.map(\.name), ["虚构豆腐", "虚构杂粮饭"])
+        XCTAssertEqual(meal.calories, 400)
+        XCTAssertEqual(meal.protein, 24)
+        XCTAssertEqual(meal.carbs, 53)
+        XCTAssertEqual(meal.fat, 11)
+        XCTAssertEqual(meal.nutritionSource, .derivedFromItems)
+    }
+
     @MainActor
     func testQueryV2AppliesDateFieldsPaginationAndExerciseSearch() throws {
         let context = try makeContext()

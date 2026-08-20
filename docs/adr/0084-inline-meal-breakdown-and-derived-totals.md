@@ -11,6 +11,7 @@
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中食物项只用于只读审查的边界；精确 Tool 查询与 `MealItem` 结构继续有效
 - 后续替代：暂无
 - 上游依据：[PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
+- 下游落地：[BUG 0026](../bugs/0026-meal-create-aggregate-overrode-item-totals.md)
 
 ## 背景
 

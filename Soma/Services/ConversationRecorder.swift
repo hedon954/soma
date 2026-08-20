@@ -531,12 +531,7 @@ enum ConversationRecorder {
             sourceTurnID: sourceTurnID,
             sourceSessionID: sourceSessionID
         )
-        if arguments.calories == nil,
-           arguments.protein == nil,
-           arguments.carbs == nil,
-           arguments.fat == nil,
-           !items.isEmpty
-        {
+        if !items.isEmpty {
             created.replaceItemsAndDeriveTotals(items)
         }
         context.insert(created)
