@@ -66,10 +66,7 @@ case "$action" in
     elif [[ -n "${SOMA_SIMULATOR_DEVICE:-}" ]]; then
       destination="platform=iOS Simulator,name=${SOMA_SIMULATOR_DEVICE},arch=${simulator_arch},OS=latest"
     else
-      simulator_id="$(select_simulator_id)"
-      xcrun simctl boot "$simulator_id" >/dev/null 2>&1 || true
-      xcrun simctl bootstatus "$simulator_id" -b >/dev/null
-      destination="platform=iOS Simulator,id=${simulator_id},arch=${simulator_arch}"
+      destination="platform=iOS Simulator,id=$(select_simulator_id),arch=${simulator_arch}"
     fi
     ;;
   *)
