@@ -824,19 +824,19 @@ enum TrainingPlanStore {
         guard let context else { return nil }
         let fingerprint = prescriptionFingerprint(session.prescriptionSnapshot)
         guard !fingerprint.isEmpty else { return nil }
-        let matches: [(TrainingProgram, WorkoutTemplateVersion)] = resolvedVersions
-            .compactMap { version in
-                guard let program = resolvedPrograms.first(where: {
-                    $0.id == version.programID
-                }) else {
-                    return nil
-                }
-                let values = prescriptions(for: version, in: context)
-                guard prescriptionFingerprint(values) == fingerprint else {
-                    return nil
-                }
-                return (program, version)
+        var matches: [(TrainingProgram, WorkoutTemplateVersion)] = []
+        for version in resolvedVersions {
+            guard let program = resolvedPrograms.first(where: {
+                $0.id == version.programID
+            }) else {
+                continue
             }
+            let values = prescriptions(for: version, in: context)
+            guard prescriptionFingerprint(values) == fingerprint else {
+                continue
+            }
+            matches.append((program, version))
+        }
         let uniquePrograms = Dictionary(grouping: matches, by: { $0.0.id })
         guard uniquePrograms.count == 1,
               let match = matches.first
@@ -850,45 +850,73 @@ enum TrainingPlanStore {
         )
     }
 
+    /// Keep each conversion tiny — CI's x86_64 type checker times out on chained
+    /// sorted/map and mixed optional array literals in these fingerprints.
     private static func prescriptionFingerprint(
         _ prescriptions: [TemplateExercisePrescription]
     ) -> String {
-        prescriptions
-            .sorted { $0.order < $1.order }
-            .map {
-                [
-                    $0.exerciseID.uuidString,
-                    String($0.targetSets ?? -1),
-                    String($0.targetReps ?? -1),
-                    String($0.targetWeightKG ?? -1),
-                    String($0.targetRestSeconds ?? -1),
-                    $0.firstSetIsWarmup ? "1" : "0",
-                    $0.laterality.rawValue,
-                    $0.plannedSets
-                        .sorted { $0.order < $1.order }
-                        .map(setPrescriptionFingerprint)
-                        .joined(separator: ",")
-                ].joined(separator: ":")
-            }
-            .joined(separator: "|")
+        let ordered = prescriptions.sorted { left, right in
+            left.order < right.order
+        }
+        var fields: [String] = []
+        fields.reserveCapacity(ordered.count)
+        for prescription in ordered {
+            fields.append(exercisePrescriptionFingerprint(prescription))
+        }
+        return fields.joined(separator: "|")
+    }
+
+    private static func exercisePrescriptionFingerprint(
+        _ prescription: TemplateExercisePrescription
+    ) -> String {
+        let orderedSets = prescription.plannedSets.sorted { left, right in
+            left.order < right.order
+        }
+        var setFields: [String] = []
+        setFields.reserveCapacity(orderedSets.count)
+        for plannedSet in orderedSets {
+            setFields.append(setPrescriptionFingerprint(plannedSet))
+        }
+        let targetSets: Int = prescription.targetSets ?? -1
+        let targetReps: Int = prescription.targetReps ?? -1
+        let targetWeightKG: Double = prescription.targetWeightKG ?? -1
+        let targetRestSeconds: Int = prescription.targetRestSeconds ?? -1
+        let warmup: String = prescription.firstSetIsWarmup ? "1" : "0"
+        var parts: [String] = []
+        parts.append(prescription.exerciseID.uuidString)
+        parts.append(String(targetSets))
+        parts.append(String(targetReps))
+        parts.append(String(targetWeightKG))
+        parts.append(String(targetRestSeconds))
+        parts.append(warmup)
+        parts.append(prescription.laterality.rawValue)
+        parts.append(setFields.joined(separator: ","))
+        return parts.joined(separator: ":")
     }
 
     private static func setPrescriptionFingerprint(
         _ set: TemplateSetPrescriptionValue
     ) -> String {
-        [
-            String(set.order),
-            set.kind.rawValue,
-            set.targetKind.rawValue,
-            String(set.targetReps ?? -1),
-            String(set.targetDurationSeconds ?? -1),
-            String(set.targetWeightKG ?? -1),
-            String(set.leftWeightKG ?? -1),
-            String(set.rightWeightKG ?? -1),
-            String(set.restBetweenSidesSeconds ?? -1),
-            String(set.restAfterSetSeconds ?? -1),
-            set.notes
-        ].joined(separator: "/")
+        let targetReps: Int = set.targetReps ?? -1
+        let targetDurationSeconds: Int = set.targetDurationSeconds ?? -1
+        let targetWeightKG: Double = set.targetWeightKG ?? -1
+        let leftWeightKG: Double = set.leftWeightKG ?? -1
+        let rightWeightKG: Double = set.rightWeightKG ?? -1
+        let restBetweenSidesSeconds: Int = set.restBetweenSidesSeconds ?? -1
+        let restAfterSetSeconds: Int = set.restAfterSetSeconds ?? -1
+        var parts: [String] = []
+        parts.append(String(set.order))
+        parts.append(set.kind.rawValue)
+        parts.append(set.targetKind.rawValue)
+        parts.append(String(targetReps))
+        parts.append(String(targetDurationSeconds))
+        parts.append(String(targetWeightKG))
+        parts.append(String(leftWeightKG))
+        parts.append(String(rightWeightKG))
+        parts.append(String(restBetweenSidesSeconds))
+        parts.append(String(restAfterSetSeconds))
+        parts.append(set.notes)
+        return parts.joined(separator: "/")
     }
 
     static func resolvedChangeLog(
