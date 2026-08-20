@@ -51,7 +51,26 @@ select_simulator_id() {
   printf '%s\n' "$simulator_id"
 }
 
+# 等待模拟器进入 Booted，避免 xcodebuild 在无输出的情况下长时间等待 CoreSimulator。
+wait_until_booted() {
+  local simulator_id="$1"
+  local deadline=$((SECONDS + 240))
+  xcrun simctl boot "$simulator_id" 2>/dev/null || true
+  while ((SECONDS < deadline)); do
+    if xcrun simctl list devices |
+      grep -F "$simulator_id" |
+      grep -q "(Booted)"; then
+      return 0
+    fi
+    sleep 3
+  done
+  echo "Simulator $simulator_id did not boot within 240s." >&2
+  xcrun simctl list devices | grep -F "$simulator_id" >&2 || true
+  return 1
+}
+
 destination=""
+quiet_flag="-quiet"
 case "$action" in
   build)
     if [[ -n "${SOMA_BUILD_DESTINATION:-}" ]]; then
@@ -61,13 +80,19 @@ case "$action" in
     fi
     ;;
   test)
+    # 测试目标不锁 arch：模拟器 runtime 只提供本机 arch，多写一个键会让 xcodebuild
+    # 在挑选测试宿主时静默等待。
     if [[ -n "${SOMA_TEST_DESTINATION:-}" ]]; then
       destination="$SOMA_TEST_DESTINATION"
     elif [[ -n "${SOMA_SIMULATOR_DEVICE:-}" ]]; then
-      destination="platform=iOS Simulator,name=${SOMA_SIMULATOR_DEVICE},arch=${simulator_arch},OS=latest"
+      destination="platform=iOS Simulator,name=${SOMA_SIMULATOR_DEVICE},OS=latest"
     else
-      destination="platform=iOS Simulator,id=$(select_simulator_id),arch=${simulator_arch}"
+      simulator_id="$(select_simulator_id)"
+      wait_until_booted "$simulator_id"
+      destination="platform=iOS Simulator,id=$simulator_id"
     fi
+    # 测试保留进度输出：静默模式下一旦挂起就完全没有可诊断信息。
+    quiet_flag=""
     ;;
   *)
     echo "Usage: $0 <build|test>" >&2
@@ -80,19 +105,25 @@ rm -rf "$result_bundle_path"
 
 echo "Running '$action' for destination: $destination"
 
-set +e
-xcodebuild "$action" \
-  -quiet \
-  -project "$project_path" \
-  -scheme Soma \
-  -configuration Debug \
-  -destination "$destination" \
-  -derivedDataPath "$derived_data_path" \
-  -clonedSourcePackagesDirPath "$source_packages_path" \
-  -resultBundlePath "$result_bundle_path" \
-  CODE_SIGN_IDENTITY="" \
-  CODE_SIGNING_REQUIRED=NO \
+xcodebuild_args=(
+  "$action"
+  -project "$project_path"
+  -scheme Soma
+  -configuration Debug
+  -destination "$destination"
+  -derivedDataPath "$derived_data_path"
+  -clonedSourcePackagesDirPath "$source_packages_path"
+  -resultBundlePath "$result_bundle_path"
+  CODE_SIGN_IDENTITY=""
+  CODE_SIGNING_REQUIRED=NO
   CODE_SIGNING_ALLOWED=NO
+)
+if [[ -n "$quiet_flag" ]]; then
+  xcodebuild_args=("$action" "$quiet_flag" "${xcodebuild_args[@]:1}")
+fi
+
+set +e
+xcodebuild "${xcodebuild_args[@]}"
 status=$?
 set -e
 
