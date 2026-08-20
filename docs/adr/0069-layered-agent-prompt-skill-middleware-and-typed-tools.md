@@ -11,6 +11,8 @@
 - 后续替代：
   - [ADR 0078](0078-batch-create-exercise-and-workout.md) 将 `create_exercise` / `create_workout` 广告为批量数组，并禁止模型指定新建 `record_id`
   - [ADR 0081](0081-default-full-tool-registration-and-selected-skill-subset.md) 取消按当前 Turn 信号剪枝与普通建议空 Tool 集
+  - [ADR 0082](0082-shortcut-owned-tool-bindings-and-method-only-skills.md) 取消 Skill 声明工具白名单，
+    改由输入框快捷按钮持有工具绑定
 - 上游依据：[PRD 030](../prd/030-agent-prompt-skill-context-and-tool-v3.md)
 
 ## 背景

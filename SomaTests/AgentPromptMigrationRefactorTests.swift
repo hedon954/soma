@@ -149,27 +149,22 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertFalse(user.contains("未填写"))
     }
 
-    func testUnselectedSkillRegistersAllCurrentProtocolTools() {
-        let tools = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
-        )
-        XCTAssertEqual(tools.count, 32)
-        XCTAssertEqual(
-            tools,
-            AgentToolExposurePolicy.tools(for: AgentToolExposurePolicy.currentProtocolGroups)
-        )
+    func testUnselectedShortcutRegistersAllCurrentProtocolTools() {
+        let tools = AgentToolExposurePolicy.tools(selectedShortcut: nil)
+        XCTAssertEqual(tools.count, AgentToolName.allCases.count)
+        XCTAssertEqual(tools, AgentToolExposurePolicy.orderedTools)
         XCTAssertTrue(tools.contains(.loadSkill))
         XCTAssertTrue(tools.contains(.createWorkout))
         XCTAssertTrue(tools.contains(.submitFeedback))
     }
 
-    func testSelectedSkillUsesExactBoundTools() throws {
-        let selected = try XCTUnwrap(
-            AgentSkillRegistry.descriptor(id: AgentSkill.nutritionAnalysis.rawValue)
+    func testSelectedShortcutUsesExactCheckedTools() {
+        let shortcut = AgentInputShortcut(
+            title: "饮食分析",
+            skillID: AgentSkill.nutritionAnalysis.rawValue,
+            toolNames: AgentToolExposurePolicy.toolNames(for: [.meals])
         )
-        let tools = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: selected)
-        )
+        let tools = AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
         XCTAssertEqual(Set(tools), [
             .listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal
         ])
@@ -201,7 +196,8 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertFalse(json.contains(#""record_id""#))
     }
 
-    func testCustomSkillPermissionsAndQuickButtonsStayInsideAllowedGroups() throws {
+    /// ADR 0082：自定义 Skill 只提供方法；删除后绑定它的快捷按钮必须自动解绑。
+    func testCustomSkillCarriesNoToolPermissionAndUnbindsOnDelete() throws {
         let suiteName = "SomaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -210,28 +206,29 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
             name: "我的训练",
             description: "快速记录训练",
             whenToUse: "用户选择快捷按钮时",
-            content: "只记录用户明确给出的组次。",
-            toolGroupIDs: [
-                AgentToolGroup.exercises.rawValue,
-                AgentToolGroup.workouts.rawValue,
-                "records",
-                AgentToolGroup.feedback.rawValue,
-                AgentToolGroup.core.rawValue
-            ]
+            content: "只记录用户明确给出的组次。"
         )
         AgentSkillRegistry.save(custom, defaults: defaults)
         let descriptor = try XCTUnwrap(
             AgentSkillRegistry.descriptor(id: custom.id, defaults: defaults)
         )
-
-        XCTAssertEqual(descriptor.toolGroups, [.exercises, .workouts])
         XCTAssertTrue(descriptor.markdown.contains("when_to_use:"))
-        AgentSkillRegistry.setQuickSkillIDs(
-            [custom.id] + AgentSkill.allCases.map(\.rawValue),
+
+        AgentInputShortcutStore.replaceAll(
+            [AgentInputShortcut(
+                id: "shortcut_my_workout",
+                title: "我的训练",
+                skillID: custom.id
+            )],
             defaults: defaults
         )
-        XCTAssertEqual(AgentSkillRegistry.quickSkillIDs(defaults: defaults).count, 6)
-        XCTAssertEqual(AgentSkillRegistry.quickSkillIDs(defaults: defaults).first, custom.id)
+        AgentSkillRegistry.delete(id: custom.id, defaults: defaults)
+
+        let shortcut = try XCTUnwrap(AgentInputShortcutStore.shortcut(
+            id: "shortcut_my_workout",
+            defaults: defaults
+        ))
+        XCTAssertNil(shortcut.skillID)
     }
 
     @MainActor

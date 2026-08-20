@@ -2,70 +2,6 @@
 import Observation
 import UIKit
 
-enum WorkoutCameraState: Equatable {
-    case idle
-    case requestingPermission
-    case configuring
-    case startingSession
-    case previewing
-    case startingRecording
-    case recording
-    case unavailable(String)
-
-    var message: String {
-        switch self {
-        case .idle:
-            "相机尚未启动"
-        case .requestingPermission:
-            "正在请求相机权限"
-        case .configuring:
-            "正在配置相机"
-        case .startingSession:
-            "正在启动相机"
-        case .previewing:
-            "相机已就绪"
-        case .startingRecording:
-            "正在开始录像"
-        case .recording:
-            "正在录制本动作目标组"
-        case let .unavailable(message):
-            message
-        }
-    }
-}
-
-enum WorkoutCameraError: LocalizedError {
-    case permissionDenied
-    case frontCameraUnavailable
-    case configurationFailed
-    case activationTimedOut
-    case activationSuperseded
-    case recordingConnectionUnavailable(String)
-    case insufficientStorage
-    case recordingFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .permissionDenied:
-            "没有相机权限；训练仍可继续，可在系统设置中开启。"
-        case .frontCameraUnavailable:
-            "当前设备没有可用的前置摄像头。"
-        case .configurationFailed:
-            "相机启动失败；训练仍可继续。"
-        case .activationTimedOut:
-            "相机未能在限定时间内启动；请重试，训练仍可继续。"
-        case .activationSuperseded:
-            "本次相机启动已被新的请求替代。"
-        case let .recordingConnectionUnavailable(reason):
-            "相机录像连接不可用（\(reason)）；请重试，训练仍可继续。"
-        case .insufficientStorage:
-            "可用存储空间不足，已跳过本次录像。"
-        case let .recordingFailed(message):
-            "录像失败：\(message)"
-        }
-    }
-}
-
 private enum WorkoutRecordingTerminalResult {
     case saved(String)
     case savedPartial(String, message: String)
@@ -604,8 +540,12 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
 
         // Rebuild only the lightweight preview connection after a host handoff.
         // The capture session and movie output continue running unchanged.
-        layer.session = nil
-        layer.session = captureSession
+        // BUG 0025：录像开始会把界面切到放大取景，SwiftUI 因此换 preview host。此时重绑
+        // 同一个 session 只会打断预览连接，所以 session 未变时不动它。
+        if layer.session !== captureSession {
+            layer.session = nil
+            layer.session = captureSession
+        }
         layer.videoGravity = videoGravity
         configureRotationCoordinatorIfPossible()
         applyCaptureGeometry(captureGeometry)
@@ -721,10 +661,19 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         if recordingAttemptLifecycles[attempt.id]?.isFinishing == false,
            !discardCurrentRecording
         {
+            // BUG 0025：这条分支是"没人请求停止但录像自己结束了"。原来只给一句固定文案，
+            // AVFoundation 的错误被丢弃，导致用户看不到原因、日志里也查不到。
+            let diagnosis = WorkoutRecordingFailureDiagnosis.make(
+                error: error,
+                stage: "finish-unexpected"
+            )
+            WorkoutRecordingDiagnostics.unexpectedFinish(
+                attemptID: attempt.id,
+                diagnosis: diagnosis,
+                error: error
+            )
             recordingAttemptLifecycles[attempt.id]?.requestStop(
-                reason: .unexpected(
-                    message: "系统提前结束了录像；已保留可用的部分视频，训练数据不受影响。"
-                )
+                reason: .unexpected(message: diagnosis.partialRecordingMessage)
             )
         }
         let disposition = recordingAttemptLifecycles[attempt.id]?
@@ -782,11 +731,17 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                 )
             }
         case .fail:
+            // BUG 0025：失败路径必须给出可行动的具体原因，而不是 AVFoundation 的
+            // "The operation could not be completed"。
+            let diagnosis = WorkoutRecordingFailureDiagnosis.make(
+                error: error,
+                stage: "finish-failed"
+            )
             let sourceError = error ?? WorkoutCameraError.recordingFailed(
-                "系统未生成可用视频；训练数据已保留。"
+                diagnosis.failureMessage
             )
             WorkoutRecordingDiagnostics.failure(
-                stage: "finish",
+                stage: "finish · \(diagnosis.technical)",
                 attemptID: attempt.id,
                 error: sourceError
             )
@@ -794,9 +749,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             let resolved: Error = if sourceError is WorkoutCameraError {
                 sourceError
             } else {
-                WorkoutCameraError.recordingFailed(
-                    sourceError.localizedDescription
-                )
+                WorkoutCameraError.recordingFailed(diagnosis.failureMessage)
             }
             state = .unavailable(resolved.localizedDescription)
             completeRecordingAttempt(
@@ -1017,6 +970,11 @@ extension WorkoutCameraService {
                 guard let resources else { return }
                 do {
                     if !resources.isConfigured {
+                        // BUG 0025：带练录像只采视频。默认值会让 AVCaptureSession 接管
+                        // AVAudioSession，于是语音提示每次播报都在重配置同一个音频会话，
+                        // 可能把正在进行的录制打断。这里明确交出音频会话所有权。
+                        resources.session
+                            .automaticallyConfiguresApplicationAudioSession = false
                         resources.session.beginConfiguration()
                         defer { resources.session.commitConfiguration() }
                         if resources.session.canSetSessionPreset(.high) {
@@ -1287,7 +1245,10 @@ extension WorkoutCameraService {
         ) { [weak self] _ in
             Task { @MainActor in
                 await self?.interrupt(
-                    message: "App 进入后台，录像已停止；训练进度已保留。",
+                    diagnosis: WorkoutRecordingFailureDiagnosis(
+                        cause: "App 进入后台，系统禁止继续使用摄像头",
+                        technical: "lifecycle=background · interrupt"
+                    ),
                     reasonCode: "background"
                 )
             }
@@ -1306,12 +1267,18 @@ extension WorkoutCameraService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            let reasonCode = (notification.userInfo?[
+                AVCaptureSessionInterruptionReasonKey
+            ] as? NSNumber)?.intValue
             Task { @MainActor in
                 guard let self,
                       (notification.object as? AVCaptureSession) === self.captureSession
                 else { return }
                 await self.interrupt(
-                    message: "相机被系统中断；训练进度不受影响。",
+                    diagnosis: WorkoutRecordingFailureDiagnosis.interruption(
+                        reasonCode: reasonCode,
+                        stage: "session-interruption"
+                    ),
                     reasonCode: "session-interruption"
                 )
             }
@@ -1343,17 +1310,20 @@ extension WorkoutCameraService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            let runtimeError = notification.userInfo?[
+                AVCaptureSessionErrorKey
+            ] as? Error
             Task { @MainActor in
                 guard let self,
                       (notification.object as? AVCaptureSession) === self.captureSession
                 else { return }
-                if let error = notification.userInfo?[AVCaptureSessionErrorKey] as? Error {
+                if let runtimeError {
                     WorkoutRecordingDiagnostics.failure(
                         stage: "runtime",
                         attemptID: self.activeRecordingAttempt?.id,
-                        error: error
+                        error: runtimeError
                     )
-                    let nsError = error as NSError
+                    let nsError = runtimeError as NSError
                     if nsError.domain == AVFoundationErrorDomain,
                        nsError.code == AVError.mediaServicesWereReset.rawValue
                     {
@@ -1361,7 +1331,10 @@ extension WorkoutCameraService {
                     }
                 }
                 await self.interrupt(
-                    message: "相机运行异常，录像已停止；请重试。",
+                    diagnosis: WorkoutRecordingFailureDiagnosis.make(
+                        error: runtimeError,
+                        stage: "session-runtime-error"
+                    ),
                     reasonCode: "runtime"
                 )
             }
@@ -1372,11 +1345,15 @@ extension WorkoutCameraService {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                if ProcessInfo.processInfo.thermalState == .serious
-                    || ProcessInfo.processInfo.thermalState == .critical
-                {
+                let thermalState = ProcessInfo.processInfo.thermalState
+                if thermalState == .serious || thermalState == .critical {
                     await self?.interrupt(
-                        message: "设备温度较高，已停止录像；训练仍可继续。",
+                        diagnosis: WorkoutRecordingFailureDiagnosis(
+                            cause: thermalState == .critical
+                                ? "设备温度已达临界，系统要求停止录像"
+                                : "设备温度偏高，系统要求停止录像",
+                            technical: "thermal_state=\(thermalState.rawValue) · interrupt"
+                        ),
                         reasonCode: "thermal"
                     )
                 } else {
@@ -1653,6 +1630,15 @@ extension WorkoutCameraService {
         }
         let resources = captureResources
         resources.queue.async {
+            // BUG 0025：录像已经开始后改写 movieOutput 视频连接的旋转或镜像，会让
+            // AVFoundation 结束这次录制并只留下几帧可播放文件。录像开始前几何已经锁定，
+            // 录像中再写既违规又没有意义，所以这里直接跳过。
+            guard !resources.movieOutput.isRecording else {
+                WorkoutRecordingDiagnostics.breadcrumb(
+                    stage: "capture-geometry-skipped-while-recording"
+                )
+                return
+            }
             if let connection = resources.movieOutput.connection(with: .video) {
                 if connection.isVideoRotationAngleSupported(
                     CGFloat(geometry.captureRotationAngle)
@@ -1706,10 +1692,12 @@ extension WorkoutCameraService {
         }
     }
 
+    /// BUG 0025：中断原因必须一路带到用户可见文案和诊断日志，不能压成一句通用提示。
     private func interrupt(
-        message: String,
+        diagnosis: WorkoutRecordingFailureDiagnosis,
         reasonCode: String
     ) async {
+        let message = diagnosis.failureMessage
         let attempt = activeRecordingAttempt
         guard Self.shouldHandleLifecycleInterruption(
             state: state,
@@ -1724,7 +1712,7 @@ extension WorkoutCameraService {
         }
         shouldRecoverCapture = true
         WorkoutRecordingDiagnostics.interruption(
-            reason: reasonCode,
+            reason: "\(reasonCode) \(diagnosis.cause) \(diagnosis.technical)",
             attemptID: attempt?.id
         )
         if let attempt {
@@ -1746,7 +1734,7 @@ extension WorkoutCameraService {
             }
             recordingAttemptLifecycles[attempt.id]?.requestStop(
                 reason: .unexpected(
-                    message: "\(message) 已保留可用的部分视频。"
+                    message: diagnosis.partialRecordingMessage
                 )
             )
             armRecordingFinishTimeout(for: attempt.id)

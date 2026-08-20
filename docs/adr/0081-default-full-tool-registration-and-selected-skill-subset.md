@@ -7,7 +7,9 @@
   - [ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 中每轮按关键词、active 计划和带练状态预选工具组的边界；整轮固定、并行 `tool_calls` 与历史帧 clearing 继续有效
   - [ADR 0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) 中按副作用意图预选 Tool、建议不暴露 mutation 的边界；原生 Tool Calling 与稳定 Prompt 前缀继续有效
   - [ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 中 Tool Exposure Middleware 按当前 Turn 信号剪枝、普通建议无业务 Tool 的边界；选中 Skill 直载全文与白名单 Tool、强类型 Schema 继续有效
-- 后续替代：暂无
+- 后续替代：
+  - [ADR 0082](0082-shortcut-owned-tool-bindings-and-method-only-skills.md) 把曝光集合的来源从
+    Skill 的 `toolGroups` 改为快捷按钮的工具白名单；Loop 开始判断一次与未选时全量曝光继续有效
 - 上游依据：[PRD 032](../prd/032-default-full-tools-and-selected-skill-subset.md)
 
 ## 背景

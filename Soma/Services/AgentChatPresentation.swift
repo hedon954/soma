@@ -1,5 +1,30 @@
 import Foundation
 
+/// 从 Tool 输出里取出可原位审查的记录引用，按出现顺序去重。
+enum AgentTurnRecordReferences {
+    static func make(from items: [AgentTurnItem]) -> [AgentRecordReference] {
+        var seen = Set<String>()
+        var result: [AgentRecordReference] = []
+        for item in items {
+            guard let output = item.output,
+                  let data = output.data(using: .utf8),
+                  let toolResult = try? JSONDecoder().decode(
+                      AgentToolResult.self,
+                      from: data
+                  )
+            else {
+                continue
+            }
+            for reference in toolResult.recordRefs ?? []
+                where seen.insert(reference.identityKey).inserted
+            {
+                result.append(reference)
+            }
+        }
+        return result
+    }
+}
+
 enum AgentTurnVisibleItems {
     /// ADR 0014 / ADR 0077：空文字卡去掉；Skill/Tool/错误和有内容的文字全部保留。
     static func make(from items: [AgentTurnItem]) -> [AgentTurnItem] {
@@ -11,16 +36,24 @@ enum AgentTurnVisibleItems {
 }
 
 /// PRD 020：连续 Skill/Tool 收成一条可展开过程；文字和失败卡仍按原顺序打断该组。
+/// PRD 033：写入产生的原位卡跟在产生它的那一步后面，让文字与卡片按对话节奏交替出现。
 enum AgentTurnTranscriptSegment: Equatable, Identifiable {
     case process(id: UUID, items: [AgentTurnItem])
     case item(AgentTurnItem)
+    case record(AgentRecordReference)
 
-    var id: UUID {
+    /// BUG 0024：单条过程渲染成 `AgentTurnItemCard`，多条渲染成可展开的
+    /// `AgentProcessGroupCard`。流式期间第二个 Tool 到达会切换视图形态，如果两种形态共用
+    /// 同一个身份，SwiftUI 会在同一 identity 上换视图类型并复用 `@State`。身份里带上形态，
+    /// 让这次变化成为干净的插入与移除。
+    var id: String {
         switch self {
-        case let .process(id, _):
-            id
+        case let .process(id, items):
+            "process-\(items.count > 1 ? "group" : "single"):\(id.uuidString)"
         case let .item(item):
-            item.id
+            "item:\(item.id.uuidString)"
+        case let .record(reference):
+            "record:\(reference.identityKey)"
         }
     }
 
@@ -30,6 +63,8 @@ enum AgentTurnTranscriptSegment: Equatable, Identifiable {
             items
         case let .item(item):
             [item]
+        case .record:
+            []
         }
     }
 }
@@ -38,10 +73,20 @@ enum AgentTurnTranscriptSegments {
     static func make(from items: [AgentTurnItem]) -> [AgentTurnTranscriptSegment] {
         var segments: [AgentTurnTranscriptSegment] = []
         var process: [AgentTurnItem] = []
+        var emittedRecords = Set<String>()
+
+        func appendRecords(of produced: [AgentTurnItem]) {
+            for reference in AgentTurnRecordReferences.make(from: produced)
+                where emittedRecords.insert(reference.identityKey).inserted
+            {
+                segments.append(.record(reference))
+            }
+        }
 
         func flushProcess() {
             guard !process.isEmpty else { return }
             segments.append(.process(id: process[0].id, items: process))
+            appendRecords(of: process)
             process = []
         }
 
@@ -51,9 +96,17 @@ enum AgentTurnTranscriptSegments {
             } else {
                 flushProcess()
                 segments.append(.item(item))
+                appendRecords(of: [item])
             }
         }
         flushProcess()
+
+        // 折叠或过滤掉的 Item 也可能带记录引用，兜底放在末尾，避免卡片凭空消失。
+        for reference in AgentTurnRecordReferences.make(from: items)
+            where emittedRecords.insert(reference.identityKey).inserted
+        {
+            segments.append(.record(reference))
+        }
         return segments
     }
 

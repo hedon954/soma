@@ -505,7 +505,8 @@ enum ConversationRecorder {
         }) else {
             return .failure("items 包含空名称或超出范围的营养值。")
         }
-        let mealType = MealType(rawValue: arguments.mealType ?? "") ?? inferredMealType()
+        let mealType = MealType(rawValue: arguments.mealType ?? "")
+            ?? inferredMealType(at: sourceDate)
         let resolvedMedia = resolvedMediaAttachments(
             mediaAttachments,
             legacyKind: mediaKind,
@@ -1054,8 +1055,10 @@ extension ConversationRecorder {
         ))) ?? []
     }
 
-    private static func inferredMealType() -> MealType {
-        switch Calendar.current.component(.hour, from: .now) {
+    /// 餐次按这条记录真正发生的时刻推断。补记昨天午餐时不能用现在的钟点，
+    /// 否则夜里补记会被标成夜宵。
+    static func inferredMealType(at date: Date) -> MealType {
+        switch Calendar.current.component(.hour, from: date) {
         case 5 ..< 11: .breakfast
         case 11 ..< 16: .lunch
         case 16 ..< 22: .dinner

@@ -52,11 +52,14 @@ final class ConversationProcessingService {
         context: ConversationProcessingContext,
         includeLocation: Bool,
         locationService: LocationContextService,
-        selectedSkillID: String? = nil,
+        selectedShortcutID: String? = nil,
         forceLocal: Bool = false
     ) -> Bool {
         // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
         let useRemote = !forceLocal && RemoteAgentPreference.isEnabled()
+        let selectedShortcut = selectedShortcutID.flatMap {
+            AgentInputShortcutStore.shortcut(id: $0)
+        }
         let persistedAttachments: [MediaAttachmentReference]
         do {
             persistedAttachments = try persistPendingAttachments(attachments)
@@ -107,7 +110,9 @@ final class ConversationProcessingService {
             turnSentAt: submittedAt,
             effectiveBusinessDate: businessDate,
             businessTimeZone: context.session.businessTimeZone,
-            selectedSkillID: selectedSkillID,
+            // PRD 033：快捷按钮绑定的 Skill 在发送时冻结，之后改配置不影响在途 Turn。
+            selectedSkillID: selectedShortcut?.skillID,
+            selectedShortcutID: selectedShortcut?.id,
             createdAt: submittedAt
         )
 
@@ -242,6 +247,12 @@ final class ConversationProcessingService {
         ) else {
             return
         }
+        // ADR 0083：崩溃时进程没有机会写任何东西，所以在开始执行前先把上下文存好。
+        AppRunSentinel.shared.recordActivity(
+            sessionID: context.session.id,
+            turnID: job.turnID,
+            activity: "agent-turn backend=\(job.backend.rawValue)"
+        )
         do {
             try AgentJobStore.claim(
                 job,
@@ -1141,6 +1152,7 @@ private extension ConversationProcessingService {
                     context: agentContext,
                     route: route,
                     selectedSkillID: job.selectedSkillID,
+                    selectedShortcutID: job.selectedShortcutID,
                     checkpoint: resumeCheckpoint,
                     firstStepDeadlineEnabled: firstStepDeadlineEnabled,
                     onCheckpoint: { checkpoint in
@@ -1585,6 +1597,11 @@ extension ConversationProcessingService {
         liveAssistantText = ""
         liveAgentActivity = nil
         isProcessing = false
+        AppRunSentinel.shared.recordActivity(
+            sessionID: sessionID,
+            turnID: nil,
+            activity: "idle"
+        )
         dataSpace = nil
         sessionID = nil
         processingTask = nil
@@ -1844,6 +1861,10 @@ extension ConversationProcessingService {
     }
 
     private func applyLiveAgentEvent(_ event: AgentTraceEvent) {
+        #if DEBUG
+            // BUG 0024：这里改的是驱动聊天界面的 `@Observable` 状态。
+            MainActor.assertIsolated("Agent 实时状态必须在主 actor 更新")
+        #endif
         liveEventRevision += 1
         switch event {
         case let .assistantTextDelta(_, delta):

@@ -221,6 +221,8 @@ final class AgentJob {
     var defaultOccurredAt: Date?
     /// 用户在输入框中单选的 Skill；用于首轮直载和恢复，提交后不随设置变化。
     var selectedSkillID: String?
+    /// PRD 033：用户单选的快捷按钮；决定本 Turn 曝光哪些 Tool，排队与恢复都沿用。
+    var selectedShortcutID: String?
 
     init(
         id: UUID = UUID(),
@@ -237,6 +239,7 @@ final class AgentJob {
         effectiveBusinessDate: Date? = nil,
         businessTimeZone: TimeZone = .current,
         selectedSkillID: String? = nil,
+        selectedShortcutID: String? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -267,6 +270,7 @@ final class AgentJob {
             timeZone: businessTimeZone
         )
         self.selectedSkillID = selectedSkillID
+        self.selectedShortcutID = selectedShortcutID
         updatedAt = createdAt
         activeAttemptNumber = 0
         submissionAttemptCount = 0
@@ -913,6 +917,11 @@ enum PersistentAgentEventProjection {
         trace: AgentTrace,
         in context: ModelContext
     ) {
+        #if DEBUG
+            // BUG 0024：这里改的是 SwiftData `@Model`。一旦流式回调重新脱离主 actor，
+            // 就在开发构建里立刻炸出来，而不是等线上随机闪退。
+            MainActor.assertIsolated("Agent 事件投影必须在主 actor 执行")
+        #endif
         trace.apply(event)
 
         switch event {

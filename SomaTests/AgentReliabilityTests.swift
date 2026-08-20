@@ -228,21 +228,17 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
     }
 
-    func testUnselectedSkillRegistersFullCurrentProtocolAndOmitsLegacyNames() {
-        let groups = AgentToolExposurePolicy.groups(selectedSkill: nil)
-        XCTAssertEqual(groups, AgentToolExposurePolicy.currentProtocolGroups)
-        let tools = AgentToolExposurePolicy.tools(for: groups)
-        XCTAssertEqual(tools.count, 32)
+    func testUnselectedShortcutRegistersFullCurrentProtocol() {
+        let tools = AgentToolExposurePolicy.tools(selectedShortcut: nil)
+        XCTAssertEqual(tools.count, AgentToolName.allCases.count)
         XCTAssertTrue(tools.contains(.loadSkill))
         XCTAssertTrue(tools.contains(.startProgram))
         XCTAssertTrue(tools.contains(.updateGym))
         XCTAssertTrue(tools.contains(.createWorkout))
     }
 
-    func testGeneralAdviceWithoutSkillStillRegistersCurrentMutationTools() {
-        let tools = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
-        )
+    func testGeneralAdviceWithoutShortcutStillRegistersCurrentMutationTools() {
+        let tools = AgentToolExposurePolicy.tools(selectedShortcut: nil)
         XCTAssertTrue(tools.contains(.createWorkout))
         XCTAssertTrue(tools.contains(.createMeal))
     }
@@ -414,17 +410,19 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("一般建议直接回答"))
     }
 
-    func testUnselectedSkillIncludesFeedbackWhileSelectedSkillDoesNot() throws {
-        let defaultTools = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
-        )
+    func testUnselectedShortcutIncludesFeedbackWhileNarrowedShortcutDoesNot() {
+        let defaultTools = AgentToolExposurePolicy.tools(selectedShortcut: nil)
         XCTAssertTrue(defaultTools.contains(.submitFeedback))
 
-        let selected = try XCTUnwrap(
-            AgentSkillRegistry.descriptor(id: AgentSkill.movementAnalysis.rawValue)
+        let shortcut = AgentInputShortcut(
+            title: "动作分析",
+            skillID: AgentSkill.movementAnalysis.rawValue,
+            toolNames: AgentToolExposurePolicy.toolNames(
+                for: [.exercises, .workouts, .review]
+            )
         )
         let selectedTools = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: selected)
+            selectedShortcut: shortcut
         )
         XCTAssertFalse(selectedTools.contains(.submitFeedback))
         XCTAssertFalse(selectedTools.contains(.loadSkill))
@@ -432,12 +430,10 @@ final class AgentReliabilityTests: XCTestCase {
     }
 
     func testPrefixStabilityForExposedTools() {
-        let first = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
-        ).map(\.rawValue)
-        let second = AgentToolExposurePolicy.tools(
-            for: AgentToolExposurePolicy.groups(selectedSkill: nil)
-        ).map(\.rawValue)
+        let first = AgentToolExposurePolicy.tools(selectedShortcut: nil)
+            .map(\.rawValue)
+        let second = AgentToolExposurePolicy.tools(selectedShortcut: nil)
+            .map(\.rawValue)
         XCTAssertEqual(first, second)
     }
 

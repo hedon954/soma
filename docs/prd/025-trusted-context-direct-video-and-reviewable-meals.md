@@ -13,6 +13,8 @@
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 固定 Loop 时间戳、重构分层超时，并将可审查卡扩展为最新回复原位 CRUD
   - [PRD 029](029-unified-local-remote-agent-model-input.md) 把上下文等价扩展为完整 Prompt、Skills、Tool 和恢复消息等价
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 修订滚动摘要、强类型 CRUD、业务日和发生时间语义
+  - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 把饮食结果卡改为
+    可编辑菜品拆解卡加只读派生汇总卡，并把记录时间收敛到钟点
 - 上游依据：
   - [BUG 0011](../bugs/0011-meal-correction-misattributed-media.md)
   - [BUG 0012](../bugs/0012-direct-video-and-first-delta-timeout.md)

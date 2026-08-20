@@ -1,29 +1,6 @@
 import SwiftData
 import SwiftUI
 
-enum ChatRecordReferenceResolver {
-    static func references(in items: [AgentTurnItem]) -> [AgentRecordReference] {
-        var seen = Set<String>()
-        var result: [AgentRecordReference] = []
-        for item in items {
-            guard let output = item.output,
-                  let data = output.data(using: .utf8),
-                  let toolResult = try? JSONDecoder().decode(
-                      AgentToolResult.self,
-                      from: data
-                  )
-            else {
-                continue
-            }
-            for reference in toolResult.recordRefs ?? [] {
-                guard seen.insert(reference.identityKey).inserted else { continue }
-                result.append(reference)
-            }
-        }
-        return result
-    }
-}
-
 enum ChatRecordEditPolicy {
     static func latestEditableAssistantMessageID(
         in messages: [CoachMessage]
@@ -33,59 +10,58 @@ enum ChatRecordEditPolicy {
     }
 }
 
-struct ChatRecordEditorCards: View {
+/// ADR 0085：一条记录引用一张原位卡，卡片由 `AgentTurnTranscript` 插在产生它的那一步之后。
+struct ChatRecordEditorCard: View {
     @Query private var workouts: [WorkoutEntry]
     @Query private var meals: [MealEntry]
     @Query private var bodies: [BodyEntry]
     @Query private var gyms: [GymProfile]
 
-    let references: [AgentRecordReference]
+    let reference: AgentRecordReference
     let sourceMessage: CoachMessage?
     let isEditable: Bool
 
     var body: some View {
-        ForEach(references, id: \.identityKey) { reference in
-            if reference.recordType == ConversationIntent.workout.rawValue,
-               let workout = workouts.first(where: {
-                   $0.businessID == reference.recordID
-               })
-            {
-                InlineWorkoutCard(
-                    workout: workout,
-                    sourceMessage: sourceMessage,
-                    isEditable: isEditable
-                )
-            } else if reference.recordType == ConversationIntent.meal.rawValue,
-                      let meal = meals.first(where: {
-                          $0.businessID == reference.recordID
-                      })
-            {
-                InlineMealCard(
-                    meal: meal,
-                    sourceMessage: sourceMessage,
-                    isEditable: isEditable
-                )
-            } else if reference.recordType == ConversationIntent.body.rawValue,
-                      let body = bodies.first(where: {
-                          $0.businessID == reference.recordID
-                      })
-            {
-                InlineBodyCard(
-                    entry: body,
-                    sourceMessage: sourceMessage,
-                    isEditable: isEditable
-                )
-            } else if reference.recordType == ConversationIntent.gym.rawValue,
-                      let gym = gyms.first(where: {
-                          $0.businessID == reference.recordID
-                      })
-            {
-                InlineGymCard(
-                    gym: gym,
-                    sourceMessage: sourceMessage,
-                    isEditable: isEditable
-                )
-            }
+        if reference.recordType == ConversationIntent.workout.rawValue,
+           let workout = workouts.first(where: {
+               $0.businessID == reference.recordID
+           })
+        {
+            InlineWorkoutCard(
+                workout: workout,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        } else if reference.recordType == ConversationIntent.meal.rawValue,
+                  let meal = meals.first(where: {
+                      $0.businessID == reference.recordID
+                  })
+        {
+            InlineMealCards(
+                meal: meal,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        } else if reference.recordType == ConversationIntent.body.rawValue,
+                  let body = bodies.first(where: {
+                      $0.businessID == reference.recordID
+                  })
+        {
+            InlineBodyCard(
+                entry: body,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        } else if reference.recordType == ConversationIntent.gym.rawValue,
+                  let gym = gyms.first(where: {
+                      $0.businessID == reference.recordID
+                  })
+        {
+            InlineGymCard(
+                gym: gym,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
         }
     }
 }
@@ -237,87 +213,6 @@ private struct InlineWorkoutCard: View {
     private func deleteRecord() {
         sourceMessage?.recordManualCorrection("训练记录 \(workout.id.uuidString) 已由用户删除")
         modelContext.delete(workout)
-        try? modelContext.save()
-    }
-}
-
-private struct InlineMealCard: View {
-    @Environment(\.modelContext) private var modelContext
-    let meal: MealEntry
-    let sourceMessage: CoachMessage?
-    let isEditable: Bool
-    @State private var type: MealType
-    @State private var title: String
-    @State private var calories: String
-    @State private var protein: String
-    @State private var carbs: String
-    @State private var fat: String
-    @State private var showsDelete = false
-
-    init(meal: MealEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
-        self.meal = meal
-        self.sourceMessage = sourceMessage
-        self.isEditable = isEditable
-        _type = State(initialValue: meal.mealType)
-        _title = State(initialValue: meal.title)
-        _calories = State(initialValue: meal.calories.map(String.init) ?? "")
-        _protein = State(initialValue: meal.protein.map { $0.formatted() } ?? "")
-        _carbs = State(initialValue: meal.carbs.map { $0.formatted() } ?? "")
-        _fat = State(initialValue: meal.fat.map { $0.formatted() } ?? "")
-    }
-
-    var body: some View {
-        InlineRecordShell(
-            title: title.isEmpty ? "饮食记录" : "\(type.rawValue) · \(title)",
-            titleText: isEditable ? $title : nil,
-            icon: "fork.knife",
-            isEditable: isEditable,
-            onSave: save,
-            onDelete: { showsDelete = true }
-        ) {
-            if isEditable {
-                Picker("餐次", selection: $type) {
-                    ForEach(MealType.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                HStack(spacing: 6) {
-                    compactMetric("kcal", text: $calories)
-                    compactMetric("蛋白", text: $protein, decimal: true)
-                    compactMetric("碳水", text: $carbs, decimal: true)
-                    compactMetric("脂肪", text: $fat, decimal: true)
-                }
-            } else {
-                Text(meal.calories.map { "\($0) kcal" } ?? "热量未填写")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .confirmationDialog("删除这条饮食记录？", isPresented: $showsDelete) {
-            Button("删除记录", role: .destructive, action: deleteRecord)
-        }
-    }
-
-    private func save() -> Bool {
-        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return false }
-        meal.mealType = type
-        meal.title = normalized
-        meal.calories = Int(calories)
-        meal.protein = Double(protein)
-        meal.carbs = Double(carbs)
-        meal.fat = Double(fat)
-        meal.nutritionSource = .userEdited
-        sourceMessage?.recordManualCorrection(
-            "饮食记录 \(meal.id.uuidString) 已改为 \(type.rawValue) \(normalized)，\(calories)kcal，蛋白\(protein)g，碳水\(carbs)g，脂肪\(fat)g"
-        )
-        try? modelContext.save()
-        return true
-    }
-
-    private func deleteRecord() {
-        sourceMessage?.recordManualCorrection("饮食记录 \(meal.id.uuidString) 已由用户删除")
-        modelContext.delete(meal)
         try? modelContext.save()
     }
 }

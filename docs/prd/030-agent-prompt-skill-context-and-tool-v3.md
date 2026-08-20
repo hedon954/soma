@@ -9,7 +9,10 @@
   - [PRD 025](025-trusted-context-direct-video-and-reviewable-meals.md) 的十轮上下文、通用 CRUD Tool 与可信时间
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 的稳定 Prompt、意图 Tool 和固定业务时间
   - [PRD 029](029-unified-local-remote-agent-model-input.md) 的统一模型输入协议
-- 后续修订：[PRD 032](032-default-full-tools-and-selected-skill-subset.md) 将未选 Skill 改为全量当前协议 Tool，并取消通用建议空 Tool 集
+- 后续修订：
+  - [PRD 032](032-default-full-tools-and-selected-skill-subset.md) 将未选 Skill 改为全量当前协议 Tool，并取消通用建议空 Tool 集
+  - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 把工具权限从 Skill 移到
+    可完整 CRUD 的输入框快捷按钮；Skill 只保留专业方法
 - 上游依据：用户对真实模型 Prompt、无意义 Tool 调用和跨天记录时间的审查
 - 下游落地：
   - [ADR 0069](../adr/0069-layered-agent-prompt-skill-middleware-and-typed-tools.md)

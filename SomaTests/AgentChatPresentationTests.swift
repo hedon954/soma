@@ -2,8 +2,8 @@
 import XCTest
 
 final class AgentChatPresentationTests: XCTestCase {
-    func testSingleExerciseResultBecomesFriendlySummaryWithoutIdentifier() throws {
-        let observation = try AgentTraceText.json([
+    func testSingleExerciseResultBecomesFriendlySummaryWithoutIdentifier() {
+        let observation = AgentTraceText.json([
             ExerciseNameReference(
                 id: 41,
                 name: "杠铃深蹲"
@@ -155,7 +155,7 @@ final class AgentChatPresentationTests: XCTestCase {
             [.tool, .text]
         )
         XCTAssertEqual(
-            ChatRecordReferenceResolver.references(in: items).map(\.recordID),
+            AgentTurnRecordReferences.make(from: items).map(\.recordID),
             [11]
         )
     }
@@ -181,7 +181,7 @@ final class AgentChatPresentationTests: XCTestCase {
         }
 
         XCTAssertEqual(
-            ChatRecordReferenceResolver.references(in: items).map(\.recordID),
+            AgentTurnRecordReferences.make(from: items).map(\.recordID),
             [21, 22]
         )
         XCTAssertEqual(
@@ -244,7 +244,7 @@ final class AgentChatPresentationTests: XCTestCase {
         ]
 
         XCTAssertEqual(
-            ChatRecordReferenceResolver.references(in: items).map(\.recordID),
+            AgentTurnRecordReferences.make(from: items).map(\.recordID),
             [1, 2, 3, 4, 5, 6]
         )
         XCTAssertEqual(
@@ -257,9 +257,12 @@ final class AgentChatPresentationTests: XCTestCase {
         XCTAssertEqual(createPresentation?.details.count, 7)
         XCTAssertEqual(createPresentation?.disclosureLabel, "展开")
         XCTAssertEqual(createPresentation?.defaultsCollapsed, true)
+        // ADR 0085：过程卡之后先出 6 张原位卡，最后才是收尾文字。
         XCTAssertEqual(
-            AgentTurnTranscriptSegments.make(from: items).count,
-            2
+            AgentTurnTranscriptSegments.make(from: items).map(\.id),
+            ["process-group:\(items[0].id.uuidString)"]
+                + refs.map { "record:workout:\($0.recordID)" }
+                + ["item:\(items[2].id.uuidString)"]
         )
     }
 
@@ -383,8 +386,90 @@ final class AgentChatPresentationTests: XCTestCase {
         ]
 
         XCTAssertEqual(
-            ChatRecordReferenceResolver.references(in: items).map(\.identityKey),
+            AgentTurnRecordReferences.make(from: items).map(\.identityKey),
             ["workout:1", "meal:1"]
+        )
+    }
+
+    /// ADR 0085：卡片跟在产生它的那一步之后，写入前后的文字保持原有顺序。
+    func testRecordCardsFollowTheStepThatProducedThem() {
+        let lead = AgentTurnItem(
+            kind: .text,
+            status: .succeeded,
+            text: "我帮你识别到了以下食物信息。"
+        )
+        let create = AgentTurnItem(
+            kind: .tool,
+            status: .succeeded,
+            title: "创建饮食记录",
+            output: AgentTraceText.json(AgentToolResult.success(
+                "已记录饮食。",
+                recordRefs: [
+                    AgentRecordReference(
+                        recordType: ConversationIntent.meal.rawValue,
+                        recordID: 7,
+                        title: "虚构午餐"
+                    )
+                ],
+                recordType: .meal
+            ))
+        )
+        let review = AgentTurnItem(
+            kind: .text,
+            status: .succeeded,
+            text: "这一餐蛋白偏低，下一餐可以补一份优质蛋白。"
+        )
+
+        XCTAssertEqual(
+            AgentTurnTranscriptSegments.make(from: [lead, create, review]).map(\.id),
+            [
+                "item:\(lead.id.uuidString)",
+                "process-single:\(create.id.uuidString)",
+                "record:meal:7",
+                "item:\(review.id.uuidString)"
+            ]
+        )
+    }
+
+    /// 同一条记录被多次引用时只出一张卡，避免重复写入被渲染成两份可编辑卡片。
+    func testRepeatedReferenceRendersASingleCard() {
+        let create = AgentTurnItem(
+            kind: .tool,
+            status: .succeeded,
+            title: "创建饮食记录",
+            output: AgentTraceText.json(AgentToolResult.success(
+                "已记录饮食。",
+                recordRefs: [
+                    AgentRecordReference(
+                        recordType: ConversationIntent.meal.rawValue,
+                        recordID: 9,
+                        title: "虚构午餐"
+                    )
+                ],
+                recordType: .meal
+            ))
+        )
+        let update = AgentTurnItem(
+            kind: .tool,
+            status: .succeeded,
+            title: "更新饮食记录",
+            output: AgentTraceText.json(AgentToolResult.success(
+                "已更新饮食。",
+                recordRefs: [
+                    AgentRecordReference(
+                        recordType: ConversationIntent.meal.rawValue,
+                        recordID: 9,
+                        title: "虚构午餐"
+                    )
+                ],
+                recordType: .meal
+            ))
+        )
+
+        let segments = AgentTurnTranscriptSegments.make(from: [create, update])
+        XCTAssertEqual(
+            segments.filter { $0.id.hasPrefix("record:") }.map(\.id),
+            ["record:meal:9"]
         )
     }
 

@@ -12,6 +12,7 @@
   - [BUG 0020](../bugs/0020-guided-camera-activation-deadline-and-partial-evidence.md)
 - 下游落地：
   - [BUG 0022](../bugs/0022-installed-v5-schema-checksum-blocks-container-open.md)
+  - [BUG 0025](../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)
 
 ## 背景
 

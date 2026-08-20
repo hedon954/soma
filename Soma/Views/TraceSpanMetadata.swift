@@ -19,6 +19,10 @@ struct TraceSpanMetadata {
         values[key] as? String
     }
 
+    private func strings(_ key: String) -> [String]? {
+        values[key] as? [String]
+    }
+
     private func integer(_ key: String) -> Int? {
         if let value = values[key] as? Int {
             return value
@@ -40,6 +44,16 @@ struct TraceSpanMetadata {
             summary += " · 缓存 \(cached.formatted())"
         }
         return summary
+    }
+
+    /// PRD 033：这一步实际交给模型的工具清单。模型声称缺少某个工具时，看这里就能判断
+    /// 是曝光问题还是模型自己的判断问题。
+    var exposedToolSummary: String? {
+        guard let names = strings("exposed_tool_names"), !names.isEmpty else {
+            guard let count = integer("exposed_tool_count") else { return nil }
+            return "工具 \(count) 个"
+        }
+        return "工具 \(names.count) 个：\(names.joined(separator: "、"))"
     }
 
     /// 首个增量之前是请求与供应商排队，之后是流式与本机投影：

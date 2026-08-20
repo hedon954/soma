@@ -987,6 +987,7 @@ private struct DeveloperSettingsView: View {
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
     @State private var customizedSections = Set<ReActPromptSection>()
     @State private var customizedSkillCount = 0
+    @State private var visibleShortcutCount = 0
     @State private var confirmsResetAllPrompts = false
 
     var body: some View {
@@ -1001,6 +1002,11 @@ private struct DeveloperSettingsView: View {
                         Text("\(agentTraces.count)")
                             .foregroundStyle(.secondary)
                     }
+                }
+                NavigationLink {
+                    DiagnosticReportSettingsView()
+                } label: {
+                    Label("崩溃诊断", systemImage: "ladybug")
                 }
             } header: {
                 Text("诊断")
@@ -1075,7 +1081,23 @@ private struct DeveloperSettingsView: View {
                     }
                 }
             } footer: {
-                Text("可编辑内置 Skill、创建本地 Skill，并绑定 App 白名单内的最小工具权限。")
+                Text("可编辑内置 Skill、创建本地 Skill；Skill 只描述方法，不再自带工具权限。")
+            }
+
+            // PRD 033：快捷按钮持有 Skill 绑定与工具白名单，是聊天输入区的唯一入口配置。
+            Section {
+                NavigationLink {
+                    AgentInputShortcutListView()
+                } label: {
+                    HStack {
+                        Label("输入框快捷按钮", systemImage: "square.grid.2x2")
+                        Spacer()
+                        Text("\(visibleShortcutCount) 个显示")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } footer: {
+                Text("新增、编辑、排序或隐藏快捷按钮，并为每个按钮勾选允许使用的工具。")
             }
 
             Section {
@@ -1103,6 +1125,7 @@ private struct DeveloperSettingsView: View {
         .onAppear {
             customizedSections = Set(ReActPromptSection.userEditableCases.filter { $0.isCustomized() })
             customizedSkillCount = AgentSkill.allCases.count { $0.isCustomized() }
+            visibleShortcutCount = AgentInputShortcutStore.visibleShortcuts().count
         }
         .alert("恢复全部默认提示词？", isPresented: $confirmsResetAllPrompts) {
             Button("恢复默认", role: .destructive) {
@@ -1215,8 +1238,6 @@ struct AgentCustomSkillEditor: View {
     @State private var description: String
     @State private var whenToUse: String
     @State private var content: String
-    @State private var selectedGroups: Set<AgentToolGroup>
-    @State private var showInQuickBar: Bool
     @State private var mode: MarkdownEditorMode = .edit
 
     init(skill: AgentCustomSkill) {
@@ -1225,11 +1246,6 @@ struct AgentCustomSkillEditor: View {
         _description = State(initialValue: skill.description)
         _whenToUse = State(initialValue: skill.whenToUse)
         _content = State(initialValue: skill.content)
-        _selectedGroups = State(initialValue: Set(
-            skill.toolGroupIDs.compactMap(AgentToolGroup.init(rawValue:))
-        ))
-        _showInQuickBar = State(initialValue:
-            AgentSkillRegistry.quickSkillIDs().contains(skill.id))
     }
 
     var body: some View {
@@ -1261,19 +1277,11 @@ struct AgentCustomSkillEditor: View {
             }
 
             Section {
-                ForEach(allowedGroups, id: \.rawValue) { group in
-                    Toggle(groupTitle(group), isOn: groupBinding(group))
-                }
+                Text("在「输入框快捷按钮」里新建按钮并绑定这个 Skill，就能决定它可以使用哪些工具、以及是否显示在聊天输入区。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             } header: {
                 Text("工具权限")
-            } footer: {
-                Text("只会暴露选中的最小工具组；权限边界由 App 固定。")
-            }
-
-            Section {
-                Toggle("显示在输入框快捷栏", isOn: $showInQuickBar)
-            } footer: {
-                Text("快捷栏最多 6 项；加入时会替换当前最后一项。")
             }
         }
         .navigationTitle("自定义 Skill")
@@ -1289,41 +1297,9 @@ struct AgentCustomSkillEditor: View {
         }
     }
 
-    private var allowedGroups: [AgentToolGroup] {
-        AgentToolGroup.allCases.filter {
-            AgentSkillRegistry.allowedCustomToolGroups.contains($0)
-        }
-    }
-
     private var isValid: Bool {
         [name, description, whenToUse, content].allSatisfy {
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-    }
-
-    private func groupBinding(_ group: AgentToolGroup) -> Binding<Bool> {
-        Binding(
-            get: { selectedGroups.contains(group) },
-            set: { selected in
-                if selected {
-                    selectedGroups.insert(group)
-                } else {
-                    selectedGroups.remove(group)
-                }
-            }
-        )
-    }
-
-    private func groupTitle(_ group: AgentToolGroup) -> String {
-        switch group {
-        case .exercises: "动作库"
-        case .workouts: "训练记录"
-        case .meals: "饮食记录"
-        case .body: "体重与体态"
-        case .plans: "训练计划与带练"
-        case .gym: "健身房"
-        case .review: "动作复盘"
-        case .core, .feedback: group.rawValue
         }
     }
 
@@ -1333,17 +1309,8 @@ struct AgentCustomSkillEditor: View {
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             description: description.trimmingCharacters(in: .whitespacesAndNewlines),
             whenToUse: whenToUse.trimmingCharacters(in: .whitespacesAndNewlines),
-            content: content.trimmingCharacters(in: .whitespacesAndNewlines),
-            toolGroupIDs: selectedGroups.map(\.rawValue).sorted()
+            content: content.trimmingCharacters(in: .whitespacesAndNewlines)
         ))
-        var quick = AgentSkillRegistry.quickSkillIDs().filter { $0 != originalID }
-        if showInQuickBar {
-            if quick.count >= 6 {
-                quick.removeLast()
-            }
-            quick.append(originalID)
-        }
-        AgentSkillRegistry.setQuickSkillIDs(quick)
         dismiss()
     }
 }
@@ -1782,6 +1749,9 @@ private struct AgentTraceSpanRow: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 12) {
+                    if span.kind == .model {
+                        tracePayload("绑定工具", metadata.exposedToolSummary)
+                    }
                     tracePayload("入参", span.input)
                     tracePayload("返回", span.output)
                     tracePayload("元数据", span.metadata)

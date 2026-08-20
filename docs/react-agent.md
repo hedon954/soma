@@ -50,16 +50,24 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 - 运动量分析
 - 运动热量估算
 
-未预选快捷 Skill 时，Agent 可调用本地只读 `load_skill` 按需加载，过程形成独立 Skill Span。
-用户在输入框上方单选快捷 Skill 后，首轮直接注入完整 Markdown、专属上下文和白名单内最小 Tool
-集合，省去一次加载调用。设置页支持内置 override、自定义 Skill、Markdown 预览、权限绑定和
-最多六个快捷按钮排序；固定 Tool 协议不能被 Skill 扩权。
+未选快捷按钮时，Agent 可调用本地只读 `load_skill` 按需加载，过程形成独立 Skill Span。
+用户在输入框上方单选一个快捷按钮后，若该按钮绑定 Skill，首轮直接注入完整 Markdown 与专属上下文，
+省去一次加载调用。设置页支持内置 override、自定义 Skill、Markdown 预览与恢复；Skill 只描述专业
+方法，工具权限由快捷按钮持有，固定 Tool 协议不能被扩权。
+
+## 输入框快捷按钮
+
+快捷按钮是可完整增删改的本机实体：名称、图标、绑定 Skill（可为空）、工具白名单、是否显示与排序，
+以 JSON 存 UserDefaults，不进入 SwiftData。默认可见三个：饮食分析、训练记录、近期分析；聊天输入区
+最多显示六个。工具默认全选，可按分组删减，也可让小模型推荐一份清单与理由后一键采纳。详见
+[ADR 0082](adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)。
 
 ## 本地工具
 
 当前协议使用 32 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 7 个，另有
-`load_skill`、健身房 2 个、复盘和反馈各 1 个。未选快捷 Skill 时，本轮把这 32 个全部放入 API
-`tools` 参数；选中 Skill 时只放入该 Skill 绑定且通过 App 白名单的子集。未知名称解码失败。
+`load_skill`、健身房 2 个、复盘和反馈各 1 个。未选快捷按钮时，本轮把这 32 个全部放入 API
+`tools` 参数；选中按钮时只放入该按钮工具白名单与当前协议的交集。未知名称解码失败。
+每次调用的工具名同时写入 Trace model span 与本机诊断日志。
 
 训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
 归档和合并。所有业务 ID 是 Int64，`create_workout` 必须绑定有效 `exercise_id`，计划动作也必须
@@ -101,11 +109,23 @@ UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有�
 
 聊天卡片与开发者 Trace 是同一事件流的两种投影：聊天强调发生了什么，Trace 保留完整参数、输出、耗时和 Token。日志不会保存 API Key、Authorization 头或媒体 Base64。
 
+Event 投影必须在主 actor 执行。流式 chunk 回调保持 `@MainActor`，文字增量在内存合批后再写入
+SwiftData；DEBUG 下投影入口断言主 actor 隔离（见
+[BUG 0024](bugs/0024-streaming-cross-actor-swiftdata-crash.md)）。
+
+除 Trace 之外还有一条本机滚动诊断日志，记录生命周期、每次模型调用的工具清单、Tool 结果、Turn 终态
+与录像阶段，用于崩溃后复盘；边界与上报规则见
+[ADR 0083](adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)。
+
 ## 关键实现
 
 - 分层 Prompt：`Soma/Services/ReActAgentPrompt.swift`
 - Tool Schema：`Soma/Services/ReActAgent.swift`
-- Skill 注册表与权限：`Soma/Services/AgentSkillRegistry.swift`
+- Skill 注册表：`Soma/Services/AgentSkillRegistry.swift`
+- 快捷按钮与工具曝光：`Soma/Services/AgentInputShortcut.swift`、
+  `Soma/Services/AgentToolExposurePolicy.swift`
+- 诊断日志与崩溃上报：`Soma/Services/DiagnosticsLogStore.swift`、
+  `Soma/Services/CrashDiagnosticsCoordinator.swift`
 - 会话滚动压缩：`Soma/Services/ConversationCompactionMiddleware.swift`
 - 流式 ReAct 编排与供应商适配：`Soma/Services/AppServices.swift`
 - 本地工具执行：`Soma/Services/ConversationRecorder.swift`

@@ -30,10 +30,12 @@
 | [0017](0017-manual-retry-immediately-cancelled.md) | 已修复，待真机确认 | 等待超过整轮墙钟后，手动重试每次都在 0.01 秒内取消 | 活动执行预算、人工重置、错误覆盖与成功清理测试 |
 | [0018](0018-remote-agent-model-input-divergence.md) | 已修复，待部署与真机确认 | 远程使用独立 Prompt，丢失 Skills、历史媒体和并行 Tool Call | 统一 Builder 静态门禁、请求逐项对照、runtime Skill 与并行 Tool 测试 |
 | [0019](0019-guided-recording-attempt-terminal-and-duplicate-alerts.md) | 首次修复不足，后续见 0020 | 系统提前结束后活动状态未清理，成功 key 被误判且同一 attempt 可弹两次失败 | attempt 单终态、stop reason、部分证据、幂等 stop、单 Alert 与真机系统中断 |
-| [0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) | 修复中，待真机复验 | 权限后配置与 Session 启动无截止，准备状态不可见，异常极短文件误报完整成功 | 完整 request deadline、可见 preflight、generation 隔离、部分证据、恢复与真机门禁 |
+| [0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) | 修复中并部分修订，后续见 0025 | 权限后配置与 Session 启动无截止，准备状态不可见，异常极短文件误报完整成功 | 完整 request deadline、可见 preflight、generation 隔离、部分证据、恢复与真机门禁 |
 | [0021](0021-unique-optional-projection-key-blocks-launch-migration.md) | 已修复，待真机复验 | 可空唯一 projectionKey 让多条旧训练记录在启动迁移时失败或丢行 | 当前 schema 上预修复与 nil-key 回填；失败诊断含堆栈、SQLite 结构和训练样例 |
 | [0022](0022-installed-v5-schema-checksum-blocks-container-open.md) | 已修复，待真机复验 | 已安装 store 上改当前 schema 后容器无法打开 | 只打开当前 SomaDataSchema、不带 migrationPlan；真机只点重试迁移 |
 | [0023](0023-same-turn-multi-exercise-merged-into-one.md) | 已修复，待真机复验 | 同一条消息的多个动作被合并成一条训练记录，Event Cards 被结果卡替换 | create 每次新增独立记录；原位卡不隐藏 Tool Event；保存有确认 |
+| [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 已修复，待真机连续对话复验 | 流式回复期间在非主线程投影 Event，写 SwiftData 与 AttributeGraph 导致频繁闪退 | chunk 回调保持 `@MainActor`、投影主 actor 断言、文字增量合批与 segment 身份唯一 |
+| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 已修复，待真机复验 | 录像开始后预览交接重放几何改写视频连接，录像提前结束且只提示固定文案 | 录像中禁止改写 movieOutput 连接的静态门禁；错误码与中断原因映射为具体原因加技术标识 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

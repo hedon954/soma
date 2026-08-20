@@ -235,10 +235,12 @@ final class GuidedWorkoutCoordinator {
             )
             : nil
         setPhase(.setInProgress, deadline: deadline, for: session)
-        cues.announce(WorkoutPrescriptionFormatter.effortAnnouncement(
+        // BUG 0025：语音播报会激活并释放 AVAudioSession。在录像刚开始的窗口内做这件事，
+        // 可能把这次录制打断，所以播报排到录像启动之后。
+        let announcement = WorkoutPrescriptionFormatter.effortAnnouncement(
             set: set,
             effort: effort.side == .none ? nil : effort
-        ))
+        )
         let queuedManualRecording = session.queuedRecordingEffortID == effort.id
         if queuedManualRecording {
             session.queuedRecordingEffortID = nil
@@ -266,6 +268,7 @@ final class GuidedWorkoutCoordinator {
                 automatic: true
             )
         }
+        cues.announce(announcement)
     }
 
     func startManualRecording(in context: ModelContext) async throws {

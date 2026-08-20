@@ -22,7 +22,7 @@
 | 训练与动作分析 | 训练动作使用稳定 ID；旧聚合与新逐组 Session 统一进入动作历史。包内动作内容保持静默，仅在用户形成动作后关联；列表展示动作图，详情展示多张动作图与程序化正背面肌群受力图。缺失字段保持空；动作示意图生成和视频复盘都只由用户主动触发，肌群图不再走 AI 生成。 |
 | 动作快捷输入 | 输入框只在本地 active 标准名称中匹配；建议行一次给出「动作名 + 最近一次训练数据」，点一次写入完整草稿，没有历史时只写动作名。只修改草稿且仍由用户主动发送。 |
 | 训练计划与带练 | PRD 031 的当前验收目标：计划详情依次展示可编辑概览、确定性训练效果和动作列表；侧别与按次数/按时长保存在动作定义，计划组只编辑该定义下有意义的次数或时长、重量与间歇。点击开始只选择一次三种录像策略即进入首个动作；计时与休息自动推进，进度按动作/逻辑组分段，语音播报组数与次数/秒数。动作记录先于 Session 自动完成，最后进入本地分享预览。实现中项目必须由启动数据回填、Coordinator、投影、热量和 UI 测试逐项证明，不能只以编译通过代替。 |
-| 自动录像 | Session 可关闭、每动作首个工作组或每组自动录制；主界面始终保留主动录像。每次请求拥有 attempt 单终态并绑定 Effort，成功 key 为 true 的有效文件必须保留；提前结束和重复 stop 不产生第二个 Alert。相机失败暂停自动策略但不阻断训练，真实 Delegate、系统中断和左右独立片段仍需真机证据。 |
+| 自动录像 | Session 可关闭、每动作首个工作组或每组自动录制；主界面始终保留主动录像。每次请求拥有 attempt 单终态并绑定 Effort，成功 key 为 true 的有效文件必须保留；提前结束和重复 stop 不产生第二个 Alert。相机失败暂停自动策略但不阻断训练；失败提示给出具体原因与技术标识，录像进行中不改写视频连接。真实 Delegate、系统中断和左右独立片段仍需真机证据。 |
 | CRUD | 训练、饮食、身体详情进入即编辑，修改后显示保存；次要区块（受力图、热量估算、AI 解析、原始记录、宏量营养）默认折叠但展开后仍可完整编辑。训练记录逐组默认只编辑动作定义下的次数或时长与重量，不展示逻辑组或完成方式选择器。历史列表左滑红色图标删除。训练记录按自然日分组，筛选为「全部 + 按月」的扁平菜单并支持分页加载；记录通过 `exerciseID` 关联动作库，列表行只保留主指标与缩略图，打开历史时对仅有名称的旧记录做确定性回填。健身房和器械也可修改与删除。 |
 | 统计 | 进展首屏收敛为紧凑“当前上下文”入口、最近记录、带“最近 7 天”摘要的连续性热力图、体重趋势和训练容量趋势。 |
 | 时间粒度与拖动 | 体重和容量都支持周、双周、月、季，并允许横向拖动历史窗口。 |
@@ -44,7 +44,7 @@
 | 动态模型 | 模型是纯文本输入框；保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以输入历史式建议列表出现在输入框下方，可点选也可手输。候选行只显示模型 ID，不截断列表，超过五条时列表内部滚动。刷新候选不覆盖已填写的模型，只在为空时补一个默认值。 |
 | 多模态提示位置 | 能力说明只在模型已填写后出现，且只占一行；文案明确说明是多模态能力（支持图片与视频关键帧 / 只能发送文字 / 未标注时由平台在发送时验证）。 |
 | 多模态提醒 | 已知不支持的模型上传前阻止；未知能力由服务端验证，失败时把平台原始原因展示到聊天和 Trace。 |
-| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。当前 32 个单一职责 Tool：未选 Skill 注册全部，选中 Skill 只注册绑定子集。未知名称解码失败。过长 Tool 结果可展开；原位审查卡与 Event Cards 同时保留。原始 JSON 只在开发者 Trace 中保留。 |
+| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。当前 32 个单一职责 Tool：未选快捷按钮注册全部，选中快捷按钮只注册该按钮工具白名单。未知名称解码失败。过长 Tool 结果可展开；原位审查卡与 Event Cards 同时保留。原始 JSON 只在开发者 Trace 中保留。 |
 | Agent 纠错与删除 | 数据查询返回稳定记录 ID；训练、饮食和身体支持显式 update 工具原位纠错并合并新媒体；delete 工具仅接受用户当前消息的明确意图，且不级联删除聊天和共享媒体。create 每次新增，不能用创建代替更新。 |
 | 跨消息去重 | 相同 Tool Call 由回执幂等；跨 Turn 训练/身体业务键返回疑似重复、不静默改写。纠正必须绑定查询得到的记录 ID。歧义时保持独立记录。 |
 | 可继续 Session | 教练页左上角时间按钮、左边界右滑与 VoiceOver 操作打开同一个历史会话抽屉；可新建或选择旧 Session 继续发送，跨天不自动抢走当前选择。 |
@@ -57,13 +57,14 @@
 | 回复文字选择 | Agent Markdown 回复使用系统可选择文本，支持长按选择与复制，并保留段落、列表和链接语义。 |
 | 健身房媒体归档 | 本轮发图创建健身房会保存全部图片；下一轮要求创建或回答名称时，历史消息向模型提供 `recent_gym_turn` 语义引用，模型在 Tool Call 中选择后由 App 解析紧邻上一轮媒体位置，不暴露沙盒路径，也不读取更早或其他 Session 媒体。 |
 | 媒体放大与单张解绑 | 聊天、健身房、训练、饮食和身体详情点击媒体进入统一全屏查看浮层；图片可缩放、多项可左右切换。聊天浮层只读，记录与健身房的删除入口只在浮层内；移除后封面与旧兼容字段同步更新，聊天原附件、其他记录引用和系统相册保持不变。 |
-| 渐进式 Skills | System 只披露 `name/description/when_to_use`；`load_skill` 可按需加载。预选快捷 Skill 时首轮直接注入完整 Markdown、专属上下文和白名单内最小 Tool 集；内置 override、自定义 Skill、权限和最多六个快捷按钮可管理。 |
-| 系统协议边界 | 固定身份、安全、真实性和授权契约不可编辑，仅人格可编辑；工具与严格参数 Schema 由 App 通过 API 注册，不进入 System Prompt，Skill 只能在 App 白名单内收窄权限。 |
+| 渐进式 Skills | System 只披露 `name/description/when_to_use`；`load_skill` 可按需加载。选中的快捷按钮绑定 Skill 时，首轮直接注入完整 Markdown 与专属上下文；内置 override、自定义 Skill 与 Markdown 预览可管理，Skill 不再声明工具权限。 |
+| 输入框快捷按钮 | 快捷按钮可新增、改名、换图标、换绑 Skill、删除、拖动排序并单独控制显示；每个按钮持有工具白名单，默认全选、可按分组删减，也可由小模型推荐清单与理由后一键采纳。默认可见「饮食分析」「训练记录」「近期分析」三个，聊天最多显示六个。未知工具名在保存与运行时都被丢弃。 |
+| 系统协议边界 | 固定身份、安全、真实性和授权契约不可编辑，仅人格可编辑；工具与严格参数 Schema 由 App 通过 API 注册，不进入 System Prompt；Skill 只描述方法，快捷按钮只能在当前协议内收窄权限。 |
 | Trace | 一次远程消息生成一条成功或失败 Trace；model、skill、tool、output Span 作为 Event 实时更新 UI，并保存相对耗时、Token、入参与返回。 |
 | 开发者设置 | 直接提供执行日志入口和数量；固定 Tool 协议不作为不可操作的设置项或说明展示。 |
 | 持久 Job/Event | 每条消息拥有稳定 `AgentJob` 与单调语义 Event；Chat、Trace、通知和 Live Activity 维护独立 cursor，UI 读取不删除事件。 |
 | 可选远程执行 | 设置默认关闭并披露数据流；单次可选仅本机。匿名设备签名、幂等 Job、Event 补拉、Worker lease 和设备 Tool handoff 由 `Server/` 提供，BYOK 不上传。 |
-| Backend 输入等价 | iOS 用 `AgentModelInputEnvelope v2` 组装 system/history/current 消息、媒体 ID、Skill 快照、选中 Skill、仅当轮有效的 Tool 定义、步数与时限；本机直接消费，远端只绑定临时 upload。Server 不含第二套 Agent Prompt；当前暴露的 runtime Skill 可就地执行，并行设备 Tool 全部持久化且结果齐备后按原调用顺序续跑。 |
+| Backend 输入等价 | iOS 用 `AgentModelInputEnvelope v2` 组装 system/history/current 消息、媒体 ID、Skill 快照、选中快捷按钮与 Skill、仅当轮有效的 Tool 定义、步数与时限；本机直接消费，远端只绑定临时 upload。Server 不含第二套 Agent Prompt；当前暴露的 runtime Skill 可就地执行，并行设备 Tool 全部持久化且结果齐备后按原调用顺序续跑。 |
 | 系统进度 | Live Activity 只显示通用阶段、操作数和队列数，不含健康文本或虚假百分比；完成通知和系统表面深链到稳定 Turn。 |
 
 ## 已实现：训练智能
@@ -161,7 +162,7 @@
 | 规范化幂等 | `AgentToolCallSignature` 归一 trim/同义字段/数值/nil；`set_entries` 保序；失败 receipt 可重试（`AgentReliabilityTests`）。 |
 | 业务级疑似重复 | 同日同动作同组指纹命中返回既有 ID +「疑似重复」，不静默合并（`AgentBusinessKeyDeduper`）。 |
 | 同气泡续跑 | Job 持久化 `lastCompletedStep`/`loopCheckpoint`；有检查点时复用 `responseMessageID` 且不递增 `attemptNumber`；`DataIntegrityRepair` 不把可恢复中断标为 failed。 |
-| 工具组与并行 | `AgentToolExposurePolicy`：未选 Skill 注册 currentProtocolGroups（32 个当前协议 Tool）；选中 Skill 使用白名单绑定组。`parallelToolCalls=true` 且本机顺序执行。 |
+| 工具曝光与并行 | `AgentToolExposurePolicy`：未选快捷按钮注册当前协议 32 个 Tool；选中按钮使用该按钮 `toolNames` 与协议的交集，恢复时沿用 checkpoint 的 `exposedToolNames`。`parallelToolCalls=true` 且本机顺序执行。 |
 | 延迟辅助 | 流式滚动约 10Hz 非动画节流；历史视频帧经 `VideoFrameCache` LRU；step ≥ 2 历史帧占位。Trace 可观测 `time_to_first_delta_ms`/`projection_ms`/`cached_prompt_tokens`。 |
 | 红线不破坏 | LLM 摘要只替换更早对话且有确定性兜底，不静默跨轮合并业务记录；Tool Schema 仍固定；本地/远程共用版本化 Envelope。 |
 
@@ -179,11 +180,35 @@
 | 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；Job 创建时冻结原始 Turn 时间、`effectiveBusinessDate`、时区和 `defaultOccurredAt`，首次 claim 再冻结 `loopStartedAt`。create/update 的 `occurred_at` 省略时复用稳定默认值，排队、跨午夜和重试不使用新墙钟。 |
 | 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁。`AgentLoopDeadline` 以 3/5/10 分钟活动执行预算取消当前窗口，等待用户、网络或前台不计时；自动恢复保留已耗时长，用户显式重试刷新预算但保留固定业务时间与成功 step。 |
 | 确定性快捷训练 | typed 最近训练草稿 trim 后未改且无附件时使用 `deterministicWorkout` Job；空 Key 测试证明不调用 LLM、执行时间实时读取并产生同构 Trace/Event/结果卡。 |
-| 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；同一 Turn 不同动作各成一条记录、各有一张卡，卡片出现在该回复过程与文字之后。最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存成功显示已保存态；删除写入有界 correction block。连续成功 Skill/Tool 收成一条可展开过程摘要，失败卡单独露出，Event Cards 不被结果卡替换。 |
+| 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；同一 Turn 不同动作各成一条记录、各有一张卡，卡片插在产生它的那一步之后，写入前后的文字保持原顺序。最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存成功显示已保存态；删除写入有界 correction block。连续成功 Skill/Tool 收成一条可展开过程摘要，失败卡单独露出，Event Cards 不被结果卡替换。 |
 | 计划与一级页面 | 计划编辑同屏提供组数、次数、重量、间歇；进展首卡直出当前健身房；设置底部直接嵌入反馈；空 Session 提供确定性和最多六条自定义快捷语。 |
-| Tool 与 Prompt 节制 | 未选 Skill 注册完整当前协议 Tool，选中 Skill 只注册绑定集合。System 使用分层 `[SOMA SYSTEM v2]`，User 使用 `[SOMA CURRENT TURN v2]` 固定顺序且空块完全省略；后续只追加 assistant/tool 尾部。 |
+| Tool 与 Prompt 节制 | 未选快捷按钮注册完整当前协议 Tool，选中按钮只注册该按钮工具白名单。System 使用分层 `[SOMA SYSTEM v2]`，User 使用 `[SOMA CURRENT TURN v2]` 固定顺序且空块完全省略；后续只追加 assistant/tool 尾部。 |
 | 动作图覆盖 | 内置专属图条目不少于 100，Bundle 逐资源校验；真机核对得到的 24 个常见动作名称全部有确定目录映射与离线动作图，不把个人训练事实写入仓库。 |
 | Gmail 自动化 | Codex 自动化 `soma-gmail-draft-pr` 每 3 小时运行一次；只处理一封未标记反馈，从最新 `origin/main` 建隔离分支并产出分析、必要 PRD/ADR、实现、测试、Changelog 和 Draft PR。成功建 PR 后才标记邮件；不合并、发布或真机安装。 |
+
+## 消息元信息、快捷按钮 CRUD、可观测性与饮食双卡片
+
+[PRD 033](prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)、
+[ADR 0082](adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)–[0085](adr/0085-record-cards-follow-the-producing-step.md)、
+[BUG 0024](bugs/0024-streaming-cross-actor-swiftdata-crash.md) 与
+[BUG 0025](bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md) 的当前实现证据。
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 消息元信息单行 | `ChatMessageMetaLine` 在气泡底部输出一行 caption2：当天只显示 `HH:mm`，跨天补 `M月D日`，跨年补年份；用户消息带位置时同行显示「时间 · 位置」并对长 POI 中间截断，助手消息只显示时间。独立位置胶囊已删除，VoiceOver 合并朗读。 |
+| 日期入口位置 | 记录日期入口位于导航栏 `principal` 的两行标题下方居中，输入区不再放日期芯片；改期仍持久化到 Session 并只影响本次对话默认日期。 |
+| 快捷按钮存储 | `AgentInputShortcutStore` 以 UserDefaults JSON 保存增删改与排序，未知工具名在读写两侧清理；删除 Skill 时解绑引用它的按钮。`AgentInputShortcutTests` 覆盖默认三按钮、可见性与规范化。 |
+| 曝光边界 | 选中按钮时 `AgentToolExposurePolicy` 只返回该按钮工具白名单与当前协议交集，未选时返回全量；`AgentJob.selectedShortcutID` 让排队、恢复与远程 Envelope 沿用同一判断，旧 checkpoint 的 `exposedGroups` 仍可还原。 |
+| AI 推荐工具 | `AgentToolRecommendationService` 只在用户点按时发一次非流式请求，优先小模型档，返回清单与理由并丢弃未知名称；未配置模型或响应不可解析时保持原选择并说明失败原因，请求不含健康数据。 |
+| 流式稳定性 | 流式 chunk 回调保持 `@MainActor`，文字增量经 `AgentTextDeltaCoalescer` 合批；segment id 携带形态标记保证 `ForEach` 身份唯一；DEBUG 下投影入口断言主 actor，`make check` 静态守卫这两条。 |
+| LLM 工具清单可见 | 每次模型调用把 `exposed_tool_names` 与数量写进 model span metadata 和诊断日志，高级设置的执行日志显示「绑定工具」。 |
+| 诊断日志 | `DiagnosticsLogStore` 双文件滚动记录生命周期、模型调用、Tool 结果、Turn 终态与录像阶段，恒定脱敏密钥与 Authorization，不写媒体 Base64。 |
+| 崩溃误报边界 | `AppRunSentinel.isRunningUnderTests` 让测试进程既不置位哨兵也不上报；哨兵额外记录上次运行是否附着调试器，`CrashReportEligibility` 拒绝把调试器结束当成崩溃。设置页可丢弃排队报告。`CrashDiagnosticsTests` 覆盖这两条。 |
+| 崩溃自动上报 | `AppRunSentinel` 识别上次异常终止，MetricKit 提供崩溃类型与堆栈；`CrashReportComposer` 汇总环境、崩溃 Session 上下文、最后一次 Job/Trace 与日志尾部，`DiagnosticReportMailer` 以独立主题和 `.txt` 附件发送，失败留盘重试、最多 5 份。高级设置提供总开关与查看入口。 |
+| 录像失败原因 | `WorkoutRecordingFailureDiagnosis` 把 `AVError.Code` 与中断原因映射为具体中文原因并附 `（domain code · stage）`；非预期结束与中断都使用该诊断，同时写入诊断日志。 |
+| 饮食双卡片 | 聊天内第一张「记饮食」卡是可直接改的菜品清单，行内可改名称、份量、kcal 与三大宏量并支持增删行与改餐次；第二张「饮食评价」卡只读，随草稿由 `MealNutritionTotals.derive` 实时重算，缺项显示「未估算」不补零，保存后写入值与卡二一致。 |
+| 卡片位置 | `AgentTurnTranscriptSegments` 把 `record_refs` 插在产生它的 Tool 或过程摘要之后，重复引用只出一张卡，无法归位的兜底在末尾；饮食 Skill 要求写入前先说一句不含数字的识别说明。`AgentChatPresentationTests` 覆盖顺序与去重。 |
+| 饮食时间 | `defaultOccurredAt` 保留发送时刻钟点，餐次按记录发生时刻推断；饮食 Skill 明确要求没有用户明确时间就省略 `occurred_at`。 |
 
 ## 实施前文档门禁
 
@@ -286,6 +311,15 @@ AI 配置引导与暂存在模拟器使用空标准档 Key 验收：准备文字
 重试全部”。从管理页进入 LLM 配置应与设置 Tab 的平台、地址、Key 和模型一致。保存标准档 Key 后
 返回教练，确认其余消息按发送顺序进入流式 Agent，不产生重复业务记录；设置中不出现远程 Agent
 开关或本地模式提示。
+
+崩溃诊断与录像原因真机验收：先在高级设置确认「自动发送崩溃诊断」开关状态，用「查看上次报告」
+确认报告不含 API Key、Authorization 或媒体内容；人工触发一次诊断邮件，确认主题独立且附件为 `.txt`。
+带练连续录制 3 组，并分别制造后台切换、来电中断与低存储，确认提示给出具体原因和技术标识，
+诊断日志能查到对应阶段。BUG 0025 的根因结论以真机复验为准。
+
+快捷按钮与饮食双卡片验收：新增一个按钮并只勾选饮食工具，发送一次饮食描述，确认执行日志的
+「绑定工具」只包含所选工具；隐藏该按钮后确认聊天输入区不再出现它。在饮食第一张卡改一道菜的
+热量并保存，确认第二张卡与「饮食记录」详情同步更新；清空某个宏量后确认显示「未估算」而不是 0。
 
 LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/models` 列表中的 ID，返回设置首页再
 进入，确认值不变且重新拉取候选也不覆盖；切换到小模型档确认平台、Base URL、Key、模型独立；

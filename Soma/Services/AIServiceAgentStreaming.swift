@@ -1,6 +1,25 @@
 import Foundation
 import SwiftOpenAI
 
+/// 一步 LLM 推理开始时需要落到 Trace 与诊断日志的上下文。PRD 033：工具清单是排查
+/// "模型说自己没有某个工具" 的关键证据，必须与 Span 一起记录。
+struct AgentModelStepStart {
+    var spanID: UUID
+    var operationStep: Int
+    var modelStep: Int
+    var startedAt: Date
+    var traceInput: String
+    var route: AIModelRoute
+    var historyExchangeCount: Int
+    var historicalImageCount: Int
+    var directVideoCount: Int
+    var mediaMode: AgentMediaMode
+    var messageCount: Int
+    var exposedToolNames: [String]
+    var selectedSkillID: String?
+    var selectedShortcutID: String?
+}
+
 struct AgentStreamStepRequest {
     var tools: [ChatCompletionParameters.Tool]
     var model: String
@@ -115,8 +134,9 @@ extension AIService {
         }
     }
 
-    /// 消费一步推理的流式响应。首个增量之前是请求与供应商排队，之后本机投影与流式读取
-    /// 共用同一个 actor；deadline 在底层 stream 之上统一执行。
+    /// 消费一步推理的流式响应。BUG 0024：读取 chunk 在私有 actor，投影必须回到主 actor，
+    /// 且文字增量按 `AgentTextDeltaCoalescer` 的节拍合批，不再逐 token 写库。
+    /// deadline 在底层 stream 之上统一执行。
     func consumeAgentStream(
         parameters: ChatCompletionParameters,
         videos: [AgentVideoInput],
@@ -129,6 +149,15 @@ extension AIService {
     ) async throws -> AgentStreamOutcome {
         var outcome = AgentStreamOutcome()
         var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
+        var coalescer = AgentTextDeltaCoalescer()
+
+        func project(_ text: String) {
+            let projectionStartedAt = Date()
+            trace?(.assistantTextDelta(itemID: textItemID, delta: text))
+            outcome.projectionSeconds += Date()
+                .timeIntervalSince(projectionStartedAt)
+        }
+
         do {
             let stream = try await agentStream(
                 parameters: parameters,
@@ -157,16 +186,15 @@ extension AIService {
                     }
                     if let content = delta.content, !content.isEmpty {
                         outcome.passage += content
-                        let projectionStartedAt = Date()
-                        trace?(.assistantTextDelta(
-                            itemID: textItemID,
-                            delta: content
-                        ))
-                        outcome.projectionSeconds += Date()
-                            .timeIntervalSince(projectionStartedAt)
+                        if let batched = coalescer.append(content, now: Date()) {
+                            project(batched)
+                        }
                     }
                     if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
                         outcome.ignoredReasoning = true
+                    }
+                    if delta.toolCalls?.isEmpty == false, let tail = coalescer.flush() {
+                        project(tail)
                     }
                     for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
                         let index = toolDelta.index ?? position
@@ -178,11 +206,17 @@ extension AIService {
                 return meaningful
             }
         } catch {
+            if let tail = coalescer.flush() {
+                project(tail)
+            }
             throw StreamingFailure.interrupted(
                 error,
                 passage: outcome.passage,
                 receivedMeaningfulDelta: outcome.firstDeltaAt != nil
             )
+        }
+        if let tail = coalescer.flush() {
+            project(tail)
         }
         outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap { toolCallDeltas[$0] }
         outcome.ttftBudgetMilliseconds = milliseconds(
@@ -191,12 +225,60 @@ extension AIService {
         return outcome
     }
 
+    /// 开始一步推理：写 running Span，并把绑定工具列表写进诊断日志。
+    func announceModelStepStart(
+        _ start: AgentModelStepStart,
+        trace: ((AgentTraceEvent) -> Void)?
+    ) {
+        trace?(.span(AgentTraceSpan(
+            id: start.spanID,
+            step: start.operationStep,
+            kind: .model,
+            title: "LLM 推理",
+            status: .running,
+            startedAt: start.startedAt,
+            endedAt: start.startedAt,
+            input: start.modelStep == 1
+                ? start.traceInput
+                : "继续处理上一轮 assistant.tool_calls 与 role=tool 结果。",
+            metadata: AgentTraceText.jsonObject([
+                "history_exchange_count": start.historyExchangeCount,
+                "history_image_count": start.historicalImageCount,
+                "direct_video_count": start.directVideoCount,
+                "media_mode": start.mediaMode.rawValue,
+                "provider": start.route.provider.displayName,
+                "model": start.route.model,
+                "model_tier": start.route.tier.title,
+                "routing_reason": start.route.reason,
+                "message_count": start.messageCount,
+                "exposed_tool_count": start.exposedToolNames.count,
+                "exposed_tool_names": start.exposedToolNames,
+                "selected_skill_id": start.selectedSkillID
+                    .map { $0 as Any } ?? NSNull(),
+                "selected_shortcut_id": start.selectedShortcutID
+                    .map { $0 as Any } ?? NSNull(),
+                "stream": true,
+                "thinking": false
+            ])
+        )))
+        AgentDiagnostics.modelRequest(
+            step: start.operationStep,
+            provider: start.route.provider.displayName,
+            model: start.route.model,
+            tier: start.route.tier.title,
+            skillID: start.selectedSkillID,
+            toolNames: start.exposedToolNames,
+            messageCount: start.messageCount
+        )
+    }
+
     func modelSpanMetadata(
         history: [AgentConversationExchange],
         historicalImageCount: Int,
         directVideoCount: Int,
         route: AIModelRoute,
         streamed: AgentStreamOutcome,
+        exposedToolNames: [String],
         startedAt: Date,
         endedAt: Date
     ) -> String {
@@ -204,6 +286,9 @@ extension AIService {
         return AgentTraceText.jsonObject([
             "history_exchange_count": history.count,
             "history_image_count": historicalImageCount,
+            // PRD 033：完成态 Span 也带上工具清单，回看历史 Trace 时不必再猜。
+            "exposed_tool_names": exposedToolNames,
+            "exposed_tool_count": exposedToolNames.count,
             "direct_video_count": directVideoCount,
             "media_mode": streamed.mediaMode.rawValue,
             "request_attempt": streamed.requestAttempt,

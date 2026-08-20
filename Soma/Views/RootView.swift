@@ -137,6 +137,11 @@ struct RootView: View {
                 modelContext: modelContext,
                 locationService: locationContext
             )
+            // ADR 0083：崩溃报告要带上崩溃 session 的上下文，所以在拿到 ModelContext 之后
+            // 才补齐并发送。
+            await CrashDiagnosticsCoordinator.shared.flushPendingReports(
+                in: modelContext
+            )
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {

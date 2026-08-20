@@ -4,6 +4,9 @@
 - 日期：2026-08-11
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) 的固定工具组列表，新增 `feedback` 组
+- 后续替代：
+  - [ADR 0083](0083-local-diagnostics-log-and-silent-crash-reporting.md) 增加不由用户当轮意图触发的
+    崩溃诊断投递；`submit_feedback` 的模型可控内容与设备执行语义继续有效
 - 上游依据：[PRD 024](../prd/024-chat-agent-feedback-tool.md)
 
 ## 背景

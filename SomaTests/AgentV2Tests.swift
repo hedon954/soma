@@ -6,7 +6,9 @@ import XCTest
 final class AgentV2Tests: XCTestCase {
     func testTypedDomainContractExposesTwentySevenVersionedTools() {
         let tools = AgentToolExposurePolicy.tools(
-            for: [.exercises, .workouts, .meals, .body, .plans]
+            names: AgentToolExposurePolicy.toolNames(
+                for: [.exercises, .workouts, .meals, .body, .plans]
+            )
         )
 
         XCTAssertEqual(tools.count, 27)
@@ -333,7 +335,7 @@ final class AgentV2Tests: XCTestCase {
         }
 
         XCTAssertEqual(
-            ChatRecordReferenceResolver.references(in: items),
+            AgentTurnRecordReferences.make(from: items),
             [AgentRecordReference(
                 recordType: ConversationIntent.workout.rawValue,
                 recordID: id,

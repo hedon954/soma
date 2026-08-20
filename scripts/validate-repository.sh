@@ -123,6 +123,14 @@ if grep -R -nE \
   fail "Widget configuration metadata must use static String or LocalizedStringKey values"
 fi
 
+grep -q 'MainActor.assertIsolated' Soma/Models/AgentJob.swift ||
+  fail "BUG 0024: agent event projection must assert main actor isolation"
+grep -q 'onChunk: @MainActor' Soma/Services/AgentStreamDeadline.swift ||
+  fail "BUG 0024: streaming chunk handling must stay isolated to the main actor"
+grep -q 'guard !resources.movieOutput.isRecording else' \
+  Soma/Services/WorkoutCameraService.swift ||
+  fail "BUG 0025: capture geometry must not rewrite movie output while recording"
+
 for privacy_key in \
   NSCameraUsageDescription \
   NSMicrophoneUsageDescription \

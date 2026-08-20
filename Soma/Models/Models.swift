@@ -452,15 +452,11 @@ final class MealEntry: BusinessIdentifiedModel {
     func replaceItemsAndDeriveTotals(_ newItems: [MealItem]) {
         items = newItems
         nutritionSource = .derivedFromItems
-        calories = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.calories))
-        protein = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.protein))
-        carbs = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.carbs))
-        fat = newItems.isEmpty ? nil : sumIfComplete(newItems.map(\.fat))
-    }
-
-    private func sumIfComplete<T: AdditiveArithmetic>(_ values: [T?]) -> T? {
-        guard values.allSatisfy({ $0 != nil }) else { return nil }
-        return values.compactMap { $0 }.reduce(.zero, +)
+        let totals = MealNutritionTotals.derive(from: newItems)
+        calories = totals.calories
+        protein = totals.protein
+        carbs = totals.carbs
+        fat = totals.fat
     }
 }
 

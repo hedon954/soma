@@ -1,12 +1,12 @@
 import Foundation
 
+/// ADR 0082：Skill 只描述专业方法。工具权限由输入框快捷按钮持有，Skill 不再自带工具分组。
 struct AgentSkillDescriptor: Identifiable, Equatable, Sendable {
     var id: String
     var title: String
     var summary: String
     var whenToUse: String
     var markdown: String
-    var toolGroups: Set<AgentToolGroup>
     var isBuiltIn: Bool
 }
 
@@ -16,12 +16,9 @@ struct AgentCustomSkill: Codable, Equatable, Identifiable, Sendable {
     var description: String
     var whenToUse: String
     var content: String
-    var toolGroupIDs: [String]
 
     var descriptor: AgentSkillDescriptor {
-        let groups = Set(toolGroupIDs.compactMap(AgentToolGroup.init(rawValue:)))
-            .intersection(AgentSkillRegistry.allowedCustomToolGroups)
-        return AgentSkillDescriptor(
+        AgentSkillDescriptor(
             id: id,
             title: name,
             summary: description,
@@ -35,7 +32,6 @@ struct AgentCustomSkill: Codable, Equatable, Identifiable, Sendable {
 
             \(content)
             """,
-            toolGroups: groups,
             isBuiltIn: false
         )
     }
@@ -43,10 +39,6 @@ struct AgentCustomSkill: Codable, Equatable, Identifiable, Sendable {
 
 enum AgentSkillRegistry {
     static let customSkillsKey = "ai.react.custom-skills.v1"
-    static let quickSkillIDsKey = "ai.react.quick-skill-ids.v1"
-    static let allowedCustomToolGroups: Set<AgentToolGroup> = [
-        .exercises, .workouts, .meals, .body, .plans, .gym, .review
-    ]
 
     static func allDescriptors(
         defaults: UserDefaults = .standard
@@ -90,39 +82,20 @@ enum AgentSkillRegistry {
             customSkills(defaults: defaults).filter { $0.id != id },
             defaults: defaults
         )
-        setQuickSkillIDs(
-            quickSkillIDs(defaults: defaults).filter { $0 != id },
-            defaults: defaults
-        )
-    }
-
-    static func quickSkillIDs(defaults: UserDefaults = .standard) -> [String] {
-        let stored = defaults.stringArray(forKey: quickSkillIDsKey) ?? []
-        if !stored.isEmpty {
-            return Array(stored.prefix(6))
+        // 快捷按钮可能绑着这个 Skill；删除后解绑，避免发送时注入不存在的 Skill 正文。
+        let shortcuts = AgentInputShortcutStore.shortcuts(defaults: defaults)
+        if shortcuts.contains(where: { $0.skillID == id }) {
+            AgentInputShortcutStore.replaceAll(
+                shortcuts.map { shortcut in
+                    var value = shortcut
+                    if value.skillID == id {
+                        value.skillID = nil
+                    }
+                    return value
+                },
+                defaults: defaults
+            )
         }
-        return AgentSkill.defaultQuickSkills.map(\.rawValue)
-    }
-
-    static func quickDescriptors(
-        defaults: UserDefaults = .standard
-    ) -> [AgentSkillDescriptor] {
-        let byID = Dictionary(uniqueKeysWithValues: allDescriptors(defaults: defaults).map {
-            ($0.id, $0)
-        })
-        return quickSkillIDs(defaults: defaults).compactMap { byID[$0] }
-    }
-
-    static func setQuickSkillIDs(
-        _ ids: [String],
-        defaults: UserDefaults = .standard
-    ) {
-        let allowed = Set(allDescriptors(defaults: defaults).map(\.id))
-        var seen = Set<String>()
-        let normalized = ids.filter {
-            allowed.contains($0) && seen.insert($0).inserted
-        }
-        defaults.set(Array(normalized.prefix(6)), forKey: quickSkillIDsKey)
     }
 
     private static func persist(
@@ -143,7 +116,6 @@ extension AgentSkill {
             summary: summary,
             whenToUse: whenToUse,
             markdown: markdown(in: defaults),
-            toolGroups: toolGroups,
             isBuiltIn: true
         )
     }

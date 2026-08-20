@@ -287,6 +287,7 @@ enum DataMigrationState: Equatable {
 struct SomaApp: App {
     @UIApplicationDelegateAdaptor(SomaAppDelegate.self)
     private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @State private var aiService = AIService()
     @State private var dataSpace = DataSpaceController()
     @State private var conversationProcessor = ConversationProcessingService()
@@ -325,6 +326,18 @@ struct SomaApp: App {
             }
             .task {
                 await dataSpace.runLaunchMigration()
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                // ADR 0083：前台哨兵决定下次启动能否判定"上一次运行被异常终止"。
+                switch phase {
+                case .active:
+                    AppRunSentinel.shared.markForegroundActive()
+                case .inactive, .background:
+                    AppRunSentinel.shared.markForegroundEnded()
+                @unknown default:
+                    break
+                }
+                AppLifecycleDiagnostics.phase(String(describing: phase))
             }
         }
     }

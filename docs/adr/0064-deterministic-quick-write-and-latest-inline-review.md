@@ -7,6 +7,9 @@
   - [ADR 0027](0027-required-ai-configuration-and-send-gate.md) 中所有教练发送都必须先具备可用 LLM 的边界
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中记录结果只投影为只读结果卡、修改进入详情页的边界
 - 后续修订：[ADR 0077](0077-same-turn-identity-merge-and-additive-inline-review.md) 原位卡与 Event Cards 共存，保存必须有可见确认
+- 后续替代：
+  - [ADR 0084](0084-inline-meal-breakdown-and-derived-totals.md) 把饮食原位审查从整餐字段改为可编辑
+    菜品拆解卡加派生汇总卡；确定性快捷直写与最新回复原位审查继续有效
 - 下游落地：[BUG 0023](../bugs/0023-same-turn-multi-exercise-merged-into-one.md)
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
 

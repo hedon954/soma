@@ -93,7 +93,10 @@ extension ConversationProcessingService {
         let selectedSkill = job.selectedSkillID.flatMap {
             AgentSkillRegistry.descriptor(id: $0, defaults: context.ai.defaults)
         }
-        let effectiveGroups = AgentToolExposurePolicy.groups(selectedSkill: selectedSkill)
+        // ADR 0082：远程执行仍由设备决定曝光边界，服务器只收到已经收窄的工具清单。
+        let selectedShortcut = job.selectedShortcutID.flatMap {
+            AgentInputShortcutStore.shortcut(id: $0, defaults: context.ai.defaults)
+        }
         let userPrompt = ReActAgentPrompt.user(
             text: userMessage.text,
             context: agentContext,
@@ -119,7 +122,7 @@ extension ConversationProcessingService {
             currentImages: media.frames,
             currentVideos: media.videos,
             skills: AgentSkill.snapshots(defaults: context.ai.defaults),
-            tools: AgentToolExposurePolicy.tools(for: effectiveGroups),
+            tools: AgentToolExposurePolicy.tools(selectedShortcut: selectedShortcut),
             selectedSkillID: selectedSkill?.id,
             maxSteps: ReActAgentPreference.maxSteps(defaults: context.ai.defaults),
             deadlinePolicy: context.ai.streamDeadlinePolicy

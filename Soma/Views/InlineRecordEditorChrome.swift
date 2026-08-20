@@ -1,12 +1,17 @@
 import SwiftUI
 
-struct InlineRecordShell<Content: View>: View {
+struct InlineRecordShell<Content: View, Accessory: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var titleText: Binding<String>?
     let icon: String
     let isEditable: Bool
     var onSave: (() -> Bool)?
     var onDelete: (() -> Void)?
+    /// 派生卡片本来就没有编辑入口，不该显示锁标记，否则会被读成“暂时不能改”。
+    var showsLockWhenReadOnly = true
+    /// 标题右侧的补充控件，例如饮食卡的餐次选择。
+    @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -24,6 +29,9 @@ struct InlineRecordShell<Content: View>: View {
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(2)
                 }
+                if !dynamicTypeSize.isAccessibilitySize {
+                    accessory
+                }
                 Spacer(minLength: 8)
                 if isEditable {
                     if let onSave {
@@ -37,12 +45,16 @@ struct InlineRecordShell<Content: View>: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("删除")
                     }
-                } else {
+                } else if showsLockWhenReadOnly {
                     Image(systemName: "lock.fill")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .accessibilityLabel("已锁定")
                 }
+            }
+            // 辅助字号下标题会换行，配件挤在同一行会把标题撕成两段，改为单独一行。
+            if dynamicTypeSize.isAccessibilitySize {
+                accessory
             }
             content
         }
@@ -56,6 +68,31 @@ struct InlineRecordShell<Content: View>: View {
             RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous)
                 .stroke(.primary.opacity(0.06), lineWidth: 1)
         }
+    }
+}
+
+extension InlineRecordShell where Accessory == EmptyView {
+    init(
+        title: String,
+        titleText: Binding<String>? = nil,
+        icon: String,
+        isEditable: Bool,
+        onSave: (() -> Bool)? = nil,
+        onDelete: (() -> Void)? = nil,
+        showsLockWhenReadOnly: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(
+            title: title,
+            titleText: titleText,
+            icon: icon,
+            isEditable: isEditable,
+            onSave: onSave,
+            onDelete: onDelete,
+            showsLockWhenReadOnly: showsLockWhenReadOnly,
+            accessory: { EmptyView() },
+            content: content
+        )
     }
 }
 

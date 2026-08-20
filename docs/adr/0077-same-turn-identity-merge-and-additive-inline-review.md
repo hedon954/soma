@@ -6,7 +6,10 @@
 - 部分替代：
   - [ADR 0018](0018-provenance-aware-record-merge.md) 中「同一 sourceTurnID 永远更新原记录」、不核对动作或餐次身份的边界
   - [ADR 0064](0064-deterministic-quick-write-and-latest-inline-review.md) 中未写明原位卡与 Event Cards 共存、保存无确认的实现缺口
-- 后续替代：[ADR 0079](0079-create-inserts-update-by-id.md) 删除 create 路径上「同一 Turn 按身份合并」；原位审查卡与保存确认仍有效
+- 后续替代：
+  - [ADR 0079](0079-create-inserts-update-by-id.md) 删除 create 路径上「同一 Turn 按身份合并」；原位审查卡与保存确认仍有效
+  - [ADR 0084](0084-inline-meal-breakdown-and-derived-totals.md) 让一条饮食记录投影两张卡；原位卡与 Event Cards 共存、保存必须可见确认继续有效
+  - [ADR 0085](0085-record-cards-follow-the-producing-step.md) 把原位卡改为跟随产生它的那一步渲染；逐条投影与保存确认继续有效
 - 上游依据：
   - [PRD 020](../prd/020-gui-simplification-and-progressive-disclosure.md)
   - [PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
@@ -33,7 +36,8 @@
 3. 相同 Tool Call 的重放继续由 `AgentMutationReceipt` 幂等，不靠「Turn 内第一条记录」。
 4. 原位审查卡按 `record_refs` 逐条投影：一次 Tool 写入 N 条记录就渲染 N 张卡，与文字、
    Skill、Tool、错误 Event Cards 同时保留。连续成功的 Skill/Tool 默认收成一条可展开过程摘要，
-   展开后仍能逐条审查；折叠不等于删除。原位卡渲染在过程与文字之后，避免把教练结论顶出屏幕。
+   展开后仍能逐条审查；折叠不等于删除。卡片位置由 [ADR 0085](0085-record-cards-follow-the-producing-step.md)
+   改为跟随产生它的那一步。
 5. 原位保存成功必须把保存控件改为已保存态并给出成功触觉；校验失败保持可再试，不假装成功。
 
 ## 未选择的方案

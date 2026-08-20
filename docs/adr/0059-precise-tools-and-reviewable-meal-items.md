@@ -11,6 +11,9 @@
   - [ADR 0064](0064-deterministic-quick-write-and-latest-inline-review.md) 将 record reference 扩展为最新回复原位 CRUD 与修订上下文
   - [ADR 0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) 将 `mutate_user_data` 从常驻 core 移入按写意图暴露的 records 组
   - [ADR 0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) 用按领域单一职责 Tool 替代通用查询与通用 CRUD
+- 后续修订：
+  - [ADR 0084](0084-inline-meal-breakdown-and-derived-totals.md) 把食物项从只读审查改为聊天内可编辑
+    事实来源，汇总变为纯派生；精确 Tool 查询与 `MealItem` 结构继续有效
 - 上游依据：
   - [PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
   - [BUG 0011](../bugs/0011-meal-correction-misattributed-media.md)

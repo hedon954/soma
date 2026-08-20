@@ -12,7 +12,9 @@
 - 上游依据：
   - [持久 Agent Job、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)
   - [BUG 0004](../bugs/0004-agent-background-stream-interruption.md)
-- 下游落地：[Agent Job 与远程执行协议](../engineering/agent-job-protocol.md)
+- 下游落地：
+  - [Agent Job 与远程执行协议](../engineering/agent-job-protocol.md)
+  - [BUG 0024](../bugs/0024-streaming-cross-actor-swiftdata-crash.md)
 - 关联：[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
 
 ## 背景

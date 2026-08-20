@@ -63,7 +63,9 @@ struct CoachView: View {
     @State private var showsLocationPrompt = false
     @State private var useLocalForNextMessage = false
     @State private var selectedExerciseSuggestion: ExerciseInputSuggestion?
-    @State private var selectedSkillID: String?
+    @State private var selectedShortcutID: String?
+    /// 设置页可能在返回聊天前改动快捷按钮，这里在出现时重新读一次。
+    @State private var inputShortcuts = AgentInputShortcutStore.visibleShortcuts()
     /// 流式期间合并滚动，避免每个 token 启动一次 250ms 动画反压 MainActor。
     @State private var lastLiveScrollAt = Date.distantPast
     @State private var liveScrollTask: Task<Void, Never>?
@@ -174,6 +176,13 @@ struct CoachView: View {
                 .accessibilityLabel("历史对话")
                 .accessibilityHint("打开对话会话列表")
             }
+            // PRD 033：记录日期是本次对话的高频上下文，放在标题下方居中，不再占输入区。
+            ToolbarItem(placement: .principal) {
+                CoachTitleWithBusinessDate(
+                    businessDate: currentSession?.effectiveBusinessDate ?? .now,
+                    onChangeBusinessDate: changeBusinessDate
+                )
+            }
         }
         .accessibilityAction(named: "打开历史对话") {
             openSessionDrawer()
@@ -255,6 +264,7 @@ struct CoachView: View {
         }
         .onAppear {
             locationPreferenceRaw = ConversationLocationPreference.current().rawValue
+            refreshInputShortcuts()
         }
         .onChange(of: draft) {
             guard let selectedExerciseSuggestion else { return }
@@ -356,9 +366,8 @@ struct CoachView: View {
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
             useLocalForNextMessage: $useLocalForNextMessage,
-            selectedSkillID: $selectedSkillID,
-            businessDate: currentSession?.effectiveBusinessDate ?? .now,
-            onChangeBusinessDate: changeBusinessDate,
+            selectedShortcutID: $selectedShortcutID,
+            shortcuts: inputShortcuts,
             isSending: processor.isProcessing,
             isListening: speechInput.isListening,
             speechMessage: speechInput.errorMessage,
@@ -376,6 +385,15 @@ struct CoachView: View {
 
     private func showMedia() {
         sheet = .media
+    }
+
+    private func refreshInputShortcuts() {
+        inputShortcuts = AgentInputShortcutStore.visibleShortcuts()
+        if let selectedShortcutID,
+           !inputShortcuts.contains(where: { $0.id == selectedShortcutID })
+        {
+            self.selectedShortcutID = nil
+        }
     }
 
     private func changeBusinessDate(_ date: Date) {
@@ -731,7 +749,7 @@ struct CoachView: View {
                 context: processingContext,
                 includeLocation: locationPreference == .enabled,
                 locationService: locationContext,
-                selectedSkillID: selectedSkillID,
+                selectedShortcutID: selectedShortcutID,
                 forceLocal: useLocalForNextMessage
             )
         }
@@ -740,7 +758,7 @@ struct CoachView: View {
             attachments = []
             useLocalForNextMessage = false
             selectedExerciseSuggestion = nil
-            selectedSkillID = nil
+            selectedShortcutID = nil
             composerDismissRequest = UUID()
             scrollRequest = UUID()
             if needsConfigurationGuidance {
@@ -1152,16 +1170,6 @@ struct CoachBubble: View {
                         .foregroundStyle(AppTheme.tint)
                 }
 
-                if !message.isFromCoach, let location = message.location {
-                    Label(location.displayName, systemImage: "location.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(AppTheme.tint.opacity(0.88), in: Capsule())
-                        .accessibilityLabel("发送位置 \(location.displayName)")
-                }
-
                 if !message.mediaAttachments.isEmpty {
                     StoredMediaStrip(attachments: message.mediaAttachments)
                 }
@@ -1218,6 +1226,8 @@ struct CoachBubble: View {
                     .tint(AppTheme.tint)
                     .accessibilityHint("复用原始文字、媒体和发送时的位置再次处理")
                 }
+
+                metaLine
             }
 
             if message.isFromCoach {
@@ -1225,6 +1235,80 @@ struct CoachBubble: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// PRD 033：时间与位置合并成一行 caption，位置不再单独占一个胶囊。
+    @ViewBuilder
+    private var metaLine: some View {
+        let content = ChatMessageMetaLine.make(
+            date: message.date,
+            locationName: message.location?.displayName,
+            isFromCoach: message.isFromCoach
+        )
+        Text(content.text)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .accessibilityLabel(content.accessibilityLabel)
+    }
+}
+
+/// PRD 033：导航栏标题区的两行结构：上面是 App 名，下面是当前 Session 的记录日期入口。
+private struct CoachTitleWithBusinessDate: View {
+    let businessDate: Date
+    let onChangeBusinessDate: (Date) -> Void
+    @State private var showsPicker = false
+    @State private var pendingDate = Date.now
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text("Soma")
+                .font(.headline)
+            Button {
+                pendingDate = businessDate
+                showsPicker = true
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "calendar")
+                    Text(businessDate.formatted(.dateTime.month().day()))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.tint)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("本次对话的记录日期")
+            .accessibilityValue(
+                businessDate.formatted(date: .long, time: .omitted)
+            )
+            .accessibilityHint("更改后，本次对话新增的记录默认使用这个日期")
+        }
+        .sheet(isPresented: $showsPicker) {
+            NavigationStack {
+                DatePicker(
+                    "Session 日期",
+                    selection: $pendingDate,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .padding()
+                .navigationTitle("默认记录日期")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { showsPicker = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") {
+                            onChangeBusinessDate(pendingDate)
+                            showsPicker = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
     }
 }
 
@@ -1253,9 +1337,8 @@ private struct CoachComposer: View {
     let pendingCount: Int
     let showsExecutionChoice: Bool
     @Binding var useLocalForNextMessage: Bool
-    @Binding var selectedSkillID: String?
-    let businessDate: Date
-    let onChangeBusinessDate: (Date) -> Void
+    @Binding var selectedShortcutID: String?
+    let shortcuts: [AgentInputShortcut]
     let isSending: Bool
     let isListening: Bool
     let speechMessage: String?
@@ -1270,8 +1353,6 @@ private struct CoachComposer: View {
     let onSend: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var focused: Bool
-    @State private var showsBusinessDatePicker = false
-    @State private var pendingBusinessDate = Date.now
 
     /// PRD 020：输入区同一时间最多一层上下文条，优先级为
     /// 附件预览 > 动作建议 > 场馆切换。
@@ -1294,10 +1375,7 @@ private struct CoachComposer: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                businessDateChip
-                skillShortcuts
-            }
+            skillShortcuts
 
             // ADR 0045：暂存计数常驻在输入区上方，与上下文条互不挤占。
             if pendingCount > 0 {
@@ -1380,76 +1458,33 @@ private struct CoachComposer: View {
                 focused = false
             }
         }
-        .sheet(isPresented: $showsBusinessDatePicker) {
-            NavigationStack {
-                DatePicker(
-                    "Session 日期",
-                    selection: $pendingBusinessDate,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .padding()
-                .navigationTitle("默认记录日期")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") { showsBusinessDatePicker = false }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") {
-                            onChangeBusinessDate(pendingBusinessDate)
-                            showsBusinessDatePicker = false
-                        }
-                    }
-                }
-            }
-            .presentationDetents([.medium])
-        }
     }
 
-    private var businessDateChip: some View {
-        Button {
-            pendingBusinessDate = businessDate
-            showsBusinessDatePicker = true
-        } label: {
-            Label(
-                businessDate.formatted(.dateTime.month().day()),
-                systemImage: "calendar"
-            )
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Color(uiColor: .secondarySystemGroupedBackground),
-                in: Capsule()
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Session 默认记录日期")
-        .accessibilityValue(businessDate.formatted(date: .long, time: .omitted))
-    }
-
+    /// PRD 033：快捷按钮由设置页完整增删改，这里只呈现可见项并单选。
     private var skillShortcuts: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(AgentSkillRegistry.quickDescriptors()) { skill in
+                ForEach(shortcuts) { shortcut in
+                    let isSelected = selectedShortcutID == shortcut.id
                     Button {
-                        selectedSkillID = selectedSkillID == skill.id ? nil : skill.id
+                        selectedShortcutID = isSelected ? nil : shortcut.id
                     } label: {
-                        Text(skill.title)
+                        Label(shortcut.title, systemImage: shortcut.iconSystemName)
+                            .labelStyle(.titleAndIcon)
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .foregroundStyle(selectedSkillID == skill.id ? .white : .secondary)
+                            .foregroundStyle(isSelected ? .white : .secondary)
                             .background(
-                                selectedSkillID == skill.id
+                                isSelected
                                     ? AppTheme.tint
                                     : Color(uiColor: .secondarySystemGroupedBackground),
                                 in: Capsule()
                             )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Skill：\(skill.title)")
-                    .accessibilityValue(selectedSkillID == skill.id ? "已选择" : "未选择")
+                    .accessibilityLabel("快捷按钮：\(shortcut.title)")
+                    .accessibilityValue(isSelected ? "已选择" : "未选择")
                 }
             }
             .padding(.horizontal, 2)

@@ -368,7 +368,10 @@ enum StreamingFailure: Error {
 struct AgentToolLoopState {
     var messages: [ChatCompletionParameters.Message]
     var tools: [ChatCompletionParameters.Tool]
-    var exposedGroups: Set<AgentToolGroup>
+    /// PRD 033：本次调用真正交给模型的工具名，也是恢复时要还原的曝光集合。
+    /// `ChatCompletionParameters.Tool` 读不回名字，所以在组装时一并保存，供 Trace
+    /// metadata、诊断日志与 checkpoint 使用。
+    var exposedToolNames: [String] = []
     var observations: [AgentObservation] = []
     var executedMutations = Set<String>()
     var executedReads: [String: AgentToolResult] = [:]
@@ -519,6 +522,7 @@ final class AIService {
         context: String,
         route requestedRoute: AIModelRoute? = nil,
         selectedSkillID: String? = nil,
+        selectedShortcutID: String? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
         firstStepDeadlineEnabled: Bool = true,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
@@ -537,6 +541,7 @@ final class AIService {
             context: context,
             requestedRoute: requestedRoute,
             selectedSkillID: selectedSkillID,
+            selectedShortcutID: selectedShortcutID,
             checkpoint: checkpoint
         ))
         let selectedRoute = prepared.selectedRoute
@@ -618,39 +623,31 @@ final class AIService {
                 let modelSpanID = UUID()
                 let textItemID = UUID()
                 let modelStartedAt = Date()
-                trace?(.span(AgentTraceSpan(
-                    id: modelSpanID,
-                    step: operationStep,
-                    kind: .model,
-                    title: "LLM 推理",
-                    status: .running,
-                    startedAt: modelStartedAt,
-                    endedAt: modelStartedAt,
-                    input: currentModelStep == 1
-                        ? traceInput
-                        : "继续处理上一轮 assistant.tool_calls 与 role=tool 结果。",
-                    metadata: AgentTraceText.jsonObject([
-                        "history_exchange_count": history.count,
-                        "history_image_count": checkpoint != nil || clearedHistoryFrames
+                announceModelStepStart(
+                    AgentModelStepStart(
+                        spanID: modelSpanID,
+                        operationStep: operationStep,
+                        modelStep: currentModelStep,
+                        startedAt: modelStartedAt,
+                        traceInput: traceInput,
+                        route: selectedRoute,
+                        historyExchangeCount: history.count,
+                        historicalImageCount: checkpoint != nil || clearedHistoryFrames
                             ? 0
                             : historicalImageCount,
-                        "direct_video_count": videos.count,
-                        "media_mode": initialMediaMode(
+                        directVideoCount: videos.count,
+                        mediaMode: initialMediaMode(
                             images: images,
                             videos: videos,
                             hasVideo: hasVideo
-                        ).rawValue,
-                        "provider": provider.displayName,
-                        "model": model,
-                        "model_tier": selectedRoute.tier.title,
-                        "routing_reason": selectedRoute.reason,
-                        "message_count": toolState.messages.count,
-                        "exposed_tool_groups": toolState.exposedGroups.map(\.rawValue).sorted(),
-                        "exposed_tool_count": toolState.tools.count,
-                        "stream": true,
-                        "thinking": false
-                    ])
-                )))
+                        ),
+                        messageCount: toolState.messages.count,
+                        exposedToolNames: toolState.exposedToolNames,
+                        selectedSkillID: selectedSkillID,
+                        selectedShortcutID: selectedShortcutID
+                    ),
+                    trace: trace
+                )
 
                 var streamed: AgentStreamOutcome
                 do {
@@ -738,6 +735,7 @@ final class AIService {
                         directVideoCount: videos.count,
                         route: selectedRoute,
                         streamed: streamed,
+                        exposedToolNames: toolState.exposedToolNames,
                         startedAt: modelStartedAt,
                         endedAt: modelEndedAt
                     )
@@ -887,6 +885,15 @@ final class AIService {
             }
         } catch {
             let endedAt = Date()
+            AgentDiagnostics.toolFinished(
+                name: call.name.rawValue,
+                step: step,
+                status: error is CancellationError ? "cancelled" : "failed",
+                startedAt: startedAt,
+                endedAt: endedAt,
+                deduplicated: false,
+                detail: agentErrorDescription(error)
+            )
             trace?(.span(AgentTraceSpan(
                 id: spanID,
                 step: step,
@@ -905,6 +912,15 @@ final class AIService {
         }
 
         let endedAt = Date()
+        AgentDiagnostics.toolFinished(
+            name: call.name.rawValue,
+            step: step,
+            status: result.ok ? "succeeded" : "failed",
+            startedAt: startedAt,
+            endedAt: endedAt,
+            deduplicated: wasDeduplicated,
+            detail: result.ok ? nil : result.observation
+        )
         let spanKind: AgentTraceSpanKind = call.name == .loadSkill
             ? .skill
             : .tool

@@ -4,8 +4,12 @@
 - 决策阶段：2026-07-30
 - 部分替代：[ADR 0005](0005-trace-span-event-observability.md) 中“最终回复下挂 Skill/Tool 时间线”的聊天呈现方案
 - 后续替代：[ADR 0016](0016-conversation-turn-attempt-and-footprint-projection.md) 将一条 Turn 扩展为多次 Attempt
-- 后续修订：[ADR 0077](0077-same-turn-identity-merge-and-additive-inline-review.md) 确认原位审查卡不得过滤 Event Cards
-- 下游落地：[BUG 0023](../bugs/0023-same-turn-multi-exercise-merged-into-one.md)
+- 后续修订：
+  - [ADR 0077](0077-same-turn-identity-merge-and-additive-inline-review.md) 确认原位审查卡不得过滤 Event Cards
+  - [ADR 0085](0085-record-cards-follow-the-producing-step.md) 把原位卡纳入同一条有序渲染，跟随产生它的那一步
+- 下游落地：
+  - [BUG 0023](../bugs/0023-same-turn-multi-exercise-merged-into-one.md)
+  - [BUG 0024](../bugs/0024-streaming-cross-actor-swiftdata-crash.md)
 
 ## 背景
 

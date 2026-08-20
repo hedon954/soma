@@ -56,23 +56,23 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0050](0050-per-turn-tool-group-exposure-and-parallel-calls.md) | 部分已替代 | 每轮工具组预选、expand_tool_group 逃生、并行 tool_calls 与历史帧 clearing；feedback 组由 0054 增加；按信号预选由 0081 替代 |
 | [0051](0051-authenticated-in-app-feedback-email-delivery.md) | 部分已替代 | 应用内多模态反馈经认证 Server 和临时上传投递到固定维护者邮箱；邮件供应商由 0052 替代 |
 | [0052](0052-gmail-self-delivery-for-in-app-feedback.md) | 部分已替代 | Gmail OAuth 从 `hedonwang@gmail.com` 向同一邮箱自发自收；个人阶段的凭据位置由 0053 临时替代 |
-| [0053](0053-personal-only-direct-qq-mail-feedback.md) | 已采纳，仅限个人使用阶段 | App 直连 QQ SMTP 并投递到固定 Gmail；外部分发由 online check 强制迁移凭据 |
-| [0054](0054-device-executed-chat-feedback-tool.md) | 已采纳 | Chat 通过无参数固定 Tool 提交当前 Turn 原文与媒体；本机等待 SMTP，远程模式交回设备执行 |
+| [0053](0053-personal-only-direct-qq-mail-feedback.md) | 部分已替代，仅限个人使用阶段 | App 直连 QQ SMTP 并投递到固定 Gmail；外部分发由 online check 强制迁移凭据；只承载用户填写内容的边界由 0083 部分替代 |
+| [0054](0054-device-executed-chat-feedback-tool.md) | 部分已替代 | Chat 通过无参数固定 Tool 提交当前 Turn 原文与媒体；本机等待 SMTP，远程模式交回设备执行；只有用户明确意图才投递的边界由 0083 部分替代 |
 | [0055](0055-hybrid-daily-conversation-sessions.md) | 部分已替代 | 自动按日解析保留；可编辑业务日与 Turn 日期覆盖由 0072 修订 |
 | [0056](0056-trusted-selective-multimodal-context.md) | 部分已替代 | 可信时间、token 预算与选择性媒体保留；滚动摘要由 0070 修订 |
 | [0057](0057-direct-video-capability-and-observable-fallback.md) | 已采纳 | 按 provider/model 能力直传视频，失败后才按需抽帧并诚实降级 |
 | [0058](0058-first-delta-deadline-and-bounded-retry.md) | 已采纳 | 8/10/20 秒首增量门禁、单次重试、idle/total timeout 与取消传播 |
-| [0059](0059-precise-tools-and-reviewable-meal-items.md) | 部分已替代 | 可审查饮食分项保留；通用查询与 CRUD 由 0069 的强类型 Tool 替代 |
+| [0059](0059-precise-tools-and-reviewable-meal-items.md) | 部分已替代 | 可审查饮食分项保留；通用查询与 CRUD 由 0069 的强类型 Tool 替代；只读审查由 0084 修订为聊天内可编辑 |
 | [0060](0060-guided-performance-workout-entry-projection.md) | 部分已替代 | 终态动作投影保留；一对一 projection key 与左右/时长证据由 0073 修订 |
 | [0061](0061-discoverable-conversation-session-entry.md) | 已采纳 | 会话抽屉同时保留左上角时间按钮、左缘手势与 VoiceOver 操作 |
 | [0062](0062-user-resumed-llm-interruption-barrier.md) | 已采纳 | 明确欠费只由用户释放，后续消息受严格 FIFO 屏障约束 |
 | [0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) | 部分已替代 | 失败 step 同气泡续跑和冻结业务时间保留；墙钟预算由 0067 改为活动执行预算 |
-| [0064](0064-deterministic-quick-write-and-latest-inline-review.md) | 部分已替代 | 未修改 typed 快捷训练直写本地，最新 AI 回复提供原位记录 CRUD 与修订上下文；原位卡与 Event Cards 共存、保存确认由 0077 修订 |
+| [0064](0064-deterministic-quick-write-and-latest-inline-review.md) | 部分已替代 | 未修改 typed 快捷训练直写本地，最新 AI 回复提供原位记录 CRUD 与修订上下文；原位卡与 Event Cards 共存、保存确认由 0077 修订，饮食整餐字段编辑由 0084 替代 |
 | [0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) | 部分已替代 | 明确副作用意图和原生协议保留；Prompt v2 与 Skill 最小工具集由 0069 修订；按意图预选 Tool 由 0081 替代 |
 | [0066](0066-bundled-action-illustration-coverage.md) | 已采纳 | 静默内置目录至少维持一百个 common action 专属离线图 |
 | [0067](0067-separate-business-time-and-active-loop-budget.md) | 部分已替代 | 活动执行预算保持；记录发生时间由 0072 从 Loop 时间拆分 |
 | [0068](0068-versioned-unified-agent-model-input.md) | 部分已替代 | 设备生成统一输入保持；Prompt、Skill 与 Tool v3 由 0069 升级 |
-| [0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) | 部分已替代 | 分层 Prompt、动态 Skill Middleware 与按领域强类型 Tool；批量 create 与本机分配记录 ID 由 0078 修订；未选 Skill 剪枝由 0081 替代 |
+| [0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) | 部分已替代 | 分层 Prompt、动态 Skill Middleware 与按领域强类型 Tool；批量 create 与本机分配记录 ID 由 0078 修订；未选 Skill 剪枝由 0081 替代；Skill 绑定工具白名单由 0082 替代 |
 | [0070](0070-reviewable-rolling-session-compaction.md) | 已采纳 | 十轮外对话在 Loop 前形成可追溯、可回退的替代式滚动摘要 |
 | [0071](0071-integer-business-identities-and-explicit-relations.md) | 部分已替代 | 本机业务身份、训练关系与启动迁移门禁；历史 VersionedSchema 打开路径由 0075 替代 |
 | [0072](0072-session-business-date-and-record-occurrence-time.md) | 已采纳 | Session 业务日与记录发生时间分离，Tool 可显式覆盖 occurred_at |
@@ -80,11 +80,15 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) | 已采纳，实施与真机验收中 | 相机完整 activation 有界、camera-ready preflight、部分录像证据和系统中断恢复 |
 | [0075](0075-current-swiftdata-schema-without-historical-versions.md) | 已采纳 | 只打开当前 SomaDataSchema，不维护历史 VersionedSchema 链；启动门禁继续做业务回填 |
 | [0076](0076-exercise-owned-laterality-and-target-kind.md) | 已采纳 | 侧别与按次数/按时长归 `ExerciseDefinition`；组与记录只编辑动作定义下有意义的参数 |
-| [0077](0077-same-turn-identity-merge-and-additive-inline-review.md) | 部分已替代 | 原位审查卡不得替换 Event Cards，保存需可见确认；同一 Turn 按身份合并由 0079 删除 |
+| [0077](0077-same-turn-identity-merge-and-additive-inline-review.md) | 部分已替代 | 原位审查卡不得替换 Event Cards，保存需可见确认；同一 Turn 按身份合并由 0079 删除，一条饮食记录只投影一张卡由 0084 替代，卡片位置由 0085 替代 |
 | [0078](0078-batch-create-exercise-and-workout.md) | 部分已替代 | `create_exercise` / `create_workout` 一次写入多条；新建训练记录 ID 由本机分配；整批重试身份合并由 0079 删除 |
 | [0079](0079-create-inserts-update-by-id.md) | 已采纳 | 训练、饮食、身体的 create 每次都新增；纠正只走 update；删除 create 路径上的同一 Turn/身份/纠错词合并 |
 | [0080](0080-conversation-session-swipe-delete.md) | 已采纳 | 历史抽屉左滑删除对话聊天图；不删除训练、饮食、身体等业务记录；在途 Job 拒绝删除 |
-| [0081](0081-default-full-tool-registration-and-selected-skill-subset.md) | 已采纳 | 未选 Skill 注册当前协议全部 Tool；选中快捷 Skill 只注册白名单绑定子集；Loop 开始时判断一次 |
+| [0081](0081-default-full-tool-registration-and-selected-skill-subset.md) | 已替代 | 未选 Skill 注册当前协议全部 Tool；Loop 开始时判断一次仍有效，选中场景的曝光来源由 0082 替代 |
+| [0082](0082-shortcut-owned-tool-bindings-and-method-only-skills.md) | 已采纳 | 输入框快捷按钮持有工具白名单并可完整 CRUD；Skill 只保留专业方法，分组降级为设置页分类 |
+| [0083](0083-local-diagnostics-log-and-silent-crash-reporting.md) | 已采纳，个人使用阶段 | 本机滚动诊断日志、启动哨兵与 MetricKit 崩溃证据；报告默认静默上报并留盘重试，可一键关闭 |
+| [0084](0084-inline-meal-breakdown-and-derived-totals.md) | 已采纳 | 饮食原位审查分为可编辑菜品清单卡与只读派生汇总卡；缺项保持为空，记录时间使用钟点 |
+| [0085](0085-record-cards-follow-the-producing-step.md) | 已采纳 | 原位卡插在产生它的那一步之后，文字与卡片交替出现；重复引用只渲染一张卡，无法归位的兜底在末尾 |
 
 新决策使用 [ADR 模板](template.md)。
 

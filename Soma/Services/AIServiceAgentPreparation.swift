@@ -12,6 +12,7 @@ struct AgentRunPreparationRequest {
     var context: String
     var requestedRoute: AIModelRoute?
     var selectedSkillID: String?
+    var selectedShortcutID: String?
     var checkpoint: AgentLoopCheckpoint?
 }
 
@@ -82,11 +83,7 @@ extension AIService {
         let historyForPrompt = request.checkpoint == nil
             ? request.history
             : request.history.map(removingImages)
-        var exposedGroups = restoredToolGroups(request)
-        if exposedGroups.isEmpty {
-            exposedGroups = AgentToolExposurePolicy.groups(selectedSkill: selectedSkill)
-        }
-        let exposedTools = AgentToolExposurePolicy.tools(for: exposedGroups)
+        let exposedTools = exposedTools(request)
         let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
         let modelInput = try AgentModelInputBuilder.build(
             systemPrompt: systemPrompt,
@@ -115,7 +112,7 @@ extension AIService {
         var toolState = AgentToolLoopState(
             messages: messages,
             tools: exposedTools.map(\.chatTool),
-            exposedGroups: exposedGroups
+            exposedToolNames: exposedTools.map(\.rawValue)
         )
         let batches = request.checkpoint?.toolBatches ?? []
         restoreCheckpointBatches(batches, state: &toolState)
@@ -160,7 +157,7 @@ extension AIService {
                     result: $0.result
                 )
             },
-            exposedGroups: state.exposedGroups.map(\.rawValue).sorted(),
+            exposedToolNames: state.exposedToolNames,
             nextModelStep: nextModelStep,
             toolBatches: batches
         )
@@ -190,13 +187,19 @@ extension AIService {
         return AgentOutcome(finalAnswer: answer, observations: observations)
     }
 
-    private func restoredToolGroups(
+    /// ADR 0082：恢复优先沿用 checkpoint 的曝光集合；首轮按选中的快捷按钮收窄，
+    /// 未选快捷按钮时全量曝光。
+    private func exposedTools(
         _ request: AgentRunPreparationRequest
-    ) -> Set<AgentToolGroup> {
-        if let checkpoint = request.checkpoint, !checkpoint.exposedGroups.isEmpty {
-            return Set(checkpoint.exposedGroups.compactMap(AgentToolGroup.init(rawValue:)))
+    ) -> [AgentToolName] {
+        let restored = request.checkpoint?.restoredToolNames ?? []
+        if !restored.isEmpty {
+            return AgentToolExposurePolicy.tools(names: restored)
         }
-        return []
+        let shortcut = request.selectedShortcutID.flatMap {
+            AgentInputShortcutStore.shortcut(id: $0, defaults: defaults)
+        }
+        return AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
     }
 
     private func removingImages(

@@ -643,7 +643,10 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
     var lastCompletedStep: Int
     var assistantPassages: [String]
     var observations: [AgentCheckpointObservation]
-    var exposedGroups: [String]
+    /// ADR 0082：恢复时按工具名还原曝光集合。
+    var exposedToolNames: [String]
+    /// 在盘的旧 checkpoint 只记录了分组；解码后转换成工具名，不再写入新值。
+    var legacyExposedGroups: [String]
     var nextModelStep: Int?
     var toolBatches: [AgentCheckpointToolBatch]?
 
@@ -651,23 +654,72 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
         lastCompletedStep: Int,
         assistantPassages: [String],
         observations: [AgentCheckpointObservation],
-        exposedGroups: [String],
+        exposedToolNames: [String],
+        legacyExposedGroups: [String] = [],
         nextModelStep: Int? = nil,
         toolBatches: [AgentCheckpointToolBatch]? = nil
     ) {
         self.lastCompletedStep = lastCompletedStep
         self.assistantPassages = assistantPassages
         self.observations = observations
-        self.exposedGroups = exposedGroups
+        self.exposedToolNames = exposedToolNames
+        self.legacyExposedGroups = legacyExposedGroups
         self.nextModelStep = nextModelStep
         self.toolBatches = toolBatches
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case lastCompletedStep
+        case assistantPassages
+        case observations
+        case exposedToolNames
+        case legacyExposedGroups = "exposedGroups"
+        case nextModelStep
+        case toolBatches
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lastCompletedStep = try container.decode(Int.self, forKey: .lastCompletedStep)
+        assistantPassages = try container.decode(
+            [String].self,
+            forKey: .assistantPassages
+        )
+        observations = try container.decode(
+            [AgentCheckpointObservation].self,
+            forKey: .observations
+        )
+        exposedToolNames = try container.decodeIfPresent(
+            [String].self,
+            forKey: .exposedToolNames
+        ) ?? []
+        legacyExposedGroups = try container.decodeIfPresent(
+            [String].self,
+            forKey: .legacyExposedGroups
+        ) ?? []
+        nextModelStep = try container.decodeIfPresent(Int.self, forKey: .nextModelStep)
+        toolBatches = try container.decodeIfPresent(
+            [AgentCheckpointToolBatch].self,
+            forKey: .toolBatches
+        )
+    }
+
+    /// 恢复时的有效曝光集合：新 checkpoint 直接用工具名，旧 checkpoint 由分组展开。
+    var restoredToolNames: [String] {
+        if !exposedToolNames.isEmpty {
+            return exposedToolNames
+        }
+        let groups = Set(legacyExposedGroups.compactMap(AgentToolGroup.init(rawValue:)))
+        return groups.isEmpty
+            ? []
+            : AgentToolExposurePolicy.toolNames(for: groups)
     }
 
     static let empty = AgentLoopCheckpoint(
         lastCompletedStep: 0,
         assistantPassages: [],
         observations: [],
-        exposedGroups: []
+        exposedToolNames: []
     )
 }
 
@@ -1338,6 +1390,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
     case trendAnalysis = "trend_analysis"
     case trainingVolumeAnalysis = "training_volume_analysis"
     case calorieEstimation = "calorie_estimation"
+    case workoutLogging = "workout_logging"
 
     var id: String {
         rawValue
@@ -1353,6 +1406,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .trendAnalysis: "运动趋势分析"
         case .trainingVolumeAnalysis: "运动量分析"
         case .calorieEstimation: "运动热量估算"
+        case .workoutLogging: "训练记录"
         }
     }
 
@@ -1366,6 +1420,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .trendAnalysis: "分析训练、体重和饮食的周期趋势，区分信号、噪声和缺失数据。"
         case .trainingVolumeAnalysis: "按可验证记录计算训练容量，并支持不同时间粒度的可比分析。"
         case .calorieEstimation: "用本地 MET 规则和可追溯时长估算训练消耗，不让模型自由计算。"
+        case .workoutLogging: "把自然语言或图片里的训练内容写成可审查的训练记录，缺失字段保持为空。"
         }
     }
 
@@ -1379,35 +1434,12 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .trendAnalysis: "用户询问跨日或跨周期的训练、饮食、身体趋势时"
         case .trainingVolumeAnalysis: "用户询问训练量、容量、频率或周期对比时"
         case .calorieEstimation: "用户希望估算训练消耗或记录可计算训练时"
+        case .workoutLogging: "用户描述刚完成的训练、报组次重量或要求补记训练时"
         }
     }
 
     var defaultsKey: String {
         "ai.react.skill.\(rawValue)"
-    }
-
-    var toolGroups: Set<AgentToolGroup> {
-        switch self {
-        case .gymAnalysis: [.gym]
-        case .trainingPlan: [.exercises, .plans]
-        case .movementAnalysis: [.exercises, .workouts, .review]
-        case .nutritionAnalysis: [.meals]
-        case .postureAnalysis: [.body]
-        case .trendAnalysis: [.workouts, .meals, .body]
-        case .trainingVolumeAnalysis: [.workouts]
-        case .calorieEstimation: [.exercises, .workouts]
-        }
-    }
-
-    static var defaultQuickSkills: [AgentSkill] {
-        [
-            .trainingPlan,
-            .nutritionAnalysis,
-            .movementAnalysis,
-            .postureAnalysis,
-            .trendAnalysis,
-            .gymAnalysis
-        ]
     }
 
     static var catalogForToolDescription: String {
@@ -1466,7 +1498,9 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             2. 热量、蛋白质、碳水和脂肪优先给合理区间；写入单值时使用区间中位估计，并在 note 中保留估算依据和误差来源。
             3. 不把照片外不可见的油、酱料或配料当作确定事实，可作为可能的偏差来源提示。
             4. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。纠正、补图或改已有餐必须先 list/get 再用 update_meal。无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
-            5. 记录成功后最多补充两句不重复结果卡数据的教练说明。提供平衡饮食建议，不使用羞辱性语言，不把估算当作医学或营养治疗结论。
+               不要猜测用餐时间：用户没有明确说时间就省略 occurred_at，由 App 使用发送时刻（含钟点）；只有用户明确给出时间时才写带时区的完整 ISO-8601 时间，不要写只有日期的值。
+            5. 调用 create_meal 或 update_meal 之前，先用一句话说明你识别到了什么（例如“我帮你识别到了以下食物信息。”）。这句话不列菜名、份量和数字，结果卡会显示它们。
+            6. 记录成功后最多补充两句不重复结果卡数据的教练说明。提供平衡饮食建议，不使用羞辱性语言，不把估算当作医学或营养治疗结论。
             """
         case .postureAnalysis:
             """
@@ -1523,6 +1557,23 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             4. App 使用 2024 Adult Compendium 的 MET 口径，按 MET × 体重(kg) × 时长(小时)计算总消耗估算并四舍五入为整数 kcal。
             5. 缺少体重，或既无明确时长也无法用完整组次与间歇推算时，不生成热量值。向用户说明缺少什么，不补默认值。
             6. MET 只是人群平均近似，抗阻训练的间歇性使误差可能较大。回答使用“预计约”并避免把数值当作精确测量或医疗结论。
+            """
+        case .workoutLogging:
+            """
+            # 训练记录
+
+            目标：把用户口述、文字或图片里的训练内容一次写成结构完整、可回看编辑的训练记录。
+
+            执行规则：
+            1. 先 search_exercises 复用已有动作；确实没有时才 create_exercise，然后用返回的
+               exercise_id 一次 create_workout 写入本次全部动作，不要一个动作调用一次。
+            2. 组数、次数、重量、间歇、时长、RIR 只写用户明确给出或图片明确可读的值。没提到的字段
+               必须省略，不能用常见值补齐，也不能写 0 代替未知。
+            3. 自重动作不要编造外部重量；单侧动作按用户表述记录，不自行折算左右合计。
+            4. 用户在纠正已有训练时，先 list_workouts 或 get_workout 找到目标记录，再用
+               update_workout 修改，不要新建重复记录。
+            5. 写入成功后最多两句说明，只补充结果卡看不到的信息（例如省略了哪些字段、需要用户确认
+               什么），不复述已经在卡片里的数字。
             """
         }
     }

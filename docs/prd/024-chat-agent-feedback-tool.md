@@ -4,6 +4,9 @@
 - 日期：2026-08-11
 - 修订自：[PRD 004](004-soma-current-product.md) 的聊天与隐私边界；[PRD 022](022-react-reliability-and-context-awareness.md) 的工具组；[PRD 023](023-in-app-multimodal-feedback.md) 的反馈入口与投递规则
 - 上游依据：维护者明确要求用户可直接在 Chat 中提交反馈
+- 后续修订：
+  - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 在同一投递链路上
+    增加默认静默的崩溃诊断上报；用户明确提交才发送的边界只覆盖反馈本身
 - 下游落地：[ADR 0054](../adr/0054-device-executed-chat-feedback-tool.md)
 
 ## 用户结果

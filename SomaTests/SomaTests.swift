@@ -310,7 +310,7 @@ final class SomaTests: XCTestCase {
         AgentSkill.movementAnalysis.save(customizedSkill, in: defaults)
         let systemPrompt = ReActAgentPrompt.system(defaults: defaults)
 
-        XCTAssertEqual(AgentSkill.allCases.count, 8)
+        XCTAssertEqual(AgentSkill.allCases.count, 9)
         XCTAssertTrue(systemPrompt.contains(AgentSkill.movementAnalysis.rawValue))
         XCTAssertTrue(systemPrompt.contains(AgentSkill.movementAnalysis.summary))
         XCTAssertFalse(systemPrompt.contains(customizedSkill))

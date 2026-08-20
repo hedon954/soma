@@ -1,11 +1,14 @@
 # BUG 0020：带练相机完整 activation 无截止且极短录像误报成功
 
-- 状态：修复中；自动化与维护者真机验收尚未完成
+- 状态：修复中并部分修订（见 BUG 0025）；自动化与维护者真机验收尚未完成
 - 发现日期：2026-08-16
 - 影响范围：带练自动/手动录像、相机唤醒、失败可见性、系统中断与视频证据真值
 - 修订自：
   - [BUG 0013](0013-guided-recording-startup-silent-stall.md) 的启动截止与失败事件修复
   - [BUG 0019](0019-guided-recording-attempt-terminal-and-duplicate-alerts.md) 的 attempt 单终态与成功文件保留修复
+- 后续修订：
+  - [BUG 0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) 定位到录像开始后
+    预览交接重放几何会改写视频连接并提前终止录像，并把失败原因具体化
 - 下游落地：[ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
 
 ## 症状

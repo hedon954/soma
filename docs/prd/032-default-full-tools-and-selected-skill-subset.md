@@ -7,7 +7,9 @@
   - [PRD 022](022-react-reliability-and-context-awareness.md) 中每轮按关键词和本机状态预选工具组的边界
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 中建议类问题不暴露写入 Tool 的边界
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 中通用建议发送空 Tool 集、未选 Skill 按输入剪枝的边界
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 把「选中 Skill 决定
+    子集」改为「选中快捷按钮决定子集」；未选时全量曝光继续有效
 - 上游依据：维护者对当前 ReAct Loop 工具注册规则的纠正：未选 Skill 必须是完整默认集，不得按句子剪枝
 - 下游落地：
   - [ADR 0081](../adr/0081-default-full-tool-registration-and-selected-skill-subset.md)

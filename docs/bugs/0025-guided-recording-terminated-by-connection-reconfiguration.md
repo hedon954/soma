@@ -1,0 +1,58 @@
+# BUG 0025：带练录像被连接重配置提前终止，且失败原因不可见
+
+- 状态：已修复，待真机复验
+- 发现日期：2026-08-20
+- 影响范围：带练自动/手动录像、录像失败提示、录像诊断日志
+- 修订自：
+  - [BUG 0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) 的完整 activation
+    截止与部分录像证据修复
+- 上游依据：
+  - [ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
+- 下游落地：
+  - [PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
+  - [ADR 0083](../adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
+
+## 症状
+
+带练开始录像后很快结束，界面提示「系统提前结束了录像」。提示不说明是存储不足、被其它 App 抢占、
+系统中断还是别的原因，用户无法判断该怎么处理。设备上留下一个可播放但极短的文件。
+
+## 根因
+
+录像开始本身会触发一次相机几何重放：
+
+`didStartRecordingTo` → `cameraStateChanged(.recording)` → `mode = .expandedCapture` →
+SwiftUI 更换 preview host → `attachPreviewLayer` 重绑 `AVCaptureSession` 并调用
+`applyCaptureGeometry`，后者在录像进行中改写 `AVCaptureMovieFileOutput` 的视频连接旋转与镜像。
+
+AVFoundation 因此结束当前录制，并留下一个可播放的短文件。这条路径落到「非预期结束」分支，
+分支使用固定文案且丢弃 `Error` 对象，所以真实原因既不显示也不落日志。
+
+`AVCaptureSession.automaticallyConfiguresApplicationAudioSession` 保持默认开启，而带练在同一时刻
+播报语音提示，音频会话竞争会放大中断概率。
+
+## 修复
+
+- `applyCaptureGeometry` 的 movieOutput 分支加 `isRecording == false` 守卫。录像前已锁定几何，
+  录像中改写既违规也无用；preview 分支保留。
+- `attachPreviewLayer` 在 `layer.session === captureSession` 时不再 `session = nil` 重绑，
+  录像中的 host 交接只更新 preview。
+- 配置阶段设 `automaticallyConfiguresApplicationAudioSession = false`（本就没有音频输入），
+  并把 `beginCurrentSet` 的语音播报移到录像真正开始之后。
+- 新增 `WorkoutRecordingFailureDiagnosis`：把 `AVError.Code` 与 `AVCaptureSession.InterruptionReason`
+  映射为具体中文原因，并附带 `（domain code · stage）` 技术标识。非预期结束与中断都改用这份诊断，
+  同时写入诊断日志。
+
+## 回归门禁
+
+- 自动化测试：错误码到文案映射、中断原因到文案映射、未知原因保留原始码、部分与完全失败文案保留
+  技术标识。
+- `make check` 静态门禁：`applyCaptureGeometry` 必须保留录像中不改写 movieOutput 的守卫。
+- 手工验收：真机连续 3 组带练录像；分别验证后台切换、来电中断与语音提示开关，确认提示给出对应原因，
+  诊断日志能查到阶段与技术标识。录像根因的最终结论以真机复验为准。
+
+## 验证
+
+- `WorkoutRecordingFailureDiagnosisTests`
+- `GuidedWorkoutRecordingRecoveryTests`
+- 夹具只使用虚构动作与本地临时文件，不含真实身体影像。

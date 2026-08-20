@@ -7,6 +7,8 @@
   - [PRD 029](029-unified-local-remote-agent-model-input.md) 将稳定 Prompt、按意图 Tool 和并行语义统一到本地/远程 Backend
   - [PRD 030](030-agent-prompt-skill-context-and-tool-v3.md) 以条件上下文、Skill 直载和强类型 Tool 进一步缩短执行路径
   - [PRD 032](032-default-full-tools-and-selected-skill-subset.md) 取消建议零 Tool 与按意图预选；未选 Skill 注册完整当前协议 Tool
+  - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 把饮食原位审查扩展为
+    可编辑菜品卡与派生汇总卡；训练、身体原位 CRUD 边界不变
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的当前教练、进展、设置、计划与 Agent 失败重试基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的计划处方可发现性、快捷训练记录与内置动作图覆盖

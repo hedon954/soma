@@ -141,6 +141,8 @@ struct WorkoutRecordingAttemptLifecycle: Equatable {
 }
 
 enum WorkoutRecordingDiagnostics {
+    /// ADR 0083：录像阶段既写 OSLog 也写本机滚动日志，崩溃后仍能回读到最后几步。
+    fileprivate static let category = "workout-recording"
     private static let logger = Logger(
         subsystem: "top.hedon.soma",
         category: "GuidedWorkoutRecording"
@@ -152,6 +154,18 @@ enum WorkoutRecordingDiagnostics {
         error: Error
     ) {
         logger.error("\(metadata(stage: stage, attemptID: attemptID, error: error), privacy: .public)")
+        let nsError = error as NSError
+        DiagnosticsLogStore.shared.append(
+            category: category,
+            message: "录像失败",
+            fields: [
+                "stage": stage,
+                "attempt_id": attemptID?.uuidString ?? "none",
+                "domain": nsError.domain,
+                "code": "\(nsError.code)",
+                "description": error.localizedDescription
+            ]
+        )
     }
 
     static func breadcrumb(
@@ -163,6 +177,15 @@ enum WorkoutRecordingDiagnostics {
         let resolvedDetail = detail ?? "none"
         logger.notice(
             "stage=\(stage, privacy: .public) attempt_id=\(resolvedAttemptID, privacy: .public) detail=\(resolvedDetail, privacy: .public)"
+        )
+        DiagnosticsLogStore.shared.append(
+            category: category,
+            message: "录像阶段",
+            fields: [
+                "stage": stage,
+                "attempt_id": resolvedAttemptID,
+                "detail": resolvedDetail
+            ]
         )
     }
 
@@ -179,6 +202,36 @@ enum WorkoutRecordingDiagnostics {
     static func interruption(reason: String, attemptID: UUID? = nil) {
         logger.error(
             "stage=interruption attempt_id=\(attemptID?.uuidString ?? "none", privacy: .public) reason=\(reason, privacy: .public)"
+        )
+        DiagnosticsLogStore.shared.append(
+            category: category,
+            message: "录像被中断",
+            fields: [
+                "attempt_id": attemptID?.uuidString ?? "none",
+                "reason": reason
+            ]
+        )
+    }
+
+    /// BUG 0025：录像自己结束的那条分支原来不落任何诊断。这里恒定记录具体原因与技术标识，
+    /// 让 Console 与诊断报告都能解释"录像无法继续"。
+    static func unexpectedFinish(
+        attemptID: UUID,
+        diagnosis: WorkoutRecordingFailureDiagnosis,
+        error: Error?
+    ) {
+        logger.error(
+            "stage=finish-unexpected attempt_id=\(attemptID.uuidString, privacy: .public) technical=\(diagnosis.technical, privacy: .public)"
+        )
+        DiagnosticsLogStore.shared.append(
+            category: category,
+            message: "录像提前结束",
+            fields: [
+                "attempt_id": attemptID.uuidString,
+                "cause": diagnosis.cause,
+                "technical": diagnosis.technical,
+                "has_error": error == nil ? "false" : "true"
+            ]
         )
     }
 }

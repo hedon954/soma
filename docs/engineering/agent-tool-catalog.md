@@ -7,7 +7,7 @@
 
 - 名称、描述、严格参数 Schema：`Soma/Services/ReActAgent.swift`。
 - 分组与 Loop 开始时的暴露：`Soma/Services/AgentToolExposurePolicy.swift`。
-- Skill 权限白名单：`Soma/Services/AgentSkillRegistry.swift`。
+- 快捷按钮的工具白名单：`Soma/Services/AgentInputShortcut.swift`。
 - 设备执行：`Soma/Services/ConversationRecorderTypedTools.swift` 及各领域扩展。
 - 公共结果与本地二次校验：`AgentToolResultV2.swift`、`ConversationRecorderToolV2.swift`。
 - 本地/远程统一输入：`AgentModelInput.swift`；远程注册表：`Server/src/tool-registry.ts`。
@@ -19,11 +19,13 @@
 运行时只解码当前协议 32 个名称。每次请求把当轮允许的集合放进 API `tools` 参数；System
 Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，整轮固定。
 
-- 未预选 Skill：注册当前协议全部 32 个 Tool，含 `load_skill`。Skill 目录完整可见。不做关键词或本机状态剪枝。
-- 预选 Skill：直接注入完整 Skill Markdown、专属上下文，并只暴露该 Skill 声明且通过 App
-  白名单的 Tool 组；不注册 `load_skill`。
+- 未选快捷按钮：注册当前协议全部 32 个 Tool，含 `load_skill`。Skill 目录完整可见。不做关键词或本机状态剪枝。
+- 选中快捷按钮：只暴露该按钮 `toolNames` 与当前协议的交集；按钮绑定 Skill 时首轮直载完整
+  Markdown 与专属上下文。ADR 0082 之后曝光边界由按钮持有，Skill 不再声明工具。
+- 分组（`AgentToolGroup`）只是设置页里勾选工具的分类，不是运行时单位。
 - 已经预加载的事实足够时不得重复查询。
-- 未知 Tool 名称解码失败，不能执行。
+- 未知 Tool 名称在保存快捷按钮与运行时都被丢弃，解码失败不能执行。
+- 每次模型调用都把本轮工具名写进 Trace model span 与诊断日志（ADR 0083）。
 
 ## 当前 32 个 Tool
 
@@ -49,6 +51,7 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 - 计划的每个动作也必须绑定动作库 `exercise_id`。
 - 训练、饮食、身体 create/update 都支持可选 `occurred_at`。它是带时区 ISO-8601 时间；
   省略时使用 Job 从原始用户 Turn 冻结的 `defaultOccurredAt`，重试、排队和跨午夜不会漂移。
+  `defaultOccurredAt` 保留发送时刻的钟点，不是业务日零点；用户没有明确说时间就应省略。
 - list/get/create/update/delete 彼此独立；get/update/delete 必须传对应领域的精确 Int64 ID。
 - create 每次都新增独立记录，同一轮可多次调用；纠正、补图或改已有记录必须先 list/get 再 update。
 - 每个对象 Schema 都设置 `additionalProperties: false`；兼容 Provider 时发送 `strict: true`，
@@ -72,6 +75,6 @@ ok, code, message, data?, record_refs?, page?, error?
 
 - 新增、删除、重命名 Tool 或改变 Schema/输出时，同一提交更新 iOS 注册表、Server
   注册表、统一 Envelope、本文和确定性测试。
-- Tool 和 Tool 权限是 App 固定安全边界；用户可编辑 Prompt 或 Skill 只能在白名单内收窄，
-  不能动态新增任意工具。
+- Tool 和 Tool 权限是 App 固定安全边界；用户可编辑 Prompt、Skill 或快捷按钮只能在当前协议内
+  收窄，不能动态新增任意工具。
 - 旧 Server 不得静默接受新 Envelope 后降级；协议不兼容时提示更新或切换本地执行。

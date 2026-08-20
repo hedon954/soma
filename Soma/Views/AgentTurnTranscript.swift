@@ -15,12 +15,8 @@ struct AgentTurnTranscript: View {
         AgentTurnTranscriptSegments.make(from: items)
     }
 
-    private var recordReferences: [AgentRecordReference] {
-        ChatRecordReferenceResolver.references(in: items)
-    }
-
-    /// ADR 0014 / ADR 0077：按 Item 顺序渲染全部 Event Card，不按 kind 重排。
-    /// 连续 Skill/Tool 收成一条可展开过程；失败卡单独露出。原位卡放在回复末尾。
+    /// ADR 0014 / ADR 0077 / ADR 0085：按 Item 顺序渲染全部 Event Card，不按 kind 重排。
+    /// 连续 Skill/Tool 收成一条可展开过程；失败卡单独露出。写入产生的原位卡紧跟产生它的那一步。
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(segments) { segment in
@@ -33,19 +29,17 @@ struct AgentTurnTranscript: View {
                     }
                 case let .item(item):
                     AgentTurnItemCard(item: item)
+                case let .record(reference):
+                    ChatRecordEditorCard(
+                        reference: reference,
+                        sourceMessage: sourceMessage,
+                        isEditable: isEditable
+                    )
                 }
             }
 
             if isLive, !visibleItems.contains(where: { $0.status == .running }) {
                 AgentTurnWaitingCard()
-            }
-
-            if !recordReferences.isEmpty {
-                ChatRecordEditorCards(
-                    references: recordReferences,
-                    sourceMessage: sourceMessage,
-                    isEditable: isEditable
-                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

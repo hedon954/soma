@@ -267,6 +267,22 @@ final class SomaAppDelegate: NSObject, UIApplicationDelegate,
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         BackgroundRemoteUploadCoordinator.shared.activate()
+        // 单测宿主是 App 本身，测试结束会被直接杀进程；哨兵在测试里不置位也不上报。
+        guard !AppRunSentinel.isRunningUnderTests else { return true }
+        MainActor.assumeIsolated {
+            let previousRun = AppRunSentinel.shared.beginRun(
+                version: AppBuildInfo.version,
+                build: AppBuildInfo.build
+            )
+            AppLifecycleDiagnostics.launched(
+                version: AppBuildInfo.version,
+                build: AppBuildInfo.build,
+                previousRunEndedCleanly: !previousRun.endedUnexpectedly
+            )
+            CrashDiagnosticsCoordinator.shared.activate(
+                previousRun: previousRun
+            )
+        }
         return true
     }
 

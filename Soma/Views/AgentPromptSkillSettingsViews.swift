@@ -12,11 +12,10 @@ struct FixedAgentContractView: View {
     }
 }
 
-/// PRD 030：内置 Skill、本地 Skill 与最多 6 个快捷入口共享同一注册表。
+/// PRD 033：Skill 只管专业方法，工具权限与快捷入口由「输入框快捷按钮」持有。
 struct AgentSkillsListView: View {
     @State private var customizedSkills = Set<AgentSkill>()
     @State private var customSkills: [AgentCustomSkill] = []
-    @State private var quickSkillIDs: [String] = []
     @State private var editingCustomSkill: AgentCustomSkill?
     @State private var confirmsResetAll = false
 
@@ -45,7 +44,7 @@ struct AgentSkillsListView: View {
                     }
                 }
             } footer: {
-                Text("系统提示词只披露 name、description 和 when_to_use；选中快捷 Skill 时首轮直接注入全文。")
+                Text("系统提示词只披露 name、description 和 when_to_use；快捷按钮绑定的 Skill 首轮直接注入全文。")
             }
 
             Section {
@@ -70,27 +69,13 @@ struct AgentSkillsListView: View {
                         name: "新 Skill",
                         description: "",
                         whenToUse: "",
-                        content: "# 执行规则\n",
-                        toolGroupIDs: []
+                        content: "# 执行规则\n"
                     )
                 }
             } header: {
                 Text("自定义 Skills")
             } footer: {
-                Text("自定义 Skill 只能获得 App 白名单工具组，不能声明代码或任意工具。")
-            }
-
-            Section {
-                ForEach(quickSkillIDs, id: \.self) { id in
-                    if let skill = AgentSkillRegistry.descriptor(id: id) {
-                        Label(skill.title, systemImage: "line.3.horizontal")
-                    }
-                }
-                .onMove(perform: moveQuickSkills)
-            } header: {
-                Text("输入框快捷按钮")
-            } footer: {
-                Text("最多显示 6 个；在自定义 Skill 编辑页可加入或移出快捷按钮。")
+                Text("Skill 只描述做事方法，不声明工具权限；工具在「输入框快捷按钮」里勾选。")
             }
 
             Section {
@@ -122,7 +107,6 @@ struct AgentSkillsListView: View {
     private func reload() {
         customizedSkills = Set(AgentSkill.allCases.filter { $0.isCustomized() })
         customSkills = AgentSkillRegistry.customSkills()
-        quickSkillIDs = AgentSkillRegistry.quickSkillIDs()
     }
 
     private func deleteCustomSkills(at offsets: IndexSet) {
@@ -130,11 +114,6 @@ struct AgentSkillsListView: View {
             AgentSkillRegistry.delete(id: customSkills[offset].id)
         }
         reload()
-    }
-
-    private func moveQuickSkills(from offsets: IndexSet, to destination: Int) {
-        quickSkillIDs.move(fromOffsets: offsets, toOffset: destination)
-        AgentSkillRegistry.setQuickSkillIDs(quickSkillIDs)
     }
 }
 
