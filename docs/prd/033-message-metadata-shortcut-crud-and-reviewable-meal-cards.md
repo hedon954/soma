@@ -20,6 +20,7 @@
   - [ADR 0083](../adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
   - [ADR 0084](../adr/0084-inline-meal-breakdown-and-derived-totals.md)
   - [ADR 0085](../adr/0085-record-cards-follow-the-producing-step.md)
+  - [BUG 0026](../bugs/0026-remote-model-tool-list-missing-from-logs.md)
 
 ## 背景
 

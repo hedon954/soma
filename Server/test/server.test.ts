@@ -219,6 +219,33 @@ test("worker projects provider deltas before the terminal output", async () => {
   assert.equal(events.at(-1)?.kind, "output");
 });
 
+test("worker model start records every exposed tool", async () => {
+  const store = new InMemorySomaStore();
+  const input = makeJobInput({
+    allowedRemoteTools: ["load_skill"],
+    allowedDeviceTools: ["list_workouts"],
+  });
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  const worker = new AgentWorker(store, new DeterministicTestProvider());
+
+  await worker.runOnce();
+  const events = await store.events(job.id, 0, 100);
+  const modelStart = events.find((event) =>
+    event.kind === "model" && event.phase === "started"
+  );
+
+  assert.deepEqual(modelStart?.payload.exposedToolNames, [
+    "load_skill",
+    "list_workouts",
+  ]);
+  assert.equal(modelStart?.payload.exposedToolCount, 2);
+});
+
 test("worker survives process replacement and device tool result is idempotent", async () => {
   const store = new InMemorySomaStore();
   const deviceID = randomUUID();

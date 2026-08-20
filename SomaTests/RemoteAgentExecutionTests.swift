@@ -95,6 +95,36 @@ struct RemoteAgentExecutionTests {
     }
 
     @Test
+    func remoteModelStartPreservesExposedToolsInSpanMetadata() {
+        let event = RemoteAgentEvent(
+            id: UUID().uuidString,
+            jobID: UUID().uuidString,
+            sequence: 2,
+            kind: "model",
+            phase: "started",
+            payloadVersion: 1,
+            payload: [
+                "provider": .string("managed"),
+                "model": .string("configured"),
+                "mediaMode": .string("text"),
+                "requestAttempt": .number(1),
+                "exposedToolNames": .array([
+                    .string("load_skill"),
+                    .string("list_workouts")
+                ]),
+                "exposedToolCount": .number(2)
+            ],
+            createdAt: .now
+        )
+
+        let metadata = TraceSpanMetadata(remoteModelSpanMetadata(event))
+        #expect(
+            metadata.exposedToolSummary
+                == "工具 2 个：load_skill、list_workouts"
+        )
+    }
+
+    @Test
     func clientRegistersSignsAndSubmitsIdempotently() async throws {
         let identity = RemoteDeviceIdentity(usesEphemeralStorage: true)
         let server = MockRemoteAgentServer()

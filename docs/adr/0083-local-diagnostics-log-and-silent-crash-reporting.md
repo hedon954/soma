@@ -11,6 +11,7 @@
   - [PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
   - [BUG 0024](../bugs/0024-streaming-cross-actor-swiftdata-crash.md)
   - [BUG 0025](../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)
+- 下游落地：[BUG 0026](../bugs/0026-remote-model-tool-list-missing-from-logs.md)
 
 ## 背景
 

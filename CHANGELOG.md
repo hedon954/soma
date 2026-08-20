@@ -5,6 +5,20 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Fixed
+
+- 后台持续处理的每次模型调用现在会在执行日志和本机诊断日志中记录实际绑定的工具名称与数量，
+  与本机 ReAct 的可观测性保持一致。
+
+### Privacy
+
+- 只把远程 Job 已有的固定工具名称带回设备写入本机滚动日志，不新增健康数据、用户正文、密钥或
+  媒体内容的出网与留存。
+
+### Data and migration
+
+- 不新增 SwiftData 字段或 PostgreSQL migration，已有远程 Job Event 可继续兼容读取。
+
 ## [0.0.8] - 2026-08-21
 
 本次更新打磨真机走查留下的交互：图片从缩略图放大、饮食卡与详情对齐、训练/饮食历史按天折叠、
