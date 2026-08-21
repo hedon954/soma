@@ -13,6 +13,8 @@
 - 下游落地：
   - [BUG 0022](../bugs/0022-installed-v5-schema-checksum-blocks-container-open.md)
   - [BUG 0025](../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)
+  - [BUG 0026](../bugs/0026-guided-auto-recording-still-stops-without-reason.md)
+  - [PRD 035](../prd/035-guided-preview-then-record-and-immediate-share.md)
 
 ## 背景
 

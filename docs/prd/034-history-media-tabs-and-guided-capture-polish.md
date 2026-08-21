@@ -1,6 +1,6 @@
 # PRD 034：历史、媒体、Tab 与带练取景打磨
 
-- 状态：已实施
+- 状态：已实施，部分修订
 - 日期：2026-08-20
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的媒体放大、训练/饮食历史、底部 Tab 与饮食审查基线
@@ -12,7 +12,8 @@
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的训练筛选菜单与设置/日志密度
   - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 的倒计时结束先切 `.setInProgress` 再启动录像
   - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 的聊天饮食双卡片密度与执行日志内联展开 LLM 入参
-- 后续修订：暂无
+- 后续修订：
+  - [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 将自动录像改为倒计时只取景、开组后再写文件，完成后立即分享并回到训练主页
 - 上游依据：
   - [BUG 0025](../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)
 - 下游落地：[ADR 0086](../adr/0086-preview-and-history-thumbs-use-aspect-fill.md)
@@ -42,7 +43,8 @@ v0.0.7 真机走查留下八项交互与可靠性问题，可收成一轮：
    失败行仍在时间线露出最多两行错误摘要。
 5. 换到底部另一个 Tab 时保留各自子页面；再点已经选中的 Tab 才回到该 Tab 根页面。教练 Tab 回到当前
    Session，不清空对话。
-6. 自动录像在倒计时 PIP 宿主上真正开始写入之后，才切换到本组放大取景。展开预览与历史缩略按取景比例
+6. 自动录像在倒计时只取景，动作正式开始后再写文件；该时序由
+   [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 修订。展开预览与历史缩略按取景比例
    铺满裁切，不再 letterbox。
 
 ## 产品规则
@@ -82,8 +84,8 @@ v0.0.7 真机走查留下八项交互与可靠性问题，可收成一轮：
 
 ### 自动录像与取景
 
-- 倒计时结束：先在现有 PIP 宿主 `startRecording`，等到 `didStartRecordingTo` 成功后再进入
-  `.setInProgress`。
+- 倒计时结束：先进入 `.setInProgress` 并等待执行页预览宿主，再 `startRecording`。该时序由
+  [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 修订；不再在倒计时 PIP 上先写文件。
 - `startingRecording` 与 `isRecording` 均不得改写 `movieOutput` 连接几何。
 - 紧凑与放大预览都使用 `.resizeAspectFill`；保存文件仍使用已锁定的捕获几何。
 

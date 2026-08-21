@@ -611,11 +611,25 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
       schemaVersion: 2,
       arguments: {
         title: "虚构午餐",
-        items: [{ name: "豆腐", protein: 12 }],
+        total_sugar: 8,
+        glycemic_speed: "moderate",
+        glycemic_assessment: "混合餐，仅作定性估算。",
+        items: [{ name: "虚构豆腐", protein: 12, total_sugar: 1 }],
       },
       allowedNames: ["create_meal"],
     }).mutation,
     true,
+  );
+  assert.throws(() =>
+    validateDeviceTool({
+      name: "create_meal",
+      schemaVersion: 2,
+      arguments: {
+        title: "虚构午餐",
+        glycemic_speed: "certain-spike",
+      },
+      allowedNames: ["create_meal"],
+    }),
   );
   assert.equal(
     validateDeviceTool({

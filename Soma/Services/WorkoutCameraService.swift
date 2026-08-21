@@ -98,6 +98,8 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     @ObservationIgnored private var recordingStartupTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var recordingFinishTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var activePreviewHostID: UUID?
+    @ObservationIgnored private var previewHostWaiters: [WorkoutPreviewHostWaiter] = []
+    @ObservationIgnored private var previewHostWaitTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var shouldRecoverCapture = false
     @ObservationIgnored private var requiresCaptureResourceRebuild = false
     @ObservationIgnored private var ownedCaptureSessionIDs: Set<ObjectIdentifier> = []
@@ -181,7 +183,21 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         ) {
             replaceCaptureResourcesIfCurrent(captureResources)
         }
-        if state == .previewing || state == .recording {
+        if GuidedPreviewHostSettlement.shouldReuseRunningCaptureSession(
+            state: state,
+            sessionIsRunning: captureSession.isRunning,
+            sessionIsInterrupted: captureSession.isInterrupted
+        ) {
+            WorkoutRecordingDiagnostics.breadcrumb(
+                stage: "prepare-reused-running-session",
+                attemptID: pendingRecordingAttemptID
+            )
+            if state != .previewing,
+               state != .recording,
+               state != .startingRecording
+            {
+                state = .previewing
+            }
             return
         }
         if let preparationTask {
@@ -522,14 +538,31 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         videoGravity: AVLayerVideoGravity
     ) {
         guard layer === sharedPreviewLayer else { return }
+        let rebuildConnections = GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+            cameraState: state,
+            hasLivePreview: GuidedPreviewHostSettlement.hasLivePreview(
+                layerHasSession: layer.session != nil,
+                cameraState: state
+            )
+        )
         guard activePreviewHostID != hostID else {
             layer.videoGravity = videoGravity
-            applyCaptureGeometry(captureGeometry)
+            if rebuildConnections {
+                applyCaptureGeometry(captureGeometry)
+            }
             refreshPreviewConnectionState()
             return
         }
 
         activePreviewHostID = hostID
+        if !rebuildConnections {
+            layer.videoGravity = videoGravity
+            observePreviewReadiness(on: layer, hostID: hostID)
+            refreshPreviewConnectionState()
+            resumeSettledPreviewHostWaiters()
+            return
+        }
+
         previewRotationObservation = nil
         captureRotationObservation = nil
         rotationCoordinator = nil
@@ -537,11 +570,6 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         previewStartupTimeoutTask?.cancel()
         isPreviewReady = false
         previewIssueMessage = nil
-
-        // Rebuild only the lightweight preview connection after a host handoff.
-        // The capture session and movie output continue running unchanged.
-        // BUG 0025：录像开始会把界面切到放大取景，SwiftUI 因此换 preview host。此时重绑
-        // 同一个 session 只会打断预览连接，所以 session 未变时不动它。
         if layer.session !== captureSession {
             layer.session = nil
             layer.session = captureSession
@@ -552,15 +580,28 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         observePreviewReadiness(on: layer, hostID: hostID)
         refreshPreviewConnectionState()
         armPreviewStartupTimeout()
+        resumeSettledPreviewHostWaiters()
     }
 
     func detachPreviewLayer(
         _ layer: AVCaptureVideoPreviewLayer,
         hostID: UUID
     ) {
-        guard layer === sharedPreviewLayer,
-              activePreviewHostID == hostID
-        else {
+        guard layer === sharedPreviewLayer, activePreviewHostID == hostID else {
+            return
+        }
+        if !GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+            cameraState: state,
+            hasLivePreview: GuidedPreviewHostSettlement.hasLivePreview(
+                layerHasSession: layer.session != nil,
+                cameraState: state
+            )
+        ) {
+            WorkoutRecordingDiagnostics.breadcrumb(
+                stage: "preview-detach-skipped-while-recording",
+                attemptID: activeRecordingAttempt?.id,
+                detail: WorkoutRecordingDiagnostics.callStackSummary()
+            )
             return
         }
         previewRotationObservation = nil
@@ -661,8 +702,6 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         if recordingAttemptLifecycles[attempt.id]?.isFinishing == false,
            !discardCurrentRecording
         {
-            // BUG 0025：这条分支是"没人请求停止但录像自己结束了"。原来只给一句固定文案，
-            // AVFoundation 的错误被丢弃，导致用户看不到原因、日志里也查不到。
             let diagnosis = WorkoutRecordingFailureDiagnosis.make(
                 error: error,
                 stage: "finish-unexpected"
@@ -731,8 +770,6 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                 )
             }
         case .fail:
-            // BUG 0025：失败路径必须给出可行动的具体原因，而不是 AVFoundation 的
-            // "The operation could not be completed"。
             let diagnosis = WorkoutRecordingFailureDiagnosis.make(
                 error: error,
                 stage: "finish-failed"
@@ -970,9 +1007,6 @@ extension WorkoutCameraService {
                 guard let resources else { return }
                 do {
                     if !resources.isConfigured {
-                        // BUG 0025：带练录像只采视频。默认值会让 AVCaptureSession 接管
-                        // AVAudioSession，于是语音提示每次播报都在重配置同一个音频会话，
-                        // 可能把正在进行的录制打断。这里明确交出音频会话所有权。
                         resources.session
                             .automaticallyConfiguresApplicationAudioSession = false
                         resources.session.beginConfiguration()
@@ -1632,9 +1666,7 @@ extension WorkoutCameraService {
         let skipMovieOutputGeometry = state == .startingRecording
             || state == .recording
         resources.queue.async {
-            // BUG 0025：录像已经开始或即将开始后改写 movieOutput 视频连接的旋转或镜像，
-            // 会让 AVFoundation 结束这次录制并只留下几帧可播放文件。录像开始前几何已经
-            // 锁定，录像中再写既违规又没有意义，所以这里直接跳过。
+            // BUG 0025：录像已开始后改写 movieOutput 连接会结束当前文件，这里直接跳过。
             guard !skipMovieOutputGeometry, !resources.movieOutput.isRecording else {
                 WorkoutRecordingDiagnostics.breadcrumb(
                     stage: "capture-geometry-skipped-while-recording"
@@ -1694,7 +1726,6 @@ extension WorkoutCameraService {
         }
     }
 
-    /// BUG 0025：中断原因必须一路带到用户可见文案和诊断日志，不能压成一句通用提示。
     private func interrupt(
         diagnosis: WorkoutRecordingFailureDiagnosis,
         reasonCode: String
@@ -1712,6 +1743,18 @@ extension WorkoutCameraService {
             )
             return
         }
+        if GuidedPreviewHostSettlement.shouldIgnoreTransientPreviewInterruption(
+            reasonCode: reasonCode,
+            hasActiveAttempt: attempt != nil,
+            hasSessionOwner: sessionOwnership.activeOwner != nil
+        ) {
+            shouldRecoverCapture = true
+            WorkoutRecordingDiagnostics.breadcrumb(
+                stage: "interruption-ignored",
+                detail: "\(reasonCode)-while-previewing"
+            )
+            return
+        }
         shouldRecoverCapture = true
         WorkoutRecordingDiagnostics.interruption(
             reason: "\(reasonCode) \(diagnosis.cause) \(diagnosis.technical)",
@@ -1719,10 +1762,6 @@ extension WorkoutCameraService {
         )
         if let attempt {
             state = .unavailable(message)
-            // AVFoundation can report an interruption error even after it has
-            // produced a valid movie. Keep this attempt open until the file
-            // delegate resolves the success key and file contents. The finish
-            // timeout remains the sole fallback when no delegate arrives.
             recordingStartupTimeoutTask?.cancel()
             recordingStartupTimeoutTask = nil
             guard temporaryURL != nil else {
@@ -1784,41 +1823,6 @@ extension WorkoutCameraService {
         }
     }
 
-    static func shouldHandleLifecycleInterruption(
-        state: WorkoutCameraState,
-        hasActiveAttempt: Bool,
-        hasPreparation: Bool
-    ) -> Bool {
-        if hasActiveAttempt || hasPreparation {
-            return true
-        }
-        switch state {
-        case .requestingPermission,
-             .configuring,
-             .startingSession,
-             .previewing,
-             .startingRecording,
-             .recording:
-            return true
-        case .idle, .unavailable:
-            return false
-        }
-    }
-
-    static func shouldRebuildCaptureResources(
-        requiresRebuild: Bool,
-        hasActiveAttempt: Bool
-    ) -> Bool {
-        requiresRebuild && !hasActiveAttempt
-    }
-
-    static func shouldRecoverAfterInterruptionEnded(
-        isOwnedSession: Bool,
-        shouldRecover: Bool
-    ) -> Bool {
-        isOwnedSession && shouldRecover
-    }
-
     private func removeTemporaryRecordingIfPresent() {
         guard let temporaryURL else { return }
         try? FileManager.default.removeItem(at: temporaryURL)
@@ -1828,44 +1832,63 @@ extension WorkoutCameraService {
     }
 }
 
-private final class MovieRecordingDelegate:
-    NSObject,
-    @unchecked Sendable,
-    AVCaptureFileOutputRecordingDelegate
-{
-    var started: ((URL) -> Void)?
-    var completion: ((URL, Error?) -> Void)?
-
-    func fileOutput(
-        _: AVCaptureFileOutput,
-        didStartRecordingTo outputFileURL: URL,
-        from _: [AVCaptureConnection]
-    ) {
-        started?(outputFileURL)
+extension WorkoutCameraService {
+    var previewHostID: UUID? {
+        activePreviewHostID
     }
 
-    func fileOutput(
-        _: AVCaptureFileOutput,
-        didFinishRecordingTo outputFileURL: URL,
-        from _: [AVCaptureConnection],
-        error: Error?
-    ) {
-        completion?(outputFileURL, error)
+    func waitUntilPreviewHostSettled(from previousHostID: UUID?) async {
+        if GuidedPreviewHostSettlement.isSettled(
+            currentHostID: activePreviewHostID,
+            previousHostID: previousHostID
+        ) {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            previewHostWaiters.append(
+                WorkoutPreviewHostWaiter(
+                    previousHostID: previousHostID,
+                    continuation: continuation
+                )
+            )
+            previewHostWaitTimeoutTask?.cancel()
+            previewHostWaitTimeoutTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(900))
+                self?.resumeAllPreviewHostWaiters()
+            }
+        }
     }
-}
 
-@MainActor
-@Observable
-final class WorkoutRuntime {
-    let camera: WorkoutCameraService
-    let coordinator: GuidedWorkoutCoordinator
+    private func resumeSettledPreviewHostWaiters() {
+        let remaining = previewHostWaiters.filter { waiter in
+            if GuidedPreviewHostSettlement.isSettled(
+                currentHostID: activePreviewHostID,
+                previousHostID: waiter.previousHostID
+            ) {
+                waiter.continuation.resume()
+                return false
+            }
+            return true
+        }
+        previewHostWaiters = remaining
+        if remaining.isEmpty {
+            previewHostWaitTimeoutTask?.cancel()
+            previewHostWaitTimeoutTask = nil
+        }
+    }
 
-    init() {
-        let camera = WorkoutCameraService()
-        self.camera = camera
-        coordinator = GuidedWorkoutCoordinator(
-            recorder: camera,
-            cues: SystemWorkoutCueProvider()
-        )
+    private func resumeAllPreviewHostWaiters() {
+        let waiters = previewHostWaiters
+        previewHostWaiters = []
+        previewHostWaitTimeoutTask?.cancel()
+        previewHostWaitTimeoutTask = nil
+        waiters.forEach { $0.continuation.resume() }
+    }
+
+    func idlePreviewKeepingSessionOwner() async {
+        guard sessionOwnership.activeOwner != nil,
+              state != .startingRecording, state != .recording else { return }
+        shouldRecoverCapture = false
+        await stopCaptureSession()
     }
 }

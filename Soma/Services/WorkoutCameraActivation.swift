@@ -168,6 +168,13 @@ enum WorkoutRecordingDiagnostics {
         )
     }
 
+    static func callStackSummary(limit: Int = 12) -> String {
+        Thread.callStackSymbols
+            .prefix(limit)
+            .joined(separator: " | ")
+            .replacingOccurrences(of: NSHomeDirectory(), with: "~")
+    }
+
     static func breadcrumb(
         stage: String,
         attemptID: UUID? = nil,
@@ -230,7 +237,8 @@ enum WorkoutRecordingDiagnostics {
                 "attempt_id": attemptID.uuidString,
                 "cause": diagnosis.cause,
                 "technical": diagnosis.technical,
-                "has_error": error == nil ? "false" : "true"
+                "has_error": error == nil ? "false" : "true",
+                "stack": callStackSummary()
             ]
         )
     }

@@ -21,17 +21,43 @@ struct GuidedWorkoutPresentationState: Equatable {
         mode = .compact
     }
 
-    mutating func cameraStateChanged(_ state: WorkoutCameraState) {
-        if state == .recording {
-            mode = .expandedCapture
+    mutating func cameraStateChanged(
+        _: WorkoutCameraState,
+        isStartingRecording _: Bool = false
+    ) {}
+
+    mutating func phaseChanged(
+        _ phase: GuidedWorkoutPhase,
+        expandForRecording: Bool = false
+    ) {
+        if phase == .setInProgress {
+            if expandForRecording {
+                mode = .expandedCapture
+            }
         } else {
             mode = .compact
         }
     }
+}
 
-    mutating func phaseChanged(_ phase: GuidedWorkoutPhase) {
-        if phase != .setInProgress {
-            mode = .compact
+enum GuidedExpandedCaptureVisibility {
+    static func isVisible(
+        sessionIsActive: Bool,
+        mode: GuidedWorkoutPresentationMode,
+        phase: GuidedWorkoutPhase,
+        cameraState: WorkoutCameraState,
+        isStartingRecording: Bool
+    ) -> Bool {
+        guard sessionIsActive,
+              mode == .expandedCapture,
+              phase == .setInProgress
+        else { return false }
+        switch cameraState {
+        case .previewing, .startingSession, .startingRecording, .recording,
+             .configuring, .requestingPermission:
+            return true
+        case .idle, .unavailable:
+            return isStartingRecording
         }
     }
 }
@@ -41,14 +67,10 @@ enum WorkoutCaptureLayout {
         isLandscape ? 16 / 9 : 9 / 16
     }
 
-    static func compactPreviewWidth(
-        availableWidth: CGFloat,
-        isLandscape: Bool
-    ) -> CGFloat {
-        let proposed = availableWidth * (isLandscape ? 0.18 : 0.31)
-        let minimum: CGFloat = isLandscape ? 132 : 120
-        let maximum: CGFloat = isLandscape ? 176 : 148
-        return min(max(proposed, minimum), maximum)
+    static func compactPreviewSize(isLandscape: Bool) -> CGSize {
+        let width: CGFloat = isLandscape ? 210 : 132
+        let ratio = previewAspectRatio(isLandscape: isLandscape)
+        return CGSize(width: width, height: width / ratio)
     }
 
     static func landscapeControlWidth(availableWidth: CGFloat) -> CGFloat {
@@ -75,6 +97,165 @@ enum WorkoutCaptureLayout {
             availableHeight - headerHeight - controlsHeight - spacing * 2,
             0
         )
+    }
+}
+
+struct GuidedCompactCameraPreview: View {
+    let camera: WorkoutCameraService
+    let isLandscape: Bool
+    let recordingErrorMessage: String?
+    var onExpand: (() -> Void)?
+
+    var body: some View {
+        let size = WorkoutCaptureLayout.compactPreviewSize(isLandscape: isLandscape)
+        let preview = WorkoutCameraSurface(
+            camera: camera,
+            showsSafeFrame: false,
+            compact: true,
+            recordingErrorMessage: recordingErrorMessage
+        )
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
+        .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
+
+        if let onExpand {
+            preview
+                .overlay {
+                    Color.clear
+                        .contentShape(
+                            RoundedRectangle(cornerRadius: AppTheme.cardRadius)
+                        )
+                }
+                .onTapGesture(perform: onExpand)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("放大相机")
+                .accessibilityLabel(
+                    camera.state == .recording ? "正在录制，放大相机" : "相机取景，放大相机"
+                )
+        } else {
+            preview
+        }
+    }
+}
+
+enum GuidedPictureInPictureLayout {
+    static let edgePadding: CGFloat = 12
+
+    static func defaultTrailingOffset(
+        containerSize: CGSize,
+        previewSize: CGSize
+    ) -> CGSize {
+        let maxX = max((containerSize.width - previewSize.width) / 2, 0)
+        return clampedOffset(
+            CGSize(width: maxX - edgePadding, height: 0),
+            containerSize: containerSize,
+            previewSize: previewSize
+        )
+    }
+
+    static func trailingFrameOrigin(
+        containerSize: CGSize,
+        previewSize: CGSize
+    ) -> CGPoint {
+        let offset = defaultTrailingOffset(
+            containerSize: containerSize,
+            previewSize: previewSize
+        )
+        return CGPoint(
+            x: (containerSize.width - previewSize.width) / 2 + offset.width,
+            y: (containerSize.height - previewSize.height) / 2 + offset.height
+        )
+    }
+
+    static func clampedOffset(
+        _ offset: CGSize,
+        containerSize: CGSize,
+        previewSize: CGSize
+    ) -> CGSize {
+        let maxX = max((containerSize.width - previewSize.width) / 2, 0)
+        let maxY = max((containerSize.height - previewSize.height) / 2, 0)
+        return CGSize(
+            width: min(max(offset.width, -maxX), maxX),
+            height: min(max(offset.height, -maxY), maxY)
+        )
+    }
+}
+
+struct GuidedDraggableCompactCameraPreview: View {
+    let camera: WorkoutCameraService
+    let isLandscape: Bool
+    let recordingErrorMessage: String?
+    var onExpand: (() -> Void)?
+    let containerSize: CGSize
+    @State private var offset: CGSize?
+    @GestureState private var dragTranslation = CGSize.zero
+
+    var body: some View {
+        let previewSize = WorkoutCaptureLayout.compactPreviewSize(
+            isLandscape: isLandscape
+        )
+        let restOffset = offset ?? GuidedPictureInPictureLayout.defaultTrailingOffset(
+            containerSize: containerSize,
+            previewSize: previewSize
+        )
+        let displayed = GuidedPictureInPictureLayout.clampedOffset(
+            CGSize(
+                width: restOffset.width + dragTranslation.width,
+                height: restOffset.height + dragTranslation.height
+            ),
+            containerSize: containerSize,
+            previewSize: previewSize
+        )
+        ZStack {
+            GuidedCompactCameraPreview(
+                camera: camera,
+                isLandscape: isLandscape,
+                recordingErrorMessage: recordingErrorMessage,
+                onExpand: onExpand
+            )
+            .offset(x: displayed.width, y: displayed.height)
+        }
+        .frame(width: containerSize.width, height: containerSize.height)
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 8)
+                .updating($dragTranslation) { value, state, _ in
+                    state = value.translation
+                }
+                .onEnded { value in
+                    offset = GuidedPictureInPictureLayout.clampedOffset(
+                        CGSize(
+                            width: restOffset.width + value.translation.width,
+                            height: restOffset.height + value.translation.height
+                        ),
+                        containerSize: containerSize,
+                        previewSize: previewSize
+                    )
+                }
+        )
+        .accessibilityHint("按住可拖动预览窗")
+    }
+}
+
+extension View {
+    func guidedPictureInPicture(
+        camera: WorkoutCameraService?,
+        isLandscape: Bool,
+        recordingErrorMessage: String?,
+        onExpand: (() -> Void)? = nil
+    ) -> some View {
+        overlay {
+            if let camera {
+                GeometryReader { geo in
+                    GuidedDraggableCompactCameraPreview(
+                        camera: camera,
+                        isLandscape: isLandscape,
+                        recordingErrorMessage: recordingErrorMessage,
+                        onExpand: onExpand,
+                        containerSize: geo.size
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -198,9 +379,11 @@ enum GuidedCameraSurfacePlacement: Equatable {
         phase: GuidedWorkoutPhase,
         cameraState: WorkoutCameraState,
         isStarting: Bool,
-        sessionIsActive: Bool
+        sessionIsActive: Bool,
+        isCaptureTarget: Bool
     ) -> GuidedCameraSurfacePlacement {
         guard sessionIsActive,
+              isCaptureTarget,
               isStarting || cameraState != .idle
         else { return .hidden }
         switch phase {
@@ -212,6 +395,66 @@ enum GuidedCameraSurfacePlacement: Equatable {
         case .sessionReview, .completed:
             return .hidden
         }
+    }
+}
+
+enum GuidedPreviewHostSettlement {
+    static func isSettled(
+        currentHostID: UUID?,
+        previousHostID: UUID?
+    ) -> Bool {
+        guard let currentHostID else { return false }
+        return currentHostID != previousHostID
+    }
+
+    static func hasLivePreview(
+        layerHasSession: Bool,
+        cameraState: WorkoutCameraState
+    ) -> Bool {
+        guard layerHasSession else { return false }
+        switch cameraState {
+        case .requestingPermission, .configuring, .startingSession,
+             .previewing, .startingRecording, .recording:
+            return true
+        case .idle, .unavailable:
+            return false
+        }
+    }
+
+    static func shouldRebuildCaptureConnections(
+        cameraState: WorkoutCameraState,
+        hasLivePreview: Bool = false
+    ) -> Bool {
+        switch cameraState {
+        case .startingRecording, .recording:
+            false
+        case .configuring, .startingSession, .previewing:
+            !hasLivePreview
+        case .idle, .requestingPermission, .unavailable:
+            true
+        }
+    }
+
+    static func shouldReuseRunningCaptureSession(
+        state: WorkoutCameraState,
+        sessionIsRunning: Bool,
+        sessionIsInterrupted: Bool
+    ) -> Bool {
+        guard sessionIsRunning, !sessionIsInterrupted else { return false }
+        if case .unavailable = state {
+            return false
+        }
+        return true
+    }
+
+    static func shouldIgnoreTransientPreviewInterruption(
+        reasonCode: String,
+        hasActiveAttempt: Bool,
+        hasSessionOwner: Bool
+    ) -> Bool {
+        reasonCode == "session-interruption"
+            && !hasActiveAttempt
+            && hasSessionOwner
     }
 }
 

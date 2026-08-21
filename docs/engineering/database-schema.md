@@ -57,10 +57,10 @@ Effort、修复关系/投影键、分配业务 ID 并写入 schema version 5 mar
 
 ### 用户记录
 
-<!-- schema-model: MealEntry | id,businessID,date,mealTypeRaw,title,calories,protein,carbs,fat,itemsData,nutritionSourceRaw,notes,imagePath,mediaAttachmentsData,confidence,sourceTurnID,sourceSessionID -->
+<!-- schema-model: MealEntry | id,businessID,date,mealTypeRaw,title,calories,protein,carbs,fat,totalSugar,glycemicSpeedRaw,glycemicAssessment,itemsData,nutritionSourceRaw,notes,imagePath,mediaAttachmentsData,confidence,sourceTurnID,sourceSessionID -->
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
-| `MealEntry` | `id: UUID`、`date: Date`、`mealTypeRaw: String`、`title: String`、`calories: Int?`、`protein: Double?`、`carbs: Double?`、`fat: Double?`、`itemsData: Data`、`nutritionSourceRaw: String`、`notes: String`、`imagePath: String?`、`mediaAttachmentsData: Data`、`confidence: Double`、`sourceTurnID: UUID?`、`sourceSessionID: UUID?` | 未确认营养值保持为空；来源字段连接创建它的聊天 turn/session。 |
+| `MealEntry` | `id: UUID`、`date: Date`、`mealTypeRaw: String`、`title: String`、`calories: Int?`、`protein: Double?`、`carbs: Double?`、`fat: Double?`、`totalSugar: Double?`、`glycemicSpeedRaw: String?`、`glycemicAssessment: String`、`itemsData: Data`、`nutritionSourceRaw: String`、`notes: String`、`imagePath: String?`、`mediaAttachmentsData: Data`、`confidence: Double`、`sourceTurnID: UUID?`、`sourceSessionID: UUID?` | 未确认营养值保持为空；总糖包含天然糖与添加糖；升糖速度只表示成对保存的餐食组成定性估算，修改菜品时清空旧评估。来源字段连接创建它的聊天 turn/session。 |
 | <!-- schema-model: BodyEntry | id,businessID,date,weight,bodyFat,waist,notes,imagePath,mediaAttachmentsData,analysis,externalSource,externalID,sourceTurnID,sourceSessionID --> `BodyEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体记录字段 | `externalSource + externalID` 用于外部导入去重，由 Store 维护。 |
 | <!-- schema-model: WorkoutEntry | id,businessID,date,exercise,exerciseID,exerciseDefinition,sets,reps,weight,setEntriesData,restSeconds,durationMinutes,notes,mediaKindRaw,mediaPath,mediaAttachmentsData,formScore,intensity,feedback,estimatedCalories,calorieMET,calorieDurationMinutes,calorieDurationEstimated,calorieAlgorithmVersion,externalSource,externalID,sourceTurnID,sourceSessionID,sourceWorkoutSessionID,sourcePerformanceID,projectionKey,sourcePerformance --> `WorkoutEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）、训练字段、动作关系、来源关系及唯一 `projectionKey` | 带练投影使用 `guided-performance:<uuid>`；其余记录使用 `entry:<uuid>`。unique 索引保留，启动迁移即使 marker 已是 5 也必须先补齐空 key，不能把多个 `nil` 留给 SwiftData 校验。热量投影保留可选算法版本；UUID 来源继续用于旧备份映射与审计。 |
 
@@ -102,7 +102,7 @@ Effort、修复关系/投影键、分配业务 ID 并写入 schema version 5 mar
 | 字段 | Codable 载荷 |
 | --- | --- |
 | `ExternalSyncCursor.cursorData` | 外部 provider 自有 cursor 数据 |
-| `MealEntry.itemsData` | `[MealItem]` |
+| `MealEntry.itemsData` | `[MealItem]`，每项包含稳定 ID、名称、可选份量、热量、三大宏量与 `totalSugar: Double?` |
 | 各记录与消息的 `mediaAttachmentsData` | `[MediaAttachmentReference]` |
 | `WorkoutEntry.setEntriesData` | `[WorkoutSetEvidence]`；V5 可含 logical set index、side、kind、target kind、reps/duration、重量、休息与录像 |
 | `ExerciseDefinition.primaryMusclesData`、`secondaryMusclesData`、`movementPatternsData` | `[String]` |

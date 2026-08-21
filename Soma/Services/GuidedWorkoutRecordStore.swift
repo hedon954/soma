@@ -170,6 +170,9 @@ protocol WorkoutRecordingControlling: AnyObject {
     ) -> WorkoutCameraSessionOwnerToken
     func endWorkoutSession(owner: WorkoutCameraSessionOwnerToken) async
     func prepare() async throws
+    var previewHostID: UUID? { get }
+    func waitUntilPreviewHostSettled(from previousHostID: UUID?) async
+    func idlePreviewKeepingSessionOwner() async
     func startRecording(attempt: WorkoutRecordingAttempt) async throws
     func stopRecording(attemptID: UUID) async throws -> String?
     func cancelRecording(attemptID: UUID?) async
@@ -188,6 +191,14 @@ extension WorkoutRecordingControlling {
     func endWorkoutSession(owner _: WorkoutCameraSessionOwnerToken) async {
         await cancelRecording(attemptID: nil)
     }
+
+    var previewHostID: UUID? {
+        nil
+    }
+
+    func waitUntilPreviewHostSettled(from _: UUID?) async {}
+
+    func idlePreviewKeepingSessionOwner() async {}
 }
 
 @MainActor

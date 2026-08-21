@@ -10,6 +10,7 @@
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 改为按需启动相机，扩展录像策略、语音和完成复盘
   - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口迁移到一级训练 Tab
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将放大取景改为 fill 裁切，并要求倒计时结束先完成录像启动再切组阶段
+  - [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 取消开组时自动放大取景，倒计时只取景、正式开始后再录像
 - 上游依据：
   - [训练计划编排、沉浸式带练与真实取景调研](../research/2026-08-03-guided-workout-flow-and-capture.md)
   - [BUG 0006](../bugs/0006-workout-camera-preview-recording-mismatch.md)

@@ -490,65 +490,19 @@ struct GuidedCompactSetView: View {
                 }
             }
 
-            GeometryReader { proxy in
-                ZStack(alignment: .bottomTrailing) {
-                    ExerciseArtworkView(
-                        reference: exercise?.preferredActionIllustration
-                            ?? BundledExerciseCatalog.fallbackActionIllustration
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 26))
-
-                    if showsCamera, isRecording {
-                        Button(action: onExpandCamera) {
-                            WorkoutCameraSurface(
-                                camera: camera,
-                                showsSafeFrame: false,
-                                compact: true,
-                                recordingErrorMessage: cameraErrorMessage
-                            )
-                            .allowsHitTesting(false)
-                            .frame(width: WorkoutCaptureLayout.compactPreviewWidth(
-                                availableWidth: proxy.size.width,
-                                isLandscape: isLandscape
-                            ))
-                            .aspectRatio(
-                                WorkoutCaptureLayout.previewAspectRatio(
-                                    isLandscape: isLandscape
-                                ),
-                                contentMode: .fit
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
-                            .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
-                        .padding(12)
-                        .accessibilityLabel("正在录制，放大相机")
-                    } else if showsCamera {
-                        WorkoutCameraSurface(
-                            camera: camera,
-                            showsSafeFrame: false,
-                            compact: true,
-                            recordingErrorMessage: cameraErrorMessage
-                        )
-                        .allowsHitTesting(false)
-                        .frame(width: WorkoutCaptureLayout.compactPreviewWidth(
-                            availableWidth: proxy.size.width,
-                            isLandscape: isLandscape
-                        ))
-                        .aspectRatio(
-                            WorkoutCaptureLayout.previewAspectRatio(
-                                isLandscape: isLandscape
-                            ),
-                            contentMode: .fit
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
-                        .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
-                        .padding(12)
-                        .accessibilityLabel("相机启动与取景状态")
-                    }
-                }
+            GeometryReader { _ in
+                ExerciseArtworkView(
+                    reference: exercise?.preferredActionIllustration
+                        ?? BundledExerciseCatalog.fallbackActionIllustration
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 26))
+                .guidedPictureInPicture(
+                    camera: showsCamera ? camera : nil,
+                    isLandscape: isLandscape,
+                    recordingErrorMessage: cameraErrorMessage,
+                    onExpand: onExpandCamera
+                )
             }
         }
     }
@@ -1002,12 +956,12 @@ struct WorkoutCameraSurface: View {
         }
         .overlay(alignment: .topLeading) {
             Label(
-                compact
-                    ? (camera.state == .recording ? "录制中" : "取景")
-                    : (camera.state == .recording ? "正在录制" : "完整取景"),
+                compactPreviewBadgeText,
                 systemImage: camera.state == .recording
                     ? "record.circle.fill"
-                    : "viewfinder"
+                    : (camera.state == .startingRecording
+                        ? "camera.aperture"
+                        : "viewfinder")
             )
             .font(compact ? .caption2.bold() : .caption.bold())
             .foregroundStyle(camera.state == .recording ? .white : .primary)
@@ -1021,6 +975,16 @@ struct WorkoutCameraSurface: View {
             )
             .padding(compact ? 7 : 12)
         }
+    }
+
+    private var compactPreviewBadgeText: String {
+        if camera.state == .recording {
+            return compact ? "录制中" : "正在录制"
+        }
+        if camera.state == .startingRecording {
+            return "正在开启录像"
+        }
+        return compact ? "取景" : "完整取景"
     }
 
     private var presentation: WorkoutCameraSurfacePresentation {

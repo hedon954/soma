@@ -1,4 +1,4 @@
-# BUG 0026：远程模型调用缺少绑定工具清单
+# BUG 0028：远程模型调用缺少绑定工具清单
 
 - 状态：已修复，待部署与真机远程模式复验
 - 发现日期：2026-08-21
@@ -31,7 +31,8 @@ PRD 033 落地时只在 `AIService.announceModelStepStart` 接入了 `AgentDiagn
 ## 回归门禁
 
 - Server 测试断言 Worker 的每个 `model.started` Event 精确保留本次 Provider 请求工具清单。
-- `RemoteAgentExecutionTests` 断言远程 Event 可生成执行日志所需的可读工具摘要。
+- `RemoteAgentExecutionTests` 断言新远程 Event 可生成执行日志所需的可读工具摘要，旧 Event 缺少
+  工具字段时稳定显示为空清单。
 - 手工验收：部署 Server 后用虚构内容分别走本机与后台持续处理，在「高级设置 → 执行日志」中
   确认每个 LLM Span 都显示工具数量与完整名称，诊断日志同时出现对应调用。
 

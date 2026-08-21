@@ -160,7 +160,8 @@ extension ConversationRecorder {
             ]
         case "meals": [
                 "record_id", "date", "meal_type", "title", "calories",
-                "protein", "carbs", "fat", "items", "note"
+                "protein", "carbs", "fat", "total_sugar", "glycemic_speed",
+                "glycemic_assessment", "items", "note"
             ]
         case "body": [
                 "record_id", "date", "weight", "body_fat", "waist",
@@ -317,12 +318,19 @@ extension ConversationRecorder {
             "protein": entry.protein.map(AgentJSONValue.number) ?? .null,
             "carbs": entry.carbs.map(AgentJSONValue.number) ?? .null,
             "fat": entry.fat.map(AgentJSONValue.number) ?? .null,
+            "total_sugar": entry.totalSugar.map(AgentJSONValue.number) ?? .null,
+            "glycemic_speed": entry.glycemicSpeedRaw
+                .map(AgentJSONValue.string) ?? .null,
+            "glycemic_assessment": entry.glycemicAssessment.isEmpty
+                ? .null : .string(entry.glycemicAssessment),
             "items": .array(entry.items.map { item in
                 .object([
                     "id": .string(item.id.uuidString),
                     "name": .string(item.name),
                     "portion_description": item.portionDescription
-                        .map(AgentJSONValue.string) ?? .null
+                        .map(AgentJSONValue.string) ?? .null,
+                    "total_sugar": item.totalSugar
+                        .map(AgentJSONValue.number) ?? .null
                 ])
             })
         ])
@@ -339,7 +347,7 @@ private extension AgentMutationPayload {
             ]
         case "meal": [
                 "meal_type", "title", "calories", "protein", "carbs", "fat",
-                "items", "note"
+                "total_sugar", "glycemic_speed", "glycemic_assessment", "items", "note"
             ]
         case "body": [
                 "weight", "body_fat", "waist", "posture_note", "safety_note"
@@ -396,6 +404,15 @@ private extension AgentMutationPayload {
         }
         if fat != nil {
             fields.insert("fat")
+        }
+        if totalSugar != nil {
+            fields.insert("total_sugar")
+        }
+        if glycemicSpeed != nil {
+            fields.insert("glycemic_speed")
+        }
+        if glycemicAssessment != nil {
+            fields.insert("glycemic_assessment")
         }
         if items != nil {
             fields.insert("items")

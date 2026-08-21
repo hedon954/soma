@@ -17,6 +17,7 @@
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
+  - [PRD 035](../prd/035-guided-preview-then-record-and-immediate-share.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯
@@ -324,15 +325,17 @@ plannedSets.first(where: kind == working)
 
 主界面始终保留录像按钮；非自动目标 Effort 也可主动录像。相机流程：
 
-1. `setInProgress` 根据 policy 或手动操作建立唯一 attempt，绑定当前 Effort，之前不准备相机；
-2. `prepare`、`startRunning` 和 `startRecording` 在专用队列执行，训练事实先保存；
-3. 只有 `didStartRecordingTo` 回调后才把录像标为 active 并展示取景器；
-4. 用户确认、跳过、暂停、后台或相机中断时终结 attempt；saved/failed/cancelled 只能提交一次；
-5. `AVErrorRecordingSuccessfullyFinishedKey == true` 且文件有效时保留文件，即使 error 非空；
-6. 完成文件原子移入 `PrivateMedia`，写入当前 `WorkoutEffort.recordedVideoPath`；
-7. Coordinator 消费 attempt 终态并成为唯一 Alert 源；已终结 attempt 的 stop 幂等，不产生第二个
+1. 自动策略在动作介绍或组前倒计时 preflight 到 `.previewing`，取景可见但不写文件；
+2. 倒计时归零先进入 `.setInProgress`，等待执行页预览宿主挂上后再 `startRecording`；
+3. 只有 `didStartRecordingTo` 后才把录像标为 active 并显示红点；
+4. 组或 Effort 结束时 `stopRecording` 并绑定当前 Effort。
+   `prepare`、`startRunning` 和文件写入在专用队列执行，训练事实先保存；
+5. 用户确认、跳过、暂停、后台或相机中断时终结 attempt；saved/failed/cancelled 只能提交一次；
+6. `AVErrorRecordingSuccessfullyFinishedKey == true` 且文件有效时保留文件，即使 error 非空；
+7. 完成文件原子移入 `PrivateMedia`，写入当前 `WorkoutEffort.recordedVideoPath`；
+8. Coordinator 消费 attempt 终态并成为唯一 Alert 源；已终结 attempt 的 stop 幂等，不产生第二个
    `stop-missing`；
-8. `WorkoutSet.recordedVideoPath` 与 `ExercisePerformance.activeVideoPath` 只保留兼容投影。
+9. `WorkoutSet.recordedVideoPath` 与 `ExercisePerformance.activeVideoPath` 只保留兼容投影。
 
 预览和保存文件共享 `WorkoutCaptureGeometry`：
 

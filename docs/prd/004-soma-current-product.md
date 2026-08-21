@@ -32,6 +32,7 @@
   - [PRD 032](032-default-full-tools-and-selected-skill-subset.md)
   - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md)
+  - [PRD 035](035-guided-preview-then-record-and-immediate-share.md)
 - 下游落地：
   - [ADR 0079](../adr/0079-create-inserts-update-by-id.md)
   - [ADR 0080](../adr/0080-conversation-session-swipe-delete.md)

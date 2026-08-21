@@ -10,6 +10,7 @@
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 的录像警告、动作记录投影与用户确认结束边界
 - 后续修订：
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将倒计时结束改为先完成 `startRecording` 再进入 `.setInProgress`，预览与历史缩略改为 fill
+  - [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 将自动录像改回开组后再写文件，完成后立即分享并回到训练主页
 - 上游依据：[BUG 0019](../bugs/0019-guided-recording-attempt-terminal-and-duplicate-alerts.md)
 - 下游落地：
   - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
@@ -159,7 +160,7 @@ v0.0.6 已拥有计划版本、确定性带练、三种录像策略、动作终�
   2. 验证全部 Performance 终态；
   3. Session 标为 completed/finalized；
   4. 结束系统训练投影；
-  5. 进入本地 `WorkoutShareSheet`。
+  5. 进入本地 `WorkoutShareSheet`；关闭预览后回到训练 Tab 主页，不再经过「查看分享」中间页。
 - 任一步失败保留已经成功保存的事实，展示可重试错误；未完成收口前不展示成功分享页。
 
 ### 热量与身体信息

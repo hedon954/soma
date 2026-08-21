@@ -11,6 +11,7 @@
 4. `CLAUDE.md` 定义所有开发活动必须遵循的原则。
 5. `.claude/skills/` 定义可执行的日常开发与发布 SOP。
 6. 代码、测试、Makefile 和 scripts 是可执行事实。
+7. `.codex|.cursor|.claude/plans/` 记录所有 Agent 的调研与开发计划。
 
 发生冲突时，不要静默绕过约束。先确认当前 PRD 和 Accepted ADR；需要改变长期边界时，
 新增 ADR supersede 旧决策。

@@ -480,6 +480,9 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
+    var totalSugar: Double?
+    var glycemicSpeedRaw: String?
+    var glycemicAssessment: String?
     var items: [MealItem]?
     var nutritionSourceRaw: String?
     var notes: String
@@ -498,6 +501,11 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
         protein = model.protein
         carbs = model.carbs
         fat = model.fat
+        totalSugar = model.totalSugar
+        glycemicSpeedRaw = model.glycemicSpeedRaw
+        glycemicAssessment = model.glycemicAssessment.isEmpty
+            ? nil
+            : model.glycemicAssessment
         items = model.items
         nutritionSourceRaw = model.nutritionSourceRaw
         notes = model.notes
@@ -517,6 +525,9 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
             protein: protein,
             carbs: carbs,
             fat: fat,
+            totalSugar: totalSugar,
+            glycemicSpeed: glycemicSpeedRaw.flatMap(MealGlycemicSpeed.init(rawValue:)),
+            glycemicAssessment: glycemicAssessment ?? "",
             items: items ?? [],
             nutritionSource: nutritionSourceRaw
                 .flatMap(MealNutritionSource.init(rawValue:)) ?? .imported,

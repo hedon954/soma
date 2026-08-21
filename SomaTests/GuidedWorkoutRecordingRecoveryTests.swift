@@ -14,6 +14,7 @@ private final class RecordingRecoverySpy: WorkoutRecordingControlling {
     var preparationBehavior: PreparationBehavior
     private(set) var prepareCount = 0
     private(set) var cancelCount = 0
+    private(set) var idlePreviewCount = 0
     private(set) var attempts: [WorkoutRecordingAttempt] = []
     private var activeAttempt: WorkoutRecordingAttempt?
     private var preparationContinuation: CheckedContinuation<Void, Never>?
@@ -55,6 +56,10 @@ private final class RecordingRecoverySpy: WorkoutRecordingControlling {
     func cancelRecording(attemptID _: UUID?) async {
         cancelCount += 1
         activeAttempt = nil
+    }
+
+    func idlePreviewKeepingSessionOwner() async {
+        idlePreviewCount += 1
     }
 
     func resumePreparation() {
@@ -218,6 +223,66 @@ final class GuidedWorkoutRecordingRecoveryTests: XCTestCase {
 
         XCTAssertEqual(recorder.prepareCount, 2)
         XCTAssertEqual(fixture.session.currentEffortID, fixture.efforts[1].id)
+    }
+
+    @MainActor
+    func testEnabledPolicyDoesNotRecordLaterSetsAndReleasesPreview() async throws {
+        let fixture = try makeFixture(
+            performanceCount: 1,
+            setCount: 2,
+            policy: .enabled,
+            restSeconds: 0
+        )
+        defer { clearDefaults(fixture) }
+        let recorder = RecordingRecoverySpy()
+        let coordinator = makeCoordinator(recorder, fixture: fixture)
+
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        XCTAssertTrue(coordinator.shouldCaptureCurrentEffort(in: fixture.context))
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        XCTAssertEqual(recorder.attempts.map(\.setID), [fixture.sets[0].id])
+
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+        try await coordinator.beginCurrentSet(in: fixture.context)
+
+        XCTAssertEqual(recorder.attempts.map(\.setID), [fixture.sets[0].id])
+        XCTAssertGreaterThanOrEqual(recorder.idlePreviewCount, 1)
+        XCTAssertFalse(coordinator.shouldCaptureCurrentEffort(in: fixture.context))
+    }
+
+    @MainActor
+    func testEndEarlyAbandonsSessionWithoutRequiringRemainingSets() async throws {
+        let fixture = try makeFixture(
+            performanceCount: 1,
+            setCount: 2,
+            policy: .disabled,
+            restSeconds: 0
+        )
+        defer { clearDefaults(fixture) }
+        let coordinator = makeCoordinator(
+            RecordingRecoverySpy(),
+            fixture: fixture
+        )
+
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        try coordinator.prepareCurrentSet(in: fixture.context)
+        try await coordinator.beginCurrentSet(in: fixture.context)
+        try await coordinator.confirmCurrentSet(
+            actualReps: 8,
+            actualWeightKG: 20,
+            in: fixture.context
+        )
+        try await coordinator.endEarly(in: fixture.context)
+
+        XCTAssertEqual(fixture.session.status, .abandoned)
+        XCTAssertEqual(fixture.sets[0].status, .completed)
     }
 
     @MainActor

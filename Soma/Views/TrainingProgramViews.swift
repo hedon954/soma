@@ -191,6 +191,7 @@ private struct TrainingProgramDetailView: View {
     @State private var showsOverviewEditor = false
     @State private var overviewDraft = ""
     @State private var startedSession: WorkoutSession?
+    @State private var returnToTrainingHomeAfterWorkout = false
     @State private var errorMessage: String?
     @State private var isOptimizing = false
     @State private var confirmsDelete = false
@@ -615,9 +616,16 @@ private struct TrainingProgramDetailView: View {
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(false)
         }
-        .fullScreenCover(item: $startedSession) { session in
+        .fullScreenCover(item: $startedSession, onDismiss: {
+            if returnToTrainingHomeAfterWorkout {
+                returnToTrainingHomeAfterWorkout = false
+                dismiss()
+            }
+        }) { session in
             NavigationStack {
-                GuidedWorkoutView(session: session)
+                GuidedWorkoutView(session: session) {
+                    returnToTrainingHomeAfterWorkout = true
+                }
             }
         }
         .alert(

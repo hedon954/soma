@@ -62,6 +62,9 @@ enum RecordMergePolicy {
             entry.protein = input.protein
             entry.carbs = input.carbs
             entry.fat = input.fat
+            entry.totalSugar = input.totalSugar
+            entry.glycemicSpeed = input.glycemicSpeed
+            entry.glycemicAssessment = input.glycemicAssessment
             if !input.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 entry.notes = input.sourceText
             }
@@ -80,6 +83,9 @@ enum RecordMergePolicy {
                 entry.protein = input.protein
                 entry.carbs = input.carbs
                 entry.fat = input.fat
+                entry.totalSugar = input.totalSugar
+                entry.glycemicSpeed = input.glycemicSpeed
+                entry.glycemicAssessment = input.glycemicAssessment
                 entry.confidence = confidence
             }
         }
@@ -185,6 +191,9 @@ enum RecordMergePolicy {
             protein: rhs.protein,
             carbs: rhs.carbs,
             fat: rhs.fat,
+            totalSugar: rhs.totalSugar,
+            glycemicSpeed: rhs.glycemicSpeed,
+            glycemicAssessment: rhs.glycemicAssessment,
             sourceText: rhs.notes,
             media: rhs.mediaAttachments,
             isCorrection: false
@@ -400,6 +409,9 @@ struct MealMergeInput {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
+    var totalSugar: Double?
+    var glycemicSpeed: MealGlycemicSpeed?
+    var glycemicAssessment: String
     var sourceText: String
     var media: [MediaAttachmentReference]
     var isCorrection: Bool
@@ -476,6 +488,9 @@ extension DataIntegrityRepair {
                     protein: entry.protein,
                     carbs: entry.carbs,
                     fat: entry.fat,
+                    totalSugar: entry.totalSugar,
+                    glycemicSpeed: entry.glycemicSpeed,
+                    glycemicAssessment: entry.glycemicAssessment,
                     sourceText: entry.notes,
                     media: entry.mediaAttachments,
                     isCorrection: true

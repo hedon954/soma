@@ -12,7 +12,7 @@ struct WorkoutCameraPreview: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> CameraPreviewView {
-        let view = CameraPreviewView()
+        let view = CameraPreviewView(frame: .zero)
         context.coordinator.configure(view)
         return view
     }
@@ -68,6 +68,16 @@ final class CameraPreviewView: UIView {
     var onPreviewLayerReady:
         (@MainActor (AVCaptureVideoPreviewLayer, UUID) -> Void)?
     private weak var hostedPreviewLayer: AVCaptureVideoPreviewLayer?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()

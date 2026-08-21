@@ -27,6 +27,25 @@ enum MealNutritionSource: String, Codable, CaseIterable, Sendable {
     case imported
 }
 
+/// 食物组成层面的定性消化吸收速度。它不是个体餐后血糖曲线或医疗结论。
+enum MealGlycemicSpeed: String, Codable, CaseIterable, Identifiable, Sendable {
+    case slow
+    case moderate
+    case fast
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .slow: "较慢"
+        case .moderate: "中等"
+        case .fast: "较快"
+        }
+    }
+}
+
 struct MealItem: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     var name: String
@@ -35,6 +54,8 @@ struct MealItem: Codable, Equatable, Identifiable, Sendable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
+    /// 总糖，包含天然存在与添加的糖；没有标签或可靠识别时保持 nil。
+    var totalSugar: Double?
 
     init(
         id: UUID = UUID(),
@@ -43,7 +64,8 @@ struct MealItem: Codable, Equatable, Identifiable, Sendable {
         calories: Int? = nil,
         protein: Double? = nil,
         carbs: Double? = nil,
-        fat: Double? = nil
+        fat: Double? = nil,
+        totalSugar: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -52,6 +74,7 @@ struct MealItem: Codable, Equatable, Identifiable, Sendable {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
+        self.totalSugar = totalSugar
     }
 }
 
@@ -376,6 +399,9 @@ final class MealEntry: BusinessIdentifiedModel {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
+    var totalSugar: Double?
+    var glycemicSpeedRaw: String?
+    var glycemicAssessment: String = ""
     var itemsData: Data = Data()
     var nutritionSourceRaw: String = MealNutritionSource.aiEstimate.rawValue
     var notes: String
@@ -398,6 +424,9 @@ final class MealEntry: BusinessIdentifiedModel {
         protein: Double? = nil,
         carbs: Double? = nil,
         fat: Double? = nil,
+        totalSugar: Double? = nil,
+        glycemicSpeed: MealGlycemicSpeed? = nil,
+        glycemicAssessment: String = "",
         items: [MealItem] = [],
         nutritionSource: MealNutritionSource = .aiEstimate,
         notes: String = "",
@@ -415,6 +444,9 @@ final class MealEntry: BusinessIdentifiedModel {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
+        self.totalSugar = totalSugar
+        glycemicSpeedRaw = glycemicSpeed?.rawValue
+        self.glycemicAssessment = glycemicAssessment
         itemsData = MealItemStorage.encode(items)
         nutritionSourceRaw = nutritionSource.rawValue
         self.notes = notes
@@ -449,6 +481,11 @@ final class MealEntry: BusinessIdentifiedModel {
         set { nutritionSourceRaw = newValue.rawValue }
     }
 
+    var glycemicSpeed: MealGlycemicSpeed? {
+        get { glycemicSpeedRaw.flatMap(MealGlycemicSpeed.init(rawValue:)) }
+        set { glycemicSpeedRaw = newValue?.rawValue }
+    }
+
     func replaceItemsAndDeriveTotals(_ newItems: [MealItem]) {
         items = newItems
         nutritionSource = .derivedFromItems
@@ -457,6 +494,10 @@ final class MealEntry: BusinessIdentifiedModel {
         protein = totals.protein
         carbs = totals.carbs
         fat = totals.fat
+        totalSugar = totals.totalSugar
+        // 菜品或份量变化后，旧的定性判断不再可靠；Agent 或用户可显式重新填写。
+        glycemicSpeed = nil
+        glycemicAssessment = ""
     }
 }
 

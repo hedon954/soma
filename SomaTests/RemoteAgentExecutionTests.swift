@@ -125,6 +125,28 @@ struct RemoteAgentExecutionTests {
     }
 
     @Test
+    func legacyRemoteModelStartDefaultsToEmptyExposedTools() {
+        let event = RemoteAgentEvent(
+            id: UUID().uuidString,
+            jobID: UUID().uuidString,
+            sequence: 2,
+            kind: "model",
+            phase: "started",
+            payloadVersion: 1,
+            payload: [
+                "provider": .string("managed"),
+                "model": .string("configured"),
+                "mediaMode": .string("text"),
+                "requestAttempt": .number(1)
+            ],
+            createdAt: .now
+        )
+
+        let metadata = TraceSpanMetadata(remoteModelSpanMetadata(event))
+        #expect(metadata.exposedToolSummary == "工具 0 个")
+    }
+
+    @Test
     func clientRegistersSignsAndSubmitsIdempotently() async throws {
         let identity = RemoteDeviceIdentity(usesEphemeralStorage: true)
         let server = MockRemoteAgentServer()

@@ -41,6 +41,7 @@ struct GuidedWorkoutView: View {
     private var definitions: [ExerciseDefinition]
 
     let session: WorkoutSession
+    var onFinishedReturnHome: () -> Void = {}
     @State private var actualReps = ""
     @State private var actualDuration = ""
     @State private var actualWeight = ""
@@ -56,8 +57,12 @@ struct GuidedWorkoutView: View {
     @State private var isCoordinatorActivated = false
     @State private var sessionOwner: WorkoutCameraSessionOwnerToken?
 
-    init(session: WorkoutSession) {
+    init(
+        session: WorkoutSession,
+        onFinishedReturnHome: @escaping () -> Void = {}
+    ) {
         self.session = session
+        self.onFinishedReturnHome = onFinishedReturnHome
         #if DEBUG
             if ProcessInfo.processInfo.environment["SOMA_GUIDED_CAPTURE_PREVIEW"] == "1" {
                 _presentation = State(initialValue: GuidedWorkoutPresentationState(
@@ -177,9 +182,13 @@ struct GuidedWorkoutView: View {
                     .ignoresSafeArea()
 
                 if session.status == .active,
-                   presentation.mode == .expandedCapture,
-                   session.guidedPhase == .setInProgress,
-                   camera.state == .recording
+                   GuidedExpandedCaptureVisibility.isVisible(
+                       sessionIsActive: true,
+                       mode: presentation.mode,
+                       phase: session.guidedPhase,
+                       cameraState: camera.state,
+                       isStartingRecording: coordinator.isStartingRecording
+                   )
                 {
                     GuidedExpandedCaptureView(
                         camera: camera,
@@ -241,7 +250,9 @@ struct GuidedWorkoutView: View {
                 } catch {
                     presentOperationError(error)
                 }
-            } else if session.guidedPhase == .sessionReview {
+            } else if session.guidedPhase == .sessionReview
+                || session.status == .completed
+            {
                 finalizeSessionAndShare()
             }
         }
@@ -286,12 +297,20 @@ struct GuidedWorkoutView: View {
         }
         .onChange(of: camera.state) {
             var next = presentation
-            next.cameraStateChanged(camera.state)
+            next.cameraStateChanged(
+                camera.state,
+                isStartingRecording: coordinator.isStartingRecording
+            )
             presentation = next
         }
         .onChange(of: session.guidedPhaseRaw) {
             var next = presentation
-            next.phaseChanged(session.guidedPhase)
+            next.phaseChanged(
+                session.guidedPhase,
+                expandForRecording: coordinator.shouldCaptureCurrentEffort(
+                    in: modelContext
+                )
+            )
             #if DEBUG
                 if session.guidedPhase == .setInProgress,
                    ProcessInfo.processInfo.environment[
@@ -302,7 +321,9 @@ struct GuidedWorkoutView: View {
                 }
             #endif
             presentation = next
-            if session.guidedPhase == .sessionReview {
+            if session.guidedPhase == .sessionReview
+                || session.guidedPhase == .completed
+            {
                 finalizeSessionAndShare()
             }
         }
@@ -324,12 +345,7 @@ struct GuidedWorkoutView: View {
             Button("结束并保留已完成组", role: .destructive) {
                 run {
                     try await coordinator.endEarly(in: modelContext)
-                    await WorkoutSystemProjectionCoordinator.shared.end(
-                        session: session,
-                        completedSetCount: completedSetCount,
-                        totalSetCount: sessionSets.count
-                    )
-                    dismiss()
+                    finalizeSessionAndShare()
                 }
             }
             Button("继续训练", role: .cancel) {}
@@ -356,6 +372,7 @@ struct GuidedWorkoutView: View {
             }
         }
         .sheet(item: $shareModel, onDismiss: {
+            onFinishedReturnHome()
             dismiss()
         }) { model in
             WorkoutShareSheet(model: model)
@@ -408,22 +425,6 @@ struct GuidedWorkoutView: View {
 
             phaseContent(isLandscape: isLandscape)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .bottomTrailing) {
-                    if cameraSurfacePlacement == .phasePictureInPicture {
-                        WorkoutCameraSurface(
-                            camera: camera,
-                            showsSafeFrame: false,
-                            compact: true,
-                            recordingErrorMessage: coordinator.recordingErrorMessage
-                        )
-                        .frame(width: isLandscape ? 210 : 132)
-                        .aspectRatio(isLandscape ? 16 / 9 : 9 / 16, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius))
-                        .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
-                        .padding(18)
-                        .accessibilityLabel("相机启动与取景状态")
-                    }
-                }
         }
     }
 
@@ -439,6 +440,9 @@ struct GuidedWorkoutView: View {
                 GuidedExerciseIntroductionView(
                     exercise: currentExerciseDefinition,
                     performance: currentPerformance,
+                    camera: phasePictureInPictureCamera,
+                    isLandscape: isLandscape,
+                    cameraErrorMessage: coordinator.recordingErrorMessage,
                     onPrepare: prepareCurrentSet,
                     onReplace: { showsReplacement = true },
                     onSkip: skipCurrentExercise
@@ -449,6 +453,9 @@ struct GuidedWorkoutView: View {
                     targetText: targetText,
                     phaseStartedAt: session.phaseStartedAt,
                     deadlineAt: session.phaseDeadlineAt,
+                    camera: phasePictureInPictureCamera,
+                    isLandscape: isLandscape,
+                    cameraErrorMessage: coordinator.recordingErrorMessage,
                     onTick: coordinator.announceCountdown,
                     onFinished: beginCurrentSetAfterCountdown
                 )
@@ -506,22 +513,17 @@ struct GuidedWorkoutView: View {
                             in: modelContext
                         )
                     },
+                    camera: phasePictureInPictureCamera,
+                    isLandscape: isLandscape,
+                    cameraErrorMessage: coordinator.recordingErrorMessage,
                     onTick: coordinator.announceCountdown,
                     onAdjust: adjustRest,
                     onFinish: finishRest
                 )
-            case .sessionReview:
+            case .sessionReview, .completed:
                 GuidedSessionFinalizationView(
                     state: finalizationState,
                     onRetry: finalizeSessionAndShare
-                )
-            case .completed:
-                GuidedSessionReviewView(
-                    summary: TrainingPlanStore.summary(
-                        for: session.id,
-                        in: modelContext
-                    ),
-                    onFinish: finalizeSessionAndShare
                 )
             }
         }
@@ -589,12 +591,19 @@ struct GuidedWorkoutView: View {
         #endif
     }
 
+    private var phasePictureInPictureCamera: WorkoutCameraService? {
+        cameraSurfacePlacement == .phasePictureInPicture ? camera : nil
+    }
+
     private var cameraSurfacePlacement: GuidedCameraSurfacePlacement {
         GuidedCameraSurfacePlacement.resolve(
             phase: session.guidedPhase,
             cameraState: camera.state,
             isStarting: coordinator.isStartingRecording,
-            sessionIsActive: session.status == .active
+            sessionIsActive: session.status == .active,
+            isCaptureTarget: coordinator.shouldCaptureCurrentEffort(
+                in: modelContext
+            )
         )
     }
 
@@ -632,6 +641,11 @@ struct GuidedWorkoutView: View {
     @MainActor
     private func beginCurrentSetAfterCountdown() async {
         guard session.guidedPhase == .preSetCountdown else { return }
+        if coordinator.shouldCaptureCurrentEffort(in: modelContext) {
+            var next = presentation
+            next.expand()
+            presentation = next
+        }
         do {
             try await coordinator.beginCurrentSet(in: modelContext)
         } catch {
@@ -729,7 +743,7 @@ struct GuidedWorkoutView: View {
         finalizationState = .saving
         Task {
             do {
-                if session.status != .completed {
+                if session.status == .active {
                     try coordinator.complete(in: modelContext)
                 }
                 await WorkoutSystemProjectionCoordinator.shared.end(
