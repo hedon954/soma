@@ -84,6 +84,12 @@ enum RemoteJSONValue: Codable, Equatable, Sendable {
         guard case let .object(value) = self else { return nil }
         return value
     }
+
+    var stringArrayValue: [String]? {
+        guard case let .array(values) = self else { return nil }
+        let strings = values.compactMap(\.stringValue)
+        return strings.count == values.count ? strings : nil
+    }
 }
 
 struct RemoteAgentJobSnapshot: Codable, Equatable, Sendable {

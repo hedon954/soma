@@ -1,6 +1,24 @@
 import Foundation
 import SwiftData
 
+func remoteModelSpanMetadata(_ event: RemoteAgentEvent) -> String {
+    let mediaMode = event.payload["mediaMode"]?.stringValue ?? "text"
+    let exposedToolNames = event.payload["exposedToolNames"]?.stringArrayValue ?? []
+    let exposedToolCount = event.payload["exposedToolCount"]?.intValue
+        ?? exposedToolNames.count
+    return AgentTraceText.jsonObject([
+        "media_mode": mediaMode,
+        "request_attempt": event.payload["requestAttempt"]?.intValue ?? 1,
+        "exposed_tool_names": exposedToolNames,
+        "exposed_tool_count": exposedToolCount,
+        "provider": event.payload["provider"]?.stringValue ?? "managed",
+        "model": event.payload["model"]?.stringValue ?? "configured",
+        "ttft_budget_seconds": mediaMode == "direct_video"
+            ? 20
+            : mediaMode == "text" ? 8 : 10
+    ])
+}
+
 struct RemoteVideoKeyframeFallbackRequired: Error {
     var code: String
 }

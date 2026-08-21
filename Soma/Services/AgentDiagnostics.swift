@@ -14,23 +14,26 @@ enum AgentDiagnostics {
         tier: String,
         skillID: String?,
         toolNames: [String],
-        messageCount: Int
+        messageCount: Int?
     ) {
+        var fields = [
+            "step": "\(step)",
+            "provider": provider,
+            "model": model,
+            "tier": tier,
+            "skill_id": skillID ?? "none",
+            "tool_count": "\(toolNames.count)",
+            "tools": toolNames.isEmpty
+                ? "none"
+                : toolNames.joined(separator: ",")
+        ]
+        if let messageCount {
+            fields["message_count"] = "\(messageCount)"
+        }
         DiagnosticsLogStore.shared.append(
             category: category,
             message: "LLM 调用",
-            fields: [
-                "step": "\(step)",
-                "provider": provider,
-                "model": model,
-                "tier": tier,
-                "skill_id": skillID ?? "none",
-                "message_count": "\(messageCount)",
-                "tool_count": "\(toolNames.count)",
-                "tools": toolNames.isEmpty
-                    ? "none"
-                    : toolNames.joined(separator: ",")
-            ]
+            fields: fields
         )
     }
 

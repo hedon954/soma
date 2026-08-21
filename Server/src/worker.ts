@@ -84,7 +84,12 @@ export class AgentWorker {
     if (lease === undefined) return undefined;
     const job = lease.job;
     if (isTerminal(job.state)) return job;
-    await this.store.appendEvent(job.id, lease.epoch, {
+    const history = await this.store.events(job.id, 0, 500);
+    const exposedToolNames = effectiveAllowedDeviceTools(
+      job.input?.modelInput.activeTools ?? [],
+      history,
+    );
+    history.push(await this.store.appendEvent(job.id, lease.epoch, {
       kind: "model",
       phase: "started",
       payloadVersion: 1,
@@ -93,9 +98,11 @@ export class AgentWorker {
         model: "configured",
         mediaMode: job.input?.mediaMode ?? "text",
         requestAttempt: job.input?.requestAttempt ?? 1,
+        exposedToolNames,
+        exposedToolCount: exposedToolNames.length,
       },
       createdAt: now,
-    });
+    }));
     const textItemID = randomUUID();
     let emittedText = false;
     const heartbeat = setInterval(() => {
@@ -108,7 +115,6 @@ export class AgentWorker {
       );
     }, Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3)));
     try {
-      const history = await this.store.events(job.id, 0, 500);
       const completedOperations = history.filter((event) =>
         event.kind === "tool" && event.phase === "completed"
       ).length;

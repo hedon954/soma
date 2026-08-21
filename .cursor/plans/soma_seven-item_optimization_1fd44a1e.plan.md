@@ -185,4 +185,3 @@ struct AgentInputShortcut: Codable, Identifiable, Sendable {
 - 迭代中跑 `make check`，完成前跑 `make verify`。
 - iPhone 模拟器检查消息元信息行、导航栏日期入口、快捷按钮设置与饮食双卡片的浅色/深色、空态、长中文与 Dynamic Type。
 - 真机手工场景：带练录像连续 3 组、后台切换、来电中断、语音提示开关对比；崩溃上报先走一次人工触发的诊断邮件。录像根因需真机复验后才写入 BUG 0025 的已验证结论。
-

@@ -821,8 +821,8 @@ final class ConversationProcessingService {
                 at: event.createdAt
             )
         } else if event.kind == "model", event.phase == "started" {
-            let mediaMode = event.payload["mediaMode"]?.stringValue ?? "text"
-            let requestAttempt = event.payload["requestAttempt"]?.intValue ?? 1
+            let exposedToolNames = event.payload["exposedToolNames"]?
+                .stringArrayValue ?? []
             projectRemoteSpan(
                 AgentTraceSpan(
                     sequence: event.sequence,
@@ -831,18 +831,21 @@ final class ConversationProcessingService {
                     status: .running,
                     startedAt: event.createdAt,
                     endedAt: event.createdAt,
-                    metadata: AgentTraceText.jsonObject([
-                        "media_mode": mediaMode,
-                        "request_attempt": requestAttempt,
-                        "ttft_budget_seconds": mediaMode == "direct_video"
-                            ? 20
-                            : mediaMode == "text" ? 8 : 10
-                    ])
+                    metadata: remoteModelSpanMetadata(event)
                 ),
                 job: job,
                 responseMessage: responseMessage,
                 trace: trace,
                 context: context
+            )
+            AgentDiagnostics.modelRequest(
+                step: event.sequence,
+                provider: event.payload["provider"]?.stringValue ?? "managed",
+                model: event.payload["model"]?.stringValue ?? "configured",
+                tier: "后台持续处理",
+                skillID: job.selectedSkillID,
+                toolNames: exposedToolNames,
+                messageCount: nil
             )
         } else if event.kind == "output",
                   event.phase == "completed",

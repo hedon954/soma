@@ -202,7 +202,7 @@
 | 曝光边界 | 选中按钮时 `AgentToolExposurePolicy` 只返回该按钮工具白名单与当前协议交集，未选时返回全量；`AgentJob.selectedShortcutID` 让排队、恢复与远程 Envelope 沿用同一判断，旧 checkpoint 的 `exposedGroups` 仍可还原。 |
 | AI 推荐工具 | `AgentToolRecommendationService` 只在用户点按时发一次非流式请求，优先小模型档，返回清单与理由并丢弃未知名称；未配置模型或响应不可解析时保持原选择并说明失败原因，请求不含健康数据。 |
 | 流式稳定性 | 流式 chunk 回调保持 `@MainActor`，文字增量经 `AgentTextDeltaCoalescer` 合批；segment id 携带形态标记保证 `ForEach` 身份唯一；DEBUG 下投影入口断言主 actor，`make check` 静态守卫这两条。 |
-| LLM 工具清单可见 | 每次模型调用把 `exposed_tool_names` 与数量写进 model span metadata 和诊断日志；执行时间线只显示摘要，完整绑定工具/入参/返回在 Span 详情页可选择复制。 |
+| LLM 工具清单可见 | 本机与后台持续处理的每次模型调用都把 `exposed_tool_names` 与数量写进 model span metadata 和诊断日志；Server 的 `model.started` Event 携带实际工具集合，执行时间线只显示摘要，完整绑定工具/入参/返回在 Span 详情页可选择复制。 |
 | 诊断日志 | `DiagnosticsLogStore` 双文件滚动记录生命周期、模型调用、Tool 结果、Turn 终态与录像阶段，恒定脱敏密钥与 Authorization，不写媒体 Base64。 |
 | 崩溃误报边界 | `AppRunSentinel.isRunningUnderTests` 让测试进程既不置位哨兵也不上报；哨兵额外记录上次运行是否附着调试器，`CrashReportEligibility` 拒绝把调试器结束当成崩溃。设置页可丢弃排队报告。`CrashDiagnosticsTests` 覆盖这两条。 |
 | 崩溃自动上报 | `AppRunSentinel` 识别上次异常终止，MetricKit 提供崩溃类型与堆栈；`CrashReportComposer` 汇总环境、崩溃 Session 上下文、最后一次 Job/Trace 与日志尾部，`DiagnosticReportMailer` 以独立主题和 `.txt` 附件发送，失败留盘重试、最多 5 份。高级设置提供总开关与查看入口。 |

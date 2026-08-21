@@ -107,4 +107,3 @@ sequenceDiagram
 - 新增 PRD 034，修订 BUG 0025、acceptance、CHANGELOG Unreleased。
 - 单测：饮食按天分组与筛选、Tab reselect 重置、span 行不再内嵌超长 Text、录像 `startingRecording` 几何守卫。
 - 真机：点开饮食/足迹图无黑闪；聊天饮食卡更矮且字段仍在；详情菜品行与聊天一致；训练/饮食芯片+折叠；再点「进展」回到进展首页；自动录像连续 3 组；执行日志 LLM 进新页不卡。
-
