@@ -26,6 +26,10 @@ struct InlineMealCards: View {
         MealNutritionTotals.derive(from: drafts.compactMap(\.item))
     }
 
+    private var assessmentIsCurrent: Bool {
+        drafts.compactMap(\.item) == meal.items
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             itemsCard
@@ -33,7 +37,9 @@ struct InlineMealCards: View {
                 meal: meal,
                 mealType: mealType,
                 totals: totals,
-                itemCount: drafts.compactMap(\.item).count
+                itemCount: drafts.compactMap(\.item).count,
+                glycemicSpeed: assessmentIsCurrent ? meal.glycemicSpeed : nil,
+                glycemicAssessment: assessmentIsCurrent ? meal.glycemicAssessment : ""
             )
         }
         .confirmationDialog("删除这条饮食记录？", isPresented: $showsDelete) {
@@ -215,6 +221,7 @@ struct MealItemDraftRow: View {
                 macro("蛋白", $draft.protein)
                 macro("碳水", $draft.carbs)
                 macro("脂肪", $draft.fat)
+                macro("总糖", $draft.totalSugar)
             }
         } else {
             ViewThatFits(in: .horizontal) {
@@ -247,6 +254,7 @@ struct MealItemDraftRow: View {
         macro("蛋白", $draft.protein)
         macro("碳水", $draft.carbs)
         macro("脂肪", $draft.fat)
+        macro("总糖", $draft.totalSugar)
     }
 
     /// 单位统一在汇总卡里写清楚，行内只留标签和数字，保持一行读得完。
@@ -276,7 +284,8 @@ struct MealItemReadOnlyRow: View {
             item.portionDescription,
             item.protein.map { "蛋白 \($0.formatted())" },
             item.carbs.map { "碳水 \($0.formatted())" },
-            item.fat.map { "脂肪 \($0.formatted())" }
+            item.fat.map { "脂肪 \($0.formatted())" },
+            item.totalSugar.map { "总糖 \($0.formatted())" }
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
@@ -369,6 +378,8 @@ private struct MealTotalsCard: View {
     let mealType: MealType
     let totals: MealNutritionTotals
     let itemCount: Int
+    let glycemicSpeed: MealGlycemicSpeed?
+    let glycemicAssessment: String
 
     var body: some View {
         InlineRecordShell(
@@ -396,6 +407,26 @@ private struct MealTotalsCard: View {
                     macro("蛋白质", totals.protein)
                     macro("脂肪", totals.fat)
                 }
+                HStack(alignment: .top, spacing: 10) {
+                    macro("总糖", totals.totalSugar)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("升糖速度估算")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(glycemicSpeed?.displayName ?? "证据不足")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                }
+                if !glycemicAssessment.isEmpty {
+                    Text(glycemicAssessment)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Text("基于食物组成的定性估算，不代表你的实际血糖反应。")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 NavigationLink {
                     MealRecordDetailView(meal: meal)
                 } label: {

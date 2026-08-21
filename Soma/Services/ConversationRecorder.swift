@@ -201,6 +201,12 @@ enum ConversationRecorder {
                         value["protein"] = entry.protein.map(AgentJSONValue.number) ?? .null
                         value["carbs"] = entry.carbs.map(AgentJSONValue.number) ?? .null
                         value["fat"] = entry.fat.map(AgentJSONValue.number) ?? .null
+                        value["total_sugar"] = entry.totalSugar
+                            .map(AgentJSONValue.number) ?? .null
+                        value["glycemic_speed"] = entry.glycemicSpeedRaw
+                            .map(AgentJSONValue.string) ?? .null
+                        value["glycemic_assessment"] = entry.glycemicAssessment.nilIfEmpty
+                            .map(AgentJSONValue.string) ?? .null
                         value["note"] = entry.notes.nilIfEmpty
                             .map(AgentJSONValue.string) ?? .null
                         let encodedItems: [AgentJSONValue] = entry.items.map { item in
@@ -213,7 +219,9 @@ enum ConversationRecorder {
                                     .map { .number(Double($0)) } ?? .null,
                                 "protein": item.protein.map(AgentJSONValue.number) ?? .null,
                                 "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
-                                "fat": item.fat.map(AgentJSONValue.number) ?? .null
+                                "fat": item.fat.map(AgentJSONValue.number) ?? .null,
+                                "total_sugar": item.totalSugar
+                                    .map(AgentJSONValue.number) ?? .null
                             ])
                         }
                         value["items"] = .array(encodedItems)
@@ -495,6 +503,13 @@ enum ConversationRecorder {
         guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
         }
+        if let totalSugar = arguments.totalSugar, !(0 ... 1000).contains(totalSugar) {
+            return .failure("total_sugar 必须在 0 到 1000g 之间。")
+        }
+        let glycemic = validatedGlycemicAssessment(arguments)
+        if case let .failure(message) = glycemic {
+            return .failure(message)
+        }
         let items = arguments.items?.map(\.model) ?? []
         guard items.allSatisfy({ item in
             !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -502,6 +517,7 @@ enum ConversationRecorder {
                 && [item.protein, item.carbs, item.fat]
                 .compactMap { $0 }
                 .allSatisfy { (0 ... 1000).contains($0) }
+                && (item.totalSugar.map { (0 ... 1000).contains($0) } ?? true)
         }) else {
             return .failure("items 包含空名称或超出范围的营养值。")
         }
@@ -520,6 +536,7 @@ enum ConversationRecorder {
             protein: arguments.protein,
             carbs: arguments.carbs,
             fat: arguments.fat,
+            totalSugar: arguments.totalSugar,
             items: items,
             nutritionSource: .aiEstimate,
             notes: recordedText(
@@ -531,13 +548,12 @@ enum ConversationRecorder {
             sourceTurnID: sourceTurnID,
             sourceSessionID: sourceSessionID
         )
-        if arguments.calories == nil,
-           arguments.protein == nil,
-           arguments.carbs == nil,
-           arguments.fat == nil,
-           !items.isEmpty
-        {
+        if !items.isEmpty {
             created.replaceItemsAndDeriveTotals(items)
+        }
+        if case let .success(assessment) = glycemic, let assessment {
+            created.glycemicSpeed = assessment.speed
+            created.glycemicAssessment = assessment.text
         }
         context.insert(created)
         try? BusinessIDAllocator.assign(
@@ -753,6 +769,13 @@ extension ConversationRecorder {
         guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
         }
+        if let totalSugar = arguments.totalSugar, !(0 ... 1000).contains(totalSugar) {
+            return .failure("total_sugar 必须在 0 到 1000g 之间。")
+        }
+        let glycemic = validatedGlycemicAssessment(arguments)
+        if case let .failure(message) = glycemic {
+            return .failure(message)
+        }
         if let itemInputs = arguments.items {
             let items = itemInputs.map(\.model)
             guard items.allSatisfy({ item in
@@ -761,6 +784,7 @@ extension ConversationRecorder {
                     && [item.protein, item.carbs, item.fat]
                     .compactMap { $0 }
                     .allSatisfy { (0 ... 1000).contains($0) }
+                    && (item.totalSugar.map { (0 ... 1000).contains($0) } ?? true)
             }) else {
                 return .failure("items 包含空名称或超出范围的营养值。")
             }
@@ -773,16 +797,24 @@ extension ConversationRecorder {
             entry.mealType = type
         }
         entry.title = arguments.title?.trimmed.nilIfEmpty ?? entry.title
-        entry.calories = arguments.calories ?? entry.calories
-        entry.protein = arguments.protein ?? entry.protein
-        entry.carbs = arguments.carbs ?? entry.carbs
-        entry.fat = arguments.fat ?? entry.fat
-        if arguments.calories != nil
-            || arguments.protein != nil
-            || arguments.carbs != nil
-            || arguments.fat != nil
-        {
-            entry.nutritionSource = .aiEstimate
+        if arguments.items == nil {
+            entry.calories = arguments.calories ?? entry.calories
+            entry.protein = arguments.protein ?? entry.protein
+            entry.carbs = arguments.carbs ?? entry.carbs
+            entry.fat = arguments.fat ?? entry.fat
+            entry.totalSugar = arguments.totalSugar ?? entry.totalSugar
+            if arguments.calories != nil
+                || arguments.protein != nil
+                || arguments.carbs != nil
+                || arguments.fat != nil
+                || arguments.totalSugar != nil
+            {
+                entry.nutritionSource = .aiEstimate
+            }
+        }
+        if case let .success(assessment) = glycemic, let assessment {
+            entry.glycemicSpeed = assessment.speed
+            entry.glycemicAssessment = assessment.text
         }
         let note = recordedText(
             sourceText,
@@ -1461,6 +1493,34 @@ extension ConversationRecorder {
         in context: ModelContext
     ) {
         _ = targetGym(named: result.gymName, gyms: gyms, in: context)
+    }
+
+    private struct ValidatedGlycemicAssessment {
+        var speed: MealGlycemicSpeed
+        var text: String
+    }
+
+    private enum GlycemicAssessmentValidation {
+        case success(ValidatedGlycemicAssessment?)
+        case failure(String)
+    }
+
+    private static func validatedGlycemicAssessment(
+        _ arguments: AgentToolArguments
+    ) -> GlycemicAssessmentValidation {
+        let rawSpeed = arguments.glycemicSpeed?.trimmed.nilIfEmpty
+        let text = arguments.glycemicAssessment?.trimmed.nilIfEmpty
+        guard rawSpeed != nil || text != nil else { return .success(nil) }
+        guard let rawSpeed,
+              let speed = MealGlycemicSpeed(rawValue: rawSpeed),
+              let text
+        else {
+            return .failure(
+                "glycemic_speed 与 glycemic_assessment 必须成对提供，"
+                    + "速度只能是 slow、moderate 或 fast。"
+            )
+        }
+        return .success(ValidatedGlycemicAssessment(speed: speed, text: text))
     }
 
     private static func recordedText(_ source: String, analysis: String) -> String {

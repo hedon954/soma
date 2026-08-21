@@ -647,6 +647,9 @@ private struct MealRecordEditor: View {
     @State private var protein: String
     @State private var carbs: String
     @State private var fat: String
+    @State private var totalSugar: String
+    @State private var glycemicSpeed: MealGlycemicSpeed?
+    @State private var glycemicAssessment: String
     @State private var drafts: [MealItemDraft]
     @State private var notes: String
     @State private var macrosExpanded = false
@@ -660,6 +663,9 @@ private struct MealRecordEditor: View {
         _protein = State(initialValue: EditorValue.string(meal.protein))
         _carbs = State(initialValue: EditorValue.string(meal.carbs))
         _fat = State(initialValue: EditorValue.string(meal.fat))
+        _totalSugar = State(initialValue: EditorValue.string(meal.totalSugar))
+        _glycemicSpeed = State(initialValue: meal.glycemicSpeed)
+        _glycemicAssessment = State(initialValue: meal.glycemicAssessment)
         _drafts = State(initialValue: MealItemDraft.drafts(for: meal))
         _notes = State(initialValue: meal.notes)
     }
@@ -744,7 +750,32 @@ private struct MealRecordEditor: View {
                         text: $fat,
                         keyboard: .decimalPad
                     )
+                    RecordFieldRow(
+                        title: "总糖",
+                        placeholder: "未估算",
+                        unit: "g",
+                        text: $totalSugar,
+                        keyboard: .decimalPad
+                    )
                 }
+            }
+
+            Section("升糖速度") {
+                Picker("食物组成估算", selection: $glycemicSpeed) {
+                    Text("证据不足").tag(nil as MealGlycemicSpeed?)
+                    ForEach(MealGlycemicSpeed.allCases) { speed in
+                        Text(speed.displayName).tag(Optional(speed))
+                    }
+                }
+                RecordFieldRow(
+                    title: "估算依据",
+                    placeholder: "证据与不确定性",
+                    text: $glycemicAssessment,
+                    isMultiline: true
+                )
+                Text("这里只描述食物组成的定性速度，不代表个人实际血糖峰值，也不能用于诊断。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -782,6 +813,12 @@ private struct MealRecordEditor: View {
             && EditorValue.validDouble(protein, range: 0 ... 2000)
             && EditorValue.validDouble(carbs, range: 0 ... 2000)
             && EditorValue.validDouble(fat, range: 0 ... 2000)
+            && EditorValue.validDouble(totalSugar, range: 0 ... 2000)
+            && ((glycemicSpeed == nil && glycemicAssessment.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty) || (glycemicSpeed != nil && !glycemicAssessment.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty))
     }
 
     private var isDirty: Bool {
@@ -792,6 +829,10 @@ private struct MealRecordEditor: View {
             || EditorValue.double(protein) != meal.protein
             || EditorValue.double(carbs) != meal.carbs
             || EditorValue.double(fat) != meal.fat
+            || EditorValue.double(totalSugar) != meal.totalSugar
+            || glycemicSpeed != meal.glycemicSpeed
+            || glycemicAssessment.trimmingCharacters(in: .whitespacesAndNewlines)
+            != meal.glycemicAssessment
             || editedItems != meal.items
             || notes.trimmingCharacters(in: .whitespacesAndNewlines) != meal.notes
     }
@@ -801,26 +842,48 @@ private struct MealRecordEditor: View {
 
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedGlycemicAssessment = glycemicAssessment.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         title = normalizedTitle
         notes = normalizedNotes
         meal.date = date
         meal.mealType = mealType
         meal.title = normalizedTitle
         let normalizedItems = editedItems
+        let itemsChanged = normalizedItems != meal.items
         let editedTotals = EditorValue.int(calories) != meal.calories
             || EditorValue.double(protein) != meal.protein
             || EditorValue.double(carbs) != meal.carbs
             || EditorValue.double(fat) != meal.fat
-        if normalizedItems != meal.items {
+            || EditorValue.double(totalSugar) != meal.totalSugar
+        let editedGlycemic = glycemicSpeed != meal.glycemicSpeed
+            || normalizedGlycemicAssessment != meal.glycemicAssessment
+        if itemsChanged {
             meal.replaceItemsAndDeriveTotals(normalizedItems)
             drafts = MealItemDraft.drafts(for: meal)
+            if !editedTotals {
+                calories = EditorValue.string(meal.calories)
+                protein = EditorValue.string(meal.protein)
+                carbs = EditorValue.string(meal.carbs)
+                fat = EditorValue.string(meal.fat)
+                totalSugar = EditorValue.string(meal.totalSugar)
+            }
         }
         if editedTotals {
             meal.calories = EditorValue.int(calories)
             meal.protein = EditorValue.double(protein)
             meal.carbs = EditorValue.double(carbs)
             meal.fat = EditorValue.double(fat)
+            meal.totalSugar = EditorValue.double(totalSugar)
             meal.nutritionSource = .userEdited
+        }
+        if editedGlycemic {
+            meal.glycemicSpeed = glycemicSpeed
+            meal.glycemicAssessment = normalizedGlycemicAssessment
+        } else if itemsChanged {
+            glycemicSpeed = nil
+            glycemicAssessment = ""
         }
         meal.notes = normalizedNotes
         try? modelContext.save()

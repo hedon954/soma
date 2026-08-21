@@ -9,7 +9,8 @@
 - 后续修订：暂无
 - 修订自：
   - [ADR 0059](0059-precise-tools-and-reviewable-meal-items.md) 中食物项只用于只读审查的边界；精确 Tool 查询与 `MealItem` 结构继续有效
-- 后续替代：暂无
+- 后续替代：
+  - [ADR 0087](0087-reviewable-total-sugar-and-glycemic-speed.md) 把菜品与派生汇总字段扩展到总糖，并增加独立、成对、非诊断的餐食组成升糖速度评估
 - 上游依据：[PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
 
 ## 背景

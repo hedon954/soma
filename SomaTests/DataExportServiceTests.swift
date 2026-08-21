@@ -84,6 +84,12 @@ final class DataExportServiceTests: XCTestCase {
             from: Data(contentsOf: mealDirectory.appending(path: "分析结果.json"))
         )
         XCTAssertEqual(analysis.title, "测试午餐")
+        XCTAssertEqual(analysis.totalSugar, 7)
+        XCTAssertEqual(analysis.glycemicSpeed, "moderate")
+        XCTAssertEqual(
+            analysis.glycemicAssessment,
+            "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。"
+        )
         XCTAssertEqual(analysis.media.map(\.kind), ["image"])
         XCTAssertEqual(analysis.sourceText, "午餐吃了荞麦面，之后做了深蹲")
     }

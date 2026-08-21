@@ -50,6 +50,9 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
   `create_workout(workouts)`。新建训练记录不要传 `record_id`。
 - 计划的每个动作也必须绑定动作库 `exercise_id`。
 - 训练、饮食、身体 create/update 都支持可选 `occurred_at`。它是带时区 ISO-8601 时间；
+- 饮食 create/update 支持可选 `total_sugar` 与菜品分项总糖；`glycemic_speed` 只接受
+  `slow|moderate|fast`，并必须与非空 `glycemic_assessment` 成对出现。该评估描述餐食组成，
+  不代表个体血糖峰值或诊断；修改菜品会清除旧评估。
   省略时使用 Job 从原始用户 Turn 冻结的 `defaultOccurredAt`，重试、排队和跨午夜不会漂移。
   `defaultOccurredAt` 保留发送时刻的钟点，不是业务日零点；用户没有明确说时间就应省略。
 - list/get/create/update/delete 彼此独立；get/update/delete 必须传对应领域的精确 Int64 ID。

@@ -46,6 +46,9 @@ struct PortableMealAnalysis: Codable, Equatable, Sendable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
+    var totalSugar: Double?
+    var glycemicSpeed: String?
+    var glycemicAssessment: String?
     var items: [MealItem]?
     var nutritionSource: String?
     var notes: String?

@@ -237,10 +237,12 @@ struct AgentMealItemInput: Codable, Equatable {
     var protein: Double? = nil
     var carbs: Double? = nil
     var fat: Double? = nil
+    var totalSugar: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, calories, protein, carbs, fat
         case portionDescription = "portion_description"
+        case totalSugar = "total_sugar"
     }
 
     var model: MealItem {
@@ -251,7 +253,8 @@ struct AgentMealItemInput: Codable, Equatable {
             calories: calories,
             protein: protein,
             carbs: carbs,
-            fat: fat
+            fat: fat,
+            totalSugar: totalSugar
         )
     }
 }
@@ -271,6 +274,9 @@ struct AgentMutationPayload: Codable, Equatable {
     var protein: Double? = nil
     var carbs: Double? = nil
     var fat: Double? = nil
+    var totalSugar: Double? = nil
+    var glycemicSpeed: String? = nil
+    var glycemicAssessment: String? = nil
     var items: [AgentMealItemInput]? = nil
     var note: String? = nil
     var weight: Double? = nil
@@ -288,6 +294,9 @@ struct AgentMutationPayload: Codable, Equatable {
         case durationMinutes = "duration_minutes"
         case formScore = "form_score"
         case mealType = "meal_type"
+        case totalSugar = "total_sugar"
+        case glycemicSpeed = "glycemic_speed"
+        case glycemicAssessment = "glycemic_assessment"
         case bodyFat = "body_fat"
         case postureNote = "posture_note"
         case safetyNote = "safety_note"
@@ -312,6 +321,9 @@ extension AgentMutationPayload {
             protein: protein,
             carbs: carbs,
             fat: fat,
+            totalSugar: totalSugar,
+            glycemicSpeed: glycemicSpeed,
+            glycemicAssessment: glycemicAssessment,
             note: note,
             items: items,
             bodyFat: bodyFat,
@@ -419,6 +431,9 @@ struct AgentToolArguments: Codable, Equatable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
+    var totalSugar: Double?
+    var glycemicSpeed: String?
+    var glycemicAssessment: String?
     var note: String?
     var items: [AgentMealItemInput]?
 
@@ -463,6 +478,9 @@ struct AgentToolArguments: Codable, Equatable {
         case durationMinutes = "duration_minutes"
         case formScore = "form_score"
         case mealType = "meal_type"
+        case totalSugar = "total_sugar"
+        case glycemicSpeed = "glycemic_speed"
+        case glycemicAssessment = "glycemic_assessment"
         case bodyFat = "body_fat"
         case postureNote = "posture_note"
         case safetyNote = "safety_note"
@@ -522,6 +540,9 @@ struct AgentToolArguments: Codable, Equatable {
         protein: Double? = nil,
         carbs: Double? = nil,
         fat: Double? = nil,
+        totalSugar: Double? = nil,
+        glycemicSpeed: String? = nil,
+        glycemicAssessment: String? = nil,
         note: String? = nil,
         items: [AgentMealItemInput]? = nil,
         bodyFat: Double? = nil,
@@ -584,6 +605,9 @@ struct AgentToolArguments: Codable, Equatable {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
+        self.totalSugar = totalSugar
+        self.glycemicSpeed = glycemicSpeed
+        self.glycemicAssessment = glycemicAssessment
         self.note = note
         self.items = items
         self.bodyFat = bodyFat
@@ -1037,6 +1061,12 @@ extension AgentToolName {
                 "protein": number("蛋白质克数"),
                 "carbs": number("碳水克数"),
                 "fat": number("脂肪克数"),
+                "total_sugar": number("总糖克数，包含天然糖与添加糖；证据不足时省略"),
+                "glycemic_speed": string(
+                    "基于食物组成的定性消化吸收速度，不是个体血糖预测",
+                    values: MealGlycemicSpeed.allCases.map(\.rawValue)
+                ),
+                "glycemic_assessment": string("简要说明判断依据与不确定性，不给出血糖峰值或诊断"),
                 "items": mealItemArray(),
                 "note": string("估算依据、不确定性或用户原始补充")
             ], required: ["title"])
@@ -1073,6 +1103,12 @@ extension AgentToolName {
                 "protein": number("修正后的蛋白质克数"),
                 "carbs": number("修正后的碳水克数"),
                 "fat": number("修正后的脂肪克数"),
+                "total_sugar": number("修正后的总糖克数；证据不足时省略"),
+                "glycemic_speed": string(
+                    "修正后的定性消化吸收速度，不是个体血糖预测",
+                    values: MealGlycemicSpeed.allCases.map(\.rawValue)
+                ),
+                "glycemic_assessment": string("修正后的判断依据与不确定性"),
                 "items": mealItemArray(),
                 "note": string("修正依据、不确定性或用户原始补充")
             ], required: ["record_id"])
@@ -1177,7 +1213,8 @@ extension AgentToolName {
                 "calories": integer("分项千卡"),
                 "protein": number("分项蛋白质克数"),
                 "carbs": number("分项碳水克数"),
-                "fat": number("分项脂肪克数")
+                "fat": number("分项脂肪克数"),
+                "total_sugar": number("分项总糖克数；无法区分添加糖时不要猜测添加糖")
             ], required: ["name"]),
             description: "有序食物项；未知营养字段省略"
         )
@@ -1415,7 +1452,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .gymAnalysis: "识别环境与器械，区分可见证据和推断，并更新电子健身房。"
         case .trainingPlan: "结合目标、历史、身体状态和当前器械制定可执行训练计划。"
         case .movementAnalysis: "基于图片或视频关键帧评估动作、负荷与安全边界。"
-        case .nutritionAnalysis: "识别食物与份量，给出带不确定性的热量和宏量营养估算。"
+        case .nutritionAnalysis: "识别食物与份量，给出带不确定性的营养、总糖与餐食组成升糖速度估算。"
         case .postureAnalysis: "以中性、非诊断方式记录体态与标准化照片的可比变化。"
         case .trendAnalysis: "分析训练、体重和饮食的周期趋势，区分信号、噪声和缺失数据。"
         case .trainingVolumeAnalysis: "按可验证记录计算训练容量，并支持不同时间粒度的可比分析。"
@@ -1491,16 +1528,17 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             """
             # 饮食分析
 
-            目标：从文字和食物照片中提取可记录的餐食信息，并提供诚实的热量与宏量营养估算。
+            目标：从文字和食物照片中提取可记录的餐食信息，并提供诚实的营养、总糖与餐食组成升糖速度估算。
 
             执行规则：
             1. 识别可见食物、烹饪方式和可判断的份量；餐具尺寸未知、食物被遮挡或混合时说明不确定性。
-            2. 热量、蛋白质、碳水和脂肪优先给合理区间；写入单值时使用区间中位估计，并在 note 中保留估算依据和误差来源。
+            2. 热量、蛋白质、碳水、脂肪和总糖优先给合理区间；写入单值时使用区间中位估计，并在 note 中保留估算依据和误差来源。total_sugar 指天然糖与添加糖合计；没有营养标签或配料证据时不得把它写成“添加糖”。
             3. 不把照片外不可见的油、酱料或配料当作确定事实，可作为可能的偏差来源提示。
-            4. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。纠正、补图或改已有餐必须先 list/get 再用 update_meal。无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
+            4. 总糖不等于个体血糖反应。只有餐食组成证据足够时，才同时写 glycemic_speed 与 glycemic_assessment：速度只能是 slow、moderate 或 fast，依据需说明精制碳水、纤维、蛋白质、脂肪、烹饪或形态等可见因素及不确定性。不得预测个体血糖峰值、曲线或作诊断；证据不足时两项都省略。
+            5. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。纠正、补图或改已有餐必须先 list/get 再用 update_meal。无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
                不要猜测用餐时间：用户没有明确说时间就省略 occurred_at，由 App 使用发送时刻（含钟点）；只有用户明确给出时间时才写带时区的完整 ISO-8601 时间，不要写只有日期的值。
-            5. 调用 create_meal 或 update_meal 之前，先用一句话说明你识别到了什么（例如“我帮你识别到了以下食物信息。”）。这句话不列菜名、份量和数字，结果卡会显示它们。
-            6. 记录成功后最多补充两句不重复结果卡数据的教练说明。提供平衡饮食建议，不使用羞辱性语言，不把估算当作医学或营养治疗结论。
+            6. 调用 create_meal 或 update_meal 之前，先用一句话说明你识别到了什么（例如“我帮你识别到了以下食物信息。”）。这句话不列菜名、份量和数字，结果卡会显示它们。
+            7. 记录成功后最多补充两句不重复结果卡数据的教练说明。提供平衡饮食建议，不使用羞辱性语言，不把估算当作医学或营养治疗结论。
             """
         case .postureAnalysis:
             """

@@ -37,6 +37,7 @@
 | [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 已修复，待真机连续对话复验 | 流式回复期间在非主线程投影 Event，写 SwiftData 与 AttributeGraph 导致频繁闪退 | chunk 回调保持 `@MainActor`、投影主 actor 断言、文字增量合批与 segment 身份唯一 |
 | [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 首次修复不足，后续见 0026 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因 |
 | [0026](0026-guided-auto-recording-still-stops-without-reason.md) | 已修复，待真机复验 | 开组换预览宿主并自动放大取景仍会掐断自动录像，极短文件被当成正常保存 | 倒计时只取景、开组后放大再写文件；录像中不重建连接；非目标组无预览 |
+| [0027](0027-meal-aggregate-overrides-item-facts.md) | 已修复，待真机 Agent 交互确认 | 创建饮食时顶层营养可覆盖菜品派生事实 | 菜品优先写入、总糖完整性与 Tool 结果回归测试 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 
