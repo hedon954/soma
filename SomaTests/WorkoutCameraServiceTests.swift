@@ -105,6 +105,10 @@ final class WorkoutCameraServiceTests: XCTestCase {
         XCTAssertFalse(diagnostics.contains("杠铃深蹲"))
         XCTAssertFalse(diagnostics.contains("80kg"))
         XCTAssertFalse(diagnostics.contains("secret.mov"))
+        XCTAssertFalse(
+            WorkoutRecordingDiagnostics.callStackSummary()
+                .contains(NSHomeDirectory())
+        )
     }
 
     @MainActor
@@ -467,19 +471,129 @@ final class WorkoutCameraServiceTests: XCTestCase {
         )
     }
 
-    func testFullCaptureOnlyStaysVisibleWhileActuallyRecording() {
+    func testSetStartExpandsCaptureAndCollapseSurvivesRecording() {
         var state = GuidedWorkoutPresentationState()
 
-        state.expand()
         state.cameraStateChanged(.previewing)
         XCTAssertEqual(state.mode, .compact)
 
+        state.phaseChanged(.setInProgress, expandForRecording: true)
+        state.cameraStateChanged(.idle, isStartingRecording: true)
+        XCTAssertEqual(state.mode, .expandedCapture)
+
         state.collapse()
         state.cameraStateChanged(.recording)
-        XCTAssertEqual(state.mode, .expandedCapture)
+        XCTAssertEqual(state.mode, .compact)
+        XCTAssertFalse(
+            GuidedExpandedCaptureVisibility.isVisible(
+                sessionIsActive: true,
+                mode: state.mode,
+                phase: .setInProgress,
+                cameraState: .recording,
+                isStartingRecording: false
+            )
+        )
 
         state.phaseChanged(.resting)
         XCTAssertEqual(state.mode, .compact)
+    }
+
+    func testPreviewHostSettlementWaitsForANewHost() {
+        let countdownHost = UUID()
+        let setHost = UUID()
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.isSettled(
+                currentHostID: nil,
+                previousHostID: countdownHost
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.isSettled(
+                currentHostID: countdownHost,
+                previousHostID: countdownHost
+            )
+        )
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.isSettled(
+                currentHostID: setHost,
+                previousHostID: countdownHost
+            )
+        )
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.isSettled(
+                currentHostID: setHost,
+                previousHostID: nil
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+                cameraState: .startingRecording
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+                cameraState: .recording
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+                cameraState: .previewing,
+                hasLivePreview: true
+            )
+        )
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+                cameraState: .previewing,
+                hasLivePreview: false
+            )
+        )
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.hasLivePreview(
+                layerHasSession: true,
+                cameraState: .previewing
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.hasLivePreview(
+                layerHasSession: false,
+                cameraState: .previewing
+            )
+        )
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.shouldReuseRunningCaptureSession(
+                state: .idle,
+                sessionIsRunning: true,
+                sessionIsInterrupted: false
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldReuseRunningCaptureSession(
+                state: .previewing,
+                sessionIsRunning: true,
+                sessionIsInterrupted: true
+            )
+        )
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.shouldIgnoreTransientPreviewInterruption(
+                reasonCode: "session-interruption",
+                hasActiveAttempt: false,
+                hasSessionOwner: true
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldIgnoreTransientPreviewInterruption(
+                reasonCode: "background",
+                hasActiveAttempt: false,
+                hasSessionOwner: true
+            )
+        )
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldIgnoreTransientPreviewInterruption(
+                reasonCode: "session-interruption",
+                hasActiveAttempt: true,
+                hasSessionOwner: true
+            )
+        )
     }
 }
 

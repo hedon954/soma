@@ -3,6 +3,9 @@ import SwiftUI
 struct GuidedExerciseIntroductionView: View {
     let exercise: ExerciseDefinition?
     let performance: ExercisePerformance?
+    var camera: WorkoutCameraService?
+    var isLandscape = false
+    var cameraErrorMessage: String?
     let onPrepare: () -> Void
     let onReplace: () -> Void
     let onSkip: () -> Void
@@ -20,6 +23,11 @@ struct GuidedExerciseIntroductionView: View {
                 .aspectRatio(1, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 26))
+                .guidedPictureInPicture(
+                    camera: camera,
+                    isLandscape: isLandscape,
+                    recordingErrorMessage: cameraErrorMessage
+                )
 
                 Label(
                     exercise?.coachingNotes.nilIfBlank
@@ -56,6 +64,9 @@ struct GuidedSetCountdownView: View {
     let targetText: String
     let phaseStartedAt: Date?
     var deadlineAt: Date?
+    var camera: WorkoutCameraService?
+    var isLandscape = false
+    var cameraErrorMessage: String?
     let onTick: (Int) -> Void
     let onFinished: @MainActor () async -> Void
 
@@ -83,6 +94,11 @@ struct GuidedSetCountdownView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .guidedPictureInPicture(
+                camera: camera,
+                isLandscape: isLandscape,
+                recordingErrorMessage: cameraErrorMessage
+            )
         }
         .task(id: deadlineAt ?? phaseStartedAt) {
             do {
@@ -177,6 +193,9 @@ struct GuidedRestView: View {
     let nextSet: WorkoutSet?
     var nextEffort: WorkoutEffort?
     let remainingSeconds: () -> Int
+    var camera: WorkoutCameraService?
+    var isLandscape = false
+    var cameraErrorMessage: String?
     let onTick: (Int) -> Void
     let onAdjust: (Int) -> Void
     let onFinish: () -> Void
@@ -216,6 +235,11 @@ struct GuidedRestView: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .guidedPictureInPicture(
+                camera: camera,
+                isLandscape: isLandscape,
+                recordingErrorMessage: cameraErrorMessage
+            )
         }
         .task(id: nextEffort?.id ?? nextSet?.id) {
             var announced: Set<Int> = []

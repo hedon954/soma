@@ -45,7 +45,8 @@
 | [031：独立逐组处方、低摩擦带练与自动完成分享](031-guided-workout-v5-independent-sets-and-automatic-completion.md) | 主体已实施，录像修订中 | 一步选择录像策略、独立逻辑组与左右 Effort、计时/休息自动推进、分段进度、动作记录先行、热量与分享预览；完整相机 activation 与部分证据由 ADR 0074 修订；SwiftData 只打开当前模型由 ADR 0075 落地；侧别与完成方式归动作定义由 ADR 0076 修订 |
 | [032：未选 Skill 全量工具，选中 Skill 绑定子集](032-default-full-tools-and-selected-skill-subset.md) | 已实施，部分修订；待真机验收 | 未选快捷 Skill 时注册当前协议全部 Tool 与完整 Skill 目录；选中场景 Skill 时只注册白名单绑定工具；子集来源由 033 改为快捷按钮 |
 | [033：消息元信息、快捷按钮 CRUD、可观测性与饮食双卡片](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) | 已实施，待真机录像与崩溃上报验收 | 消息底部单行时间与位置、日期入口移到导航栏、快捷按钮完整 CRUD 并持有工具白名单、流式闪退修复与崩溃静默上报、每次 LLM 调用记录工具清单、录像失败具体原因、可编辑菜品清单卡加派生汇总卡并跟随写入步骤出现 |
-| [034：历史、媒体、Tab 与带练取景打磨](034-history-media-tabs-and-guided-capture-polish.md) | 已实施 | 媒体从缩略图 zoom、饮食详情复用聊天菜品行、训练/饮食月份芯片与按天折叠、执行日志 Span 进独立页、再点当前 Tab 回根、自动录像先锁定宿主再切组、预览与缩略 fill |
+| [034：历史、媒体、Tab 与带练取景打磨](034-history-media-tabs-and-guided-capture-polish.md) | 已实施，部分修订 | 媒体从缩略图 zoom、饮食详情复用聊天菜品行、训练/饮食月份芯片与按天折叠、执行日志 Span 进独立页、再点当前 Tab 回根、自动录像先锁定宿主再切组、预览与缩略 fill；开组录像时序由 035 修订 |
+| [035：带练先取景再录像，完成后立即分享并回训练主页](035-guided-preview-then-record-and-immediate-share.md) | 已实施，待真机录像与分享验收 | 倒计时小窗取景、开组后放大录制、缩小后继续录像；首组策略后续组不预览；计划结束含提前结束立即分享，关闭后回训练主页 |
 
 ## 阅读约定
 

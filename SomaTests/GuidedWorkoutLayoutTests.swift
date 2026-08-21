@@ -74,6 +74,48 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         XCTAssertNil(camera.previewIssueMessage)
     }
 
+    @MainActor
+    func testPreviewHostDetachSkipsTeardownWhileRecording() {
+        let camera = WorkoutCameraService()
+        let layer = camera.sharedPreviewLayer
+        let hostID = UUID()
+        camera.attachPreviewLayer(
+            layer,
+            hostID: hostID,
+            videoGravity: .resizeAspectFill
+        )
+        camera.useCameraStateForTesting(.recording)
+        camera.detachPreviewLayer(layer, hostID: hostID)
+        XCTAssertEqual(camera.activePreviewHostIDForTesting, hostID)
+        XCTAssertFalse(
+            GuidedPreviewHostSettlement.shouldRebuildCaptureConnections(
+                cameraState: .recording
+            )
+        )
+    }
+
+    @MainActor
+    func testPreviewHostDetachSkipsTeardownWhilePreviewing() {
+        let camera = WorkoutCameraService()
+        let layer = camera.sharedPreviewLayer
+        layer.session = AVCaptureSession()
+        let hostID = UUID()
+        camera.attachPreviewLayer(
+            layer,
+            hostID: hostID,
+            videoGravity: .resizeAspectFill
+        )
+        camera.useCameraStateForTesting(.previewing)
+        camera.detachPreviewLayer(layer, hostID: hostID)
+        XCTAssertEqual(camera.activePreviewHostIDForTesting, hostID)
+        XCTAssertTrue(
+            GuidedPreviewHostSettlement.hasLivePreview(
+                layerHasSession: true,
+                cameraState: .previewing
+            )
+        )
+    }
+
     func testRecordingWithoutVisiblePreviewShowsActionableState() {
         XCTAssertEqual(
             WorkoutCameraSurfacePresentation.resolve(
@@ -196,7 +238,8 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
                     phase: phase,
                     cameraState: .previewing,
                     isStarting: false,
-                    sessionIsActive: true
+                    sessionIsActive: true,
+                    isCaptureTarget: true
                 ),
                 .phasePictureInPicture
             )
@@ -206,7 +249,8 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
                 phase: .setInProgress,
                 cameraState: .startingRecording,
                 isStarting: true,
-                sessionIsActive: true
+                sessionIsActive: true,
+                isCaptureTarget: true
             ),
             .setHero
         )
@@ -215,7 +259,18 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
                 phase: .exerciseIntroduction,
                 cameraState: .idle,
                 isStarting: false,
-                sessionIsActive: true
+                sessionIsActive: true,
+                isCaptureTarget: true
+            ),
+            .hidden
+        )
+        XCTAssertEqual(
+            GuidedCameraSurfacePlacement.resolve(
+                phase: .setInProgress,
+                cameraState: .previewing,
+                isStarting: false,
+                sessionIsActive: true,
+                isCaptureTarget: false
             ),
             .hidden
         )
@@ -288,14 +343,23 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             accuracy: 0.0001
         )
 
-        let portraitPIP = WorkoutCaptureLayout.compactPreviewWidth(
-            availableWidth: 390,
-            isLandscape: false
+        let portraitPIP = WorkoutCaptureLayout.compactPreviewSize(isLandscape: false)
+        XCTAssertEqual(portraitPIP.width, 132, accuracy: 0.001)
+        XCTAssertEqual(
+            portraitPIP.height,
+            132 * 16 / 9,
+            accuracy: 0.001
+        )
+        let landscapePIP = WorkoutCaptureLayout.compactPreviewSize(isLandscape: true)
+        XCTAssertEqual(landscapePIP.width, 210, accuracy: 0.001)
+        XCTAssertEqual(
+            landscapePIP.height,
+            210 * 9 / 16,
+            accuracy: 0.001
         )
         let landscapeCameraShare = WorkoutCaptureLayout.landscapeCameraShare(
             availableWidth: 844
         )
-        XCTAssertGreaterThanOrEqual(portraitPIP, 120)
         XCTAssertGreaterThanOrEqual(landscapeCameraShare, 0.68)
         XCTAssertEqual(
             WorkoutCaptureLayout.portraitCameraRegionHeight(
@@ -306,6 +370,48 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
             ),
             516
         )
+        let previewSize = WorkoutCaptureLayout.compactPreviewSize(isLandscape: false)
+        let container = CGSize(width: 390, height: 390)
+        XCTAssertEqual(
+            GuidedPictureInPictureLayout.clampedOffset(
+                .zero,
+                containerSize: container,
+                previewSize: previewSize
+            ),
+            .zero
+        )
+        let trailing = GuidedPictureInPictureLayout.defaultTrailingOffset(
+            containerSize: container,
+            previewSize: previewSize
+        )
+        XCTAssertGreaterThan(trailing.width, 0)
+        XCTAssertEqual(trailing.height, 0, accuracy: 0.001)
+        let origin = GuidedPictureInPictureLayout.trailingFrameOrigin(
+            containerSize: container,
+            previewSize: previewSize
+        )
+        XCTAssertEqual(
+            origin.x,
+            container.width - previewSize.width
+                - GuidedPictureInPictureLayout.edgePadding,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            origin.y,
+            (container.height - previewSize.height) / 2,
+            accuracy: 0.001
+        )
+        XCTAssertGreaterThan(
+            origin.x,
+            (container.width - previewSize.width) / 2
+        )
+        let clamped = GuidedPictureInPictureLayout.clampedOffset(
+            CGSize(width: 400, height: -400),
+            containerSize: CGSize(width: 390, height: 390),
+            previewSize: previewSize
+        )
+        XCTAssertLessThanOrEqual(clamped.width, (390 - previewSize.width) / 2)
+        XCTAssertGreaterThanOrEqual(clamped.height, -(390 - previewSize.height) / 2)
     }
 
     func testExpandedActionTitleCombinesExerciseAndTargetOnOneLine() {

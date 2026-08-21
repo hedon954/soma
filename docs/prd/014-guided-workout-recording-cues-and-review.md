@@ -12,6 +12,7 @@
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 收敛带练执行同屏控件密度与准备页选项呈现
   - [PRD 019](019-training-review-plan-management-and-muscle-map-share.md) 将录像失败反馈统一为含原因的 toast 提示与可解释的按钮禁用
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将自动录像改为先在倒计时宿主完成写入再放大取景，历史缩略按取景比例 fill
+  - [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 将倒计时改为只取景，动作开始后再录像，并让完成后立即分享
 - 上游依据：
   - [带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)
   - [BUG 0010](../bugs/0010-guided-recording-state-and-cue-gaps.md)

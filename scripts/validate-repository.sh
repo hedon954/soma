@@ -133,6 +133,21 @@ grep -q 'skipMovieOutputGeometry = state == .startingRecording' \
 grep -q 'guard !skipMovieOutputGeometry, !resources.movieOutput.isRecording else' \
   Soma/Services/WorkoutCameraService.swift ||
   fail "BUG 0025: capture geometry must not rewrite movie output while recording"
+grep -q 'waitUntilPreviewHostSettled' \
+  Soma/Services/GuidedWorkoutCoordinator.swift ||
+  fail "BUG 0026: beginCurrentSet must wait for the set preview host before recording"
+grep -q 'shouldRebuildCaptureConnections' \
+  Soma/Services/WorkoutCameraService.swift ||
+  fail "BUG 0026: live recording must not rebuild capture connections on preview host handoff"
+grep -q 'hasLivePreview' \
+  Soma/Views/GuidedWorkoutInteractionState.swift ||
+  fail "BUG 0026: live preview host handoff must not rebuild capture connections"
+grep -q 'prepare-reused-running-session' \
+  Soma/Services/WorkoutCameraService.swift ||
+  fail "BUG 0026: startRecording must reuse a running capture session instead of reconfiguring"
+grep -q 'shouldIgnoreTransientPreviewInterruption' \
+  Soma/Views/GuidedWorkoutInteractionState.swift ||
+  fail "BUG 0026: previewing session-interruption must not stop an owned capture session"
 
 for privacy_key in \
   NSCameraUsageDescription \

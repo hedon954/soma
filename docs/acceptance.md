@@ -22,7 +22,7 @@
 | 训练与动作分析 | 训练动作使用稳定 ID；旧聚合与新逐组 Session 统一进入动作历史。包内动作内容保持静默，仅在用户形成动作后关联；列表展示动作图，详情展示多张动作图与程序化正背面肌群受力图。缺失字段保持空；动作示意图生成和视频复盘都只由用户主动触发，肌群图不再走 AI 生成。 |
 | 动作快捷输入 | 输入框只在本地 active 标准名称中匹配；建议行一次给出「动作名 + 最近一次训练数据」，点一次写入完整草稿，没有历史时只写动作名。只修改草稿且仍由用户主动发送。 |
 | 训练计划与带练 | PRD 031 的当前验收目标：计划详情依次展示可编辑概览、确定性训练效果和动作列表；侧别与按次数/按时长保存在动作定义，计划组只编辑该定义下有意义的次数或时长、重量与间歇。点击开始只选择一次三种录像策略即进入首个动作；计时与休息自动推进，进度按动作/逻辑组分段，语音播报组数与次数/秒数。动作记录先于 Session 自动完成，最后进入本地分享预览。实现中项目必须由启动数据回填、Coordinator、投影、热量和 UI 测试逐项证明，不能只以编译通过代替。 |
-| 自动录像 | Session 可关闭、每动作首个工作组或每组自动录制；主界面始终保留主动录像。倒计时结束先在现有 PIP 宿主等到 `didStartRecordingTo`，再切 `.setInProgress`。每次请求拥有 attempt 单终态并绑定 Effort，成功 key 为 true 的有效文件必须保留；提前结束和重复 stop 不产生第二个 Alert。相机失败暂停自动策略但不阻断训练；失败提示给出具体原因与技术标识，`startingRecording` 与录像进行中不改写视频连接。紧凑与放大预览、历史缩略均 fill。真实 Delegate、系统中断和左右独立片段仍需真机证据。 |
+| 自动录像 | Session 可关闭、每动作首个工作组或每组自动录制；主界面始终保留主动录像。倒计时只取景，开组进入 `.setInProgress` 并等预览宿主后再 `startRecording`。每次请求拥有 attempt 单终态并绑定 Effort，成功 key 为 true 的有效文件必须保留；提前结束和重复 stop 不产生第二个 Alert。相机失败暂停自动策略但不阻断训练；失败提示给出具体原因与技术标识，`startingRecording` 与录像进行中不改写视频连接、不重建 RotationCoordinator。紧凑与放大预览、历史缩略均 fill。真实 Delegate、系统中断和左右独立片段仍需真机证据。 |
 | CRUD | 训练、饮食、身体详情进入即编辑，修改后显示保存；次要区块（受力图、热量估算、AI 解析、原始记录、宏量营养）默认折叠但展开后仍可完整编辑。训练记录逐组默认只编辑动作定义下的次数或时长与重量，不展示逻辑组或完成方式选择器。历史列表左滑红色图标删除。训练与饮食记录按自然日分组、常驻导航标题下「全部 + 按月」透明芯片筛选、按天可折叠，并支持分页加载；记录通过 `exerciseID` 关联动作库，列表行只保留主指标与取景比例缩略图，打开历史时对仅有名称的旧记录做确定性回填。健身房和器械也可修改与删除。 |
 | 统计 | 进展首屏收敛为紧凑“当前上下文”入口、最近记录、带“最近 7 天”摘要的连续性热力图、体重趋势和训练容量趋势。 |
 | 底部 Tab | 教练、训练、进展、设置四个 Tab 各自保留导航栈；换 Tab 不 pop，再点已选中的 Tab 才回到该 Tab 根页面。教练再选回到当前 Session，不清空对话。 |
@@ -214,8 +214,10 @@
 ## 已实现：历史、媒体、Tab 与带练取景打磨
 
 [PRD 034](prd/034-history-media-tabs-and-guided-capture-polish.md)、
+[PRD 035](prd/035-guided-preview-then-record-and-immediate-share.md)、
 [ADR 0086](adr/0086-preview-and-history-thumbs-use-aspect-fill.md) 与
-[BUG 0025](bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md) 后续修订的当前实现证据。
+[BUG 0025](bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)、
+[BUG 0026](bugs/0026-guided-auto-recording-still-stops-without-reason.md) 的当前实现证据。
 
 | 要求 | 当前证据 |
 | --- | --- |
@@ -224,8 +226,9 @@
 | 历史芯片与折叠 | `historyListChrome` 使用 inline 标题加图标；`HistoryMonthFilterBar` 无 `.bar` 实心底。每一天是 `HistoryDayHeader` 卡片，日期与条数与行缩略图共用 `HistoryDayCardLayout.horizontalInset`，折叠后仍显示条数与已知容量/热量。`WorkoutHistoryQueryTests` 覆盖饮食按天分组、摘要只累加完整容量/热量，以及同年芯片省略年份。 |
 | Span 独立页 | `AgentTraceSpanRow` 是 `NavigationLink`；`AgentTraceSpanPayloads.sections` 分段入参/返回。`AgentTraceSpanPayloadsTests` 覆盖超长入参不依赖时间线内嵌。 |
 | Tab 再选 | `AppTabReselect.stackID` 仅在 selected == incoming 时换 UUID；`RootView` 用 `.id` 重建该 Tab 栈。`AppTabReselectTests` 覆盖再选与切换。 |
-| 自动录像宿主 | `beginCurrentSet` 先 `startRecording` 再 `setPhase(.setInProgress)`。`applyCaptureGeometry` 在 `startingRecording`/`recording` 跳过 movieOutput；`validate-repository.sh` 静态守卫。 |
+| 自动录像宿主 | `beginCurrentSet` 先进入 `.setInProgress` 并打开放大取景，`waitUntilPreviewHostSettled` 后再 `startRecording`。已有预览连接时换宿主不重建、不因 `session-interruption` 停掉 Session；`prepare()` 复用仍在跑的 Session。录像中可缩小。非目标组不显示取景。`GuidedWorkoutCoordinatorTests` / `WorkoutCameraServiceTests` / `GuidedWorkoutLayoutTests` 覆盖时序与居中；`validate-repository.sh` 静态守卫。 |
 | 预览 fill | `WorkoutCameraSurface` 与 `CameraPreviewView` 默认 `.resizeAspectFill`；历史录像缩略按取景比例 `scaledToFill`。 |
+| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。 |
 
 ## 实施前文档门禁
 

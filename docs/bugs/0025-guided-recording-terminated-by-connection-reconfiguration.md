@@ -1,11 +1,14 @@
 # BUG 0025：带练录像被连接重配置提前终止，且失败原因不可见
 
-- 状态：已修复，待真机复验
+- 状态：首次修复不足，后续见 0026
 - 发现日期：2026-08-20
 - 影响范围：带练自动/手动录像、录像失败提示、录像诊断日志
 - 修订自：
   - [BUG 0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) 的完整 activation
     截止与部分录像证据修复
+- 后续修订：
+  - [BUG 0026](0026-guided-auto-recording-still-stops-without-reason.md) 定位到开组时预览宿主交接
+    与自动放大取景仍会掐断录像，且极短文件被当成正常保存
 - 上游依据：
   - [ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
 - 下游落地：

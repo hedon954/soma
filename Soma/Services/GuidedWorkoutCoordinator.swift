@@ -247,31 +247,58 @@ final class GuidedWorkoutCoordinator {
         }
         try context.save()
 
-        if queuedManualRecording {
-            await startRecording(
-                for: performance,
-                set: set,
-                effortID: effort.id,
-                automatic: false
-            )
-        } else if shouldRecord(
+        // PRD 035：倒计时只取景；开组并等执行页宿主后再写文件。
+        let previousPreviewHostID = recorder.previewHostID
+        setPhase(.setInProgress, deadline: deadline, for: session)
+        try context.save()
+        let shouldStartRecording = queuedManualRecording || shouldRecord(
             set: set,
             effort: effort,
             performance: performance,
             session: session
-        ) {
+        )
+        if shouldStartRecording {
+            await recorder.waitUntilPreviewHostSettled(
+                from: previousPreviewHostID
+            )
             await startRecording(
                 for: performance,
                 set: set,
                 effortID: effort.id,
-                automatic: true
+                automatic: !queuedManualRecording
+            )
+        } else {
+            await releaseCameraIfNotNeeded(in: context)
+        }
+        cues.announce(announcement)
+    }
+
+    func shouldCaptureCurrentEffort(in context: ModelContext) -> Bool {
+        guard let session = try? activeSession(in: context) else { return false }
+        if recordingSetID != nil || isStartingRecording || manualRecordingQueued {
+            return true
+        }
+        if let performance = currentPerformance(for: session, in: context),
+           let set = currentSet(for: session, in: context),
+           let effort = currentEffort(for: session, in: context)
+        {
+            return shouldRecord(
+                set: set,
+                effort: effort,
+                performance: performance,
+                session: session
             )
         }
-        // BUG 0025：自动录像必须在倒计时 PIP 宿主上真正 startRecording 之后
-        // 才切到 setInProgress，避免预览交接在 isRecording 仍为 false 时改写几何。
-        setPhase(.setInProgress, deadline: deadline, for: session)
-        try context.save()
-        cues.announce(announcement)
+        switch session.guidedPhase {
+        case .exerciseIntroduction, .preSetCountdown:
+            return nextAutomaticRecordingEffortID(
+                for: session,
+                in: context
+            ) != nil
+        case .ready, .setInProgress, .setConfirmation, .resting,
+             .sessionReview, .completed:
+            return false
+        }
     }
 
     func startManualRecording(in context: ModelContext) async throws {
@@ -470,6 +497,7 @@ final class GuidedWorkoutCoordinator {
             normalizeQueuedRecording(for: session, in: context)
             try context.save()
             cues.success()
+            await releaseCameraIfNotNeeded(in: context)
         } catch {
             context.rollback()
             throw error
@@ -515,6 +543,7 @@ final class GuidedWorkoutCoordinator {
                 in: context
             )
             try context.save()
+            await releaseCameraIfNotNeeded(in: context)
         } catch {
             context.rollback()
             throw error
@@ -1379,6 +1408,13 @@ extension GuidedWorkoutCoordinator {
             )
     }
 
+    private func releaseCameraIfNotNeeded(in context: ModelContext) async {
+        guard recordingSetID == nil, !isStartingRecording else { return }
+        guard !shouldCaptureCurrentEffort(in: context) else { return }
+        recordingStatusMessage = nil
+        await recorder.idlePreviewKeepingSessionOwner()
+    }
+
     private func startRecording(
         for performance: ExercisePerformance,
         set: WorkoutSet,
@@ -1858,35 +1894,6 @@ extension GuidedWorkoutCoordinator {
             .insufficientStorage
         case .recordingFailed:
             .recordingFailed
-        }
-    }
-}
-
-enum GuidedWorkoutError: LocalizedError, Equatable {
-    case missingSession
-    case missingPerformance
-    case missingSet
-    case missingEffort
-    case noPendingEffortForRecording
-    case sessionNotReadyForCompletion
-    case missingWorkoutProjection
-
-    var errorDescription: String? {
-        switch self {
-        case .missingSession:
-            "没有可继续的训练。"
-        case .missingPerformance:
-            "当前动作不存在。"
-        case .missingSet:
-            "当前训练组不存在。"
-        case .missingEffort:
-            "当前训练动作侧不存在。"
-        case .noPendingEffortForRecording:
-            "没有可预约录像的下一组；你仍可在动作开始后点击录像。"
-        case .sessionNotReadyForCompletion:
-            "训练尚未完成，暂时不能结束。"
-        case .missingWorkoutProjection:
-            "动作训练记录尚未保存，请重试。"
         }
     }
 }

@@ -488,7 +488,7 @@ struct WorkoutShareSheet: View {
                                 Task { await renderPoster() }
                             }
                             .buttonStyle(.borderedProminent)
-                            Button("返回训练历史") {
+                            Button("返回训练") {
                                 dismiss()
                             }
                         }
