@@ -41,4 +41,3 @@ exports/
 Soma/Resources/FeedbackCredentials.plist
 .claude/settings.local.json
 .codex/tmp/
-.cursor/plans/
