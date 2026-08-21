@@ -90,6 +90,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0084](0084-inline-meal-breakdown-and-derived-totals.md) | 已采纳 | 饮食原位审查分为可编辑菜品清单卡与只读派生汇总卡；缺项保持为空，记录时间使用钟点 |
 | [0085](0085-record-cards-follow-the-producing-step.md) | 已采纳 | 原位卡插在产生它的那一步之后，文字与卡片交替出现；重复引用只渲染一张卡，无法归位的兜底在末尾 |
 | [0086](0086-preview-and-history-thumbs-use-aspect-fill.md) | 已采纳 | 带练紧凑/放大预览与历史录像缩略统一 aspect fill；保存文件仍使用锁定的捕获几何 |
+| [0087](0087-reviewable-total-sugar-and-glycemic-speed.md) | 已采纳 | 总糖是可空营养事实；升糖速度与依据成对保存、编辑菜品后失效，且不冒充个体血糖预测 |
 
 新决策使用 [ADR 模板](template.md)。
 

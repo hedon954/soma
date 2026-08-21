@@ -26,6 +26,108 @@ final class AgentV2Tests: XCTestCase {
     }
 
     @MainActor
+    func testCreateMealPersistsReviewableSugarAndQualitativeGlycemicEstimate() throws {
+        let context = try makeContext()
+        let result = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createMeal,
+                arguments: AgentToolArguments(
+                    mealType: MealType.snack.rawValue,
+                    title: "虚构加餐",
+                    totalSugar: 99,
+                    glycemicSpeed: MealGlycemicSpeed.fast.rawValue,
+                    glycemicAssessment: "精制碳水占比较高；实际反应因人而异。",
+                    items: [
+                        AgentMealItemInput(
+                            name: "虚构酸奶",
+                            portionDescription: "一杯",
+                            calories: 120,
+                            protein: 6,
+                            carbs: 18,
+                            fat: 3,
+                            totalSugar: 8
+                        ),
+                        AgentMealItemInput(
+                            name: "虚构莓果",
+                            portionDescription: "一小份",
+                            calories: 45,
+                            protein: 1,
+                            carbs: 10,
+                            fat: 0.5,
+                            totalSugar: 3
+                        )
+                    ]
+                )
+            ),
+            sourceText: "记录这份虚构加餐",
+            sourceDate: Date(timeIntervalSince1970: 1_787_200_000),
+            sourceSessionID: UUID(),
+            sourceTurnID: UUID(),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        let meal = try XCTUnwrap(
+            try context.fetch(FetchDescriptor<MealEntry>()).first
+        )
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(meal.totalSugar, 11)
+        XCTAssertEqual(meal.glycemicSpeed, .fast)
+        XCTAssertEqual(
+            meal.glycemicAssessment,
+            "精制碳水占比较高；实际反应因人而异。"
+        )
+        guard case let .object(payload)? = result.data else {
+            return XCTFail("饮食 Tool 应返回结构化记录")
+        }
+        XCTAssertEqual(payload["total_sugar"], .number(11))
+        XCTAssertEqual(payload["glycemic_speed"], .string("fast"))
+    }
+
+    @MainActor
+    func testUpdateMealKeepsItemsAsNutritionSourceAndRefreshesAssessment() throws {
+        let context = try makeContext()
+        let meal = MealEntry(
+            mealType: .snack,
+            title: "旧虚构加餐",
+            totalSugar: 20,
+            glycemicSpeed: .slow,
+            glycemicAssessment: "旧判断"
+        )
+        context.insert(meal)
+        try BusinessIDAllocator.assignMissingIDs(in: context)
+        let recordID = try XCTUnwrap(meal.businessID)
+
+        let result = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .updateMeal,
+                arguments: AgentToolArguments(
+                    title: "新虚构加餐",
+                    totalSugar: 99,
+                    glycemicSpeed: MealGlycemicSpeed.moderate.rawValue,
+                    glycemicAssessment: "混合餐，仅作定性估算。",
+                    items: [
+                        AgentMealItemInput(name: "虚构食物甲", totalSugar: 2),
+                        AgentMealItemInput(name: "虚构食物乙", totalSugar: 3)
+                    ],
+                    recordID: recordID
+                )
+            ),
+            sourceText: "修正这份虚构加餐",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(meal.totalSugar, 5)
+        XCTAssertEqual(meal.nutritionSource, .derivedFromItems)
+        XCTAssertEqual(meal.glycemicSpeed, .moderate)
+        XCTAssertEqual(meal.glycemicAssessment, "混合餐，仅作定性估算。")
+    }
+
+    @MainActor
     func testMutateMealKeepsUnknownNutritionNilAndDerivesCompleteFields() throws {
         let context = try makeContext()
         let result = ConversationRecorder.mutateUserData(

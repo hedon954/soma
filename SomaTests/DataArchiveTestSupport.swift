@@ -95,6 +95,9 @@ enum DataArchiveTestSupport {
             protein: 32,
             carbs: 58,
             fat: 16,
+            totalSugar: 7,
+            glycemicSpeed: .moderate,
+            glycemicAssessment: "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。",
             notes: "荞麦面和蔬菜",
             mediaAttachments: [
                 MediaAttachmentReference(kind: .image, path: mealMediaPath)

@@ -184,6 +184,12 @@ final class DataBackupServiceTests: XCTestCase {
             businessIDsByNamespace(in: snapshot)
         )
         XCTAssertEqual(restored.meals.map(\.id), snapshot.meals.map(\.id))
+        XCTAssertEqual(restored.meals.first?.totalSugar, 7)
+        XCTAssertEqual(restored.meals.first?.glycemicSpeedRaw, "moderate")
+        XCTAssertEqual(
+            restored.meals.first?.glycemicAssessment,
+            "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。"
+        )
         XCTAssertEqual(
             restored.meals.first?.mediaAttachments.first?.path,
             "PrivateMedia/restored.jpg"
