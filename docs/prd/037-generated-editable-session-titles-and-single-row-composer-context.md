@@ -6,7 +6,7 @@
   - [PRD 004](004-soma-current-product.md) 的本地 Session 标题与教练输入区基线
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 的可继续 Session 抽屉与健身房切换入口
   - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 的三个默认快捷按钮与输入区呈现
-- 后续修订：暂无
+- 后续修订：[PRD 038](038-long-press-session-title-editing.md) 以标题长按编辑替代可见省略号菜单
 - 上游依据：维护者要求会话标题自动生成、可手动编辑，并让快捷按钮与健身房入口保持同一行
 - 下游落地：[ADR 0088](../adr/0088-async-generated-session-title-with-manual-precedence.md)
 

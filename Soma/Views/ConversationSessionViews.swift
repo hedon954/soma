@@ -79,6 +79,11 @@ struct ConversationSessionDrawer: View {
             Button("取消", role: .cancel) {
                 renamingSessionID = nil
             }
+            if renamingSession?.titleSource == .manual {
+                Button("恢复自动标题") {
+                    restoreAutomaticTitle()
+                }
+            }
             Button("保存") {
                 saveRename()
             }
@@ -100,51 +105,25 @@ struct ConversationSessionDrawer: View {
         )
     }
 
-    private func sessionListRow(_ session: ConversationSession) -> some View {
-        HStack(spacing: 0) {
-            Button {
-                onSelectSession(session)
-            } label: {
-                sessionRowContent(session)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(
-                session.id == currentSessionID
-                    ? "当前对话"
-                    : "切换后可继续对话"
-            )
-            .accessibilityAction(named: "重命名对话") {
-                beginRename(session)
-            }
+    private var renamingSession: ConversationSession? {
+        guard let renamingSessionID else { return nil }
+        return sessions.first { $0.id == renamingSessionID }
+    }
 
-            Menu {
-                Button {
-                    beginRename(session)
-                } label: {
-                    Label("重命名", systemImage: "pencil")
-                }
-                if session.titleSource == .manual {
-                    Button {
-                        if !onRestoreAutomaticTitle(session) {
-                            showsRenameFailureAlert = true
-                        }
-                    } label: {
-                        Label("恢复自动标题", systemImage: "sparkles")
-                    }
-                }
-                Divider()
-                Button(role: .destructive) {
-                    onDeleteSession(session)
-                } label: {
-                    Label("删除对话", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 40, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("对话操作")
+    private func sessionListRow(_ session: ConversationSession) -> some View {
+        Button {
+            onSelectSession(session)
+        } label: {
+            sessionRowContent(session)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(
+            session.id == currentSessionID
+                ? "当前对话，长按标题可重命名"
+                : "切换后可继续对话，长按标题可重命名"
+        )
+        .accessibilityAction(named: "重命名对话") {
+            beginRename(session)
         }
         .background(
             session.id == currentSessionID
@@ -170,6 +149,13 @@ struct ConversationSessionDrawer: View {
                 Text(session.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in
+                                beginRename(session)
+                            }
+                    )
                 Spacer()
                 if session.id == currentSessionID {
                     Image(systemName: "checkmark.circle.fill")
@@ -206,5 +192,13 @@ struct ConversationSessionDrawer: View {
             showsRenameFailureAlert = true
         }
         self.renamingSessionID = nil
+    }
+
+    private func restoreAutomaticTitle() {
+        guard let session = renamingSession else { return }
+        if !onRestoreAutomaticTitle(session) {
+            showsRenameFailureAlert = true
+        }
+        renamingSessionID = nil
     }
 }
