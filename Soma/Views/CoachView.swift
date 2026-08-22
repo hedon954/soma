@@ -155,6 +155,8 @@ struct CoachView: View {
                     isProcessing: processor.isProcessing,
                     onNewSession: createSession,
                     onSelectSession: selectSession,
+                    onRenameSession: renameSession,
+                    onRestoreAutomaticTitle: restoreAutomaticTitle,
                     onDeleteSession: deleteSession
                 )
                 .frame(width: drawerWidth)
@@ -472,6 +474,46 @@ struct CoachView: View {
             }
         } catch {
             showsSessionDeleteBlockedAlert = true
+        }
+    }
+
+    private func renameSession(
+        _ session: ConversationSession,
+        title: String
+    ) -> Bool {
+        let previousTitle = session.title
+        let previousSourceRaw = session.titleSourceRaw
+        guard session.setManualTitle(title) else { return false }
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            session.title = previousTitle
+            session.titleSourceRaw = previousSourceRaw
+            return false
+        }
+    }
+
+    private func restoreAutomaticTitle(_ session: ConversationSession) -> Bool {
+        let previousTitle = session.title
+        let previousSourceRaw = session.titleSourceRaw
+        let fallbackText = ConversationSessionTitleService.fallbackText(
+            sessionID: session.id,
+            messages: allMessages
+        )
+        session.restoreAutomaticTitle(from: fallbackText)
+        do {
+            try modelContext.save()
+            processor.titleGenerator.request(
+                sessionID: session.id,
+                ai: ai,
+                modelContext: modelContext
+            )
+            return true
+        } catch {
+            session.title = previousTitle
+            session.titleSourceRaw = previousSourceRaw
+            return false
         }
     }
 
@@ -1354,10 +1396,10 @@ private struct CoachComposer: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var focused: Bool
 
-    /// PRD 020：输入区同一时间最多一层上下文条，优先级为
-    /// 附件预览 > 动作建议 > 场馆切换。
+    /// PRD 020：输入区同一时间最多一层内容上下文条，附件预览优先于动作建议。
+    /// PRD 037：场馆切换与快捷按钮同属发送前控制，固定在同一个横向滚动行。
     private enum ContextStrip {
-        case attachments, suggestions, gym
+        case attachments, suggestions
     }
 
     private var contextStrip: ContextStrip? {
@@ -1367,15 +1409,12 @@ private struct CoachComposer: View {
         if !exerciseSuggestions.isEmpty {
             return .suggestions
         }
-        if gyms.count >= 2 {
-            return .gym
-        }
         return nil
     }
 
     var body: some View {
         VStack(spacing: 8) {
-            skillShortcuts
+            composerContextControls
 
             // ADR 0045：暂存计数常驻在输入区上方，与上下文条互不挤占。
             if pendingCount > 0 {
@@ -1405,8 +1444,6 @@ private struct CoachComposer: View {
                     }
                     onApplySuggestion(suggestion)
                 }
-            case .gym:
-                gymStrip
             case nil:
                 EmptyView()
             }
@@ -1460,8 +1497,8 @@ private struct CoachComposer: View {
         }
     }
 
-    /// PRD 033：快捷按钮由设置页完整增删改，这里只呈现可见项并单选。
-    private var skillShortcuts: some View {
+    /// PRD 033 / 037：可见快捷按钮与多场馆切换在一个水平行内，窄屏只滚动不换行。
+    private var composerContextControls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(shortcuts) { shortcut in
@@ -1485,6 +1522,9 @@ private struct CoachComposer: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("快捷按钮：\(shortcut.title)")
                     .accessibilityValue(isSelected ? "已选择" : "未选择")
+                }
+                if gyms.count >= 2 {
+                    gymStrip
                 }
             }
             .padding(.horizontal, 2)
@@ -1532,7 +1572,6 @@ private struct CoachComposer: View {
             )
         }
         .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var addMediaButton: some View {

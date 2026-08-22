@@ -2,12 +2,20 @@ import Foundation
 import Observation
 import SwiftData
 
+enum ConversationTitleSource: String, Codable, Equatable, Sendable {
+    case fallback
+    case generated
+    case manual
+}
+
 @Model
 final class ConversationSession {
     var id: UUID
     var startedAt: Date
     var updatedAt: Date
     var title: String
+    /// 旧库缺字段时按 fallback 解释；manual 永远不被异步生成结果覆盖。
+    var titleSourceRaw: String?
     /// 用户在这个 Session 内默认操作的业务日期；旧库由启动迁移按 startedAt 回填。
     var businessDate: Date?
     /// 业务日期对应的 IANA 时区。不能用重试时的当前时区覆盖。
@@ -18,6 +26,7 @@ final class ConversationSession {
         startedAt: Date = .now,
         updatedAt: Date? = nil,
         title: String = "新对话",
+        titleSource: ConversationTitleSource? = nil,
         businessDate: Date? = nil,
         businessTimeZoneIdentifier: String = TimeZone.current.identifier
     ) {
@@ -25,6 +34,7 @@ final class ConversationSession {
         self.startedAt = startedAt
         self.updatedAt = updatedAt ?? startedAt
         self.title = title
+        titleSourceRaw = (titleSource ?? .fallback).rawValue
         let zone = TimeZone(identifier: businessTimeZoneIdentifier) ?? .current
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = zone
@@ -34,6 +44,15 @@ final class ConversationSession {
 
     var effectiveBusinessDate: Date {
         businessDate ?? startedAt
+    }
+
+    var titleSource: ConversationTitleSource {
+        get { ConversationTitleSource(rawValue: titleSourceRaw ?? "") ?? .fallback }
+        set { titleSourceRaw = newValue.rawValue }
+    }
+
+    var canGenerateTitle: Bool {
+        titleSource == .fallback
     }
 
     var businessTimeZone: TimeZone {
@@ -49,23 +68,73 @@ final class ConversationSession {
     }
 
     func recordUserMessage(_ text: String, at date: Date) {
-        if title == "新对话" {
-            title = Self.title(from: text)
+        if titleSource == .fallback, title == Self.defaultTitle {
+            title = Self.fallbackTitle(from: text)
         }
         updatedAt = max(updatedAt, date)
+    }
+
+    @discardableResult
+    func setManualTitle(_ value: String) -> Bool {
+        guard let normalized = Self.normalizedTitle(
+            value,
+            maximumLength: Self.maximumManualTitleLength
+        ) else {
+            return false
+        }
+        title = normalized
+        titleSource = .manual
+        return true
+    }
+
+    func restoreAutomaticTitle(from text: String?) {
+        title = text.map(Self.fallbackTitle(from:)) ?? Self.defaultTitle
+        titleSource = .fallback
+    }
+
+    @discardableResult
+    func applyGeneratedTitle(_ value: String) -> Bool {
+        guard canGenerateTitle,
+              let normalized = Self.normalizedTitle(
+                  value,
+                  maximumLength: Self.maximumGeneratedTitleLength
+              )
+        else {
+            return false
+        }
+        title = normalized
+        titleSource = .generated
+        return true
     }
 
     func touch(at date: Date) {
         updatedAt = max(updatedAt, date)
     }
 
-    private static func title(from text: String) -> String {
-        let normalized = text
+    static let defaultTitle = "新对话"
+    static let maximumGeneratedTitleLength = 28
+    static let maximumManualTitleLength = 40
+
+    static func fallbackTitle(from text: String) -> String {
+        guard let normalized = normalizedTitle(
+            text,
+            maximumLength: maximumGeneratedTitleLength
+        ) else {
+            return "媒体对话"
+        }
+        return normalized
+    }
+
+    static func normalizedTitle(
+        _ value: String,
+        maximumLength: Int
+    ) -> String? {
+        let normalized = value
             .replacingOccurrences(of: "\n", with: " ")
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
-        guard !normalized.isEmpty else { return "媒体对话" }
-        return String(normalized.prefix(28))
+        guard !normalized.isEmpty else { return nil }
+        return String(normalized.prefix(maximumLength))
     }
 }
 

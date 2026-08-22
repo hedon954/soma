@@ -2,16 +2,6 @@ import Foundation
 import Observation
 import SwiftData
 
-struct ConversationProcessingContext {
-    var structuredContext: String
-    var session: ConversationSession
-    var dataSpace: DataSpace
-    var gyms: [GymProfile]
-    var equipment: [GymEquipment]
-    var ai: AIService
-    var modelContext: ModelContext
-}
-
 @MainActor
 @Observable
 final class ConversationProcessingService {
@@ -32,6 +22,8 @@ final class ConversationProcessingService {
 
     @ObservationIgnored
     private var retryTask: Task<Void, Never>?
+
+    @ObservationIgnored let titleGenerator = SessionTitleGenerator()
 
     @ObservationIgnored
     private let backgroundLease: BackgroundExecutionLease
@@ -591,6 +583,9 @@ final class ConversationProcessingService {
             }
             context.session.touch(at: .now)
             try context.modelContext.save()
+            if job.state == .succeeded {
+                titleGenerator.request(context: context)
+            }
         } catch let fallback as RemoteVideoKeyframeFallbackRequired {
             guard job.remoteRequestAttempt == 1,
                   !job.state.isTerminal
@@ -1080,7 +1075,7 @@ private extension ConversationProcessingService {
                 endedAt: traceNow,
                 metadata: AgentTraceText.jsonObject([
                     "media_mode": media.mode.rawValue,
-                    "video_bytes": mediaAttachmentBytes(media.attachments),
+                    "video_bytes": ConversationMediaMetrics.videoBytes(media.attachments),
                     "frame_count": media.mode == .keyframes ? media.frames.count : 0,
                     "duration_ms": media.preparationMilliseconds
                 ])
@@ -1235,48 +1230,8 @@ private extension ConversationProcessingService {
 
         context.session.touch(at: .now)
         try? context.modelContext.save()
-    }
-
-    private func executeAgentTool(
-        _ call: AgentToolCall,
-        turnID: UUID,
-        userMessage: CoachMessage,
-        sourceDate: Date,
-        mediaAttachments: [MediaAttachmentReference],
-        preferredGymID: UUID?,
-        context: ConversationProcessingContext
-    ) async throws -> AgentToolResult {
-        if call.name == .submitFeedback {
-            return try await AgentMutationStore.executeAsync(
-                call,
-                turnID: turnID,
-                in: context.modelContext
-            ) {
-                try await AgentFeedbackTool.submit(
-                    id: turnID,
-                    sourceText: userMessage.text,
-                    mediaAttachments: mediaAttachments
-                )
-            }
-        }
-
-        return AgentMutationStore.execute(
-            call,
-            turnID: turnID,
-            in: context.modelContext
-        ) {
-            ConversationRecorder.executeAgentTool(
-                call,
-                sourceText: userMessage.text,
-                sourceDate: sourceDate,
-                sourceSessionID: context.session.id,
-                sourceTurnID: turnID,
-                mediaKind: mediaAttachments.first?.kind ?? .none,
-                mediaPath: mediaAttachments.first?.path,
-                mediaAttachments: mediaAttachments,
-                preferredGymID: preferredGymID,
-                in: context.modelContext
-            )
+        if job.state == .succeeded {
+            titleGenerator.request(context: context)
         }
     }
 }
@@ -1775,23 +1730,6 @@ extension ConversationProcessingService {
                 _ = MediaStore.removeStoredFile(at: reference.path)
             }
             throw error
-        }
-    }
-
-    private func mediaAttachmentBytes(
-        _ attachments: [MediaAttachmentReference]
-    ) -> Int {
-        attachments.reduce(0) { total, attachment in
-            guard attachment.kind == .video,
-                  let url = MediaStore.url(at: attachment.path),
-                  let attributes = try? FileManager.default.attributesOfItem(
-                      atPath: url.path
-                  ),
-                  let bytes = (attributes[.size] as? NSNumber)?.intValue
-            else {
-                return total
-            }
-            return total + bytes
         }
     }
 

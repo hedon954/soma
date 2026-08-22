@@ -12,6 +12,7 @@
 - 后续修订：
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 压紧聊天饮食卡密度，详情复用同一菜品行，并把执行日志 LLM 入参从时间线内联展开改为独立页
   - [PRD 036](036-meal-sugar-and-glycemic-speed-estimate.md) 把饮食菜品和派生汇总扩展到总糖，并增加成对、非诊断的餐食组成升糖速度估算
+  - [PRD 037](037-generated-editable-session-titles-and-single-row-composer-context.md) 让快捷按钮与健身房入口保持同一横向滚动行
 - 上游依据：
   - 维护者一次提出的七项优化：消息时间与位置、日期入口位置、快捷按钮 CRUD、流式闪退与自动上报、LLM 工具列表日志、带练录像失败原因、Keep 风格饮食双卡片
   - [BUG 0024](../bugs/0024-streaming-cross-actor-swiftdata-crash.md)

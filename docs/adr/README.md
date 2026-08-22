@@ -91,6 +91,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0085](0085-record-cards-follow-the-producing-step.md) | 已采纳 | 原位卡插在产生它的那一步之后，文字与卡片交替出现；重复引用只渲染一张卡，无法归位的兜底在末尾 |
 | [0086](0086-preview-and-history-thumbs-use-aspect-fill.md) | 已采纳 | 带练紧凑/放大预览与历史录像缩略统一 aspect fill；保存文件仍使用锁定的捕获几何 |
 | [0087](0087-reviewable-total-sugar-and-glycemic-speed.md) | 已采纳 | 总糖是可空营养事实；升糖速度与依据成对保存、编辑菜品后失效，且不冒充个体血糖预测 |
+| [0088](0088-async-generated-session-title-with-manual-precedence.md) | 已采纳 | 会话标题小模型优先异步生成；手动标题优先，失败保留本地兜底且不扩张 Tool 协议 |
 
 新决策使用 [ADR 模板](template.md)。
 

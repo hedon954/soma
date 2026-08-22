@@ -5,12 +5,14 @@ struct ConversationSessionDTO: Codable, Equatable, Sendable {
     var startedAt: Date
     var updatedAt: Date
     var title: String
+    var titleSourceRaw: String?
 
     init(_ model: ConversationSession) {
         id = model.id
         startedAt = model.startedAt
         updatedAt = model.updatedAt
         title = model.title
+        titleSourceRaw = model.titleSourceRaw
     }
 
     func makeModel() -> ConversationSession {
@@ -18,7 +20,8 @@ struct ConversationSessionDTO: Codable, Equatable, Sendable {
             id: id,
             startedAt: startedAt,
             updatedAt: updatedAt,
-            title: title
+            title: title,
+            titleSource: titleSourceRaw.flatMap(ConversationTitleSource.init(rawValue:))
         )
     }
 }

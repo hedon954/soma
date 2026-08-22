@@ -33,6 +33,7 @@
   - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md)
   - [PRD 035](035-guided-preview-then-record-and-immediate-share.md)
+  - [PRD 037](037-generated-editable-session-titles-and-single-row-composer-context.md)
 - 下游落地：
   - [ADR 0079](../adr/0079-create-inserts-update-by-id.md)
   - [ADR 0080](../adr/0080-conversation-session-swipe-delete.md)
@@ -56,12 +57,14 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 - 对话按本地 Session 持久化；当前 Session 按数据空间恢复，不因跨天或进入前台自动切换；
   左上角时间按钮、从左边界右滑和 VoiceOver 操作均可打开历史抽屉、新建 Session 或选择旧
   Session 继续对话；历史抽屉支持左滑删除对话，只删除该 Session 的聊天图，不删除训练、饮食
-  或身体记录；
+  或身体记录；标题在首个成功来回后由小模型优先、标准模型回落异步生成，支持手动重命名与恢复
+  自动标题，手动标题不会被迟到结果覆盖；
 - 支持文字、系统语音，以及单次最多十项的多图片、多视频和混合附件；三项起在聊天中按微信式牌组折叠，折叠态按首图方向选择稳定卡片画布，后图在同一画布上缩小、旋转和向右露出，避免极端比例撑乱聊天；显式展开后按各自比例排列并可再次收起，点击任一聊天媒体进入统一全屏查看，图片可缩放、多项可左右切换；
 - 支持原生文本选择与划句复制；用户绿色气泡中的选区使用随浅色/深色外观自适应的高对比色，
   不与气泡品牌色混淆；
 - 教练回复使用完整 Markdown 渲染，表达以结论、必要依据和下一步为主，避免过程复述、冗长表格和多级标题；
-- 健身房达到两个时，输入框上方才提供当前场馆的紧凑切换入口；
+- 健身房达到两个时，输入框上方才提供当前场馆的紧凑切换入口，并与快捷按钮保持在同一个横向
+  滚动行；
 - 健身房照片在本轮创建，或用户紧邻下一轮补充场馆名称时，保存到对应 `GymMedia` 档案；
 - 发送被接受后收起键盘、清空草稿与附件并滚到消息底部，随后原位等待 Agent 回复；
 - 一次 Agent 回复由文字、Skill、Tool 和错误等有序 Event Cards 组成，流式追加并持久保留；

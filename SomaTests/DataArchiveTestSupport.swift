@@ -285,7 +285,8 @@ enum DataArchiveTestSupport {
             id: sessionID,
             startedAt: fixedDate,
             updatedAt: fixedDate.addingTimeInterval(3600),
-            title: "午餐与训练"
+            title: "午餐与训练",
+            titleSource: .manual
         ))
         context.insert(CoachMessage(
             date: fixedDate,

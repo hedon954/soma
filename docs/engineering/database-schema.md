@@ -84,10 +84,10 @@ Effort、修复关系/投影键、分配业务 ID 并写入 schema version 5 mar
 
 ### 对话与 Agent 运行时
 
-<!-- schema-model: ConversationSession | id,startedAt,updatedAt,title,businessDate,businessTimeZoneIdentifier -->
+<!-- schema-model: ConversationSession | id,startedAt,updatedAt,title,titleSourceRaw,businessDate,businessTimeZoneIdentifier -->
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
-| `ConversationSession` | `id: UUID`、`startedAt: Date`、`updatedAt: Date`、`title: String` | 聊天会话根对象。 |
+| `ConversationSession` | `id: UUID`、`startedAt: Date`、`updatedAt: Date`、`title: String`、`titleSourceRaw: String?`、`businessDate: Date?`、`businessTimeZoneIdentifier: String?` | 聊天会话根对象；标题来源区分本地兜底、模型生成和用户手动，旧库空值按兜底解释。标题编辑不改变最近活动时间。 |
 | <!-- schema-model: CoachMessage | id,date,sessionID,isFromCoach,text,mediaKindRaw,mediaPath,mediaAttachmentsData,recordTypeRaw,agentTraceID,agentStatusRaw,agentEventsData,agentTurnItemsData,turnID,attemptNumber,locationData,effectiveGymID,manualCorrectionSummary --> `CoachMessage` | `id: UUID`、`date: Date`、`sessionID: UUID?`、`isFromCoach: Bool`、`text: String`、`mediaKindRaw: String`、`mediaPath: String?`、`mediaAttachmentsData: Data`、`recordTypeRaw: String?`、`agentTraceID: UUID?`、`agentStatusRaw: String?`、`agentEventsData: Data`、`agentTurnItemsData: Data`、`turnID: UUID?`、`attemptNumber: Int`、`locationData: Data`、`effectiveGymID: UUID?`、`manualCorrectionSummary: String?` | 同一响应气泡覆盖重试状态；结构化记录修正摘要进入消息上下文。 |
 | <!-- schema-model: AgentTrace | id,startedAt,endedAt,statusRaw,provider,model,endpoint,dataSpaceRaw,userInput,contextSnapshot,mediaKindRaw,imageCount,imageAttachmentCount,videoAttachmentCount,finalAnswer,errorMessage,spansData,turnID,attemptNumber --> `AgentTrace` | `id: UUID`、`startedAt: Date`、`endedAt: Date?`、`statusRaw: String`、`provider: String`、`model: String`、`endpoint: String`、`dataSpaceRaw: String`、`userInput: String`、`contextSnapshot: String`、`mediaKindRaw: String`、`imageCount: Int`、`imageAttachmentCount: Int`、`videoAttachmentCount: Int`、`finalAnswer: String?`、`errorMessage: String?`、`spansData: Data`、`turnID: UUID?`、`attemptNumber: Int` | 每次远程 attempt 一条 trace；不保存 reasoning 内容。 |
 | <!-- schema-model: AgentMutationReceipt | key,turnID,signature,resultData,createdAt,statusRaw --> `AgentMutationReceipt` | `key: String [unique]`、`turnID: UUID`、`signature: String`、`resultData: Data`、`createdAt: Date`、`statusRaw: String` | 本地业务 Tool 写入的幂等回执。 |

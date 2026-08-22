@@ -231,6 +231,19 @@
 | 预览 fill | `WorkoutCameraSurface` 与 `CameraPreviewView` 默认 `.resizeAspectFill`；历史录像缩略按取景比例 `scaledToFill`。 |
 | 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。 |
 
+## 会话标题与输入上下文单行布局
+
+[PRD 037](prd/037-generated-editable-session-titles-and-single-row-composer-context.md) 与
+[ADR 0088](adr/0088-async-generated-session-title-with-manual-precedence.md) 的当前实现证据。
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 标题生成 | 首条用户消息同步形成本地兜底；首个成功 ReAct 来回落盘后由 `ConversationSessionTitleService` 异步生成标题，优先已启用小模型、失败回落标准模型。请求无 Tool、无媒体、无 Trace，不阻塞聊天 Job；两档失败保留兜底。 |
+| 手动优先 | `ConversationSession.titleSourceRaw` 区分 `fallback/generated/manual`。抽屉行菜单支持重命名与恢复自动标题；异步写回重新获取 Session 并拒绝覆盖 `manual` 或已有 `generated`，标题变化不修改 `updatedAt`。 |
+| 备份兼容 | `ConversationSessionDTO` 往返标题来源；旧 JSON 缺字段按 fallback 解码。数据库结构文档同步可选字段。 |
+| 单行上下文 | `CoachComposer` 把最多六个快捷按钮和达到两个后的健身房 Menu 放进同一个水平 `ScrollView`；窄屏、长名称与大字号横向滚动，不折到第二行。附件和动作建议继续使用独立内容上下文条。 |
+| UI 与无障碍 | Session 行可见省略号菜单保留原生尾随左滑删除；重命名弹框限制非空 40 字，菜单和行提供 VoiceOver 重命名语义。 |
+
 ## 实施前文档门禁
 
 - PRD 010/011、ADR 0028—0035 和两份工程协议相互一致；ADR 0034 固定文档生命周期，

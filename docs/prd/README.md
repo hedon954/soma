@@ -48,6 +48,7 @@
 | [034：历史、媒体、Tab 与带练取景打磨](034-history-media-tabs-and-guided-capture-polish.md) | 已实施，部分修订 | 媒体从缩略图 zoom、饮食详情复用聊天菜品行、训练/饮食月份芯片与按天折叠、执行日志 Span 进独立页、再点当前 Tab 回根、自动录像先锁定宿主再切组、预览与缩略 fill；开组录像时序由 035 修订 |
 | [035：带练先取景再录像，完成后立即分享并回训练主页](035-guided-preview-then-record-and-immediate-share.md) | 已实施，待真机录像与分享验收 | 倒计时小窗取景、开组后放大录制、缩小后继续录像；首组策略后续组不预览；计划结束含提前结束立即分享，关闭后回训练主页 |
 | [036：饮食总糖分析与餐食组成升糖速度估算](036-meal-sugar-and-glycemic-speed-estimate.md) | 已实施，待真机 Agent 交互与旧库打开验收 | 菜品与整餐总糖、成对定性速度与依据、过期评估失效及非诊断边界 |
+| [037：会话标题自动生成、可编辑与输入上下文单行收敛](037-generated-editable-session-titles-and-single-row-composer-context.md) | 已采纳，实施中 | 小模型优先异步生成稳定会话标题、手动改名优先，并让快捷按钮与健身房入口保持单行 |
 
 ## 阅读约定
 

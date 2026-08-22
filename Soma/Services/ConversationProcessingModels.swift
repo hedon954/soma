@@ -1,4 +1,15 @@
 import Foundation
+import SwiftData
+
+struct ConversationProcessingContext {
+    var structuredContext: String
+    var session: ConversationSession
+    var dataSpace: DataSpace
+    var gyms: [GymProfile]
+    var equipment: [GymEquipment]
+    var ai: AIService
+    var modelContext: ModelContext
+}
 
 enum ConversationMediaPreparationError: LocalizedError {
     case attachmentPersistenceFailed
@@ -10,6 +21,23 @@ enum ConversationMediaPreparationError: LocalizedError {
             "附件未能完整保存到本机，请检查存储空间后重试"
         case .videoFramesUnavailable:
             "视频已保存在本机，但未能提取任何可供模型分析的画面，请换一个可播放的视频后重试"
+        }
+    }
+}
+
+enum ConversationMediaMetrics {
+    static func videoBytes(_ attachments: [MediaAttachmentReference]) -> Int {
+        attachments.reduce(0) { total, attachment in
+            guard attachment.kind == .video,
+                  let url = MediaStore.url(at: attachment.path),
+                  let attributes = try? FileManager.default.attributesOfItem(
+                      atPath: url.path
+                  ),
+                  let bytes = (attributes[.size] as? NSNumber)?.intValue
+            else {
+                return total
+            }
+            return total + bytes
         }
     }
 }
