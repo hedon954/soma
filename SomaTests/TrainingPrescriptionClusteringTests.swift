@@ -13,6 +13,27 @@ final class TrainingPrescriptionClusteringTests: XCTestCase {
         )
     }
 
+    func testLegacyPerSetRestDoesNotSplitActionParameterClusters() {
+        let drafts = [
+            TrainingSetPrescriptionDraft(
+                order: 1,
+                reps: "8",
+                weight: "80",
+                restAfterSetSeconds: "90"
+            ),
+            TrainingSetPrescriptionDraft(
+                order: 2,
+                reps: "8",
+                weight: "80"
+            )
+        ]
+
+        XCTAssertEqual(
+            TrainingPrescriptionDraftClustering.clusters(in: drafts),
+            [TrainingPrescriptionCluster(startIndex: 0, count: 2)]
+        )
+    }
+
     func testWarmupThenWorkingDraftsSplitClusters() {
         let drafts = [
             TrainingSetPrescriptionDraft(order: 1, kind: .warmup, reps: "8", weight: "60"),

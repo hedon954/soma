@@ -45,8 +45,6 @@ extension TemplateSetPrescriptionValue {
             targetWeightKG: targetWeightKG,
             leftWeightKG: leftWeightKG,
             rightWeightKG: rightWeightKG,
-            restBetweenSidesSeconds: restBetweenSidesSeconds,
-            restAfterSetSeconds: restAfterSetSeconds,
             notes: notes
         )
     }
@@ -60,7 +58,5 @@ struct TemplateSetPrescriptionClusterSignature: Equatable {
     var targetWeightKG: Double?
     var leftWeightKG: Double?
     var rightWeightKG: Double?
-    var restBetweenSidesSeconds: Int?
-    var restAfterSetSeconds: Int?
     var notes: String
 }

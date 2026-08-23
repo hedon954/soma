@@ -16,10 +16,12 @@ struct AgentSystemSettingsView: View {
                     "锁屏与灵动岛显示长任务",
                     isOn: $liveActivitiesEnabled
                 )
+                .appToggleStyle()
                 Toggle(
                     "任务完成通知",
                     isOn: notificationBinding
                 )
+                .appToggleStyle()
             } header: {
                 Text("系统进度")
             } footer: {

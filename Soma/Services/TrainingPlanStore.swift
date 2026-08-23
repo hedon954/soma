@@ -204,6 +204,7 @@ enum TrainingPlanStore {
                 targetReps: exercise.targetReps,
                 targetWeightKG: exercise.targetWeightKG,
                 targetRestSeconds: exercise.targetRestSeconds,
+                restBetweenSidesSeconds: exercise.restBetweenSidesSeconds,
                 firstSetIsWarmup: exercise.firstSetIsWarmup,
                 equipmentKind: exercise.equipmentKind,
                 notes: exercise.notes,
@@ -375,7 +376,8 @@ enum TrainingPlanStore {
             let laterality = performance.exerciseDefinition?.hasExplicitLaterality == true
                 ? performance.exerciseDefinition?.laterality ?? prescription.laterality
                 : prescription.laterality
-            for planned in prescription.plannedSets.sorted(by: { $0.order < $1.order }) {
+            let orderedSets = prescription.plannedSets.sorted { $0.order < $1.order }
+            for (setIndex, planned) in orderedSets.enumerated() {
                 let targetKind = performance.exerciseDefinition?.hasExplicitTargetKind == true
                     ? performance.exerciseDefinition?.targetKind ?? planned.targetKind
                     : planned.targetKind
@@ -388,8 +390,12 @@ enum TrainingPlanStore {
                     plannedReps: planned.targetReps,
                     plannedDurationSeconds: planned.targetDurationSeconds,
                     plannedWeightKG: planned.targetWeightKG,
-                    plannedRestSeconds: planned.restAfterSetSeconds,
-                    restBetweenSidesSeconds: planned.restBetweenSidesSeconds
+                    plannedRestSeconds: setIndex < orderedSets.count - 1
+                        ? prescription.targetRestSeconds
+                        : nil,
+                    restBetweenSidesSeconds: laterality == .both
+                        ? prescription.restBetweenSidesSeconds
+                        : nil
                 )
                 set.performance = performance
                 context.insert(set)
@@ -787,6 +793,7 @@ enum TrainingPlanStore {
         let targetReps: Int = prescription.targetReps ?? -1
         let targetWeightKG: Double = prescription.targetWeightKG ?? -1
         let targetRestSeconds: Int = prescription.targetRestSeconds ?? -1
+        let restBetweenSidesSeconds: Int = prescription.restBetweenSidesSeconds ?? -1
         let warmup: String = prescription.firstSetIsWarmup ? "1" : "0"
         var parts: [String] = []
         parts.append(prescription.exerciseID.uuidString)
@@ -794,6 +801,7 @@ enum TrainingPlanStore {
         parts.append(String(targetReps))
         parts.append(String(targetWeightKG))
         parts.append(String(targetRestSeconds))
+        parts.append(String(restBetweenSidesSeconds))
         parts.append(warmup)
         parts.append(prescription.laterality.rawValue)
         parts.append(setFields.joined(separator: ","))
@@ -853,6 +861,7 @@ enum TrainingPlanStore {
                 targetReps: prescription.targetReps,
                 targetWeightKG: prescription.targetWeightKG,
                 targetRestSeconds: prescription.targetRestSeconds,
+                restBetweenSidesSeconds: prescription.restBetweenSidesSeconds,
                 firstSetIsWarmup: prescription.firstSetIsWarmup,
                 equipmentKind: prescription.equipmentKind,
                 notes: prescription.notes,
@@ -914,6 +923,14 @@ private extension TrainingPlanStore {
         if let rest = value.targetRestSeconds, !(0 ... 3600).contains(rest) {
             throw TrainingPlanError.invalidValue("目标间歇")
         }
+        if let rest = value.restBetweenSidesSeconds,
+           !(0 ... 3600).contains(rest)
+        {
+            throw TrainingPlanError.invalidValue("换侧间歇")
+        }
+        if value.laterality != .both, value.restBetweenSidesSeconds != nil {
+            throw TrainingPlanError.invalidValue("只有左右分开动作可以设置换侧间歇")
+        }
         guard !value.plannedSets.isEmpty else {
             throw TrainingPlanError.invalidValue("目标次数")
         }
@@ -963,12 +980,6 @@ private extension TrainingPlanStore {
             set.rightWeightKG
         ].compactMap({ $0 }) where !(0 ... 1000).contains(weight) {
             throw TrainingPlanError.invalidValue("目标重量")
-        }
-        for rest in [
-            set.restBetweenSidesSeconds,
-            set.restAfterSetSeconds
-        ].compactMap({ $0 }) where !(0 ... 3600).contains(rest) {
-            throw TrainingPlanError.invalidValue("目标间歇")
         }
         let hasInvalidSideWeight = switch laterality {
         case .none:

@@ -32,6 +32,7 @@ struct RemoteAgentSettingsView: View {
                         }
                     }
                 ))
+                .appToggleStyle()
                 .disabled(status.isWorking)
 
                 TextField(

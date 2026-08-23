@@ -393,6 +393,26 @@ enum AgentToolSchemaValidator {
         else {
             throw invalid("\(path).laterality", "侧别无效")
         }
+        if exercise["target_rest_seconds"] != nil {
+            try requireInteger(
+                exercise["target_rest_seconds"],
+                in: 0 ... 3600,
+                path: "\(path).target_rest_seconds"
+            )
+        }
+        if exercise["rest_between_sides_seconds"] != nil {
+            try requireInteger(
+                exercise["rest_between_sides_seconds"],
+                in: 0 ... 3600,
+                path: "\(path).rest_between_sides_seconds"
+            )
+            guard laterality == .both else {
+                throw invalid(
+                    "\(path).rest_between_sides_seconds",
+                    "只有 both 可设置左右间歇"
+                )
+            }
+        }
         return laterality
     }
 
@@ -468,11 +488,6 @@ enum AgentToolSchemaValidator {
         {
             try requireNumber(set[key], in: 0 ... 1000, path: "\(path).\(key)")
         }
-        for key in ["rest_between_sides_seconds", "rest_after_set_seconds"]
-            where set[key] != nil
-        {
-            try requireInteger(set[key], in: 0 ... 3600, path: "\(path).\(key)")
-        }
     }
 
     private static func validateLaterality(
@@ -480,9 +495,6 @@ enum AgentToolSchemaValidator {
         path: String,
         laterality: ExerciseLaterality
     ) throws {
-        if laterality != .both, set["rest_between_sides_seconds"] != nil {
-            throw invalid("\(path).rest_between_sides_seconds", "只有 both 可设置左右间歇")
-        }
         if laterality == .none,
            set["left_weight_kg"] != nil || set["right_weight_kg"] != nil
         {

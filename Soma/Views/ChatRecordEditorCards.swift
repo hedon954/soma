@@ -272,6 +272,7 @@ private struct InlineGymCard: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1 ... 2)
                 Toggle("当前健身房", isOn: $isCurrent)
+                    .appToggleStyle()
                     .font(.caption)
                     .disabled(gym.isCurrent)
             } else if !gym.notes.isEmpty {

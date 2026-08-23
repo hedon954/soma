@@ -5,7 +5,7 @@
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) 中把 `laterality` 当作计划动作可选项、把 `targetKind` 当作每组独立变量并向用户展开的产品边界
-- 后续替代：暂无
+- 后续替代：[ADR 0091](0091-action-level-planned-rest.md) 将两类计划间歇与侧别并列为动作级配置；侧别与完成方式归动作定义的边界继续有效
 - 上游依据：
   - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
   - [PRD 020](../prd/020-gui-simplification-and-progressive-disclosure.md)

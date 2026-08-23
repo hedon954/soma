@@ -45,6 +45,7 @@ Use the current PRD and Accepted ADRs as the product contract. This skill suppli
 - Missing facts stay `nil` and display as an em dash or disappear when the whole metric has no evidence. Zero weight means self-weight only where the data model already defines that meaning.
 - Reuse the same record draft/projection in chat and detail editors. A more compact card must not rebuild ordered evidence from aggregate sets/reps/weight fields.
 - Ignore rest when deciding whether consecutive workout groups share one display run. Hide after-group rest for the final logical group, while preserving between-side rest and all stored evidence.
+- In plan authoring, edit between-set rest and between-side rest once at the exercise level beside laterality. Show between-side rest only for `.both`; do not repeat planned rest fields inside each set. Compile between-set rest to non-final logical sets when a Session starts, while actual workout rest remains per-set evidence.
 - Preserve primary/secondary muscle identity when aggregating a plan. Target-set count may scale intensity, but must not promote an accumulated secondary muscle into primary focus.
 - In exercise detail, keep primary muscles, secondary muscles, coaching notes, the two-sided muscle map, and its legend in one Standard Action list row. Do not let `Form` create spacer-like rows from standalone dividers, maps, or legends.
 - When an exercise detail is opened from a plan, show that plan prescription first. Separate latest training, capacity trend and record rows; use exact recorded dates on chart axes and compact heterogeneous sets without visible group numbers.
@@ -56,6 +57,7 @@ Use the current PRD and Accepted ADRs as the product contract. This skill suppli
 - Add deterministic tests for any formatter, projection, grouping, ordering, theme mapping, or state transition.
 - When changing colors, test contrast on the actual semantic surface and verify that the page/card/inset luminance order remains visible in both themes.
 - Audit data marks, metric icons and category icons separately from navigation. Neutral Tab icons and primary controls are correct; black or page-wide-orange metric marks are not.
+- Use the shared `appToggleStyle()` for Switches so enabled state remains visible in both themes; preserve labels and non-color state cues.
 - Render the affected flow with fictional data in light and dark mode. Also inspect long Chinese text, missing values, keyboard, scrolling, safe area and a large Dynamic Type size.
 - Compare implementation and source design at the same viewport and state. Fix P0/P1/P2 differences before handoff and record the evidence in `design-qa.md` for product-wide redesigns.
 - Run `make format`, `make check`, and `make verify` as required by `soma-development`.

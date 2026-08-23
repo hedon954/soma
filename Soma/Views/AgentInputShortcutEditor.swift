@@ -49,6 +49,7 @@ struct AgentInputShortcutEditor: View {
                     }
                 }
                 Toggle("显示在聊天输入区", isOn: $isVisible)
+                    .appToggleStyle()
             }
 
             Section {
@@ -153,6 +154,7 @@ struct AgentInputShortcutEditor: View {
         DisclosureGroup {
             ForEach(group.tools, id: \.rawValue) { tool in
                 Toggle(tool.displayTitle, isOn: toolBinding(tool.rawValue))
+                    .appToggleStyle()
                     .font(.callout)
             }
         } label: {

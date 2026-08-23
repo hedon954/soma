@@ -311,6 +311,8 @@ extension ConversationRecorder {
                     exerciseID: definition.id,
                     exerciseName: definition.canonicalName,
                     order: input.order,
+                    targetRestSeconds: input.targetRestSeconds,
+                    restBetweenSidesSeconds: input.restBetweenSidesSeconds,
                     equipmentKind: nonempty(input.equipmentKind),
                     notes: normalized(input.notes),
                     laterality: laterality,
@@ -324,8 +326,6 @@ extension ConversationRecorder {
                             targetWeightKG: set.targetWeightKG,
                             leftWeightKG: set.leftWeightKG,
                             rightWeightKG: set.rightWeightKG,
-                            restBetweenSidesSeconds: set.restBetweenSidesSeconds,
-                            restAfterSetSeconds: set.restAfterSetSeconds,
                             notes: normalized(set.notes)
                         )
                     }
@@ -372,6 +372,12 @@ extension ConversationRecorder {
                                 .map(setData)
                         )
                     ]
+                    if let rest = prescription.targetRestSeconds {
+                        exercise["target_rest_seconds"] = .number(Double(rest))
+                    }
+                    if let rest = prescription.restBetweenSidesSeconds {
+                        exercise["rest_between_sides_seconds"] = .number(Double(rest))
+                    }
                     if let equipment = nonempty(prescription.equipmentKind) {
                         exercise["equipment_kind"] = .string(equipment)
                     }
@@ -405,8 +411,6 @@ extension ConversationRecorder {
         put("target_weight_kg", set.targetWeightKG)
         put("left_weight_kg", set.leftWeightKG)
         put("right_weight_kg", set.rightWeightKG)
-        put("rest_between_sides_seconds", set.restBetweenSidesSeconds)
-        put("rest_after_set_seconds", set.restAfterSetSeconds)
         if let notes = nonempty(set.notes) {
             value["notes"] = .string(notes)
         }

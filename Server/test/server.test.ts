@@ -1391,8 +1391,6 @@ function validPlanV3Set(): Record<string, unknown> {
     target_reps: 8,
     left_weight_kg: 20,
     right_weight_kg: 22.5,
-    rest_between_sides_seconds: 15,
-    rest_after_set_seconds: 90,
   };
 }
 
@@ -1401,6 +1399,8 @@ function validPlanV3Exercise(): Record<string, unknown> {
     exercise_id: 7,
     order: 1,
     laterality: "both",
+    target_rest_seconds: 90,
+    rest_between_sides_seconds: 15,
     set_prescriptions: [validPlanV3Set()],
   };
 }

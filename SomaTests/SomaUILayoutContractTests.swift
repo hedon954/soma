@@ -46,12 +46,10 @@ final class SomaUILayoutContractTests: XCTestCase {
                 hasWeightTrend: true
             ),
             [
-                .weekSummary,
+                .trainingOverview,
                 .conclusion,
                 .recentActivities,
-                .continuityTrend,
                 .weightTrend,
-                .volumeTrend,
                 .allData,
                 .currentGym,
                 .personalResources
@@ -63,14 +61,23 @@ final class SomaUILayoutContractTests: XCTestCase {
                 hasWeightTrend: false
             ),
             [
-                .weekSummary,
+                .trainingOverview,
                 .conclusion,
-                .continuityTrend,
-                .volumeTrend,
                 .allData,
                 .currentGym,
                 .personalResources
             ]
+        )
+    }
+
+    func testProgressTrainingOverviewUsesThreeCompactTabs() {
+        XCTAssertEqual(
+            ProgressTrainingOverviewTab.allCases,
+            [.recentWeek, .continuity, .volume]
+        )
+        XCTAssertEqual(
+            ProgressTrainingOverviewTab.allCases.map(\.title),
+            ["近 7 天", "连续性", "容量"]
         )
     }
 }

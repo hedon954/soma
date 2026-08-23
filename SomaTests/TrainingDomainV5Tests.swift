@@ -74,8 +74,71 @@ final class TrainingDomainV5Tests: XCTestCase {
         XCTAssertEqual(decoded.laterality, .none)
         XCTAssertEqual(decoded.plannedSets.count, 3)
         XCTAssertEqual(decoded.plannedSets.map(\.kind), [.warmup, .working, .working])
-        XCTAssertEqual(decoded.plannedSets.first?.restAfterSetSeconds, 60)
-        XCTAssertNil(decoded.plannedSets.last?.restAfterSetSeconds)
+        XCTAssertEqual(decoded.targetRestSeconds, 60)
+        XCTAssertTrue(decoded.plannedSets.allSatisfy {
+            $0.restAfterSetSeconds == nil && $0.restBetweenSidesSeconds == nil
+        })
+    }
+
+    func testLegacyPerSetRestCanonicalizesToExerciseLevel() {
+        let prescription = TemplateExercisePrescription(
+            exerciseID: UUID(),
+            exerciseName: "虚构侧推",
+            order: 1,
+            laterality: .both,
+            plannedSets: [
+                TemplateSetPrescriptionValue(
+                    order: 1,
+                    targetReps: 8,
+                    restBetweenSidesSeconds: 15,
+                    restAfterSetSeconds: 60
+                ),
+                TemplateSetPrescriptionValue(
+                    order: 2,
+                    targetReps: 8,
+                    restBetweenSidesSeconds: 15
+                )
+            ]
+        )
+
+        XCTAssertEqual(prescription.targetRestSeconds, 60)
+        XCTAssertEqual(prescription.restBetweenSidesSeconds, 15)
+        XCTAssertTrue(prescription.plannedSets.allSatisfy {
+            $0.restAfterSetSeconds == nil && $0.restBetweenSidesSeconds == nil
+        })
+
+        let incomplete = TemplateExercisePrescription(
+            exerciseID: UUID(),
+            exerciseName: "虚构侧推",
+            order: 1,
+            laterality: .both,
+            plannedSets: [
+                TemplateSetPrescriptionValue(
+                    order: 1,
+                    targetReps: 8,
+                    restBetweenSidesSeconds: 15,
+                    restAfterSetSeconds: 60
+                ),
+                TemplateSetPrescriptionValue(order: 2, targetReps: 8),
+                TemplateSetPrescriptionValue(order: 3, targetReps: 8)
+            ]
+        )
+        XCTAssertNil(incomplete.targetRestSeconds)
+        XCTAssertNil(incomplete.restBetweenSidesSeconds)
+    }
+
+    func testPrescriptionDraftDropsSideRestOutsideBothLaterality() {
+        let exerciseID = UUID()
+        let draft = TrainingPrescriptionDraft(
+            exerciseID: exerciseID,
+            laterality: .left,
+            restBetweenSidesSeconds: "20"
+        )
+
+        XCTAssertNil(
+            draft.prescription(order: 1, names: [exerciseID: "虚构侧推"])
+                .restBetweenSidesSeconds
+        )
     }
 
     @MainActor
@@ -96,6 +159,8 @@ final class TrainingDomainV5Tests: XCTestCase {
                     order: 1,
                     targetSets: 2,
                     targetReps: nil,
+                    targetRestSeconds: 45,
+                    restBetweenSidesSeconds: 15,
                     laterality: .both,
                     plannedSets: [
                         TemplateSetPrescriptionValue(
@@ -104,9 +169,7 @@ final class TrainingDomainV5Tests: XCTestCase {
                             targetKind: .repetitions,
                             targetReps: 10,
                             leftWeightKG: 8,
-                            rightWeightKG: 9,
-                            restBetweenSidesSeconds: 15,
-                            restAfterSetSeconds: 45
+                            rightWeightKG: 9
                         ),
                         TemplateSetPrescriptionValue(
                             order: 2,
@@ -170,6 +233,9 @@ final class TrainingDomainV5Tests: XCTestCase {
         )
         XCTAssertEqual(logicalSets[1].plannedTargetKind, .duration)
         XCTAssertEqual(logicalSets[1].plannedDurationSeconds, 30)
+        XCTAssertEqual(logicalSets[0].plannedRestSeconds, 45)
+        XCTAssertNil(logicalSets[1].plannedRestSeconds)
+        XCTAssertTrue(logicalSets.allSatisfy { $0.restBetweenSidesSeconds == 15 })
         XCTAssertEqual(session.currentSetID, logicalSets.first?.id)
         XCTAssertNotNil(session.currentEffortID)
         XCTAssertTrue(efforts.allSatisfy { $0.businessID != nil })

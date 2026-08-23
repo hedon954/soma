@@ -144,6 +144,7 @@ struct SettingsView: View {
             Toggle(isOn: $voiceCuesEnabled) {
                 SettingsHomeRowLabel(item: .voiceCues, title: "带练语音提示")
             }
+            .appToggleStyle()
         } header: {
             settingsHomeSectionHeader("个人与训练")
         }
@@ -281,6 +282,7 @@ struct SettingsView: View {
             Toggle(isOn: locationEnabledBinding) {
                 Label("随消息记录位置", systemImage: "location")
             }
+            .appToggleStyle()
         } header: {
             Text("隐私")
         } footer: {
@@ -379,6 +381,7 @@ struct SettingsView: View {
         } else {
             Section {
                 Toggle("启用小模型", isOn: $smallModelEnabled)
+                    .appToggleStyle()
             } footer: {
                 Text("关闭时所有任务都走标准模型，这里的配置会被保留。")
             }
@@ -873,6 +876,7 @@ struct PersonalBodyInfoView: View {
                 DisclosureGroup("更多（可选）", isExpanded: $moreBasicsExpanded) {
                     ProfileFieldRow(title: "称呼", placeholder: "可选", text: $displayName)
                     Toggle("填写出生日期", isOn: $hasBirthDate)
+                        .appToggleStyle()
                     if hasBirthDate {
                         DatePicker(
                             "出生日期",

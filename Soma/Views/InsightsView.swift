@@ -160,12 +160,14 @@ struct InsightsView: View {
     @ViewBuilder
     private func progressHomeSection(_ section: ProgressHomeSection) -> some View {
         switch section {
-        case .weekSummary:
-            ProgressWeekSummaryCard(
+        case .trainingOverview:
+            ProgressTrainingOverviewCard(
                 trainingCount: weekTrainingCount,
                 volume: weekVolume,
                 weightChange: weekWeightChange,
-                trainingDays: weekTrainingDays
+                trainingDays: weekTrainingDays,
+                trainingDates: trainingDates,
+                volumePoints: combinedVolumePoints
             )
         case .conclusion:
             ProgressConclusionCard(
@@ -174,7 +176,31 @@ struct InsightsView: View {
                 status: conclusionStatus
             )
         case .recentActivities:
-            SectionHeading(title: "最近活动")
+            HStack(alignment: .center, spacing: 12) {
+                SectionHeading(title: "最近活动")
+                Spacer()
+                NavigationLink {
+                    WorkoutHistoryView()
+                } label: {
+                    progressHistoryShortcut(
+                        title: "训练记录",
+                        systemImage: "dumbbell.fill",
+                        role: .training
+                    )
+                }
+                .buttonStyle(.plain)
+                NavigationLink {
+                    MealHistoryView()
+                } label: {
+                    progressHistoryShortcut(
+                        title: "饮食记录",
+                        systemImage: "fork.knife",
+                        role: .meal
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(minHeight: 44)
             AppCard {
                 VStack(spacing: 0) {
                     ForEach(Array(recentActivities.enumerated()), id: \.element.id) { index, activity in
@@ -191,13 +217,8 @@ struct InsightsView: View {
                     }
                 }
             }
-        case .continuityTrend:
-            SectionHeading(title: "趋势")
-            ContributionCard(trainingDates: trainingDates)
         case .weightTrend:
             WeightTrendCard(entries: weightedBodyEntries)
-        case .volumeTrend:
-            TrainingVolumeTrendCard(points: combinedVolumePoints)
         case .allData:
             SectionHeading(title: "数据与全部记录")
             RecentRecordsCard(
@@ -259,6 +280,23 @@ struct InsightsView: View {
         }
     }
 
+    private func progressHistoryShortcut(
+        title: String,
+        systemImage: String,
+        role: AppSemanticRole
+    ) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.caption2.weight(.semibold))
+            Text(title)
+                .font(.caption.weight(.medium))
+                .underline(true, color: role.accent)
+        }
+        .foregroundStyle(role.accent)
+        .frame(minHeight: AppTheme.minimumTapTarget)
+        .contentShape(Rectangle())
+    }
+
     private var conclusionTitle: String {
         switch weekTrainingCount {
         case 0: "等待新的训练节奏"
@@ -308,6 +346,51 @@ struct InsightsView: View {
         return messages.count {
             !$0.isFromCoach && $0.turnID.map(successful.contains) == true
         }
+    }
+}
+
+private struct ProgressTrainingOverviewCard: View {
+    let trainingCount: Int
+    let volume: Double?
+    let weightChange: Double?
+    let trainingDays: Set<Date>
+    let trainingDates: [Date]
+    let volumePoints: [TrainingVolumePoint]
+    @State private var selection = ProgressTrainingOverviewTab.recentWeek
+
+    var body: some View {
+        AppCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Picker("训练概览", selection: $selection) {
+                    ForEach(ProgressTrainingOverviewTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                switch selection {
+                case .recentWeek:
+                    ProgressWeekSummaryCard(
+                        trainingCount: trainingCount,
+                        volume: volume,
+                        weightChange: weightChange,
+                        trainingDays: trainingDays,
+                        embedded: true
+                    )
+                case .continuity:
+                    ContributionCard(
+                        trainingDates: trainingDates,
+                        embedded: true
+                    )
+                case .volume:
+                    TrainingVolumeTrendCard(
+                        points: volumePoints,
+                        embedded: true
+                    )
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -412,65 +495,74 @@ private struct RecordIndexRow: View {
 
 private struct ContributionCard: View {
     let trainingDates: [Date]
+    var embedded = false
 
     var body: some View {
-        AppCard {
-            VStack(alignment: .leading, spacing: 9) {
+        if embedded {
+            content
+        } else {
+            AppCard { content }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if !embedded {
                 MetricHeading(title: "训练连续性", role: .consistency)
+            }
 
-                HStack(alignment: .top, spacing: 7) {
-                    VStack(spacing: 4) {
-                        Color.clear.frame(width: 16, height: 14)
-                        ForEach(0 ..< 7, id: \.self) { row in
-                            Text(weekdayLabel(for: row))
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 16, height: 13, alignment: .trailing)
-                        }
+            HStack(alignment: .top, spacing: 7) {
+                VStack(spacing: 4) {
+                    Color.clear.frame(width: 16, height: 14)
+                    ForEach(0 ..< 7, id: \.self) { row in
+                        Text(weekdayLabel(for: row))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16, height: 13, alignment: .trailing)
                     }
+                }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 4) {
-                                ForEach(Array(weeks.enumerated()), id: \.element.id) { index, _ in
-                                    Color.clear
-                                        .frame(width: 13, height: 14)
-                                        .overlay(alignment: .leading) {
-                                            Text(monthLabel(at: index))
-                                                .font(.system(size: 9))
-                                                .foregroundStyle(.secondary)
-                                                .fixedSize()
-                                        }
-                                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            ForEach(Array(weeks.enumerated()), id: \.element.id) { index, _ in
+                                Color.clear
+                                    .frame(width: 13, height: 14)
+                                    .overlay(alignment: .leading) {
+                                        Text(monthLabel(at: index))
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize()
+                                    }
                             }
+                        }
 
-                            HStack(alignment: .top, spacing: 4) {
-                                ForEach(weeks) { week in
-                                    VStack(spacing: 4) {
-                                        ForEach(week.days, id: \.self) { day in
-                                            contributionCell(for: day)
-                                        }
+                        HStack(alignment: .top, spacing: 4) {
+                            ForEach(weeks) { week in
+                                VStack(spacing: 4) {
+                                    ForEach(week.days, id: \.self) { day in
+                                        contributionCell(for: day)
                                     }
                                 }
                             }
                         }
                     }
                 }
-
-                HStack(spacing: 4) {
-                    Text("过去 13 周")
-                    Spacer()
-                    Text("少")
-                    ForEach(0 ..< 5, id: \.self) { level in
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(color(for: level))
-                            .frame(width: 10, height: 10)
-                    }
-                    Text("多")
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
             }
+
+            HStack(spacing: 4) {
+                Text("过去 13 周")
+                Spacer()
+                Text("少")
+                ForEach(0 ..< 5, id: \.self) { level in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color(for: level))
+                        .frame(width: 10, height: 10)
+                }
+                Text("多")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -751,6 +843,7 @@ enum TrainingVolumeAnalytics {
 
 private struct TrainingVolumeTrendCard: View {
     let points: [TrainingVolumePoint]
+    var embedded = false
     @State private var range: TrendRange = .month
     @State private var scrollStart = Calendar.current.startOfDay(
         for: Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
@@ -801,131 +894,136 @@ private struct TrainingVolumeTrendCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MetricHeading(title: "训练容量趋势", role: .trainingLoad)
+        if embedded {
+            content
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                MetricHeading(title: "训练容量趋势", role: .trainingLoad)
+                AppCard { content }
+            }
+        }
+    }
 
-            AppCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Picker("时间粒度", selection: $range) {
-                        ForEach(TrendRange.allCases) { option in
-                            Text(option.label).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    if points.isEmpty {
-                        ContentUnavailableView {
-                            Label("暂无容量数据", systemImage: "chart.xyaxis.line")
-                        } description: {
-                            Text("记录组数、次数和重量后，这里会按日汇总组数 × 次数 × 重量生成趋势；缺失字段不计入。")
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else {
-                        HStack(alignment: .firstTextBaseline) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("本期总容量")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(TrainingVolumeAnalytics.formatted(currentTotal)) kg")
-                                    .font(.title3.bold().monospacedDigit())
-                            }
-
-                            Spacer()
-
-                            if let changePercent {
-                                Label(
-                                    String(format: "%+.0f%% 较上期", changePercent),
-                                    systemImage: changePercent >= 0
-                                        ? "arrow.up.right"
-                                        : "arrow.down.right"
-                                )
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(AppMetricRole.trainingLoad.accent)
-                            }
-                        }
-
-                        Text("\(scrollStart.formatted(.dateTime.year().month().day())) – \(visibleEnd.formatted(.dateTime.month().day()))")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-
-                        Chart(points) { point in
-                            AreaMark(
-                                x: .value("日期", point.date),
-                                y: .value("训练容量", point.volume)
-                            )
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [
-                                        AppMetricRole.trainingLoad.accent.opacity(0.24),
-                                        AppMetricRole.trainingLoad.accent.opacity(0.02)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-
-                            LineMark(
-                                x: .value("日期", point.date),
-                                y: .value("训练容量", point.volume)
-                            )
-                            .interpolationMethod(.catmullRom)
-                            .lineStyle(
-                                StrokeStyle(
-                                    lineWidth: 2.25,
-                                    lineCap: .round,
-                                    lineJoin: .round
-                                )
-                            )
-                            .foregroundStyle(AppMetricRole.trainingLoad.accent)
-
-                            PointMark(
-                                x: .value("日期", point.date),
-                                y: .value("训练容量", point.volume)
-                            )
-                            .foregroundStyle(AppMetricRole.trainingLoad.accent)
-                        }
-                        .chartScrollableAxes(.horizontal)
-                        .chartXScale(domain: xDomain)
-                        .chartXVisibleDomain(length: range.duration)
-                        .chartScrollPosition(x: $scrollStart)
-                        .chartYScale(domain: yDomain)
-                        .chartXAxis {
-                            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                                AxisGridLine()
-                                    .foregroundStyle(AppTheme.separator)
-                                AxisTick()
-                                    .foregroundStyle(AppTheme.separator)
-                                AxisValueLabel(format: .dateTime.month().day())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .chartYAxis {
-                            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                                AxisGridLine()
-                                    .foregroundStyle(AppTheme.separator)
-                                AxisTick()
-                                    .foregroundStyle(AppTheme.separator)
-                                AxisValueLabel {
-                                    if let volume = value.as(Double.self) {
-                                        Text(TrainingVolumeAnalytics.formatted(volume))
-                                    }
-                                }
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-                        .frame(height: 180)
-                    }
-                }
-                .onChange(of: range) {
-                    let start = Calendar.current.date(
-                        byAdding: .day,
-                        value: -range.rawValue,
-                        to: .now
-                    ) ?? .now
-                    scrollStart = Calendar.current.startOfDay(for: start)
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("时间粒度", selection: $range) {
+                ForEach(TrendRange.allCases) { option in
+                    Text(option.label).tag(option)
                 }
             }
+            .pickerStyle(.segmented)
+
+            if points.isEmpty {
+                ContentUnavailableView {
+                    Label("暂无容量数据", systemImage: "chart.xyaxis.line")
+                } description: {
+                    Text("记录组数、次数和重量后，这里会按日汇总组数 × 次数 × 重量生成趋势；缺失字段不计入。")
+                }
+                .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("本期总容量")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(TrainingVolumeAnalytics.formatted(currentTotal)) kg")
+                            .font(.title3.bold().monospacedDigit())
+                    }
+
+                    Spacer()
+
+                    if let changePercent {
+                        Label(
+                            String(format: "%+.0f%% 较上期", changePercent),
+                            systemImage: changePercent >= 0
+                                ? "arrow.up.right"
+                                : "arrow.down.right"
+                        )
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AppMetricRole.trainingLoad.accent)
+                    }
+                }
+
+                Text("\(scrollStart.formatted(.dateTime.year().month().day())) – \(visibleEnd.formatted(.dateTime.month().day()))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                Chart(points) { point in
+                    AreaMark(
+                        x: .value("日期", point.date),
+                        y: .value("训练容量", point.volume)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                AppMetricRole.trainingLoad.accent.opacity(0.24),
+                                AppMetricRole.trainingLoad.accent.opacity(0.02)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("日期", point.date),
+                        y: .value("训练容量", point.volume)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(
+                        StrokeStyle(
+                            lineWidth: 2.25,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
+                    )
+                    .foregroundStyle(AppMetricRole.trainingLoad.accent)
+
+                    PointMark(
+                        x: .value("日期", point.date),
+                        y: .value("训练容量", point.volume)
+                    )
+                    .foregroundStyle(AppMetricRole.trainingLoad.accent)
+                }
+                .chartScrollableAxes(.horizontal)
+                .chartXScale(domain: xDomain)
+                .chartXVisibleDomain(length: range.duration)
+                .chartScrollPosition(x: $scrollStart)
+                .chartYScale(domain: yDomain)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisGridLine()
+                            .foregroundStyle(AppTheme.separator)
+                        AxisTick()
+                            .foregroundStyle(AppTheme.separator)
+                        AxisValueLabel(format: .dateTime.month().day())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine()
+                            .foregroundStyle(AppTheme.separator)
+                        AxisTick()
+                            .foregroundStyle(AppTheme.separator)
+                        AxisValueLabel {
+                            if let volume = value.as(Double.self) {
+                                Text(TrainingVolumeAnalytics.formatted(volume))
+                            }
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 180)
+            }
+        }
+        .onChange(of: range) {
+            let start = Calendar.current.date(
+                byAdding: .day,
+                value: -range.rawValue,
+                to: .now
+            ) ?? .now
+            scrollStart = Calendar.current.startOfDay(for: start)
         }
     }
 }

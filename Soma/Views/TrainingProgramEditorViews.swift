@@ -5,12 +5,16 @@ struct TrainingPrescriptionDraft: Identifiable {
     var id: UUID
     var exerciseID: UUID
     var laterality: ExerciseLaterality
+    var restBetweenSetsSeconds: String
+    var restBetweenSidesSeconds: String
     var plannedSets: [TrainingSetPrescriptionDraft]
 
     init(
         id: UUID = UUID(),
         exerciseID: UUID,
         laterality: ExerciseLaterality = .none,
+        restBetweenSetsSeconds: String = "",
+        restBetweenSidesSeconds: String = "",
         plannedSets: [TrainingSetPrescriptionDraft] = [
             TrainingSetPrescriptionDraft(order: 1)
         ]
@@ -18,6 +22,8 @@ struct TrainingPrescriptionDraft: Identifiable {
         self.id = id
         self.exerciseID = exerciseID
         self.laterality = laterality
+        self.restBetweenSetsSeconds = restBetweenSetsSeconds
+        self.restBetweenSidesSeconds = restBetweenSidesSeconds
         self.plannedSets = plannedSets
     }
 
@@ -25,6 +31,8 @@ struct TrainingPrescriptionDraft: Identifiable {
         self.init(
             exerciseID: prescription.exerciseID,
             laterality: prescription.laterality,
+            restBetweenSetsSeconds: prescription.targetRestSeconds.map(String.init) ?? "",
+            restBetweenSidesSeconds: prescription.restBetweenSidesSeconds.map(String.init) ?? "",
             plannedSets: prescription.plannedSets.isEmpty
                 ? [TrainingSetPrescriptionDraft(order: 1)]
                 : prescription.plannedSets
@@ -53,7 +61,10 @@ struct TrainingPrescriptionDraft: Identifiable {
                 ? first?.targetReps
                 : nil,
             targetWeightKG: first?.targetWeightKG,
-            targetRestSeconds: first?.restAfterSetSeconds,
+            targetRestSeconds: Int(restBetweenSetsSeconds),
+            restBetweenSidesSeconds: laterality == .both
+                ? Int(restBetweenSidesSeconds)
+                : nil,
             firstSetIsWarmup: first?.kind == .warmup,
             laterality: laterality,
             plannedSets: sets
@@ -150,8 +161,6 @@ struct TrainingSetPrescriptionDraft: Identifiable, Equatable {
             targetWeightKG: weights.shared,
             leftWeightKG: weights.left,
             rightWeightKG: weights.right,
-            restBetweenSidesSeconds: Int(restBetweenSidesSeconds),
-            restAfterSetSeconds: Int(restAfterSetSeconds),
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
@@ -603,9 +612,9 @@ private extension TrainingPrescriptionDraft {
             if let weightKG = recent.weightKG {
                 plannedSets[index].weight = weightKG.formatted()
             }
-            if let restSeconds = recent.restSeconds {
-                plannedSets[index].restAfterSetSeconds = String(restSeconds)
-            }
+        }
+        if let restSeconds = recent.restSeconds {
+            restBetweenSetsSeconds = String(restSeconds)
         }
         if let firstSetIsWarmup = recent.firstSetIsWarmup,
            let firstIndex = plannedSets.indices.first

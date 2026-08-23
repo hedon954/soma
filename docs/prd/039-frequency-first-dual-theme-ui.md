@@ -7,7 +7,7 @@
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的渐进披露与设置顺序
   - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 的独立逻辑组与左右执行
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 的 Tab、历史和媒体基线
-- 后续修订：暂无
+- 后续修订：[PRD 041](041-action-level-rest-and-compact-progress.md) 将进展三项训练视图合并为分段卡、增加最近活动快捷入口并统一开关状态样式
 - 上游依据：维护者确认的 Soma 最终 UI 设计稿
 - 下游落地：[ADR 0089](../adr/0089-semantic-dual-theme-and-lossless-workout-editor.md)
 
@@ -91,10 +91,8 @@ Soma 已有聊天、计划、训练、记录和趋势闭环，但部分页面存
 
 ### 进展
 
-![进展页浅色实施稿](../assets/ui/2026-08-22/implementation-progress-light.png)
-![进展页深色实施稿](../assets/ui/2026-08-22/implementation-progress-dark.png)
-![进展趋势浅色实施稿](../assets/ui/2026-08-22/implementation-progress-trends-light.png)
-![进展趋势深色实施稿](../assets/ui/2026-08-22/implementation-progress-trends-dark.png)
+![进展页浅色实施稿](../assets/ui/2026-08-23/progress-overview-light.png)
+![进展页深色实施稿](../assets/ui/2026-08-23/progress-overview-dark.png)
 
 - 顺序为最近 7 天摘要、一条结论、最近三项混合活动、趋势、全部数据入口。
 - 摘要只显示可靠指标；未知项不补零、不占位。

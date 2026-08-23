@@ -15,10 +15,12 @@
   - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0086](../adr/0086-preview-and-history-thumbs-use-aspect-fill.md)
   - [ADR 0090](../adr/0090-current-state-business-models-and-session-facts.md)
+  - [ADR 0091](../adr/0091-action-level-planned-rest.md)
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
   - [PRD 035](../prd/035-guided-preview-then-record-and-immediate-share.md)
+  - [PRD 041](../prd/041-action-level-rest-and-compact-progress.md)
 - 关联：[PRD 010](../prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯
@@ -48,7 +50,7 @@ WorkoutSession
 - `ExerciseDefinition` 是动作身份事实。
 - `TrainingProgram` 直接拥有当前计划处方。
 - `WorkoutSession` 是一次执行容器。
-- `TemplateSetPrescription` 是完全独立的计划逻辑组，不依赖动作级统一默认值。
+- `TemplateSetPrescription` 是目标独立的计划逻辑组；两类计划间歇是动作级执行节奏。
 - `WorkoutSet` 是用户看到的逻辑组；`WorkoutEffort.actual*` 是左右、次数/时长和录像的原子事实。
 - `WorkoutEntry` 是完成动作进入统一 CRUD、导出和趋势的业务投影，通过 Session/Performance 来源
   ID、唯一 projection key 和一对一关系与原始事实关联。
@@ -129,15 +131,16 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 `TrainingProgram` 保存名称、可编辑 `overview`、状态、`scheduleHint` 与当前动作处方。旧 `goal`
 只作为迁移来源，不形成第二份事实。计划不保存版本号、版本来源、差异摘要或恢复链。
 
-`TemplateExercise` 保存动作关系、顺序、从 `ExerciseDefinition` 复制的 `lateralityRaw`、器械与动作
-备注。用户面对的侧别在动作定义上修改。laterality 只允许：
+`TemplateExercise` 保存动作关系、顺序、从 `ExerciseDefinition` 复制的 `lateralityRaw`、器械、动作
+备注、动作级组间歇 `targetRestSeconds` 与换侧间歇 `restBetweenSidesSeconds`。用户面对的侧别在动作
+定义上修改。laterality 只允许：
 
 - `.none`：全身，不区分左右；
 - `.both`：左右分别执行且固定先左后右；
 - `.left/.right`：只执行对应一侧。
 
-V4 的 `targetSets/targetReps/targetWeightKG/targetRestSeconds/firstSetIsWarmup` 只用于旧 Tool、旧备份和
-迁移兼容；V5 新处方读取持久的 `TemplateSetPrescription`。
+`targetSets/targetReps/targetWeightKG/firstSetIsWarmup` 只用于旧 Tool、旧备份和迁移兼容；当前组目标
+读取持久的 `TemplateSetPrescription`，两类计划间歇读取 `TemplateExercise`。
 
 每条 `TemplateSetPrescription` 保存：
 
@@ -147,11 +150,12 @@ V4 的 `targetSets/targetReps/targetWeightKG/targetRestSeconds/firstSetIsWarmup`
 | 类型 | `kindRaw`: warmup/working；旧枚举中的其他值继续兼容但本版编辑器不扩展 |
 | 目标 | `targetKindRaw`: repetitions/duration；只允许对应的 reps 或 durationSeconds |
 | 重量 | none/单侧使用 `targetWeightKG`；both 可用 `leftWeightKG/rightWeightKG` |
-| 间歇 | `restBetweenSidesSeconds` 只对 both 有意义；`restAfterSetSeconds` 属于本逻辑组之后 |
+| 兼容间歇 | `restBetweenSidesSeconds/restAfterSetSeconds` 仅无损读取旧计划；当前新写入保持为空 |
 | 备注 | 可选组备注，空字符串不能被理解为模型已知事实 |
 
-任何动作、独立组或排序变化都直接更新当前计划。开始训练时将独立组编码进
-`TemplateExercisePrescription.plannedSets`，之后修改计划不影响既有 Session。
+任何动作、独立组或排序变化都直接更新当前计划。开始训练时将动作级间歇与独立组编码进
+`TemplateExercisePrescription`；组间歇只编译到非最终 `WorkoutSet`，换侧间歇编译到 `.both` 的每个
+逻辑组。之后修改计划不影响既有 Session。
 
 ### 执行事实
 
@@ -237,8 +241,9 @@ Effort 不被伪造成重量容量；逻辑组数按 Set 计算，不因 both �
 - `archive_program`、`delete_program`：分别归档或在明确授权后永久删除计划；
 - `start_program`：只接受列表返回的计划 ID，在设备本地创建不可变 Session 并打开带练。
 
-V5 计划 Tool 使用嵌套 `set_prescriptions` 表达独立组、laterality、target kind、逐侧重量与两类
-间歇。递归验证必须拒绝 unknown 字段、非法枚举/范围和 reps/duration 同时有效。新调用只暴露
+V5 计划 Tool 在动作层表达 laterality 与两类间歇，嵌套 `set_prescriptions` 表达独立组的 target
+kind、次数/时长、逐侧重量和备注。递归验证必须拒绝 unknown 字段、非法枚举/范围、非 both 的
+换侧间歇和 reps/duration 同时有效。新调用只暴露
 新 schema；已经持久化的旧 schema Tool Call/Checkpoint 由版本化 decoder 确定性展开，不能因为
 升级丢失用户已授权工作。
 

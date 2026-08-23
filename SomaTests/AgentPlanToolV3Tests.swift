@@ -24,6 +24,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
                 "exercise_id": 42,
                 "order": 1,
                 "laterality": "both",
+                "target_rest_seconds": 45,
+                "rest_between_sides_seconds": 15,
                 "set_prescriptions": [
                     [
                         "order": 1,
@@ -31,9 +33,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
                         "target_kind": "repetitions",
                         "target_reps": 10,
                         "left_weight_kg": 8,
-                        "right_weight_kg": 9,
-                        "rest_between_sides_seconds": 15,
-                        "rest_after_set_seconds": 45
+                        "right_weight_kg": 9
                     ],
                     [
                         "order": 2,
@@ -51,6 +51,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
         XCTAssertEqual(resolved.local.arguments.overview, "左右独立。")
         let exercise = try XCTUnwrap(resolved.local.arguments.templateExercises?.first)
         XCTAssertEqual(exercise.laterality, .both)
+        XCTAssertEqual(exercise.targetRestSeconds, 45)
+        XCTAssertEqual(exercise.restBetweenSidesSeconds, 15)
         XCTAssertEqual(exercise.setPrescriptions?.count, 2)
         XCTAssertEqual(exercise.setPrescriptions?.last?.targetKind, .duration)
         XCTAssertEqual(exercise.setPrescriptions?.last?.targetDurationSeconds, 30)
@@ -67,6 +69,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
                 "target_kind": "repetitions"
             ]),
             arguments(laterality: "alternating"),
+            arguments(laterality: "none"),
             arguments(set: validSet().merging(["target_reps": 0]) { _, rhs in rhs }),
             arguments(set: validSet().merging(["target_duration_seconds": 30]) { _, rhs in rhs }),
             arguments(order: "1")
@@ -125,6 +128,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
                     templateExercises: [AgentTemplateExerciseInput(
                         exerciseID: exerciseID,
                         order: 1,
+                        targetRestSeconds: 60,
+                        restBetweenSidesSeconds: 15,
                         laterality: .both,
                         setPrescriptions: [
                             AgentTemplateSetPrescriptionInput(
@@ -133,9 +138,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
                                 targetKind: .duration,
                                 targetDurationSeconds: 30,
                                 leftWeightKG: 12,
-                                rightWeightKG: 14,
-                                restBetweenSidesSeconds: 15,
-                                restAfterSetSeconds: 60
+                                rightWeightKG: 14
                             )
                         ]
                     )]
@@ -159,6 +162,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
         XCTAssertEqual(v3Prescription.plannedSets.first?.targetKind, .duration)
         XCTAssertEqual(v3Prescription.plannedSets.first?.leftWeightKG, 12)
         XCTAssertEqual(v3Prescription.plannedSets.first?.rightWeightKG, 14)
+        XCTAssertEqual(v3Prescription.targetRestSeconds, 60)
+        XCTAssertEqual(v3Prescription.restBetweenSidesSeconds, 15)
 
         let legacy = ConversationRecorder.executeAgentTool(
             AgentToolCall(
@@ -244,6 +249,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
                 "exercise_id": 42,
                 "order": order,
                 "laterality": laterality,
+                "target_rest_seconds": 90,
+                "rest_between_sides_seconds": 15,
                 "set_prescriptions": [set]
             ]]
         ]
@@ -256,9 +263,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
             "target_kind": "repetitions",
             "target_reps": 8,
             "left_weight_kg": 20,
-            "right_weight_kg": 22,
-            "rest_between_sides_seconds": 15,
-            "rest_after_set_seconds": 90
+            "right_weight_kg": 22
         ]
     }
 

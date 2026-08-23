@@ -310,6 +310,7 @@ private struct WorkoutRecordEditor: View {
                     numericField("MET", text: $calorieMET, keyboard: .decimalPad)
                     numericField("计算时长", unit: "分钟", text: $calorieDurationMinutes, keyboard: .decimalPad)
                     Toggle("计算时长来自推算", isOn: $calorieDurationEstimated)
+                        .appToggleStyle()
 
                     if !hasCalorieReferenceWeight {
                         NavigationLink {

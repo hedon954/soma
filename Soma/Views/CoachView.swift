@@ -1715,6 +1715,7 @@ private struct CoachComposer: View {
                 Toggle(isOn: $useLocalForNextMessage) {
                     Label("本次仅本机", systemImage: "iphone")
                 }
+                .appToggleStyle()
             } label: {
                 sendLabel
             } primaryAction: {

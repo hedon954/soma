@@ -12,6 +12,7 @@ struct DiagnosticReportSettingsView: View {
         Form {
             Section {
                 Toggle("自动发送崩溃诊断", isOn: $isAutoSendEnabled)
+                    .appToggleStyle()
                     .onChange(of: isAutoSendEnabled) { _, newValue in
                         coordinator.isAutoSendEnabled = newValue
                     }

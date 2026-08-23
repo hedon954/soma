@@ -49,6 +49,7 @@ struct TemplateExerciseDTO: Codable, Equatable, Sendable {
     var targetReps: Int?
     var targetWeightKG: Double?
     var targetRestSeconds: Int?
+    var restBetweenSidesSeconds: Int?
     var firstSetIsWarmup: Bool
     var equipmentKind: String?
     var notes: String
@@ -64,6 +65,7 @@ struct TemplateExerciseDTO: Codable, Equatable, Sendable {
         targetReps = model.targetReps
         targetWeightKG = model.targetWeightKG
         targetRestSeconds = model.targetRestSeconds
+        restBetweenSidesSeconds = model.restBetweenSidesSeconds
         firstSetIsWarmup = model.firstSetIsWarmup
         equipmentKind = model.equipmentKind
         notes = model.notes
@@ -80,6 +82,7 @@ struct TemplateExerciseDTO: Codable, Equatable, Sendable {
             targetReps: targetReps,
             targetWeightKG: targetWeightKG,
             targetRestSeconds: targetRestSeconds,
+            restBetweenSidesSeconds: restBetweenSidesSeconds,
             firstSetIsWarmup: firstSetIsWarmup,
             equipmentKind: equipmentKind,
             notes: notes,

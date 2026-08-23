@@ -1,6 +1,6 @@
 # ADR 0073：独立逐组处方、原子执行与确定性带练收口
 
-- 状态：部分已替代；独立处方、Effort 归属与自动收口继续有效，完整相机 activation 由 ADR 0074 细化，历史 VersionedSchema 链由 ADR 0075 替代，侧别与完成方式由 ADR 0076 归动作定义，业务版本链与热量算法版本字段由 ADR 0090 删除
+- 状态：部分已替代；独立处方、Effort 归属与自动收口继续有效，完整相机 activation 由 ADR 0074 细化，历史 VersionedSchema 链由 ADR 0075 替代，侧别与完成方式由 ADR 0076 归动作定义，业务版本链与热量算法版本字段由 ADR 0090 删除，计划间歇由 ADR 0091 提升到动作级
 - 日期：2026-08-16
 - 维护者：Soma maintainers
 - 部分替代：
@@ -12,6 +12,7 @@
   - [ADR 0071](0071-integer-business-identities-and-explicit-relations.md)
   - [BUG 0019](../bugs/0019-guided-recording-attempt-terminal-and-duplicate-alerts.md)
 - 后续替代：
+  - [ADR 0091](0091-action-level-planned-rest.md) 将计划换侧间歇与组间歇提升为动作级配置；逐组实际休息证据继续有效
   - [ADR 0090](0090-current-state-business-models-and-session-facts.md) 删除版本化模板关系与热量算法版本字段，保留独立组、Session 快照和状态机 transition revision
   - [ADR 0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) 细化录像 attempt 的起点、准备阶段 deadline、camera-ready preflight、部分文件语义和系统中断恢复；本 ADR 的 Effort 归属与单终态原则继续有效
   - [ADR 0075](0075-current-swiftdata-schema-without-historical-versions.md) 取消冻结 V3/V4/V5 与跨级磁盘夹具；独立组、Effort、projection key 与启动数据回填继续有效

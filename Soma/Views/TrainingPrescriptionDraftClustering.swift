@@ -116,12 +116,6 @@ extension TrainingSetPrescriptionDraft {
             weight: weight.trimmingCharacters(in: .whitespacesAndNewlines),
             leftWeight: leftWeight.trimmingCharacters(in: .whitespacesAndNewlines),
             rightWeight: rightWeight.trimmingCharacters(in: .whitespacesAndNewlines),
-            restBetweenSidesSeconds: restBetweenSidesSeconds.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ),
-            restAfterSetSeconds: restAfterSetSeconds.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ),
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
@@ -135,7 +129,5 @@ struct TrainingSetDraftClusterSignature: Equatable {
     var weight: String
     var leftWeight: String
     var rightWeight: String
-    var restBetweenSidesSeconds: String
-    var restAfterSetSeconds: String
     var notes: String
 }

@@ -84,6 +84,7 @@ struct AgentInputShortcutListView: View {
             }
             Spacer(minLength: 8)
             Toggle("显示", isOn: visibilityBinding(shortcut))
+                .appToggleStyle()
                 .labelsHidden()
                 .accessibilityLabel("在聊天输入区显示\(shortcut.title)")
         }

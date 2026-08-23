@@ -94,6 +94,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0088](0088-async-generated-session-title-with-manual-precedence.md) | 已采纳 | 会话标题小模型优先异步生成；手动标题优先，失败保留本地兜底且不扩张 Tool 协议 |
 | [0089](0089-semantic-dual-theme-and-lossless-workout-editor.md) | 已采纳 | 主题由根层语义映射；聊天与详情以同一纯值投影无损编辑有序训练证据 |
 | [0090](0090-current-state-business-models-and-session-facts.md) | 已采纳 | 业务模型只保留当前状态；训练历史由 Session 处方快照与执行事实承担，技术兼容版本继续隔离保留 |
+| [0091](0091-action-level-planned-rest.md) | 已采纳 | 计划组间歇与换侧间歇归动作；开始训练时编译到逻辑组，实际休息证据仍逐组保存 |
 
 新决策使用 [ADR 模板](template.md)。
 

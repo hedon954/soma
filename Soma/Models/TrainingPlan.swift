@@ -131,6 +131,7 @@ struct TemplateExercisePrescription: Codable, Equatable, Hashable, Identifiable,
     var targetReps: Int?
     var targetWeightKG: Double?
     var targetRestSeconds: Int?
+    var restBetweenSidesSeconds: Int?
     var firstSetIsWarmup: Bool
     var equipmentKind: String?
     var notes: String
@@ -146,6 +147,7 @@ struct TemplateExercisePrescription: Codable, Equatable, Hashable, Identifiable,
         targetReps: Int? = nil,
         targetWeightKG: Double? = nil,
         targetRestSeconds: Int? = nil,
+        restBetweenSidesSeconds: Int? = nil,
         firstSetIsWarmup: Bool = false,
         equipmentKind: String? = nil,
         notes: String = "",
@@ -160,22 +162,40 @@ struct TemplateExercisePrescription: Codable, Equatable, Hashable, Identifiable,
         self.targetReps = targetReps
         self.targetWeightKG = targetWeightKG
         self.targetRestSeconds = targetRestSeconds
+        self.restBetweenSidesSeconds = restBetweenSidesSeconds
         self.firstSetIsWarmup = firstSetIsWarmup
         self.equipmentKind = equipmentKind
         self.notes = notes
         self.laterality = laterality
-        self.plannedSets = plannedSets ?? Self.expandLegacySets(
+        let rawSets = plannedSets ?? Self.expandLegacySets(
             targetSets: targetSets,
             targetReps: targetReps,
             targetWeightKG: targetWeightKG,
             targetRestSeconds: targetRestSeconds,
             firstSetIsWarmup: firstSetIsWarmup
         )
+        if self.targetRestSeconds == nil {
+            self.targetRestSeconds = Self.consensus(
+                Array(rawSets.dropLast()).map(\.restAfterSetSeconds)
+            )
+        }
+        if self.restBetweenSidesSeconds == nil {
+            self.restBetweenSidesSeconds = Self.consensus(
+                rawSets.map(\.restBetweenSidesSeconds)
+            )
+        }
+        self.plannedSets = rawSets.map { value in
+            var copy = value
+            copy.restBetweenSidesSeconds = nil
+            copy.restAfterSetSeconds = nil
+            return copy
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, exerciseID, exerciseName, order
         case targetSets, targetReps, targetWeightKG, targetRestSeconds
+        case restBetweenSidesSeconds
         case firstSetIsWarmup, equipmentKind, notes, laterality, plannedSets
     }
 
@@ -189,6 +209,10 @@ struct TemplateExercisePrescription: Codable, Equatable, Hashable, Identifiable,
         targetReps = try values.decodeIfPresent(Int.self, forKey: .targetReps)
         targetWeightKG = try values.decodeIfPresent(Double.self, forKey: .targetWeightKG)
         targetRestSeconds = try values.decodeIfPresent(Int.self, forKey: .targetRestSeconds)
+        restBetweenSidesSeconds = try values.decodeIfPresent(
+            Int.self,
+            forKey: .restBetweenSidesSeconds
+        )
         firstSetIsWarmup = try values.decodeIfPresent(
             Bool.self,
             forKey: .firstSetIsWarmup
@@ -199,7 +223,7 @@ struct TemplateExercisePrescription: Codable, Equatable, Hashable, Identifiable,
             ExerciseLaterality.self,
             forKey: .laterality
         ) ?? .none
-        plannedSets = try values.decodeIfPresent(
+        let rawSets = try values.decodeIfPresent(
             [TemplateSetPrescriptionValue].self,
             forKey: .plannedSets
         ) ?? Self.expandLegacySets(
@@ -209,6 +233,32 @@ struct TemplateExercisePrescription: Codable, Equatable, Hashable, Identifiable,
             targetRestSeconds: targetRestSeconds,
             firstSetIsWarmup: firstSetIsWarmup
         )
+        if targetRestSeconds == nil {
+            targetRestSeconds = Self.consensus(
+                Array(rawSets.dropLast()).map(\.restAfterSetSeconds)
+            )
+        }
+        if restBetweenSidesSeconds == nil {
+            restBetweenSidesSeconds = Self.consensus(
+                rawSets.map(\.restBetweenSidesSeconds)
+            )
+        }
+        plannedSets = rawSets.map { value in
+            var copy = value
+            copy.restBetweenSidesSeconds = nil
+            copy.restAfterSetSeconds = nil
+            return copy
+        }
+    }
+
+    private static func consensus(_ values: [Int?]) -> Int? {
+        guard !values.isEmpty,
+              let first = values[0],
+              values.dropFirst().allSatisfy({ $0 == first })
+        else {
+            return nil
+        }
+        return first
     }
 
     static func expandLegacySets(
@@ -365,6 +415,7 @@ final class TemplateExercise: BusinessIdentifiedModel {
     var targetReps: Int?
     var targetWeightKG: Double?
     var targetRestSeconds: Int?
+    var restBetweenSidesSeconds: Int?
     var firstSetIsWarmup: Bool
     var equipmentKind: String?
     var notes: String
@@ -383,6 +434,7 @@ final class TemplateExercise: BusinessIdentifiedModel {
         targetReps: Int? = nil,
         targetWeightKG: Double? = nil,
         targetRestSeconds: Int? = nil,
+        restBetweenSidesSeconds: Int? = nil,
         firstSetIsWarmup: Bool = false,
         equipmentKind: String? = nil,
         notes: String = "",
@@ -396,6 +448,7 @@ final class TemplateExercise: BusinessIdentifiedModel {
         self.targetReps = targetReps
         self.targetWeightKG = targetWeightKG
         self.targetRestSeconds = targetRestSeconds
+        self.restBetweenSidesSeconds = restBetweenSidesSeconds
         self.firstSetIsWarmup = firstSetIsWarmup
         self.equipmentKind = equipmentKind
         self.notes = notes

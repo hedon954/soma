@@ -55,6 +55,7 @@ final class WorkoutPrescriptionFormatterTests: XCTestCase {
             exerciseID: UUID(),
             exerciseName: "深蹲",
             order: 1,
+            targetRestSeconds: 90,
             laterality: .none,
             plannedSets: [
                 TemplateSetPrescriptionValue(
@@ -62,16 +63,14 @@ final class WorkoutPrescriptionFormatterTests: XCTestCase {
                     kind: .warmup,
                     targetKind: .repetitions,
                     targetReps: 8,
-                    targetWeightKG: 60,
-                    restAfterSetSeconds: 60
+                    targetWeightKG: 60
                 )
             ] + (2 ... 5).map {
                 TemplateSetPrescriptionValue(
                     order: $0,
                     targetKind: .repetitions,
                     targetReps: 8,
-                    targetWeightKG: 80,
-                    restAfterSetSeconds: 90
+                    targetWeightKG: 80
                 )
             }
         )
@@ -85,7 +84,7 @@ final class WorkoutPrescriptionFormatterTests: XCTestCase {
         )
         XCTAssertEqual(
             WorkoutPrescriptionFormatter.exerciseSummary(prescription),
-            "热身 1×8次 60kg 歇60秒 · 工作 4×8次 80kg 歇90秒"
+            "热身 1×8次 60kg · 工作 4×8次 80kg · 组间歇90秒"
         )
     }
 

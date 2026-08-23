@@ -44,58 +44,67 @@ struct ProgressWeekSummaryCard: View {
     let volume: Double?
     let weightChange: Double?
     let trainingDays: Set<Date>
+    var embedded = false
 
     private let calendar = Calendar.current
 
     var body: some View {
-        AppCard {
-            VStack(alignment: .leading, spacing: 20) {
+        if embedded {
+            content
+        } else {
+            AppCard { content }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            if !embedded {
                 MetricHeading(title: "最近 7 天", role: .consistency)
-
-                HStack(spacing: 0) {
-                    metric(value: "\(trainingCount)", unit: nil, label: "次训练")
-                    if let volume {
-                        Divider()
-                            .frame(height: 48)
-                        metric(
-                            value: volume.formatted(.number.precision(.fractionLength(0))),
-                            unit: "kg",
-                            label: "总训练量"
-                        )
-                    }
-                    if let weightChange {
-                        Divider()
-                            .frame(height: 48)
-                        metric(
-                            value: weightChange.formatted(
-                                .number.sign(strategy: .always()).precision(.fractionLength(0 ... 1))
-                            ),
-                            unit: "kg",
-                            label: "体重变化"
-                        )
-                    }
-                }
-
-                HStack(spacing: 0) {
-                    ForEach(days, id: \.self) { date in
-                        VStack(spacing: 7) {
-                            Capsule()
-                                .fill(
-                                    trainingDays.contains(calendar.startOfDay(for: date))
-                                        ? AppMetricRole.consistency.accent
-                                        : AppTheme.separator
-                                )
-                                .frame(width: 7, height: 38)
-                            Text(date.formatted(.dateTime.weekday(.narrow)))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("最近 7 天有 \(trainingDays.count) 个训练日")
             }
+
+            HStack(spacing: 0) {
+                metric(value: "\(trainingCount)", unit: nil, label: "次训练")
+                if let volume {
+                    Divider()
+                        .frame(height: 48)
+                    metric(
+                        value: volume.formatted(.number.precision(.fractionLength(0))),
+                        unit: "kg",
+                        label: "总训练量"
+                    )
+                }
+                if let weightChange {
+                    Divider()
+                        .frame(height: 48)
+                    metric(
+                        value: weightChange.formatted(
+                            .number.sign(strategy: .always()).precision(.fractionLength(0 ... 1))
+                        ),
+                        unit: "kg",
+                        label: "体重变化"
+                    )
+                }
+            }
+
+            HStack(spacing: 0) {
+                ForEach(days, id: \.self) { date in
+                    VStack(spacing: 7) {
+                        Capsule()
+                            .fill(
+                                trainingDays.contains(calendar.startOfDay(for: date))
+                                    ? AppMetricRole.consistency.accent
+                                    : AppTheme.separator
+                            )
+                            .frame(width: 7, height: 38)
+                        Text(date.formatted(.dateTime.weekday(.narrow)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("最近 7 天有 \(trainingDays.count) 个训练日")
         }
     }
 

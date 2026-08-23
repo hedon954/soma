@@ -345,8 +345,6 @@ struct AgentTemplateSetPrescriptionInput: Codable, Equatable {
     var targetWeightKG: Double? = nil
     var leftWeightKG: Double? = nil
     var rightWeightKG: Double? = nil
-    var restBetweenSidesSeconds: Int? = nil
-    var restAfterSetSeconds: Int? = nil
     var notes: String? = nil
 
     enum CodingKeys: String, CodingKey {
@@ -357,8 +355,6 @@ struct AgentTemplateSetPrescriptionInput: Codable, Equatable {
         case targetWeightKG = "target_weight_kg"
         case leftWeightKG = "left_weight_kg"
         case rightWeightKG = "right_weight_kg"
-        case restBetweenSidesSeconds = "rest_between_sides_seconds"
-        case restAfterSetSeconds = "rest_after_set_seconds"
     }
 }
 
@@ -370,6 +366,7 @@ struct AgentTemplateExerciseInput: Codable, Equatable {
     var targetReps: Int? = nil
     var targetWeightKG: Double? = nil
     var targetRestSeconds: Int? = nil
+    var restBetweenSidesSeconds: Int? = nil
     var firstSetIsWarmup: Bool? = nil
     var equipmentKind: String? = nil
     var notes: String? = nil
@@ -383,6 +380,7 @@ struct AgentTemplateExerciseInput: Codable, Equatable {
         case targetReps = "target_reps"
         case targetWeightKG = "target_weight_kg"
         case targetRestSeconds = "target_rest_seconds"
+        case restBetweenSidesSeconds = "rest_between_sides_seconds"
         case firstSetIsWarmup = "first_set_is_warmup"
         case equipmentKind = "equipment_kind"
         case setPrescriptions = "set_prescriptions"
@@ -1268,6 +1266,8 @@ extension AgentToolName {
                     "none=左右同时或不区分；both=先左后右；left/right=仅单侧",
                     values: ExerciseLaterality.allCases.map(\.rawValue)
                 ),
+                "target_rest_seconds": integer("动作各组之间的统一间歇，0 到 3600 秒"),
+                "rest_between_sides_seconds": integer("左右分开动作统一换侧间歇，0 到 3600 秒；仅 both 可用"),
                 "equipment_kind": string("用户明确指定的必要器械"),
                 "notes": string("用户明确提供的动作备注"),
                 "set_prescriptions": array(
@@ -1286,8 +1286,6 @@ extension AgentToolName {
                         "target_weight_kg": number("不区分侧别或双侧共用的外部重量，0 到 1000 kg"),
                         "left_weight_kg": number("左侧外部重量，0 到 1000 kg"),
                         "right_weight_kg": number("右侧外部重量，0 到 1000 kg"),
-                        "rest_between_sides_seconds": integer("左右之间间歇，0 到 3600 秒"),
-                        "rest_after_set_seconds": integer("本逻辑组结束后的间歇，0 到 3600 秒"),
                         "notes": string("本组备注")
                     ], required: ["order", "kind", "target_kind"]),
                     description: "每组互相独立；至少一组"

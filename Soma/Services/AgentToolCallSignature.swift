@@ -259,6 +259,9 @@ private struct AgentToolSignatureArguments {
         if let value = item.targetRestSeconds {
             row["target_rest_seconds"] = value
         }
+        if let value = item.restBetweenSidesSeconds {
+            row["rest_between_sides_seconds"] = value
+        }
         if let value = item.firstSetIsWarmup {
             row["first_set_is_warmup"] = value
         }
@@ -301,12 +304,6 @@ private struct AgentToolSignatureArguments {
         }
         if let weight = set.rightWeightKG {
             value["right_weight_kg"] = rounded(weight)
-        }
-        if let rest = set.restBetweenSidesSeconds {
-            value["rest_between_sides_seconds"] = rest
-        }
-        if let rest = set.restAfterSetSeconds {
-            value["rest_after_set_seconds"] = rest
         }
         if let notes = nonempty(set.notes) {
             value["notes"] = notes

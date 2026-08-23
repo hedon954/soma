@@ -642,6 +642,11 @@ struct MarkdownText: UIViewRepresentable {
 }
 
 extension View {
+    func appToggleStyle() -> some View {
+        toggleStyle(.switch)
+            .tint(AppStatusRole.positive.accent)
+    }
+
     func appPageBackground() -> some View {
         background(AppTheme.pageBackground.ignoresSafeArea())
     }

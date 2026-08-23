@@ -39,6 +39,14 @@ enum WorkoutPrescriptionFormatter {
                 includeKind: mixedKinds || sets[cluster.startIndex].kind != .working
             )
         })
+        if let rest = prescription.targetRestSeconds {
+            tokens.append("组间歇\(rest)秒")
+        }
+        if prescription.laterality == .both,
+           let rest = prescription.restBetweenSidesSeconds
+        {
+            tokens.append("换侧间歇\(rest)秒")
+        }
         return tokens.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
@@ -138,9 +146,6 @@ enum WorkoutPrescriptionFormatter {
             parts.append("\(count)组")
         }
         parts.append(contentsOf: weightTokens(set, laterality: laterality))
-        if let rest = set.restAfterSetSeconds {
-            parts.append("歇\(rest)秒")
-        }
         return parts.filter { !$0.isEmpty }.joined(separator: " ")
     }
 

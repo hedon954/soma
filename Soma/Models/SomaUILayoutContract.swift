@@ -49,12 +49,10 @@ enum TrainingHomeSection: String, CaseIterable, Identifiable, Sendable {
 }
 
 enum ProgressHomeSection: String, CaseIterable, Identifiable, Sendable {
-    case weekSummary
+    case trainingOverview
     case conclusion
     case recentActivities
-    case continuityTrend
     case weightTrend
-    case volumeTrend
     case allData
     case currentGym
     case personalResources
@@ -73,6 +71,24 @@ enum ProgressHomeSection: String, CaseIterable, Identifiable, Sendable {
             case .weightTrend: hasWeightTrend
             default: true
             }
+        }
+    }
+}
+
+enum ProgressTrainingOverviewTab: String, CaseIterable, Identifiable, Sendable {
+    case recentWeek
+    case continuity
+    case volume
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .recentWeek: "近 7 天"
+        case .continuity: "连续性"
+        case .volume: "容量"
         }
     }
 }

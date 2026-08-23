@@ -68,8 +68,6 @@ const templateSetPrescriptionsV3 = {
       target_weight_kg: { type: "number", minimum: 0, maximum: 1_000 },
       left_weight_kg: { type: "number", minimum: 0, maximum: 1_000 },
       right_weight_kg: { type: "number", minimum: 0, maximum: 1_000 },
-      rest_between_sides_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
-      rest_after_set_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
       notes: stringValue,
     },
     required: ["order", "kind", "target_kind"],
@@ -84,6 +82,8 @@ const templateExercisesV3 = {
       exercise_id: { type: "integer", minimum: 1 },
       order: { type: "integer", minimum: 1, maximum: 100 },
       laterality: { type: "string", enum: ["none", "both", "left", "right"] },
+      target_rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
+      rest_between_sides_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
       equipment_kind: stringValue,
       notes: stringValue,
       set_prescriptions: templateSetPrescriptionsV3,
@@ -681,6 +681,20 @@ function validatePlanV3(input: {
     if (typeof laterality !== "string" || !["none", "both", "left", "right"].includes(laterality)) {
       invalidSchema(`${path}.laterality 无效。`);
     }
+    if (exercise.target_rest_seconds !== undefined) {
+      requireInteger(exercise.target_rest_seconds, 0, 3_600, `${path}.target_rest_seconds`);
+    }
+    if (exercise.rest_between_sides_seconds !== undefined) {
+      requireInteger(
+        exercise.rest_between_sides_seconds,
+        0,
+        3_600,
+        `${path}.rest_between_sides_seconds`,
+      );
+      if (laterality !== "both") {
+        invalidSchema(`${path}.rest_between_sides_seconds 只适用于 both。`);
+      }
+    }
     const sets = exercise.set_prescriptions;
     if (!Array.isArray(sets) || sets.length < 1 || sets.length > 100) {
       invalidSchema(`${path}.set_prescriptions 必须包含 1 到 100 个组。`);
@@ -713,12 +727,6 @@ function validatePlanV3(input: {
       }
       for (const key of ["target_weight_kg", "left_weight_kg", "right_weight_kg"]) {
         if (set[key] !== undefined) requireNumber(set[key], 0, 1_000, `${setPath}.${key}`);
-      }
-      for (const key of ["rest_between_sides_seconds", "rest_after_set_seconds"]) {
-        if (set[key] !== undefined) requireInteger(set[key], 0, 3_600, `${setPath}.${key}`);
-      }
-      if (laterality !== "both" && set.rest_between_sides_seconds !== undefined) {
-        invalidSchema(`${setPath}.rest_between_sides_seconds 只适用于 both。`);
       }
       if (laterality === "none" &&
           (set.left_weight_kg !== undefined || set.right_weight_kg !== undefined)) {

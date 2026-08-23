@@ -6,6 +6,7 @@
 - 主张：Your body, understood.
 - 修订自：[PRD 003](003-streaming-react-agent.md)
 - 后续修订：
+  - [PRD 041](041-action-level-rest-and-compact-progress.md)
   - [PRD 040](040-current-state-business-data-with-session-facts.md)
   - [PRD 005](005-conversation-sessions-and-send-feedback.md)
   - [PRD 006](006-footprints-location-and-retry.md)

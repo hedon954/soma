@@ -148,6 +148,22 @@ struct TrainingPrescriptionEditorView: View {
             }
             .pickerStyle(.menu)
 
+            metric(
+                "组间歇时间（秒）",
+                text: $draft.restBetweenSetsSeconds,
+                keyboard: .numberPad,
+                optional: true
+            )
+
+            if draft.laterality == .both {
+                metric(
+                    "左右侧切换间歇时间（秒）",
+                    text: $draft.restBetweenSidesSeconds,
+                    keyboard: .numberPad,
+                    optional: true
+                )
+            }
+
             Text(draft.laterality.editorExplanation)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -159,6 +175,9 @@ struct TrainingPrescriptionEditorView: View {
             get: { draft.laterality },
             set: { value in
                 draft.laterality = value
+                if value != .both {
+                    draft.restBetweenSidesSeconds = ""
+                }
                 selectedExercise?.laterality = value
                 try? modelContext.save()
             }
@@ -276,20 +295,6 @@ struct TrainingPrescriptionEditorView: View {
 
         weightFields(for: setID)
 
-        if draft.laterality == .both {
-            metric(
-                "左右之间间歇（秒）",
-                text: field(setID, \.restBetweenSidesSeconds),
-                keyboard: .numberPad,
-                optional: true
-            )
-        }
-        metric(
-            "本组结束后间歇（秒）",
-            text: field(setID, \.restAfterSetSeconds),
-            keyboard: .numberPad,
-            optional: true
-        )
         TextField("本组备注（可选）", text: notes, axis: .vertical)
             .lineLimit(2 ... 5)
     }
