@@ -28,6 +28,8 @@ struct RootView: View {
     @Environment(SomaCaptureRouter.self) private var captureRouter
     @Environment(DataManagementCoordinator.self) private var dataManagement
     @Query(sort: \AgentJob.createdAt) private var agentJobs: [AgentJob]
+    @AppStorage(AppAppearancePreference.defaultsKey)
+    private var appearanceRaw = AppAppearancePreference.system.rawValue
     @State private var selectedTab: AppTab = .coach
     @State private var tabStackIDs: [AppTab: UUID] = [
         .coach: UUID(),
@@ -49,14 +51,26 @@ struct RootView: View {
                 }
             }
             .id(tabStackIDs[.coach])
-            .tabItem { Label("教练", systemImage: "bubble.left.and.bubble.right.fill") }
+            .tabItem {
+                Label(
+                    "教练",
+                    systemImage: selectedTab == .coach
+                        ? "bubble.left.and.bubble.right.fill"
+                        : "bubble.left.and.bubble.right"
+                )
+            }
             .tag(AppTab.coach)
 
             NavigationStack {
                 TrainingProgramLibraryView()
             }
             .id(tabStackIDs[.training])
-            .tabItem { Label("训练", systemImage: "figure.strengthtraining.traditional") }
+            .tabItem {
+                Label(
+                    "训练",
+                    systemImage: selectedTab == .training ? "dumbbell.fill" : "dumbbell"
+                )
+            }
             .tag(AppTab.training)
 
             NavigationStack {
@@ -69,10 +83,20 @@ struct RootView: View {
             // PRD 020 修订：设置从各页右上角 gear 收敛为底部第 4 个 Tab。
             SettingsView(isEmbeddedInTab: true)
                 .id(tabStackIDs[.settings])
-                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tabItem {
+                    Label(
+                        "设置",
+                        systemImage: selectedTab == .settings ? "gearshape.fill" : "gearshape"
+                    )
+                }
                 .tag(AppTab.settings)
         }
         .tint(AppTheme.tint)
+        .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .preferredColorScheme(
+            AppAppearancePolicy.rootColorScheme(storedRawValue: appearanceRaw)
+        )
         .overlay(alignment: .topLeading) {
             AgentSystemProjectionHost()
         }

@@ -15,7 +15,7 @@ struct ExerciseArtworkView: View {
             } else {
                 Image(systemName: "figure.strengthtraining.traditional")
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.trainingAccent)
             }
         }
         .accessibilityLabel(reference.title)

@@ -4,14 +4,15 @@ import SwiftData
 extension ConversationRecorder {
     static func listTrainingPrograms(in context: ModelContext) -> AgentToolResult {
         let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
-            .filter { $0.status == .active && $0.currentTemplateVersionID != nil }
+            .filter {
+                $0.status == .active
+                    && !TrainingPlanStore.prescriptions(for: $0, in: context).isEmpty
+            }
             .sorted { $0.updatedAt > $1.updatedAt }
-        let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? []
         let values = programs.map { program in
-            let template = versions.first { $0.id == program.currentTemplateVersionID }
-            return "[id:\(program.businessID ?? 0)] \(program.name)"
+            "[id:\(program.businessID ?? 0)] \(program.name)"
                 + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
-                + "；模板：\(template?.name ?? "未找到")"
+                + "；动作：\(TrainingPlanStore.prescriptions(for: program, in: context).count) 个"
         }
         return .success(values.isEmpty ? "暂无可执行训练计划。" : values.joined(separator: "\n"))
     }
@@ -25,14 +26,10 @@ extension ConversationRecorder {
             return .failure("get_training_program 需要有效的 program_id。")
         }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard let program = programs.first(where: { $0.businessID == programID }),
-              let versionID = program.currentTemplateVersionID,
-              let version = ((try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? [])
-              .first(where: { $0.id == versionID })
-        else {
-            return .failure("没有找到训练计划或其当前模板，请重新查询。")
+        guard let program = programs.first(where: { $0.businessID == programID }) else {
+            return .failure("没有找到训练计划，请重新查询。")
         }
-        let prescriptions = TrainingPlanStore.prescriptions(for: version, in: context)
+        let prescriptions = TrainingPlanStore.prescriptions(for: program, in: context)
         let exercises = prescriptions.map { prescription in
             let sets = prescription.plannedSets.sorted { $0.order < $1.order }
                 .map { set in
@@ -46,12 +43,11 @@ extension ConversationRecorder {
             return "\(prescription.order). \(prescription.exerciseName)（\(prescription.laterality.rawValue)）：\(sets)"
         }
         let overview = program.overview.isEmpty ? "未记录" : program.overview
-        let header = "[id:\(program.businessID ?? 0)] \(program.name)；概览：\(overview)；模板：\(version.name) v\(version.version)"
+        let header = "[id:\(program.businessID ?? 0)] \(program.name)；概览：\(overview)"
         return .success(
             "\(header)\n\(exercises.joined(separator: "\n"))",
             data: programData(
                 program: program,
-                version: version,
                 prescriptions: prescriptions,
                 in: context
             )
@@ -62,28 +58,19 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let name = nonempty(arguments.programName),
-              let templateName = nonempty(arguments.templateName)
-        else {
-            return .failure(
-                "create_training_program 需要 program_name 和 template_name。"
-            )
+        guard let name = nonempty(arguments.programName) else {
+            return .failure("create_program 需要 program_name。")
         }
         do {
             let prescriptions = try planPrescriptions(arguments, in: context)
             let contentKey = TrainingPlanStore.contentFingerprint(prescriptions)
             let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
                 .filter { $0.status == .active }
-            let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? []
             if let existing = programs.first(where: {
                 $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
                     .localizedCaseInsensitiveCompare(name) == .orderedSame
-            }),
-                let version = versions.first(where: {
-                    $0.id == existing.currentTemplateVersionID
-                })
-            {
-                let current = TrainingPlanStore.prescriptions(for: version, in: context)
+            }) {
+                let current = TrainingPlanStore.prescriptions(for: existing, in: context)
                 if TrainingPlanStore.contentFingerprint(current) == contentKey {
                     return .success(
                         "已有内容相同的训练计划 [id:\(existing.businessID ?? 0)]：\(existing.name)。"
@@ -93,10 +80,8 @@ extension ConversationRecorder {
             let program = try TrainingPlanStore.createProgram(
                 name: name,
                 goal: normalized(arguments.overview ?? arguments.goal),
-                templateName: templateName,
                 scheduleHint: normalized(arguments.scheduleHint),
                 prescriptions: prescriptions,
-                source: "agent",
                 in: context
             )
             return .success(
@@ -107,16 +92,12 @@ extension ConversationRecorder {
         }
     }
 
-    static func createWorkoutTemplateVersion(
+    static func updateTrainingProgram(
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let programID = arguments.programID, programID > 0,
-              let templateName = nonempty(arguments.templateName)
-        else {
-            return .failure(
-                "更新训练模板需要有效的 program_id 和 template_name。"
-            )
+        guard let programID = arguments.programID, programID > 0 else {
+            return .failure("update_program 需要有效的 program_id。")
         }
         let programs = (
             try? context.fetch(FetchDescriptor<TrainingProgram>())
@@ -125,16 +106,15 @@ extension ConversationRecorder {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
-            let version = try TrainingPlanStore.createNextVersion(
+            try TrainingPlanStore.updateProgram(
                 for: program,
-                name: templateName,
+                name: nonempty(arguments.programName) ?? program.name,
                 scheduleHint: normalized(arguments.scheduleHint),
                 prescriptions: planPrescriptions(arguments, in: context),
-                source: "agent",
                 in: context
             )
             return .success(
-                "已为计划 [id:\(program.businessID ?? 0)] 创建模板 v\(version.version) [id:\(version.businessID ?? 0)]。"
+                "已更新训练计划 [id:\(program.businessID ?? 0)]：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -368,7 +348,6 @@ extension ConversationRecorder {
 
     private static func programData(
         program: TrainingProgram,
-        version: WorkoutTemplateVersion,
         prescriptions: [TemplateExercisePrescription],
         in context: ModelContext
     ) -> AgentJSONValue {
@@ -380,32 +359,28 @@ extension ConversationRecorder {
             "program_id": .number(Double(program.businessID ?? 0)),
             "program_name": .string(program.name),
             "overview": .string(program.overview),
-            "template": .object([
-                "version": .number(Double(version.version)),
-                "template_name": .string(version.name),
-                "schedule_hint": .string(version.scheduleHint),
-                "template_exercises": .array(
-                    prescriptions.sorted { $0.order < $1.order }.map { prescription in
-                        var exercise: [String: AgentJSONValue] = [
-                            "exercise_id": .number(Double(definitionIDs[prescription.exerciseID] ?? 0)),
-                            "exercise_name": .string(prescription.exerciseName),
-                            "order": .number(Double(prescription.order)),
-                            "laterality": .string(prescription.laterality.rawValue),
-                            "set_prescriptions": .array(
-                                prescription.plannedSets.sorted { $0.order < $1.order }
-                                    .map(setData)
-                            )
-                        ]
-                        if let equipment = nonempty(prescription.equipmentKind) {
-                            exercise["equipment_kind"] = .string(equipment)
-                        }
-                        if let notes = nonempty(prescription.notes) {
-                            exercise["notes"] = .string(notes)
-                        }
-                        return .object(exercise)
+            "schedule_hint": .string(program.scheduleHint),
+            "exercises": .array(
+                prescriptions.sorted { $0.order < $1.order }.map { prescription in
+                    var exercise: [String: AgentJSONValue] = [
+                        "exercise_id": .number(Double(definitionIDs[prescription.exerciseID] ?? 0)),
+                        "exercise_name": .string(prescription.exerciseName),
+                        "order": .number(Double(prescription.order)),
+                        "laterality": .string(prescription.laterality.rawValue),
+                        "set_prescriptions": .array(
+                            prescription.plannedSets.sorted { $0.order < $1.order }
+                                .map(setData)
+                        )
+                    ]
+                    if let equipment = nonempty(prescription.equipmentKind) {
+                        exercise["equipment_kind"] = .string(equipment)
                     }
-                )
-            ])
+                    if let notes = nonempty(prescription.notes) {
+                        exercise["notes"] = .string(notes)
+                    }
+                    return .object(exercise)
+                }
+            )
         ])
     }
 

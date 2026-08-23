@@ -11,6 +11,7 @@
 - 后续修订：
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将倒计时结束改为先完成 `startRecording` 再进入 `.setInProgress`，预览与历史缩略改为 fill
   - [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 将自动录像改回开组后再写文件，完成后立即分享并回到训练主页
+  - [PRD 039](039-frequency-first-dual-theme-ui.md) 以无可见组号的分段进度与共享逻辑组编辑器统一带练和记录呈现
 - 上游依据：[BUG 0019](../bugs/0019-guided-recording-attempt-terminal-and-duplicate-alerts.md)
 - 下游落地：
   - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)

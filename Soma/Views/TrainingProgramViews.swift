@@ -23,87 +23,37 @@ struct TrainingProgramLibraryView: View {
         }
     }
 
-    var body: some View {
-        List {
-            if let resumableSession {
-                Section("继续训练") {
-                    Button {
-                        WorkoutInterfaceOrientationPolicy.shared
-                            .setGuidedWorkoutActive(true)
-                        resumedSession = resumableSession
-                    } label: {
-                        Label(
-                            "继续 \(resumableSession.startedAt.formatted(date: .omitted, time: .shortened)) 的训练",
-                            systemImage: "play.circle.fill"
-                        )
-                    }
-                }
-            }
-
-            Section("我的计划") {
-                if activePrograms.isEmpty {
-                    ContentUnavailableView(
-                        "还没有训练计划",
-                        systemImage: "list.bullet.clipboard",
-                        description: Text("点右上角＋选择动作组合，或在教练中描述目标让 Soma 帮你生成。")
-                    )
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-                } else {
-                    ForEach(activePrograms) { program in
-                        NavigationLink {
-                            TrainingProgramDetailView(program: program)
-                        } label: {
-                            programRow(program)
-                        }
-                    }
-                }
-            }
-
-            let archived = programs.filter { $0.status == .archived }
-            if !archived.isEmpty {
-                Section("已归档") {
-                    ForEach(archived) { program in
-                        NavigationLink {
-                            TrainingProgramDetailView(program: program)
-                        } label: {
-                            programRow(program)
-                        }
-                    }
-                }
-            }
-
-            let completed = sessions.filter {
-                $0.status == .completed || $0.status == .abandoned
-            }
-            if !completed.isEmpty {
-                Section("训练历史") {
-                    ForEach(completed.prefix(20)) { session in
-                        NavigationLink {
-                            WorkoutSessionReviewView(session: session)
-                        } label: {
-                            WorkoutSessionHistoryRow(
-                                session: session,
-                                programs: programs
-                            )
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                deleteSession(session)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .accessibilityLabel("删除计划训练记录")
-                            .tint(.red)
-                        }
-                    }
-                }
-            }
+    private var completedSessions: [WorkoutSession] {
+        sessions.filter {
+            $0.status == .completed || $0.status == .abandoned
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+    }
+
+    private var archivedPrograms: [TrainingProgram] {
+        programs.filter { $0.status == .archived }
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
+                ForEach(
+                    TrainingHomeSection.visible(
+                        hasResumableSession: resumableSession != nil,
+                        hasRecentSessions: !completedSessions.isEmpty,
+                        hasArchivedPrograms: !archivedPrograms.isEmpty
+                    )
+                ) { section in
+                    trainingHomeSection(section)
+                }
+            }
+            .padding(AppTheme.pagePadding)
+            .padding(.bottom, 72)
+            .frame(maxWidth: AppTheme.readableContentMaxWidth)
+            .frame(maxWidth: .infinity)
+        }
         .appPageBackground()
         .navigationTitle("训练")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             TrainingPlanStore.backfillProgramSources(in: modelContext)
         }
@@ -144,17 +94,78 @@ struct TrainingProgramLibraryView: View {
         }
     }
 
-    private func programRow(_ program: TrainingProgram) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(program.name)
-                .font(.headline)
-            Text(program.overview.isEmpty ? "未填写计划概览" : program.overview)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+    @ViewBuilder
+    private func trainingHomeSection(_ section: TrainingHomeSection) -> some View {
+        switch section {
+        case .resume:
+            if let resumableSession {
+                Button {
+                    WorkoutInterfaceOrientationPolicy.shared
+                        .setGuidedWorkoutActive(true)
+                    resumedSession = resumableSession
+                } label: {
+                    TrainingResumeCard(session: resumableSession)
+                }
+                .buttonStyle(.plain)
+            }
+        case .programs:
+            SectionHeading(title: "我的计划")
+            if activePrograms.isEmpty {
+                EmptyStateCard(
+                    icon: "list.bullet.clipboard",
+                    title: "还没有训练计划",
+                    message: "点右上角＋选择动作组合，或在教练中描述目标让 Soma 帮你生成。"
+                )
+            } else {
+                ForEach(activePrograms) { program in
+                    NavigationLink {
+                        TrainingProgramDetailView(program: program)
+                    } label: {
+                        TrainingProgramHomeCard(program: program)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        case .recent:
+            SectionHeading(title: "最近训练")
+            AppCard {
+                VStack(spacing: 0) {
+                    ForEach(Array(completedSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
+                        NavigationLink {
+                            WorkoutSessionReviewView(session: session)
+                        } label: {
+                            TrainingSessionHomeRow(
+                                session: session,
+                                programs: programs
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                deleteSession(session)
+                            } label: {
+                                Label("删除训练记录", systemImage: "trash")
+                            }
+                        }
+
+                        if index < min(completedSessions.count, 3) - 1 {
+                            Divider()
+                                .overlay(AppTheme.separator)
+                        }
+                    }
+                }
+            }
+        case .archived:
+            SectionHeading(title: "已归档")
+            ForEach(archivedPrograms) { program in
+                NavigationLink {
+                    TrainingProgramDetailView(program: program)
+                } label: {
+                    TrainingProgramHomeCard(program: program)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.vertical, 5)
-        .accessibilityElement(children: .combine)
     }
 
     private func deleteSession(_ session: WorkoutSession) {
@@ -170,8 +181,6 @@ private struct TrainingProgramDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
-    @Query(sort: \WorkoutTemplateVersion.createdAt, order: .reverse)
-    private var allVersions: [WorkoutTemplateVersion]
     @Query(sort: \ExerciseDefinition.canonicalName)
     private var definitions: [ExerciseDefinition]
     @Query(sort: \WorkoutEntry.date, order: .reverse)
@@ -187,6 +196,7 @@ private struct TrainingProgramDetailView: View {
 
     let program: TrainingProgram
     @State private var showsEditor = false
+    @State private var editingPrescription: TemplateExercisePrescription?
     @State private var showsStart = false
     @State private var showsOverviewEditor = false
     @State private var overviewDraft = ""
@@ -196,22 +206,11 @@ private struct TrainingProgramDetailView: View {
     @State private var isOptimizing = false
     @State private var confirmsDelete = false
     @State private var statsExpanded = false
-    @State private var versionsExpanded = false
     @State private var adviceExpanded = false
 
-    private var versions: [WorkoutTemplateVersion] {
-        allVersions.filter { $0.programID == program.id }
-    }
-
-    private var currentVersion: WorkoutTemplateVersion? {
-        guard let id = program.currentTemplateVersionID else { return nil }
-        return versions.first { $0.id == id }
-    }
-
     private var prescriptions: [TemplateExercisePrescription] {
-        guard let currentVersion else { return [] }
-        return TrainingPlanStore.prescriptions(
-            for: currentVersion,
+        TrainingPlanStore.prescriptions(
+            for: program,
             in: modelContext
         )
     }
@@ -252,18 +251,11 @@ private struct TrainingProgramDetailView: View {
     }
 
     private var programSessions: [WorkoutSession] {
-        let familyIDs = Set(versions.map(\.familyID))
-        return sessions.filter { session in
+        sessions.filter { session in
             guard session.status == .completed || session.status == .abandoned else {
                 return false
             }
-            if session.programID == program.id {
-                return true
-            }
-            if let familyID = session.sourceTemplateFamilyID {
-                return familyIDs.contains(familyID)
-            }
-            return false
+            return session.programID == program.id
         }
     }
 
@@ -302,7 +294,7 @@ private struct TrainingProgramDetailView: View {
                                 x: .value("日期", point.date),
                                 y: .value("有效容量", point.volume)
                             )
-                            .foregroundStyle(AppTheme.tint.gradient)
+                            .foregroundStyle(AppTheme.trainingAccent.gradient)
                         }
                         .frame(height: 160)
                         .accessibilityLabel("该计划近几次训练的有效容量趋势")
@@ -354,7 +346,7 @@ private struct TrainingProgramDetailView: View {
 
             planOverviewSection
 
-            Section("动作") {
+            Section {
                 if prescriptions.isEmpty {
                     Text("这份计划还没有动作。")
                         .foregroundStyle(.secondary)
@@ -362,50 +354,25 @@ private struct TrainingProgramDetailView: View {
                 ForEach(prescriptions.sorted(by: { $0.order < $1.order })) { item in
                     prescriptionRow(item)
                 }
+            } header: {
+                HStack {
+                    Text("动作与参数")
+                    Spacer()
+                    if program.status == .active {
+                        Button {
+                            showsEditor = true
+                        } label: {
+                            Label("编辑全部", systemImage: "slider.horizontal.3")
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AppTheme.trainingAccent)
+                        .textCase(nil)
+                        .accessibilityHint("编辑动作顺序以及全部动作参数")
+                    }
+                }
             }
 
             programStatsSection
-
-            if !versions.isEmpty {
-                Section {
-                    DisclosureGroup(isExpanded: $versionsExpanded) {
-                        ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
-                            let previous = versions.dropFirst(index + 1).first
-                            let changeLog = TrainingPlanStore.resolvedChangeLog(
-                                for: version,
-                                previous: previous,
-                                in: modelContext
-                            )
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text("v\(version.version) · \(version.name)")
-                                        .font(.subheadline.weight(.semibold))
-                                    Spacer(minLength: 8)
-                                    Text(version.createdAt.formatted(
-                                        date: .abbreviated,
-                                        time: .omitted
-                                    ))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                }
-                                Text(changeDescription(for: changeLog))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .textSelection(.enabled)
-                            }
-                            .padding(.vertical, 2)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel(
-                                "v\(version.version) \(version.name)，\(changeDescription(for: changeLog))"
-                            )
-                        }
-                    } label: {
-                        Text("版本历史")
-                    }
-                    .accessibilityLabel("版本历史，共 \(versions.count) 个版本")
-                }
-            }
 
             if isOptimizing || currentRecommendation != nil {
                 Section {
@@ -434,12 +401,6 @@ private struct TrainingProgramDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if program.status == .active {
-                        Button {
-                            showsEditor = true
-                        } label: {
-                            Label("编辑并创建新版本", systemImage: "slider.horizontal.3")
-                        }
-
                         Button {
                             adviceExpanded = true
                             optimize()
@@ -508,7 +469,7 @@ private struct TrainingProgramDetailView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将删除「\(program.name)」及其全部模板版本。已完成的训练历史不会被删除。")
+            Text("将删除「\(program.name)」。已完成的训练历史不会被删除。")
         }
         .confirmationDialog(
             "选择录像方式",
@@ -546,25 +507,18 @@ private struct TrainingProgramDetailView: View {
                         .accessibilityHint("训练不会被阻断")
                     }
 
-                    Button {
-                        let blocking = readiness(for: .disabled).filter {
-                            $0.severity == .blocking
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            ForEach(TrainingProgramDetailAction.allCases) {
+                                primaryActionButton($0)
+                            }
                         }
-                        guard blocking.isEmpty else {
-                            errorMessage = blocking.map(\.message)
-                                .joined(separator: "\n")
-                            return
+                        VStack(spacing: 8) {
+                            ForEach(TrainingProgramDetailAction.allCases) {
+                                primaryActionButton($0)
+                            }
                         }
-                        WorkoutInterfaceOrientationPolicy.shared
-                            .setGuidedWorkoutActive(true)
-                        showsStart = true
-                    } label: {
-                        Label("开始训练", systemImage: "play.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 10)
@@ -575,10 +529,24 @@ private struct TrainingProgramDetailView: View {
             NavigationStack {
                 TrainingTemplateEditor(
                     program: program,
-                    currentVersion: currentVersion,
                     initialPrescriptions: prescriptions,
                     definitions: definitions
                 )
+            }
+        }
+        .sheet(item: $editingPrescription) { item in
+            NavigationStack {
+                TrainingPrescriptionEditorView(
+                    initialDraft: TrainingPrescriptionDraft(item),
+                    exercise: definition(for: item.exerciseID),
+                    definitions: definitions.filter { !$0.isArchived },
+                    recent: ExerciseRecentPrescriptionResolver.latest(
+                        exerciseID: item.exerciseID,
+                        in: modelContext
+                    )
+                ) { updated in
+                    try saveEditedPrescription(updated, replacing: item)
+                }
             }
         }
         .sheet(isPresented: $showsOverviewEditor) {
@@ -645,14 +613,6 @@ private struct TrainingProgramDetailView: View {
         }
     }
 
-    private func changeDescription(for changeLog: TemplateVersionChangeLog) -> String {
-        let details = changeLog.details.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !details.isEmpty {
-            return details
-        }
-        return changeLog.summary
-    }
-
     private func start(with policy: AutoRecordingPolicy) {
         do {
             startedSession = try TrainingPlanStore.startSession(
@@ -681,6 +641,28 @@ private struct TrainingProgramDetailView: View {
         }
     }
 
+    private func saveEditedPrescription(
+        _ updated: TrainingPrescriptionDraft,
+        replacing original: TemplateExercisePrescription
+    ) throws {
+        let ordered = prescriptions.sorted { $0.order < $1.order }
+        guard let index = ordered.firstIndex(where: { $0.id == original.id }) else {
+            throw TrainingPlanError.missingExercise(original.exerciseID)
+        }
+        var drafts = ordered.map(TrainingPrescriptionDraft.init)
+        drafts[index] = updated
+        try TrainingPlanStore.updateProgram(
+            for: program,
+            name: program.name,
+            scheduleHint: program.scheduleHint,
+            prescriptions: makePrescriptions(
+                rows: drafts,
+                definitions: definitions
+            ),
+            in: modelContext
+        )
+    }
+
     private func optimize() {
         guard ai.hasRequiredAPIKey else {
             errorMessage = "请先在设置的「LLM 配置」中完成配置；个人 API Key 不会上传到 Soma 后台。"
@@ -703,18 +685,40 @@ private struct TrainingProgramDetailView: View {
     }
 
     /// 计划内动作行：有动作库定义时可点击进入动作详情。
-    @ViewBuilder
     private func prescriptionRow(
         _ item: TemplateExercisePrescription
     ) -> some View {
-        if let definition = definition(for: item.exerciseID) {
-            NavigationLink {
-                ExerciseDetailView(exercise: definition)
-            } label: {
+        HStack(spacing: 4) {
+            if let definition = definition(for: item.exerciseID) {
+                NavigationLink {
+                    ExerciseDetailView(
+                        exercise: definition,
+                        planPrescription: item
+                    )
+                } label: {
+                    prescriptionLabel(item)
+                }
+            } else {
                 prescriptionLabel(item)
             }
-        } else {
-            prescriptionLabel(item)
+
+            if program.status == .active {
+                Button {
+                    editingPrescription = item
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.trainingAccent)
+                        .frame(
+                            width: AppTheme.minimumTapTarget,
+                            height: AppTheme.minimumTapTarget
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("编辑\(item.exerciseName)参数")
+                .accessibilityHint("修改组数、次数或时长、重量、侧别与间歇")
+            }
         }
     }
 
@@ -727,18 +731,65 @@ private struct TrainingProgramDetailView: View {
                     .preferredActionIllustration
                     ?? BundledExerciseCatalog.fallbackActionIllustration
             )
-            .frame(width: 68, height: 68)
-            .clipShape(RoundedRectangle(cornerRadius: 15))
-            VStack(alignment: .leading, spacing: 5) {
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.controlRadius))
+            VStack(alignment: .leading, spacing: 4) {
                 Text("\(item.order). \(item.exerciseName)")
-                    .font(.headline)
+                    .font(.subheadline.weight(.medium))
                 Text(prescriptionSummary(item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(2)
+                if Set(item.plannedSets.map(\.targetKind)).count > 1 {
+                    Label("混合次数与时长", systemImage: "exclamationmark.circle")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.warning)
+                }
             }
+            Spacer(minLength: 4)
         }
+        .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func primaryActionButton(
+        _ action: TrainingProgramDetailAction
+    ) -> some View {
+        switch action {
+        case .editPlan:
+            Button {
+                showsEditor = true
+            } label: {
+                Label("编辑计划", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityHint("编辑动作顺序以及全部动作参数")
+        case .startTraining:
+            Button {
+                let blocking = readiness(for: .disabled).filter {
+                    $0.severity == .blocking
+                }
+                guard blocking.isEmpty else {
+                    errorMessage = blocking.map(\.message)
+                        .joined(separator: "\n")
+                    return
+                }
+                WorkoutInterfaceOrientationPolicy.shared
+                    .setGuidedWorkoutActive(true)
+                showsStart = true
+            } label: {
+                Label("开始训练", systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(AppTheme.accentEmphasis)
+            .controlSize(.large)
+        }
     }
 
     /// 训练效果总览：聚合当前模板全部动作的刺激肌群，确定性生成。
@@ -770,9 +821,21 @@ private struct TrainingProgramDetailView: View {
                         allowsExpansion: true
                     )
                 }
-                Text(overview.overviewText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(
+                        "\(overview.exerciseCount) 个动作 · \(overview.totalSets) 组",
+                        systemImage: "figure.strengthtraining.traditional"
+                    )
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.trainingAccent)
+                    if !overview.primaryFocus.isEmpty {
+                        focusLine("主要", groups: overview.primaryFocus)
+                    }
+                    if !overview.secondaryFocus.isEmpty {
+                        focusLine("辅助", groups: overview.secondaryFocus)
+                    }
+                }
+                .padding(.vertical, 4)
             } header: {
                 Text("训练效果总览")
             } footer: {
@@ -780,6 +843,20 @@ private struct TrainingProgramDetailView: View {
                     Text("按各动作的主要/辅助肌群与目标组数确定性聚合，不是个人受力测量。")
                 }
             }
+        }
+    }
+
+    private func focusLine(
+        _ label: String,
+        groups: [MuscleGroup]
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .leading)
+            Text(groups.map(\.displayName).joined(separator: "、"))
+                .font(.subheadline)
         }
     }
 
@@ -812,9 +889,6 @@ private struct WorkoutSessionHistoryRow: View {
         if let preferredProgramName,
            !preferredProgramName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
-            if let version = session.sourceTemplateVersion {
-                return "\(preferredProgramName) · v\(version)"
-            }
             return preferredProgramName
         }
         return "未关联训练计划"

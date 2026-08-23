@@ -16,7 +16,6 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
     var muscleDiagramAssetName: String?
     var userDemoVideos: [MediaAttachmentReference]
     var guidanceVideos: [ExerciseVideoSource]
-    var contentRevisionsData: Data?
     var imageReferences: [ExerciseImageReference]?
     var lateralityRaw: String?
     var targetKindRaw: String?
@@ -43,7 +42,6 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
         muscleDiagramAssetName = model.muscleDiagramAssetName
         userDemoVideos = model.userDemoVideos
         guidanceVideos = model.guidanceVideos
-        contentRevisionsData = model.contentRevisionsData
         imageReferences = model.imageReferences
         lateralityRaw = model.lateralityRaw.isEmpty ? nil : model.lateralityRaw
         targetKindRaw = model.targetKindRaw.isEmpty ? nil : model.targetKindRaw
@@ -79,7 +77,6 @@ struct ExerciseDefinitionDTO: Codable, Equatable, Sendable {
             }
             return value
         }
-        definition.contentRevisionsData = contentRevisionsData ?? Data()
         definition.imageReferences = (imageReferences ?? []).map { reference in
             var value = reference
             if let path = reference.localPath {
@@ -109,7 +106,6 @@ struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
     var affectedTemplateExerciseIDs: [UUID]?
     var affectedPerformanceIDs: [UUID]?
     var affectedRecommendationIDs: [UUID]?
-    var transferredContentRevisionIDs: [UUID]?
     var transferredUserDemoVideos: [MediaAttachmentReference]?
     var transferredGuidanceVideos: [ExerciseVideoSource]?
     var transferredImageReferences: [ExerciseImageReference]?
@@ -132,7 +128,6 @@ struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
         affectedTemplateExerciseIDs = model.affectedTemplateExerciseIDs
         affectedPerformanceIDs = model.affectedPerformanceIDs
         affectedRecommendationIDs = model.affectedRecommendationIDs
-        transferredContentRevisionIDs = model.transferredContentRevisionIDs
         transferredUserDemoVideos = model.transferredUserDemoVideos
         transferredGuidanceVideos = model.transferredGuidanceVideos
         transferredImageReferences = model.transferredImageReferences
@@ -171,7 +166,6 @@ struct ExerciseMergeRecordDTO: Codable, Equatable, Sendable {
             affectedTemplateExerciseIDs: affectedTemplateExerciseIDs ?? [],
             affectedPerformanceIDs: affectedPerformanceIDs ?? [],
             affectedRecommendationIDs: affectedRecommendationIDs ?? [],
-            transferredContentRevisionIDs: transferredContentRevisionIDs ?? [],
             transferredUserDemoVideos: mappedUserDemoVideos,
             transferredGuidanceVideos: mappedGuidanceVideos,
             transferredImageReferences: mappedImageReferences,

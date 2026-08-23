@@ -42,7 +42,7 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
                 .listPrograms,
                 .getProgram,
                 .createProgram,
-                .createProgramVersion,
+                .updateProgram,
                 .archiveProgram,
                 .deleteProgram,
                 .startProgram

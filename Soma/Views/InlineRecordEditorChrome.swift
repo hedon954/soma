@@ -5,6 +5,8 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
     let title: String
     var titleText: Binding<String>?
     let icon: String
+    var iconTint: Color = AppTheme.tint
+    var iconSoftTint: Color = AppTheme.softTint
     let isEditable: Bool
     var onSave: (() -> Bool)?
     var onDelete: (() -> Void)?
@@ -19,7 +21,10 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: icon)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.tint)
+                    .foregroundStyle(iconTint)
+                    .frame(width: 36, height: 36)
+                    .background(iconSoftTint, in: Circle())
+                    .accessibilityHidden(true)
                 if isEditable, let titleText {
                     TextField("名称", text: titleText)
                         .font(.subheadline.weight(.semibold))
@@ -41,6 +46,10 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
                         Button(role: .destructive, action: onDelete) {
                             Image(systemName: "trash")
                                 .font(.footnote.weight(.semibold))
+                                .frame(
+                                    width: AppTheme.minimumTapTarget,
+                                    height: AppTheme.minimumTapTarget
+                                )
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("删除")
@@ -58,15 +67,14 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
             }
             content
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(14)
         .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous)
+            AppTheme.cardBackground,
+            in: RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous)
-                .stroke(.primary.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
+                .stroke(AppTheme.separator, lineWidth: 0.5)
         }
     }
 }
@@ -76,6 +84,8 @@ extension InlineRecordShell where Accessory == EmptyView {
         title: String,
         titleText: Binding<String>? = nil,
         icon: String,
+        iconTint: Color = AppTheme.tint,
+        iconSoftTint: Color = AppTheme.softTint,
         isEditable: Bool,
         onSave: (() -> Bool)? = nil,
         onDelete: (() -> Void)? = nil,
@@ -86,6 +96,8 @@ extension InlineRecordShell where Accessory == EmptyView {
             title: title,
             titleText: titleText,
             icon: icon,
+            iconTint: iconTint,
+            iconSoftTint: iconSoftTint,
             isEditable: isEditable,
             onSave: onSave,
             onDelete: onDelete,
@@ -134,6 +146,10 @@ struct InlineRecordActions: View {
             Image(systemName: didSave ? "checkmark.circle.fill" : "checkmark.circle")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(didSave ? AppTheme.tint : .secondary)
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
+                )
         }
         .buttonStyle(.plain)
         .disabled(didSave)

@@ -178,7 +178,7 @@ struct GuidedWorkoutView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Color(uiColor: .systemGroupedBackground)
+                AppTheme.pageBackground
                     .ignoresSafeArea()
 
                 if session.status == .active,

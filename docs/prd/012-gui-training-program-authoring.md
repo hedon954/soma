@@ -6,6 +6,7 @@
   - [PRD 004](004-soma-current-product.md) 的“教练是唯一创建入口”边界
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的“聊天创建、GUI 审查计划”路径
 - 后续修订：
+  - [PRD 040](040-current-state-business-data-with-session-facts.md) 将版本化保存改为直接更新当前计划
   - [PRD 013](013-guided-workout-experience-and-capture.md) 增加动作图、折叠处方和显式最近值复用
   - [PRD 016](016-training-primary-tab.md) 将计划入口从进展迁移到一级训练 Tab
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 将处方编辑改为组数/次数优先的

@@ -7,16 +7,17 @@ struct TrainingPrescriptionEditorView: View {
     let exercise: ExerciseDefinition?
     let definitions: [ExerciseDefinition]
     let recent: RecentExercisePrescription?
-    let onSave: (TrainingPrescriptionDraft) -> Void
+    let onSave: (TrainingPrescriptionDraft) throws -> Void
     @State private var draft: TrainingPrescriptionDraft
     @State private var expandedClusterIDs: Set<UUID> = []
+    @State private var errorMessage: String?
 
     init(
         initialDraft: TrainingPrescriptionDraft,
         exercise: ExerciseDefinition?,
         definitions: [ExerciseDefinition],
         recent: RecentExercisePrescription?,
-        onSave: @escaping (TrainingPrescriptionDraft) -> Void
+        onSave: @escaping (TrainingPrescriptionDraft) throws -> Void
     ) {
         self.exercise = exercise
         self.definitions = definitions
@@ -89,13 +90,24 @@ struct TrainingPrescriptionEditorView: View {
                 .accessibilityLabel("更多操作")
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("完成") {
-                    normalizeOrder()
-                    onSave(draft)
-                    dismiss()
-                }
-                .disabled(!hasValidTargets)
+                Button("保存", action: save)
+                    .disabled(!hasValidTargets)
             }
+        }
+        .alert(
+            "无法保存",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: {
+                    if !$0 {
+                        errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
@@ -583,6 +595,16 @@ struct TrainingPrescriptionEditorView: View {
     private func normalizeOrder() {
         for index in draft.plannedSets.indices {
             draft.plannedSets[index].order = index + 1
+        }
+    }
+
+    private func save() {
+        normalizeOrder()
+        do {
+            try onSave(draft)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

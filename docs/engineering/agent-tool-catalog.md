@@ -36,7 +36,7 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 | workouts | `list_workouts`、`get_workout`、`create_workout`、`update_workout`、`delete_workout` | 训练记录单一职责 CRUD |
 | meals | `list_meals`、`get_meal`、`create_meal`、`update_meal`、`delete_meal` | 饮食记录单一职责 CRUD |
 | body | `list_body_entries`、`get_body_entry`、`create_body_entry`、`update_body`、`delete_body_entry` | 身体与体态记录单一职责 CRUD |
-| plans | `list_programs`、`get_program`、`create_program`、`create_program_version`、`archive_program`、`delete_program`、`start_program` | 计划读取、创建、不可变新版本、归档、删除和带练启动 |
+| plans | `list_programs`、`get_program`、`create_program`、`update_program`、`archive_program`、`delete_program`、`start_program` | 计划读取、创建、直接更新当前处方、归档、删除和带练启动 |
 | gym | `update_gym`、`switch_gym` | 健身房与器械维护、当前场馆切换 |
 | review | `record_performance_analysis` | 保存绑定 Performance 的视频复盘 |
 | feedback | `submit_feedback` | 仅在当前 Turn 明确授权时提交产品反馈 |

@@ -19,7 +19,6 @@ final class TrainingPlanTests: XCTestCase {
         let program = try TrainingPlanStore.createProgram(
             name: "全身训练",
             goal: "保持规律训练",
-            templateName: "全身训练",
             scheduleHint: "周末",
             prescriptions: [
                 TemplateExercisePrescription(
@@ -42,21 +41,16 @@ final class TrainingPlanTests: XCTestCase {
                     )]
                 )
             ],
-            source: "gui",
             in: context
         )
 
-        let version = try XCTUnwrap(
-            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first { $0.id == program.currentTemplateVersionID }
-        )
         let values = TrainingPlanStore.prescriptions(
-            for: version,
+            for: program,
             in: context
         )
 
         XCTAssertEqual(program.goal, "保持规律训练")
-        XCTAssertEqual(version.source, "gui")
+        XCTAssertEqual(program.scheduleHint, "周末")
         XCTAssertEqual(values.map(\.exerciseID), [row.id, squat.id])
         XCTAssertEqual(values.map(\.order), [1, 2])
         XCTAssertEqual(values.first?.targetSets, 3)
@@ -68,7 +62,7 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
-    func testStartingSessionFreezesVersionAndCreatesOrderedSets() throws {
+    func testStartingSessionFreezesPrescriptionSnapshotAndCreatesOrderedSets() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }
         let squat = try ExerciseLibraryStore.resolveOrCreateExact(
@@ -81,7 +75,6 @@ final class TrainingPlanTests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "力量 A/B",
-            templateName: "训练 A",
             prescriptions: [
                 prescription(
                     exercise: squat,
@@ -101,7 +94,7 @@ final class TrainingPlanTests: XCTestCase {
         )
         let originalSnapshot = session.prescriptionSnapshot
 
-        _ = try TrainingPlanStore.createNextVersion(
+        try TrainingPlanStore.updateProgram(
             for: program,
             name: "训练 A 调整",
             scheduleHint: "周一",
@@ -112,19 +105,15 @@ final class TrainingPlanTests: XCTestCase {
         )
 
         XCTAssertEqual(session.prescriptionSnapshot, originalSnapshot)
-        XCTAssertEqual(session.sourceTemplateVersion, 1)
         XCTAssertEqual(session.programID, program.id)
         XCTAssertEqual(session.programNameSnapshot, "力量 A/B")
         XCTAssertEqual(
             TrainingPlanStore.programSourceLabel(for: session),
-            "力量 A/B · v1"
+            "力量 A/B"
         )
-        let nextVersion = try XCTUnwrap(
-            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first { $0.version == 2 && $0.programID == program.id }
-        )
-        XCTAssertEqual(nextVersion.changeSummary?.contains("移除") == true
-            || nextVersion.changeSummary?.contains("单侧哑铃卧推") == true, true)
+        let current = TrainingPlanStore.prescriptions(for: program, in: context)
+        XCTAssertEqual(current.map(\.exerciseID), [press.id])
+        XCTAssertEqual(current.first?.plannedSets.count, 4)
         let performances = try context.fetch(FetchDescriptor<ExercisePerformance>())
             .filter { $0.sessionID == session.id }
         let sets = try context.fetch(FetchDescriptor<WorkoutSet>())
@@ -167,7 +156,6 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertEqual(issues.first?.severity, .warning)
         let program = try TrainingPlanStore.createProgram(
             name: "后链",
-            templateName: "后链",
             prescriptions: values,
             in: context
         )
@@ -190,7 +178,6 @@ final class TrainingPlanTests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "下肢",
-            templateName: "下肢",
             prescriptions: [
                 prescription(exercise: exercise, order: 1, sets: 3)
             ],
@@ -341,7 +328,6 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertThrowsError(
             try TrainingPlanStore.createProgram(
                 name: "自重",
-                templateName: "自重",
                 prescriptions: [
                     TemplateExercisePrescription(
                         exerciseID: exercise.id,
@@ -366,7 +352,7 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
-    func testAgentToolsCreateVersionQueryAndArchivePlan() throws {
+    func testAgentToolsCreateUpdateQueryAndArchivePlan() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }
         let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
@@ -388,7 +374,6 @@ final class TrainingPlanTests: XCTestCase {
                 arguments: AgentToolArguments(
                     programName: "推举计划",
                     goal: "提升力量",
-                    templateName: "推举日",
                     templateExercises: [item]
                 )
             ),
@@ -402,10 +387,9 @@ final class TrainingPlanTests: XCTestCase {
         )
         let update = try ConversationRecorder.executeAgentTool(
             AgentToolCall(
-                name: .createProgramVersion,
+                name: .updateProgram,
                 arguments: AgentToolArguments(
                     programID: XCTUnwrap(program.businessID),
-                    templateName: "推举日调整",
                     templateExercises: [item]
                 )
             ),
@@ -442,8 +426,8 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertTrue(archive.ok)
         XCTAssertEqual(program.status, .archived)
         XCTAssertEqual(
-            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>()).count,
-            2
+            TrainingPlanStore.prescriptions(for: program, in: context).count,
+            1
         )
     }
 
@@ -457,7 +441,6 @@ final class TrainingPlanTests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "深蹲训练",
-            templateName: "下肢日",
             prescriptions: [
                 TemplateExercisePrescription(
                     exerciseID: exercise.id,
@@ -647,7 +630,6 @@ final class TrainingPlanTests: XCTestCase {
         context.insert(legacy)
         let program = try TrainingPlanStore.createProgram(
             name: "后链",
-            templateName: "硬拉日",
             prescriptions: [
                 prescription(exercise: exercise, order: 1, sets: 2)
             ],
@@ -699,23 +681,21 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
-    func testExerciseContentRevisionsAreVersionedAndRestorable() throws {
+    func testExerciseContentKeepsOnlyCurrentValues() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }
         let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
             canonicalName: "保加利亚分腿蹲",
             in: context
         )
-        let first = ExerciseContentRevision(
-            source: .ai,
+        let first = ExerciseContent(
             coachingNotes: "保持躯干稳定。",
             primaryMuscles: ["股四头肌"],
             secondaryMuscles: ["臀大肌"],
             movementPatterns: ["蹲"]
         )
         exercise.apply(first)
-        exercise.apply(ExerciseContentRevision(
-            source: .manual,
+        exercise.apply(ExerciseContent(
             coachingNotes: "用户修订。",
             primaryMuscles: ["臀大肌"],
             secondaryMuscles: [],
@@ -723,13 +703,13 @@ final class TrainingPlanTests: XCTestCase {
         ))
         try context.save()
 
-        XCTAssertEqual(exercise.contentRevisions.count, 2)
-        XCTAssertEqual(exercise.contentRevisions.first, first)
         XCTAssertEqual(exercise.coachingNotes, "用户修订。")
+        XCTAssertEqual(exercise.primaryMuscles, ["臀大肌"])
+        XCTAssertNotEqual(exercise.coachingNotes, first.coachingNotes)
     }
 
     @MainActor
-    func testLegacySessionResolvesPlanLabelFromTemplateFamily() throws {
+    func testSessionBackfillsPlanFromPrescriptionSnapshot() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }
         let squat = try ExerciseLibraryStore.resolveOrCreateExact(
@@ -738,23 +718,15 @@ final class TrainingPlanTests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "下肢力量",
-            templateName: "腿日",
             prescriptions: [
                 prescription(exercise: squat, order: 1, sets: 3)
             ],
             in: context
         )
-        let version = try XCTUnwrap(
-            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first { $0.id == program.currentTemplateVersionID }
-        )
-
-        // Pre-snapshot sessions only kept the template family link.
+        // Legacy rows without a plan id can still match one current plan by snapshot.
         let legacy = WorkoutSession(
-            sourceTemplateFamilyID: version.familyID,
-            sourceTemplateVersion: version.version,
             prescriptionSnapshot: TrainingPlanStore.prescriptions(
-                for: version,
+                for: program,
                 in: context
             ),
             status: .completed
@@ -764,7 +736,7 @@ final class TrainingPlanTests: XCTestCase {
 
         XCTAssertEqual(
             TrainingPlanStore.programSourceLabel(for: legacy, in: context),
-            "下肢力量 · v1"
+            "下肢力量"
         )
         XCTAssertTrue(
             TrainingPlanStore.backfillProgramSource(for: legacy, in: context)
@@ -774,7 +746,7 @@ final class TrainingPlanTests: XCTestCase {
         XCTAssertEqual(legacy.programNameSnapshot, "下肢力量")
         XCTAssertEqual(
             TrainingPlanStore.programSourceLabel(for: legacy),
-            "下肢力量 · v1"
+            "下肢力量"
         )
     }
 
@@ -788,17 +760,12 @@ final class TrainingPlanTests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "基础力量训练",
-            templateName: "组合 A",
             prescriptions: [
                 prescription(exercise: squat, order: 1, sets: 4, warmup: true)
             ],
             in: context
         )
-        let version = try XCTUnwrap(
-            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first { $0.id == program.currentTemplateVersionID }
-        )
-        let values = TrainingPlanStore.prescriptions(for: version, in: context)
+        let values = TrainingPlanStore.prescriptions(for: program, in: context)
 
         // Lost every plan link except the frozen prescription snapshot.
         let orphan = WorkoutSession(
@@ -810,7 +777,7 @@ final class TrainingPlanTests: XCTestCase {
 
         XCTAssertEqual(
             TrainingPlanStore.programSourceLabel(for: orphan, in: context),
-            "基础力量训练 · v1"
+            "基础力量训练"
         )
     }
 
@@ -824,7 +791,6 @@ final class TrainingPlanTests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "上肢拉力",
-            templateName: "拉日",
             prescriptions: [
                 prescription(exercise: row, order: 1, sets: 4)
             ],
@@ -842,7 +808,7 @@ final class TrainingPlanTests: XCTestCase {
 
         XCTAssertEqual(
             TrainingPlanStore.programSourceLabel(for: session),
-            "上肢拉力 · v1"
+            "上肢拉力"
         )
     }
 

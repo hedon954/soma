@@ -354,6 +354,8 @@ struct CoachView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+            .frame(maxWidth: AppTheme.readableContentMaxWidth)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -383,6 +385,8 @@ struct CoachView: View {
             onToggleVoice: toggleVoice,
             onSend: send
         )
+        .frame(maxWidth: AppTheme.readableContentMaxWidth)
+        .frame(maxWidth: .infinity)
     }
 
     private func showMedia() {
@@ -1032,7 +1036,7 @@ private struct ConversationStarter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("像聊天一样描述训练、饮食或身体变化，Soma 会理解并记录。")
-                .font(.title3.bold())
+                .font(.title3.weight(.medium))
                 .lineSpacing(3)
             VStack(spacing: 8) {
                 ForEach(Array(allSuggestions.enumerated()), id: \.offset) { _, suggestion in
@@ -1093,7 +1097,7 @@ private struct ConversationStarter: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 11)
-                .background(.background, in: RoundedRectangle(cornerRadius: 14))
+                .somaCardSurface(radius: 14)
         }
         .buttonStyle(.plain)
     }
@@ -1159,7 +1163,8 @@ private struct SelectableChatText: UIViewRepresentable {
         }
 
         for (range, intent) in runs {
-            let baseFont = UIFont.preferredFont(forTextStyle: .body)
+            let preferred = UIFont.preferredFont(forTextStyle: .subheadline)
+            let baseFont = UIFont.systemFont(ofSize: preferred.pointSize, weight: .light)
             let font: UIFont
             if intent?.contains(.code) == true {
                 font = UIFont.monospacedSystemFont(
@@ -1167,17 +1172,17 @@ private struct SelectableChatText: UIViewRepresentable {
                     weight: .regular
                 )
             } else {
+                let resolvedBase = intent?.contains(.stronglyEmphasized) == true
+                    ? UIFont.systemFont(ofSize: preferred.pointSize, weight: .medium)
+                    : baseFont
                 var traits: UIFontDescriptor.SymbolicTraits = []
-                if intent?.contains(.stronglyEmphasized) == true {
-                    traits.insert(.traitBold)
-                }
                 if intent?.contains(.emphasized) == true {
                     traits.insert(.traitItalic)
                 }
-                let descriptor = baseFont.fontDescriptor
+                let descriptor = resolvedBase.fontDescriptor
                     .withSymbolicTraits(traits)
-                    ?? baseFont.fontDescriptor
-                font = UIFont(descriptor: descriptor, size: baseFont.pointSize)
+                    ?? resolvedBase.fontDescriptor
+                font = UIFont(descriptor: descriptor, size: resolvedBase.pointSize)
             }
             attributed[range].font = font
             attributed[range].foregroundColor = color
@@ -1200,7 +1205,7 @@ struct CoachBubble: View {
             ? AgentVisibleTextSanitizer.sanitize(message.text)
             : message.text
 
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             if !message.isFromCoach {
                 Spacer(minLength: 52)
             }
@@ -1209,7 +1214,7 @@ struct CoachBubble: View {
                 if let label = message.recordType?.recordedLabel {
                     Label(label, systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.tint)
+                        .foregroundStyle(AppTheme.success)
                 }
 
                 if !message.mediaAttachments.isEmpty {
@@ -1228,20 +1233,26 @@ struct CoachBubble: View {
                 } else if !visibleMessageText.isEmpty, !message.isAutomaticMediaSummary {
                     Group {
                         if message.isFromCoach {
-                            MarkdownText(visibleMessageText)
+                            CoachResponseView(visibleMessageText)
                         } else {
-                            SelectableChatText(content: visibleMessageText, color: .white)
+                            SelectableChatText(
+                                content: visibleMessageText,
+                                color: .label
+                            )
                         }
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 10)
-                    .background(
-                        message.isFromCoach
-                            ? Color(uiColor: .secondarySystemGroupedBackground)
-                            : AppTheme.tint,
-                        in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    )
-                    .foregroundStyle(message.isFromCoach ? Color.primary : Color.white)
+                    .padding(.horizontal, message.isFromCoach ? 2 : 12)
+                    .padding(.vertical, message.isFromCoach ? 3 : 8)
+                    .background {
+                        if !message.isFromCoach {
+                            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                .fill(AppTheme.insetBackground)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                        .stroke(AppTheme.separator, lineWidth: 0.5)
+                                }
+                        }
+                    }
                 }
 
                 if isStaged, !message.isFromCoach {
@@ -1252,6 +1263,10 @@ struct CoachBubble: View {
                         if let onDiscardPending {
                             Button(role: .destructive, action: onDiscardPending) {
                                 Image(systemName: "trash")
+                                    .frame(
+                                        width: AppTheme.minimumTapTarget,
+                                        height: AppTheme.minimumTapTarget
+                                    )
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("删除这条暂存消息")
@@ -1263,6 +1278,7 @@ struct CoachBubble: View {
                     Button(action: onRetry) {
                         Label("重试", systemImage: "arrow.clockwise")
                             .font(.subheadline.weight(.semibold))
+                            .frame(minHeight: AppTheme.minimumTapTarget)
                     }
                     .buttonStyle(.bordered)
                     .tint(AppTheme.tint)
@@ -1306,7 +1322,7 @@ private struct CoachTitleWithBusinessDate: View {
     var body: some View {
         VStack(spacing: 1) {
             Text("Soma")
-                .font(.headline)
+                .font(.headline.weight(.medium))
             Button {
                 pendingDate = businessDate
                 showsPicker = true
@@ -1315,9 +1331,9 @@ private struct CoachTitleWithBusinessDate: View {
                     Image(systemName: "calendar")
                     Text(businessDate.formatted(.dateTime.month().day()))
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
+                        .font(.system(size: 8, weight: .medium))
                 }
-                .font(.caption2.weight(.semibold))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(AppTheme.tint)
             }
             .buttonStyle(.plain)
@@ -1482,8 +1498,13 @@ private struct CoachComposer: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.bar)
+        .padding(.vertical, 6)
+        .background(AppTheme.pageBackground)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppTheme.separator)
+                .frame(height: 0.5)
+        }
         .onChange(of: focusRequest) {
             focused = true
         }
@@ -1506,18 +1527,28 @@ private struct CoachComposer: View {
                     Button {
                         selectedShortcutID = isSelected ? nil : shortcut.id
                     } label: {
-                        Label(shortcut.title, systemImage: shortcut.iconSystemName)
-                            .labelStyle(.titleAndIcon)
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .foregroundStyle(isSelected ? .white : .secondary)
-                            .background(
-                                isSelected
-                                    ? AppTheme.tint
-                                    : Color(uiColor: .secondarySystemGroupedBackground),
-                                in: Capsule()
-                            )
+                        HStack(spacing: 6) {
+                            Image(systemName: shortcut.iconSystemName)
+                                .foregroundStyle(
+                                    isSelected
+                                        ? AppTheme.onAccent
+                                        : shortcutColor(shortcut)
+                                )
+                            Text(shortcut.title)
+                                .foregroundStyle(
+                                    isSelected ? AppTheme.onAccent : Color.secondary
+                                )
+                        }
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            isSelected
+                                ? AppTheme.accentEmphasis
+                                : AppTheme.insetBackground,
+                            in: Capsule()
+                        )
+                        .frame(minHeight: AppTheme.minimumTapTarget)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("快捷按钮：\(shortcut.title)")
@@ -1565,11 +1596,12 @@ private struct CoachComposer: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
             .background(
-                Color(uiColor: .secondarySystemGroupedBackground),
+                AppTheme.insetBackground,
                 in: Capsule()
             )
+            .frame(minHeight: AppTheme.minimumTapTarget)
         }
         .accessibilityLabel("当前健身房 \(currentGym?.name ?? "未选择")，点击切换")
     }
@@ -1578,8 +1610,12 @@ private struct CoachComposer: View {
         Button(action: onAddMedia) {
             Image(systemName: "plus")
                 .font(.title3.weight(.semibold))
-                .frame(width: 38, height: 38)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
+                .frame(width: 36, height: 36)
+                .background(AppTheme.insetBackground, in: Circle())
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
+                )
         }
         .disabled(attachments.count >= MediaPicker.maximumSelectionCount)
         .accessibilityLabel("添加照片或视频，可多选")
@@ -1591,8 +1627,9 @@ private struct CoachComposer: View {
             .focused($focused)
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
+            .frame(minHeight: AppTheme.minimumTapTarget)
             .background(
-                Color(uiColor: .secondarySystemGroupedBackground),
+                AppTheme.insetBackground,
                 in: RoundedRectangle(cornerRadius: 19)
             )
     }
@@ -1601,11 +1638,15 @@ private struct CoachComposer: View {
         Button(action: onToggleVoice) {
             Image(systemName: isListening ? "waveform" : "mic.fill")
                 .font(.body.weight(.semibold))
-                .frame(width: 38, height: 38)
-                .foregroundStyle(isListening ? Color.white : AppTheme.tint)
+                .frame(width: 36, height: 36)
+                .foregroundStyle(isListening ? AppTheme.onAccent : AppTheme.tint)
                 .background(
-                    isListening ? AppTheme.tint : Color(uiColor: .secondarySystemGroupedBackground),
+                    isListening ? AppTheme.accentEmphasis : AppTheme.insetBackground,
                     in: Circle()
+                )
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
                 )
         }
         .disabled(isSending)
@@ -1632,20 +1673,38 @@ private struct CoachComposer: View {
     }
 
     private var sendLabel: some View {
-        Group {
+        let foreground = useLocalForNextMessage ? Color.white : AppTheme.onAccent
+        return Group {
             if isSending {
-                ProgressView().tint(.white)
+                ProgressView().tint(foreground)
             } else {
                 Image(systemName: useLocalForNextMessage ? "iphone" : "arrow.up")
                     .fontWeight(.bold)
             }
         }
-        .frame(width: 38, height: 38)
-        .foregroundStyle(.white)
+        .frame(width: 40, height: 40)
+        .foregroundStyle(foreground)
         .background(
-            useLocalForNextMessage ? AppTheme.warning : AppTheme.tint,
+            useLocalForNextMessage ? AppTheme.warningEmphasis : AppTheme.accentEmphasis,
             in: Circle()
         )
+        .frame(
+            width: AppTheme.minimumTapTarget,
+            height: AppTheme.minimumTapTarget
+        )
+    }
+
+    private func shortcutColor(_ shortcut: AgentInputShortcut) -> Color {
+        switch shortcut.id {
+        case "shortcut_nutrition":
+            AppTheme.mealAccent
+        case "shortcut_workout_log":
+            AppTheme.trainingAccent
+        case "shortcut_recent_review":
+            AppTheme.trendAccent
+        default:
+            AppTheme.tint
+        }
     }
 
     /// PRD 020：远程执行方式不再常驻输入区，改为发送按钮长按菜单按条覆盖。

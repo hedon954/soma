@@ -320,7 +320,7 @@ final class ExerciseLibraryTests: XCTestCase {
             weight: 60
         )
         let templateExercise = TemplateExercise(
-            templateVersionID: UUID(),
+            prescriptionGroupID: UUID(),
             exerciseID: source.id,
             order: 1
         )
@@ -350,14 +350,13 @@ final class ExerciseLibraryTests: XCTestCase {
             inputFingerprint: "exercise-fingerprint",
             advice: "保持当前负荷"
         )
-        let sourceRevision = ExerciseContentRevision(
-            source: .manual,
+        let sourceContent = ExerciseContent(
             coachingNotes: "保持躯干稳定",
             primaryMuscles: ["股四头肌"],
             secondaryMuscles: ["核心"],
             movementPatterns: ["蹲"]
         )
-        source.apply(sourceRevision)
+        source.apply(sourceContent)
         let sourceVideo = MediaAttachmentReference(
             kind: .video,
             path: "PrivateMedia/source.mov"
@@ -388,6 +387,7 @@ final class ExerciseLibraryTests: XCTestCase {
         source.imageReferences = [sourceImage]
         target.userDemoVideos = [targetVideo]
         target.imageReferences.append(targetImage)
+        let targetCoachingNotesBeforeMerge = target.coachingNotes
         let targetImagesBeforeMerge = target.imageReferences
         context.insert(workout)
         context.insert(templateExercise)
@@ -417,9 +417,7 @@ final class ExerciseLibraryTests: XCTestCase {
         XCTAssertTrue(source.userDemoVideos.isEmpty)
         XCTAssertEqual(analysis.performanceID, performance.id)
         XCTAssertEqual(recommendation.targetID, target.id)
-        XCTAssertTrue(target.contentRevisions.contains {
-            $0.id == sourceRevision.id
-        })
+        XCTAssertEqual(target.coachingNotes, targetCoachingNotesBeforeMerge)
 
         try ExerciseLibraryStore.undo(record, in: context)
 
@@ -436,9 +434,7 @@ final class ExerciseLibraryTests: XCTestCase {
         XCTAssertEqual(target.userDemoVideos, [targetVideo])
         XCTAssertEqual(target.imageReferences, targetImagesBeforeMerge)
         XCTAssertEqual(recommendation.targetID, source.id)
-        XCTAssertFalse(target.contentRevisions.contains {
-            $0.id == sourceRevision.id
-        })
+        XCTAssertEqual(source.coachingNotes, sourceContent.coachingNotes)
     }
 
     @MainActor
@@ -519,7 +515,7 @@ final class ExerciseLibraryTests: XCTestCase {
 
         XCTAssertEqual(
             ExerciseQuickFill.text(for: workout),
-            "30kg × 5 × 4组，间歇 2min"
+            "4×5次 30kg · 间歇 2min"
         )
         XCTAssertEqual(ExerciseQuickFill.text(for: incomplete), "3组")
     }
@@ -546,7 +542,80 @@ final class ExerciseLibraryTests: XCTestCase {
 
         XCTAssertEqual(
             ExerciseQuickFill.text(for: completed + [pending]),
-            "30kg × 5 × 4组，间歇 2min"
+            "4×5次 30kg · 间歇 2min"
+        )
+    }
+
+    func testQuickFillCompressesUnevenRunsWithoutGroupNumbersOrFinalRest() {
+        let workout = WorkoutEntry(
+            exercise: "辅助引体向上",
+            setEntries: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    reps: 5,
+                    externalWeightKG: 29,
+                    restSeconds: 60
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 2,
+                    reps: 5,
+                    externalWeightKG: 29,
+                    restSeconds: 60
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 3,
+                    reps: 5,
+                    externalWeightKG: 29,
+                    restSeconds: 60
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 4,
+                    reps: 5,
+                    externalWeightKG: 29,
+                    restSeconds: 60
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 5,
+                    reps: 3,
+                    externalWeightKG: 29,
+                    restSeconds: 999
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            ExerciseQuickFill.text(for: workout),
+            "4×5次 29kg · 1×3次 29kg · 间歇 1min"
+        )
+        XCTAssertFalse(ExerciseQuickFill.text(for: workout).contains("第1组"))
+        XCTAssertFalse(ExerciseQuickFill.text(for: workout).contains("999"))
+    }
+
+    func testQuickFillPreservesAlternatingDurationMeaning() {
+        let workout = WorkoutEntry(
+            exercise: "侧平板支撑",
+            setEntries: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    side: .left,
+                    targetKind: .duration,
+                    durationSeconds: 45,
+                    externalWeightKG: 0,
+                    restSeconds: 15
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    side: .right,
+                    targetKind: .duration,
+                    durationSeconds: 45,
+                    externalWeightKG: 0
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            ExerciseQuickFill.text(for: workout),
+            "左右各做 1×每侧45秒 自重"
         )
     }
 

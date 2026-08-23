@@ -4,7 +4,7 @@ enum TraceStyle {
     static func color(for status: AgentTraceStatus) -> Color {
         switch status {
         case .running: AppTheme.warning
-        case .succeeded: AppTheme.tint
+        case .succeeded: AppTheme.success
         case .failed: .red
         case .cancelled: .secondary
         }
@@ -12,10 +12,10 @@ enum TraceStyle {
 
     static func color(for kind: AgentTraceSpanKind) -> Color {
         switch kind {
-        case .model: .purple
-        case .skill: .blue
-        case .tool: AppTheme.tint
-        case .output: .cyan
+        case .model: AppTheme.trendAccent
+        case .skill: AppTheme.bodyAccent
+        case .tool: AppTheme.trainingAccent
+        case .output: AppTheme.mealAccent
         }
     }
 

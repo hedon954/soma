@@ -6,6 +6,7 @@
 - 主张：Your body, understood.
 - 修订自：[PRD 003](003-streaming-react-agent.md)
 - 后续修订：
+  - [PRD 040](040-current-state-business-data-with-session-facts.md)
   - [PRD 005](005-conversation-sessions-and-send-feedback.md)
   - [PRD 006](006-footprints-location-and-retry.md)
   - [PRD 007](007-data-export-backup-and-erasure.md)
@@ -34,6 +35,7 @@
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md)
   - [PRD 035](035-guided-preview-then-record-and-immediate-share.md)
   - [PRD 037](037-generated-editable-session-titles-and-single-row-composer-context.md)
+  - [PRD 039](039-frequency-first-dual-theme-ui.md)
 - 下游落地：
   - [ADR 0079](../adr/0079-create-inserts-update-by-id.md)
   - [ADR 0080](../adr/0080-conversation-session-swipe-delete.md)
@@ -132,14 +134,15 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
 - `ExerciseDefinition` 以稳定 ID 串联聊天训练与计划训练，Agent 先读取当前空间完整
   `{id,name}` 列表后由模型完成语义复用或创建；
 - 动作详情展示旧聚合训练与新逐组 Session 的统一历史、容量趋势、教练提示、通用主要/辅助
-  肌群、用户示范视频和授权/外部指导来源；
+  肌群、用户示范视频和授权/外部指导来源；计划入口先显示本计划目标，训练历史按最近一次、
+  训练橙容量趋势与全部记录分层，异构组压缩显示且不罗列组号；
 - App 包内静默预置常见动作说明、动作示意图和前后人体肌群图；只有用户实际形成的动作才关联
   并显示这些素材，未使用动作不会进入个人动作库或 Agent 名称列表；
 - 动作列表左侧显示示意图，详情支持多图、用户上传，以及显式点击后的 AI 图片生成兜底；
   打开详情、记录训练和开始计划不会自动生成图片；
-- 计划使用不可变模板版本；开始训练冻结处方到 Session，计划值、AI 建议与实际 Set 分层；
+- 计划只保留当前处方；开始训练冻结处方到 Session，计划值、AI 建议与实际 Set 分层；
 - 计划既可由 Agent 从聊天生成，也可在 GUI 中从当前动作库选择、排序并配置处方后确定性创建；
-  每个动作可直接修改组数、次数、重量和间歇；两条路径共用稳定动作 ID、验证和不可变版本，
+  每个动作可直接修改组数、次数、重量和间歇；两条路径共用稳定动作 ID、当前计划和验证，
   不调用模型补齐空值；
 - 本地带练状态机负责动作说明、倒计时、确认、休息、暂停、跳过、替换、恢复与确定性总结，
   断网和 Provider 失败不阻断已开始训练；

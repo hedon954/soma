@@ -141,6 +141,7 @@ struct ExerciseLibraryView: View {
                 $0.performanceID == performance.id
                     && $0.status == .completed
             }
+            guard !sets.isEmpty else { return nil }
             return ExerciseHistoryItem.session(ExerciseSessionHistory(
                 performance: performance,
                 session: session,
@@ -165,6 +166,7 @@ struct ExerciseDetailView: View {
     private var workoutSets: [WorkoutSet]
 
     let exercise: ExerciseDefinition
+    let planPrescription: TemplateExercisePrescription?
 
     @State private var olderHistoryExpanded = false
     @State private var showsContentEditor = false
@@ -173,6 +175,14 @@ struct ExerciseDetailView: View {
     @Namespace private var mediaZoomNamespace
     @State private var presentedDemoVideo: MediaAttachmentReference?
     @State private var demoVideoError: String?
+
+    init(
+        exercise: ExerciseDefinition,
+        planPrescription: TemplateExercisePrescription? = nil
+    ) {
+        self.exercise = exercise
+        self.planPrescription = planPrescription
+    }
 
     private var history: [WorkoutEntry] {
         workouts.filter { $0.exerciseID == exercise.id }
@@ -196,6 +206,7 @@ struct ExerciseDetailView: View {
                 $0.performanceID == performance.id
                     && $0.status == .completed
             }
+            guard !sets.isEmpty else { return nil }
             return ExerciseSessionHistory(
                 performance: performance,
                 session: session,
@@ -224,8 +235,53 @@ struct ExerciseDetailView: View {
         .sorted { $0.date < $1.date }
     }
 
+    private var displayedVolumeTrend: [ExerciseVolumePoint] {
+        Array(volumeTrend.suffix(12))
+    }
+
+    private var latestVolume: Double? {
+        displayedVolumeTrend.last?.volume
+    }
+
+    private var volumeChange: Double? {
+        guard displayedVolumeTrend.count >= 2,
+              let latest = displayedVolumeTrend.last?.volume,
+              let previous = displayedVolumeTrend.dropLast().last?.volume,
+              previous > 0
+        else {
+            return nil
+        }
+        return (latest - previous) / previous
+    }
+
     var body: some View {
         Form {
+            if let planPrescription {
+                Section("本计划目标") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("当前处方", systemImage: "scope")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(AppTheme.trainingAccent)
+                        Text(
+                            WorkoutPrescriptionFormatter.exerciseSummary(
+                                planPrescription
+                            )
+                        )
+                        .font(.subheadline.monospacedDigit())
+                        .fixedSize(horizontal: false, vertical: true)
+                        if Set(planPrescription.plannedSets.map(\.targetKind)).count > 1 {
+                            Label(
+                                "包含次数和时长两种目标，请按每段单位执行",
+                                systemImage: "exclamationmark.circle"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.warning)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
             Section("动作示意图") {
                 ExerciseImageGallery(
                     images: exercise.actionIllustrations,
@@ -238,35 +294,44 @@ struct ExerciseDetailView: View {
                 LabeledContent("名称", value: exercise.canonicalName)
                 LabeledContent("完成方式", value: exercise.targetKind.displayName)
                 LabeledContent("左右方式", value: exercise.laterality.displayName)
-                if !exercise.primaryMuscles.isEmpty {
-                    LabeledContent(
-                        "主要肌群",
-                        value: exercise.primaryMuscles.joined(separator: "、")
-                    )
-                }
-                if !exercise.coachingNotes
-                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                {
-                    Text(exercise.coachingNotes)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
+                if !exercise.primaryMuscles.isEmpty || !exercise.secondaryMuscles.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !exercise.primaryMuscles.isEmpty {
+                            muscleSummaryRow(
+                                title: "主要肌群",
+                                muscles: exercise.primaryMuscles
+                            )
+                        }
+                        if !exercise.secondaryMuscles.isEmpty {
+                            muscleSummaryRow(
+                                title: "辅助肌群",
+                                muscles: exercise.secondaryMuscles
+                            )
+                        }
+                        if !exercise.coachingNotes
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        {
+                            Text(exercise.coachingNotes)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
 
-            Section {
-                MuscleMapView(
-                    intensities: MuscleGroupMapping.intensityMap(
-                        primary: exercise.primaryMuscles,
-                        secondary: exercise.secondaryMuscles
-                    ),
-                    showsBothSides: true,
-                    height: 210,
-                    allowsExpansion: true
-                )
-            } header: {
-                Text("常见受力")
-            } footer: {
-                Text("着色按主要/辅助肌群确定性生成，不是个人受力测量。轻点可放大。")
+                        Divider()
+
+                        MuscleMapView(
+                            intensities: MuscleGroupMapping.intensityMap(
+                                primary: exercise.primaryMuscles,
+                                secondary: exercise.secondaryMuscles
+                            ),
+                            showsBothSides: true,
+                            height: 190,
+                            allowsExpansion: true
+                        )
+                        Text("训练橙表示通用主要/辅助肌群，不是个人受力测量。轻点可放大。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("示范视频") {
@@ -301,39 +366,63 @@ struct ExerciseDetailView: View {
                 }
             }
 
-            Section("训练历史") {
+            Section {
                 if let latest = allHistory.first {
-                    LabeledContent("最近一次") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("最近一次")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(latest.date.formatted(
+                            date: .abbreviated,
+                            time: .shortened
+                        ))
+                        .font(.subheadline.weight(.medium))
                         Text(latest.summary)
-                            .multilineTextAlignment(.trailing)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }
-                LabeledContent("累计记录", value: "\(allHistory.count) 条")
-                if !volumeTrend.isEmpty {
-                    Chart(volumeTrend.suffix(12)) { point in
-                        LineMark(
-                            x: .value("日期", point.date),
-                            y: .value("容量", point.volume)
-                        )
-                        PointMark(
-                            x: .value("日期", point.date),
-                            y: .value("容量", point.volume)
-                        )
+                    .padding(.vertical, 4)
+
+                    if let latestVolume {
+                        volumeTrendView(latestVolume: latestVolume)
                     }
-                    .frame(height: 150)
-                    .accessibilityLabel("最近有效训练容量趋势")
+                } else {
+                    Text("完成一次这个动作后，这里会显示最近记录与容量趋势。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
                 }
-                ForEach(Array(allHistory.prefix(5))) { item in
-                    historyLink(item)
+            } header: {
+                Text("训练概览")
+            } footer: {
+                if latestVolume != nil {
+                    Text("容量只统计同时记录了次数和外部重量的完成组；缺失值与自重不参与计算。")
                 }
-                if allHistory.count > 5 {
-                    DisclosureGroup(
-                        "更早记录（\(allHistory.count - 5) 条）",
-                        isExpanded: $olderHistoryExpanded
-                    ) {
-                        ForEach(Array(allHistory.dropFirst(5))) { item in
-                            historyLink(item)
+            }
+
+            if !allHistory.isEmpty {
+                Section {
+                    ForEach(Array(allHistory.prefix(5))) { item in
+                        historyLink(item)
+                    }
+                    if allHistory.count > 5 {
+                        DisclosureGroup(
+                            "更早记录（\(allHistory.count - 5) 条）",
+                            isExpanded: $olderHistoryExpanded
+                        ) {
+                            ForEach(Array(allHistory.dropFirst(5))) { item in
+                                historyLink(item)
+                            }
                         }
+                    }
+                } header: {
+                    HStack {
+                        Text("训练记录")
+                        Spacer()
+                        Text("\(allHistory.count) 条")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -398,6 +487,16 @@ struct ExerciseDetailView: View {
         }
     }
 
+    private func muscleSummaryRow(title: String, muscles: [String]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+            Spacer(minLength: 12)
+            Text(muscles.joined(separator: "、"))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
     private func addDemoVideos(_ media: [PickedMedia]) {
         do {
             try ExerciseDemoVideoLibrary.add(
@@ -443,15 +542,106 @@ struct ExerciseDetailView: View {
     }
 
     private func historyLabel(_ item: ExerciseHistoryItem) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(item.date.formatted(
                 date: .abbreviated,
                 time: .shortened
             ))
+            .font(.subheadline.weight(.medium))
             Text(item.summary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.vertical, 3)
+    }
+
+    private func volumeTrendView(latestVolume: Double) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            HStack(alignment: .firstTextBaseline, spacing: 24) {
+                volumeMetric(
+                    value: "\(number(latestVolume)) kg",
+                    label: "最近容量"
+                )
+                if let volumeChange {
+                    volumeMetric(
+                        value: volumeChange.formatted(
+                            .percent.precision(.fractionLength(0))
+                        ),
+                        label: "较上次"
+                    )
+                }
+            }
+            if displayedVolumeTrend.count > 1 {
+                Chart(displayedVolumeTrend) { point in
+                    LineMark(
+                        x: .value("日期", point.date),
+                        y: .value("容量", point.volume)
+                    )
+                    .interpolationMethod(.linear)
+                    .lineStyle(
+                        StrokeStyle(
+                            lineWidth: 2.25,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
+                    )
+                    .foregroundStyle(AppMetricRole.trainingLoad.accent)
+                    PointMark(
+                        x: .value("日期", point.date),
+                        y: .value("容量", point.volume)
+                    )
+                    .symbolSize(34)
+                    .foregroundStyle(AppMetricRole.trainingLoad.accent)
+                    if displayedVolumeTrend.count <= 4 {
+                        PointMark(
+                            x: .value("日期", point.date),
+                            y: .value("容量", point.volume)
+                        )
+                        .foregroundStyle(.clear)
+                        .annotation(position: .top) {
+                            Text(number(point.volume))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: displayedVolumeTrend.map(\.date)) {
+                        AxisGridLine()
+                            .foregroundStyle(AppTheme.separator)
+                        AxisTick()
+                            .foregroundStyle(AppTheme.separator)
+                        AxisValueLabel(format: .dateTime.month().day())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 150)
+                .accessibilityLabel("最近有效训练容量趋势")
+                .accessibilityValue(volumeTrendAccessibilityValue)
+            }
+        }
+    }
+
+    private func volumeMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.title3.weight(.medium).monospacedDigit())
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var volumeTrendAccessibilityValue: String {
+        displayedVolumeTrend.map {
+            "\($0.date.formatted(date: .abbreviated, time: .omitted)) \(number($0.volume)) 千克"
+        }.joined(separator: "，")
+    }
+
+    private func number(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0 ... 1)))
     }
 }
 
@@ -474,16 +664,7 @@ private struct ExerciseSessionHistory: Identifiable {
     }
 
     var summary: String {
-        let setDetails = sets.sorted { $0.order < $1.order }.map { set in
-            [
-                set.actualWeightKG.map { "\($0.formatted())kg" },
-                set.actualReps.map { "\($0)次" }
-            ].compactMap { $0 }.joined(separator: "×")
-        }.filter { !$0.isEmpty }
-        return "\(sets.count) 组已确认"
-            + (setDetails.isEmpty
-                ? ""
-                : " · \(setDetails.joined(separator: "、"))")
+        WorkoutHistoryFormatter.text(for: sets)
     }
 }
 

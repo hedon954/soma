@@ -303,7 +303,7 @@ test("queued schema 2 plan tool remains executable after schema 3 becomes curren
     properties: {
       program_name: { type: "string" },
       goal: { type: "string" },
-      template_name: { type: "string" },
+      schedule_hint: { type: "string" },
       template_exercises: {
         type: "array",
         items: {
@@ -319,7 +319,7 @@ test("queued schema 2 plan tool remains executable after schema 3 becomes curren
         },
       },
     },
-    required: ["program_name", "template_name", "template_exercises"],
+    required: ["program_name", "template_exercises"],
     additionalProperties: false,
   };
   input.modelInput.tools = [{
@@ -349,7 +349,7 @@ test("queued schema 2 plan tool remains executable after schema 3 becomes curren
       arguments: {
         program_name: "虚构旧计划",
         goal: "兼容恢复",
-        template_name: "A",
+        schedule_hint: "每周两次",
         template_exercises: [{
           exercise_id: 42,
           order: 1,
@@ -669,7 +669,7 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
 test("plan schema 3 validates nested prescriptions and keeps schema 2 registered", () => {
   assert.equal(deviceToolRegistry.get("get_program")?.schemaVersion, 3);
   assert.equal(deviceToolRegistry.get("create_program")?.schemaVersion, 3);
-  assert.equal(deviceToolRegistry.get("create_program_version")?.schemaVersion, 3);
+  assert.equal(deviceToolRegistry.get("update_program")?.schemaVersion, 3);
   assert.equal(deviceToolRegistry.get("start_program")?.schemaVersion, 2);
 
   assert.equal(validateDeviceTool({
@@ -684,7 +684,7 @@ test("plan schema 3 validates nested prescriptions and keeps schema 2 registered
     arguments: {
       program_name: "虚构旧计划",
       goal: "旧目标",
-      template_name: "A",
+      schedule_hint: "每周两次",
       template_exercises: [{
         exercise_id: 7,
         order: 1,
@@ -1282,7 +1282,7 @@ function testToolSchemaVersion(name: string): number {
   if ([
     "get_program",
     "create_program",
-    "create_program_version",
+    "update_program",
     "create_exercise",
     "create_workout",
   ].includes(name)) {
@@ -1300,14 +1300,14 @@ function testToolParameters(name: string): Record<string, unknown> {
       additionalProperties: false,
     };
   }
-  if (["create_program", "create_program_version"].includes(name)) {
+  if (["create_program", "update_program"].includes(name)) {
     return {
       type: "object",
       properties: {
         ...(name === "create_program"
           ? { program_name: { type: "string" } }
           : { program_id: { type: "integer" } }),
-        template_name: { type: "string" },
+        schedule_hint: { type: "string" },
         template_exercises: {
           type: "array",
           items: {
@@ -1339,7 +1339,6 @@ function testToolParameters(name: string): Record<string, unknown> {
       },
       required: [
         name === "create_program" ? "program_name" : "program_id",
-        "template_name",
         "template_exercises",
       ],
       additionalProperties: false,
@@ -1410,7 +1409,7 @@ function validPlanV3Arguments(): Record<string, unknown> {
   return {
     program_name: "虚构逐组计划",
     overview: "左右独立，保持缺失事实为空。",
-    template_name: "A",
+    schedule_hint: "每周两次",
     template_exercises: [validPlanV3Exercise()],
   };
 }

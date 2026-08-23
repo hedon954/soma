@@ -398,9 +398,6 @@ enum GuidedWorkoutRecordStore {
             calorieMET: calorieEstimate?.met,
             calorieDurationMinutes: calorieEstimate?.durationMinutes,
             calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
-            calorieAlgorithmVersion: calorieEstimate == nil
-                ? nil
-                : WorkoutCalorieCalculator.algorithmVersion,
             sourceWorkoutSessionID: session.id,
             sourcePerformanceID: performance.id,
             projectionKey: projectionKey

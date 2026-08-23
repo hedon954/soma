@@ -21,12 +21,6 @@ struct InsightsView: View {
         Calendar.current.date(byAdding: .day, value: -6, to: .now) ?? .distantPast
     }
 
-    private var weekWorkouts: [WorkoutEntry] {
-        workouts.filter {
-            $0.sourceWorkoutSessionID == nil && $0.date >= weekStart
-        }
-    }
-
     private var completedSessions: [WorkoutSession] {
         workoutSessions.filter {
             $0.status == .completed || $0.status == .abandoned
@@ -39,8 +33,16 @@ struct InsightsView: View {
     }
 
     private var weekTrainingCount: Int {
-        weekWorkouts.count
-            + completedSessions.count { $0.startedAt >= weekStart }
+        let standaloneCount = workouts.count {
+            $0.sourceWorkoutSessionID == nil && $0.date >= weekStart
+        }
+        let projectedSessionIDs = Set(workouts.compactMap { workout in
+            workout.date >= weekStart ? workout.sourceWorkoutSessionID : nil
+        })
+        let recentCompletedSessionIDs = Set(completedSessions.compactMap { session in
+            session.startedAt >= weekStart ? session.id : nil
+        })
+        return standaloneCount + projectedSessionIDs.union(recentCompletedSessionIDs).count
     }
 
     private var combinedVolumePoints: [TrainingVolumePoint] {
@@ -50,6 +52,69 @@ struct InsightsView: View {
             performances: exercisePerformances,
             sets: workoutSets
         )
+    }
+
+    private var weekVolume: Double? {
+        let total = combinedVolumePoints
+            .filter { $0.date >= weekStart }
+            .reduce(0) { $0 + $1.volume }
+        return total > 0 ? total : nil
+    }
+
+    private var weekTrainingDays: Set<Date> {
+        Set(trainingDates.filter { $0 >= weekStart }.map(Calendar.current.startOfDay(for:)))
+    }
+
+    private var weekWeightChange: Double? {
+        let values = weightedBodyEntries
+            .filter { $0.date >= weekStart }
+            .compactMap(\.weight)
+        guard let first = values.first, let last = values.last, values.count >= 2 else {
+            return nil
+        }
+        return last - first
+    }
+
+    private var dateRangeText: String {
+        let format = Date.FormatStyle(date: .abbreviated, time: .omitted)
+        return "\(weekStart.formatted(format))—\(Date.now.formatted(format))"
+    }
+
+    private var recentActivities: [ProgressRecentActivity] {
+        let workoutValues = workouts.map {
+            ProgressRecentActivity(
+                id: $0.id,
+                kind: .workout,
+                date: $0.date,
+                title: $0.exercise,
+                detail: $0.setEvidenceSummary ?? "训练记录",
+                metric: $0.estimatedVolume.map { "\($0.formatted()) kg" }
+            )
+        }
+        let mealValues = meals.map {
+            ProgressRecentActivity(
+                id: $0.id,
+                kind: .meal,
+                date: $0.date,
+                title: $0.title,
+                detail: $0.mealType.rawValue,
+                metric: $0.calories.map { "\($0) kcal" }
+            )
+        }
+        let bodyValues = bodyEntries.map {
+            ProgressRecentActivity(
+                id: $0.id,
+                kind: .body,
+                date: $0.date,
+                title: "身体记录",
+                detail: $0.notes.isEmpty ? "身体变化" : $0.notes,
+                metric: $0.weight.map { "\($0.formatted()) kg" }
+            )
+        }
+        return (workoutValues + mealValues + bodyValues)
+            .sorted { $0.date > $1.date }
+            .prefix(3)
+            .map { $0 }
     }
 
     private var weightedBodyEntries: [BodyEntry] {
@@ -65,90 +130,175 @@ struct InsightsView: View {
         return equipment.filter { $0.gymID == currentGym.id }.count
     }
 
-    /// PRD 020：首屏收敛为紧凑上下文入口、记录入口、连续性与趋势卡；
-    /// 「最近 7 天」摘要并入连续性卡头部，不再单独占一个区块。
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                NavigationLink {
-                    GymLibraryView()
-                } label: {
-                    CurrentGymContextCard(
-                        gymName: currentGym?.name ?? "尚未建立",
-                        coverImagePath: currentGym?.coverImagePath,
-                        note: currentGym?.notes,
-                        equipmentCount: currentEquipmentCount
+            LazyVStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
+                Text(dateRangeText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+
+                ForEach(
+                    ProgressHomeSection.visible(
+                        hasRecentActivities: !recentActivities.isEmpty,
+                        hasWeightTrend: weightedBodyEntries.count >= 2
                     )
+                ) { section in
+                    progressHomeSection(section)
                 }
-                .buttonStyle(.plain)
-
-                // PRD 020 修订：足迹与动作库不再挤进「最近记录」，各自独立成卡。
-                AppCard {
-                    VStack(spacing: 0) {
-                        NavigationLink {
-                            FootprintsView()
-                        } label: {
-                            RecordIndexRow(
-                                icon: "shoeprints.fill",
-                                title: "足迹",
-                                count: successfulFootprintCount,
-                                latest: successfulFootprintCount == 0
-                                    ? "Agent 成功后自动收录"
-                                    : "回顾你的文字与影像"
-                            )
-                        }
-
-                        Divider()
-                            .padding(.leading, 44)
-
-                        NavigationLink {
-                            ExerciseLibraryView()
-                        } label: {
-                            RecordIndexRow(
-                                icon: "books.vertical",
-                                title: "动作库",
-                                count: exerciseDefinitions.count { !$0.isArchived },
-                                latest: exerciseDefinitions.contains(where: { !$0.isArchived })
-                                    ? "查看动作详情与受力"
-                                    : "随训练自然形成"
-                            )
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-
-                RecentRecordsCard(
-                    workoutCount: workouts.count,
-                    mealCount: meals.count,
-                    bodyCount: bodyEntries.count,
-                    latestWorkout: workouts.last?.exercise,
-                    latestMeal: meals.last?.title,
-                    latestWeight: weightedBodyEntries.last?.weight
-                )
-
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("连续性")
-                            .font(.headline)
-                        Spacer()
-                        Text("最近 7 天 \(weekTrainingCount) 次训练")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    ContributionCard(trainingDates: trainingDates)
-                }
-
-                if weightedBodyEntries.count >= 2 {
-                    WeightTrendCard(entries: weightedBodyEntries)
-                }
-
-                TrainingVolumeTrendCard(points: combinedVolumePoints)
             }
-            .padding(16)
+            .padding(AppTheme.pagePadding)
             .padding(.bottom, 72)
+            .frame(maxWidth: AppTheme.readableContentMaxWidth)
+            .frame(maxWidth: .infinity)
         }
         .appPageBackground()
         .navigationTitle("进展")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func progressHomeSection(_ section: ProgressHomeSection) -> some View {
+        switch section {
+        case .weekSummary:
+            ProgressWeekSummaryCard(
+                trainingCount: weekTrainingCount,
+                volume: weekVolume,
+                weightChange: weekWeightChange,
+                trainingDays: weekTrainingDays
+            )
+        case .conclusion:
+            ProgressConclusionCard(
+                title: conclusionTitle,
+                detail: conclusionDetail,
+                status: conclusionStatus
+            )
+        case .recentActivities:
+            SectionHeading(title: "最近活动")
+            AppCard {
+                VStack(spacing: 0) {
+                    ForEach(Array(recentActivities.enumerated()), id: \.element.id) { index, activity in
+                        NavigationLink {
+                            recentActivityDestination(activity)
+                        } label: {
+                            ProgressRecentActivityRow(activity: activity)
+                        }
+                        .buttonStyle(.plain)
+                        if index < recentActivities.count - 1 {
+                            Divider()
+                                .overlay(AppTheme.separator)
+                        }
+                    }
+                }
+            }
+        case .continuityTrend:
+            SectionHeading(title: "趋势")
+            ContributionCard(trainingDates: trainingDates)
+        case .weightTrend:
+            WeightTrendCard(entries: weightedBodyEntries)
+        case .volumeTrend:
+            TrainingVolumeTrendCard(points: combinedVolumePoints)
+        case .allData:
+            SectionHeading(title: "数据与全部记录")
+            RecentRecordsCard(
+                workoutCount: workouts.count,
+                mealCount: meals.count,
+                bodyCount: bodyEntries.count,
+                latestWorkout: workouts.last?.exercise,
+                latestMeal: meals.last?.title,
+                latestWeight: weightedBodyEntries.last?.weight
+            )
+        case .currentGym:
+            NavigationLink {
+                GymLibraryView()
+            } label: {
+                CurrentGymContextCard(
+                    gymName: currentGym?.name ?? "尚未建立",
+                    coverImagePath: currentGym?.coverImagePath,
+                    note: currentGym?.notes,
+                    equipmentCount: currentEquipmentCount
+                )
+            }
+            .buttonStyle(.plain)
+        case .personalResources:
+            AppCard {
+                VStack(spacing: 0) {
+                    NavigationLink {
+                        FootprintsView()
+                    } label: {
+                        RecordIndexRow(
+                            icon: "shoeprints.fill",
+                            role: .trend,
+                            title: "足迹",
+                            count: successfulFootprintCount,
+                            latest: successfulFootprintCount == 0
+                                ? "Agent 成功后自动收录"
+                                : "回顾你的文字与影像"
+                        )
+                    }
+
+                    Divider()
+                        .padding(.leading, 44)
+
+                    NavigationLink {
+                        ExerciseLibraryView()
+                    } label: {
+                        RecordIndexRow(
+                            icon: "books.vertical",
+                            role: .training,
+                            title: "动作库",
+                            count: exerciseDefinitions.count { !$0.isArchived },
+                            latest: exerciseDefinitions.contains(where: { !$0.isArchived })
+                                ? "查看动作详情与受力"
+                                : "随训练自然形成"
+                        )
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var conclusionTitle: String {
+        switch weekTrainingCount {
+        case 0: "等待新的训练节奏"
+        case 1 ... 2: "训练正在积累"
+        default: "训练节奏稳定"
+        }
+    }
+
+    private var conclusionDetail: String {
+        switch weekTrainingCount {
+        case 0: "最近 7 天还没有完整训练记录。"
+        case 1 ... 2: "本周完成 \(weekTrainingCount) 次训练，继续保持规律即可。"
+        default: "本周完成 \(weekTrainingCount) 次训练，频率比单次数字更值得关注。"
+        }
+    }
+
+    private var conclusionStatus: AppStatusRole {
+        switch weekTrainingCount {
+        case 0: .neutral
+        case 1 ... 2: .attention
+        default: .positive
+        }
+    }
+
+    @ViewBuilder
+    private func recentActivityDestination(_ activity: ProgressRecentActivity) -> some View {
+        switch activity.kind {
+        case .workout:
+            if let workout = workouts.first(where: { $0.id == activity.id }) {
+                WorkoutRecordDetailView(workout: workout)
+            }
+        case .meal:
+            if let meal = meals.first(where: { $0.id == activity.id }) {
+                MealRecordDetailView(meal: meal)
+            }
+        case .body:
+            if let entry = bodyEntries.first(where: { $0.id == activity.id }) {
+                BodyRecordDetailView(entry: entry)
+            }
+        }
     }
 
     private var successfulFootprintCount: Int {
@@ -182,6 +332,7 @@ private struct RecentRecordsCard: View {
                     } label: {
                         RecordIndexRow(
                             icon: "figure.strengthtraining.traditional",
+                            role: .training,
                             title: "训练记录",
                             count: workoutCount,
                             latest: latestWorkout ?? "暂无记录"
@@ -196,6 +347,7 @@ private struct RecentRecordsCard: View {
                     } label: {
                         RecordIndexRow(
                             icon: "fork.knife",
+                            role: .meal,
                             title: "饮食记录",
                             count: mealCount,
                             latest: latestMeal ?? "暂无记录"
@@ -210,6 +362,7 @@ private struct RecentRecordsCard: View {
                     } label: {
                         RecordIndexRow(
                             icon: "scalemass",
+                            role: .body,
                             title: "体重记录",
                             count: bodyCount,
                             latest: latestWeight.map { String(format: "%.1f kg", $0) } ?? "暂无记录"
@@ -224,17 +377,14 @@ private struct RecentRecordsCard: View {
 
 private struct RecordIndexRow: View {
     let icon: String
+    let role: AppSemanticRole
     let title: String
     let count: Int
     let latest: String
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.headline)
-                .foregroundStyle(AppTheme.tint)
-                .frame(width: 32, height: 32)
-                .background(AppTheme.softTint, in: Circle())
+            SemanticIconBadge(systemImage: icon, role: role, size: 34)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -266,6 +416,8 @@ private struct ContributionCard: View {
     var body: some View {
         AppCard {
             VStack(alignment: .leading, spacing: 9) {
+                MetricHeading(title: "训练连续性", role: .consistency)
+
                 HStack(alignment: .top, spacing: 7) {
                     VStack(spacing: 4) {
                         Color.clear.frame(width: 16, height: 14)
@@ -375,9 +527,9 @@ private struct ContributionCard: View {
     private func color(for count: Int) -> Color {
         switch count {
         case 0: Color.secondary.opacity(0.1)
-        case 1: AppTheme.tint.opacity(0.48)
-        case 2: AppTheme.tint.opacity(0.72)
-        default: AppTheme.tint
+        case 1: AppMetricRole.consistency.accent.opacity(0.42)
+        case 2: AppMetricRole.consistency.accent.opacity(0.7)
+        default: AppMetricRole.consistency.accent
         }
     }
 }
@@ -438,8 +590,7 @@ private struct WeightTrendCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("体重趋势")
-                .font(.headline)
+            MetricHeading(title: "体重趋势", role: .body)
             AppCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Picker("时间粒度", selection: $range) {
@@ -460,12 +611,19 @@ private struct WeightTrendCard: View {
                                 y: .value("体重", weight)
                             )
                             .interpolationMethod(.catmullRom)
-                            .foregroundStyle(AppTheme.tint)
+                            .lineStyle(
+                                StrokeStyle(
+                                    lineWidth: 2.25,
+                                    lineCap: .round,
+                                    lineJoin: .round
+                                )
+                            )
+                            .foregroundStyle(AppMetricRole.body.accent)
                             PointMark(
                                 x: .value("日期", entry.date),
                                 y: .value("体重", weight)
                             )
-                            .foregroundStyle(AppTheme.tint)
+                            .foregroundStyle(AppMetricRole.body.accent)
                         }
                     }
                     .chartScrollableAxes(.horizontal)
@@ -476,11 +634,22 @@ private struct WeightTrendCard: View {
                     .chartXAxis {
                         AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                             AxisGridLine()
+                                .foregroundStyle(AppTheme.separator)
+                            AxisTick()
+                                .foregroundStyle(AppTheme.separator)
                             AxisValueLabel(format: .dateTime.month().day())
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .chartYAxis {
-                        AxisMarks(position: .leading)
+                        AxisMarks(position: .leading) { _ in
+                            AxisGridLine()
+                                .foregroundStyle(AppTheme.separator)
+                            AxisTick()
+                                .foregroundStyle(AppTheme.separator)
+                            AxisValueLabel()
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(height: 180)
                 }
@@ -633,8 +802,7 @@ private struct TrainingVolumeTrendCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("训练容量趋势")
-                .font(.headline)
+            MetricHeading(title: "训练容量趋势", role: .trainingLoad)
 
             AppCard {
                 VStack(alignment: .leading, spacing: 12) {
@@ -672,7 +840,7 @@ private struct TrainingVolumeTrendCard: View {
                                         : "arrow.down.right"
                                 )
                                 .font(.caption.weight(.medium))
-                                .foregroundStyle(changePercent >= 0 ? AppTheme.tint : .secondary)
+                                .foregroundStyle(AppMetricRole.trainingLoad.accent)
                             }
                         }
 
@@ -689,8 +857,8 @@ private struct TrainingVolumeTrendCard: View {
                             .foregroundStyle(
                                 LinearGradient(
                                     colors: [
-                                        AppTheme.tint.opacity(0.24),
-                                        AppTheme.tint.opacity(0.02)
+                                        AppMetricRole.trainingLoad.accent.opacity(0.24),
+                                        AppMetricRole.trainingLoad.accent.opacity(0.02)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
@@ -702,13 +870,20 @@ private struct TrainingVolumeTrendCard: View {
                                 y: .value("训练容量", point.volume)
                             )
                             .interpolationMethod(.catmullRom)
-                            .foregroundStyle(AppTheme.tint)
+                            .lineStyle(
+                                StrokeStyle(
+                                    lineWidth: 2.25,
+                                    lineCap: .round,
+                                    lineJoin: .round
+                                )
+                            )
+                            .foregroundStyle(AppMetricRole.trainingLoad.accent)
 
                             PointMark(
                                 x: .value("日期", point.date),
                                 y: .value("训练容量", point.volume)
                             )
-                            .foregroundStyle(AppTheme.tint)
+                            .foregroundStyle(AppMetricRole.trainingLoad.accent)
                         }
                         .chartScrollableAxes(.horizontal)
                         .chartXScale(domain: xDomain)
@@ -718,17 +893,25 @@ private struct TrainingVolumeTrendCard: View {
                         .chartXAxis {
                             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine()
+                                    .foregroundStyle(AppTheme.separator)
+                                AxisTick()
+                                    .foregroundStyle(AppTheme.separator)
                                 AxisValueLabel(format: .dateTime.month().day())
+                                    .foregroundStyle(.secondary)
                             }
                         }
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
                                 AxisGridLine()
+                                    .foregroundStyle(AppTheme.separator)
+                                AxisTick()
+                                    .foregroundStyle(AppTheme.separator)
                                 AxisValueLabel {
                                     if let volume = value.as(Double.self) {
                                         Text(TrainingVolumeAnalytics.formatted(volume))
                                     }
                                 }
+                                .foregroundStyle(.secondary)
                             }
                         }
                         .frame(height: 180)
@@ -763,7 +946,7 @@ private struct CurrentGymContextCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("当前健身房", systemImage: "sparkles")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.tint)
+                        .foregroundStyle(AppTheme.trainingAccent)
                     Text(gymName)
                         .font(.headline)
                         .lineLimit(1)

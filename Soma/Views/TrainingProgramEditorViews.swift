@@ -230,7 +230,6 @@ struct TrainingProgramCreationView: View {
             _ = try TrainingPlanStore.createProgram(
                 name: normalizedName,
                 goal: overview.trimmingCharacters(in: .whitespacesAndNewlines),
-                templateName: normalizedName,
                 scheduleHint: scheduleHint.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 ),
@@ -238,7 +237,6 @@ struct TrainingProgramCreationView: View {
                     rows: rows,
                     definitions: activeDefinitions
                 ),
-                source: "gui",
                 in: modelContext
             )
             dismiss()
@@ -252,7 +250,6 @@ struct TrainingTemplateEditor: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     let program: TrainingProgram
-    let currentVersion: WorkoutTemplateVersion?
     let definitions: [ExerciseDefinition]
 
     @State private var name: String
@@ -263,15 +260,13 @@ struct TrainingTemplateEditor: View {
 
     init(
         program: TrainingProgram,
-        currentVersion: WorkoutTemplateVersion?,
         initialPrescriptions: [TemplateExercisePrescription],
         definitions: [ExerciseDefinition]
     ) {
         self.program = program
-        self.currentVersion = currentVersion
         self.definitions = definitions
-        _name = State(initialValue: currentVersion?.name ?? program.name)
-        _scheduleHint = State(initialValue: currentVersion?.scheduleHint ?? "")
+        _name = State(initialValue: program.name)
+        _scheduleHint = State(initialValue: program.scheduleHint)
         _rows = State(initialValue: initialPrescriptions.map(
             TrainingPrescriptionDraft.init
         ))
@@ -283,8 +278,8 @@ struct TrainingTemplateEditor: View {
 
     var body: some View {
         Form {
-            Section("模板") {
-                TextField("模板名称", text: $name)
+            Section("计划") {
+                TextField("计划名称", text: $name)
                 TextField("安排提示", text: $scheduleHint)
             }
 
@@ -293,7 +288,7 @@ struct TrainingTemplateEditor: View {
                 definitions: activeDefinitions
             )
         }
-        .navigationTitle("新建模板版本")
+        .navigationTitle("编辑训练计划")
         .navigationBarTitleDisplayMode(.inline)
         .environment(\.editMode, $editMode)
         .toolbar {
@@ -313,7 +308,7 @@ struct TrainingTemplateEditor: View {
 
     private func save() {
         do {
-            _ = try TrainingPlanStore.createNextVersion(
+            try TrainingPlanStore.updateProgram(
                 for: program,
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                 scheduleHint: scheduleHint.trimmingCharacters(
@@ -323,7 +318,6 @@ struct TrainingTemplateEditor: View {
                     rows: rows,
                     definitions: activeDefinitions
                 ),
-                source: "gui",
                 in: modelContext
             )
             dismiss()
@@ -340,7 +334,7 @@ private struct TrainingPrescriptionRowsSection: View {
     let definitions: [ExerciseDefinition]
 
     var body: some View {
-        Section("动作顺序") {
+        Section {
             if rows.isEmpty {
                 Text("选择动作后，可拖动调整顺序；处方按需展开编辑。")
                     .foregroundStyle(.secondary)
@@ -377,13 +371,16 @@ private struct TrainingPrescriptionRowsSection: View {
 
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(exercise?.canonicalName ?? "已归档动作")
-                                        .font(.headline)
+                                        .font(.subheadline.weight(.medium))
                                         .foregroundStyle(.primary)
                                         .lineLimit(2)
                                     Text(row.prescriptionSummary)
-                                        .font(.subheadline)
+                                        .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
+                                    Label("编辑参数", systemImage: "pencil")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(AppTheme.trainingAccent)
                                 }
                                 Spacer(minLength: 4)
                             }
@@ -460,6 +457,10 @@ private struct TrainingPrescriptionRowsSection: View {
                 Label("选择动作", systemImage: "plus.circle.fill")
             }
             .disabled(definitions.isEmpty)
+        } header: {
+            Text("动作与参数")
+        } footer: {
+            Text("点按动作修改组数、次数或时长、重量、侧别与间歇。")
         }
     }
 
@@ -550,6 +551,7 @@ struct TrainingExercisePickerView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accentEmphasis)
                 .controlSize(.large)
                 .disabled(selectedIDs.isEmpty)
                 .padding()
@@ -613,7 +615,7 @@ private extension TrainingPrescriptionDraft {
     }
 }
 
-private func makePrescriptions(
+func makePrescriptions(
     rows: [TrainingPrescriptionDraft],
     definitions: [ExerciseDefinition]
 ) -> [TemplateExercisePrescription] {

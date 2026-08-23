@@ -307,13 +307,14 @@ final class TrainingProgram: BusinessIdentifiedModel {
     var name: String
     @Attribute(originalName: "goal") var overview: String
     var statusRaw: String
-    var currentTemplateVersionID: UUID?
+    @Attribute(originalName: "currentTemplateVersionID") var prescriptionGroupID: UUID?
+    var scheduleHint: String = ""
     var createdAt: Date
     var updatedAt: Date
     @Relationship(
         deleteRule: .cascade,
-        inverse: \WorkoutTemplateVersion.program
-    ) var templateVersions: [WorkoutTemplateVersion] = []
+        inverse: \TemplateExercise.program
+    ) var templateExercises: [TemplateExercise] = []
 
     init(
         id: UUID = UUID(),
@@ -321,7 +322,8 @@ final class TrainingProgram: BusinessIdentifiedModel {
         goal: String = "",
         overview: String? = nil,
         status: TrainingProgramStatus = .active,
-        currentTemplateVersionID: UUID? = nil,
+        prescriptionGroupID: UUID? = nil,
+        scheduleHint: String = "",
         createdAt: Date = .now,
         updatedAt: Date? = nil
     ) {
@@ -329,7 +331,8 @@ final class TrainingProgram: BusinessIdentifiedModel {
         self.name = name
         self.overview = overview ?? goal
         statusRaw = status.rawValue
-        self.currentTemplateVersionID = currentTemplateVersionID
+        self.prescriptionGroupID = prescriptionGroupID ?? id
+        self.scheduleHint = scheduleHint
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
     }
@@ -350,56 +353,12 @@ final class TrainingProgram: BusinessIdentifiedModel {
 }
 
 @Model
-final class WorkoutTemplateVersion: BusinessIdentifiedModel {
-    var id: UUID
-    var businessID: Int64?
-    var programID: UUID
-    var familyID: UUID
-    var version: Int
-    var name: String
-    var scheduleHint: String
-    var source: String
-    var createdAt: Date
-    var changeSummary: String?
-    var changeDetails: String?
-    @Relationship(deleteRule: .nullify) var program: TrainingProgram?
-    @Relationship(
-        deleteRule: .cascade,
-        inverse: \TemplateExercise.templateVersion
-    ) var templateExercises: [TemplateExercise] = []
-
-    init(
-        id: UUID = UUID(),
-        programID: UUID,
-        familyID: UUID = UUID(),
-        version: Int,
-        name: String,
-        scheduleHint: String = "",
-        source: String = "user",
-        createdAt: Date = .now,
-        changeSummary: String? = nil,
-        changeDetails: String? = nil
-    ) {
-        self.id = id
-        self.programID = programID
-        self.familyID = familyID
-        self.version = version
-        self.name = name
-        self.scheduleHint = scheduleHint
-        self.source = source
-        self.createdAt = createdAt
-        self.changeSummary = changeSummary
-        self.changeDetails = changeDetails
-    }
-}
-
-@Model
 final class TemplateExercise: BusinessIdentifiedModel {
     var id: UUID
     var businessID: Int64?
-    var templateVersionID: UUID
+    @Attribute(originalName: "templateVersionID") var prescriptionGroupID: UUID
     var exerciseID: UUID
-    @Relationship(deleteRule: .nullify) var templateVersion: WorkoutTemplateVersion?
+    @Relationship(deleteRule: .nullify) var program: TrainingProgram?
     @Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?
     var order: Int
     var targetSets: Int?
@@ -417,7 +376,7 @@ final class TemplateExercise: BusinessIdentifiedModel {
 
     init(
         id: UUID = UUID(),
-        templateVersionID: UUID,
+        prescriptionGroupID: UUID,
         exerciseID: UUID,
         order: Int,
         targetSets: Int? = nil,
@@ -430,7 +389,7 @@ final class TemplateExercise: BusinessIdentifiedModel {
         laterality: ExerciseLaterality = .none
     ) {
         self.id = id
-        self.templateVersionID = templateVersionID
+        self.prescriptionGroupID = prescriptionGroupID
         self.exerciseID = exerciseID
         self.order = order
         self.targetSets = targetSets
@@ -555,8 +514,6 @@ final class WorkoutSession: BusinessIdentifiedModel {
     var gymID: UUID?
     var programID: UUID?
     var programNameSnapshot: String?
-    var sourceTemplateFamilyID: UUID?
-    var sourceTemplateVersion: Int?
     var prescriptionSnapshotData: Data
     var statusRaw: String
     var guidedPhaseRaw: String
@@ -587,8 +544,6 @@ final class WorkoutSession: BusinessIdentifiedModel {
         gymID: UUID? = nil,
         programID: UUID? = nil,
         programNameSnapshot: String? = nil,
-        sourceTemplateFamilyID: UUID? = nil,
-        sourceTemplateVersion: Int? = nil,
         prescriptionSnapshot: [TemplateExercisePrescription] = [],
         status: WorkoutSessionStatus = .draft,
         guidedPhase: GuidedWorkoutPhase = .ready,
@@ -614,8 +569,6 @@ final class WorkoutSession: BusinessIdentifiedModel {
         self.gymID = gymID
         self.programID = programID
         self.programNameSnapshot = programNameSnapshot
-        self.sourceTemplateFamilyID = sourceTemplateFamilyID
-        self.sourceTemplateVersion = sourceTemplateVersion
         prescriptionSnapshotData = TrainingPlanCoding.encode(prescriptionSnapshot)
         statusRaw = status.rawValue
         guidedPhaseRaw = guidedPhase.rawValue

@@ -15,7 +15,7 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(
             Set(tools.filter { $0.schemaVersion == 3 }),
             [
-                .getProgram, .createProgram, .createProgramVersion,
+                .getProgram, .createProgram, .updateProgram,
                 .createExercise, .createWorkout
             ]
         )

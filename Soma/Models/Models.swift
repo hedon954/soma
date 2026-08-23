@@ -587,7 +587,6 @@ final class WorkoutEntry: BusinessIdentifiedModel {
     var calorieMET: Double?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool = false
-    var calorieAlgorithmVersion: String?
     var externalSource: String?
     var externalID: String?
     var sourceTurnID: UUID?
@@ -748,7 +747,6 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         calorieMET: Double? = nil,
         calorieDurationMinutes: Double? = nil,
         calorieDurationEstimated: Bool = false,
-        calorieAlgorithmVersion: String? = nil,
         externalSource: String? = nil,
         externalID: String? = nil,
         sourceTurnID: UUID? = nil,
@@ -784,7 +782,6 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         self.calorieMET = calorieMET
         self.calorieDurationMinutes = calorieDurationMinutes
         self.calorieDurationEstimated = calorieDurationEstimated
-        self.calorieAlgorithmVersion = calorieAlgorithmVersion
         self.externalSource = externalSource
         self.externalID = externalID
         self.sourceTurnID = sourceTurnID

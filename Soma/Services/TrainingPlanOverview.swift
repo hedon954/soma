@@ -54,30 +54,39 @@ enum TrainingPlanOverview {
     }
 
     static func summarize(_ exercises: [ExerciseInput]) -> Summary {
-        let weightedMaps = exercises.map { exercise in
+        let primaryMaps = exercises.map { exercise in
             let weight = Double(max(exercise.targetSets ?? 1, 1))
             return MuscleGroupMapping.intensityMap(
                 primary: exercise.primaryMuscles,
-                secondary: exercise.secondaryMuscles,
+                secondary: [],
                 primaryWeight: weight,
-                secondaryWeight: weight * 0.45
+                secondaryWeight: 0
             )
         }
+        let secondaryMaps = exercises.map { exercise in
+            let weight = Double(max(exercise.targetSets ?? 1, 1))
+            return MuscleGroupMapping.intensityMap(
+                primary: [],
+                secondary: exercise.secondaryMuscles,
+                primaryWeight: 0,
+                secondaryWeight: weight
+            )
+        }
+        let primaryScores = MuscleGroupMapping.merge(primaryMaps)
+        let secondaryScores = MuscleGroupMapping.merge(secondaryMaps)
+        let weightedMaps = [
+            primaryScores,
+            secondaryScores.mapValues { $0 * 0.45 }
+        ]
         let intensities = MuscleGroupMapping.normalized(
             MuscleGroupMapping.merge(weightedMaps)
         )
-        let ranked = intensities.sorted {
-            if $0.value != $1.value {
-                return $0.value > $1.value
-            }
-            return $0.key.rawValue < $1.key.rawValue
-        }
-        let primaryFocus = ranked
-            .filter { $0.value >= 0.65 }
+        let primaryFocus = ranked(primaryScores)
             .prefix(3)
             .map(\.key)
-        let secondaryFocus = ranked
-            .filter { $0.value >= 0.25 && $0.value < 0.65 }
+        let primaryGroups = Set(primaryScores.keys)
+        let secondaryFocus = ranked(secondaryScores)
+            .filter { !primaryGroups.contains($0.key) }
             .prefix(3)
             .map(\.key)
         return Summary(
@@ -87,5 +96,16 @@ enum TrainingPlanOverview {
             primaryFocus: Array(primaryFocus),
             secondaryFocus: Array(secondaryFocus)
         )
+    }
+
+    private static func ranked(
+        _ scores: [MuscleGroup: Double]
+    ) -> [(key: MuscleGroup, value: Double)] {
+        scores.sorted {
+            if $0.value != $1.value {
+                return $0.value > $1.value
+            }
+            return $0.key.rawValue < $1.key.rawValue
+        }
     }
 }

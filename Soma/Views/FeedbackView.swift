@@ -99,12 +99,19 @@ struct FeedbackView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
+            AppTheme.insetBackground,
             in: RoundedRectangle(
                 cornerRadius: AppTheme.cardRadius,
                 style: .continuous
             )
         )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: AppTheme.cardRadius,
+                style: .continuous
+            )
+            .stroke(AppTheme.separator, lineWidth: AppTheme.inputBorderWidth)
+        }
     }
 
     @ViewBuilder
@@ -167,6 +174,7 @@ struct FeedbackView: View {
             }
         }
         .buttonStyle(.borderedProminent)
+        .tint(AppTheme.accentEmphasis)
         .disabled(isSending || isEmpty)
         .accessibilityHint("提交当前文字和附件")
     }

@@ -237,15 +237,10 @@ enum AgentContextPackBuilder {
         in context: ModelContext
     ) -> String? {
         guard let program = programs.first else { return nil }
-        let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())) ?? []
-        let version = versions.first { $0.id == program.currentTemplateVersionID }
         let last = sessions.first {
             $0.programID == program.id && $0.status == .completed
         }
         var parts = ["当前计划：\(program.name)"]
-        if let version {
-            parts.append("模板 \(version.name) v\(version.version)")
-        }
         if let last {
             let done = last.prescriptionSnapshot.count
             parts.append("上次完成 \(done) 个动作快照")

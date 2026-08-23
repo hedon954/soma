@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 struct PersonalDataSnapshot: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 5
+    static let currentSchemaVersion = 6
 
     var schemaVersion = Self.currentSchemaVersion
     var createdAt: Date
@@ -17,7 +17,6 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
     var exerciseMergeRecords: [ExerciseMergeRecordDTO]?
     var workouts: [WorkoutEntryDTO]
     var trainingPrograms: [TrainingProgramDTO]?
-    var workoutTemplateVersions: [WorkoutTemplateVersionDTO]?
     var templateExercises: [TemplateExerciseDTO]?
     var templateSetPrescriptions: [TemplateSetPrescriptionDTO]?
     var workoutSessions: [WorkoutSessionDTO]?
@@ -117,9 +116,6 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
                 .map(WorkoutEntryDTO.init),
             trainingPrograms: context.fetch(FetchDescriptor<TrainingProgram>())
                 .map(TrainingProgramDTO.init),
-            workoutTemplateVersions: context.fetch(
-                FetchDescriptor<WorkoutTemplateVersion>()
-            ).map(WorkoutTemplateVersionDTO.init),
             templateExercises: context.fetch(FetchDescriptor<TemplateExercise>())
                 .map(TemplateExerciseDTO.init),
             templateSetPrescriptions: context.fetch(
@@ -227,9 +223,6 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         }
         for program in trainingPrograms ?? [] {
             context.insert(program.makeModel())
-        }
-        for version in workoutTemplateVersions ?? [] {
-            context.insert(version.makeModel())
         }
         for item in templateExercises ?? [] {
             context.insert(item.makeModel())
@@ -616,7 +609,6 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var calorieMET: Double?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool
-    var calorieAlgorithmVersion: String?
     var externalSource: String?
     var externalID: String?
     var sourceTurnID: UUID?
@@ -646,7 +638,6 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         calorieMET = model.calorieMET
         calorieDurationMinutes = model.calorieDurationMinutes
         calorieDurationEstimated = model.calorieDurationEstimated
-        calorieAlgorithmVersion = model.calorieAlgorithmVersion
         externalSource = model.externalSource
         externalID = model.externalID
         sourceTurnID = model.sourceTurnID
@@ -677,7 +668,6 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
             calorieMET: calorieMET,
             calorieDurationMinutes: calorieDurationMinutes,
             calorieDurationEstimated: calorieDurationEstimated,
-            calorieAlgorithmVersion: calorieAlgorithmVersion,
             externalSource: externalSource,
             externalID: externalID,
             sourceTurnID: sourceTurnID,

@@ -1,12 +1,13 @@
 # PRD 019：训练回顾分组筛选、计划管理补全与程序化受力图分享
 
-- 状态：已实现，待真机验收
+- 状态：部分修订；记录回顾、计划管理、受力图与分享继续有效，版本历史与差异由 PRD 040 删除
 - 日期：2026-08-04
 - 修订自：
   - [PRD 004](004-soma-current-product.md) 的训练记录列表与教练回复渲染基线
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的版本历史、归档与通用肌群图范围
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 的录像失败反馈范围
 - 后续修订：
+  - [PRD 040](040-current-state-business-data-with-session-facts.md) 删除版本历史、版本差异和来源版本展示
   - [PRD 026](026-guided-workout-record-projection-camera-failures-and-session-entry.md) 将录像失败从自动消失 toast 修订为有诊断日志的系统警告框
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 将计划详情的版本历史与统计改为默认折叠展示
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 将训练筛选改为标题下月份芯片，按天分组可折叠，并让饮食历史共用同一套呈现

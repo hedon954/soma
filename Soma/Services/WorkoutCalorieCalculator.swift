@@ -10,10 +10,6 @@ struct WorkoutCalorieEstimate: Equatable {
 }
 
 enum WorkoutCalorieCalculator {
-    /// Persisted with newly materialized deterministic calorie estimates so a
-    /// future rule change never makes historical values ambiguous.
-    static let algorithmVersion = "soma-met-2024-v1"
-
     /// MET values follow the 2024 Adult Compendium of Physical Activities.
     /// The 4-second fallback is the midpoint of a controlled 1–2s concentric
     /// plus 2–3s eccentric repetition; it is used only when the user supplied

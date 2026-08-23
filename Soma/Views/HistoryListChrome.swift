@@ -3,14 +3,19 @@ import SwiftUI
 struct HistoryPageTitle: View {
     let title: String
     let systemImage: String
+    let role: AppSemanticRole
 
     var body: some View {
-        Label(title, systemImage: systemImage)
-            .labelStyle(.titleAndIcon)
-            .font(.headline)
-            .imageScale(.medium)
-            .fixedSize()
-            .accessibilityAddTraits(.isHeader)
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(role.accent)
+            Text(title)
+                .foregroundStyle(.primary)
+        }
+        .font(.headline)
+        .imageScale(.medium)
+        .fixedSize()
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -18,6 +23,7 @@ extension View {
     func historyListChrome(
         title: String,
         systemImage: String,
+        role: AppSemanticRole,
         selected: WorkoutHistoryDateFilter,
         chips: [(filter: WorkoutHistoryDateFilter, title: String)],
         onSelect: @escaping (WorkoutHistoryDateFilter) -> Void
@@ -26,7 +32,7 @@ extension View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HistoryPageTitle(title: title, systemImage: systemImage)
+                    HistoryPageTitle(title: title, systemImage: systemImage, role: role)
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -57,9 +63,10 @@ struct HistoryMonthFilterBar: View {
                             .font(.subheadline.weight(chip.filter == selected ? .semibold : .regular))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
+                            .frame(minHeight: AppTheme.minimumTapTarget)
                             .background(
                                 chip.filter == selected
-                                    ? AppTheme.tint.opacity(0.16)
+                                    ? AppTheme.softTint
                                     : Color.primary.opacity(0.06),
                                 in: Capsule()
                             )
@@ -140,7 +147,7 @@ private struct HistoryDayCardBackground: View {
             ),
             style: .continuous
         )
-        .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        .fill(AppTheme.cardBackground)
     }
 
     private var topRadius: CGFloat {

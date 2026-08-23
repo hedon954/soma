@@ -4,7 +4,7 @@
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
 - 状态：当前 schema 快照；实现收口后仍需以数据库结构门禁复核
-- 最近同步：2026-08-17
+- 最近同步：2026-08-23
 - SwiftData 注册来源：[`Soma/App/SomaApp.swift`](../../Soma/App/SomaApp.swift)
 - SwiftData 版本与启动迁移来源：[`Soma/Models/SomaDataMigration.swift`](../../Soma/Models/SomaDataMigration.swift)
 - SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models/)
@@ -14,6 +14,7 @@
   - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
   - [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)
   - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
+  - [ADR 0090](../adr/0090-current-state-business-models-and-session-facts.md)
 - 相关决策：ADR 0001、0031、0032，以及
   [`训练领域模型与运行时协议`](training-domain-model.md)
 
@@ -34,13 +35,13 @@
 
 ## 设备端 SwiftData
 
-个人空间与演示空间各自使用独立 `ModelContainer`，当前注册完全相同的 29 个模型。两个空间
+个人空间与演示空间各自使用独立 `ModelContainer`，当前注册完全相同的 28 个模型。两个空间
 不能互相连接，也不启用 CloudKit。App 启动时先迁移个人空间、再迁移演示空间；两者均写入并
 复核当前 `DataMigrationMarker` 前，根界面与 Agent 队列都不会挂载。
 
 磁盘库由 `SomaStoreOpening` 以 `Schema(SomaDataSchema.models)` 打开，不传入
 `migrationPlan`。缺少的可选列由系统轻量推断补齐。打开后启动门禁再展开旧聚合处方、建立
-Effort、修复关系/投影键、分配业务 ID 并写入 schema version 5 marker。打开路径见
+Effort、修复关系/投影键、收敛当前计划、分配业务 ID 并写入 schema version 6 marker。打开路径见
 [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)；任一数据空间
 失败时不开放业务 Root。
 
@@ -62,20 +63,19 @@ Effort、修复关系/投影键、分配业务 ID 并写入 schema version 5 mar
 | --- | --- | --- |
 | `MealEntry` | `id: UUID`、`date: Date`、`mealTypeRaw: String`、`title: String`、`calories: Int?`、`protein: Double?`、`carbs: Double?`、`fat: Double?`、`totalSugar: Double?`、`glycemicSpeedRaw: String?`、`glycemicAssessment: String`、`itemsData: Data`、`nutritionSourceRaw: String`、`notes: String`、`imagePath: String?`、`mediaAttachmentsData: Data`、`confidence: Double`、`sourceTurnID: UUID?`、`sourceSessionID: UUID?` | 未确认营养值保持为空；总糖包含天然糖与添加糖；升糖速度只表示成对保存的餐食组成定性估算，修改菜品时清空旧评估。来源字段连接创建它的聊天 turn/session。 |
 | <!-- schema-model: BodyEntry | id,businessID,date,weight,bodyFat,waist,notes,imagePath,mediaAttachmentsData,analysis,externalSource,externalID,sourceTurnID,sourceSessionID --> `BodyEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体记录字段 | `externalSource + externalID` 用于外部导入去重，由 Store 维护。 |
-| <!-- schema-model: WorkoutEntry | id,businessID,date,exercise,exerciseID,exerciseDefinition,sets,reps,weight,setEntriesData,restSeconds,durationMinutes,notes,mediaKindRaw,mediaPath,mediaAttachmentsData,formScore,intensity,feedback,estimatedCalories,calorieMET,calorieDurationMinutes,calorieDurationEstimated,calorieAlgorithmVersion,externalSource,externalID,sourceTurnID,sourceSessionID,sourceWorkoutSessionID,sourcePerformanceID,projectionKey,sourcePerformance --> `WorkoutEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）、训练字段、动作关系、来源关系及唯一 `projectionKey` | 带练投影使用 `guided-performance:<uuid>`；其余记录使用 `entry:<uuid>`。unique 索引保留，启动迁移即使 marker 已是 5 也必须先补齐空 key，不能把多个 `nil` 留给 SwiftData 校验。热量投影保留可选算法版本；UUID 来源继续用于旧备份映射与审计。 |
+| <!-- schema-model: WorkoutEntry | id,businessID,date,exercise,exerciseID,exerciseDefinition,sets,reps,weight,setEntriesData,restSeconds,durationMinutes,notes,mediaKindRaw,mediaPath,mediaAttachmentsData,formScore,intensity,feedback,estimatedCalories,calorieMET,calorieDurationMinutes,calorieDurationEstimated,externalSource,externalID,sourceTurnID,sourceSessionID,sourceWorkoutSessionID,sourcePerformanceID,projectionKey,sourcePerformance --> `WorkoutEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）、训练字段、动作关系、来源关系及唯一 `projectionKey` | 带练投影使用 `guided-performance:<uuid>`；其余记录使用 `entry:<uuid>`。unique 索引保留，启动迁移必须先补齐空 key，不能把多个 `nil` 留给 SwiftData 校验。热量投影保留 MET、计算时长、估算标记和结果，不维护算法版本；UUID 来源继续用于旧备份映射与审计。 |
 
 ### 动作库与训练计划
 
-<!-- schema-model: ExerciseDefinition | canonicalNameKey,id,businessID,canonicalName,createdAt,updatedAt,archivedAt,mergedIntoID,coachingNotes,primaryMusclesData,secondaryMusclesData,movementPatternsData,muscleDiagramAssetName,userDemoVideosData,guidanceVideosData,contentRevisionsData,imageReferencesData,lateralityRaw,targetKindRaw -->
+<!-- schema-model: ExerciseDefinition | canonicalNameKey,id,businessID,canonicalName,createdAt,updatedAt,archivedAt,mergedIntoID,coachingNotes,primaryMusclesData,secondaryMusclesData,movementPatternsData,muscleDiagramAssetName,userDemoVideosData,guidanceVideosData,imageReferencesData,lateralityRaw,targetKindRaw -->
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
-| `ExerciseDefinition` | `canonicalNameKey: String [unique]`、`id: UUID`、`canonicalName: String`、`createdAt: Date`、`updatedAt: Date`、`archivedAt: Date?`、`mergedIntoID: UUID?`、`coachingNotes: String`、`primaryMusclesData: Data`、`secondaryMusclesData: Data`、`movementPatternsData: Data`、`muscleDiagramAssetName: String?`、`userDemoVideosData: Data`、`guidanceVideosData: Data`、`contentRevisionsData: Data`、`imageReferencesData: Data`、`lateralityRaw: String`、`targetKindRaw: String` | `mergedIntoID` 是动作合并后的自引用；规范名键唯一。空的 `lateralityRaw`/`targetKindRaw` 表示尚未配置，展示时按全身和按次数解释。 |
-| <!-- schema-model: ExerciseMergeRecord | id,businessID,sourceExerciseID,targetExerciseID,sourceName,affectedWorkoutIDsData,affectedTemplateExerciseIDsData,affectedPerformanceIDsData,affectedRecommendationIDsData,transferredContentRevisionIDsData,transferredUserDemoVideosData,transferredGuidanceVideosData,transferredImageReferencesData,createdAt,undoneAt --> `ExerciseMergeRecord` | `businessID: Int64?`、迁移锚点与可撤销合并快照 | 保存动作合并的受影响对象和可撤销信息。 |
-| <!-- schema-model: TrainingProgram | id,businessID,name,overview,statusRaw,currentTemplateVersionID,createdAt,updatedAt,templateVersions --> `TrainingProgram` | `businessID: Int64?`、迁移锚点及计划字段 | `overview` 以 `originalName: goal` 无损沿用旧列；版本集合是 cascade 组成关系。 |
-| <!-- schema-model: WorkoutTemplateVersion | id,businessID,programID,familyID,version,name,scheduleHint,source,createdAt,changeSummary,changeDetails,program,templateExercises --> `WorkoutTemplateVersion` | `businessID: Int64?`、迁移锚点及模板版本字段 | `familyID + version` 表达版本链，并显式关联 Program 与动作集合。 |
-| <!-- schema-model: TemplateExercise | id,businessID,templateVersionID,exerciseID,templateVersion,exerciseDefinition,order,targetSets,targetReps,targetWeightKG,targetRestSeconds,firstSetIsWarmup,equipmentKind,notes,lateralityRaw,setPrescriptions --> `TemplateExercise` | `businessID: Int64?`、动作级兼容处方、从动作定义复制的 `lateralityRaw` 及父子关系 | 聚合目标只服务旧数据；V5 新处方读取 cascade 独立组集合；用户侧别以 `ExerciseDefinition` 为准。 |
+| `ExerciseDefinition` | `canonicalNameKey: String [unique]`、`id: UUID`、`canonicalName: String`、`createdAt: Date`、`updatedAt: Date`、`archivedAt: Date?`、`mergedIntoID: UUID?`、`coachingNotes: String`、`primaryMusclesData: Data`、`secondaryMusclesData: Data`、`movementPatternsData: Data`、`muscleDiagramAssetName: String?`、`userDemoVideosData: Data`、`guidanceVideosData: Data`、`imageReferencesData: Data`、`lateralityRaw: String`、`targetKindRaw: String` | `mergedIntoID` 是动作合并后的自引用；规范名键唯一。内容字段只保存当前状态。空的 `lateralityRaw`/`targetKindRaw` 表示尚未配置，展示时按全身和按次数解释。 |
+| <!-- schema-model: ExerciseMergeRecord | id,businessID,sourceExerciseID,targetExerciseID,sourceName,affectedWorkoutIDsData,affectedTemplateExerciseIDsData,affectedPerformanceIDsData,affectedRecommendationIDsData,transferredUserDemoVideosData,transferredGuidanceVideosData,transferredImageReferencesData,createdAt,undoneAt --> `ExerciseMergeRecord` | `businessID: Int64?`、迁移锚点与可撤销合并快照 | 保存动作合并的受影响对象和可撤销媒体信息。 |
+| <!-- schema-model: TrainingProgram | id,businessID,name,overview,statusRaw,prescriptionGroupID,scheduleHint,createdAt,updatedAt,templateExercises --> `TrainingProgram` | `businessID: Int64?`、迁移锚点、当前计划字段与 cascade 动作关系 | 当前计划直接拥有处方，不维护版本号或版本链。 |
+| <!-- schema-model: TemplateExercise | id,businessID,prescriptionGroupID,exerciseID,program,exerciseDefinition,order,targetSets,targetReps,targetWeightKG,targetRestSeconds,firstSetIsWarmup,equipmentKind,notes,lateralityRaw,setPrescriptions --> `TemplateExercise` | `businessID: Int64?`、当前计划关系、动作级兼容处方、从动作定义复制的 `lateralityRaw` 及独立组集合 | `prescriptionGroupID` 是旧列无损迁移后的当前计划分组锚点；新业务通过 `program` 关系读取。用户侧别以 `ExerciseDefinition` 为准。 |
 | <!-- schema-model: TemplateSetPrescription | id,businessID,templateExerciseID,templateExercise,order,kindRaw,targetKindRaw,targetReps,targetDurationSeconds,targetWeightKG,leftWeightKG,rightWeightKG,restBetweenSidesSeconds,restAfterSetSeconds,notes --> `TemplateSetPrescription` | 独立逻辑组的类型、次数/时长、逐侧重量、两类间歇与备注 | `templateExerciseID` 是迁移锚点，`templateExercise` 是业务关系；target kind 决定 reps/duration union。 |
-| <!-- schema-model: WorkoutSession | id,businessID,startedAt,endedAt,gymID,programID,programNameSnapshot,sourceTemplateFamilyID,sourceTemplateVersion,prescriptionSnapshotData,statusRaw,guidedPhaseRaw,currentPerformanceID,currentSetID,currentEffortID,phaseStartedAt,phaseDeadlineAt,transitionRevision,restStartedAt,restTargetEndAt,autoRecordingPolicyRaw,queuedRecordingEffortID,automaticRecordingPaused,automaticRecordingPauseCodeRaw,automaticRecordingPauseReason,sourceTurnID,sourceJobID,performances --> `WorkoutSession` | `businessID: Int64?`、不可变处方快照、当前 Performance/Set/Effort、录像恢复状态及动作集合 | `transitionRevision` 防止重复推进；录像预约及带 code/reason 的暂停原因可跨 View 重建恢复；Performance 为 cascade 子项。 |
+| <!-- schema-model: WorkoutSession | id,businessID,startedAt,endedAt,gymID,programID,programNameSnapshot,prescriptionSnapshotData,statusRaw,guidedPhaseRaw,currentPerformanceID,currentSetID,currentEffortID,phaseStartedAt,phaseDeadlineAt,transitionRevision,restStartedAt,restTargetEndAt,autoRecordingPolicyRaw,queuedRecordingEffortID,automaticRecordingPaused,automaticRecordingPauseCodeRaw,automaticRecordingPauseReason,sourceTurnID,sourceJobID,performances --> `WorkoutSession` | `businessID: Int64?`、不可变处方快照、当前 Performance/Set/Effort、录像恢复状态及动作集合 | `transitionRevision` 是状态机并发令牌，不是业务版本；录像预约及带 code/reason 的暂停原因可跨 View 重建恢复；Performance 为 cascade 子项。 |
 | <!-- schema-model: ExercisePerformance | id,businessID,sessionID,session,exerciseID,exerciseDefinition,exerciseName,order,prescriptionSnapshotData,statusRaw,notes,activeVideoPath,activeVideoKindRaw,workoutProjectionSuppressed,projectedWorkout,workoutSets --> `ExercisePerformance` | `businessID: Int64?`、Session/动作关系、执行字段、逻辑组集合和可空投影 | 业务上每个终态 Performance 最多一条投影；兼容视频路径同步保存 complete/partial kind；用户删除后 suppression 阻止复活。 |
 | <!-- schema-model: WorkoutSet | id,businessID,performanceID,performance,order,kindRaw,laterality,plannedReps,plannedTargetKindRaw,plannedDurationSeconds,plannedWeightKG,plannedRestSeconds,restBetweenSidesSeconds,actualReps,actualDurationSeconds,actualWeightKG,actualRestSeconds,statusRaw,startedAt,completedAt,recordedVideoPath,recordedVideoKindRaw,efforts --> `WorkoutSet` | 逻辑组、Performance 关系、目标类型、兼容聚合值、组级状态与 Effort 集合 | V5 实际证据读取 cascade Effort；兼容聚合路径同步保存 complete/partial kind，旧数据缺 kind 按 complete 解释。 |
 | <!-- schema-model: WorkoutEffort | id,businessID,workoutSetID,workoutSet,order,sideRaw,targetKindRaw,plannedReps,plannedDurationSeconds,plannedWeightKG,actualReps,actualDurationSeconds,actualWeightKG,actualRestSeconds,statusRaw,startedAt,completedAt,recordedVideoPath,recordedVideoKindRaw --> `WorkoutEffort` | `none/left/right` 原子执行的目标、实际值、状态、时间、视频路径与证据种类 | `.both` 由同一 Set 下 left/right 两条表达；`recordedVideoKindRaw` 区分 complete/partial，旧路径缺 kind 按 complete；缺失实际字段保持 `nil`。 |
@@ -108,10 +108,9 @@ Effort、修复关系/投影键、分配业务 ID 并写入 schema version 5 mar
 | `ExerciseDefinition.primaryMusclesData`、`secondaryMusclesData`、`movementPatternsData` | `[String]` |
 | `ExerciseDefinition.userDemoVideosData` | `[MediaAttachmentReference]` |
 | `ExerciseDefinition.guidanceVideosData` | `[ExerciseVideoSource]` |
-| `ExerciseDefinition.contentRevisionsData` | `[ExerciseContentRevision]` |
 | `ExerciseDefinition.imageReferencesData` | `[ExerciseImageReference]` |
 | `ExerciseMergeRecord` 的 `affected…IDsData` | `[UUID]` |
-| `ExerciseMergeRecord` 的 `transferred…Data` | 对应的 revision、media、video 或 image reference 数组 |
+| `ExerciseMergeRecord` 的 `transferred…Data` | 对应的 media、video 或 image reference 数组 |
 | `WorkoutSession.prescriptionSnapshotData` | `[TemplateExercisePrescription]`，其中 `plannedSets` 保存独立组值 |
 | `ExercisePerformance.prescriptionSnapshotData` | `TemplateExercisePrescription`，旧聚合字段继续可解码 |
 | `CoachMessage.agentEventsData` | `[AgentTraceSpan]` |
@@ -140,8 +139,7 @@ erDiagram
     ExerciseDefinition o|--o{ ExerciseDefinition : "mergedIntoID"
     ExerciseDefinition ||--o{ ExerciseMergeRecord : "source/targetExerciseID"
 
-    TrainingProgram ||--o{ WorkoutTemplateVersion : "programID"
-    WorkoutTemplateVersion ||--o{ TemplateExercise : "templateVersionID"
+    TrainingProgram ||--o{ TemplateExercise : "program"
     TemplateExercise ||--o{ TemplateSetPrescription : "templateExerciseID"
     TrainingProgram o|--o{ WorkoutSession : "programID"
     WorkoutSession ||--o{ ExercisePerformance : "sessionID"

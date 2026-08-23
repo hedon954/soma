@@ -22,7 +22,6 @@ enum PersonalDataStore {
         try context.delete(model: ExerciseMergeRecord.self)
         try context.delete(model: WorkoutEntry.self)
         try context.delete(model: TrainingProgram.self)
-        try context.delete(model: WorkoutTemplateVersion.self)
         try context.delete(model: TemplateExercise.self)
         try context.delete(model: TemplateSetPrescription.self)
         try context.delete(model: WorkoutSession.self)
@@ -100,7 +99,6 @@ extension PersonalDataSnapshot {
         total += exerciseDefinitions?.count ?? 0
         total += exerciseMergeRecords?.count ?? 0
         total += trainingPrograms?.count ?? 0
-        total += workoutTemplateVersions?.count ?? 0
         total += templateExercises?.count ?? 0
         total += templateSetPrescriptions?.count ?? 0
         total += workoutSessions?.count ?? 0

@@ -140,6 +140,7 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
 
         XCTAssertTrue(system.hasPrefix("[SOMA SYSTEM v2]"))
         XCTAssertTrue(system.contains("## 固定安全、真实性与授权契约"))
+        XCTAssertTrue(system.contains("有多项行动建议时使用 `## 建议` 和短列表"))
         XCTAssertFalse(system.contains("create_workout"))
         XCTAssertFalse(system.contains("list_workouts"))
         XCTAssertFalse(system.contains("additionalProperties"))

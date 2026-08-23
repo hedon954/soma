@@ -73,11 +73,7 @@ private struct InlineWorkoutCard: View {
     let sourceMessage: CoachMessage?
     let isEditable: Bool
     @State private var exercise: String
-    @State private var sets: String
-    @State private var reps: String
-    @State private var weight: String
-    @State private var duration: String
-    @State private var rest: String
+    @State private var workoutDraft: WorkoutRecordDraft
     @State private var showsDelete = false
 
     private var linkedDefinition: ExerciseDefinition? {
@@ -87,67 +83,32 @@ private struct InlineWorkoutCard: View {
         return nil
     }
 
-    private var usesDuration: Bool {
-        ExerciseLoggingProfile.resolvedTargetKind(
-            exercise: linkedDefinition,
-            evidenceTargetKind: workout.setEntries.compactMap(\.targetKind).first,
-            reps: workout.representativeReps,
-            durationSeconds: representativeDuration
-        ) == .duration
-    }
-
-    private var representativeDuration: Int? {
-        let entries = workout.setEntries
-        guard !entries.isEmpty else { return nil }
-        let values = entries.compactMap(\.durationSeconds)
-        guard values.count == entries.count, Set(values).count == 1 else {
-            return nil
-        }
-        return values.first
-    }
-
     init(workout: WorkoutEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.workout = workout
         self.sourceMessage = sourceMessage
         self.isEditable = isEditable
         _exercise = State(initialValue: workout.exercise)
-        _sets = State(initialValue: workout.setCount.map(String.init) ?? "")
-        _reps = State(initialValue: workout.representativeReps.map(String.init) ?? "")
-        let durationValues = workout.setEntries.compactMap(\.durationSeconds)
-        let sharedDuration = durationValues.count == workout.setEntries.count
-            && Set(durationValues).count == 1
-            ? durationValues.first
-            : nil
-        _duration = State(initialValue: sharedDuration.map(String.init) ?? "")
-        _weight = State(initialValue: workout.representativeWeight.map { $0.formatted() } ?? "")
-        _rest = State(initialValue: workout.restSeconds.map(String.init) ?? "")
+        _workoutDraft = State(
+            initialValue: WorkoutRecordDraft(evidence: workout.setEntries)
+        )
     }
 
     var body: some View {
         InlineRecordShell(
             title: exercise.isEmpty ? "训练记录" : exercise,
             titleText: isEditable ? $exercise : nil,
-            icon: "figure.strengthtraining.traditional",
+            icon: "dumbbell.fill",
+            iconTint: AppTheme.trainingAccent,
+            iconSoftTint: AppTheme.trainingSoftTint,
             isEditable: isEditable,
             onSave: save,
             onDelete: { showsDelete = true }
         ) {
-            if isEditable {
-                HStack(spacing: 6) {
-                    compactMetric("组", text: $sets)
-                    if usesDuration {
-                        compactMetric("秒", text: $duration)
-                    } else {
-                        compactMetric("次", text: $reps)
-                    }
-                    compactMetric("kg", text: $weight, decimal: true)
-                    compactMetric("间歇", text: $rest)
-                }
-            } else {
-                Text(workout.setEvidenceSummary ?? "组次与重量未填写")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            WorkoutLogicalGroupsEditor(
+                draft: $workoutDraft,
+                isEditable: isEditable,
+                fallbackRestSeconds: workout.restSeconds
+            )
         }
         .confirmationDialog("删除这条训练记录？", isPresented: $showsDelete) {
             Button("删除记录", role: .destructive, action: deleteRecord)
@@ -156,7 +117,7 @@ private struct InlineWorkoutCard: View {
 
     private func save() -> Bool {
         let normalized = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return false }
+        guard !normalized.isEmpty, workoutDraft.isValid else { return false }
         let nameKey = ExerciseLibraryStore.canonicalNameKey(normalized)
         if let exerciseID = workout.exerciseID,
            let current = definitions.first(where: { $0.id == exerciseID }),
@@ -172,22 +133,7 @@ private struct InlineWorkoutCard: View {
             allowCreate: true
         )
         exercise = definition?.canonicalName ?? normalized
-        workout.setEntries = (0 ..< (Int(sets) ?? 0)).map { _ in
-            if usesDuration {
-                WorkoutSetEvidence(
-                    targetKind: .duration,
-                    durationSeconds: Int(duration),
-                    externalWeightKG: Double(weight)
-                )
-            } else {
-                WorkoutSetEvidence(
-                    targetKind: .repetitions,
-                    reps: Int(reps),
-                    externalWeightKG: Double(weight)
-                )
-            }
-        }
-        workout.restSeconds = Int(rest)
+        workout.setEntries = workoutDraft.evidence
         let estimate = WorkoutCalorieCalculator.estimate(
             exercise: workout.exercise,
             intensity: workout.intensity,
@@ -202,9 +148,7 @@ private struct InlineWorkoutCard: View {
         workout.calorieDurationMinutes = estimate?.durationMinutes
         workout.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         sourceMessage?.recordManualCorrection(
-            usesDuration
-                ? "训练记录 \(workout.id.uuidString) 已改为 \(workout.exercise)，\(sets)组，\(duration)秒，\(weight)kg，间歇\(rest)秒"
-                : "训练记录 \(workout.id.uuidString) 已改为 \(workout.exercise)，\(sets)组，\(reps)次，\(weight)kg，间歇\(rest)秒"
+            "训练记录 \(workout.id.uuidString) 已修改，动作 \(workout.exercise)，保留 \(workoutDraft.groups.count) 个逻辑组的逐组事实"
         )
         try? modelContext.save()
         return true
@@ -242,6 +186,8 @@ private struct InlineBodyCard: View {
         InlineRecordShell(
             title: "身体记录",
             icon: "scalemass",
+            iconTint: AppTheme.bodyAccent,
+            iconSoftTint: AppTheme.bodySoftTint,
             isEditable: isEditable,
             onSave: save,
             onDelete: { showsDelete = true }

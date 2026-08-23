@@ -51,6 +51,8 @@ struct InlineMealCards: View {
         InlineRecordShell(
             title: "记饮食",
             icon: "fork.knife",
+            iconTint: AppTheme.mealAccent,
+            iconSoftTint: AppTheme.mealSoftTint,
             isEditable: isEditable,
             onSave: isEditable ? save : nil,
             onDelete: isEditable ? { showsDelete = true } : nil,
@@ -72,7 +74,7 @@ struct InlineMealCards: View {
                     } label: {
                         Label("添加菜品", systemImage: "plus.circle")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppTheme.tint)
+                            .foregroundStyle(AppTheme.mealAccent)
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.plain)
@@ -97,10 +99,10 @@ struct InlineMealCards: View {
                         .font(.system(size: 8, weight: .bold))
                 }
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.tint)
+                .foregroundStyle(AppTheme.mealAccent)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
-                .background(AppTheme.tint.opacity(0.12), in: Capsule())
+                .background(AppTheme.mealSoftTint, in: Capsule())
             }
             .accessibilityLabel("餐次")
             .accessibilityValue(mealType.rawValue)
@@ -322,10 +324,10 @@ struct MealItemIcon: View {
     var body: some View {
         Image(systemName: "takeoutbag.and.cup.and.straw.fill")
             .font(.caption2)
-            .foregroundStyle(AppTheme.tint)
+            .foregroundStyle(AppTheme.mealAccent)
             .frame(width: 22, height: 22)
             .background(
-                AppTheme.tint.opacity(0.12),
+                AppTheme.mealSoftTint,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .accessibilityHidden(true)
@@ -363,7 +365,7 @@ struct InlineTextValue: View {
         .padding(.horizontal, 5)
         .padding(.vertical, 3)
         .background(
-            isFocused ? AppTheme.tint.opacity(0.12) : .clear,
+            isFocused ? AppTheme.softTint : .clear,
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
         .animation(.easeInOut(duration: 0.15), value: isFocused)
@@ -385,6 +387,8 @@ private struct MealTotalsCard: View {
         InlineRecordShell(
             title: "饮食评价",
             icon: "chart.pie",
+            iconTint: AppTheme.mealAccent,
+            iconSoftTint: AppTheme.mealSoftTint,
             isEditable: false,
             showsLockWhenReadOnly: false
         ) {
@@ -435,10 +439,10 @@ private struct MealTotalsCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                         .background(
-                            AppTheme.tint.opacity(0.12),
+                            AppTheme.mealSoftTint,
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                         )
-                        .foregroundStyle(AppTheme.tint)
+                        .foregroundStyle(AppTheme.mealAccent)
                 }
                 .buttonStyle(.plain)
             }

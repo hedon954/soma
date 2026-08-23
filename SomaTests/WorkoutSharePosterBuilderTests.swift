@@ -96,11 +96,10 @@ final class WorkoutSharePosterBuilderTests: XCTestCase {
     }
 
     @MainActor
-    func testProgramDisplayNameOmitsVersionSuffix() throws {
+    func testProgramDisplayNameUsesSessionSnapshotName() throws {
         let session = WorkoutSession(
             programID: UUID(),
             programNameSnapshot: "基础力量训练",
-            sourceTemplateVersion: 1,
             status: .completed
         )
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -113,11 +112,10 @@ final class WorkoutSharePosterBuilderTests: XCTestCase {
             in: container.mainContext
         )
         XCTAssertEqual(name, "基础力量训练")
-        XCTAssertFalse(name?.contains("v1") == true)
     }
 
     @MainActor
-    func testProgramDisplayNameStripsVersionFromSourceLabel() throws {
+    func testProgramDisplayNameUsesCurrentProgramName() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: WorkoutSession.self,
@@ -129,7 +127,6 @@ final class WorkoutSharePosterBuilderTests: XCTestCase {
         context.insert(program)
         let session = WorkoutSession(
             programID: program.id,
-            sourceTemplateVersion: 2,
             status: .completed
         )
         context.insert(session)
@@ -137,7 +134,7 @@ final class WorkoutSharePosterBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             TrainingPlanStore.programSourceLabel(for: session, in: context),
-            "推日 · v2"
+            "推日"
         )
         XCTAssertEqual(
             WorkoutSharePosterBuilder.programDisplayName(for: session, in: context),

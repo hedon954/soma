@@ -7,7 +7,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
     func testOnlyCurrentPlanAndBatchWriteToolsAdvertiseSchemaThree() {
         XCTAssertEqual(AgentToolName.getProgram.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.createProgram.schemaVersion, 3)
-        XCTAssertEqual(AgentToolName.createProgramVersion.schemaVersion, 3)
+        XCTAssertEqual(AgentToolName.updateProgram.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.createWorkout.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.startProgram.schemaVersion, 2)
@@ -20,7 +20,6 @@ final class AgentPlanToolV3Tests: XCTestCase {
         let resolved = try resolve([
             "program_name": "虚构逐组计划",
             "overview": "左右独立。",
-            "template_name": "A",
             "template_exercises": [[
                 "exercise_id": 42,
                 "order": 1,
@@ -82,7 +81,6 @@ final class AgentPlanToolV3Tests: XCTestCase {
         let legacy: [String: Any] = [
             "program_name": "虚构旧计划",
             "goal": "旧 Job",
-            "template_name": "A",
             "template_exercises": [[
                 "exercise_id": 42,
                 "order": 1,
@@ -124,7 +122,6 @@ final class AgentPlanToolV3Tests: XCTestCase {
                 arguments: AgentToolArguments(
                     programName: "V3 计划",
                     overview: "左右重量不同。",
-                    templateName: "A",
                     templateExercises: [AgentTemplateExerciseInput(
                         exerciseID: exerciseID,
                         order: 1,
@@ -155,9 +152,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
                 .first { $0.name == "V3 计划" }
         )
         XCTAssertEqual(v3Program.overview, "左右重量不同。")
-        let v3Version = try currentVersion(for: v3Program, in: fixture.context)
         let v3Prescription = try XCTUnwrap(
-            TrainingPlanStore.prescriptions(for: v3Version, in: fixture.context).first
+            TrainingPlanStore.prescriptions(for: v3Program, in: fixture.context).first
         )
         XCTAssertEqual(v3Prescription.laterality, .both)
         XCTAssertEqual(v3Prescription.plannedSets.first?.targetKind, .duration)
@@ -170,7 +166,6 @@ final class AgentPlanToolV3Tests: XCTestCase {
                 arguments: AgentToolArguments(
                     programName: "V2 恢复计划",
                     goal: "旧 Job",
-                    templateName: "旧 A",
                     templateExercises: [AgentTemplateExerciseInput(
                         exerciseID: exerciseID,
                         order: 1,
@@ -192,9 +187,8 @@ final class AgentPlanToolV3Tests: XCTestCase {
             try fixture.context.fetch(FetchDescriptor<TrainingProgram>())
                 .first { $0.name == "V2 恢复计划" }
         )
-        let legacyVersion = try currentVersion(for: legacyProgram, in: fixture.context)
         let legacyPrescription = try XCTUnwrap(
-            TrainingPlanStore.prescriptions(for: legacyVersion, in: fixture.context).first
+            TrainingPlanStore.prescriptions(for: legacyProgram, in: fixture.context).first
         )
         XCTAssertEqual(legacyPrescription.laterality, .none)
         XCTAssertEqual(legacyPrescription.plannedSets.count, 3)
@@ -246,7 +240,6 @@ final class AgentPlanToolV3Tests: XCTestCase {
         let set = set ?? validSet()
         return [
             "program_name": "虚构计划",
-            "template_name": "A",
             "template_exercises": [[
                 "exercise_id": 42,
                 "order": order,
@@ -282,17 +275,5 @@ final class AgentPlanToolV3Tests: XCTestCase {
             isStoredInMemoryOnly: true
         )
         return try (ModelContext(XCTUnwrap(spaces.personalContainer)), defaults, suite)
-    }
-
-    @MainActor
-    private func currentVersion(
-        for program: TrainingProgram,
-        in context: ModelContext
-    ) throws -> WorkoutTemplateVersion {
-        let id = try XCTUnwrap(program.currentTemplateVersionID)
-        return try XCTUnwrap(
-            try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first { $0.id == id }
-        )
     }
 }

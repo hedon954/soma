@@ -6,6 +6,7 @@
   - [PRD 010](010-exercise-library-plans-guided-training.md) 的程序化带练与自动录像交互
   - [PRD 012](012-gui-training-program-authoring.md) 的计划 GUI 编排交互
 - 后续修订：
+  - [PRD 040](040-current-state-business-data-with-session-facts.md) 删除保存新版本交互，保留 Session 处方快照
   - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 取消二级开始页与手动休息推进，并以独立逻辑组/Effort 扩展左右和时长训练
   - [PRD 014](014-guided-workout-recording-cues-and-review.md) 改为按需启动相机，扩展录像策略、语音和完成复盘
   - [PRD 016](016-training-primary-tab.md) 将高频计划与带练入口迁移到一级训练 Tab

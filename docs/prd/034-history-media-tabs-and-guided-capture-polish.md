@@ -14,6 +14,7 @@
   - [PRD 033](033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md) 的聊天饮食双卡片密度与执行日志内联展开 LLM 入参
 - 后续修订：
   - [PRD 035](035-guided-preview-then-record-and-immediate-share.md) 将自动录像改为倒计时只取景、开组后再写文件，完成后立即分享并回到训练主页
+  - [PRD 039](039-frequency-first-dual-theme-ui.md) 统一根标题、浅深卡片层级、二级列表密度与频率优先页面顺序
 - 上游依据：
   - [BUG 0025](../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)
 - 下游落地：[ADR 0086](../adr/0086-preview-and-history-thumbs-use-aspect-fill.md)

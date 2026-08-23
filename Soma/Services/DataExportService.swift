@@ -277,7 +277,6 @@ enum DataExportService {
             calorieMET: workout.calorieMET,
             calorieDurationMinutes: workout.calorieDurationMinutes,
             calorieDurationEstimated: workout.calorieDurationEstimated,
-            calorieAlgorithmVersion: workout.calorieAlgorithmVersion,
             externalSource: workout.externalSource,
             externalID: workout.externalID,
             sourceTurnID: workout.sourceTurnID,

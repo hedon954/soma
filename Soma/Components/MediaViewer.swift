@@ -103,7 +103,7 @@ struct MediaViewer: View {
             }
             .opacity(chromeOpacity)
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(AppAppearancePolicy.mediaViewerColorScheme)
         .statusBarHidden()
         .mediaZoomDestination(
             sourceID: zoomSourceID ?? selectedAttachmentID,

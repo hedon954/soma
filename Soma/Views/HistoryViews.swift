@@ -108,6 +108,7 @@ struct WorkoutHistoryView: View {
         .historyListChrome(
             title: "训练记录",
             systemImage: "figure.strengthtraining.traditional",
+            role: .training,
             selected: filter,
             chips: monthChips,
             onSelect: { filter = $0 }
@@ -279,6 +280,7 @@ struct MealHistoryView: View {
         .historyListChrome(
             title: "饮食记录",
             systemImage: "fork.knife",
+            role: .meal,
             selected: filter,
             chips: monthChips,
             onSelect: { filter = $0 }
@@ -475,7 +477,8 @@ private struct MealHistoryRow: View {
                 path: meal.mediaAttachments.first?.path,
                 fallbackIcon: meal.mealType.icon,
                 width: meal.mediaAttachments.first?.kind == .video ? 42 : 58,
-                height: meal.mediaAttachments.first?.kind == .video ? 74 : 58
+                height: meal.mediaAttachments.first?.kind == .video ? 74 : 58,
+                role: .meal
             )
 
             VStack(alignment: .leading, spacing: 5) {
@@ -521,7 +524,8 @@ private struct BodyHistoryRow: View {
             MediaThumbnail(
                 kind: entry.mediaAttachments.first?.kind ?? .none,
                 path: entry.mediaAttachments.first?.path,
-                fallbackIcon: "scalemass"
+                fallbackIcon: "scalemass",
+                role: .body
             )
 
             VStack(alignment: .leading, spacing: 5) {

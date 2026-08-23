@@ -31,10 +31,8 @@ enum DemoTrainingPlanSeeder {
         _ = try? TrainingPlanStore.createProgram(
             name: "基础力量训练",
             goal: "稳定提升全身基础力量",
-            templateName: "上肢下肢组合 A",
             scheduleHint: "按状态完成，动作之间充分休息。",
             prescriptions: prescriptions,
-            source: "demo",
             in: context
         )
     }

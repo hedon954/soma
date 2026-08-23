@@ -125,15 +125,9 @@ enum DataArchiveTestSupport {
         let program = TrainingProgram(
             name: "测试计划",
             goal: "稳定训练",
+            scheduleHint: "训练 A",
             createdAt: fixedDate
         )
-        let template = WorkoutTemplateVersion(
-            programID: program.id,
-            version: 1,
-            name: "训练 A",
-            createdAt: fixedDate
-        )
-        program.currentTemplateVersionID = template.id
         let prescription = TemplateExercisePrescription(
             exerciseID: exercise.id,
             exerciseName: exercise.canonicalName,
@@ -145,7 +139,7 @@ enum DataArchiveTestSupport {
         )
         let templateExercise = TemplateExercise(
             id: prescription.id,
-            templateVersionID: template.id,
+            prescriptionGroupID: program.prescriptionGroupID ?? program.id,
             exerciseID: exercise.id,
             order: 1,
             targetSets: 1,
@@ -162,8 +156,8 @@ enum DataArchiveTestSupport {
         )
         let workoutSession = WorkoutSession(
             startedAt: fixedDate.addingTimeInterval(3600),
-            sourceTemplateFamilyID: template.familyID,
-            sourceTemplateVersion: 1,
+            programID: program.id,
+            programNameSnapshot: program.name,
             prescriptionSnapshot: [prescription],
             status: .completed,
             guidedPhase: .completed,
@@ -173,6 +167,7 @@ enum DataArchiveTestSupport {
             automaticRecordingPauseCode: .permissionDenied,
             automaticRecordingPauseReason: "没有相机权限；可在系统设置中开启。"
         )
+        templateExercise.program = program
         let performance = ExercisePerformance(
             sessionID: workoutSession.id,
             exerciseID: exercise.id,
@@ -215,7 +210,6 @@ enum DataArchiveTestSupport {
             recordedVideoKind: .partial
         )
         context.insert(program)
-        context.insert(template)
         context.insert(templateExercise)
         context.insert(setPrescription)
         context.insert(workoutSession)
@@ -223,8 +217,8 @@ enum DataArchiveTestSupport {
         context.insert(workoutSet)
         context.insert(workoutEffort)
         context.insert(RecommendationSnapshot(
-            targetKind: "template",
-            targetID: template.id,
+            targetKind: "training_program",
+            targetID: program.id,
             inputFingerprint: "test-plan-fingerprint",
             advice: "测试建议",
             createdAt: fixedDate
@@ -253,7 +247,6 @@ enum DataArchiveTestSupport {
             affectedTemplateExerciseIDs: [templateExercise.id],
             affectedPerformanceIDs: [performance.id],
             affectedRecommendationIDs: [],
-            transferredContentRevisionIDs: [UUID()],
             transferredUserDemoVideos: [
                 MediaAttachmentReference(
                     kind: .video,

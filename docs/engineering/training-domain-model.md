@@ -14,6 +14,7 @@
   - [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)
   - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0086](../adr/0086-preview-and-history-thumbs-use-aspect-fill.md)
+  - [ADR 0090](../adr/0090-current-state-business-models-and-session-facts.md)
   - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
@@ -34,10 +35,9 @@ ExerciseDefinition
   └─ ExercisePerformance
 
 TrainingProgram
-  └─ WorkoutTemplateVersion
-       └─ TemplateExercise
-            └─ TemplateSetPrescription（独立逻辑组）
-            ↓ 开始时快照
+  └─ TemplateExercise
+       └─ TemplateSetPrescription（当前独立逻辑组）
+       ↓ 开始时快照
 WorkoutSession
   └─ ExercisePerformance
        ├─ WorkoutSet（逻辑组）
@@ -46,7 +46,7 @@ WorkoutSession
 ```
 
 - `ExerciseDefinition` 是动作身份事实。
-- `WorkoutTemplateVersion` 是可修改的计划处方。
+- `TrainingProgram` 直接拥有当前计划处方。
 - `WorkoutSession` 是一次执行容器。
 - `TemplateSetPrescription` 是完全独立的计划逻辑组，不依赖动作级统一默认值。
 - `WorkoutSet` 是用户看到的逻辑组；`WorkoutEffort.actual*` 是左右、次数/时长和录像的原子事实。
@@ -81,14 +81,15 @@ SwiftData transaction 内迁移：
 - `WorkoutEntry.exerciseID`；
 - `TemplateExercise.exerciseID`；
 - `ExercisePerformance.exerciseID`；
-- `ExerciseContent`、`ExerciseMedia`；
+- `ExerciseMedia`；
 - Recommendation target。
 
 撤销仅保证最近一次、尚未发生冲突性后续编辑的合并；无法安全撤销时提示用户，不猜测拆分。
 
 ### 内容与媒体
 
-`ExerciseContent` 保存可编辑提示、主要肌群、辅助肌群、动作模式、来源和版本。
+`ExerciseContent` 是编辑和生成时使用的当前值对象；`ExerciseDefinition` 直接保存当前提示、主要
+肌群、辅助肌群和动作模式。
 `ExerciseMedia` 保存：
 
 - `kind`: userDemo/somaOwned/licensed/externalLink；
@@ -96,8 +97,8 @@ SwiftData transaction 内迁移：
 - `rightsNote`、`sourceTitle`、`sortOrder`；
 - 创建、修改时间。
 
-外部链接不是本地副本；链接失效不删除来源记录。多个内容版本通过显式版本或历史快照恢复，
-不把每次 AI 生成直接覆盖成不可逆文本。
+外部链接不是本地副本；链接失效不删除来源记录。动作内容编辑或 AI 生成直接更新当前值，不维护
+内容修订数组或恢复入口。
 
 #### 静默内置目录
 
@@ -125,11 +126,8 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 ### 计划
 
-`TrainingProgram` 保存名称、可编辑 `overview`、状态和当前版本引用。V5 使用
-`@Attribute(originalName: "goal")` 无损延续旧字段，`goal` 只作为兼容访问器，不再形成第二份事实。
-
-`WorkoutTemplateVersion` 保存稳定 template family ID、单调 version、名称、schedule hint、创建来源
-与时间。模板名称和 schedule hint 是版本事实，但不在计划详情首屏显示为“当前模板”。
+`TrainingProgram` 保存名称、可编辑 `overview`、状态、`scheduleHint` 与当前动作处方。旧 `goal`
+只作为迁移来源，不形成第二份事实。计划不保存版本号、版本来源、差异摘要或恢复链。
 
 `TemplateExercise` 保存动作关系、顺序、从 `ExerciseDefinition` 复制的 `lateralityRaw`、器械与动作
 备注。用户面对的侧别在动作定义上修改。laterality 只允许：
@@ -152,14 +150,14 @@ V4 的 `targetSets/targetReps/targetWeightKG/targetRestSeconds/firstSetIsWarmup`
 | 间歇 | `restBetweenSidesSeconds` 只对 both 有意义；`restAfterSetSeconds` 属于本逻辑组之后 |
 | 备注 | 可选组备注，空字符串不能被理解为模型已知事实 |
 
-任何动作、独立组或排序变化都创建新版本。开始训练时将独立组编码进
-`TemplateExercisePrescription.plannedSets`，之后修改模板不影响既有 Session。
+任何动作、独立组或排序变化都直接更新当前计划。开始训练时将独立组编码进
+`TemplateExercisePrescription.plannedSets`，之后修改计划不影响既有 Session。
 
 ### 执行事实
 
 `WorkoutSession` 保存不可变处方快照、状态以及当前 `performance/set/effort`。V5 新增
 `currentEffortID`、`phaseDeadlineAt` 与 `transitionRevision`；`restTargetEndAt` 继续用于兼容休息通知
-和旧恢复路径。来源 Turn/Job、场馆、模板 family/version 与开始/结束时间保持原语义。
+和旧恢复路径。来源 Turn/Job、场馆、计划 ID/名称快照与开始/结束时间保持原语义。
 
 `ExercisePerformance` 保存动作关系、顺序、本动作独立组快照、状态、备注和旧视频入口；
 `projectedWorkout` 是终态业务投影的一对一关系，`workoutProjectionSuppressed` 继续表达用户明确
@@ -234,8 +232,8 @@ Effort 不被伪造成重量容量；逻辑组数按 Set 计算，不因 both �
 固定能力分为：
 
 - `list_programs`、`get_program`：按 Int64 ID 返回计划摘要与详情；
-- `create_program`：创建计划及首个不可变版本，每个动作都必须绑定有效 Int64 `exercise_id`；
-- `create_program_version`：从现有计划创建不可变新版本，不原地覆盖历史版本；
+- `create_program`：创建当前计划，每个动作都必须绑定有效 Int64 `exercise_id`；
+- `update_program`：按 `program_id` 直接替换当前名称、安排和完整动作处方；
 - `archive_program`、`delete_program`：分别归档或在明确授权后永久删除计划；
 - `start_program`：只接受列表返回的计划 ID，在设备本地创建不可变 Session 并打开带练。
 
@@ -405,7 +403,7 @@ Performance 终态、完成 Session、结束系统投影并进入本地分享预
 | 层 | 必须覆盖 |
 | --- | --- |
 | Model | 名称唯一、ID/关系、独立组、Set/Effort 真值、一对一投影、级联删除 |
-| Tool | ID/name、nested set schema、严格 union、旧 schema 恢复、跨空间、幂等、计划版本 |
+| Tool | ID/name、nested set schema、严格 union、旧 schema 恢复、跨空间、幂等、当前计划更新 |
 | Migration | 当前 schema 无 plan 打开、启动门禁展开旧聚合处方/Effort、projection key 预修复、旧快照/备份、休息归属、统计不重复、双空间 marker |
 | Candidate | 本地搜索、最近值、nil、只修改草稿 |
 | Catalog/Image | 空库静默、按动作激活、fill-only、资源加载、显式生成、上传、删除、合并与备份 |

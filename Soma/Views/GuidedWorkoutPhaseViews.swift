@@ -14,7 +14,7 @@ struct GuidedExerciseIntroductionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text(performance?.exerciseName ?? "准备动作")
-                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .font(.title2.weight(.semibold))
 
                 ExerciseArtworkView(
                     reference: exercise?.preferredActionIllustration
@@ -37,7 +37,10 @@ struct GuidedExerciseIntroductionView: View {
                 .font(.body)
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: AppTheme.cardRadius))
+                .background(
+                    AppTheme.insetBackground,
+                    in: RoundedRectangle(cornerRadius: AppTheme.cardRadius)
+                )
 
                 Button(action: onPrepare) {
                     Text("准备本动作")
@@ -45,6 +48,7 @@ struct GuidedExerciseIntroductionView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accentEmphasis)
                 .controlSize(.large)
 
                 HStack {
@@ -81,12 +85,12 @@ struct GuidedSetCountdownView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.2)) { context in
             VStack(spacing: 16) {
-                Text("第 \(set?.order ?? 1) 组")
-                    .font(.title2.bold())
+                Text("即将开始")
+                    .font(.title2.weight(.semibold))
                 Text("\(clock.remaining(at: context.date))")
                     .font(.system(size: 108, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppTheme.trainingAccent)
                 Text(targetText)
                     .font(.title.bold())
                 Text("倒计时结束后开始本组")
@@ -128,14 +132,15 @@ struct GuidedPausedView: View {
         VStack(spacing: 20) {
             Image(systemName: "pause.circle.fill")
                 .font(.system(size: 72))
-                .foregroundStyle(.green)
+                .foregroundStyle(AppTheme.tint)
             Text("训练已暂停")
-                .font(.largeTitle.bold())
+                .font(.title2.weight(.semibold))
             Text("未完成录像已经停止；继续后请确认本组状态。")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("继续训练", systemImage: "play.fill", action: onResume)
                 .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accentEmphasis)
                 .controlSize(.large)
         }
         .padding(28)
@@ -157,7 +162,7 @@ struct GuidedSetRecoveryView: View {
                 .font(.system(size: 62))
                 .foregroundStyle(.orange)
             Text("刚才这一组怎么样？")
-                .font(.largeTitle.bold())
+                .font(.title2.weight(.semibold))
             Text("Soma 不会自动把中断的组记为完成。")
                 .foregroundStyle(.secondary)
             if isCompletingEffort {
@@ -171,6 +176,7 @@ struct GuidedSetRecoveryView: View {
             } else {
                 Button("已完成：\(targetText)", action: onCompleted)
                     .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.accentEmphasis)
                     .controlSize(.large)
             }
             HStack(spacing: 24) {
@@ -213,7 +219,7 @@ struct GuidedRestView: View {
                 if let nextSet {
                     Text(nextEffort?.side == .right
                         ? "下一侧 · 右侧"
-                        : "下一组 · 第 \(nextSet.order) 组")
+                        : "下一组")
                         .font(.title3.bold())
                     Text(WorkoutPrescriptionFormatter.setTarget(
                         set: nextSet,
@@ -231,6 +237,7 @@ struct GuidedRestView: View {
                     onFinish()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accentEmphasis)
                 .controlSize(.large)
             }
             .padding(24)
@@ -286,10 +293,10 @@ struct GuidedSessionReviewView: View {
             VStack(spacing: 20) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 64))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppTheme.tint)
                 VStack(spacing: 6) {
                     Text("本次训练已完成")
-                        .font(.largeTitle.bold())
+                        .font(.title2.weight(.semibold))
                     Text(summary.text)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
@@ -326,13 +333,13 @@ struct GuidedSessionReviewView: View {
                                     .foregroundStyle(
                                         exercise.completedSets > 0
                                             || exercise.partialSets > 0
-                                            ? .green
+                                            ? AppTheme.tint
                                             : .secondary
                                     )
                             }
                             .padding(14)
                             .background(
-                                Color(uiColor: .secondarySystemGroupedBackground),
+                                AppTheme.insetBackground,
                                 in: RoundedRectangle(cornerRadius: 16)
                             )
                         }
@@ -342,6 +349,7 @@ struct GuidedSessionReviewView: View {
 
                 Button("查看分享", action: onFinish)
                     .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.accentEmphasis)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
             }
@@ -423,6 +431,7 @@ struct GuidedSessionFinalizationView: View {
                     .foregroundStyle(.secondary)
                 Button("重试保存", action: onRetry)
                     .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.accentEmphasis)
                     .controlSize(.large)
                     .accessibilityHint("重新保存训练记录并打开分享界面")
             }

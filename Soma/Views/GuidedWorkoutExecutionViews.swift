@@ -145,7 +145,10 @@ struct GuidedWorkoutChrome: View {
                             ? "play.fill"
                             : "pause.fill")
                             .font(.headline)
-                            .frame(width: 42, height: 42)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
                             .background(.thinMaterial, in: Circle())
                         Text(session.status == .paused ? "继续" : "暂停")
                             .font(.caption2)
@@ -158,7 +161,10 @@ struct GuidedWorkoutChrome: View {
                     VStack(spacing: 3) {
                         Image(systemName: recordingSystemImage)
                             .font(.headline)
-                            .frame(width: 42, height: 42)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
                             .background(.thinMaterial, in: Circle())
                         Text(recordingLabel)
                             .font(.caption2)
@@ -187,7 +193,10 @@ struct GuidedWorkoutChrome: View {
                     VStack(spacing: 3) {
                         Image(systemName: "ellipsis")
                             .font(.headline)
-                            .frame(width: 42, height: 42)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
                             .background(.thinMaterial, in: Circle())
                         Text("更多")
                             .font(.caption2)
@@ -247,9 +256,9 @@ struct GuidedWorkoutChrome: View {
     ) -> Color {
         switch status {
         case .warning:
-            .orange
+            AppTheme.warning
         case .recording:
-            .red
+            AppTheme.destructive
         case .preparing, .ready:
             .secondary
         }
@@ -260,9 +269,9 @@ struct GuidedWorkoutChrome: View {
     ) -> Color {
         switch status {
         case .warning:
-            .orange.opacity(0.09)
+            AppTheme.warningSoftTint
         case .recording:
-            .red.opacity(0.07)
+            AppTheme.destructive.opacity(0.07)
         case .preparing, .ready:
             .secondary.opacity(0.08)
         }
@@ -275,7 +284,7 @@ struct GuidedWorkoutChrome: View {
                 value: Double(completedExerciseCount),
                 total: Double(max(exerciseCount, 1))
             )
-            .tint(.green)
+            .tint(AppTheme.success)
         } else {
             HStack(spacing: 5) {
                 ForEach(progressExercises) { exercise in
@@ -296,7 +305,7 @@ struct GuidedWorkoutChrome: View {
                                        segment.state != .failed
                                     {
                                         RoundedRectangle(cornerRadius: 3)
-                                            .fill(Color.green)
+                                            .fill(AppTheme.success)
                                             .frame(
                                                 width: proxy.size.width
                                                     * segment.completionFraction
@@ -326,15 +335,15 @@ struct GuidedWorkoutChrome: View {
         case .pending:
             Color.secondary.opacity(0.18)
         case .current:
-            Color.green.opacity(0.55)
+            AppTheme.success.opacity(0.55)
         case .completed:
-            Color.green
+            AppTheme.success
         case .partial:
             Color.secondary.opacity(0.18)
         case .skipped:
             Color.secondary.opacity(0.45)
         case .failed:
-            Color.red.opacity(0.18)
+            AppTheme.destructive.opacity(0.18)
         }
     }
 
@@ -345,7 +354,7 @@ struct GuidedWorkoutChrome: View {
         switch state {
         case .current:
             RoundedRectangle(cornerRadius: 3)
-                .stroke(Color.green, lineWidth: 1.5)
+                .stroke(AppTheme.success, lineWidth: 1.5)
         case .partial:
             Image(systemName: "circle.lefthalf.filled")
                 .font(.system(size: 7, weight: .bold))
@@ -359,7 +368,7 @@ struct GuidedWorkoutChrome: View {
         case .failed:
             Image(systemName: "exclamationmark")
                 .font(.system(size: 7, weight: .black))
-                .foregroundStyle(.red)
+                .foregroundStyle(AppTheme.destructive)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .pending, .completed:
             EmptyView()
@@ -480,7 +489,7 @@ struct GuidedCompactSetView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(performance?.exerciseName ?? "当前动作")
-                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .font(.title2.weight(.semibold))
                     .lineLimit(2)
                 Spacer()
                 if let performance {
@@ -516,10 +525,10 @@ struct GuidedCompactSetView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(setProgressText)
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(AppTheme.tint)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(.green.opacity(0.08), in: Capsule())
+                            .background(AppTheme.softTint, in: Capsule())
                         HStack(spacing: 6) {
                             Text(targetText)
                                 .font(.system(
@@ -549,10 +558,13 @@ struct GuidedCompactSetView: View {
                     } label: {
                         Image(systemName: "lightbulb")
                             .font(.subheadline)
-                            .frame(width: 36, height: 36)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
                             .background(.thinMaterial, in: Circle())
                     }
-                    .foregroundStyle(showsCoachingNote ? .green : .secondary)
+                    .foregroundStyle(showsCoachingNote ? AppTheme.tint : .secondary)
                     .disabled(isCompletingEffort)
                     .accessibilityLabel("教练提示")
                     .accessibilityValue(showsCoachingNote ? "已展开" : "已收起")
@@ -560,11 +572,14 @@ struct GuidedCompactSetView: View {
                     Button(action: onRecord) {
                         Image(systemName: recordingControl.systemImage)
                             .font(.subheadline)
-                            .frame(width: 36, height: 36)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
                             .background(.thinMaterial, in: Circle())
                     }
                     .foregroundStyle(
-                        isRecording || isStartingRecording ? .red : .green
+                        isRecording || isStartingRecording ? .red : AppTheme.tint
                     )
                     .disabled(
                         isCompletingEffort || !recordingControl.isEnabled
@@ -577,7 +592,10 @@ struct GuidedCompactSetView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.subheadline)
-                            .frame(width: 36, height: 36)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
                             .background(.thinMaterial, in: Circle())
                     }
                     .foregroundStyle(.secondary)
@@ -604,7 +622,10 @@ struct GuidedCompactSetView: View {
                     .foregroundStyle(.primary)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.green.opacity(0.06), in: RoundedRectangle(cornerRadius: AppTheme.cardRadius))
+                    .background(
+                        AppTheme.insetBackground,
+                        in: RoundedRectangle(cornerRadius: AppTheme.cardRadius)
+                    )
             }
 
             if isCompletingEffort {
@@ -621,6 +642,7 @@ struct GuidedCompactSetView: View {
                         .multilineTextAlignment(.center)
                         Button("重试完成并保存", action: onComplete)
                             .buttonStyle(.borderedProminent)
+                            .tint(AppTheme.accentEmphasis)
                             .controlSize(.large)
                     }
                     .frame(maxWidth: .infinity)
@@ -632,10 +654,10 @@ struct GuidedCompactSetView: View {
                             systemImage: "timer"
                         )
                         .font(.headline.monospacedDigit())
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppTheme.tint)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                        .background(AppTheme.softTint, in: RoundedRectangle(cornerRadius: 14))
                     }
                 }
             } else {
@@ -646,6 +668,7 @@ struct GuidedCompactSetView: View {
                         .padding(.vertical, 7)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accentEmphasis)
                 .controlSize(.large)
             }
         }
@@ -665,10 +688,9 @@ struct GuidedCompactSetView: View {
 
     private var setProgressText: String {
         guard let set else { return "本组目标" }
-        let base = "第 \(set.order)/\(max(sets.count, 1)) 组"
         let side = WorkoutPrescriptionFormatter.sideName(effortSide)
-        let kind = set.kind == .warmup ? " · 热身" : ""
-        return side.isEmpty ? "\(base)\(kind)" : "\(base) · \(side)\(kind)"
+        let kind = set.kind == .warmup ? "热身" : "当前目标"
+        return side.isEmpty ? kind : "\(side) · \(kind)"
     }
 
     private var recordingControl: GuidedRecordingControlPresentation {
@@ -773,7 +795,10 @@ struct GuidedExpandedCaptureView: View {
             HStack(spacing: 10) {
                 Button(action: onPause) {
                     Image(systemName: "pause.fill")
-                        .frame(width: 38, height: 38)
+                        .frame(
+                            width: AppTheme.minimumTapTarget,
+                            height: AppTheme.minimumTapTarget
+                        )
                         .background(.thinMaterial, in: Circle())
                 }
                 .accessibilityLabel("暂停训练")
@@ -794,7 +819,10 @@ struct GuidedExpandedCaptureView: View {
             Spacer()
             Button(action: onMore) {
                 Image(systemName: "ellipsis")
-                    .frame(width: 40, height: 40)
+                    .frame(
+                        width: AppTheme.minimumTapTarget,
+                        height: AppTheme.minimumTapTarget
+                    )
                     .background(.thinMaterial, in: Circle())
             }
             .foregroundStyle(.primary)
@@ -820,7 +848,6 @@ struct GuidedExpandedCaptureView: View {
         .overlay(alignment: .bottom) {
             Text(
                 "动作 \(performance?.order ?? 1)/\(max(performanceCount, 1))"
-                    + " · 第 \(set?.order ?? 1)/\(sets.count) 组"
             )
             .font(.subheadline.bold())
             .foregroundStyle(.white)
@@ -845,11 +872,11 @@ struct GuidedExpandedCaptureView: View {
                 .lineLimit(isLandscape ? 2 : 3)
                 .padding(isLandscape ? 10 : 13)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.green.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+                .background(AppTheme.insetBackground, in: RoundedRectangle(cornerRadius: 16))
             if !isLandscape {
                 Button("编辑本组", systemImage: "pencil", action: onEdit)
                     .font(.subheadline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppTheme.tint)
                     .buttonStyle(.plain)
                     .disabled(isCompletingEffort)
             }
@@ -870,10 +897,10 @@ struct GuidedExpandedCaptureView: View {
                         systemImage: "timer"
                     )
                     .font(.headline.monospacedDigit())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppTheme.tint)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, isLandscape ? 8 : 14)
-                    .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                    .background(AppTheme.softTint, in: RoundedRectangle(cornerRadius: 14))
                 }
             } else {
                 Button(action: onComplete) {
@@ -885,6 +912,7 @@ struct GuidedExpandedCaptureView: View {
                         .padding(.vertical, isLandscape ? 4 : 7)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(AppTheme.accentEmphasis)
                 .controlSize(.large)
             }
         }
@@ -892,7 +920,7 @@ struct GuidedExpandedCaptureView: View {
         .background {
             if isLandscape {
                 RoundedRectangle(cornerRadius: 24)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .fill(AppTheme.cardBackground)
             }
         }
     }
@@ -1002,59 +1030,39 @@ struct GuidedSetProgressRail: View {
     let currentSetID: UUID?
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
-                VStack(spacing: 5) {
-                    ZStack {
-                        Circle()
-                            .fill(circleFill(for: set))
-                            .frame(width: 30, height: 30)
-                        if set.status == .completed {
-                            Image(systemName: "checkmark")
-                                .font(.caption.bold())
-                                .foregroundStyle(.white)
-                        } else if set.status == .partial {
-                            Image(systemName: "circle.lefthalf.filled")
-                                .font(.caption.bold())
-                                .foregroundStyle(.green)
-                        } else {
-                            Text("\(set.order)")
-                                .font(.caption.bold())
-                                .foregroundStyle(set.id == currentSetID ? .white : .secondary)
+        HStack(spacing: 7) {
+            ForEach(sets) { set in
+                Capsule()
+                    .fill(segmentFill(for: set))
+                    .frame(height: 6)
+                    .overlay {
+                        if set.status == .partial {
+                            Capsule()
+                                .fill(AppTheme.tint)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .scaleEffect(x: 0.5, anchor: .leading)
                         }
                     }
-                    Text(set.kind == .warmup ? "热身" : "第\(set.order)组")
-                        .font(.caption2)
-                        .foregroundStyle(set.id == currentSetID ? .green : .secondary)
-                        .lineLimit(1)
-                }
-                if index < sets.count - 1 {
-                    Rectangle()
-                        .fill(
-                            set.status == .completed
-                                ? Color.green
-                                : Color.secondary.opacity(0.25)
-                        )
-                        .frame(height: 2)
-                        .padding(.bottom, 22)
-                }
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(progressAccessibilityLabel)
     }
 
-    private func circleFill(for set: WorkoutSet) -> Color {
+    private func segmentFill(for set: WorkoutSet) -> Color {
         if set.status == .completed {
-            return .green
+            return AppTheme.tint
         }
         if set.status == .partial {
-            return Color.secondary.opacity(0.12)
+            return AppTheme.separator
         }
         if set.id == currentSetID {
-            return .green.opacity(0.85)
+            return AppTheme.trainingAccent
         }
-        return Color.secondary.opacity(0.12)
+        if set.status == .skipped || set.status == .failed {
+            return Color.secondary.opacity(0.38)
+        }
+        return AppTheme.separator
     }
 
     private var progressAccessibilityLabel: String {

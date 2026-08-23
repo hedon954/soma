@@ -1,0 +1,1 @@
+../../.codex/plans/2026-08-22-soma-ui-optimization.md

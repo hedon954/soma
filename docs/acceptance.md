@@ -11,7 +11,7 @@
 | 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
 | 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
 | 启动数据迁移 | App 根层先显示迁移门禁，按个人空间、演示空间顺序用当前 `SomaDataSchema` 打开容器（不带历史 VersionedSchema 计划），再完成 Int64 分配、关系修复、旧聚合处方展开为 independent sets、旧 Set 变为单 `.none` Effort、为每条训练记录补齐不重复 projection key 并校验非空快照后才创建业务页面。失败保持可重试错误态，不允许在半迁移容器上继续读写；失败诊断必须含堆栈、错误 Mirror/Dump、SQLite 表结构、空/重复 projection key 计数和截断训练记录样例，且不含身体测量、饮食原文、聊天正文与媒体文件。当前 schema 上的预修复与 nil-key 回填测试必须通过；打开路径不依赖历史版本磁盘夹具。 |
-| 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；显式展开后保留各自比例并可收起，点击任一聊天媒体进入只读全屏查看，图片可缩放、多项可左右切换；视频按模型能力直传或关键帧降级并明示实际模式；`SpeechInputService` 使用系统语音识别；消息正文支持完整 Markdown、原生范围选择与复制，用户绿色气泡的选区在浅色和深色外观下都使用高对比系统前景色。`MarkdownAttributedStringBuilder` 从 `presentationIntent` 重建段落与列表断行，避免教练回复黏连。 |
+| 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；显式展开后保留各自比例并可收起，点击任一聊天媒体进入只读全屏查看，图片可缩放、多项可左右切换；视频按模型能力直传或关键帧降级并明示实际模式；`SpeechInputService` 使用系统语音识别；AI 正文使用受控 Markdown 的标题、段落、分隔线和列表，用户消息使用主题灰色气泡；两者都保留原生范围选择、复制及高对比系统前景色。`MarkdownAttributedStringBuilder` 从 `presentationIntent` 重建段落与列表断行，避免教练回复黏连。 |
 | 对话 Session | `ConversationSessionController` 在根层首次加载和 Scene 重新进入前台时解析当前 Session；今天有最后消息则复用，否则新建当天 Session；旧消息按自然日归档。历史抽屉可回看、继续，并支持左滑删除该对话的聊天图；训练、饮食、身体记录不随会话删除。在途 Agent Job 拒绝删除。 |
 | 发送反馈 | 提交被接受后清空草稿与附件、撤销文本焦点并滚到稳定底部锚点；用户消息和 Agent Event 更新继续保持在底部等待回复。 |
 | Widget 与系统快捷入口 | 免费签名阶段 `SomaWidget` 仅提供中尺寸文字、拍照、照片/视频快速记录；三种锁屏快捷组件与 App Shortcuts 提供相同入口。均只深链进入既有录入路径，不读取训练状态、不在扩展内写记录或运行 Agent。情境化组件见暂缓的 PRD 017 与 ADR 0042。 |
@@ -77,14 +77,14 @@
 | 要求 | 目标验收 |
 | --- | --- |
 | 动作身份 | `ExerciseDefinition.businessID: Int64`、必需 SwiftData Relationship、`search_exercises` 和独立 create/update/archive/merge Tool；`create_exercise` 一次接收多个标准名，`create_workout` 一次接收多条已绑定动作 ID 的记录，新建记录 ID 由本机分配。旧 UUID 数据在启动迁移中按规范名回填，空名称进入明确待确认动作。 |
-| 动作历史 | 动作详情按 ID 展示 `WorkoutEntry`；带练终态 Performance 先按来源 ID 物化为记录，旧 Session 尚未物化时才回退到 Session/Set，不能重复显示。合并记录迁移训练、模板、Performance/分析链和媒体，并只撤销本次引用。 |
+| 动作历史 | 动作详情按 ID 展示 `WorkoutEntry`；带练终态 Performance 先按来源 ID 物化为记录，旧 Session 尚未物化时才回退到 Session/Set，不能重复显示。计划入口先显示本计划目标；最近一次、容量趋势和全部记录分层，异构组忽略间歇压缩且不显示组号，图表使用真实日期与训练橙，最近容量及较上次变化可直接读取。合并记录迁移训练、模板、Performance/分析链和媒体，并只撤销本次引用。 |
 | 静默动作内容 | `BundledExerciseCatalog` 提供 40+ 常见动作内容与授权/项目素材；空数据库不产生动作，已知动作创建后只 fill-only 激活自身内容，未使用目录条目不进入列表或 Tool。 |
-| 动作图片 | 列表左侧加载紧凑动作示意图；详情首屏只读展示示意图、名称、折叠教练提示、紧凑单面肌群图与最近训练，编辑与媒体管理（用户上传、显式 AI 动作示意图生成、示范视频、外部链接）在工具栏菜单的子页。肌群图不再 AI 生成；既有 generated/user 肌群图仍可在媒体子页查看删除。generated/user 图片进入合并、备份、恢复、清除与媒体回收。 |
+| 动作图片 | 列表左侧加载紧凑动作示意图；详情首屏只读展示示意图、名称、教练提示，并在“标准动作”内合并主要/辅助肌群文字与紧凑双面肌群图；最近训练另行分层。编辑与媒体管理（用户上传、显式 AI 动作示意图生成、示范视频、外部链接）在工具栏菜单的子页。肌群图不再 AI 生成；既有 generated/user 肌群图仍可在媒体子页查看删除。generated/user 图片进入合并、备份、恢复、清除与媒体回收。 |
 | 快捷输入 | `CoachView` 本地候选读取 active 名称；`ExerciseInputSuggestionBuilder` 优先读取统一训练记录，旧带练尚未物化时才读取 completed Set，一行给出动作名加最近一次训练，不重复候选、不请求网络、不写业务数据、不为缺失历史编造数值。 |
-| 计划真值 | V5 以 `TrainingProgram.overview`、版本、动作、独立 `TemplateSetPrescription`、Session、Performance、逻辑 Set、原子 Effort 和 Recommendation 分层；开始训练冻结含 independent sets 的快照。V4 聚合处方只用于兼容迁移。 |
-| 计划 GUI 创建 | `TrainingProgramCreationView` 与版本编辑器共享处方草稿、动作图片选择器和最近容量解析器；只读取当前 active 动作，以稳定 ID 调用 `TrainingPlanStore` 创建版本 1，空字段保持 `nil`。计划列表与动作编辑器把连续相同组收成一句，展开某一组后仍写入独立处方行。 |
+| 计划真值 | V5 以当前 `TrainingProgram.overview`、动作、独立 `TemplateSetPrescription`、Session、Performance、逻辑 Set、原子 Effort 和 Recommendation 分层；开始训练冻结含 independent sets 的快照。V4 聚合处方只用于兼容迁移。 |
+| 计划 GUI 创建 | `TrainingProgramCreationView` 与当前计划编辑器共享处方草稿、动作图片选择器和最近容量解析器；只读取当前 active 动作，以稳定 ID 调用 `TrainingPlanStore` 创建计划，空字段保持 `nil`。计划列表与动作编辑器把连续相同组收成一句，展开某一组后仍写入独立处方行。 |
 | 统计兼容 | `TrainingStatistics` 以来源 Performance ID 在投影训练记录与原始 completed Set 间择一累计，不把计划、建议或同一带练动作算两次。 |
-| 带练 V5 | Coordinator 按 current Performance/Set/Effort、deadline 和 transition revision 推进；`.both` 固定左后右，时长 Effort 与左右/组间休息到期自动推进且只能一次。Performance 终态先生成具有 business ID、动作关系、唯一 projection key 的 `WorkoutEntry`，全跳过不建记录；最后一个 Effort 自动完成 Session 并进入分享预览，不再等待“保存并结束”。本行在目标测试和 `make verify` 通过前属于实施中证据。 |
+| 带练 V5 | Coordinator 按 current Performance/Set/Effort、deadline 和 transition revision 推进；`.both` 固定左后右，时长 Effort 与左右/组间休息到期自动推进且只能一次。Performance 终态先生成具有 business ID、动作关系、唯一 projection key 的 `WorkoutEntry`，全跳过不建记录；最后一个 Effort 自动完成 Session 并进入分享预览，不再等待“保存并结束”。 |
 | 自动录像 V5 | `WorkoutCameraService` 将 Delegate/stop/中断归一为 attempt 终态，Coordinator 是唯一 Alert 源；Effort 保存独立视频，Set/Performance 录像路径只作兼容投影。success key、提前 finish、重复 finish/stop、同 attempt 单 Alert 和新 retry 新 Alert 必须有自动化测试，真实相机仍需真机。 |
 | 训练系统投影 | 独立 `SomaWorkoutActivityAttributes` 只投影通用阶段、组进度和休息结束时间；本地通知与 `soma://workout/session/{id}` 深链不包含动作、重量或媒体。 |
 | 视频复盘 | `PerformanceReviewView` 主动创建 Agent Job；`record_performance_analysis` 校验视频指纹并幂等绑定 source Job。 |
@@ -125,9 +125,29 @@
 | 训练降噪 | 统计/版本/AI 继续折叠、管理入菜单；计划首屏改为无标题可编辑概览、训练效果、动作列表。三种录像策略在点击开始后一步选择，取消准备页；主动录像成为执行页常驻控制，进度改为动作/逻辑组嵌套分段。逐组编辑只显示动作定义下有意义的字段，复制只创建独立副本。 |
 | 进展降噪 | 足迹与动作库独立成卡，「最近记录」只保留训练/饮食/体重；足迹为朋友圈式 feeds 卡片（头像、正文可展开、宫格媒体、位置与相对时间）；视频缩略统一为 `VideoPosterView` 封面帧；记录编辑折叠受力图/热量估算/AI 解析/原始记录；历史行单主指标、筛选「全部 + 按月」。 |
 | 设置降噪 | 设置为底部第 4 个 Tab，内容页右上角不再放齿轮；AI 服务「平台 → API Key → 模型」三步，Base URL/图片模型/小模型档进「高级」，保存与获取合并；任务进度与后台处理位于「更多」；身体信息核心三字段直出；隐私页仅位置开关加一句 footer；Keep/COROS 折叠为「其他设备」；远程数据边界折叠；Skills 二级页；「高级设置」文案统一。 |
-| 动作库降噪 | 详情只读首屏 + 工具栏菜单进入编辑/媒体子页；提示文本直出无标题；受力图双面 210pt 可放大；示范视频首屏可看可传（与媒体子页共用 `ExerciseDemoVideoLibrary` 写入规则）；内置目录扩充纯文字条目（150+，键唯一与肌群可映射由单测门禁）；历史默认 5 条、更早折叠；列表行缩略图 48×54、副文案一行。 |
+| 动作库降噪 | 详情只读首屏 + 工具栏菜单进入编辑/媒体子页；提示文本直出无标题；受力图双面 210pt 可放大，有效区域、标签与引导线统一使用训练橙深浅；示范视频首屏可看可传（与媒体子页共用 `ExerciseDemoVideoLibrary` 写入规则）；内置目录扩充纯文字条目（150+，键唯一与肌群可映射由单测门禁）；历史默认 5 条、更早折叠；列表行缩略图 48×54、副文案一行。 |
 | 红线不破坏 | 聊天发送链路、全部记录 CRUD、missing-is-nil、API Key/HealthKit/导出备份清除/远程授权披露、带练状态机语义均未变化，折叠不等于删除。 |
 | 设计系统 | `AppTheme` 提供 `cardRadius`/`controlRadius` 圆角 token 与 `listThumbnailSize`/`listRowVerticalPadding` 列表密度规范；重构涉及界面已替换硬编码样式。 |
+
+## 主体已实现：频率优先双主题与无损训练记录编辑
+
+以下是 [PRD 039](prd/039-frequency-first-dual-theme-ui.md) 与
+[ADR 0089](adr/0089-semantic-dual-theme-and-lossless-workout-editor.md) 的当前实现证据；真实相机、
+HealthKit 与真机 VoiceOver 继续单列。
+
+| 要求 | 当前证据 |
+| --- | --- |
+| 双主题 | `AppAppearancePreference` 提供跟随系统、浅色、深色，并在 `RootView` 统一映射 `preferredColorScheme`；`AppTheme` 提供纯白/纯黑 page、浅深 card/inset/separator、黑白主交互与稀疏语义彩色图标。浅色语义色适度提高明度与饱和度，在纯白背景上保持清晰且对比度至少为 4.5:1；暗色语义色保持既定色值。语义图标不使用阴影、柔光或模糊。未知偏好回落系统。 |
+| 配色可读性 | `AppThemePaletteTests` 验证浅/深语义前景至少 4.5:1、黑白主控件使用反色前景，并固定两种主题的表面明度顺序。 |
+| 根页面 | 四个 Tab 保持独立导航栈和再点当前 Tab 回根；根标题均使用 inline，未选中图标为线框、选中项为中性强调。训练按进行中、计划、最近训练；进展按七天摘要、结论、三项混合活动、趋势、全部数据；设置按个人、服务、更多、关于、显示、反馈。 |
+| 设置图标 | 根设置项保留既有文字、SF Symbol 形状和行布局，仅将图标按身体、训练、智能、健康、数据、通知和后台功能映射为不同语义色；图标不得统一黑白，不增加彩色底块或彩色文字。`SettingsHomeIconTests` 验证全部符号有效互异并覆盖七类功能色。 |
+| 教练阅读与输入 | AI 正文和用户消息使用 Subheadline Light，结构标题与强调仅使用 Medium；AI 正文直接对齐消息区左边界，不设置重复头像或装饰列；用户消息使用主题灰色气泡。Composer 只保留加号、文本、麦克风和发送，三个 Skill 紧凑但保持 44 pt 触达。每条消息显示日期时间。 |
+| AI 结构化排版 | `CoachResponseDocument` 只解析标题、段落、分隔线、有序/无序列表，`CoachResponseView` 映射为本地原生布局；未知 Markdown 可读降级，模型不能注入任意 UI。 |
+| 外观与反馈 | 外观位于设置倒数第二组，三种偏好即时应用；纯白主题的设置 section 使用浅灰分组卡和明确间距，根分区标题对齐卡片外沿。反馈继续直接嵌入最后一组，输入使用 inset 表面与 1 pt separator 边界，不进入关于或二级页面，失败恢复沿用 `FeedbackView`。 |
+| 无损编辑 | `WorkoutRecordDraft` 按有序 evidence 建立逻辑组和 effort；聊天 `InlineWorkoutCard` 与详情 `WorkoutRecordDetailView` 共用 `WorkoutLogicalGroupsEditor`，保存从 draft evidence 回写，不经聚合标量重建。 |
+| 侧别与目标 | 编辑器覆盖双侧同时、左右各做、仅左、仅右，以及次数或时长；正常界面没有组号，VoiceOver 可用序号定位。侧别、类型、目标、次数/时长和重量相同的连续组压缩为 `×N`，间歇不参与判断；动作最后一组没有组间歇，左右动作仍有换侧间歇。 |
+| 真值回归 | `WorkoutRecordEditorProjectionTests` 覆盖顺序、legacy 无索引、左右 effort、四种侧别、次数/时长、忽略间歇的连续压缩、最后一组间歇目标、录像元数据无损、添加继承结构与复制移除录像；缺失值保持 `nil`。 |
+| 设计依据 | 浅深设计稿、当前实施截图、页面规则、未采用方案与验证矩阵保存在 [工程报告](engineering/soma-ui-design-system.md)；Coding Agent 使用 `.claude/skills/soma-ui-development/`。 |
 
 ## 已实现：LLM 暂存补偿与显式配置
 
@@ -196,7 +216,7 @@
 
 | 要求 | 当前证据 |
 | --- | --- |
-| 消息元信息单行 | `ChatMessageMetaLine` 在气泡底部输出一行 caption2：当天只显示 `HH:mm`，跨天补 `M月D日`，跨年补年份；用户消息带位置时同行显示「时间 · 位置」并对长 POI 中间截断，助手消息只显示时间。独立位置胶囊已删除，VoiceOver 合并朗读。 |
+| 消息元信息单行 | `ChatMessageMetaLine` 在消息底部输出一行 caption2：每条消息固定显示日期与时间，跨年额外显示年份；用户消息带位置时同行显示「日期时间 · 位置」并对长 POI 中间截断。独立位置胶囊已删除，VoiceOver 合并朗读。 |
 | 日期入口位置 | 记录日期入口位于导航栏 `principal` 的两行标题下方居中，输入区不再放日期芯片；改期仍持久化到 Session 并只影响本次对话默认日期。 |
 | 快捷按钮存储 | `AgentInputShortcutStore` 以 UserDefaults JSON 保存增删改与排序，未知工具名在读写两侧清理；删除 Skill 时解绑引用它的按钮。`AgentInputShortcutTests` 覆盖默认三按钮、可见性与规范化。 |
 | 曝光边界 | 选中按钮时 `AgentToolExposurePolicy` 只返回该按钮工具白名单与当前协议交集，未选时返回全量；`AgentJob.selectedShortcutID` 让排队、恢复与远程 Envelope 沿用同一判断，旧 checkpoint 的 `exposedGroups` 仍可还原。 |
@@ -281,8 +301,8 @@ JSON 和有序媒体；设置密码备份后让 App 进入后台，再返回确�
 
 教练页手工验收：点击左上角时间按钮打开会话抽屉，再关闭并从左边界右滑打开同一抽屉；新建两个非空 Session 后来回切换并继续发送；
 首次发送分别验证允许和拒绝位置都只出现一次确认；准备 0、1、2 个健身房验证只有两馆时
-显示切换入口；长按用户绿色气泡并拖动选区，分别在浅色、深色外观确认选区与气泡明显区分，
-且复制菜单仍可用；长按 Agent 的列表、链接和多段回复验证可精确选择复制。分别点击聊天中的
+显示切换入口；长按用户主题灰色气泡并拖动选区，分别在浅色、深色外观确认选区与气泡明显区分，
+且复制菜单仍可用；确认 AI 正文从消息区左边界开始、没有重复头像或装饰列；长按 Agent 的列表、链接和多段回复验证可精确选择复制。分别点击聊天中的
 单张、双张和三张以上折叠媒体，确认从缩略图位置放大进入全屏、可切换与缩放，且没有删除聊天附件的入口，
 过程中不先出现一块空黑全屏。准备四个以上虚构动作并查询两条虚构训练，确认过程默认只显示一条状态摘要行；点开后 Tool
 卡片先显示结果数量或简短结论，展开逐项完整显示动作/训练信息但不出现 UUID、JSON、
@@ -294,10 +314,17 @@ JSON 和有序媒体；设置密码备份后让 App 进入后台，再返回确�
 「进展」回到进展首页。教练再点回到当前 Session，对话仍在。
 
 训练计划 GUI 验收使用两个虚构动作：计划详情从上到下是无标题可编辑概览、确定性训练效果、
-动作列表和折叠历史/版本，不再出现“目标”“当前模板”两行。第一个动作配置 `.both`，包含热身
+动作列表和训练历史，不显示业务版本号、版本历史或恢复入口。第一个动作配置 `.both`，包含热身
 次数组、左右重量不同的工作次数组和工作计时组；第二个动作配置 `.right`。逐组新增、复制、
 删除和排序后确认所有组完全独立，切换 target kind 不会同时保存次数与秒数，空字段没有被补齐。
-再次编辑产生新版本，已开始 Session 的旧 `plannedSets` 快照保持不变。
+再次编辑直接更新当前计划；已开始 Session 的旧 `plannedSets` 快照保持不变，新 Session 使用更新后的处方。
+
+计划与动作详情验收继续使用虚构数据：计划总览中累计辅助组数不能把辅助肌群列为主要；受力图有效
+区域、标签与引导线在浅深主题中均为训练橙深浅。动作详情的主要肌群、辅助肌群、提示、双面受力图
+与图例位于“标准动作”的同一列表行，没有空白 Divider 行或独立受力图章节。点击一个含异构组的
+计划动作后，首个业务区块显示
+本计划目标；最近一次显示 `4×5次 29kg · 1×3次 29kg` 而非逐组序号，最近容量、较上次变化、图上
+两点和横轴真实日期与两条记录逐项一致，最后逻辑组的组后间歇不出现。
 
 开练与自动推进验收：点击“开始训练”立即看到“每个动作录第一组”“每一组都录”“不录像”，
 任一选择后直接进入首个动作，不出现准备 Sheet、折叠录像区或第二个开始按钮。分别执行三种策略，

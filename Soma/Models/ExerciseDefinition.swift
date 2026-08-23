@@ -29,40 +29,11 @@ struct ExerciseVideoSource: Codable, Equatable, Hashable, Identifiable, Sendable
     }
 }
 
-struct ExerciseContentRevision: Codable, Equatable, Identifiable, Sendable {
-    enum Source: String, Codable, Sendable {
-        case manual
-        case ai
-    }
-
-    var id: UUID
-    var source: Source
+struct ExerciseContent: Codable, Equatable, Sendable {
     var coachingNotes: String
     var primaryMuscles: [String]
     var secondaryMuscles: [String]
     var movementPatterns: [String]
-    var createdAt: Date
-    var sourceJobID: UUID?
-
-    init(
-        id: UUID = UUID(),
-        source: Source,
-        coachingNotes: String,
-        primaryMuscles: [String],
-        secondaryMuscles: [String],
-        movementPatterns: [String],
-        createdAt: Date = .now,
-        sourceJobID: UUID? = nil
-    ) {
-        self.id = id
-        self.source = source
-        self.coachingNotes = coachingNotes
-        self.primaryMuscles = primaryMuscles
-        self.secondaryMuscles = secondaryMuscles
-        self.movementPatterns = movementPatterns
-        self.createdAt = createdAt
-        self.sourceJobID = sourceJobID
-    }
 }
 
 enum ExerciseImageKind: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
@@ -142,7 +113,6 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
     var muscleDiagramAssetName: String?
     var userDemoVideosData: Data
     var guidanceVideosData: Data
-    var contentRevisionsData: Data = Data()
     var imageReferencesData: Data = Data()
     var lateralityRaw: String = ""
     var targetKindRaw: String = ""
@@ -172,9 +142,6 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
         )
         guidanceVideosData = ExerciseDefinitionCoding.encode(
             [ExerciseVideoSource]()
-        )
-        contentRevisionsData = ExerciseDefinitionCoding.encode(
-            [ExerciseContentRevision]()
         )
         imageReferencesData = ExerciseDefinitionCoding.encode(
             [ExerciseImageReference]()
@@ -250,19 +217,6 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
         }
     }
 
-    var contentRevisions: [ExerciseContentRevision] {
-        get {
-            ExerciseDefinitionCoding.decode(
-                [ExerciseContentRevision].self,
-                from: contentRevisionsData
-            ) ?? []
-        }
-        set {
-            contentRevisionsData = ExerciseDefinitionCoding.encode(newValue)
-            updatedAt = .now
-        }
-    }
-
     var imageReferences: [ExerciseImageReference] {
         get {
             ExerciseDefinitionCoding.decode(
@@ -312,14 +266,11 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    func apply(_ revision: ExerciseContentRevision) {
-        coachingNotes = revision.coachingNotes
-        primaryMuscles = revision.primaryMuscles
-        secondaryMuscles = revision.secondaryMuscles
-        movementPatterns = revision.movementPatterns
-        var values = contentRevisions
-        values.append(revision)
-        contentRevisions = values
+    func apply(_ content: ExerciseContent) {
+        coachingNotes = content.coachingNotes
+        primaryMuscles = content.primaryMuscles
+        secondaryMuscles = content.secondaryMuscles
+        movementPatterns = content.movementPatterns
         updatedAt = .now
     }
 }
@@ -335,7 +286,6 @@ final class ExerciseMergeRecord: BusinessIdentifiedModel {
     var affectedTemplateExerciseIDsData: Data = Data()
     var affectedPerformanceIDsData: Data = Data()
     var affectedRecommendationIDsData: Data = Data()
-    var transferredContentRevisionIDsData: Data = Data()
     var transferredUserDemoVideosData: Data = Data()
     var transferredGuidanceVideosData: Data = Data()
     var transferredImageReferencesData: Data = Data()
@@ -350,7 +300,6 @@ final class ExerciseMergeRecord: BusinessIdentifiedModel {
         affectedTemplateExerciseIDs: [UUID] = [],
         affectedPerformanceIDs: [UUID] = [],
         affectedRecommendationIDs: [UUID] = [],
-        transferredContentRevisionIDs: [UUID] = [],
         transferredUserDemoVideos: [MediaAttachmentReference] = [],
         transferredGuidanceVideos: [ExerciseVideoSource] = [],
         transferredImageReferences: [ExerciseImageReference] = [],
@@ -371,9 +320,6 @@ final class ExerciseMergeRecord: BusinessIdentifiedModel {
         )
         affectedRecommendationIDsData = ExerciseDefinitionCoding.encode(
             affectedRecommendationIDs
-        )
-        transferredContentRevisionIDsData = ExerciseDefinitionCoding.encode(
-            transferredContentRevisionIDs
         )
         transferredUserDemoVideosData = ExerciseDefinitionCoding.encode(
             transferredUserDemoVideos
@@ -415,13 +361,6 @@ final class ExerciseMergeRecord: BusinessIdentifiedModel {
         ) ?? []
     }
 
-    var transferredContentRevisionIDs: [UUID] {
-        ExerciseDefinitionCoding.decode(
-            [UUID].self,
-            from: transferredContentRevisionIDsData
-        ) ?? []
-    }
-
     var transferredUserDemoVideos: [MediaAttachmentReference] {
         ExerciseDefinitionCoding.decode(
             [MediaAttachmentReference].self,
@@ -451,98 +390,11 @@ struct ExerciseNameReference: Codable, Equatable, Identifiable, Sendable {
 
 enum ExerciseQuickFill {
     static func text(for workout: WorkoutEntry) -> String {
-        var values: [String] = []
-        let entries = workout.setEntries
-        if !entries.isEmpty,
-           entries.allSatisfy({
-               $0.reps == nil && $0.externalWeightKG == nil
-           })
-        {
-            values.append("\(entries.count)组")
-        } else if !entries.isEmpty,
-                  let reps = workout.representativeReps,
-                  let weight = workout.representativeWeight
-        {
-            let weightText = weight == 0
-                ? "自重"
-                : "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
-            values.append("\(weightText) × \(reps) × \(entries.count)组")
-        } else if let summary = workout.setEvidenceSummary {
-            values.append(summary)
-        } else {
-            if let weight = workout.weight {
-                values.append(
-                    weight == 0
-                        ? "自重"
-                        : "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
-                )
-            }
-            if let reps = workout.reps {
-                values.append("\(reps)次")
-            }
-            if let sets = workout.sets {
-                values.append("\(sets)组")
-            }
-        }
-        if let restSeconds = workout.restSeconds {
-            values.append("间歇 \(durationText(seconds: restSeconds))")
-        }
-        return values.joined(separator: "，")
+        WorkoutHistoryFormatter.text(for: workout)
     }
 
     static func text(for sets: [WorkoutSet]) -> String {
-        let completed = sets
-            .filter { $0.status == .completed }
-            .sorted { $0.order < $1.order }
-        guard !completed.isEmpty else { return "" }
-
-        var values: [String] = []
-        let firstReps = completed.first?.actualReps
-        let firstWeight = completed.first?.actualWeightKG
-        let hasUniformCapacity = completed.allSatisfy {
-            $0.actualReps == firstReps && $0.actualWeightKG == firstWeight
-        }
-
-        if hasUniformCapacity, let reps = firstReps, let weight = firstWeight {
-            let weightText = weight == 0
-                ? "自重"
-                : "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
-            values.append("\(weightText) × \(reps) × \(completed.count)组")
-        } else {
-            let details = completed.compactMap { set -> String? in
-                let capacity = [
-                    set.actualWeightKG.map {
-                        $0 == 0
-                            ? "自重"
-                            : "\($0.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
-                    },
-                    set.actualReps.map { "\($0)次" }
-                ].compactMap { $0 }
-                guard !capacity.isEmpty else { return nil }
-                return "第\(set.order)组 " + capacity.joined(separator: " × ")
-            }
-            values.append(
-                details.isEmpty
-                    ? "\(completed.count)组"
-                    : details.joined(separator: "，")
-            )
-        }
-
-        let rests = completed.compactMap(\.actualRestSeconds)
-        if let firstRest = rests.first,
-           rests.count == completed.count,
-           rests.allSatisfy({ $0 == firstRest })
-        {
-            values.append("间歇 \(durationText(seconds: firstRest))")
-        }
-        return values.joined(separator: "，")
-    }
-
-    private static func durationText(seconds: Int) -> String {
-        if seconds > 0, seconds.isMultiple(of: 60) {
-            return "\(seconds / 60)min"
-        }
-        return "\(seconds)s"
+        WorkoutHistoryFormatter.text(for: sets)
     }
 }
 
@@ -757,33 +609,6 @@ enum ExerciseLibraryStore {
         for recommendation in affectedRecommendations {
             recommendation.targetID = target.id
         }
-        var sourceRevisions = source.contentRevisions
-        let sourceHasCurrentContent = !source.coachingNotes.isEmpty
-            || !source.primaryMuscles.isEmpty
-            || !source.secondaryMuscles.isEmpty
-            || !source.movementPatterns.isEmpty
-        if sourceHasCurrentContent,
-           !sourceRevisions.contains(where: {
-               $0.coachingNotes == source.coachingNotes
-                   && $0.primaryMuscles == source.primaryMuscles
-                   && $0.secondaryMuscles == source.secondaryMuscles
-                   && $0.movementPatterns == source.movementPatterns
-           })
-        {
-            sourceRevisions.append(ExerciseContentRevision(
-                source: .manual,
-                coachingNotes: source.coachingNotes,
-                primaryMuscles: source.primaryMuscles,
-                secondaryMuscles: source.secondaryMuscles,
-                movementPatterns: source.movementPatterns,
-                createdAt: source.updatedAt
-            ))
-        }
-        let targetRevisionIDs = Set(target.contentRevisions.map(\.id))
-        let transferredRevisions = sourceRevisions.filter {
-            !targetRevisionIDs.contains($0.id)
-        }
-        target.contentRevisions += transferredRevisions
         let targetUserVideoIDs = Set(target.userDemoVideos.map(\.id))
         let transferredUserVideos = source.userDemoVideos.filter {
             !targetUserVideoIDs.contains($0.id)
@@ -822,7 +647,6 @@ enum ExerciseLibraryStore {
             affectedTemplateExerciseIDs: affectedTemplateExercises.map(\.id),
             affectedPerformanceIDs: affectedPerformances.map(\.id),
             affectedRecommendationIDs: affectedRecommendations.map(\.id),
-            transferredContentRevisionIDs: transferredRevisions.map(\.id),
             transferredUserDemoVideos: transferredUserVideos,
             transferredGuidanceVideos: transferredGuidanceVideos,
             transferredImageReferences: transferredImageReferences
@@ -856,18 +680,12 @@ enum ExerciseLibraryStore {
         let transferredGuidanceIDs = Set(
             record.transferredGuidanceVideos.map(\.id)
         )
-        let transferredRevisionIDs = Set(
-            record.transferredContentRevisionIDs
-        )
         let transferredImageIDs = Set(
             record.transferredImageReferences.map(\.id)
         )
         guard transferredUserIDs.isSubset(of: Set(target.userDemoVideos.map(\.id))),
               transferredGuidanceIDs.isSubset(
                   of: Set(target.guidanceVideos.map(\.id))
-              ),
-              transferredRevisionIDs.isSubset(
-                  of: Set(target.contentRevisions.map(\.id))
               ),
               transferredImageIDs.isSubset(
                   of: Set(target.imageReferences.map(\.id))
@@ -918,9 +736,6 @@ enum ExerciseLibraryStore {
             && recommendation.targetID == target.id
         {
             recommendation.targetID = source.id
-        }
-        target.contentRevisions.removeAll {
-            transferredRevisionIDs.contains($0.id)
         }
         target.userDemoVideos.removeAll {
             transferredUserIDs.contains($0.id)

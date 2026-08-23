@@ -195,13 +195,13 @@ struct MuscleMapView: View {
                 leader.addLine(to: label)
                 context.stroke(
                     leader,
-                    with: .color(AppTheme.tint.opacity(0.35)),
+                    with: .color(AppTheme.trainingAccent.opacity(0.42)),
                     lineWidth: fontSize > 8 ? 0.8 : 0.5
                 )
 
                 let text = Text(anchor.group.displayName)
                     .font(.system(size: fontSize, weight: .semibold))
-                    .foregroundColor(AppTheme.tint)
+                    .foregroundColor(AppTheme.trainingAccent)
                 let textAnchor: UnitPoint = anchor.edge == .leading ? .leading : .trailing
                 context.draw(context.resolve(text), at: label, anchor: textAnchor)
             }
@@ -224,9 +224,9 @@ struct MuscleMapView: View {
             return Color.secondary.opacity(0.20)
         }
         if intensity < 0.55 {
-            return AppTheme.tint.opacity(0.45)
+            return AppTheme.trainingAccent.opacity(0.48)
         }
-        return AppTheme.tint.opacity(0.88)
+        return AppTheme.trainingAccent.opacity(0.92)
     }
 
     private var accessibilityDescription: String {

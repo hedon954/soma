@@ -1,8 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// PRD 020：动作内容编辑子页，承接原详情页平铺的名称/肌群编辑、
-/// AI 说明生成、版本恢复与合并/归档管理。
+/// PRD 020：动作内容编辑子页，承接名称、肌群、AI 说明与合并/归档管理。
 struct ExerciseContentEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +23,6 @@ struct ExerciseContentEditorView: View {
     @State private var mergeTargetID: UUID?
     @State private var errorMessage: String?
     @State private var isGeneratingContent = false
-    @State private var revisionsExpanded = false
 
     init(exercise: ExerciseDefinition) {
         self.exercise = exercise
@@ -90,36 +88,6 @@ struct ExerciseContentEditorView: View {
                     }
                 }
                 .disabled(isGeneratingContent || exercise.isArchived)
-            }
-
-            if !exercise.contentRevisions.isEmpty {
-                Section {
-                    DisclosureGroup("动作说明版本", isExpanded: $revisionsExpanded) {
-                        ForEach(exercise.contentRevisions.reversed()) { revision in
-                            Button {
-                                restore(revision)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(
-                                            revision.source == .ai
-                                                ? "AI 生成"
-                                                : "手动编辑"
-                                        )
-                                        Text(revision.createdAt.formatted(
-                                            date: .abbreviated,
-                                            time: .shortened
-                                        ))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Text("恢复")
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             Section("动作管理") {
@@ -197,8 +165,7 @@ struct ExerciseContentEditorView: View {
                     in: modelContext
                 )
             }
-            exercise.apply(ExerciseContentRevision(
-                source: .manual,
+            exercise.apply(ExerciseContent(
                 coachingNotes: coachingNotes.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 ),
@@ -248,35 +215,20 @@ struct ExerciseContentEditorView: View {
         Task {
             defer { isGeneratingContent = false }
             do {
-                let revision = try await TrainingIntelligenceService
+                let content = try await TrainingIntelligenceService
                     .generateContent(
                         for: exercise,
                         ai: ai,
                         in: modelContext
                     )
-                coachingNotes = revision.coachingNotes
-                primaryMuscles = revision.primaryMuscles.joined(separator: "、")
-                secondaryMuscles = revision.secondaryMuscles.joined(separator: "、")
-                movementPatterns = revision.movementPatterns.joined(separator: "、")
+                coachingNotes = content.coachingNotes
+                primaryMuscles = content.primaryMuscles.joined(separator: "、")
+                secondaryMuscles = content.secondaryMuscles.joined(separator: "、")
+                movementPatterns = content.movementPatterns.joined(separator: "、")
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
-    }
-
-    private func restore(_ revision: ExerciseContentRevision) {
-        exercise.apply(ExerciseContentRevision(
-            source: .manual,
-            coachingNotes: revision.coachingNotes,
-            primaryMuscles: revision.primaryMuscles,
-            secondaryMuscles: revision.secondaryMuscles,
-            movementPatterns: revision.movementPatterns
-        ))
-        coachingNotes = revision.coachingNotes
-        primaryMuscles = revision.primaryMuscles.joined(separator: "、")
-        secondaryMuscles = revision.secondaryMuscles.joined(separator: "、")
-        movementPatterns = revision.movementPatterns.joined(separator: "、")
-        try? modelContext.save()
     }
 }
 

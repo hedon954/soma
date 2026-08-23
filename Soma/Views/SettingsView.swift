@@ -8,6 +8,8 @@ struct SettingsView: View {
     private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
     @AppStorage("workout.voiceCuesEnabled")
     private var voiceCuesEnabled = true
+    @AppStorage(AppAppearancePreference.defaultsKey)
+    private var appearanceRaw = AppAppearancePreference.system.rawValue
     @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
 
     @State private var modelTier: AIModelTier = .standard
@@ -61,12 +63,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             Form {
-                profileAndTrainingSection
-                serviceSection
-                privacyAndAdvancedSection
-                aboutSection
-                feedbackSection
+                ForEach(SettingsHomeSection.allCases) { section in
+                    settingsSection(section)
+                }
             }
+            .scrollContentBackground(.hidden)
+            .listSectionSpacing(18)
+            .frame(maxWidth: AppTheme.readableContentMaxWidth)
+            .frame(maxWidth: .infinity)
+            .appPageBackground()
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -107,32 +112,48 @@ struct SettingsView: View {
         .onAppear(perform: loadInitialConfiguration)
     }
 
+    private func settingsSection(_ section: SettingsHomeSection) -> some View {
+        Group {
+            switch section {
+            case .profileAndTraining: profileAndTrainingSection
+            case .service: serviceSection
+            case .more: privacyAndAdvancedSection
+            case .about: aboutSection
+            case .display: displaySection
+            case .feedback: feedbackSection
+            }
+        }
+        .listRowBackground(AppTheme.cardBackground)
+    }
+
     private var profileAndTrainingSection: some View {
-        Section("个人与训练") {
+        Section {
             NavigationLink {
                 PersonalBodyInfoView()
             } label: {
-                Label("身体信息", systemImage: "person.text.rectangle")
+                SettingsHomeRowLabel(item: .bodyInfo, title: "身体信息")
             }
 
             NavigationLink {
                 GymLibraryView()
             } label: {
-                Label("健身房", systemImage: "building.2")
+                SettingsHomeRowLabel(item: .gym, title: "健身房")
             }
 
             // PRD 020：带练语音提示从每次开练的准备页移到设置。
             Toggle(isOn: $voiceCuesEnabled) {
-                Label("带练语音提示", systemImage: "speaker.wave.2")
+                SettingsHomeRowLabel(item: .voiceCues, title: "带练语音提示")
             }
+        } header: {
+            settingsHomeSectionHeader("个人与训练")
         }
     }
 
     private var serviceSection: some View {
-        Section("服务") {
+        Section {
             NavigationLink(value: SettingsRoute.llm) {
                 SettingsSummaryRow(
-                    icon: "sparkles",
+                    item: .llm,
                     title: "LLM 配置",
                     detail: ai.hasRequiredAPIKey
                         ? "\(ai.provider.displayName) · \(ai.model(for: ai.provider).isEmpty ? "未填写模型" : ai.model(for: ai.provider))"
@@ -144,33 +165,35 @@ struct SettingsView: View {
                 HealthDataIntegrationsView()
             } label: {
                 SettingsSummaryRow(
-                    icon: "heart.text.square",
+                    item: .healthDevices,
                     title: "健康数据与设备",
                     detail: "Apple 健康、Keep、COROS"
                 )
             }
+        } header: {
+            settingsHomeSectionHeader("服务")
         }
     }
 
     /// PRD 020：任务进度与后台处理是低频配置，下沉到「更多」。
     private var privacyAndAdvancedSection: some View {
-        Section("更多") {
+        Section {
             NavigationLink {
                 DataManagementView()
             } label: {
-                Label("数据与备份", systemImage: "externaldrive")
+                SettingsHomeRowLabel(item: .dataBackup, title: "数据与备份")
             }
 
             NavigationLink {
                 AgentSystemSettingsView()
             } label: {
-                Label("任务进度与通知", systemImage: "waveform.path.ecg")
+                SettingsHomeRowLabel(item: .taskProgress, title: "任务进度与通知")
             }
 
             NavigationLink {
                 RemoteAgentSettingsView()
             } label: {
-                Label("后台持续处理", systemImage: "server.rack")
+                SettingsHomeRowLabel(item: .backgroundProcessing, title: "后台持续处理")
             }
 
             NavigationLink {
@@ -181,14 +204,14 @@ struct SettingsView: View {
                 .navigationTitle("隐私与安全")
                 .navigationBarTitleDisplayMode(.inline)
             } label: {
-                Label("隐私与安全", systemImage: "hand.raised")
+                SettingsHomeRowLabel(item: .privacy, title: "隐私与安全")
             }
 
             NavigationLink {
                 DeveloperSettingsView()
             } label: {
                 HStack {
-                    Label("高级设置", systemImage: "gearshape.2")
+                    SettingsHomeRowLabel(item: .advanced, title: "高级设置")
                     Spacer()
                     if !agentTraces.isEmpty {
                         Text("\(agentTraces.count) 条日志")
@@ -197,11 +220,13 @@ struct SettingsView: View {
                     }
                 }
             }
+        } header: {
+            settingsHomeSectionHeader("更多")
         }
     }
 
     private var aboutSection: some View {
-        Section("关于") {
+        Section {
             LabeledContent("Soma", value: "1.0.0 (1)")
             Text("Your body, understood.")
                 .font(.subheadline)
@@ -211,17 +236,43 @@ struct SettingsView: View {
                     Link("Open-Meteo", destination: attributionURL)
                 }
             }
+        } header: {
+            settingsHomeSectionHeader("关于")
+        }
+    }
+
+    private var displaySection: some View {
+        Section {
+            NavigationLink {
+                AppearanceSettingsView()
+            } label: {
+                SettingsSummaryRow(
+                    item: .appearance,
+                    title: "外观",
+                    detail: AppAppearancePreference.stored(appearanceRaw).title
+                )
+            }
+        } header: {
+            settingsHomeSectionHeader("显示")
         }
     }
 
     private var feedbackSection: some View {
-        Section("反馈") {
+        Section {
             FeedbackView(isEmbedded: true)
                 .listRowInsets(
                     EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0)
                 )
                 .listRowBackground(Color.clear)
+        } header: {
+            settingsHomeSectionHeader("反馈")
         }
+    }
+
+    private func settingsHomeSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .textCase(nil)
+            .padding(.leading, -AppTheme.pagePadding)
     }
 
     /// PRD 020：隐私页只保留可操作的位置开关，静态说明压缩为一句 footer。
@@ -429,7 +480,7 @@ struct SettingsView: View {
 
     private var capabilityColor: Color {
         switch selectedCapability {
-        case .supported: AppTheme.tint
+        case .supported: AppTheme.success
         case .unsupported: AppTheme.warning
         case .unknown: .secondary
         }
@@ -567,6 +618,94 @@ struct SettingsView: View {
             models = []
             modelError = error.localizedDescription
         }
+    }
+}
+
+private struct AppearanceSettingsView: View {
+    @AppStorage(AppAppearancePreference.defaultsKey)
+    private var appearanceRaw = AppAppearancePreference.system.rawValue
+
+    private var selection: Binding<AppAppearancePreference> {
+        Binding(
+            get: { AppAppearancePreference.stored(appearanceRaw) },
+            set: { appearanceRaw = $0.rawValue }
+        )
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
+                AppCard {
+                    VStack(spacing: 0) {
+                        ForEach(Array(AppAppearancePreference.allCases.enumerated()), id: \.element) { index, option in
+                            Button {
+                                selection.wrappedValue = option
+                            } label: {
+                                HStack(spacing: 14) {
+                                    Image(systemName: option.icon)
+                                        .frame(width: 24)
+                                        .foregroundStyle(AppTheme.tint)
+                                    Text(option.title)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selection.wrappedValue == option {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(AppTheme.tint)
+                                    }
+                                }
+                                .frame(minHeight: AppTheme.minimumTapTarget)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(
+                                selection.wrappedValue == option ? .isSelected : []
+                            )
+
+                            if index < AppAppearancePreference.allCases.count - 1 {
+                                Divider()
+                                    .overlay(AppTheme.separator)
+                            }
+                        }
+                    }
+                }
+
+                AppCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("预览")
+                            .font(.headline)
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(AppTheme.trainingEmphasis)
+                                .frame(width: 40, height: 40)
+                                .overlay {
+                                    Image(systemName: "dumbbell.fill")
+                                        .foregroundStyle(.white)
+                                }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("训练记录")
+                                    .font(.headline)
+                                Text("10 次 · 16 kg · 间歇 60 秒")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            AppTheme.insetBackground,
+                            in: RoundedRectangle(
+                                cornerRadius: AppTheme.controlRadius,
+                                style: .continuous
+                            )
+                        )
+                    }
+                }
+            }
+            .padding(AppTheme.pagePadding)
+        }
+        .appPageBackground()
+        .navigationTitle("外观")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

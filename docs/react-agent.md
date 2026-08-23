@@ -176,7 +176,7 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 - `search_exercises` 按名称返回 `{exercise_id,name}`，已有上下文足够时不得重复搜索；
 - 只有无语义等价项时一次调用 `create_exercise(exercise_names)`，再把返回的 Int64 ID 交给一次
   `create_workout(workouts)`；不要指定新建 `record_id`；
-- `create_program` 与 `create_program_version` 的每个动作都必须绑定有效动作 ID；
+- `create_program` 与 `update_program` 的每个动作都必须绑定有效动作 ID；更新直接替换当前计划处方；
 - `list_programs` / `get_program` 提供精确读取，`start_program` 仅创建本地不可变 Session 并路由
   到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
 

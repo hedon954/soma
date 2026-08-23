@@ -6,12 +6,16 @@ import UIKit
 /// `presentationIntent` and strips newlines from the character buffer; converting that
 /// buffer alone collapses coach replies into a single glued block.
 enum MarkdownAttributedStringBuilder {
-    static func attributedString(from markdown: String) -> NSAttributedString {
+    static func attributedString(
+        from markdown: String,
+        textStyle: UIFont.TextStyle = .body,
+        weight: UIFont.Weight = .regular
+    ) -> NSAttributedString {
         guard let parsed = try? AttributedString(
             markdown: markdown,
             options: .init(interpretedSyntax: .full)
         ) else {
-            return styledPlainText(markdown)
+            return styledPlainText(markdown, textStyle: textStyle, weight: weight)
         }
 
         var rebuilt = AttributedString()
@@ -47,7 +51,12 @@ enum MarkdownAttributedStringBuilder {
             }
 
             var fragment = AttributedString(parsed[run.range])
-            applyInlineStyle(&fragment, intent: run.attributes.inlinePresentationIntent)
+            applyInlineStyle(
+                &fragment,
+                intent: run.attributes.inlinePresentationIntent,
+                textStyle: textStyle,
+                weight: weight
+            )
             rebuilt.append(fragment)
 
             if let paragraphIdentity {
@@ -60,7 +69,7 @@ enum MarkdownAttributedStringBuilder {
         }
 
         if rebuilt.characters.isEmpty {
-            return styledPlainText(markdown)
+            return styledPlainText(markdown, textStyle: textStyle, weight: weight)
         }
         return NSAttributedString(rebuilt)
     }
@@ -70,8 +79,12 @@ enum MarkdownAttributedStringBuilder {
         attributedString(from: markdown).string
     }
 
-    private static func styledPlainText(_ text: String) -> NSAttributedString {
-        let font = UIFont.preferredFont(forTextStyle: .body)
+    private static func styledPlainText(
+        _ text: String,
+        textStyle: UIFont.TextStyle,
+        weight: UIFont.Weight
+    ) -> NSAttributedString {
+        let font = preferredFont(for: textStyle, weight: weight)
         return NSAttributedString(string: text, attributes: [
             .font: font,
             .foregroundColor: UIColor.label
@@ -80,28 +93,39 @@ enum MarkdownAttributedStringBuilder {
 
     private static func applyInlineStyle(
         _ fragment: inout AttributedString,
-        intent: InlinePresentationIntent?
+        intent: InlinePresentationIntent?,
+        textStyle: UIFont.TextStyle,
+        weight: UIFont.Weight
     ) {
-        let baseFont = UIFont.preferredFont(forTextStyle: .body)
+        let baseFont = preferredFont(for: textStyle, weight: weight)
         let font: UIFont
         if intent?.contains(.code) == true {
             font = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular)
         } else {
+            let resolvedWeight: UIFont.Weight = intent?.contains(.stronglyEmphasized) == true
+                ? .medium
+                : weight
+            let resolvedBase = preferredFont(for: textStyle, weight: resolvedWeight)
             var traits: UIFontDescriptor.SymbolicTraits = []
-            if intent?.contains(.stronglyEmphasized) == true {
-                traits.insert(.traitBold)
-            }
             if intent?.contains(.emphasized) == true {
                 traits.insert(.traitItalic)
             }
-            let descriptor = baseFont.fontDescriptor.withSymbolicTraits(traits)
-                ?? baseFont.fontDescriptor
-            font = UIFont(descriptor: descriptor, size: baseFont.pointSize)
+            let descriptor = resolvedBase.fontDescriptor.withSymbolicTraits(traits)
+                ?? resolvedBase.fontDescriptor
+            font = UIFont(descriptor: descriptor, size: resolvedBase.pointSize)
         }
 
         let range = fragment.startIndex ..< fragment.endIndex
         fragment[range].font = font
         fragment[range].foregroundColor = UIColor.label
+    }
+
+    private static func preferredFont(
+        for textStyle: UIFont.TextStyle,
+        weight: UIFont.Weight
+    ) -> UIFont {
+        let preferred = UIFont.preferredFont(forTextStyle: textStyle)
+        return UIFont.systemFont(ofSize: preferred.pointSize, weight: weight)
     }
 
     private static func paragraphIdentity(in intent: PresentationIntent?) -> Int? {

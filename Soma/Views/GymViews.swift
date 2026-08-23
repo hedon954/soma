@@ -36,7 +36,7 @@ struct GymLibraryView: View {
                             } label: {
                                 Image(systemName: gym.isCurrent ? "checkmark.circle.fill" : "circle")
                                     .font(.title3)
-                                    .foregroundStyle(gym.isCurrent ? AppTheme.tint : Color.secondary.opacity(0.45))
+                                    .foregroundStyle(gym.isCurrent ? AppTheme.trainingAccent : Color.secondary.opacity(0.45))
                             }
                             .buttonStyle(.borderless)
                             .accessibilityLabel(gym.isCurrent ? "当前健身房" : "设为当前健身房")
@@ -80,9 +80,9 @@ private struct GymLibraryRow: View {
                     LocalImageView(path: gym.coverImagePath)
                 } else {
                     ZStack {
-                        AppTheme.softTint
+                        AppTheme.trainingSoftTint
                         Image(systemName: "dumbbell.fill")
-                            .foregroundStyle(AppTheme.tint)
+                            .foregroundStyle(AppTheme.trainingAccent)
                     }
                 }
             }
@@ -96,10 +96,10 @@ private struct GymLibraryRow: View {
                     if gym.isCurrent {
                         Text("当前")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppTheme.tint)
+                            .foregroundStyle(AppTheme.trainingAccent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(AppTheme.softTint, in: Capsule())
+                            .background(AppTheme.trainingSoftTint, in: Capsule())
                     }
                 }
                 Text("\(equipmentCount) 件器械 · \(gym.notes.isEmpty ? "等待 AI 解析" : gym.notes)")
@@ -152,7 +152,7 @@ struct GymDetailView: View {
                         VStack(alignment: .leading, spacing: 7) {
                             Label("AI 环境解析", systemImage: "sparkles")
                                 .font(.headline)
-                                .foregroundStyle(AppTheme.tint)
+                                .foregroundStyle(AppTheme.trainingAccent)
                             Text(gym.notes)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -529,9 +529,9 @@ private struct EquipmentReviewRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
-                AppTheme.softTint
+                AppTheme.trainingSoftTint
                 Image(systemName: "dumbbell.fill")
-                    .foregroundStyle(AppTheme.tint)
+                    .foregroundStyle(AppTheme.trainingAccent)
             }
             .frame(width: 40, height: 40)
             .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -541,7 +541,7 @@ private struct EquipmentReviewRow: View {
                     .font(.subheadline.weight(.semibold))
                 Text(item.category)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(AppTheme.tint)
+                    .foregroundStyle(AppTheme.trainingAccent)
                 Text(item.capabilities)
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -172,10 +172,7 @@ extension ConversationRecorder {
         case "exercises": ["exercise_id", "name"]
         case "exercise_history": ["record_id", "date", "summary"]
         case "programs": [
-                "program_id", "name", "goal", "status", "current_template"
-            ]
-        case "templates": [
-                "record_id", "program_id", "name", "version", "schedule_hint",
+                "program_id", "name", "goal", "status", "schedule_hint",
                 "exercises"
             ]
         case "sessions": ["session_id", "date", "status", "summary", "details"]

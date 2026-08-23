@@ -558,7 +558,6 @@ final class AgentReliabilityTests: XCTestCase {
             GymEquipment.self,
             ExerciseDefinition.self,
             TrainingProgram.self,
-            WorkoutTemplateVersion.self,
             TemplateExercise.self,
             WorkoutSession.self,
             AgentMutationReceipt.self,

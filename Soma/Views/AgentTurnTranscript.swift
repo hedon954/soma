@@ -66,7 +66,7 @@ private struct AgentProcessGroupCard: View {
                         .frame(width: 22, height: 22)
 
                     Text(AgentTurnTranscriptSegments.processSummary(for: items))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -99,12 +99,12 @@ private struct AgentProcessGroupCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
+            AppTheme.insetBackground,
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(AppTheme.tint.opacity(0.12), lineWidth: 1)
+                .stroke(AppTheme.softTint, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
     }
@@ -118,7 +118,7 @@ private struct AgentProcessGroupCard: View {
         } else {
             Image(systemName: "checkmark.circle.fill")
                 .font(.subheadline)
-                .foregroundStyle(AppTheme.tint)
+                .foregroundStyle(AppTheme.success)
         }
     }
 }
@@ -141,13 +141,9 @@ private struct AgentTurnItemCard: View {
 
     private var textCard: some View {
         let text = AgentVisibleTextSanitizer.sanitize(item.text)
-        return MarkdownText(text)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 10)
-            .background(
-                Color(uiColor: .secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-            )
+        return CoachResponseView(text)
+            .padding(.horizontal, 2)
+            .padding(.vertical, 3)
             .accessibilityLabel(text)
     }
 
@@ -184,7 +180,7 @@ private struct AgentTurnItemCard: View {
         .background {
             if showsChrome {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .fill(AppTheme.insetBackground)
             }
         }
         .overlay {
@@ -203,7 +199,7 @@ private struct AgentTurnItemCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
@@ -238,7 +234,7 @@ private struct AgentTurnItemCard: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title.isEmpty ? "执行失败" : item.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                 Text(item.errorMessage ?? item.text)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -264,7 +260,7 @@ private struct AgentTurnItemCard: View {
         case .succeeded:
             Image(systemName: item.kind == .skill ? "sparkles" : "checkmark.circle.fill")
                 .font(.subheadline)
-                .foregroundStyle(AppTheme.tint)
+                .foregroundStyle(item.kind == .skill ? AppTheme.trendAccent : AppTheme.success)
         case .failed, .cancelled:
             Image(systemName: "xmark.circle.fill")
                 .font(.subheadline)
@@ -277,7 +273,7 @@ private struct AgentTurnItemCard: View {
         case .failed, .cancelled:
             .red
         case .running, .succeeded:
-            item.kind == .skill ? .purple : AppTheme.tint
+            item.kind == .skill ? AppTheme.trendAccent : AppTheme.trainingAccent
         }
     }
 

@@ -50,7 +50,6 @@ enum SomaDataSchema {
             ExerciseMergeRecord.self,
             WorkoutEntry.self,
             TrainingProgram.self,
-            WorkoutTemplateVersion.self,
             TemplateExercise.self,
             TemplateSetPrescription.self,
             WorkoutSession.self,
@@ -73,7 +72,7 @@ enum SomaDataSchema {
 }
 
 enum SomaDataMigration {
-    static let currentVersion = 5
+    static let currentVersion = 6
 
     @MainActor
     static func migrateIfNeeded(
@@ -193,28 +192,23 @@ enum SomaDataMigration {
         }
     }
 
-    /// 修复备份恢复和 V4→V5 后的显式关系。只根据稳定 UUID 连接，不猜动作语义。
+    /// 修复备份恢复后的显式关系。只根据稳定 UUID 连接，不猜动作语义。
     static func repairTrainingRelationships(
         in context: ModelContext
     ) throws {
         let programs = try context.fetch(FetchDescriptor<TrainingProgram>())
-        let programByID = Dictionary(
-            uniqueKeysWithValues: programs.map { ($0.id, $0) }
+        let programByGroupID = Dictionary(
+            uniqueKeysWithValues: programs.compactMap { program in
+                program.prescriptionGroupID.map { ($0, program) }
+            }
         )
-        let versions = try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-        let versionByID = Dictionary(
-            uniqueKeysWithValues: versions.map { ($0.id, $0) }
-        )
-        for version in versions {
-            version.program = programByID[version.programID]
-        }
 
         let templateExercises = try context.fetch(FetchDescriptor<TemplateExercise>())
         let templateByID = Dictionary(
             uniqueKeysWithValues: templateExercises.map { ($0.id, $0) }
         )
         for exercise in templateExercises {
-            exercise.templateVersion = versionByID[exercise.templateVersionID]
+            exercise.program = programByGroupID[exercise.prescriptionGroupID]
         }
         for set in try context.fetch(FetchDescriptor<TemplateSetPrescription>()) {
             set.templateExercise = templateByID[set.templateExerciseID]
@@ -366,7 +360,31 @@ enum SomaDataMigration {
             context.insert(effort)
         }
 
+        try keepOnlyCurrentPlanPrescriptions(in: context)
         try repairTrainingRelationships(in: context)
+    }
+
+    /// 旧存储把每次编辑都保存成一组动作。迁移后只保留计划当前指向的那组，
+    /// 之后编辑直接覆盖当前计划；已开始训练继续使用 Session 内的冻结处方。
+    private static func keepOnlyCurrentPlanPrescriptions(
+        in context: ModelContext
+    ) throws {
+        let programs = try context.fetch(FetchDescriptor<TrainingProgram>())
+        for program in programs where program.prescriptionGroupID == nil {
+            program.prescriptionGroupID = program.id
+        }
+        let activeGroupIDs = Set(programs.compactMap(\.prescriptionGroupID))
+        let exercises = try context.fetch(FetchDescriptor<TemplateExercise>())
+        let removed = exercises.filter {
+            !activeGroupIDs.contains($0.prescriptionGroupID)
+        }
+        let removedIDs = Set(removed.map(\.id))
+        for set in try context.fetch(FetchDescriptor<TemplateSetPrescription>())
+            where removedIDs.contains(set.templateExerciseID)
+        {
+            context.delete(set)
+        }
+        removed.forEach(context.delete)
     }
 
     private static func validateLegacySnapshots(
@@ -432,7 +450,6 @@ enum BusinessIDAllocator {
         try assignAll(ExerciseDefinition.self, namespace: "exercise", in: context)
         try assignAll(ExerciseMergeRecord.self, namespace: "exercise_merge", in: context)
         try assignAll(TrainingProgram.self, namespace: "training_program", in: context)
-        try assignAll(WorkoutTemplateVersion.self, namespace: "template_version", in: context)
         try assignAll(TemplateExercise.self, namespace: "template_exercise", in: context)
         try assignAll(
             TemplateSetPrescription.self,
@@ -457,7 +474,6 @@ enum BusinessIDAllocator {
         try clearDuplicateIDs(ExerciseDefinition.self, in: context)
         try clearDuplicateIDs(ExerciseMergeRecord.self, in: context)
         try clearDuplicateIDs(TrainingProgram.self, in: context)
-        try clearDuplicateIDs(WorkoutTemplateVersion.self, in: context)
         try clearDuplicateIDs(TemplateExercise.self, in: context)
         try clearDuplicateIDs(TemplateSetPrescription.self, in: context)
         try clearDuplicateIDs(WorkoutSession.self, in: context)

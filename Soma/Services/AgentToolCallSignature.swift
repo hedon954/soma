@@ -105,7 +105,6 @@ private struct AgentToolSignatureArguments {
         put("program_name", arguments.programName)
         put("goal", arguments.goal)
         put("overview", arguments.overview)
-        put("template_name", arguments.templateName)
         put("schedule_hint", arguments.scheduleHint)
         put("auto_recording_policy", arguments.autoRecordingPolicy)
     }

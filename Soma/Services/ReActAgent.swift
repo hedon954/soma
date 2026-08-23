@@ -22,7 +22,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case listPrograms = "list_programs"
     case getProgram = "get_program"
     case createProgram = "create_program"
-    case createProgramVersion = "create_program_version"
+    case updateProgram = "update_program"
     case archiveProgram = "archive_program"
     case deleteProgram = "delete_program"
     case startProgram = "start_program"
@@ -44,7 +44,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .getBodyEntry, .createBodyEntry, .deleteBodyEntry,
              .updateBody,
              .listPrograms, .getProgram, .createProgram,
-             .createProgramVersion, .archiveProgram, .deleteProgram,
+             .updateProgram, .archiveProgram, .deleteProgram,
              .startProgram:
             true
         default:
@@ -74,7 +74,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         switch self {
         case .getProgram,
              .createProgram,
-             .createProgramVersion,
+             .updateProgram,
              .createExercise,
              .createWorkout:
             3
@@ -112,7 +112,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     /// 新计划、批量动作/训练写入只广告 schema 3；升级前持久化的远程 Job 仍可按原版本交回设备执行。
     var supportedSchemaVersions: Set<Int> {
         switch self {
-        case .getProgram, .createProgram, .createProgramVersion,
+        case .getProgram, .createProgram, .updateProgram,
              .createExercise, .createWorkout:
             [1, 2, 3]
         default:
@@ -142,7 +142,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         case .listPrograms: "读取计划列表"
         case .getProgram: "读取计划详情"
         case .createProgram: "创建训练计划"
-        case .createProgramVersion: "创建计划版本"
+        case .updateProgram: "更新训练计划"
         case .archiveProgram: "归档训练计划"
         case .deleteProgram: "删除训练计划"
         case .startProgram: "开始计划带练"
@@ -452,7 +452,6 @@ struct AgentToolArguments: Codable, Equatable {
     var programName: String?
     var goal: String?
     var overview: String?
-    var templateName: String?
     var scheduleHint: String?
     var templateExercises: [AgentTemplateExerciseInput]?
     var autoRecordingPolicy: String?
@@ -493,7 +492,6 @@ struct AgentToolArguments: Codable, Equatable {
         case evidence, limitations
         case programName = "program_name"
         case goal, overview
-        case templateName = "template_name"
         case scheduleHint = "schedule_hint"
         case templateExercises = "template_exercises"
         case autoRecordingPolicy = "auto_recording_policy"
@@ -560,7 +558,6 @@ struct AgentToolArguments: Codable, Equatable {
         programName: String? = nil,
         goal: String? = nil,
         overview: String? = nil,
-        templateName: String? = nil,
         scheduleHint: String? = nil,
         templateExercises: [AgentTemplateExerciseInput]? = nil,
         autoRecordingPolicy: String? = nil,
@@ -625,7 +622,6 @@ struct AgentToolArguments: Codable, Equatable {
         self.programName = programName
         self.goal = goal
         self.overview = overview
-        self.templateName = templateName
         self.scheduleHint = scheduleHint
         self.templateExercises = templateExercises
         self.autoRecordingPolicy = autoRecordingPolicy
@@ -957,13 +953,13 @@ extension AgentToolName {
         case .listPrograms:
             "读取可执行训练计划摘要。"
         case .getProgram:
-            "按 Int64 program_id 读取计划概览、当前版本和独立逐组处方。"
+            "按 Int64 program_id 读取计划概览和独立逐组处方。"
         case .createProgram:
-            "创建训练计划和首个不可变版本；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。"
-        case .createProgramVersion:
-            "用完整独立逐组处方为已有计划创建不可变新版本，不改写历史版本和已开始 Session。"
+            "创建训练计划；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。"
+        case .updateProgram:
+            "用完整独立逐组处方直接更新已有计划；已开始的 Session 继续使用自己的处方快照。"
         case .archiveProgram:
-            "归档训练计划，保留模板版本和训练历史。"
+            "归档训练计划，保留训练历史。"
         case .deleteProgram:
             "永久删除训练计划；仅在当前用户消息明确授权时使用，训练历史保留。"
         case .startProgram:
@@ -1146,17 +1142,16 @@ extension AgentToolName {
             object([
                 "program_name": string("训练计划名称"),
                 "overview": string("用户明确提供、可编辑的计划概览"),
-                "template_name": string("首个训练模板名称"),
                 "schedule_hint": string("用户明确提供的安排提示"),
                 "template_exercises": templateExerciseArrayV3()
-            ], required: ["program_name", "template_name", "template_exercises"])
-        case .createProgramVersion:
+            ], required: ["program_name", "template_exercises"])
+        case .updateProgram:
             object([
                 "program_id": integer("训练计划 Int64 ID"),
-                "template_name": string("新版本训练模板名称"),
+                "program_name": string("更新后的训练计划名称；省略则保持不变"),
                 "schedule_hint": string("用户明确提供的安排提示"),
                 "template_exercises": templateExerciseArrayV3()
-            ], required: ["program_id", "template_name", "template_exercises"])
+            ], required: ["program_id", "template_exercises"])
         case .archiveProgram:
             object([
                 "program_id": integer("训练计划 Int64 ID")

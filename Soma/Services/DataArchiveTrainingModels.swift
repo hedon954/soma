@@ -6,7 +6,8 @@ struct TrainingProgramDTO: Codable, Equatable, Sendable {
     var name: String
     var goal: String
     var statusRaw: String
-    var currentTemplateVersionID: UUID?
+    var prescriptionGroupID: UUID?
+    var scheduleHint: String
     var createdAt: Date
     var updatedAt: Date
 
@@ -16,7 +17,8 @@ struct TrainingProgramDTO: Codable, Equatable, Sendable {
         name = model.name
         goal = model.overview
         statusRaw = model.statusRaw
-        currentTemplateVersionID = model.currentTemplateVersionID
+        prescriptionGroupID = model.prescriptionGroupID
+        scheduleHint = model.scheduleHint
         createdAt = model.createdAt
         updatedAt = model.updatedAt
     }
@@ -27,54 +29,10 @@ struct TrainingProgramDTO: Codable, Equatable, Sendable {
             name: name,
             overview: goal,
             status: TrainingProgramStatus(rawValue: statusRaw) ?? .active,
-            currentTemplateVersionID: currentTemplateVersionID,
+            prescriptionGroupID: prescriptionGroupID,
+            scheduleHint: scheduleHint,
             createdAt: createdAt,
             updatedAt: updatedAt
-        )
-        model.businessID = businessID
-        return model
-    }
-}
-
-struct WorkoutTemplateVersionDTO: Codable, Equatable, Sendable {
-    var id: UUID
-    var businessID: Int64?
-    var programID: UUID
-    var familyID: UUID
-    var version: Int
-    var name: String
-    var scheduleHint: String
-    var source: String
-    var createdAt: Date
-    var changeSummary: String?
-    var changeDetails: String?
-
-    init(_ model: WorkoutTemplateVersion) {
-        id = model.id
-        businessID = model.businessID
-        programID = model.programID
-        familyID = model.familyID
-        version = model.version
-        name = model.name
-        scheduleHint = model.scheduleHint
-        source = model.source
-        createdAt = model.createdAt
-        changeSummary = model.changeSummary
-        changeDetails = model.changeDetails
-    }
-
-    func makeModel() -> WorkoutTemplateVersion {
-        let model = WorkoutTemplateVersion(
-            id: id,
-            programID: programID,
-            familyID: familyID,
-            version: version,
-            name: name,
-            scheduleHint: scheduleHint,
-            source: source,
-            createdAt: createdAt,
-            changeSummary: changeSummary,
-            changeDetails: changeDetails
         )
         model.businessID = businessID
         return model
@@ -84,7 +42,7 @@ struct WorkoutTemplateVersionDTO: Codable, Equatable, Sendable {
 struct TemplateExerciseDTO: Codable, Equatable, Sendable {
     var id: UUID
     var businessID: Int64?
-    var templateVersionID: UUID
+    var prescriptionGroupID: UUID
     var exerciseID: UUID
     var order: Int
     var targetSets: Int?
@@ -99,7 +57,7 @@ struct TemplateExerciseDTO: Codable, Equatable, Sendable {
     init(_ model: TemplateExercise) {
         id = model.id
         businessID = model.businessID
-        templateVersionID = model.templateVersionID
+        prescriptionGroupID = model.prescriptionGroupID
         exerciseID = model.exerciseID
         order = model.order
         targetSets = model.targetSets
@@ -115,7 +73,7 @@ struct TemplateExerciseDTO: Codable, Equatable, Sendable {
     func makeModel() -> TemplateExercise {
         let model = TemplateExercise(
             id: id,
-            templateVersionID: templateVersionID,
+            prescriptionGroupID: prescriptionGroupID,
             exerciseID: exerciseID,
             order: order,
             targetSets: targetSets,
@@ -195,8 +153,6 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
     var gymID: UUID?
     var programID: UUID?
     var programNameSnapshot: String?
-    var sourceTemplateFamilyID: UUID?
-    var sourceTemplateVersion: Int?
     var prescriptionSnapshotData: Data
     var statusRaw: String
     var guidedPhaseRaw: String
@@ -224,8 +180,6 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
         gymID = model.gymID
         programID = model.programID
         programNameSnapshot = model.programNameSnapshot
-        sourceTemplateFamilyID = model.sourceTemplateFamilyID
-        sourceTemplateVersion = model.sourceTemplateVersion
         prescriptionSnapshotData = model.prescriptionSnapshotData
         statusRaw = model.statusRaw
         guidedPhaseRaw = model.guidedPhaseRaw
@@ -260,8 +214,6 @@ struct WorkoutSessionDTO: Codable, Equatable, Sendable {
             gymID: gymID,
             programID: programID,
             programNameSnapshot: programNameSnapshot,
-            sourceTemplateFamilyID: sourceTemplateFamilyID,
-            sourceTemplateVersion: sourceTemplateVersion,
             prescriptionSnapshot: snapshot,
             status: WorkoutSessionStatus(rawValue: statusRaw) ?? .draft,
             guidedPhase: GuidedWorkoutPhase(rawValue: guidedPhaseRaw) ?? .ready,

@@ -55,7 +55,7 @@ enum ConversationRecorder {
              .getBodyEntry, .createBodyEntry, .deleteBodyEntry,
              .updateBody,
              .listPrograms, .getProgram, .createProgram,
-             .createProgramVersion, .archiveProgram, .deleteProgram,
+             .updateProgram, .archiveProgram, .deleteProgram,
              .startProgram:
             .failure("v3 Tool 路由异常。", code: "internal_error")
         case .loadSkill:
@@ -318,15 +318,12 @@ enum ConversationRecorder {
         case "programs":
             return queryPrograms(arguments, limit: limit, in: context)
 
-        case "templates":
-            return queryTemplates(arguments, limit: limit, in: context)
-
         case "sessions":
             return querySessions(arguments, limit: limit, in: context)
 
         default:
             return .failure(
-                "scope 不支持。可选值：overview、profile、workouts、meals、body、gyms、exercises、exercise_history、programs、templates、sessions。"
+                "scope 不支持。可选值：overview、profile、workouts、meals、body、gyms、exercises、exercise_history、programs、sessions。"
             )
         }
     }

@@ -10,9 +10,6 @@ extension ConversationRecorder {
         let programs = (
             try? context.fetch(FetchDescriptor<TrainingProgram>())
         ) ?? []
-        let versions = (
-            try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-        ) ?? []
         let sortedPrograms: [TrainingProgram] = programs.sorted {
             $0.updatedAt > $1.updatedAt
         }
@@ -35,16 +32,12 @@ extension ConversationRecorder {
                 "goal": goal,
                 "status": .string(program.status.rawValue)
             ]
-            if arguments.projection == "detail",
-               let version = versions.first(where: {
-                   $0.id == program.currentTemplateVersionID
-               })
-            {
+            if arguments.projection == "detail" {
                 let prescriptions = TrainingPlanStore.prescriptions(
-                    for: version,
+                    for: program,
                     in: context
                 )
-                let scheduleHint = optionalText(version.scheduleHint)
+                let scheduleHint = optionalText(program.scheduleHint)
                     .map(AgentJSONValue.string) ?? .null
                 let exercises: [AgentJSONValue] = prescriptions.map { item in
                     .object([
@@ -62,87 +55,14 @@ extension ConversationRecorder {
                             .map { .number(Double($0)) } ?? .null
                     ])
                 }
-                value["current_template"] = .object([
-                    "record_id": businessIDValue(version.businessID),
-                    "name": .string(version.name),
-                    "version": .number(Double(version.version)),
-                    "schedule_hint": scheduleHint,
-                    "exercises": .array(exercises)
-                ])
+                value["schedule_hint"] = scheduleHint
+                value["exercises"] = .array(exercises)
             }
             values.append(value)
         }
         return pagedResult(
             values,
             noun: "训练计划",
-            arguments: arguments,
-            limit: limit
-        )
-    }
-
-    static func queryTemplates(
-        _ arguments: AgentToolArguments,
-        limit: Int,
-        in context: ModelContext
-    ) -> AgentToolResult {
-        let versions = (
-            try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-        ) ?? []
-        let programs = (
-            try? context.fetch(FetchDescriptor<TrainingProgram>())
-        ) ?? []
-        let filtered: [WorkoutTemplateVersion] = if let businessID = arguments.programID,
-                                                    let program = programs.first(where: {
-                                                        $0.businessID == businessID
-                                                    })
-        {
-            versions.filter { $0.programID == program.id }
-        } else {
-            versions
-        }
-        let values = filtered
-            .filter {
-                arguments.recordID == nil
-                    || $0.businessID == arguments.recordID
-            }
-            .sorted { lhs, rhs in
-                lhs.createdAt == rhs.createdAt
-                    ? lhs.version > rhs.version
-                    : lhs.createdAt > rhs.createdAt
-            }
-            .map { version in
-                var value = [
-                    "record_id": businessIDValue(version.businessID),
-                    "program_id": businessIDValue(
-                        programs.first(where: { $0.id == version.programID })?.businessID
-                    ),
-                    "name": .string(version.name),
-                    "version": .number(Double(version.version))
-                ] as [String: AgentJSONValue]
-                if arguments.projection == "detail" {
-                    let scheduleHint = optionalText(version.scheduleHint)
-                        .map(AgentJSONValue.string) ?? .null
-                    let prescriptions = TrainingPlanStore.prescriptions(
-                        for: version,
-                        in: context
-                    )
-                    let exercises: [AgentJSONValue] = prescriptions.map { item in
-                        .object([
-                            "exercise_id": businessIDValue(
-                                exerciseBusinessID(item.exerciseID, in: context)
-                            ),
-                            "name": .string(item.exerciseName),
-                            "order": .number(Double(item.order))
-                        ])
-                    }
-                    value["schedule_hint"] = scheduleHint
-                    value["exercises"] = .array(exercises)
-                }
-                return value
-            }
-        return pagedResult(
-            values,
-            noun: "训练模板",
             arguments: arguments,
             limit: limit
         )

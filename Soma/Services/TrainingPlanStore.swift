@@ -119,35 +119,21 @@ enum TrainingPlanStore {
     static func createProgram(
         name: String,
         goal: String = "",
-        templateName: String,
         scheduleHint: String = "",
         prescriptions: [TemplateExercisePrescription],
-        source: String = "user",
         in context: ModelContext
     ) throws -> TrainingProgram {
         let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedName.isEmpty else { throw TrainingPlanError.emptyName }
         try validate(prescriptions, in: context)
 
-        let program = TrainingProgram(name: normalizedName, goal: goal)
-        let initialChange = TemplateVersionDiff.changeLog(
-            from: nil,
-            to: prescriptions
+        let program = TrainingProgram(
+            name: normalizedName,
+            goal: goal,
+            scheduleHint: scheduleHint
         )
-        let version = WorkoutTemplateVersion(
-            programID: program.id,
-            version: 1,
-            name: templateName,
-            scheduleHint: scheduleHint,
-            source: source,
-            changeSummary: initialChange.summary,
-            changeDetails: initialChange.details
-        )
-        program.currentTemplateVersionID = version.id
-        version.program = program
         context.insert(program)
-        context.insert(version)
-        insert(prescriptions, templateVersion: version, in: context)
+        insert(prescriptions, program: program, in: context)
         try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
         return program
@@ -163,54 +149,36 @@ enum TrainingPlanStore {
         try context.save()
     }
 
-    static func createNextVersion(
+    static func updateProgram(
         for program: TrainingProgram,
         name: String,
         scheduleHint: String,
         prescriptions: [TemplateExercisePrescription],
-        source: String = "user",
         in context: ModelContext
-    ) throws -> WorkoutTemplateVersion {
+    ) throws {
         try validate(prescriptions, in: context)
-        let versions = try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-            .filter { $0.programID == program.id }
-        let prior = versions.max { $0.version < $1.version }
-        let previousPrescriptions = prior.map {
-            Self.prescriptions(for: $0, in: context)
-        }
-        let changeLog = TemplateVersionDiff.changeLog(
-            from: previousPrescriptions,
-            to: prescriptions
+        let existing = templateExercises(for: program, in: context)
+        let existingIDs = Set(existing.map(\.id))
+        let sets = try context.fetch(FetchDescriptor<TemplateSetPrescription>())
+            .filter { existingIDs.contains($0.templateExerciseID) }
+        sets.forEach { context.delete($0) }
+        existing.forEach { context.delete($0) }
+        program.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        program.scheduleHint = scheduleHint.trimmingCharacters(
+            in: .whitespacesAndNewlines
         )
-        let version = WorkoutTemplateVersion(
-            programID: program.id,
-            familyID: prior?.familyID ?? UUID(),
-            version: (prior?.version ?? 0) + 1,
-            name: name,
-            scheduleHint: scheduleHint,
-            source: source,
-            changeSummary: changeLog.summary,
-            changeDetails: changeLog.details
-        )
-        version.program = program
-        context.insert(version)
-        insert(prescriptions, templateVersion: version, in: context)
-        program.currentTemplateVersionID = version.id
+        insert(prescriptions, program: program, in: context)
         program.updatedAt = .now
         try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
-        return version
     }
 
     static func prescriptions(
-        for version: WorkoutTemplateVersion,
+        for program: TrainingProgram,
         in context: ModelContext
     ) -> [TemplateExercisePrescription] {
-        let relatedExercises = version.templateExercises
-        let exercises = (relatedExercises.isEmpty
-            ? (try? context.fetch(FetchDescriptor<TemplateExercise>()))?
-            .filter { $0.templateVersionID == version.id } ?? []
-            : relatedExercises).sorted { $0.order < $1.order }
+        let exercises = templateExercises(for: program, in: context)
+            .sorted { $0.order < $1.order }
         let definitions = (
             try? context.fetch(FetchDescriptor<ExerciseDefinition>())
         ) ?? []
@@ -243,6 +211,17 @@ enum TrainingPlanStore {
                 plannedSets: plannedSets.isEmpty ? nil : plannedSets
             )
         }
+    }
+
+    private static func templateExercises(
+        for program: TrainingProgram,
+        in context: ModelContext
+    ) -> [TemplateExercise] {
+        let related = program.templateExercises
+        guard related.isEmpty else { return related }
+        guard let groupID = program.prescriptionGroupID else { return [] }
+        return (try? context.fetch(FetchDescriptor<TemplateExercise>()))?
+            .filter { $0.prescriptionGroupID == groupID } ?? []
     }
 
     static func readiness(
@@ -346,14 +325,8 @@ enum TrainingPlanStore {
         autoRecordingPolicy: AutoRecordingPolicy = .disabled,
         in context: ModelContext
     ) throws -> WorkoutSession {
-        guard let versionID = program.currentTemplateVersionID,
-              let version = try context.fetch(
-                  FetchDescriptor<WorkoutTemplateVersion>()
-              ).first(where: { $0.id == versionID })
-        else {
-            throw TrainingPlanError.missingTemplate
-        }
-        let values = prescriptions(for: version, in: context)
+        let values = prescriptions(for: program, in: context)
+        guard !values.isEmpty else { throw TrainingPlanError.missingTemplate }
         try validate(values, in: context)
         let blocking = readiness(
             prescriptions: values,
@@ -366,8 +339,6 @@ enum TrainingPlanStore {
             gymID: gymID,
             programID: program.id,
             programNameSnapshot: program.name,
-            sourceTemplateFamilyID: version.familyID,
-            sourceTemplateVersion: version.version,
             prescriptionSnapshot: values,
             status: .active,
             autoRecordingPolicy: autoRecordingPolicy
@@ -650,50 +621,36 @@ enum TrainingPlanStore {
         _ program: TrainingProgram,
         in context: ModelContext
     ) throws {
-        let versions = try context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-            .filter { $0.programID == program.id }
-        let familyIDs = Set(versions.map(\.familyID))
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-            .filter {
-                $0.programID == program.id
-                    || ($0.sourceTemplateFamilyID.map(familyIDs.contains) ?? false)
-            }
+            .filter { $0.programID == program.id }
         for session in sessions {
-            if session.programID == nil {
-                session.programID = program.id
-            }
             let snapshot = session.programNameSnapshot?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if snapshot == nil || snapshot?.isEmpty == true {
                 session.programNameSnapshot = program.name
             }
         }
-        let versionIDs = Set(versions.map(\.id))
-        let exercises = try context.fetch(FetchDescriptor<TemplateExercise>())
-            .filter { versionIDs.contains($0.templateVersionID) }
+        let exercises = templateExercises(for: program, in: context)
         let exerciseIDs = Set(exercises.map(\.id))
         let setPrescriptions = try context.fetch(
             FetchDescriptor<TemplateSetPrescription>()
         ).filter { exerciseIDs.contains($0.templateExerciseID) }
         setPrescriptions.forEach { context.delete($0) }
         exercises.forEach { context.delete($0) }
-        versions.forEach { context.delete($0) }
         context.delete(program)
         try context.save()
     }
 
-    /// Persists plan id/name onto sessions that still only have a template family link.
+    /// Persists plan id/name onto sessions that can be matched by their frozen prescription.
     @discardableResult
     static func backfillProgramSources(in context: ModelContext) -> Int {
         let sessions = (try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? []
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        let versions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>()))
-            ?? []
         var changed = 0
         for session in sessions where backfillProgramSource(
             for: session,
             programs: programs,
-            versions: versions
+            in: context
         ) {
             changed += 1
         }
@@ -707,13 +664,11 @@ enum TrainingPlanStore {
     static func backfillProgramSource(
         for session: WorkoutSession,
         programs: [TrainingProgram] = [],
-        versions: [WorkoutTemplateVersion] = [],
         in context: ModelContext? = nil
     ) -> Bool {
         let resolved = resolveProgramSource(
             for: session,
             programs: programs,
-            versions: versions,
             in: context
         )
         guard let resolved else { return false }
@@ -735,19 +690,14 @@ enum TrainingPlanStore {
     static func programSourceLabel(
         for session: WorkoutSession,
         programs: [TrainingProgram] = [],
-        versions: [WorkoutTemplateVersion] = [],
         in context: ModelContext? = nil
     ) -> String? {
         guard let resolved = resolveProgramSource(
             for: session,
             programs: programs,
-            versions: versions,
             in: context
         ) else {
             return nil
-        }
-        if let version = resolved.version {
-            return "\(resolved.name) · v\(version)"
         }
         return resolved.name
     }
@@ -755,13 +705,11 @@ enum TrainingPlanStore {
     private struct ResolvedProgramSource {
         var programID: UUID?
         var name: String
-        var version: Int?
     }
 
     private static func resolveProgramSource(
         for session: WorkoutSession,
         programs: [TrainingProgram],
-        versions: [WorkoutTemplateVersion],
         in context: ModelContext?
     ) -> ResolvedProgramSource? {
         let snapshot = session.programNameSnapshot?
@@ -769,21 +717,15 @@ enum TrainingPlanStore {
         if let snapshot, !snapshot.isEmpty {
             return ResolvedProgramSource(
                 programID: session.programID,
-                name: snapshot,
-                version: session.sourceTemplateVersion
+                name: snapshot
             )
         }
 
-        let resolvedPrograms: [TrainingProgram]
-        let resolvedVersions: [WorkoutTemplateVersion]
-        if let context {
-            resolvedPrograms = (try? context.fetch(FetchDescriptor<TrainingProgram>()))
+        let resolvedPrograms: [TrainingProgram] = if let context {
+            (try? context.fetch(FetchDescriptor<TrainingProgram>()))
                 ?? programs
-            resolvedVersions = (try? context.fetch(FetchDescriptor<WorkoutTemplateVersion>()))
-                ?? versions
         } else {
-            resolvedPrograms = programs
-            resolvedVersions = versions
+            programs
         }
 
         if let programID = session.programID,
@@ -791,62 +733,26 @@ enum TrainingPlanStore {
         {
             return ResolvedProgramSource(
                 programID: program.id,
-                name: program.name,
-                version: session.sourceTemplateVersion
+                name: program.name
             )
         }
 
-        if let familyID = session.sourceTemplateFamilyID {
-            let exactVersion = resolvedVersions.first(where: {
-                $0.familyID == familyID
-                    && (
-                        session.sourceTemplateVersion == nil
-                            || $0.version == session.sourceTemplateVersion
-                    )
-            })
-            let matchedVersion = exactVersion
-                ?? resolvedVersions.first(where: { $0.familyID == familyID })
-            if let matchedVersion,
-               let program = resolvedPrograms.first(where: {
-                   $0.id == matchedVersion.programID
-               })
-            {
-                return ResolvedProgramSource(
-                    programID: program.id,
-                    name: program.name,
-                    version: session.sourceTemplateVersion ?? matchedVersion.version
-                )
-            }
-        }
-
-        // Last resort for legacy rows that lost template family links: match the
-        // frozen prescription fingerprint against a unique surviving template.
+        // Legacy rows without a source id can still be matched against one current plan.
         guard let context else { return nil }
         let fingerprint = prescriptionFingerprint(session.prescriptionSnapshot)
         guard !fingerprint.isEmpty else { return nil }
-        var matches: [(TrainingProgram, WorkoutTemplateVersion)] = []
-        for version in resolvedVersions {
-            guard let program = resolvedPrograms.first(where: {
-                $0.id == version.programID
-            }) else {
-                continue
-            }
-            let values = prescriptions(for: version, in: context)
+        var matches: [TrainingProgram] = []
+        for program in resolvedPrograms {
+            let values = prescriptions(for: program, in: context)
             guard prescriptionFingerprint(values) == fingerprint else {
                 continue
             }
-            matches.append((program, version))
+            matches.append(program)
         }
-        let uniquePrograms = Dictionary(grouping: matches, by: { $0.0.id })
-        guard uniquePrograms.count == 1,
-              let match = matches.first
-        else {
-            return nil
-        }
+        guard matches.count == 1, let match = matches.first else { return nil }
         return ResolvedProgramSource(
-            programID: match.0.id,
-            name: match.0.name,
-            version: session.sourceTemplateVersion ?? match.1.version
+            programID: match.id,
+            name: match.name
         )
     }
 
@@ -919,31 +825,9 @@ enum TrainingPlanStore {
         return parts.joined(separator: "/")
     }
 
-    static func resolvedChangeLog(
-        for version: WorkoutTemplateVersion,
-        previous: WorkoutTemplateVersion?,
-        in context: ModelContext
-    ) -> TemplateVersionChangeLog {
-        if let summary = version.changeSummary?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !summary.isEmpty
-        {
-            return TemplateVersionChangeLog(
-                summary: summary,
-                details: version.changeDetails?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .nilIfEmpty
-                    ?? summary
-            )
-        }
-        let current = prescriptions(for: version, in: context)
-        let prior = previous.map { prescriptions(for: $0, in: context) }
-        return TemplateVersionDiff.changeLog(from: prior, to: current)
-    }
-
     private static func insert(
         _ prescriptions: [TemplateExercisePrescription],
-        templateVersion: WorkoutTemplateVersion,
+        program: TrainingProgram,
         in context: ModelContext
     ) {
         let definitions = (
@@ -962,7 +846,7 @@ enum TrainingPlanStore {
             }
             let item = TemplateExercise(
                 id: prescription.id,
-                templateVersionID: templateVersion.id,
+                prescriptionGroupID: program.prescriptionGroupID ?? program.id,
                 exerciseID: prescription.exerciseID,
                 order: prescription.order,
                 targetSets: prescription.targetSets,
@@ -974,7 +858,7 @@ enum TrainingPlanStore {
                 notes: prescription.notes,
                 laterality: prescription.laterality
             )
-            item.templateVersion = templateVersion
+            item.program = program
             context.insert(item)
             item.exerciseDefinition = definition
             for value in prescription.plannedSets {

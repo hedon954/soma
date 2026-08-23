@@ -89,7 +89,6 @@ final class TrainingDomainV5Tests: XCTestCase {
         let program = try TrainingPlanStore.createProgram(
             name: "左右独立",
             goal: "逐侧训练",
-            templateName: "A",
             prescriptions: [
                 TemplateExercisePrescription(
                     exerciseID: exercise.id,
@@ -129,12 +128,8 @@ final class TrainingDomainV5Tests: XCTestCase {
         XCTAssertEqual(program.overview, "左右重量独立。")
         XCTAssertEqual(program.goal, program.overview)
 
-        let version = try XCTUnwrap(
-            try fixture.context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first
-        )
         let snapshot = try XCTUnwrap(
-            TrainingPlanStore.prescriptions(for: version, in: fixture.context).first
+            TrainingPlanStore.prescriptions(for: program, in: fixture.context).first
         )
         XCTAssertEqual(snapshot.laterality, .both)
         XCTAssertEqual(snapshot.plannedSets.map(\.targetKind), [.repetitions, .duration])
@@ -144,10 +139,8 @@ final class TrainingDomainV5Tests: XCTestCase {
         XCTAssertEqual(storedSets.count, 2)
         XCTAssertTrue(storedSets.allSatisfy { $0.businessID != nil })
         XCTAssertTrue(storedSets.allSatisfy { $0.templateExercise != nil })
-        XCTAssertEqual(program.templateVersions.map(\.id), [version.id])
-        XCTAssertEqual(version.program?.id, program.id)
-        let storedExercise = try XCTUnwrap(version.templateExercises.first)
-        XCTAssertEqual(storedExercise.templateVersion?.id, version.id)
+        let storedExercise = try XCTUnwrap(program.templateExercises.first)
+        XCTAssertEqual(storedExercise.program?.id, program.id)
         XCTAssertEqual(
             Set(storedExercise.setPrescriptions.map(\.id)),
             Set(storedSets.map(\.id))
@@ -200,7 +193,6 @@ final class TrainingDomainV5Tests: XCTestCase {
         )
         let program = try TrainingPlanStore.createProgram(
             name: "关系计划",
-            templateName: "A",
             prescriptions: [TemplateExercisePrescription(
                 exerciseID: exercise.id,
                 exerciseName: exercise.canonicalName,
@@ -219,9 +211,6 @@ final class TrainingDomainV5Tests: XCTestCase {
 
         fixture.context.delete(program)
         try fixture.context.save()
-        XCTAssertTrue(try fixture.context.fetch(
-            FetchDescriptor<WorkoutTemplateVersion>()
-        ).isEmpty)
         XCTAssertTrue(try fixture.context.fetch(
             FetchDescriptor<TemplateExercise>()
         ).isEmpty)
@@ -353,10 +342,6 @@ final class TrainingDomainV5Tests: XCTestCase {
         // 5 reps × 4s fallback + 20 actual seconds + 30 rest = 70s.
         XCTAssertEqual(entry.calorieDurationMinutes ?? 0, 70.0 / 60.0, accuracy: 0.001)
         XCTAssertTrue(entry.calorieDurationEstimated)
-        XCTAssertEqual(
-            entry.calorieAlgorithmVersion,
-            WorkoutCalorieCalculator.algorithmVersion
-        )
         XCTAssertNotNil(entry.estimatedCalories)
     }
 
@@ -661,20 +646,15 @@ extension TrainingDomainV5Tests {
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
         let exercise = ExerciseDefinition(canonicalName: "虚构旧动作")
         let program = TrainingProgram(name: "旧计划", goal: "旧概览")
-        let version = WorkoutTemplateVersion(
-            programID: program.id,
-            version: 1,
-            name: "旧模板"
-        )
-        program.currentTemplateVersionID = version.id
         let templateExercise = TemplateExercise(
-            templateVersionID: version.id,
+            prescriptionGroupID: program.prescriptionGroupID ?? program.id,
             exerciseID: exercise.id,
             order: 1,
             targetSets: 2,
             targetReps: 8,
             targetRestSeconds: 60
         )
+        templateExercise.program = program
         let snapshot = TemplateExercisePrescription(
             exerciseID: exercise.id,
             exerciseName: exercise.canonicalName,
@@ -715,7 +695,6 @@ extension TrainingDomainV5Tests {
         )
         fixture.context.insert(exercise)
         fixture.context.insert(program)
-        fixture.context.insert(version)
         fixture.context.insert(templateExercise)
         fixture.context.insert(session)
         fixture.context.insert(performance)
@@ -752,7 +731,7 @@ extension TrainingDomainV5Tests {
         XCTAssertEqual(
             try fixture.context.fetch(FetchDescriptor<DataMigrationMarker>())
                 .first?.schemaVersion,
-            5
+            6
         )
     }
 
@@ -783,7 +762,7 @@ extension TrainingDomainV5Tests {
         XCTAssertEqual(
             try fixture.context.fetch(FetchDescriptor<DataMigrationMarker>())
                 .first?.schemaVersion,
-            5
+            6
         )
     }
 
@@ -864,17 +843,14 @@ extension TrainingDomainV5Tests {
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
         let exercise = ExerciseDefinition(canonicalName: "虚构缺次数动作")
         let program = TrainingProgram(name: "缺次数计划", overview: "虚构概览")
-        let version = WorkoutTemplateVersion(
-            programID: program.id,
-            version: 1,
-            name: "缺次数模板"
-        )
-        program.currentTemplateVersionID = version.id
+        let prescriptionGroupID = program.prescriptionGroupID ?? program.id
+        program.prescriptionGroupID = prescriptionGroupID
         let templateExercise = TemplateExercise(
-            templateVersionID: version.id,
+            prescriptionGroupID: prescriptionGroupID,
             exerciseID: exercise.id,
             order: 1
         )
+        templateExercise.program = program
         let first = TemplateSetPrescription(
             templateExerciseID: templateExercise.id,
             order: 1,
@@ -887,7 +863,6 @@ extension TrainingDomainV5Tests {
         )
         fixture.context.insert(exercise)
         fixture.context.insert(program)
-        fixture.context.insert(version)
         fixture.context.insert(templateExercise)
         fixture.context.insert(first)
         fixture.context.insert(second)
@@ -896,13 +871,8 @@ extension TrainingDomainV5Tests {
         let fetchedProgram = try XCTUnwrap(
             try fixture.context.fetch(FetchDescriptor<TrainingProgram>()).first
         )
-        let versionID = try XCTUnwrap(fetchedProgram.currentTemplateVersionID)
-        let fetchedVersion = try XCTUnwrap(
-            try fixture.context.fetch(FetchDescriptor<WorkoutTemplateVersion>())
-                .first { $0.id == versionID }
-        )
         let prescription = try XCTUnwrap(
-            TrainingPlanStore.prescriptions(for: fetchedVersion, in: fixture.context).first
+            TrainingPlanStore.prescriptions(for: fetchedProgram, in: fixture.context).first
         )
         XCTAssertEqual(prescription.plannedSets.count, 2)
         XCTAssertTrue(prescription.plannedSets.allSatisfy { $0.targetReps == nil })

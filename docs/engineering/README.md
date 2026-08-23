@@ -4,6 +4,7 @@
 长期决策在 `docs/adr/`；工程文档不得静默改变 PRD/ADR。
 
 - [训练领域模型与运行时协议](training-domain-model.md)
+- [Soma UI 设计系统与优化工程报告](soma-ui-design-system.md)
 - [数据库结构与 ER 图](database-schema.md)
 - [Agent Job 与远程执行协议](agent-job-protocol.md)
 - [Agent Tool 目录](agent-tool-catalog.md)

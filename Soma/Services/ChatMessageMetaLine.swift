@@ -1,7 +1,6 @@
 import Foundation
 
-/// PRD 033：每条消息底部一行说明"什么时候发的、在哪发的"。同一天只显示时刻，跨天补日期；
-/// 位置缺失时整行只剩时间，不留占位符。
+/// 每条消息固定显示日期和时间；跨年时补年份。位置缺失时不留占位符。
 enum ChatMessageMetaLine {
     struct Content: Equatable, Sendable {
         var text: String
@@ -35,9 +34,6 @@ enum ChatMessageMetaLine {
         now: Date,
         calendar: Calendar
     ) -> String {
-        if calendar.isDate(date, inSameDayAs: now) {
-            return timeFormatter.string(from: date)
-        }
         if let year = calendar.dateComponents([.year], from: date).year,
            let currentYear = calendar.dateComponents([.year], from: now).year,
            year != currentYear
@@ -46,13 +42,6 @@ enum ChatMessageMetaLine {
         }
         return dayTimeFormatter.string(from: date)
     }
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     private static let dayTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()

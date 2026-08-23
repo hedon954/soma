@@ -1,0 +1,5 @@
+interface:
+  display_name: "Soma UI 开发"
+  short_description: "按 Soma 双主题、页面契约和训练真值实现 UI"
+  brand_color: "#0CC0CC"
+  default_prompt: "Use $soma-ui-development to design or implement this Soma UI change without losing product or training-record truth."

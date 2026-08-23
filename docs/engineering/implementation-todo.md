@@ -172,7 +172,7 @@
 
 - [x] 审计并复用远端已有有序逐组训练证据。
 - [x] 新增 `TrainingProgram`。
-- [x] 新增不可变 `WorkoutTemplateVersion`。
+- [x] `TrainingProgram` 直接拥有当前计划处方，不维护业务版本对象。
 - [x] 新增 `TemplateExercise` 与 `firstSetIsWarmup`。
 - [x] 新增/完善 `WorkoutSession`。
 - [x] 新增 `ExercisePerformance`。
@@ -256,7 +256,7 @@
 - [x] 支持多个用户示范视频。
 - [x] 支持 Soma 自有/授权视频与外部链接来源。
 - [x] 不抓取、下载或重新分发第三方课程。
-- [x] AI 内容按用户请求生成并版本化。
+- [x] AI 内容按用户请求生成并更新当前动作内容。
 - [x] 打开详情和开始计划不自动请求 AI。
 - [x] 训练完成先输出本地摘要。
 - [x] 用户选择 Performance 视频后才创建复盘 Job。

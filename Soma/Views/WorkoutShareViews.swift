@@ -155,7 +155,7 @@ enum WorkoutSharePosterBuilder {
             .map(\.key.displayName)
     }
 
-    /// Plan name only — share posters omit template version.
+    /// Plan name only.
     @MainActor
     static func programDisplayName(
         for session: WorkoutSession,
@@ -305,7 +305,7 @@ struct WorkoutSharePosterView: View {
                                 .padding(.vertical, 4)
                                 .background(
                                     Capsule(style: .continuous)
-                                        .fill(AppTheme.tint.opacity(0.12))
+                                        .fill(AppTheme.softTint)
                                 )
                         }
                     }
@@ -488,6 +488,7 @@ struct WorkoutShareSheet: View {
                                 Task { await renderPoster() }
                             }
                             .buttonStyle(.borderedProminent)
+                            .tint(AppTheme.accentEmphasis)
                             Button("返回训练") {
                                 dismiss()
                             }
@@ -513,7 +514,7 @@ struct WorkoutShareSheet: View {
                             }
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(AppTheme.tint)
+                        .tint(AppTheme.accentEmphasis)
                         .disabled(isSaving)
                     }
 
@@ -529,11 +530,11 @@ struct WorkoutShareSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(12)
                             .background(
-                                Color.orange.opacity(0.1),
+                                AppTheme.warningSoftTint,
                                 in: RoundedRectangle(cornerRadius: 12)
                             )
                         }
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppTheme.warning)
                     }
 
                     Text("海报在本机渲染，不含照片、视频或位置。")

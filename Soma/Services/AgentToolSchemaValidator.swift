@@ -22,7 +22,7 @@ enum AgentToolSchemaValidator {
             throw ReActAgentError.invalidToolCall("\(name.rawValue) 参数必须是 JSON object。")
         }
         if schemaVersion == 2,
-           [.createProgram, .createProgramVersion, .getProgram].contains(name)
+           [.createProgram, .updateProgram, .getProgram].contains(name)
         {
             try validatePlanV2(raw, for: name)
             return
@@ -42,7 +42,7 @@ enum AgentToolSchemaValidator {
             throw ReActAgentError.invalidToolCall("\(name.rawValue) 本地 Schema 无法读取。")
         }
         try validate(raw, schema: parameters, path: name.rawValue)
-        if [.createProgram, .createProgramVersion, .getProgram].contains(name) {
+        if [.createProgram, .updateProgram, .getProgram].contains(name) {
             try validatePlanV3(raw, for: name)
         }
         if [.createExercise, .createWorkout].contains(name) {
@@ -62,15 +62,15 @@ enum AgentToolSchemaValidator {
             requiredTopLevel = allowedTopLevel
         case .createProgram:
             allowedTopLevel = [
-                "program_name", "goal", "template_name", "schedule_hint",
+                "program_name", "goal", "schedule_hint",
                 "template_exercises"
             ]
-            requiredTopLevel = ["program_name", "template_name", "template_exercises"]
-        case .createProgramVersion:
+            requiredTopLevel = ["program_name", "template_exercises"]
+        case .updateProgram:
             allowedTopLevel = [
-                "program_id", "template_name", "schedule_hint", "template_exercises"
+                "program_id", "program_name", "schedule_hint", "template_exercises"
             ]
-            requiredTopLevel = ["program_id", "template_name", "template_exercises"]
+            requiredTopLevel = ["program_id", "template_exercises"]
         default:
             return
         }
@@ -81,7 +81,7 @@ enum AgentToolSchemaValidator {
         if let missing = requiredTopLevel.first(where: { raw[$0] == nil }) {
             throw invalid("\(name.rawValue).\(missing)", "缺少必填字段")
         }
-        for key in ["program_name", "goal", "template_name", "schedule_hint"]
+        for key in ["program_name", "goal", "schedule_hint"]
             where raw[key] != nil && !(raw[key] is String)
         {
             throw invalid("\(name.rawValue).\(key)", "类型必须是 string")
@@ -327,11 +327,11 @@ enum AgentToolSchemaValidator {
             try requireInteger(raw["program_id"], in: 1 ... maximumJSONInteger, path: "get_program.program_id")
             return
         }
-        if name == .createProgramVersion {
+        if name == .updateProgram {
             try requireInteger(
                 raw["program_id"],
                 in: 1 ... maximumJSONInteger,
-                path: "create_program_version.program_id"
+                path: "update_program.program_id"
             )
         }
         let exercises = try requirePlanExercises(raw, for: name)

@@ -32,14 +32,14 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0026](0026-bounded-gym-media-attribution.md) | 已采纳 | 只在紧邻命名确认时把上一轮健身房照片归入档案 |
 | [0027](0027-required-ai-configuration-and-send-gate.md) | 部分已替代 | 聊天始终使用 AI；发送前硬门禁由 0045 改为暂存补偿，页面命名由 0046 改为「LLM 配置」 |
 | [0028](0028-semantic-exercise-identity.md) | 部分已替代 | 稳定动作身份保留；搜索分页由 0059 修订，Int64 表示和关系由 0071 修订 |
-| [0029](0029-versioned-training-plans-and-session-facts.md) | 部分已替代 | 计划版本与事实分层保留；Int64/关系由 0071 修订，聚合处方与 Set 证据由 0073 修订 |
+| [0029](0029-versioned-training-plans-and-session-facts.md) | 部分已替代 | Session 快照与事实分层保留；计划版本由 0090 删除，Int64/关系由 0071 修订，聚合处方与 Set 证据由 0073 修订 |
 | [0030](0030-deterministic-guided-workout-and-session-recording.md) | 部分已替代 | 确定性状态机和录像目标保留；UI 与录像几何由 0038 修订 |
 | [0031](0031-durable-agent-jobs-event-log-and-projections.md) | 部分已替代 | Agent 使用持久 Job、语义 Event Log 与独立投影；本地同气泡检查点续跑由 0048 修订 |
 | [0032](0032-optional-remote-agent-execution.md) | 已采纳 | 以匿名设备身份提供可选远程持续执行与本地 Tool handoff |
 | [0033](0033-live-activity-agent-job-projection.md) | 已采纳 | Live Activity 只投影隐私安全的 Agent Job 状态 |
 | [0034](0034-bidirectional-document-lifecycle-links.md) | 已采纳 | 文档修订、替代与研究落地关系使用双向生命周期索引 |
 | [0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) | 部分已替代 | 静默内置内容与按需动作插画保留；通用肌群图素材与生成由 0044 替代 |
-| [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展 |
+| [0036](0036-gui-training-program-authoring.md) | 部分已替代 | GUI 确定性创建保留；折叠处方和最近值由 0038 扩展，版本化保存由 0090 删除 |
 | [0037](0037-backend-transparent-streaming-and-notification-wake.md) | 部分已替代 | Local/Remote 流式等价保留；Provider 时限由 0058 扩展 |
 | [0038](0038-focused-guided-workout-and-capture-geometry.md) | 部分已替代 | 聚焦投影、单步组确认与放大画幅保留；按需相机与紧凑预览由 0039 修订；预览 letterbox 由 0086 改为 fill |
 | [0039](0039-event-driven-guided-recording-cues-and-review.md) | 部分已替代 | 事件驱动录像/语音保留；Effort/自动分享由 0073 修订，lazy activation 与部分录像证据由 0074 修订，放大 letterbox 由 0086 改为 fill |
@@ -76,7 +76,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0070](0070-reviewable-rolling-session-compaction.md) | 已采纳 | 十轮外对话在 Loop 前形成可追溯、可回退的替代式滚动摘要 |
 | [0071](0071-integer-business-identities-and-explicit-relations.md) | 部分已替代 | 本机业务身份、训练关系与启动迁移门禁；历史 VersionedSchema 打开路径由 0075 替代 |
 | [0072](0072-session-business-date-and-record-occurrence-time.md) | 已采纳 | Session 业务日与记录发生时间分离，Tool 可显式覆盖 occurred_at |
-| [0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) | 部分已替代 | 独立逻辑组、Effort 归属与自动收口保留；相机 activation 由 0074 细化，历史 VersionedSchema 链由 0075 替代，侧别/完成方式改由 0076 归动作定义 |
+| [0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) | 部分已替代 | 独立逻辑组、Effort 归属与自动收口保留；相机 activation 由 0074 细化，历史 VersionedSchema 链由 0075 替代，侧别/完成方式改由 0076 归动作定义，业务版本字段由 0090 删除 |
 | [0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) | 已采纳，实施与真机验收中 | 相机完整 activation 有界、camera-ready preflight、部分录像证据和系统中断恢复 |
 | [0075](0075-current-swiftdata-schema-without-historical-versions.md) | 已采纳 | 只打开当前 SomaDataSchema，不维护历史 VersionedSchema 链；启动门禁继续做业务回填 |
 | [0076](0076-exercise-owned-laterality-and-target-kind.md) | 已采纳 | 侧别与按次数/按时长归 `ExerciseDefinition`；组与记录只编辑动作定义下有意义的参数 |
@@ -92,6 +92,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0086](0086-preview-and-history-thumbs-use-aspect-fill.md) | 已采纳 | 带练紧凑/放大预览与历史录像缩略统一 aspect fill；保存文件仍使用锁定的捕获几何 |
 | [0087](0087-reviewable-total-sugar-and-glycemic-speed.md) | 已采纳 | 总糖是可空营养事实；升糖速度与依据成对保存、编辑菜品后失效，且不冒充个体血糖预测 |
 | [0088](0088-async-generated-session-title-with-manual-precedence.md) | 已采纳 | 会话标题小模型优先异步生成；手动标题优先，失败保留本地兜底且不扩张 Tool 协议 |
+| [0089](0089-semantic-dual-theme-and-lossless-workout-editor.md) | 已采纳 | 主题由根层语义映射；聊天与详情以同一纯值投影无损编辑有序训练证据 |
+| [0090](0090-current-state-business-models-and-session-facts.md) | 已采纳 | 业务模型只保留当前状态；训练历史由 Session 处方快照与执行事实承担，技术兼容版本继续隔离保留 |
 
 新决策使用 [ADR 模板](template.md)。
 

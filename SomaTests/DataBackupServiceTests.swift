@@ -17,7 +17,6 @@ extension WorkoutEntryDTO: ArchivedBusinessIDDTO {}
 extension ExerciseDefinitionDTO: ArchivedBusinessIDDTO {}
 extension ExerciseMergeRecordDTO: ArchivedBusinessIDDTO {}
 extension TrainingProgramDTO: ArchivedBusinessIDDTO {}
-extension WorkoutTemplateVersionDTO: ArchivedBusinessIDDTO {}
 extension TemplateExerciseDTO: ArchivedBusinessIDDTO {}
 extension TemplateSetPrescriptionDTO: ArchivedBusinessIDDTO {}
 extension WorkoutSessionDTO: ArchivedBusinessIDDTO {}
@@ -297,7 +296,6 @@ final class DataBackupServiceTests: XCTestCase {
         }
         snapshot.exerciseMergeRecords?[0].businessID = 801
         snapshot.trainingPrograms?[0].businessID = 901
-        snapshot.workoutTemplateVersions?[0].businessID = 1001
         snapshot.templateExercises?[0].businessID = 1101
         snapshot.templateSetPrescriptions?[0].businessID = 1201
         snapshot.workoutSessions?[0].businessID = 1301
@@ -308,7 +306,7 @@ final class DataBackupServiceTests: XCTestCase {
         snapshot.performanceAnalyses?[0].businessID = 1801
 
         let expected = businessIDsByNamespace(in: snapshot)
-        XCTAssertEqual(expected.count, 18)
+        XCTAssertEqual(expected.count, 17)
         XCTAssertTrue(expected.values.allSatisfy { !$0.isEmpty })
 
         let suiteName = "DataBackupBusinessIDs.\(UUID().uuidString)"
@@ -353,7 +351,7 @@ final class DataBackupServiceTests: XCTestCase {
 
         XCTAssertEqual(decoded.modelCount, snapshot.modelCount)
         let restoredIDs = businessIDsByNamespace(in: decoded)
-        XCTAssertEqual(restoredIDs.count, 18)
+        XCTAssertEqual(restoredIDs.count, 17)
         XCTAssertTrue(restoredIDs.values.allSatisfy(\.isEmpty))
     }
 
@@ -479,9 +477,6 @@ final class DataBackupServiceTests: XCTestCase {
             "exercise": indexedBusinessIDs(snapshot.exerciseDefinitions ?? []),
             "exercise_merge": indexedBusinessIDs(snapshot.exerciseMergeRecords ?? []),
             "training_program": indexedBusinessIDs(snapshot.trainingPrograms ?? []),
-            "template_version": indexedBusinessIDs(
-                snapshot.workoutTemplateVersions ?? []
-            ),
             "template_exercise": indexedBusinessIDs(snapshot.templateExercises ?? []),
             "template_set_prescription": indexedBusinessIDs(
                 snapshot.templateSetPrescriptions ?? []

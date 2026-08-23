@@ -327,25 +327,24 @@ const definitions: DeviceToolDefinition[] = [
       {
         program_name: stringValue,
         goal: stringValue,
-        template_name: stringValue,
         schedule_hint: stringValue,
         template_exercises: templateExercisesV2,
       },
-      ["program_name", "template_name", "template_exercises"],
+      ["program_name", "template_exercises"],
     ),
   },
   {
-    name: "create_program_version",
+    name: "update_program",
     schemaVersion: 2,
     mutation: true,
     parameters: parameters(
       {
         program_id: integerValue,
-        template_name: stringValue,
+        program_name: stringValue,
         schedule_hint: stringValue,
         template_exercises: templateExercisesV2,
       },
-      ["program_id", "template_name", "template_exercises"],
+      ["program_id", "template_exercises"],
     ),
   },
   {
@@ -365,25 +364,24 @@ const definitions: DeviceToolDefinition[] = [
       {
         program_name: stringValue,
         overview: stringValue,
-        template_name: stringValue,
         schedule_hint: stringValue,
         template_exercises: templateExercisesV3,
       },
-      ["program_name", "template_name", "template_exercises"],
+      ["program_name", "template_exercises"],
     ),
   },
   {
-    name: "create_program_version",
+    name: "update_program",
     schemaVersion: 3,
     mutation: true,
     parameters: parameters(
       {
         program_id: { type: "integer", minimum: 1 },
-        template_name: stringValue,
+        program_name: stringValue,
         schedule_hint: stringValue,
         template_exercises: templateExercisesV3,
       },
-      ["program_id", "template_name", "template_exercises"],
+      ["program_id", "template_exercises"],
     ),
   },
   {
@@ -570,7 +568,7 @@ export function validateDeviceTool(input: {
     validateSchema(input.arguments, input.parameters, input.name);
   }
   if (input.schemaVersion === 3 && [
-    "get_program", "create_program", "create_program_version",
+    "get_program", "create_program", "update_program",
   ].includes(input.name)) validatePlanV3(input);
   rejectForbiddenValues(input.arguments);
   return definition;
@@ -658,12 +656,12 @@ function validatePlanV3(input: {
     requireInteger(input.arguments.program_id, 1, Number.MAX_SAFE_INTEGER, "get_program.program_id");
     return;
   }
-  if (input.name === "create_program_version") {
+  if (input.name === "update_program") {
     requireInteger(
       input.arguments.program_id,
       1,
       Number.MAX_SAFE_INTEGER,
-      "create_program_version.program_id",
+      "update_program.program_id",
     );
   }
   const exercises = input.arguments.template_exercises;

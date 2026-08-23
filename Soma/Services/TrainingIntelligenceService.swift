@@ -90,7 +90,7 @@ enum TrainingIntelligenceService {
         for exercise: ExerciseDefinition,
         ai: AIService,
         in context: ModelContext
-    ) async throws -> ExerciseContentRevision {
+    ) async throws -> ExerciseContent {
         let prompt = """
         用户主动请求生成“\(exercise.canonicalName)”的动作说明。
         只返回一个 JSON 对象，不要 Markdown：
@@ -114,16 +114,15 @@ enum TrainingIntelligenceService {
             GeneratedExerciseContent.self,
             from: outcome.finalAnswer
         )
-        let revision = ExerciseContentRevision(
-            source: .ai,
+        let content = ExerciseContent(
             coachingNotes: generated.coachingNotes,
             primaryMuscles: generated.primaryMuscles,
             secondaryMuscles: generated.secondaryMuscles,
             movementPatterns: generated.movementPatterns
         )
-        exercise.apply(revision)
+        exercise.apply(content)
         try context.save()
-        return revision
+        return content
     }
 
     static func performanceFingerprint(

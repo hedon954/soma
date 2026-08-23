@@ -44,7 +44,7 @@ extension ConversationRecorder {
                 in: context
             )
         case .listPrograms, .getProgram, .createProgram,
-             .createProgramVersion, .archiveProgram, .deleteProgram,
+             .updateProgram, .archiveProgram, .deleteProgram,
              .startProgram:
             executeProgramTool(call, in: context)
         default: .failure("不是 v3 单一职责 Tool。", code: "internal_error")
@@ -190,7 +190,7 @@ extension ConversationRecorder {
         case .listPrograms: listTrainingPrograms(in: context)
         case .getProgram: getTrainingProgram(call.arguments, in: context)
         case .createProgram: createTrainingProgram(call.arguments, in: context)
-        case .createProgramVersion: createWorkoutTemplateVersion(call.arguments, in: context)
+        case .updateProgram: updateTrainingProgram(call.arguments, in: context)
         case .archiveProgram: archiveTrainingProgram(call.arguments, in: context)
         case .deleteProgram: deleteTrainingProgram(call.arguments, in: context)
         case .startProgram: startGuidedWorkout(call.arguments, in: context)
