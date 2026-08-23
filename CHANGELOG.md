@@ -5,6 +5,11 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-08-23
+
+本次更新把失败恢复交还给用户，并将逐回复反馈、崩溃证据、多模态能力来源和动作内容统一到
+可审查边界；同时压缩聊天与进展页的信息密度，补齐关键操作的可见性。
+
 ### Added
 
 - 每条已完成 AI 回复新增反馈按钮，可提交文字、照片、视频和 1–5 星评分，并附带当前 Turn 的有界脱敏执行摘要。
@@ -34,7 +39,13 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 ### Data and migration
 
 - 不新增 SwiftData 持久字段或 PostgreSQL migration；动作目录与离线资源随 App 版本更新，用户上传图保持最高优先级。
+- 最低系统版本仍为 iOS 17；旧数据无需迁移或重建。
 
+### Known limitations
+
+- 供应商目录不提供多模态能力字段时，App 保持“未知”并允许真实请求验证，不会自行宣称支持或不支持。
+- 逐回复反馈投递依赖本机 QQ SMTP 凭据和网络；失败时保留编辑内容，不在后台自动重试。
+- GitHub Release 只包含源码与变更说明，不包含 TestFlight 安装包。
 
 ## [0.0.10] - 2026-08-23
 
