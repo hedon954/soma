@@ -133,18 +133,6 @@ struct RootView: View {
         ) { _ in
             selectedTab = .coach
         }
-        // ADR 0045：LLM 配置变化立即解除暂存并开始补偿消费。
-        .onReceive(
-            NotificationCenter.default.publisher(for: .llmConfigurationDidChange)
-        ) { _ in
-            processor.resumePendingJobs(
-                dataSpace: dataSpace.activeSpace,
-                ai: ai,
-                modelContext: modelContext,
-                locationService: locationContext,
-                releaseStaged: true
-            )
-        }
         .task {
             await RemoteAgentRevocationService.retryIfNeeded()
             if dataSpace.activeSpace == .demo {
@@ -171,11 +159,8 @@ struct RootView: View {
                 modelContext: modelContext,
                 locationService: locationContext
             )
-            // ADR 0083：崩溃报告要带上崩溃 session 的上下文，所以在拿到 ModelContext 之后
-            // 才补齐并发送。
-            await CrashDiagnosticsCoordinator.shared.flushPendingReports(
-                in: modelContext
-            )
+            // ADR 0095：启动只投递已有的系统确认报告，不再把哨兵未清位当作崩溃。
+            await CrashDiagnosticsCoordinator.shared.flushPendingReports()
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {

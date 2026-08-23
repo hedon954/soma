@@ -51,12 +51,20 @@ interface ChatCompletionStreamChunk {
   };
 }
 
+export const modelStepRetryDelaysSeconds = [1, 2, 4] as const;
+
+type ModelStepRetrySleeper = (seconds: number) => Promise<void>;
+
 export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
   constructor(
     private readonly baseURL: string,
     private readonly apiKey: string,
     private readonly model: string,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly retrySleeper: ModelStepRetrySleeper = async (seconds) => {
+      await new Promise((resolve) => setTimeout(resolve, seconds * 1_000));
+    },
+    private readonly directVideoEnabled: boolean = false,
   ) {}
 
   async run(
@@ -68,22 +76,24 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     if (job.input === undefined) {
       throw new ProtocolError("job_expired", "任务内容已清理。", 410);
     }
-    const directVideo = supportsDirectVideo(this.model);
+    const directVideo = this.directVideoEnabled;
     const hasCompletedModelStep = events.some((event) =>
       event.kind === "model" && event.phase === "completed"
     );
-    const messages = modelMessages(
-      job.input.modelInput.messages,
-      media,
-      directVideo,
-      hasCompletedModelStep,
+    let usesDirectVideo = directVideo && media.some((item) =>
+      item.contentType.startsWith("video/")
     );
-    for (const event of events) {
-      if (
-        event.kind === "model" &&
-        event.phase === "completed" &&
-        Array.isArray(event.payload.toolCalls)
-      ) {
+    const appendCompletedModelEvents = (
+      messages: Record<string, unknown>[],
+    ): void => {
+      for (const event of events) {
+        if (
+          event.kind !== "model" ||
+          event.phase !== "completed" ||
+          !Array.isArray(event.payload.toolCalls)
+        ) {
+          continue;
+        }
         const toolCalls = event.payload.toolCalls as {
           id?: unknown;
           type?: unknown;
@@ -112,7 +122,14 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           }
         }
       }
-    }
+    };
+    let messages = modelMessages(
+      job.input.modelInput.messages,
+      media,
+      usesDirectVideo,
+      hasCompletedModelStep,
+    );
+    appendCompletedModelEvents(messages);
     const activeTools = effectiveAllowedDeviceTools(
       job.input.modelInput.activeTools,
       events,
@@ -130,17 +147,17 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         return tool === undefined ? [] : [[name, tool.schemaVersion] as const];
       }),
     );
-    const mediaMode = directVideo && media.some((item) => item.contentType.startsWith("video/"))
-      ? "direct_video"
-      : media.some((item) => item.contentType.startsWith("image/"))
-        ? "images"
-        : "text";
-    const maximumRequestAttempts = mediaMode === "direct_video" ||
-        (job.input.requestAttempt ?? 1) > 1
-      ? 1
-      : 2;
+    const hasKeyframeFallback = media.some((item) =>
+      item.contentType.startsWith("image/")
+    );
+    const maximumRequestAttempts = modelStepRetryDelaysSeconds.length + 1;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maximumRequestAttempts; attempt += 1) {
+      const mediaMode = usesDirectVideo
+        ? "direct_video"
+        : hasKeyframeFallback
+          ? "images"
+          : "text";
       const deadline = new ProviderRequestDeadline(
         mediaMode,
         job.input.modelInput.runtime.deadlines,
@@ -172,7 +189,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           throw new ProtocolError(
             "provider_unavailable",
             "模型服务暂时不可用。",
-            503,
+            response.status,
           );
         }
         let step: ProviderStep;
@@ -201,6 +218,19 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           !deadline.receivedMeaningfulDelta &&
           isRetryable(lastError)
         ) {
+          if (usesDirectVideo && hasKeyframeFallback) {
+            usesDirectVideo = false;
+            messages = modelMessages(
+              job.input.modelInput.messages,
+              media,
+              false,
+              hasCompletedModelStep,
+            );
+            appendCompletedModelEvents(messages);
+          }
+          const retryDelay = modelStepRetryDelaysSeconds[attempt - 1];
+          if (retryDelay === undefined) throw lastError;
+          await this.retrySleeper(retryDelay);
           continue;
         }
         throw lastError;
@@ -410,8 +440,14 @@ function modelMessages(
   const mediaByID = new Map(media.map((item) => [item.id, item]));
   return input.map((message, index) => {
     const attachments = message.mediaIDs
-      .map((id) => mediaByID.get(id))
-      .filter((item): item is ProviderMedia => item !== undefined);
+      .map((id) => ({ id, item: mediaByID.get(id) }))
+      .filter((entry): entry is { id: string; item: ProviderMedia } =>
+        entry.item !== undefined
+      )
+      .filter((entry) => directVideo
+        ? !entry.id.startsWith("current-video-frame-")
+        : !entry.item.contentType.startsWith("video/"))
+      .map((entry) => entry.item);
     if (
       attachments.length === 0 ||
       (clearHistoricalMedia && index > 0 && index < input.length - 1)
@@ -553,14 +589,20 @@ class ProviderRequestDeadline {
   }
 }
 
-export function supportsDirectVideo(model: string): boolean {
-  const normalized = model.trim().toLowerCase();
-  return ["qwen-vl-max", "qwen-vl-plus", "qwen2.5-vl", "qwen3-vl"]
-    .some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}-`));
+export function explicitCapabilityFlag(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() === "true";
 }
 
 function isRetryable(error: unknown): boolean {
-  return !(error instanceof ProtocolError) ||
-    error.code === "provider_timeout" ||
-    error.code === "provider_unavailable";
+  if (error instanceof ProtocolError) {
+    return error.code === "provider_timeout" ||
+      (
+        error.code === "provider_unavailable" &&
+        (
+          [408, 409, 425, 429].includes(error.status) ||
+          error.status >= 500
+        )
+      );
+  }
+  return error instanceof TypeError;
 }

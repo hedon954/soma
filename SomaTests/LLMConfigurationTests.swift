@@ -26,35 +26,31 @@ final class LLMConfigurationTests: XCTestCase {
         )
     }
 
-    func testOpenCodeCapabilityMarksResponsesOnlyModelsUnsupported() {
-        XCTAssertEqual(
-            ModelCapability.multimodalSupport(
-                provider: .openCode,
-                model: "gpt-5.6-sol"
-            ),
-            .unsupported
-        )
-        XCTAssertEqual(
-            ModelCapability.multimodalSupport(
-                provider: .openCode,
-                model: "gpt-5-codex"
-            ),
-            .unsupported
-        )
-        XCTAssertEqual(
-            ModelCapability.multimodalSupport(
-                provider: .openCode,
-                model: "claude-sonnet-4"
-            ),
-            .supported
-        )
-        XCTAssertEqual(
-            ModelCapability.multimodalSupport(
-                provider: .openCode,
-                model: "qwen3-coder"
-            ),
-            .unknown
-        )
+    func testOpenCodeModelNamesDoNotImplyCapability() {
+        for model in ["gpt-5.6-sol", "gpt-5-codex", "claude-sonnet-4", "qwen3-coder"] {
+            XCTAssertEqual(
+                ModelCapability.multimodalSupport(
+                    provider: .openCode,
+                    model: model
+                ),
+                .unknown
+            )
+        }
+    }
+
+    func testModelNameAloneNeverDeterminesMultimodalCapability() {
+        for (provider, model) in [
+            (AIProvider.deepSeek, "deepseek-v4-flash-vision-exp"),
+            (.openAI, "gpt-5.6-vision"),
+            (.bailian, "qwen3-vl-max"),
+            (.openCode, "claude-sonnet-vision")
+        ] {
+            XCTAssertEqual(
+                ModelCapability.multimodalSupport(provider: provider, model: model),
+                .unknown,
+                "模型名称不是能力证据：\(provider.rawValue)/\(model)"
+            )
+        }
     }
 
     @MainActor

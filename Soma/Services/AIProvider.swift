@@ -121,7 +121,7 @@ struct DirectVideoCapability: Equatable, Sendable {
     var preferredMIMEType: String
 }
 
-enum MultimodalSupport: String {
+enum MultimodalSupport: String, Codable, Hashable, Sendable {
     case supported
     case unsupported
     case unknown
@@ -130,99 +130,89 @@ enum MultimodalSupport: String {
         switch self {
         case .supported: "支持多模态：图片与视频关键帧"
         case .unsupported: "不支持多模态：只能发送文字"
-        case .unknown: "多模态能力未标注，发送图片或视频时由平台验证"
+        case .unknown: "多模态能力未知：平台模型目录未提供明确标注"
         }
+    }
+}
+
+struct MultimodalCapabilityAssessment: Codable, Hashable, Sendable {
+    let support: MultimodalSupport
+    /// 只记录平台 `/models` 响应中实际出现的字段路径；模型名称永远不是证据。
+    let source: String?
+    /// 只有平台明确列出 video 输入时才为 true；图片能力不能推导出直传视频能力。
+    let directVideoSupport: Bool?
+
+    static let unknown = MultimodalCapabilityAssessment(
+        support: .unknown,
+        source: nil,
+        directVideoSupport: nil
+    )
+
+    var sourceLabel: String {
+        source.map { "来源：平台模型目录 \($0)" }
+            ?? "来源：平台未提供能力信息"
     }
 }
 
 struct AIModelInfo: Identifiable, Hashable {
     let id: String
     let status: String?
-    let multimodalSupport: MultimodalSupport
+    let multimodalAssessment: MultimodalCapabilityAssessment
+
+    var multimodalSupport: MultimodalSupport {
+        multimodalAssessment.support
+    }
 }
 
 enum ModelCapability {
-    static func multimodalSupport(provider: AIProvider, model: String) -> MultimodalSupport {
-        let value = model.lowercased()
+    /// 供应商与模型名称不是能力证据。没有平台元数据时统一返回 unknown。
+    static func multimodalSupport(
+        provider _: AIProvider,
+        model _: String
+    ) -> MultimodalSupport {
+        .unknown
+    }
 
-        if containsAny(value, ["embedding", "rerank", "tts", "speech", "moderation"]) {
-            return .unsupported
-        }
+    static func assessment(
+        inputModalities: [String],
+        source: String
+    ) -> MultimodalCapabilityAssessment {
+        let normalized = Set(inputModalities.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }.filter { !$0.isEmpty })
+        guard !normalized.isEmpty else { return .unknown }
+        let visual = ["image", "images", "vision", "video"]
+        return MultimodalCapabilityAssessment(
+            support: normalized.contains(where: visual.contains) ? .supported : .unsupported,
+            source: source,
+            directVideoSupport: normalized.contains("video")
+        )
+    }
 
-        switch provider {
-        case .deepSeek:
-            return .unsupported
-        case .openAI:
-            if containsAny(value, ["gpt-4o", "gpt-4.1", "gpt-5", "o1", "o3", "o4"]) {
-                return .supported
-            }
-            if containsAny(value, ["whisper", "dall-e", "image-", "audio-"]) {
-                return .unsupported
-            }
-        case .bailian:
-            if containsAny(value, ["qwen-vl", "qwen3-vl", "qwen-omni", "qvq", "qwen3.5", "qwen3.6", "qwen3.7"]) {
-                return .supported
-            }
-            if containsAny(value, ["coder", "text-"]) {
-                return .unsupported
-            }
-        case .volcano:
-            if containsAny(value, ["vision", "doubao-seed"]) {
-                return .supported
-            }
-            if containsAny(value, ["code", "image-generation", "video-generation"]) {
-                return .unsupported
-            }
-        case .tencent:
-            if containsAny(value, ["vision", "vita", "glm-5v"]) {
-                return .supported
-            }
-            if containsAny(value, ["image-generation", "video-generation", "3d"]) {
-                return .unsupported
-            }
-        case .openCode:
-            // opencode 上的 GPT / Codex 系模型只暴露 Responses API，
-            // Soma 走 Chat Completions，因此这里直接标记为不可用。
-            if containsAny(value, ["gpt-", "codex"]) {
-                return .unsupported
-            }
-            if containsAny(value, ["claude", "gemini"]) {
-                return .supported
-            }
-        case .other:
-            return .unknown
-        }
-        return .unknown
+    static func assessment(
+        explicitVisionSupport: Bool,
+        source: String
+    ) -> MultimodalCapabilityAssessment {
+        MultimodalCapabilityAssessment(
+            support: explicitVisionSupport ? .supported : .unsupported,
+            source: source,
+            directVideoSupport: nil
+        )
     }
 
     static func supportsDirectVideo(
-        provider: AIProvider,
-        model: String
+        assessment: MultimodalCapabilityAssessment
     ) -> Bool {
-        directVideoCapability(provider: provider, model: model) != nil
+        assessment.directVideoSupport == true
     }
 
     static func directVideoCapability(
-        provider: AIProvider,
-        model: String
+        assessment: MultimodalCapabilityAssessment
     ) -> DirectVideoCapability? {
-        guard provider == .bailian else { return nil }
-        let value = model.lowercased()
-        let verifiedPrefixes = [
-            "qwen-vl-max", "qwen-vl-plus", "qwen2.5-vl", "qwen3-vl"
-        ]
-        guard verifiedPrefixes.contains(where: {
-            value == $0 || value.hasPrefix("\($0)-")
-        }) else {
-            return nil
-        }
+        guard supportsDirectVideo(assessment: assessment) else { return nil }
         return DirectVideoCapability(
             maximumRawBytes: 7 * 1024 * 1024,
             preferredMIMEType: "video/mp4"
         )
-    }
-
-    private static func containsAny(_ value: String, _ candidates: [String]) -> Bool {
-        candidates.contains(where: value.contains)
     }
 }

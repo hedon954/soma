@@ -1,5 +1,6 @@
 import Foundation
 @testable import Soma
+import SwiftData
 import XCTest
 
 final class FeedbackSubmissionTests: XCTestCase {
@@ -164,6 +165,143 @@ final class FeedbackSubmissionTests: XCTestCase {
             ),
             ""
         )
+    }
+
+    func testSuccessfulReplyFeedbackCollapsesButSettingsFeedbackConfirms() {
+        XCTAssertEqual(
+            FeedbackSuccessPresentationPolicy.action(isEmbedded: true),
+            .collapseEmbeddedEditor
+        )
+        XCTAssertEqual(
+            FeedbackSuccessPresentationPolicy.action(isEmbedded: false),
+            .showConfirmation
+        )
+    }
+
+    func testAssistantReplyFeedbackIncludesRatingAndBoundedDiagnostics() throws {
+        let context = try AssistantFeedbackContext(
+            messageID: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000101")),
+            turnID: UUID(uuidString: "00000000-0000-0000-0000-000000000102"),
+            messageDate: Date(timeIntervalSince1970: 1_700_000_000),
+            userText: "虚构提问",
+            assistantText: "虚构回复",
+            originalMediaSummary: "图片 1",
+            assistantStatus: "失败",
+            jobID: UUID(uuidString: "00000000-0000-0000-0000-000000000103"),
+            backend: "local",
+            jobState: "waitingForUser",
+            submissionAttemptCount: 1,
+            selectedSkillID: "fictional-skill",
+            selectedShortcutID: "fictional-shortcut",
+            traceID: UUID(uuidString: "00000000-0000-0000-0000-000000000104"),
+            provider: "Fictional Provider",
+            model: "fictional-model",
+            traceStatus: "失败",
+            spans: [
+                AssistantFeedbackSpanSummary(
+                    kind: "tool",
+                    title: "虚构工具",
+                    status: "failed",
+                    durationMilliseconds: 42,
+                    error: "虚构错误 Authorization: Bearer fictional-secret-value"
+                )
+            ],
+            appVersion: "0.0.0-test",
+            buildNumber: "1",
+            operatingSystem: "Test OS"
+        )
+
+        let envelope = AssistantFeedbackEnvelope.compose(
+            userFeedback: "这里不符合预期",
+            rating: 2,
+            context: context
+        )
+
+        XCTAssertTrue(envelope.contains("评分：2 / 5"))
+        XCTAssertTrue(envelope.contains("对应提问：\n虚构提问"))
+        XCTAssertTrue(envelope.contains("对应 AI 回复：\n虚构回复"))
+        XCTAssertTrue(envelope.contains("job_state=waitingForUser"))
+        XCTAssertTrue(envelope.contains("虚构工具"))
+        XCTAssertFalse(envelope.contains("fictional-secret-value"))
+        XCTAssertTrue(envelope.contains("[已脱敏]"))
+        XCTAssertLessThanOrEqual(
+            envelope.count,
+            FeedbackSubmissionPolicy.maximumMessageCharacters
+        )
+    }
+
+    @MainActor
+    func testAssistantFeedbackContextLoadsOnDemandFromMessageID() throws {
+        let schema = Schema([
+            CoachMessage.self,
+            AgentJob.self,
+            AgentTrace.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let modelContext = ModelContext(container)
+        let sessionID = UUID()
+        let turnID = UUID()
+        let userMessage = CoachMessage(
+            sessionID: sessionID,
+            isFromCoach: false,
+            text: "虚构提问",
+            mediaAttachments: [
+                MediaAttachmentReference(
+                    kind: .image,
+                    path: "PrivateMedia/fictional.jpg"
+                )
+            ],
+            turnID: turnID
+        )
+        let trace = AgentTrace(
+            provider: "Fictional Provider",
+            model: "fictional-model",
+            endpoint: "https://example.invalid/v1",
+            dataSpaceRaw: DataSpace.personal.rawValue,
+            userInput: "不应进入反馈",
+            contextSnapshot: "不应进入反馈",
+            mediaKind: .image,
+            imageCount: 1,
+            turnID: turnID
+        )
+        trace.apply(.span(AgentTraceSpan(
+            kind: .model,
+            title: "虚构模型步骤",
+            status: .succeeded,
+            startedAt: .now,
+            endedAt: .now
+        )))
+        let assistantMessage = CoachMessage(
+            sessionID: sessionID,
+            isFromCoach: true,
+            text: "虚构回复",
+            agentTraceID: trace.id,
+            agentStatus: .succeeded,
+            turnID: turnID,
+            attemptNumber: 1
+        )
+        modelContext.insert(userMessage)
+        modelContext.insert(trace)
+        modelContext.insert(assistantMessage)
+        try modelContext.save()
+
+        let context = try XCTUnwrap(
+            AssistantFeedbackContextBuilder.make(
+                messageID: assistantMessage.id,
+                in: modelContext,
+                bundle: Bundle(for: Self.self),
+                operatingSystem: "Test OS"
+            )
+        )
+
+        XCTAssertEqual(context.userText, "虚构提问")
+        XCTAssertEqual(context.assistantText, "虚构回复")
+        XCTAssertEqual(context.originalMediaSummary, "图片 1")
+        XCTAssertEqual(context.traceID, trace.id)
+        XCTAssertEqual(context.spans.map(\.title), ["虚构模型步骤"])
     }
 
     func testEmptyFeedbackAndUnreadableMediaAreRejected() {

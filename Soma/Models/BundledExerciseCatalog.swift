@@ -138,7 +138,7 @@ enum BundledExerciseCatalog {
 
     /// 精选条目：带专属示意图资源。
     private static let curatedEntries: [BundledExerciseContent] = [
-        item("杠铃深蹲", ["杠铃后蹲"], "soma_barbell_squat.png", squat),
+        item("杠铃深蹲", ["杠铃后蹲"], "free_Barbell_Squat.jpg", squat),
         item("自重深蹲", ["徒手深蹲", "深蹲"], "soma_bodyweight_squat.png", squat),
         item("杠铃前蹲", ["前蹲", "颈前深蹲"], "free_Front_Squat_Clean_Grip.jpg", squat),
         item("高脚杯深蹲", ["哑铃杯式深蹲"], "free_Goblet_Squat.jpg", squat),
@@ -152,7 +152,7 @@ enum BundledExerciseCatalog {
         item("杠铃臀推", ["臀推"], "free_Barbell_Hip_Thrust.jpg", glute),
         item("单腿臀桥", [], "free_Single_Leg_Glute_Bridge.jpg", glute),
         item("哑铃弓步", ["哑铃箭步蹲"], "free_Dumbbell_Lunges.jpg", lunge),
-        item("保加利亚分腿蹲", ["保加利亚蹲", "静态保加利亚蹲"], "soma_split_stance_dumbbell.png", lunge),
+        item("保加利亚分腿蹲", ["保加利亚蹲", "静态保加利亚蹲", "静态保加利亚深蹲"], "free_Split_Squat_with_Dumbbells.jpg", lunge),
         item("台阶上步", ["登阶"], "free_Step-up_with_Knee_Raise.jpg", lunge),
         item("站姿提踵", ["站姿小腿提踵"], "free_Standing_Calf_Raises.jpg", calf),
         item("站姿哑铃提踵", [], "free_Standing_Dumbbell_Calf_Raise.jpg", calf),
@@ -170,7 +170,7 @@ enum BundledExerciseCatalog {
         item("杠铃俯身划船", ["杠铃划船"], "free_Bent_Over_Barbell_Row.jpg", horizontalPull),
         item("单臂哑铃划船", ["单手哑铃划船"], "free_One-Arm_Dumbbell_Row.jpg", horizontalPull),
         item("坐姿绳索划船", ["坐姿划船"], "free_Seated_Cable_Rows.jpg", horizontalPull),
-        item("高位下拉", ["宽握高位下拉", "宽距高位下拉", "坐姿下拉"], "soma_lat_pulldown.png", verticalPull),
+        item("高位下拉", ["宽握高位下拉", "宽距高位下拉", "坐姿下拉"], "free_Wide-Grip_Lat_Pulldown.jpg", verticalPull),
         item("引体向上", ["正手引体向上"], "free_Pullups.jpg", verticalPull),
         item("反手引体向上", [], "free_Chin-Up.jpg", verticalPull),
         item("哑铃交替弯举", ["哑铃单臂交替弯举", "哑铃弯举"], "free_Dumbbell_Alternate_Bicep_Curl.jpg", armCurl),
@@ -346,9 +346,6 @@ enum BundledExerciseCatalog {
                 createdAt: .distantPast
             ))
             return true
-        }
-        guard !images.contains(where: { $0.kind == kind }) else {
-            return false
         }
         images.append(ExerciseImageReference(
             kind: kind,

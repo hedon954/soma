@@ -13,7 +13,10 @@ import {
   logOperationalError,
 } from "./operational-log.js";
 import { PostgresSomaStore } from "./postgres-store.js";
-import { OpenAICompatibleManagedProvider } from "./provider.js";
+import {
+  explicitCapabilityFlag,
+  OpenAICompatibleManagedProvider,
+} from "./provider.js";
 import { TokenCipher } from "./security.js";
 import { AgentWorker } from "./worker.js";
 
@@ -32,6 +35,9 @@ const provider = new OpenAICompatibleManagedProvider(
   requiredEnvironment("SOMA_PROVIDER_BASE_URL"),
   requiredEnvironment("SOMA_PROVIDER_API_KEY"),
   requiredEnvironment("SOMA_PROVIDER_MODEL"),
+  undefined,
+  undefined,
+  explicitCapabilityFlag(process.env.SOMA_PROVIDER_SUPPORTS_DIRECT_VIDEO),
 );
 const objects = new S3TemporaryObjectStore(
   requiredEnvironment("SOMA_OBJECT_BUCKET"),

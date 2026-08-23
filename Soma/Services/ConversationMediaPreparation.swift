@@ -116,8 +116,11 @@ extension ConversationProcessingService {
             hasVideo: true
         )
         return ModelCapability.directVideoCapability(
-            provider: route.provider,
-            model: route.model
+            assessment: context.ai.modelMultimodalAssessment(
+                provider: route.provider,
+                baseURL: route.baseURL,
+                model: route.model
+            )
         )
     }
 

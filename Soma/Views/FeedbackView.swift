@@ -1,15 +1,32 @@
 import SwiftUI
 import UIKit
 
+enum FeedbackSuccessPresentationAction: Equatable {
+    case collapseEmbeddedEditor
+    case showConfirmation
+}
+
+enum FeedbackSuccessPresentationPolicy {
+    static func action(isEmbedded: Bool) -> FeedbackSuccessPresentationAction {
+        isEmbedded ? .collapseEmbeddedEditor : .showConfirmation
+    }
+}
+
 struct FeedbackView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var modelContext
     var isEmbedded = false
+    var assistantMessageID: UUID?
+    var isCompact = false
+    var onSubmitted: () -> Void = {}
     @State private var draftID = UUID()
     @State private var message = ""
     @State private var attachments: [PendingAttachment] = []
     @State private var showsMediaPicker = false
     @State private var isSending = false
     @State private var alert: FeedbackAlert?
+    @State private var rating: Int?
     @State private var submissionTask: Task<Void, Never>?
     @FocusState private var editorFocused: Bool
 
@@ -55,13 +72,30 @@ struct FeedbackView: View {
         }
         .onDisappear {
             submissionTask?.cancel()
-            cleanupTemporaryVideos(in: attachments)
+            scheduleTemporaryVideoCleanup(in: attachments)
+        }
+        .toolbar {
+            if !isEmbedded {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("返回", systemImage: "chevron.left")
+                    }
+                    .accessibilityHint("关闭反馈页面并返回聊天")
+                }
+            }
         }
     }
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("告诉我哪里不好用，或你希望 Soma 接下来做什么。")
+            if !isCompact {
+                Text(
+                    assistantMessageID == nil
+                        ? "告诉我哪里不好用，或你希望 Soma 接下来做什么。"
+                        : "针对这条 AI 回复反馈，帮助我更快回溯问题。"
+                )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -69,7 +103,35 @@ struct FeedbackView: View {
                     .horizontal,
                     isEmbedded ? AppTheme.pagePadding : 0
                 )
+            }
+            if assistantMessageID != nil {
+                ratingPicker
+            }
             composer
+        }
+    }
+
+    private var ratingPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("这条回复怎么样？")
+                .font(.subheadline.weight(.medium))
+            HStack(spacing: 4) {
+                ForEach(1 ... 5, id: \.self) { value in
+                    Button {
+                        rating = value
+                    } label: {
+                        Image(systemName: value <= (rating ?? 0) ? "star.fill" : "star")
+                            .foregroundStyle(AppTheme.warning)
+                            .frame(
+                                width: AppTheme.minimumTapTarget,
+                                height: AppTheme.minimumTapTarget
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(value) 星")
+                    .accessibilityValue(rating == value ? "已选择" : "未选择")
+                }
+            }
         }
     }
 
@@ -87,7 +149,7 @@ struct FeedbackView: View {
                 text: $message,
                 axis: .vertical
             )
-            .lineLimit(5 ... 12)
+            .lineLimit(isCompact ? 3 ... 8 : 5 ... 12)
             .focused($editorFocused)
             .disabled(isSending)
             .accessibilityLabel("反馈内容")
@@ -173,8 +235,7 @@ struct FeedbackView: View {
                     .lineLimit(1)
             }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(AppTheme.accentEmphasis)
+        .appPrimaryButtonStyle()
         .disabled(isSending || isEmpty)
         .accessibilityHint("提交当前文字和附件")
     }
@@ -182,12 +243,33 @@ struct FeedbackView: View {
     private var isEmpty: Bool {
         message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && attachments.isEmpty
+            && rating == nil
     }
 
     private func submit() {
+        let submittedMessage: String
+        if let assistantMessageID {
+            guard let assistantContext = AssistantFeedbackContextBuilder.make(
+                messageID: assistantMessageID,
+                in: modelContext
+            ) else {
+                alert = FeedbackAlert(
+                    title: "无法读取回复",
+                    message: "这条 AI 回复可能已经被删除，请返回聊天后重试。"
+                )
+                return
+            }
+            submittedMessage = AssistantFeedbackEnvelope.compose(
+                userFeedback: message,
+                rating: rating,
+                context: assistantContext
+            )
+        } else {
+            submittedMessage = message
+        }
         do {
             _ = try FeedbackSubmissionPolicy.validatedMessage(
-                message,
+                submittedMessage,
                 attachments: attachments
             )
         } catch {
@@ -197,7 +279,6 @@ struct FeedbackView: View {
         editorFocused = false
         isSending = true
         let id = draftID
-        let submittedMessage = message
         let submittedAttachments = attachments
         submissionTask = Task { @MainActor in
             defer {
@@ -211,14 +292,22 @@ struct FeedbackView: View {
                     message: submittedMessage,
                     attachments: submittedAttachments
                 )
-                cleanupTemporaryVideos(in: submittedAttachments)
+                scheduleTemporaryVideoCleanup(in: submittedAttachments)
                 message = ""
                 attachments = []
+                rating = nil
                 draftID = UUID()
-                alert = FeedbackAlert(
-                    title: "反馈已发送",
-                    message: "谢谢，你的反馈已经送达。"
-                )
+                switch FeedbackSuccessPresentationPolicy.action(
+                    isEmbedded: isEmbedded
+                ) {
+                case .collapseEmbeddedEditor:
+                    onSubmitted()
+                case .showConfirmation:
+                    alert = FeedbackAlert(
+                        title: "反馈已发送",
+                        message: "谢谢，你的反馈已经送达。"
+                    )
+                }
             } catch is CancellationError {
                 return
             } catch {
@@ -231,14 +320,19 @@ struct FeedbackView: View {
         guard let attachment = attachments.first(where: { $0.id == id }) else {
             return
         }
-        cleanupTemporaryVideos(in: [attachment])
+        scheduleTemporaryVideoCleanup(in: [attachment])
         attachments.removeAll { $0.id == id }
     }
 
-    private func cleanupTemporaryVideos(in attachments: [PendingAttachment]) {
-        for attachment in attachments where attachment.kind == .video {
-            guard let url = attachment.videoURL else { continue }
-            try? FileManager.default.removeItem(at: url)
+    private func scheduleTemporaryVideoCleanup(in attachments: [PendingAttachment]) {
+        let urls = attachments.compactMap { attachment in
+            attachment.kind == .video ? attachment.videoURL : nil
+        }
+        guard !urls.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            for url in urls {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 }

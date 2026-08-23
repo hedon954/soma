@@ -85,6 +85,13 @@ if grep -R -n \
   fail "current product files still contain the retired FormCoach name"
 fi
 
+if grep -R -n \
+  --include='*.swift' \
+  '\.buttonStyle(\.borderedProminent)' \
+  Soma >/dev/null 2>&1; then
+  fail "raw borderedProminent buttons can lose foreground contrast; use an App filled button style"
+fi
+
 grep -q "PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma" project.yml ||
   fail "project.yml must define the Soma bundle identifier"
 grep -q "exactVersion:" project.yml ||
@@ -106,6 +113,79 @@ if grep -nE 'Soma Server|hedonwang@gmail\.com|Base URL|SMTP|QQ 邮箱' \
   Soma/Views/FeedbackView.swift >/dev/null 2>&1; then
   fail "FeedbackView must not expose delivery implementation details"
 fi
+if grep -nE '随反馈附带的上下文|contextDisclosure' \
+  Soma/Views/FeedbackView.swift >/dev/null 2>&1; then
+  fail "per-reply feedback must not show the removed context disclosure"
+fi
+if grep -n '@Query.*AgentTrace' Soma/Views/CoachView.swift >/dev/null 2>&1; then
+  fail "CoachView must not observe every AgentTrace just to present feedback"
+fi
+if grep -n 'AssistantFeedbackContextBuilder\.make' \
+  Soma/Views/CoachView.swift >/dev/null 2>&1; then
+  fail "feedback context must be deferred until submission, not built during sheet presentation"
+fi
+if grep -nE 'case assistantFeedback|sheet = \.assistantFeedback|func openFeedback' \
+  Soma/Views/CoachView.swift >/dev/null 2>&1; then
+  fail "BUG 0031: per-reply feedback presentation state must stay in its leaf button, not invalidate CoachView"
+fi
+grep -q 'struct AssistantFeedbackButton: View' \
+  Soma/Views/AssistantFeedbackButton.swift ||
+  fail "BUG 0031: per-reply feedback must use the leaf presentation component"
+grep -q '@State private var isExpanded = false' \
+  Soma/Views/AssistantFeedbackButton.swift ||
+  fail "BUG 0031: inline feedback expansion state must be owned by the leaf button"
+feedback_sheet_pattern=".sheet(isPresented: \$isPresented)"
+if grep -nF "$feedback_sheet_pattern" \
+  Soma/Views/AssistantFeedbackButton.swift >/dev/null 2>&1; then
+  fail "BUG 0031: per-reply feedback must expand inline instead of presenting a sheet"
+fi
+if ! grep -q 'FeedbackView(' Soma/Views/AssistantFeedbackButton.swift ||
+  ! grep -q 'isEmbedded: true' Soma/Views/AssistantFeedbackButton.swift; then
+  fail "BUG 0031: per-reply feedback must reuse the inline embedded composer"
+fi
+if grep -n 'AssistantFeedbackContextBuilder\.make' \
+  Soma/Views/AssistantFeedbackButton.swift >/dev/null 2>&1; then
+  fail "BUG 0031: the leaf feedback button must never assemble submission context"
+fi
+grep -q '\.id(scrollTarget)' \
+  Soma/Views/AssistantFeedbackButton.swift ||
+  fail "BUG 0031: inline feedback must expose a message-scoped bottom scroll target"
+grep -q 'onExpanded(scrollTarget)' \
+  Soma/Views/AssistantFeedbackButton.swift ||
+  fail "BUG 0031: expanding feedback must request scrolling only after the user taps"
+grep -q 'proxy.scrollTo(target, anchor: \.bottom)' \
+  Soma/Views/CoachView.swift ||
+  fail "BUG 0031: feedback expansion must scroll its editor bottom into view"
+grep -q 'onSubmitted:' \
+  Soma/Views/AssistantFeedbackButton.swift ||
+  fail "BUG 0031: successful per-reply feedback must notify its leaf presentation owner"
+grep -q 'isExpanded = false' \
+  Soma/Views/AssistantFeedbackButton.swift ||
+  fail "BUG 0031: successful per-reply feedback must collapse its inline editor"
+if grep -nE 'enqueueSentinelReport|source: "sentinel"' \
+  Soma/Services/CrashDiagnosticsCoordinator.swift >/dev/null 2>&1; then
+  fail "BUG 0032: sentinel state must never generate a crash report"
+fi
+grep -q 'evidenceSource: \.metricKit' \
+  Soma/Services/CrashDiagnosticsCoordinator.swift ||
+  fail "BUG 0032: crash reports require MetricKit evidence"
+if grep -nE 'verifiedPrefixes|supportsDirectVideo\([^)]*provider|supportsDirectVideo\([^)]*model' \
+  Soma/Services/AIProvider.swift >/dev/null 2>&1; then
+  fail "BUG 0033: model/provider names must never determine multimodal capability"
+fi
+grep -q 'source.map { "来源：平台模型目录' Soma/Services/AIProvider.swift ||
+  fail "BUG 0033: model capability decisions must expose their source"
+grep -q 'SOMA_PROVIDER_SUPPORTS_DIRECT_VIDEO' Server/src/main.ts ||
+  fail "BUG 0033: remote direct-video capability must come from explicit deployment evidence"
+if grep -n 'SOMA_PROVIDER_MODEL' Server/src/main.ts | grep -q 'directVideo'; then
+  fail "BUG 0033: remote direct-video capability must not be inferred from the model name"
+fi
+if grep -n '\.prefix(3)' Soma/Views/InsightsView.swift >/dev/null 2>&1; then
+  fail "recent activity must not be truncated to three rows"
+fi
+grep -q 'static let maximumVisibleRows = 6' \
+  Soma/Views/ProgressHomeComponents.swift ||
+  fail "recent activity viewport must show six rows before internal scrolling"
 grep -q '^Soma/Resources/FeedbackCredentials\.plist$' .gitignore ||
   fail "the local mail credential resource must stay ignored"
 grep -q 'online-check.sh' scripts/archive-testflight.sh ||

@@ -113,8 +113,6 @@ struct InsightsView: View {
         }
         return (workoutValues + mealValues + bodyValues)
             .sorted { $0.date > $1.date }
-            .prefix(3)
-            .map { $0 }
     }
 
     private var weightedBodyEntries: [BodyEntry] {
@@ -202,20 +200,37 @@ struct InsightsView: View {
             }
             .frame(minHeight: 44)
             AppCard {
-                VStack(spacing: 0) {
-                    ForEach(Array(recentActivities.enumerated()), id: \.element.id) { index, activity in
-                        NavigationLink {
-                            recentActivityDestination(activity)
-                        } label: {
-                            ProgressRecentActivityRow(activity: activity)
-                        }
-                        .buttonStyle(.plain)
-                        if index < recentActivities.count - 1 {
-                            Divider()
-                                .overlay(AppTheme.separator)
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(
+                            Array(recentActivities.enumerated()),
+                            id: \.element.id
+                        ) { index, activity in
+                            NavigationLink {
+                                recentActivityDestination(activity)
+                            } label: {
+                                ProgressRecentActivityRow(activity: activity)
+                            }
+                            .buttonStyle(.plain)
+                            if index < recentActivities.count - 1 {
+                                Divider()
+                                    .overlay(AppTheme.separator)
+                            }
                         }
                     }
                 }
+                .frame(
+                    height: ProgressRecentActivityViewport.height(
+                        activityCount: recentActivities.count
+                    )
+                )
+                .scrollIndicators(
+                    recentActivities.count
+                        > ProgressRecentActivityViewport.maximumVisibleRows
+                        ? .visible
+                        : .hidden
+                )
+                .scrollBounceBehavior(.basedOnSize)
             }
         case .weightTrend:
             WeightTrendCard(entries: weightedBodyEntries)

@@ -285,23 +285,19 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertFalse(json.contains("weekday"))
     }
 
-    func testMediaCapabilityRegistryOnlyEnablesVerifiedQwenModels() {
-        XCTAssertNotNil(ModelCapability.directVideoCapability(
-            provider: .bailian,
-            model: "qwen3-vl-plus"
-        ))
-        XCTAssertNil(ModelCapability.directVideoCapability(
-            provider: .openAI,
-            model: "gpt-5"
-        ))
-        XCTAssertNil(ModelCapability.directVideoCapability(
-            provider: .tencent,
-            model: "hy-vision-2.0-instruct"
-        ))
-        XCTAssertNil(ModelCapability.directVideoCapability(
-            provider: .bailian,
-            model: "qwen-omni-turbo"
-        ))
+    func testDirectVideoRequiresExplicitCatalogVideoModality() {
+        let explicitVideo = ModelCapability.assessment(
+            inputModalities: ["text", "image", "video"],
+            source: "input_modalities"
+        )
+        let imageOnly = ModelCapability.assessment(
+            inputModalities: ["text", "image"],
+            source: "input_modalities"
+        )
+
+        XCTAssertNotNil(ModelCapability.directVideoCapability(assessment: explicitVideo))
+        XCTAssertNil(ModelCapability.directVideoCapability(assessment: imageOnly))
+        XCTAssertNil(ModelCapability.directVideoCapability(assessment: .unknown))
     }
 
     @MainActor
@@ -323,7 +319,8 @@ final class AgentV2Tests: XCTestCase {
                 textLoopTotal: 1,
                 imageLoopTotal: 1,
                 videoLoopTotal: 1
-            )
+            ),
+            agentRetrySleeper: { _ in }
         )
         var messages = [
             ChatCompletionParameters.Message(
@@ -353,6 +350,7 @@ final class AgentV2Tests: XCTestCase {
                 textItemID: UUID(),
                 enforceFirstStepDeadline: true
             ),
+            maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
             videoFrameFallback: { [Data([2, 3])] },
             trace: nil
         )
@@ -362,6 +360,58 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(outcome.mediaMode, .keyframes)
         XCTAssertEqual(outcome.passage, "关键帧结果")
         XCTAssertNotNil(outcome.fallbackReason)
+    }
+
+    @MainActor
+    func testTransientModelStepUsesExactlyThreeExponentialRetries() async throws {
+        let transport = ThreeFailureStreamTransport()
+        let delays = RetryDelayRecorder()
+        let suiteName = "AgentV2Tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key",
+            agentStreamLoader: transport.load,
+            agentRetrySleeper: { seconds in
+                await delays.record(seconds)
+            }
+        )
+        var messages = [
+            ChatCompletionParameters.Message(role: .user, content: .text("测试重试"))
+        ]
+
+        let outcome = try await service.consumeAgentStepWithRetry(
+            messages: &messages,
+            request: AgentStreamStepRequest(
+                tools: [],
+                model: "gpt-test",
+                provider: .openAI,
+                images: [],
+                videos: [],
+                hasVideo: false,
+                step: 2,
+                route: AIModelRoute(
+                    tier: .standard,
+                    provider: .openAI,
+                    baseURL: AIProvider.openAI.defaultBaseURL,
+                    model: "gpt-test",
+                    reason: "test"
+                ),
+                apiKey: "test-key",
+                userPrompt: "测试重试",
+                textItemID: UUID()
+            ),
+            maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
+            videoFrameFallback: nil,
+            trace: nil
+        )
+
+        XCTAssertEqual(transport.requestCount, 4)
+        XCTAssertEqual(outcome.requestAttempt, 4)
+        XCTAssertEqual(outcome.passage, "第 4 次成功")
+        let recordedDelays = await delays.values
+        XCTAssertEqual(recordedDelays, [1, 2, 4])
     }
 
     func testDeadlineBudgetsMatchFirstStepAndWholeLoopMediaClasses() {
@@ -530,6 +580,46 @@ private final class RetryStreamTransport: @unchecked Sendable {
             ChatCompletionChunkObject.self,
             from: data
         )
+        return AsyncThrowingStream { continuation in
+            continuation.yield(chunk)
+            continuation.finish()
+        }
+    }
+}
+
+private actor RetryDelayRecorder {
+    private(set) var values: [TimeInterval] = []
+
+    func record(_ value: TimeInterval) {
+        values.append(value)
+    }
+}
+
+private final class ThreeFailureStreamTransport: @unchecked Sendable {
+    private(set) var requestCount = 0
+
+    func load(
+        _: ChatCompletionParameters,
+        _: AIProvider,
+        _: String,
+        _: String
+    ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error> {
+        requestCount += 1
+        guard requestCount > AgentStepRetryPolicy.maximumRetryCount else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: URLError(.networkConnectionLost))
+            }
+        }
+        let data = try JSONSerialization.data(withJSONObject: [
+            "id": "chatcmpl_retry_success",
+            "object": "chat.completion.chunk",
+            "choices": [[
+                "index": 0,
+                "delta": ["content": "第 4 次成功"],
+                "finish_reason": "stop"
+            ]]
+        ])
+        let chunk = try JSONDecoder().decode(ChatCompletionChunkObject.self, from: data)
         return AsyncThrowingStream { continuation in
             continuation.yield(chunk)
             continuation.finish()

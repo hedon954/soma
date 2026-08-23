@@ -207,25 +207,6 @@ enum ConversationTurnProjection {
     }
 }
 
-extension CoachMessage {
-    /// Loop 内自动恢复：清掉失败卡，保留已成功 step，不进入手动重试。
-    func presentAutomaticRecovery(waitingText: String) {
-        var kept = agentTurnItems.filter {
-            $0.status == .succeeded && $0.kind != .error
-        }
-        if !kept.isEmpty {
-            kept.append(AgentTurnItem(
-                kind: .text,
-                status: .succeeded,
-                text: waitingText
-            ))
-        }
-        replaceAgentTurnItems(kept)
-        text = waitingText
-        agentStatus = .cancelled
-    }
-}
-
 extension DataIntegrityRepair {
     static func backfillConversationTurns(in context: ModelContext) {
         let messages = (

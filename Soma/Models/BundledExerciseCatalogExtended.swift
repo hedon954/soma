@@ -1,8 +1,8 @@
 import Foundation
 
-/// 纯文字扩展目录（ADR 0035 修订）：大幅扩充内置动作覆盖面。
-/// 条目只提供名称、别名、教练提示、肌群与动作模式；受力图由
-/// `MuscleGroupMapping` 按肌群程序生成，动作示意图留空走通用占位。
+/// 扩展目录（ADR 0035、ADR 0094 修订）：大幅扩充内置动作覆盖面。
+/// 条目提供名称、别名、教练提示、肌群与动作模式；受力图由
+/// `MuscleGroupMapping` 按肌群程序生成，已核对的动作使用公共领域专属示意图。
 /// 名称与别名参考 free-exercise-db（CC0，800+ 动作）与常见中文动作命名。
 extension BundledExerciseCatalog {
     static let extendedEntries: [BundledExerciseContent] =
@@ -13,6 +13,7 @@ extension BundledExerciseCatalog {
             + extendedArmEntries
             + extendedCoreEntries
             + extendedPowerAndConditioningEntries
+            + extendedAdditionalEntries
 }
 
 // MARK: - Profiles
@@ -28,6 +29,91 @@ private struct ExtendedProfile {
 /// 常见动作的专属示意图。资源取自仓库已采用的 Free Exercise DB 公共领域目录；
 /// key 使用 Soma 的 canonicalName，避免靠英文别名或文件名在运行时猜测。
 private let extendedActionIllustrations: [String: String] = [
+    "壶铃深蹲": "free_Front_Squats_With_Two_Kettlebells.jpg",
+    "暂停深蹲": "free_Barbell_Squat.jpg",
+    "泽奇深蹲": "free_Zercher_Squats.jpg",
+    "杰佛逊深蹲": "free_Jefferson_Squats.jpg",
+    "西斯深蹲": "free_Weighted_Sissy_Squat.jpg",
+    "单腿腿屈伸": "free_Leg_Extensions.jpg",
+    "北欧腿弯举": "free_Natural_Glute_Ham_Raise.jpg",
+    "瑞士球腿弯举": "free_Ball_Leg_Curl.jpg",
+    "后撤弓步": "free_Dumbbell_Rear_Lunge.jpg",
+    "原地分腿蹲": "free_Split_Squats.jpg",
+    "腿举机提踵": "free_Calf_Press_On_The_Leg_Press_Machine.jpg",
+    "骑驴提踵": "free_Donkey_Calf_Raises.jpg",
+    "器械髋外展": "free_Thigh_Abductor.jpg",
+    "弹力带侧走": "free_Monster_Walk.jpg",
+    "侧卧抬腿": "free_Side_Leg_Raises.jpg",
+    "负重臀桥": "free_Barbell_Glute_Bridge.jpg",
+    "单腿臀推": "free_Single_Leg_Glute_Bridge.jpg",
+    "器械臀推": "free_Smith_Machine_Hip_Raise.jpg",
+    "绳索髋伸": "free_Glute_Kickback.jpg",
+    "上斜杠铃卧推": "free_Barbell_Incline_Bench_Press_-_Medium_Grip.jpg",
+    "高位绳索夹胸": "free_Cable_Crossover.jpg",
+    "坐姿哑铃推举": "free_Seated_Dumbbell_Press.jpg",
+    "单臂哑铃推举": "free_Standing_Palm-In_One-Arm_Dumbbell_Press.jpg",
+    "颈后推举": "free_Push_Press_-_Behind_the_Neck.jpg",
+    "地雷管推举": "free_Landmine_Linear_Jammer.jpg",
+    "绳索侧平举": "free_Cable_Seated_Lateral_Raise.jpg",
+    "杠铃片前平举": "free_Front_Plate_Raise.jpg",
+    "绳索反向飞鸟": "free_Cable_Rear_Delt_Fly.jpg",
+    "哑铃直立划船": "free_Dumbbell_One-Arm_Upright_Row.jpg",
+    "史密斯耸肩": "free_Smith_Machine_Behind_the_Back_Shrug.jpg",
+    "单臂绳索划船": "free_Seated_One-arm_Cable_Pulley_Rows.jpg",
+    "海豹划船": "free_Lying_Cambered_Barbell_Row.jpg",
+    "反握杠铃划船": "free_Reverse_Grip_Bent-Over_Rows.jpg",
+    "地雷管划船": "free_Bent_Over_One-Arm_Long_Bar_Row.jpg",
+    "反握高位下拉": "free_Underhand_Cable_Pulldowns.jpg",
+    "单臂高位下拉": "free_One_Arm_Lat_Pulldown.jpg",
+    "宽握引体向上": "free_Wide-Grip_Rear_Pull-Up.jpg",
+    "坐姿哑铃弯举": "free_Seated_Dumbbell_Curl.jpg",
+    "器械弯举": "free_Machine_Bicep_Curl.jpg",
+    "高位绳索弯举": "free_High_Cable_Curls.jpg",
+    "反握弯举": "free_Reverse_Barbell_Curl.jpg",
+    "单臂绳索下压": "free_Cable_One_Arm_Tricep_Extension.jpg",
+    "反握腕弯举": "free_Palms-Down_Wrist_Curl_Over_A_Bench.jpg",
+    "器械卷腹": "free_Ab_Crunch_Machine.jpg",
+    "悬垂屈膝抬腿": "free_Knee_Hip_Raise_On_Parallel_Bars.jpg",
+    "仰卧举腿": "free_Flat_Bench_Lying_Leg_Raise.jpg",
+    "颈部屈伸": "free_Lying_Face_Up_Plate_Neck_Resistance.jpg",
+    "杠铃高拉": "free_Clean_Pull.jpg",
+    "农夫行走": "free_Farmers_Walk.jpg",
+    "单侧负重行走": "free_Rickshaw_Carry.jpg",
+    "开合跳": "free_Star_Jump.jpg",
+    "战绳": "free_Battling_Ropes.jpg",
+    "拉雪橇": "free_Sled_Drag_-_Harness.jpg",
+    "熊爬": "free_Bear_Crawl_Sled_Drags.jpg",
+    "窄站距深蹲": "free_Narrow_Stance_Squats.jpg",
+    "奥林匹克深蹲": "free_Olympic_Squat.jpg",
+    "弹力带箱式深蹲": "free_Box_Squat_with_Bands.jpg",
+    "单腿杠铃深蹲": "free_One_Leg_Barbell_Squat.jpg",
+    "跪姿深蹲": "free_Kneeling_Squat.jpg",
+    "自重行走弓步": "free_Bodyweight_Walking_Lunge.jpg",
+    "交叉后撤弓步": "free_Crossover_Reverse_Lunge.jpg",
+    "杠铃坐姿提踵": "free_Barbell_Seated_Calf_Raise.jpg",
+    "弹力带提踵": "free_Calf_Raises_-_With_Bands.jpg",
+    "前脚掌垫高提踵": "free_Calf_Raise_On_A_Dumbbell.jpg",
+    "弹力带腿弯举": "free_Seated_Band_Hamstring_Curl.jpg",
+    "自然臀腿提拉": "free_Glute_Ham_Raise.jpg",
+    "生理球臀桥": "free_Physioball_Hip_Bridge.jpg",
+    "骨盆后倾臀桥": "free_Pelvic_Tilt_Into_Bridge.jpg",
+    "杠铃上斜肩胛上提": "free_Barbell_Incline_Shoulder_Raise.jpg",
+    "前倾哑铃前平举": "free_Front_Incline_Dumbbell_Raise.jpg",
+    "交替三角肌上举": "free_Alternating_Deltoid_Raise.jpg",
+    "坐姿俯身反向飞鸟": "free_Seated_Bent-Over_Rear_Delt_Raise.jpg",
+    "杠铃后束划船": "free_Barbell_Rear_Delt_Row.jpg",
+    "绳索后束划船": "free_Cable_Rope_Rear-Delt_Rows.jpg",
+    "跪姿高位划船": "free_Kneeling_High_Pulley_Row.jpg",
+    "单臂长杠划船": "free_One-Arm_Long_Bar_Row.jpg",
+    "壶铃单臂划船": "free_One-Arm_Kettlebell_Row.jpg",
+    "哑铃二头弯举": "free_Dumbbell_Bicep_Curl.jpg",
+    "交叉锤式弯举": "free_Cross_Body_Hammer_Curl.jpg",
+    "拖式弯举": "free_Drag_Curl.jpg",
+    "绳索锤式弯举": "free_Cable_Hammer_Curls_-_Rope_Attachment.jpg",
+    "绳索牧师椅弯举": "free_Cable_Preacher_Curl.jpg",
+    "哑铃反握腕弯举": "free_Palms-Down_Dumbbell_Wrist_Curl_Over_A_Bench.jpg",
+    "指弯举": "free_Finger_Curls.jpg",
+    "颈部等长前后对抗": "free_Isometric_Neck_Exercise_-_Front_And_Back.jpg",
     "哈克深蹲": "free_Barbell_Hack_Squat.jpg",
     "哑铃深蹲": "free_Dumbbell_Squat.jpg",
     "宽距深蹲": "free_Plie_Dumbbell_Squat.jpg",
@@ -84,7 +170,7 @@ private let extendedActionIllustrations: [String: String] = [
     "杠铃耸肩": "free_Barbell_Shrug.jpg",
     "哑铃耸肩": "free_Dumbbell_Shrug.jpg",
     "T杠划船": "free_T-Bar_Row_with_Handle.jpg",
-    "平板哑铃划船": "free_Alternating_Renegade_Row.jpg",
+    "平板哑铃划船": "free_Dumbbell_Incline_Row.jpg",
     "水平引体": "free_Inverted_Row.jpg",
     "器械划船": "free_Leverage_High_Row.jpg",
     "窄距高位下拉": "free_Close-Grip_Front_Lat_Pulldown.jpg",
@@ -124,7 +210,22 @@ private let extendedActionIllustrations: [String: String] = [
     "土耳其起立": "free_Kettlebell_Turkish_Get-Up_Squat_style.jpg",
     "跳箱": "free_Box_Jump_Multiple_Response.jpg",
     "推雪橇": "free_Sled_Push.jpg",
-    "药球砸地": "free_One-Arm_Medicine_Ball_Slam.jpg"
+    "药球砸地": "free_One-Arm_Medicine_Ball_Slam.jpg",
+    "绳索上斜胸推": "free_Incline_Cable_Chest_Press.jpg",
+    "杠铃登台阶": "free_Barbell_Step_Ups.jpg",
+    "哑铃登台阶": "free_Dumbbell_Step_Ups.jpg",
+    "上斜凳杠铃划船": "free_Incline_Bench_Pull.jpg",
+    "上斜绳索臂屈伸": "free_Cable_Incline_Triceps_Extension.jpg",
+    "双壶铃抓举": "free_Double_Kettlebell_Snatch.jpg",
+    "悬垂抓举": "free_Hang_Snatch.jpg",
+    "单手悬垂": "free_One_Handed_Hang.jpg",
+    "壶铃相扑高拉": "free_Kettlebell_Sumo_High_Pull.jpg",
+    "弹力带拉开": "free_Band_Pull_Apart.jpg",
+    "绳索硬拉": "free_Cable_Deadlifts.jpg",
+    "上斜凳直臂绳索下压": "free_Cable_Incline_Pushdown.jpg",
+    "俯卧T杠划船": "free_Lying_T-Bar_Row.jpg",
+    "低位绳索颈部划船": "free_Low_Pulley_Row_To_Neck.jpg",
+    "高架绳索划船": "free_Elevated_Cable_Rows.jpg"
 ]
 
 private func entry(
@@ -507,7 +608,7 @@ private let extendedPushEntries: [BundledExerciseContent] = [
 
 private let extendedPullEntries: [BundledExerciseContent] = [
     entry("T杠划船", ["T杆划船", "T-Bar Row"], horizontalPullProfile),
-    entry("平板哑铃划船", ["胸部支撑哑铃划船", "上斜哑铃划船"], horizontalPullProfile),
+    entry("平板哑铃划船", ["胸部支撑哑铃划船", "胸托哑铃划船", "上斜哑铃划船"], horizontalPullProfile),
     entry("水平引体", ["反向划船", "澳大利亚引体", "低杠引体"], horizontalPullProfile),
     entry("器械划船", ["坐姿器械划船"], horizontalPullProfile),
     entry("彭德利划船", ["Pendlay Row"], horizontalPullProfile),
@@ -517,7 +618,7 @@ private let extendedPullEntries: [BundledExerciseContent] = [
     entry("地雷管划船", ["landmine 划船"], horizontalPullProfile),
     entry("反握高位下拉", [], verticalPullProfile),
     entry("窄距高位下拉", ["中立握高位下拉", "V柄高位下拉"], verticalPullProfile),
-    entry("单臂高位下拉", [], verticalPullProfile),
+    entry("单臂高位下拉", ["单臂绳索下拉"], verticalPullProfile),
     entry("辅助引体向上", ["助力引体向上"], verticalPullProfile),
     entry("中立握引体向上", ["对握引体向上"], verticalPullProfile),
     entry("宽握引体向上", ["宽距引体向上"], verticalPullProfile),
@@ -588,4 +689,55 @@ private let extendedPowerAndConditioningEntries: [BundledExerciseContent] = [
     entry("拉雪橇", ["雪橇拉"], conditioningProfile),
     entry("熊爬", ["Bear Crawl"], conditioningProfile),
     entry("药球砸地", ["药球砸击", "Med Ball Slam"], powerProfile)
+]
+
+/// 在既有 208 个目录项之外新增的 46 个常见动作；与上方 54 个补图项合计
+/// 让本次目录升级新增 100 个有专属示意图的动作。
+private let extendedAdditionalEntries: [BundledExerciseContent] = [
+    entry("窄站距深蹲", [], squatProfile),
+    entry("奥林匹克深蹲", [], squatProfile),
+    entry("弹力带箱式深蹲", [], squatProfile),
+    entry("单腿杠铃深蹲", [], singleLegSquatProfile, laterality: .both),
+    entry("跪姿深蹲", [], squatProfile),
+    entry("自重行走弓步", [], lungeProfile, laterality: .both),
+    entry("交叉后撤弓步", [], lungeProfile, laterality: .both),
+    entry("杠铃坐姿提踵", [], calfProfile),
+    entry("弹力带提踵", [], calfProfile),
+    entry("前脚掌垫高提踵", [], calfProfile),
+    entry("弹力带腿弯举", [], kneeFlexionProfile),
+    entry("自然臀腿提拉", [], kneeFlexionProfile),
+    entry("生理球臀桥", [], gluteProfile),
+    entry("骨盆后倾臀桥", [], gluteProfile),
+    entry("杠铃上斜肩胛上提", [], shrugProfile),
+    entry("前倾哑铃前平举", [], frontRaiseProfile),
+    entry("交替三角肌上举", [], lateralRaiseProfile),
+    entry("坐姿俯身反向飞鸟", [], rearDeltProfile),
+    entry("杠铃后束划船", [], horizontalPullProfile),
+    entry("绳索后束划船", [], horizontalPullProfile),
+    entry("跪姿高位划船", [], horizontalPullProfile),
+    entry("单臂长杠划船", [], horizontalPullProfile, laterality: .both),
+    entry("壶铃单臂划船", [], horizontalPullProfile, laterality: .both),
+    entry("哑铃二头弯举", [], armCurlProfile),
+    entry("交叉锤式弯举", [], armCurlProfile),
+    entry("拖式弯举", [], armCurlProfile),
+    entry("绳索锤式弯举", [], armCurlProfile),
+    entry("绳索牧师椅弯举", [], armCurlProfile),
+    entry("哑铃反握腕弯举", [], forearmProfile),
+    entry("指弯举", [], forearmProfile),
+    entry("颈部等长前后对抗", [], neckProfile, targetKind: .duration),
+    entry("绳索上斜胸推", ["Incline Cable Chest Press"], chestPressProfile),
+    entry("杠铃登台阶", ["Barbell Step Up"], lungeProfile, laterality: .both),
+    entry("哑铃登台阶", ["Dumbbell Step Up"], lungeProfile, laterality: .both),
+    entry("上斜凳杠铃划船", ["Incline Bench Pull"], horizontalPullProfile),
+    entry("上斜绳索臂屈伸", ["Cable Incline Triceps Extension"], tricepsProfile),
+    entry("双壶铃抓举", ["Double Kettlebell Snatch"], powerProfile),
+    entry("悬垂抓举", ["Hang Snatch"], powerProfile),
+    entry("单手悬垂", ["One Handed Hang"], carryProfile, targetKind: .duration),
+    entry("壶铃相扑高拉", ["Kettlebell Sumo High Pull"], powerProfile),
+    entry("弹力带拉开", ["Band Pull Apart"], rearDeltProfile),
+    entry("绳索硬拉", ["Cable Deadlift"], hingeProfile),
+    entry("上斜凳直臂绳索下压", ["Cable Incline Pushdown"], pulloverProfile),
+    entry("俯卧T杠划船", ["Lying T-Bar Row"], horizontalPullProfile),
+    entry("低位绳索颈部划船", ["Low Pulley Row To Neck"], rearDeltProfile),
+    entry("高架绳索划船", ["Elevated Cable Row"], horizontalPullProfile)
 ]

@@ -117,6 +117,7 @@ baseline 只登记最早的 migration，并会先确认其中声明的表都已�
 | `SOMA_PROVIDER_BASE_URL` | Worker | Soma 管理 Provider 的 OpenAI-compatible Base URL |
 | `SOMA_PROVIDER_API_KEY` | Worker | Soma 管理 Provider 凭据 |
 | `SOMA_PROVIDER_MODEL` | Worker | 远程 Agent 模型 |
+| `SOMA_PROVIDER_SUPPORTS_DIRECT_VIDEO` | API/Worker | 有明确供应商能力来源时才设为 `true`；默认关闭，禁止按模型名推断 |
 | `SOMA_FEEDBACK_GMAIL_CLIENT_ID` | API | Gmail OAuth client ID，只保存在服务端 secret manager |
 | `SOMA_FEEDBACK_GMAIL_CLIENT_SECRET` | API | Gmail OAuth client secret，只保存在服务端 secret manager |
 | `SOMA_FEEDBACK_GMAIL_REFRESH_TOKEN` | API | 授予 `gmail.send` 的离线 refresh token，只保存在服务端 secret manager |

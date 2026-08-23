@@ -5,7 +5,7 @@ import { GmailFeedbackEmailProvider } from "./feedback.js";
 import { S3TemporaryObjectStore } from "./object-store.js";
 import { logEvent } from "./operational-log.js";
 import { PostgresSomaStore } from "./postgres-store.js";
-import { supportsDirectVideo } from "./provider.js";
+import { explicitCapabilityFlag } from "./provider.js";
 import {
   AllowDevelopmentAttestation,
   DeviceIdentityService,
@@ -65,7 +65,9 @@ const server = createSomaServer({
   identity,
   objects: objectStore,
   tokenCipher: new TokenCipher(encryptionKey),
-  directVideoEnabled: supportsDirectVideo(process.env.SOMA_PROVIDER_MODEL ?? ""),
+  directVideoEnabled: explicitCapabilityFlag(
+    process.env.SOMA_PROVIDER_SUPPORTS_DIRECT_VIDEO,
+  ),
   feedback: new GmailFeedbackEmailProvider(
     requiredEnvironment("SOMA_FEEDBACK_GMAIL_CLIENT_ID"),
     requiredEnvironment("SOMA_FEEDBACK_GMAIL_CLIENT_SECRET"),

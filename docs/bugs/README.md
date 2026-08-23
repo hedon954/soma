@@ -39,6 +39,11 @@
 | [0026](0026-guided-auto-recording-still-stops-without-reason.md) | 已修复，待真机复验 | 开组换预览宿主并自动放大取景仍会掐断自动录像，极短文件被当成正常保存 | 倒计时只取景、开组后放大再写文件；录像中不重建连接；非目标组无预览 |
 | [0027](0027-meal-aggregate-overrides-item-facts.md) | 已修复，待真机 Agent 交互确认 | 创建饮食时顶层营养可覆盖菜品派生事实 | 菜品优先写入、总糖完整性与 Tool 结果回归测试 |
 | [0028](0028-remote-model-tool-list-missing-from-logs.md) | 已修复，待部署与真机复验 | 远程模型 Span 与诊断日志缺少每次调用的绑定工具清单 | Worker Event 工具清单与 iOS 远程 Span 摘要测试 |
+| [0029](0029-visible-failure-keeps-retrying-and-stale-error.md) | 已修复，待真机网络故障复验 | 可见失败后仍自动重试，成功后残留旧错误与独立文字重试按钮 | ReAct 三次退避、Loop 外人工屏障、同气泡清理与网络故障验收 |
+| [0030](0030-prominent-button-loses-dark-mode-label.md) | 已修复，待真机界面复验 | 深色模式实心主按钮白底白字，开始训练等文字消失 | 显式反色按钮样式、禁止原始 prominent 写法与浅深主题验收 |
+| [0031](0031-feedback-sheet-transition-jank.md) | 已修复，待真机手感复验 | 逐回复反馈页进出场卡顿，图标与时间相距过远 | 原位反馈编辑器、发送时定向读取上下文与静态门禁 |
+| [0032](0032-sentinel-false-crash-reports.md) | 已修复，待真实 MetricKit 崩溃验收 | 启动哨兵把模拟器停止、强杀与安装替换误报为崩溃 | 只有 MetricKit 可入队、证据字段、旧误报清理与静态门禁 |
+| [0033](0033-model-name-multimodal-misclassification.md) | 已修复，待真实供应商目录验收 | provider 与模型名硬编码导致多模态和直传视频误判 | 明确模型目录来源、未知放行与远程显式能力开关 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

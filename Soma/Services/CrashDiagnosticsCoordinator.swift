@@ -1,9 +1,8 @@
 import Foundation
 import MetricKit
-import SwiftData
 import UIKit
 
-/// ADR 0083：启动时判断上一次运行是否异常终止，把崩溃上下文拼成报告并静默发送。
+/// ADR 0095：哨兵只保留待关联上下文；只有 MetricKit 的 MXCrashDiagnostic 可以生成报告。
 /// 总开关在高级设置里，关闭后只留盘不发送。
 @MainActor
 @Observable
@@ -50,24 +49,22 @@ final class CrashDiagnosticsCoordinator: NSObject {
         hasActivated = true
         self.previousRun = previousRun
         MXMetricManager.shared.add(self)
+        purgeUnconfirmedReports()
         pendingReportCount = reports.pendingReports().count
         lastReportSummary = reports.latestReport().map(Self.summary(of:))
     }
 
-    /// 由持有 `ModelContext` 的根视图调用：补齐崩溃 session 上下文，然后落盘并尝试发送。
-    func flushPendingReports(in context: ModelContext) async {
+    /// 启动后只清理旧哨兵标记并投递已有的系统确认报告，不查询业务数据库。
+    func flushPendingReports() async {
         guard !isSuppressed, !isFlushing else { return }
         isFlushing = true
         defer { isFlushing = false }
 
         if let previousRun {
-            self.previousRun = nil
-            if CrashReportEligibility.shouldReportSentinelTermination(previousRun) {
-                enqueueSentinelReport(previousRun, in: context)
-            } else if previousRun.endedUnexpectedly {
+            if previousRun.endedUnexpectedly {
                 logs.append(
                     category: "diagnostics",
-                    message: "上次运行附着调试器结束，不作为崩溃上报"
+                    message: "检测到上次运行未清位，仅保留上下文并等待 MetricKit 崩溃证据"
                 )
             }
             AppRunSentinel.shared.clearPreviousRunMarkers()
@@ -75,35 +72,17 @@ final class CrashDiagnosticsCoordinator: NSObject {
         await deliverPendingReports()
     }
 
-    private func enqueueSentinelReport(
-        _ previousRun: AppRunSentinel.PreviousRun,
-        in context: ModelContext
-    ) {
-        let diagnosis = CrashReportDiagnosis(
-            source: "sentinel",
-            headline: "上次前台运行被异常终止",
-            terminationReason: "启动哨兵未被正常清位；MetricKit 崩溃诊断可能随后补充",
-            exceptionType: nil,
-            exceptionCode: nil,
-            signal: nil,
-            callStack: nil
-        )
-        enqueue(
-            diagnosis: diagnosis,
-            context: CrashDiagnosticsContextBuilder.build(
-                sessionID: previousRun.sessionID,
-                turnID: previousRun.turnID,
-                lastActivity: previousRun.activity,
-                lastHeartbeat: previousRun.lastHeartbeat,
-                in: context
-            )
-        )
-    }
-
-    func enqueue(
+    private func enqueueConfirmedCrash(
         diagnosis: CrashReportDiagnosis,
         context: CrashReportContext
     ) {
+        guard CrashReportEligibility.isSystemConfirmed(source: diagnosis.source) else {
+            logs.append(
+                category: "diagnostics",
+                message: "拒绝缺少 MetricKit 证据的崩溃报告"
+            )
+            return
+        }
         let reportID = UUID()
         let createdAt = Date()
         let report = DiagnosticReport(
@@ -117,7 +96,8 @@ final class CrashDiagnosticsCoordinator: NSObject {
                 environment: Self.environment(),
                 context: context,
                 recentLog: logs.recentText()
-            )
+            ),
+            evidenceSource: .metricKit
         )
         reports.save(report)
         pendingReportCount = reports.pendingReports().count
@@ -135,7 +115,12 @@ final class CrashDiagnosticsCoordinator: NSObject {
 
     func deliverPendingReports() async {
         guard isAutoSendEnabled else { return }
+        purgeUnconfirmedReports()
         for report in reports.pendingReports() {
+            guard CrashReportEligibility.isSystemConfirmed(report: report) else {
+                reports.remove(report.id)
+                continue
+            }
             guard report.deliveryAttemptCount
                 < DiagnosticReportStore.maximumDeliveryAttempts
             else {
@@ -180,6 +165,22 @@ final class CrashDiagnosticsCoordinator: NSObject {
         logs.append(
             category: "diagnostics",
             message: "用户丢弃了全部待发送诊断报告"
+        )
+    }
+
+    /// 旧版本可能已经把 sentinel 误判落盘；升级后在任何投递前直接清除。
+    private func purgeUnconfirmedReports() {
+        let unconfirmed = reports.pendingReports().filter {
+            !CrashReportEligibility.isSystemConfirmed(report: $0)
+        }
+        guard !unconfirmed.isEmpty else { return }
+        for report in unconfirmed {
+            reports.remove(report.id)
+        }
+        logs.append(
+            category: "diagnostics",
+            message: "已清理缺少 MetricKit 证据的旧崩溃报告",
+            fields: ["count": "\(unconfirmed.count)"]
         )
     }
 
@@ -232,20 +233,22 @@ extension CrashDiagnosticsCoordinator: MXMetricManagerSubscriber {
         guard !diagnoses.isEmpty else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
+            let run = previousRun
             for diagnosis in diagnoses {
-                enqueue(
+                enqueueConfirmedCrash(
                     diagnosis: diagnosis,
                     context: CrashReportContext(
-                        sessionID: previousRun?.sessionID,
-                        turnID: previousRun?.turnID,
-                        lastActivity: previousRun?.activity,
-                        lastHeartbeat: previousRun?.lastHeartbeat,
+                        sessionID: run?.sessionID,
+                        turnID: run?.turnID,
+                        lastActivity: run?.activity,
+                        lastHeartbeat: run?.lastHeartbeat,
                         sessionMessages: [],
                         traceSpans: [],
                         traceSummary: nil
                     )
                 )
             }
+            previousRun = nil
             await deliverPendingReports()
         }
     }
@@ -267,98 +270,5 @@ extension CrashDiagnosticsCoordinator: MXMetricManagerSubscriber {
                 encoding: .utf8
             )
         )
-    }
-}
-
-/// 崩溃报告的 session 上下文读取。查询与 UI 无关，单独放一层便于复用与测试。
-@MainActor
-enum CrashDiagnosticsContextBuilder {
-    static let maximumMessages = 40
-    static let maximumMessageCharacters = 600
-    static let maximumSpans = 24
-    static let maximumSpanCharacters = 1200
-
-    static func build(
-        sessionID: UUID?,
-        turnID: UUID?,
-        lastActivity: String?,
-        lastHeartbeat: Date?,
-        in context: ModelContext
-    ) -> CrashReportContext {
-        var messages: [String] = []
-        if let sessionID {
-            let descriptor = FetchDescriptor<CoachMessage>(
-                predicate: #Predicate { $0.sessionID == sessionID },
-                sortBy: [SortDescriptor(\.date)]
-            )
-            let fetched = (try? context.fetch(descriptor)) ?? []
-            messages = fetched.suffix(maximumMessages).map(line(for:))
-        }
-
-        var spans: [String] = []
-        var traceSummary: String?
-        if let trace = latestTrace(turnID: turnID, sessionID: sessionID, in: context) {
-            traceSummary = [
-                "id=\(trace.id.uuidString)",
-                "status=\(trace.statusRaw)",
-                "provider=\(trace.provider)",
-                "model=\(trace.model)",
-                "attempt=\(trace.attemptNumber)",
-                "error=\(trace.errorMessage ?? "none")"
-            ].joined(separator: " ")
-            spans = trace.spans.suffix(maximumSpans).map(line(for:))
-        }
-
-        return CrashReportContext(
-            sessionID: sessionID,
-            turnID: turnID,
-            lastActivity: lastActivity,
-            lastHeartbeat: lastHeartbeat,
-            sessionMessages: messages,
-            traceSpans: spans,
-            traceSummary: traceSummary
-        )
-    }
-
-    private static func latestTrace(
-        turnID: UUID?,
-        sessionID: UUID?,
-        in context: ModelContext
-    ) -> AgentTrace? {
-        if let turnID {
-            var descriptor = FetchDescriptor<AgentTrace>(
-                predicate: #Predicate { $0.turnID == turnID },
-                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-            )
-            descriptor.fetchLimit = 1
-            if let trace = (try? context.fetch(descriptor))?.first {
-                return trace
-            }
-        }
-        guard sessionID != nil else { return nil }
-        var descriptor = FetchDescriptor<AgentTrace>(
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first
-    }
-
-    private static func line(for message: CoachMessage) -> String {
-        let role = message.isFromCoach ? "assistant" : "user"
-        let text = message.text.isEmpty ? "（无正文）" : message.text
-        return "[\(role)] \(message.date.ISO8601Format()) \(String(text.prefix(maximumMessageCharacters)))"
-    }
-
-    private static func line(for span: AgentTraceSpan) -> String {
-        [
-            "step=\(span.step.map(String.init) ?? "none")",
-            "kind=\(span.kind.rawValue)",
-            "title=\(span.title)",
-            "status=\(span.status.rawValue)",
-            "input=\(String((span.input ?? "none").prefix(maximumSpanCharacters)))",
-            "output=\(String((span.output ?? "none").prefix(maximumSpanCharacters)))",
-            "metadata=\(span.metadata ?? "none")",
-            "error=\(span.errorMessage ?? "none")"
-        ].joined(separator: " ")
     }
 }

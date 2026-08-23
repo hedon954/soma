@@ -5,6 +5,7 @@
 - 维护者：Soma maintainers
 - 部分替代：无
 - 后续替代：
+  - [ADR 0094](0094-user-first-versioned-bundled-action-art.md) 明确用户图最高、新版内置图在无用户图时高于生成图，并把门槛提升到 239
   - [ADR 0066](0066-bundled-action-illustration-coverage.md) 把常见动作专属图覆盖门禁提升到至少一百个，静默 fill-only 保持不变
   - [ADR 0044](0044-programmatic-muscle-map-and-training-share-poster.md) 将 `muscleMap`
     改为程序化受力图渲染，退役肌群位图与其 AI 按需生成入口；`actionIllustration`

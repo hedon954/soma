@@ -1,12 +1,18 @@
 import Foundation
 
-/// ADR 0083：崩溃报告先落盘再发送。发送失败保留在盘上，下次启动继续重试；最多保留 5 份，
+enum DiagnosticReportEvidenceSource: String, Codable, Equatable, Sendable {
+    case metricKit = "metrickit"
+}
+
+/// ADR 0095：只有带 MetricKit 系统崩溃证据的报告可以落盘并发送。发送失败保留在盘上，
+/// 下次启动继续重试；最多保留 5 份，
 /// 避免长期离线堆积。
 struct DiagnosticReport: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     var createdAt: Date
     var subject: String
     var body: String
+    var evidenceSource: DiagnosticReportEvidenceSource?
     var deliveryAttemptCount: Int
     var lastError: String?
 
@@ -15,6 +21,7 @@ struct DiagnosticReport: Codable, Equatable, Identifiable, Sendable {
         createdAt: Date = .now,
         subject: String,
         body: String,
+        evidenceSource: DiagnosticReportEvidenceSource? = nil,
         deliveryAttemptCount: Int = 0,
         lastError: String? = nil
     ) {
@@ -22,6 +29,7 @@ struct DiagnosticReport: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.subject = subject
         self.body = body
+        self.evidenceSource = evidenceSource
         self.deliveryAttemptCount = deliveryAttemptCount
         self.lastError = lastError
     }

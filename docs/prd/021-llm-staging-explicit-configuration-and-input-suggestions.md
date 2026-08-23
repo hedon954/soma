@@ -7,10 +7,13 @@
   - [PRD 008](008-coach-continuity-and-adaptive-models.md) 的双档模型配置呈现与模型选择方式
   - [PRD 011](011-durable-agent-jobs-remote-continuity.md) 的“无 Key 不落盘”发送前置条件
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的 AI 服务折叠分层与输入区动作候选两步选择
-- 后续修订：[PRD 027](027-reliable-efficient-react-and-in-context-review.md) 将明确欠费改为仅用户可释放的 FIFO 屏障，并增加暂存消息单删与全清；自动补偿与手动重试按钮互斥
+- 后续修订：
+  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 将明确欠费改为仅用户可释放的 FIFO 屏障，并增加暂存消息单删与全清；自动补偿与手动重试按钮互斥
+  - [PRD 042](042-user-controlled-recovery-message-feedback-and-action-art.md) 将所有已向用户展示的 Loop 外失败统一为人工恢复，删除网络、供应商与配置变化自动补偿
 - 关联决策：
   - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
   - [ADR 0046](../adr/0046-explicit-llm-configuration-and-input-history-suggestions.md)
+  - [ADR 0096](../adr/0096-source-backed-model-multimodal-capabilities.md)
 
 ## 背景
 
@@ -90,12 +93,13 @@ v0.0.3 完成 GUI 精简后，真机使用暴露出三类新的体验断点。
 - 每一档同屏展示：平台、Base URL、API Key、模型；标准档额外展示图片生成模型，
   小模型档额外展示「配置小模型」开关。没有「高级」折叠层。
 - Base URL 对所有平台可编辑；切换平台时预填该平台默认地址，用户改写后按平台与档位保存。
-- 平台新增 `opencode`（默认 `https://opencode.ai/zen/v1`）。Soma 使用 Chat Completions，
-  因此该平台上只走 `/responses` 的 GPT 系模型标记为不支持。
+- 平台新增 `opencode`（默认 `https://opencode.ai/zen/v1`）。provider 和模型 ID 不作为多模态
+  能力证据；只有 `/models` 返回的明确能力字段才能标记支持或不支持。
 - 模型输入框是纯文本输入；`/models` 结果以建议列表出现在输入框下方，点选即填入。
   列表为空、获取失败或平台未提供 `/models` 时，输入框继续可用。
 - 候选行只显示模型 ID；候选不做条数截断，超过五条时列表自身可下划查看全部。
-- 多模态能力说明只在模型已填写后出现，占一行，并明确指出说的是多模态（图片与视频）能力。
+- 多模态能力说明只在模型已填写后出现；有明确目录字段时同时显示判断与来源，缺少来源时显示
+  “未知”并由真实请求验证。禁止按模型名、`vision` / `vl` 字样或平台硬编码能力。
 - 模型、Base URL、图片生成模型的改动即时落盘，不依赖「完成」按钮或返回时机。
 - 刷新可用模型列表不得覆盖用户已填写的模型；只有模型为空时才自动填入建议值。
 
@@ -130,5 +134,5 @@ v0.0.3 完成 GUI 精简后，真机使用暴露出三类新的体验断点。
 - 供应商长时间不可用时，暂存会持续累积；退避上限为 5 分钟，队列不会自行丢弃消息，
   用户仍可手动取消或删除对应对话。
 - 暂存消息在真正执行前没有解析结果，趋势与统计不包含尚未消费的内容。
-- `opencode` 的模型目录由平台维护；Soma 只按名称做保守的多模态能力标注，
-  未标注能力仍由真实请求验证。
+- `opencode` 与其他平台的模型目录由各平台维护；没有明确能力元数据时 Soma 保持未知，
+  不用名称猜测，最终兼容性由真实请求验证。

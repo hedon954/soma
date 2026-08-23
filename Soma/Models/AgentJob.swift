@@ -39,7 +39,6 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
     var isRunnable: Bool {
         switch self {
         case .queued,
-             .waitingForNetwork,
              .waitingForForeground,
              .remoteRunning,
              .waitingForDevice:
@@ -49,18 +48,17 @@ enum AgentJobState: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// 网络、供应商或前台恢复仍由系统续跑，教练气泡不应展示手动重试。
+    /// 只有尚未向用户报告失败的运行态可由系统续跑。
     var awaitsAutomaticRecovery: Bool {
         switch self {
         case .queued,
-             .waitingForNetwork,
              .staged,
              .running,
              .remoteRunning,
              .waitingForForeground,
              .waitingForDevice:
             true
-        case .waitingForUser, .succeeded, .failed, .cancelled:
+        case .waitingForNetwork, .waitingForUser, .succeeded, .failed, .cancelled:
             false
         }
     }
@@ -826,7 +824,9 @@ enum AgentJobStore {
         in context: ModelContext
     ) throws {
         guard job.dataSpace == dataSpace,
-              job.state == .waitingForUser || job.state == .staged
+              job.state == .waitingForUser
+              || job.state == .staged
+              || job.state == .waitingForNetwork
         else {
             throw AgentJobStateError.invalidTransition(from: job.state, to: .queued)
         }

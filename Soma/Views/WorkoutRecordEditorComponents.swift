@@ -1,16 +1,25 @@
 import SwiftUI
 
+enum WorkoutRecordEditorDensity {
+    case standard
+    case chatCompact
+}
+
 struct WorkoutLogicalGroupsEditor: View {
     @Binding var draft: WorkoutRecordDraft
     let isEditable: Bool
     var fallbackRestSeconds: Int?
+    var density: WorkoutRecordEditorDensity = .standard
 
     private var runs: [WorkoutLogicalGroupRun] {
         draft.displayRuns
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.groupSpacing) {
+        VStack(
+            alignment: .leading,
+            spacing: density == .chatCompact ? 8 : AppTheme.groupSpacing
+        ) {
             if runs.isEmpty {
                 Text("尚未填写训练组")
                     .font(.subheadline)
@@ -46,7 +55,10 @@ struct WorkoutLogicalGroupsEditor: View {
         let groupIDs = Set(run.groups.map(\.id))
         let effortCount = group.efforts.count
 
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(
+            alignment: .leading,
+            spacing: density == .chatCompact ? 6 : 10
+        ) {
             HStack(spacing: 8) {
                 workoutChip(group.targetKindLabel)
                 workoutChip(group.sideMode.displayName)
@@ -129,7 +141,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     }
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, density == .chatCompact ? 9 : 14)
             .background(
                 AppTheme.insetBackground,
                 in: RoundedRectangle(
@@ -138,7 +150,7 @@ struct WorkoutLogicalGroupsEditor: View {
                 )
             )
         }
-        .padding(14)
+        .padding(density == .chatCompact ? 9 : 14)
         .background(
             AppTheme.cardBackground,
             in: RoundedRectangle(
@@ -260,8 +272,8 @@ struct WorkoutLogicalGroupsEditor: View {
         Text(title)
             .font(.caption)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+            .padding(.horizontal, density == .chatCompact ? 7 : 9)
+            .padding(.vertical, density == .chatCompact ? 3 : 5)
             .background(
                 AppTheme.insetBackground,
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)

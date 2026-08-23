@@ -12,6 +12,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
     var onDelete: (() -> Void)?
     /// 派生卡片本来就没有编辑入口，不该显示锁标记，否则会被读成“暂时不能改”。
     var showsLockWhenReadOnly = true
+    var contentPadding: CGFloat = 14
     /// 标题右侧的补充控件，例如饮食卡的餐次选择。
     @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
@@ -67,7 +68,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
             }
             content
         }
-        .padding(14)
+        .padding(contentPadding)
         .background(
             AppTheme.cardBackground,
             in: RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
@@ -90,6 +91,7 @@ extension InlineRecordShell where Accessory == EmptyView {
         onSave: (() -> Bool)? = nil,
         onDelete: (() -> Void)? = nil,
         showsLockWhenReadOnly: Bool = true,
+        contentPadding: CGFloat = 14,
         @ViewBuilder content: () -> Content
     ) {
         self.init(
@@ -102,6 +104,7 @@ extension InlineRecordShell where Accessory == EmptyView {
             onSave: onSave,
             onDelete: onDelete,
             showsLockWhenReadOnly: showsLockWhenReadOnly,
+            contentPadding: contentPadding,
             accessory: { EmptyView() },
             content: content
         )

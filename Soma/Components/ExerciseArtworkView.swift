@@ -41,7 +41,23 @@ struct ExerciseArtworkView: View {
 
 extension ExerciseDefinition {
     var preferredActionIllustration: ExerciseImageReference {
-        actionIllustrations.last
+        actionIllustrations.max { lhs, rhs in
+            if lhs.source.displayPriority == rhs.source.displayPriority {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.source.displayPriority < rhs.source.displayPriority
+        }
             ?? BundledExerciseCatalog.fallbackActionIllustration
+    }
+}
+
+private extension ExerciseImageSource {
+    /// 用户明确上传永远胜过生成图和内置图；同一来源内部才按更新时间选最新。
+    var displayPriority: Int {
+        switch self {
+        case .generated: 0
+        case .bundled: 1
+        case .user: 2
+        }
     }
 }

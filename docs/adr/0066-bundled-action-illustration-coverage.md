@@ -4,6 +4,7 @@
 - 日期：2026-08-13
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) 中常见动作专属图只覆盖精选小集合的边界
+- 后续替代：[ADR 0094](0094-user-first-versioned-bundled-action-art.md) 把覆盖门槛提升到至少 239，并固定用户图、新版内置图与生成图的优先级
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
 
 ## 背景

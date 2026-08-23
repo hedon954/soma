@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// ADR 0083：崩溃诊断的总开关与上次报告查看入口。开关关闭后仍会本地留盘，只是不发送。
+/// ADR 0095：只有 MetricKit 系统确认的崩溃进入这里。开关关闭后仍会本地留盘，只是不发送。
 struct DiagnosticReportSettingsView: View {
     private let coordinator = CrashDiagnosticsCoordinator.shared
     @State private var isAutoSendEnabled = CrashDiagnosticsCoordinator.shared
@@ -17,7 +17,7 @@ struct DiagnosticReportSettingsView: View {
                         coordinator.isAutoSendEnabled = newValue
                     }
             } footer: {
-                Text("开启后，App 检测到上次运行异常终止会在下次启动静默发送一封诊断邮件，内容包含设备信息、当次会话消息、最后一次执行过程与本机诊断日志。关闭后只在本机留存。")
+                Text("开启后，只有系统 MetricKit 明确记录到崩溃时才会发送诊断邮件；强杀、模拟器停止、安装替换或哨兵未清位都不会生成报告。关闭后只在本机留存。")
             }
 
             Section {
@@ -55,7 +55,7 @@ struct DiagnosticReportSettingsView: View {
             } header: {
                 Text("报告")
             } footer: {
-                Text("发送失败的报告会在下次启动重试。误判产生的报告可以直接丢弃。")
+                Text("发送失败的系统确认报告会在下次启动重试；缺少 MetricKit 证据的旧报告会自动清除。")
             }
 
             Section {

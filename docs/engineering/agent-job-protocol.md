@@ -11,6 +11,7 @@
   - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
   - [ADR 0062](../adr/0062-user-resumed-llm-interruption-barrier.md)
   - [ADR 0068](../adr/0068-versioned-unified-agent-model-input.md)
+  - [ADR 0092](../adr/0092-react-internal-retry-and-user-controlled-recovery.md)
 - 关联：
   - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
   - [PRD 029](../prd/029-unified-local-remote-agent-model-input.md)
@@ -75,13 +76,15 @@ localRunning | waitingForForeground
   → localQueued | failed | cancelled
 ```
 
-`staged` 表示 Job 已持久化但被队首恢复条件阻塞；它本身不可由 FIFO 自动领取。缺少凭据、
-地址无效、鉴权、通用限流或供应商服务端错误可在明确配置变化或退避恢复后释放。明确额度耗尽、
-billing 或 payment failure 进入 `waitingForUser`，App 启动、回到前台和定时器都不得释放；
-后续 Job 继续 staged 且不能越过队首，只有用户重试或删除屏障才能继续。传输层故障继续使用
-`waitingForNetwork`；重试不会改变结果的请求级错误进入 `failed`。判定规则见
-[ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md) 与
-[ADR 0062](../adr/0062-user-resumed-llm-interruption-barrier.md)。
+`staged` 表示 Job 已持久化但被队首恢复条件阻塞；它本身不可由 FIFO 自动领取。发送前发现缺少
+凭据或执行位置时仍可暂存，避免丢失用户输入。模型执行开始后，瞬态故障只在 ReAct 模型步骤内部
+执行三次 1/2/4 秒退避；错误一旦越过 Loop，本地与远程 Job 都进入 `waitingForUser`。App 启动、
+回到前台、配置变化、网络恢复和定时器都不得释放；后续 Job 继续 staged 且不能越过队首，只有用户
+重试或删除屏障才能继续。`waitingForNetwork` 仅保留旧数据兼容，不能由 runner 自动领取。
+判定规则见 [ADR 0092](../adr/0092-react-internal-retry-and-user-controlled-recovery.md)。
+
+远程 Worker 在单个 provider model-step 内也只使用同一组三次退避；直传视频失败时若已有关键帧，
+在这组三次预算内切换媒体模式。Worker 发出 terminal error event 后，App 不得创建自动 fallback Job。
 
 ### 服务端 Job
 

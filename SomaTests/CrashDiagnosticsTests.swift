@@ -87,24 +87,22 @@ final class CrashDiagnosticsTests: XCTestCase {
         XCTAssertNil(previous.activity)
     }
 
-    /// Xcode 按停止结束进程和崩溃留下同样的哨兵痕迹，不能当成崩溃上报。
+    /// BUG 0032：哨兵只能保留上下文，任何未清位、强杀或调试器结束都不是崩溃证据。
+    /// 只有系统 MetricKit 的 MXCrashDiagnostic 可以生成并投递崩溃报告。
     @MainActor
-    func testDebuggerTerminationIsNotReportedAsCrash() {
-        let crashed = AppRunSentinel.PreviousRun(
-            endedUnexpectedly: true,
-            wasUnderDebugger: false
-        )
-        let stopped = AppRunSentinel.PreviousRun(
-            endedUnexpectedly: true,
-            wasUnderDebugger: true
-        )
+    func testOnlyMetricKitEvidenceMayGenerateCrashReport() {
+        XCTAssertFalse(CrashReportEligibility.isSystemConfirmed(source: "sentinel"))
+        XCTAssertFalse(CrashReportEligibility.isSystemConfirmed(source: "watchdog"))
+        XCTAssertTrue(CrashReportEligibility.isSystemConfirmed(source: "metrickit"))
 
-        XCTAssertTrue(
-            CrashReportEligibility.shouldReportSentinelTermination(crashed)
+        let legacy = DiagnosticReport(subject: "旧误报", body: "无证据来源")
+        let confirmed = DiagnosticReport(
+            subject: "系统崩溃",
+            body: "MetricKit 证据",
+            evidenceSource: .metricKit
         )
-        XCTAssertFalse(
-            CrashReportEligibility.shouldReportSentinelTermination(stopped)
-        )
+        XCTAssertFalse(CrashReportEligibility.isSystemConfirmed(report: legacy))
+        XCTAssertTrue(CrashReportEligibility.isSystemConfirmed(report: confirmed))
     }
 
     @MainActor

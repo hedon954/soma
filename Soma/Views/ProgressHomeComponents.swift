@@ -1,5 +1,18 @@
 import SwiftUI
 
+enum ProgressRecentActivityViewport {
+    static let maximumVisibleRows = 6
+    static let rowHeight: CGFloat = 64
+    static let dividerHeight: CGFloat = 1
+
+    static func height(activityCount: Int) -> CGFloat {
+        let visibleRows = min(max(activityCount, 0), maximumVisibleRows)
+        guard visibleRows > 0 else { return 0 }
+        return CGFloat(visibleRows) * rowHeight
+            + CGFloat(visibleRows - 1) * dividerHeight
+    }
+}
+
 struct ProgressRecentActivity: Identifiable {
     enum Kind {
         case workout
@@ -171,6 +184,7 @@ struct ProgressRecentActivityRow: View {
                 Text(activity.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
                 Text(activity.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)

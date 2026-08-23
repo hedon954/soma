@@ -7,7 +7,9 @@
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的渐进披露与设置顺序
   - [PRD 031](031-guided-workout-v5-independent-sets-and-automatic-completion.md) 的独立逻辑组与左右执行
   - [PRD 034](034-history-media-tabs-and-guided-capture-polish.md) 的 Tab、历史和媒体基线
-- 后续修订：[PRD 041](041-action-level-rest-and-compact-progress.md) 将进展三项训练视图合并为分段卡、增加最近活动快捷入口并统一开关状态样式
+- 后续修订：
+  - [PRD 041](041-action-level-rest-and-compact-progress.md) 将进展三项训练视图合并为分段卡、增加最近活动快捷入口并统一开关状态样式
+  - [PRD 042](042-user-controlled-recovery-message-feedback-and-action-art.md) 统一实心按钮反色、压缩聊天训练卡并重做失败与逐回复反馈操作
 - 上游依据：维护者确认的 Soma 最终 UI 设计稿
 - 下游落地：[ADR 0089](../adr/0089-semantic-dual-theme-and-lossless-workout-editor.md)
 
@@ -94,10 +96,10 @@ Soma 已有聊天、计划、训练、记录和趋势闭环，但部分页面存
 ![进展页浅色实施稿](../assets/ui/2026-08-23/progress-overview-light.png)
 ![进展页深色实施稿](../assets/ui/2026-08-23/progress-overview-dark.png)
 
-- 顺序为最近 7 天摘要、一条结论、最近三项混合活动、趋势、全部数据入口。
+- 顺序为最近 7 天摘要、一条结论、最近六项混合活动、趋势、全部数据入口；更多活动在卡片内部滚动。
 - 摘要只显示可靠指标；未知项不补零、不占位。
 - 结论采用“结论 + 一句依据”，不展示内部置信度或医疗诊断。
-- 最近活动按时间混排训练、饮食和身体记录，彩色只点缀类别图标。
+- 最近活动按时间混排训练、饮食和身体记录，默认最多露出六条，更多记录在当前卡片内滚动；彩色只点缀类别图标。
 - 最近 7 天训练柱与连续性热力格使用频率青，训练容量曲线使用负荷橙，体重曲线使用身体蓝；标题
   图标与数据轨迹共享同一指标角色。训练、饮食、身体、足迹和动作库入口继续使用类别色与柔和底，
   不显示一排黑色类别图标。

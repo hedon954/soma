@@ -641,8 +641,7 @@ struct GuidedCompactSetView: View {
                         .foregroundStyle(.orange)
                         .multilineTextAlignment(.center)
                         Button("重试完成并保存", action: onComplete)
-                            .buttonStyle(.borderedProminent)
-                            .tint(AppTheme.accentEmphasis)
+                            .appPrimaryButtonStyle()
                             .controlSize(.large)
                     }
                     .frame(maxWidth: .infinity)
@@ -667,8 +666,7 @@ struct GuidedCompactSetView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 7)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accentEmphasis)
+                .appPrimaryButtonStyle()
                 .controlSize(.large)
             }
         }
@@ -911,8 +909,7 @@ struct GuidedExpandedCaptureView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, isLandscape ? 4 : 7)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accentEmphasis)
+                .appPrimaryButtonStyle()
                 .controlSize(.large)
             }
         }

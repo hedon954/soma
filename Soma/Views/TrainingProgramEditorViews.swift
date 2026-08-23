@@ -559,8 +559,7 @@ struct TrainingExercisePickerView: View {
                         : "添加 \(selectedIDs.count) 个动作")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accentEmphasis)
+                .appPrimaryButtonStyle()
                 .controlSize(.large)
                 .disabled(selectedIDs.isEmpty)
                 .padding()

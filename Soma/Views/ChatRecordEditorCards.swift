@@ -102,12 +102,14 @@ private struct InlineWorkoutCard: View {
             iconSoftTint: AppTheme.trainingSoftTint,
             isEditable: isEditable,
             onSave: save,
-            onDelete: { showsDelete = true }
+            onDelete: { showsDelete = true },
+            contentPadding: 10
         ) {
             WorkoutLogicalGroupsEditor(
                 draft: $workoutDraft,
                 isEditable: isEditable,
-                fallbackRestSeconds: workout.restSeconds
+                fallbackRestSeconds: workout.restSeconds,
+                density: .chatCompact
             )
         }
         .confirmationDialog("删除这条训练记录？", isPresented: $showsDelete) {

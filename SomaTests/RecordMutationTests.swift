@@ -778,7 +778,7 @@ final class RecordMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedBubbleOffersManualRetryOnlyAfterAutomaticRecoveryStops() throws {
+    func testFailedBubbleOffersManualRetryImmediatelyAfterLoopStops() throws {
         let turnID = UUID()
         let failed = CoachMessage(
             isFromCoach: true,
@@ -800,9 +800,8 @@ final class RecordMutationTests: XCTestCase {
             )
         )
         try job.transition(to: .waitingForNetwork)
-        XCTAssertFalse(
-            ConversationTurnProjection.canRetry(failed, in: [failed], job: job)
-        )
+        XCTAssertFalse(job.state.awaitsAutomaticRecovery)
+        XCTAssertTrue(ConversationTurnProjection.canRetry(failed, in: [failed], job: job))
 
         try job.transition(to: .waitingForUser)
         XCTAssertFalse(job.state.awaitsAutomaticRecovery)
@@ -812,7 +811,7 @@ final class RecordMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testAutomaticRecoveryClearsFailureCardsAndHidesRetry() {
+    func testManualResumeClearsFailureCardAndKeepsCompletedSteps() {
         let turnID = UUID()
         let message = CoachMessage(
             isFromCoach: true,
@@ -835,16 +834,12 @@ final class RecordMutationTests: XCTestCase {
         ))
         XCTAssertTrue(message.agentTurnItems.contains { $0.kind == .error })
 
-        let waitingText = "网络暂时不可用，任务已保留，将在网络恢复后继续。"
-        message.presentAutomaticRecovery(waitingText: waitingText)
+        let resumed = ConversationResumeProjection.completedItems(
+            from: message.agentTurnItems
+        )
 
-        XCTAssertEqual(message.agentStatus, .cancelled)
-        XCTAssertEqual(message.text, waitingText)
-        XCTAssertFalse(message.agentTurnItems.contains { $0.kind == .error })
-        XCTAssertTrue(message.agentTurnItems.contains {
-            $0.kind == .tool && $0.status == .succeeded
-        })
-        XCTAssertFalse(ConversationTurnProjection.canRetry(message, in: [message]))
+        XCTAssertFalse(resumed.contains { $0.kind == .error })
+        XCTAssertTrue(resumed.contains { $0.kind == .tool && $0.status == .succeeded })
     }
 
     func testSystemContractKeepsToolNamesOutOfPrompt() {

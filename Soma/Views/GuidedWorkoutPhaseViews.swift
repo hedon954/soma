@@ -47,8 +47,7 @@ struct GuidedExerciseIntroductionView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accentEmphasis)
+                .appPrimaryButtonStyle()
                 .controlSize(.large)
 
                 HStack {
@@ -139,8 +138,7 @@ struct GuidedPausedView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("继续训练", systemImage: "play.fill", action: onResume)
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accentEmphasis)
+                .appPrimaryButtonStyle()
                 .controlSize(.large)
         }
         .padding(28)
@@ -175,8 +173,7 @@ struct GuidedSetRecoveryView: View {
                 .accessibilityLabel("正在保存本组")
             } else {
                 Button("已完成：\(targetText)", action: onCompleted)
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.accentEmphasis)
+                    .appPrimaryButtonStyle()
                     .controlSize(.large)
             }
             HStack(spacing: 24) {
@@ -236,8 +233,7 @@ struct GuidedRestView: View {
                 Button("跳过休息") {
                     onFinish()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accentEmphasis)
+                .appPrimaryButtonStyle()
                 .controlSize(.large)
             }
             .padding(24)
@@ -348,8 +344,7 @@ struct GuidedSessionReviewView: View {
                 }
 
                 Button("查看分享", action: onFinish)
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.accentEmphasis)
+                    .appPrimaryButtonStyle()
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
             }
@@ -430,8 +425,7 @@ struct GuidedSessionFinalizationView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                 Button("重试保存", action: onRetry)
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.accentEmphasis)
+                    .appPrimaryButtonStyle()
                     .controlSize(.large)
                     .accessibilityHint("重新保存训练记录并打开分享界面")
             }

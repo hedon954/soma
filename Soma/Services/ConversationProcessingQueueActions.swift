@@ -95,7 +95,9 @@ extension ConversationProcessingService {
         ) ?? []
         if let existing = existingJobs.first(where: {
             $0.userMessageID == userMessage.id
-                && ($0.state == .waitingForUser || $0.state == .staged)
+                && ($0.state == .waitingForUser
+                    || $0.state == .staged
+                    || $0.state == .waitingForNetwork)
         }) {
             do {
                 try AgentJobStore.releaseForManualRetry(
@@ -180,8 +182,7 @@ extension ConversationProcessingService {
         dataSpace: DataSpace,
         ai: AIService,
         modelContext: ModelContext,
-        locationService: LocationContextService,
-        releaseStaged: Bool = false
+        locationService: LocationContextService
     ) {
         guard !isProcessing else { return }
         do {
@@ -197,14 +198,6 @@ extension ConversationProcessingService {
                 dataSpace: dataSpace,
                 in: modelContext
             )
-            if releaseStaged {
-                _ = try AgentJobStore.releaseStagedJobs(
-                    dataSpace: dataSpace,
-                    in: modelContext
-                ) { job in
-                    isExecutionAvailable(job, ai: ai)
-                }
-            }
         } catch {
             return
         }

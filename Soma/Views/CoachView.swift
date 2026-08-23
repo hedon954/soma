@@ -283,7 +283,7 @@ struct CoachView: View {
 
     private var conversationArea: some View {
         ScrollViewReader { proxy in
-            messageList
+            messageList(scrollProxy: proxy)
                 .scrollDismissesKeyboard(.interactively)
                 .appPageBackground()
                 .safeAreaInset(edge: .bottom) {
@@ -319,7 +319,7 @@ struct CoachView: View {
         }
     }
 
-    private var messageList: some View {
+    private func messageList(scrollProxy proxy: ScrollViewProxy) -> some View {
         ScrollView {
             LazyVStack(spacing: 14) {
                 if ConversationStarterPolicy.shouldShow(for: messages) {
@@ -345,7 +345,13 @@ struct CoachView: View {
                         onRetry: { retry(message) },
                         onDiscardPending: message.turnID.map(stagedTurnIDs.contains) == true
                             ? { discardPending(message) }
-                            : nil
+                            : nil,
+                        onFeedbackExpanded: { target in
+                            AssistantFeedbackScroller.scrollAfterLayout(
+                                to: target,
+                                using: proxy
+                            )
+                        }
                     )
                     .id(message.id)
                 }
@@ -985,6 +991,21 @@ struct CoachView: View {
     }
 }
 
+private enum AssistantFeedbackScroller {
+    static func scrollAfterLayout(
+        to target: AssistantFeedbackScrollTarget,
+        using proxy: ScrollViewProxy
+    ) {
+        Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .bottom)
+            }
+        }
+    }
+}
+
 private struct ConversationStarterSuggestion {
     let title: String
     let prompt: String
@@ -1199,6 +1220,7 @@ struct CoachBubble: View {
     var canRetry = false
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
+    var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
 
     var body: some View {
         let visibleMessageText = message.isFromCoach
@@ -1228,7 +1250,9 @@ struct CoachBubble: View {
                         items: message.agentTurnItems,
                         isLive: isLive,
                         sourceMessage: message,
-                        isEditable: isLatestAssistantMessage
+                        isEditable: isLatestAssistantMessage,
+                        canRetry: canRetry,
+                        onRetry: onRetry
                     )
                 } else if !visibleMessageText.isEmpty, !message.isAutomaticMediaSummary {
                     Group {
@@ -1274,17 +1298,6 @@ struct CoachBubble: View {
                     }
                 }
 
-                if canRetry {
-                    Button(action: onRetry) {
-                        Label("重试", systemImage: "arrow.clockwise")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(minHeight: AppTheme.minimumTapTarget)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(AppTheme.tint)
-                    .accessibilityHint("复用原始文字、媒体和发送时的位置再次处理")
-                }
-
                 metaLine
             }
 
@@ -1303,12 +1316,22 @@ struct CoachBubble: View {
             locationName: message.location?.displayName,
             isFromCoach: message.isFromCoach
         )
-        Text(content.text)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .accessibilityLabel(content.accessibilityLabel)
+        if message.isFromCoach, !isLive {
+            AssistantFeedbackButton(
+                messageID: message.id,
+                timestamp: content.text,
+                timestampAccessibilityLabel: content.accessibilityLabel,
+                onExpanded: onFeedbackExpanded
+            )
+        } else {
+            Text(content.text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .accessibilityLabel(content.accessibilityLabel)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
     }
 }
 

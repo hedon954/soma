@@ -154,20 +154,97 @@ final class ExerciseLibraryTests: XCTestCase {
         }
     }
 
-    func testCatalogKeepsAtLeastOneHundredDedicatedActionIllustrations() {
+    func testCatalogKeepsAtLeastTwoHundredThirtyNineDedicatedActionIllustrations() {
         let illustratedEntries = BundledExerciseCatalog.entries.filter {
             !$0.actionIllustrationResourceName.isEmpty
         }
 
         XCTAssertGreaterThanOrEqual(
             illustratedEntries.count,
-            100,
+            239,
             "常见动作专属图覆盖不应退回到通用占位"
         )
         XCTAssertEqual(
             Set(illustratedEntries.map(\.canonicalName)).count,
             illustratedEntries.count,
             "每个专属图映射必须对应唯一 canonicalName"
+        )
+    }
+
+    func testRequestedExerciseNamesResolveToDedicatedIllustrations() {
+        let expectedResources = [
+            "高位下拉": "free_Wide-Grip_Lat_Pulldown.jpg",
+            "胸托哑铃划船": "free_Dumbbell_Incline_Row.jpg",
+            "单臂绳索下拉": "free_One_Arm_Lat_Pulldown.jpg",
+            "杠铃深蹲": "free_Barbell_Squat.jpg",
+            "静态保加利亚深蹲": "free_Split_Squat_with_Dumbbells.jpg"
+        ]
+
+        for (name, expectedResource) in expectedResources {
+            let content = BundledExerciseCatalog.content(forName: name)
+            XCTAssertNotNil(content, "动作名没有内置目录映射：\(name)")
+            XCTAssertEqual(
+                content?.actionIllustrationResourceName,
+                expectedResource,
+                "动作名没有使用已核对的专属动作图：\(name)"
+            )
+        }
+    }
+
+    func testUserArtworkAlwaysWinsOverNewerGeneratedAndBundledArtwork() {
+        let exercise = ExerciseDefinition(canonicalName: "杠铃深蹲")
+        exercise.imageReferences = [
+            ExerciseImageReference(
+                kind: .actionIllustration,
+                source: .user,
+                title: "我的动作图",
+                localPath: "PrivateMedia/user.jpg",
+                createdAt: .distantPast
+            ),
+            ExerciseImageReference(
+                kind: .actionIllustration,
+                source: .generated,
+                title: "生成动作图",
+                localPath: "Generated/new.jpg",
+                createdAt: .now
+            ),
+            ExerciseImageReference(
+                kind: .actionIllustration,
+                source: .bundled,
+                title: "内置动作图",
+                resourceName: "free_Barbell_Squat.jpg",
+                createdAt: .now
+            )
+        ]
+
+        XCTAssertEqual(
+            exercise.preferredActionIllustration.localPath,
+            "PrivateMedia/user.jpg"
+        )
+    }
+
+    func testUpdatedBundledArtworkWinsWhenUserHasNotUploadedArtwork() {
+        let exercise = ExerciseDefinition(canonicalName: "杠铃深蹲")
+        exercise.imageReferences = [
+            ExerciseImageReference(
+                kind: .actionIllustration,
+                source: .generated,
+                title: "旧生成动作图",
+                localPath: "Generated/old.jpg",
+                createdAt: .now
+            ),
+            ExerciseImageReference(
+                kind: .actionIllustration,
+                source: .bundled,
+                title: "新版内置动作图",
+                resourceName: "free_Barbell_Squat.jpg",
+                createdAt: .distantPast
+            )
+        ]
+
+        XCTAssertEqual(
+            exercise.preferredActionIllustration.resourceName,
+            "free_Barbell_Squat.jpg"
         )
     }
 

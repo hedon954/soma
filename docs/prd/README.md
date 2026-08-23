@@ -53,6 +53,7 @@
 | [039：频率优先的双主题全产品界面](039-frequency-first-dual-theme-ui.md) | 已实现 | 语义浅深主题、紧凑根标题、高频页面顺序、无损训练逻辑组编辑与统一带练层级 |
 | [040：业务数据只保留当前状态与执行事实](040-current-state-business-data-with-session-facts.md) | 已实现 | 删除计划、动作内容与热量结果的业务版本追踪；当前计划直接更新，已开始训练由 Session 快照保护 |
 | [041：动作级间歇与紧凑进展总览](041-action-level-rest-and-compact-progress.md) | 已实现 | 两类计划间歇归动作；进展三视图合并为分段卡，最近活动增加记录快捷入口，Switch 状态统一 |
+| [042：用户控制的失败恢复、逐回复反馈与动作图扩容](042-user-controlled-recovery-message-feedback-and-action-art.md) | 已实现，待真机交互验收 | 主按钮与聊天卡密度、Loop 内三次退避/Loop 外人工恢复、逐回复多模态评分反馈、239 图门槛与用户图优先 |
 
 ## 阅读约定
 

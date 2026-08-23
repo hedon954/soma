@@ -49,7 +49,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0043](0043-free-team-widget-fallback.md) | 已采纳 | 免费签名阶段保留静态快速记录，不使用 App Groups |
 | [0044](0044-programmatic-muscle-map-and-training-share-poster.md) | 已采纳 | 规范肌群枚举与矢量路径程序化渲染受力图，分享海报本地生成 |
 | [0045](0045-llm-outage-staging-and-compensating-drain.md) | 已采纳 | LLM 失效时消息落盘暂存，恢复后按 FIFO 自动补偿消费 |
-| [0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) | 已采纳 | LLM 配置字段直接摊开并即时落盘，模型与动作候选统一为输入历史式建议 |
+| [0046](0046-explicit-llm-configuration-and-input-history-suggestions.md) | 部分已替代 | LLM 配置与输入建议保留；模型名能力推断由 0096 替代 |
 | [0047](0047-deterministic-context-pack-and-cross-turn-facts.md) | 部分已替代 | 确定性当轮上下文包保留；十轮外 digest 由 0070 的滚动摘要替代 |
 | [0048](0048-loop-checkpoint-and-same-bubble-resume.md) | 已采纳 | 本地 ReAct 在 step 边界落检查点，中断后同气泡续跑且不递增 attemptNumber |
 | [0049](0049-normalized-idempotency-and-business-dedup.md) | 已采纳 | 规范化幂等签名、pending 账本与跨 Turn 疑似重复反馈 |
@@ -86,7 +86,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0080](0080-conversation-session-swipe-delete.md) | 已采纳 | 历史抽屉左滑删除对话聊天图；不删除训练、饮食、身体等业务记录；在途 Job 拒绝删除 |
 | [0081](0081-default-full-tool-registration-and-selected-skill-subset.md) | 已替代 | 未选 Skill 注册当前协议全部 Tool；Loop 开始时判断一次仍有效，选中场景的曝光来源由 0082 替代 |
 | [0082](0082-shortcut-owned-tool-bindings-and-method-only-skills.md) | 已采纳 | 输入框快捷按钮持有工具白名单并可完整 CRUD；Skill 只保留专业方法，分组降级为设置页分类 |
-| [0083](0083-local-diagnostics-log-and-silent-crash-reporting.md) | 已采纳，个人使用阶段 | 本机滚动诊断日志、启动哨兵与 MetricKit 崩溃证据；报告默认静默上报并留盘重试，可一键关闭 |
+| [0083](0083-local-diagnostics-log-and-silent-crash-reporting.md) | 部分已替代，个人使用阶段 | 本机日志与报告投递保留；启动哨兵的崩溃判定由 0095 替代 |
 | [0084](0084-inline-meal-breakdown-and-derived-totals.md) | 已采纳 | 饮食原位审查分为可编辑菜品清单卡与只读派生汇总卡；缺项保持为空，记录时间使用钟点 |
 | [0085](0085-record-cards-follow-the-producing-step.md) | 已采纳 | 原位卡插在产生它的那一步之后，文字与卡片交替出现；重复引用只渲染一张卡，无法归位的兜底在末尾 |
 | [0086](0086-preview-and-history-thumbs-use-aspect-fill.md) | 已采纳 | 带练紧凑/放大预览与历史录像缩略统一 aspect fill；保存文件仍使用锁定的捕获几何 |
@@ -95,6 +95,11 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0089](0089-semantic-dual-theme-and-lossless-workout-editor.md) | 已采纳 | 主题由根层语义映射；聊天与详情以同一纯值投影无损编辑有序训练证据 |
 | [0090](0090-current-state-business-models-and-session-facts.md) | 已采纳 | 业务模型只保留当前状态；训练历史由 Session 处方快照与执行事实承担，技术兼容版本继续隔离保留 |
 | [0091](0091-action-level-planned-rest.md) | 已采纳 | 计划组间歇与换侧间歇归动作；开始训练时编译到逻辑组，实际休息证据仍逐组保存 |
+| [0092](0092-react-internal-retry-and-user-controlled-recovery.md) | 已采纳 | 无可见增量的模型步骤执行三次 1/2/4 秒退避；失败越过 Loop 后只允许用户释放 |
+| [0093](0093-bounded-per-reply-multimodal-feedback-context.md) | 已采纳，个人使用阶段 | 每条 AI 回复可提交文字、媒体和评分，并附带单 Turn 有界脱敏执行摘要 |
+| [0094](0094-user-first-versioned-bundled-action-art.md) | 已采纳 | 动作图使用用户图优先、新版内置图次之；专属离线图不少于 239 |
+| [0095](0095-metrickit-confirmed-crash-reports.md) | 已采纳，个人使用阶段 | 只有 MetricKit 明确崩溃证据可生成报告；启动哨兵只保留上下文 |
+| [0096](0096-source-backed-model-multimodal-capabilities.md) | 已采纳 | 多模态与直传视频能力必须有明确来源；缺少来源时为未知，禁止按模型名硬编码 |
 
 新决策使用 [ADR 模板](template.md)。
 

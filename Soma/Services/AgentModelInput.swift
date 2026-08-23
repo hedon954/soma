@@ -93,6 +93,7 @@ enum AgentModelInputBuilder {
         userPrompt: String,
         currentImages: [Data],
         currentVideos: [AgentVideoInput],
+        currentVideoFrames: [Data] = [],
         skills: [AgentModelSkillSnapshot],
         tools: [AgentToolName],
         selectedSkillID: String? = nil,
@@ -131,6 +132,9 @@ enum AgentModelInputBuilder {
         }
 
         let currentImageIDs = currentImages.indices.map { "current-image-\($0)" }
+        let currentVideoFrameIDs = currentVideoFrames.indices.map {
+            "current-video-frame-\($0)"
+        }
         let currentVideoIDs = currentVideos.indices.map { "current-video-\($0)" }
         media.append(contentsOf: zip(currentImageIDs, currentImages).map {
             .image(id: $0.0, data: $0.1)
@@ -138,10 +142,13 @@ enum AgentModelInputBuilder {
         media.append(contentsOf: zip(currentVideoIDs, currentVideos).map {
             .video(id: $0.0, input: $0.1)
         })
+        media.append(contentsOf: zip(currentVideoFrameIDs, currentVideoFrames).map {
+            .image(id: $0.0, data: $0.1)
+        })
         messages.append(AgentModelMessage(
             role: .user,
             text: userPrompt,
-            mediaIDs: currentImageIDs + currentVideoIDs
+            mediaIDs: currentImageIDs + currentVideoFrameIDs + currentVideoIDs
         ))
 
         return try PreparedAgentModelInput(

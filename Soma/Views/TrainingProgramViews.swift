@@ -786,8 +786,7 @@ private struct TrainingProgramDetailView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(AppTheme.accentEmphasis)
+            .appPrimaryButtonStyle()
             .controlSize(.large)
         }
     }

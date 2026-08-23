@@ -276,6 +276,54 @@ enum AppTheme {
     }
 }
 
+/// 系统 `borderedProminent` 会从根 `tint` 推导实心底色，却不保证在自适应
+/// 黑白主题下同步切换前景。所有 Soma 实心主操作都通过这里明确绑定反色前景，
+/// 避免深色模式出现白底白字。
+private struct AppFilledButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    let background: Color
+    let foreground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foreground.opacity(isEnabled ? 1 : 0.72))
+            .padding(.horizontal, 16)
+            .frame(minHeight: AppTheme.minimumTapTarget)
+            .background(
+                background.opacity(isEnabled ? 1 : 0.34),
+                in: RoundedRectangle(
+                    cornerRadius: AppTheme.controlRadius,
+                    style: .continuous
+                )
+            )
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: AppTheme.controlRadius,
+                    style: .continuous
+                )
+            )
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    func appPrimaryButtonStyle() -> some View {
+        buttonStyle(AppFilledButtonStyle(
+            background: AppTheme.accent,
+            foreground: AppTheme.onAccent
+        ))
+    }
+
+    func appDestructivePrimaryButtonStyle() -> some View {
+        buttonStyle(AppFilledButtonStyle(
+            background: AppTheme.destructive,
+            foreground: .white
+        ))
+    }
+}
+
 /// 业务语义颜色的唯一入口。黑白只负责导航、文字、选择与主操作；
 /// 训练、饮食、身体和趋势等数据标记必须显式声明角色。
 enum AppSemanticRole: String, CaseIterable, Sendable {

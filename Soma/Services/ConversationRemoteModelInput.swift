@@ -42,6 +42,14 @@ extension ConversationProcessingService {
                 message: "视频未能产生可供模型分析的完整视频或关键帧。"
             )
         }
+        let videoFallbackFrames: [Data] = if media.mode == .directVideo {
+            await prepareStoredMedia(
+                job.mediaAttachments.filter { $0.kind == .video },
+                frameLimit: Self.maximumAnalysisImageCount
+            ).frames
+        } else {
+            []
+        }
 
         let resolution = GymLocationResolver.resolve(
             text: userMessage.text,
@@ -121,6 +129,7 @@ extension ConversationProcessingService {
             userPrompt: userPrompt,
             currentImages: media.frames,
             currentVideos: media.videos,
+            currentVideoFrames: videoFallbackFrames,
             skills: AgentSkill.snapshots(defaults: context.ai.defaults),
             tools: AgentToolExposurePolicy.tools(selectedShortcut: selectedShortcut),
             selectedSkillID: selectedSkill?.id,

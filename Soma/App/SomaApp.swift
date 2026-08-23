@@ -368,8 +368,7 @@ private struct DataMigrationGateView: View {
                     Button("重试迁移") {
                         Task { await dataSpace.runLaunchMigration() }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.accentEmphasis)
+                    .appPrimaryButtonStyle()
                     if dataSpace.recoveryMode != .none {
                         Divider()
                         Text("如果迁移仍持续失败，可先清理旧数据库再重试（会清空对应数据）。")
@@ -404,8 +403,7 @@ private struct DataMigrationGateView: View {
                                     )
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.red)
+                            .appDestructivePrimaryButtonStyle()
                         }
                     }
                     if let detail = dataSpace.migrationFailureDetail, !detail.isEmpty {

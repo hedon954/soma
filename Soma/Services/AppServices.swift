@@ -14,6 +14,7 @@ typealias AgentStreamLoader = (
     String,
     String
 ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error>
+typealias AgentRetrySleeper = @Sendable (TimeInterval) async throws -> Void
 
 struct HealthKitImportResult: Equatable {
     let workoutCount: Int
@@ -390,6 +391,8 @@ final class AIService {
     let agentStreamLoader: AgentStreamLoader?
     @ObservationIgnored
     let streamDeadlinePolicy: AgentStreamDeadlinePolicy
+    @ObservationIgnored
+    let agentRetrySleeper: AgentRetrySleeper
 
     init(
         defaults: UserDefaults = .standard,
@@ -398,13 +401,17 @@ final class AIService {
             try await URLSession.shared.data(for: request)
         },
         agentStreamLoader: AgentStreamLoader? = nil,
-        streamDeadlinePolicy: AgentStreamDeadlinePolicy = .init()
+        streamDeadlinePolicy: AgentStreamDeadlinePolicy = .init(),
+        agentRetrySleeper: @escaping AgentRetrySleeper = { seconds in
+            try await Task.sleep(for: .seconds(seconds))
+        }
     ) {
         self.defaults = defaults
         self.apiKeyOverride = apiKeyOverride
         self.requestLoader = requestLoader
         self.agentStreamLoader = agentStreamLoader
         self.streamDeadlinePolicy = streamDeadlinePolicy
+        self.agentRetrySleeper = agentRetrySleeper
     }
 
     func fetchAvailableModels(
@@ -438,7 +445,7 @@ final class AIService {
                 AIModelInfo(
                     id: $0.id,
                     status: $0.status,
-                    multimodalSupport: ModelCapability.multimodalSupport(provider: provider, model: $0.id)
+                    multimodalAssessment: $0.multimodalAssessment
                 )
             }
             .filter { model in
@@ -450,6 +457,11 @@ final class AIService {
         guard !availableModels.isEmpty else {
             throw AIServiceError.remote("\(provider.displayName) 当前没有返回可用模型")
         }
+        cacheMultimodalAssessments(
+            availableModels,
+            provider: provider,
+            baseURL: baseURL
+        )
         return availableModels
     }
 
@@ -668,6 +680,7 @@ final class AIService {
                             enforceFirstStepDeadline: firstStepDeadlineEnabled
                                 && currentModelStep == 1
                         ),
+                        maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
                         videoFrameFallback: videoFrameFallback,
                         trace: trace
                     )
@@ -1070,7 +1083,13 @@ final class AIService {
         return error.localizedDescription
     }
 
-    private func modelIdentifiers(from data: Data) -> [(id: String, status: String?)] {
+    private func modelIdentifiers(
+        from data: Data
+    ) -> [(
+        id: String,
+        status: String?,
+        multimodalAssessment: MultimodalCapabilityAssessment
+    )] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return []
         }
@@ -1093,7 +1112,75 @@ final class AIService {
             guard let identifier, !identifier.isEmpty, seen.insert(identifier).inserted else {
                 return nil
             }
-            return (identifier, item["status"] as? String)
+            return (
+                identifier,
+                item["status"] as? String,
+                catalogMultimodalAssessment(from: item)
+            )
+        }
+    }
+
+    /// 只接受模型目录响应中的显式能力字段。模型 ID、供应商和营销名称都不是证据。
+    private func catalogMultimodalAssessment(
+        from item: [String: Any]
+    ) -> MultimodalCapabilityAssessment {
+        let modalityPaths = [
+            ["input_modalities"],
+            ["inputModalities"],
+            ["architecture", "input_modalities"],
+            ["architecture", "inputModalities"],
+            ["capabilities", "input_modalities"],
+            ["capabilities", "inputModalities"]
+        ]
+        for path in modalityPaths {
+            guard let modalities = stringList(value(at: path, in: item)) else { continue }
+            return ModelCapability.assessment(
+                inputModalities: modalities,
+                source: path.joined(separator: ".")
+            )
+        }
+
+        let booleanPaths = [
+            ["supports_vision"],
+            ["supportsVision"],
+            ["capabilities", "vision"],
+            ["capabilities", "multimodal"],
+            ["capabilities", "supports_vision"],
+            ["capabilities", "supportsVision"]
+        ]
+        for path in booleanPaths {
+            guard let supported = value(at: path, in: item) as? Bool else { continue }
+            return ModelCapability.assessment(
+                explicitVisionSupport: supported,
+                source: path.joined(separator: ".")
+            )
+        }
+        return .unknown
+    }
+
+    private func value(
+        at path: [String],
+        in item: [String: Any]
+    ) -> Any? {
+        var current: Any = item
+        for component in path {
+            guard let dictionary = current as? [String: Any],
+                  let next = dictionary[component]
+            else {
+                return nil
+            }
+            current = next
+        }
+        return current
+    }
+
+    private func stringList(_ value: Any?) -> [String]? {
+        if let values = value as? [String] {
+            return values
+        }
+        guard let value = value as? String else { return nil }
+        return value.split(separator: ",").map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 

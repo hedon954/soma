@@ -19,10 +19,6 @@ func remoteModelSpanMetadata(_ event: RemoteAgentEvent) -> String {
     ])
 }
 
-struct RemoteVideoKeyframeFallbackRequired: Error {
-    var code: String
-}
-
 extension ConversationProcessingService {
     func applyRemoteEvents(
         _ events: [RemoteAgentEvent],
@@ -61,12 +57,10 @@ extension ConversationProcessingService {
         message: String,
         context: ConversationProcessingContext
     ) {
-        if !job.state.isTerminal, job.state.canTransition(to: .failed) {
-            try? job.transition(to: .failed, error: message)
-            _ = try? AgentJobStore.append(
-                kind: .failed,
-                payload: .init(message: message),
-                to: job,
+        if !job.state.isTerminal {
+            try? AgentJobStore.waitForUser(
+                job,
+                message: message,
                 in: context.modelContext
             )
         }
@@ -185,7 +179,7 @@ extension ConversationProcessingService {
         if let responseID = job.responseMessageID,
            let existing = messages.first(where: { $0.id == responseID })
         {
-            existing.agentStatus = .running
+            prepareResponseMessageForResume(existing, job: job)
             return existing
         }
         let response = CoachMessage(
@@ -212,7 +206,8 @@ extension ConversationProcessingService {
     ) -> AgentTrace {
         let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
         if let traceID = response.agentTraceID,
-           let existing = traces.first(where: { $0.id == traceID })
+           let existing = traces.first(where: { $0.id == traceID }),
+           existing.status == .running
         {
             return existing
         }

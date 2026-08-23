@@ -175,10 +175,65 @@ extension AIService {
     }
 
     var selectedModelMultimodalSupport: MultimodalSupport {
-        ModelCapability.multimodalSupport(
+        modelMultimodalAssessment(
             provider: provider,
+            baseURL: baseURL(for: provider),
             model: model(for: provider)
+        ).support
+    }
+
+    func modelMultimodalAssessment(
+        provider: AIProvider,
+        baseURL: String,
+        model: String
+    ) -> MultimodalCapabilityAssessment {
+        let key = multimodalCapabilityDefaultsKey(
+            provider: provider,
+            baseURL: baseURL,
+            model: model
         )
+        guard let data = defaults.data(forKey: key),
+              let assessment = try? JSONDecoder().decode(
+                  MultimodalCapabilityAssessment.self,
+                  from: data
+              ),
+              assessment.source != nil
+        else {
+            return .unknown
+        }
+        return assessment
+    }
+
+    func cacheMultimodalAssessments(
+        _ models: [AIModelInfo],
+        provider: AIProvider,
+        baseURL: String
+    ) {
+        for model in models {
+            let key = multimodalCapabilityDefaultsKey(
+                provider: provider,
+                baseURL: baseURL,
+                model: model.id
+            )
+            guard model.multimodalAssessment.source != nil,
+                  let data = try? JSONEncoder().encode(model.multimodalAssessment)
+            else {
+                defaults.removeObject(forKey: key)
+                continue
+            }
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    private func multimodalCapabilityDefaultsKey(
+        provider: AIProvider,
+        baseURL: String,
+        model: String
+    ) -> String {
+        let normalizedURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let identity = "\(provider.rawValue)|\(normalizedURL)|\(model)"
+        return "ai.multimodalCapability.\(Data(identity.utf8).base64EncodedString())"
     }
 
     var hasRequiredAPIKey: Bool {

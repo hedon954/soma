@@ -6,6 +6,8 @@ struct AgentTurnTranscript: View {
     let isLive: Bool
     var sourceMessage: CoachMessage?
     var isEditable = false
+    var canRetry = false
+    var onRetry: () -> Void = {}
 
     private var visibleItems: [AgentTurnItem] {
         AgentTurnVisibleItems.make(from: items)
@@ -28,7 +30,11 @@ struct AgentTurnTranscript: View {
                         AgentTurnItemCard(item: item)
                     }
                 case let .item(item):
-                    AgentTurnItemCard(item: item)
+                    AgentTurnItemCard(
+                        item: item,
+                        canRetry: canRetry && item.kind == .error,
+                        onRetry: onRetry
+                    )
                 case let .record(reference):
                     ChatRecordEditorCard(
                         reference: reference,
@@ -126,6 +132,8 @@ private struct AgentProcessGroupCard: View {
 private struct AgentTurnItemCard: View {
     let item: AgentTurnItem
     var showsChrome = true
+    var canRetry = false
+    var onRetry: () -> Void = {}
     @State private var isExpanded = false
 
     var body: some View {
@@ -229,25 +237,44 @@ private struct AgentTurnItemCard: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.subheadline)
-                .foregroundStyle(.red)
+                .foregroundStyle(AppTheme.vitalAccent)
                 .frame(width: 22, height: 22)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title.isEmpty ? "执行失败" : item.title)
                     .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.vitalAccent)
                 Text(item.errorMessage ?? item.text)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.vitalAccent)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 4)
+
+            if canRetry {
+                Button(action: onRetry) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppTheme.vitalAccent)
+                        .frame(
+                            width: AppTheme.minimumTapTarget,
+                            height: AppTheme.minimumTapTarget
+                        )
+                        .background(AppTheme.vitalSoftTint, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("重试这条回复")
+                .accessibilityHint("复用原始文字、媒体和发送时的位置再次处理")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
-            Color.red.opacity(0.08),
+            AppTheme.vitalSoftTint,
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder

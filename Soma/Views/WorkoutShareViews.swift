@@ -487,8 +487,7 @@ struct WorkoutShareSheet: View {
                             Button("重新生成") {
                                 Task { await renderPoster() }
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(AppTheme.accentEmphasis)
+                            .appPrimaryButtonStyle()
                             Button("返回训练") {
                                 dismiss()
                             }
@@ -513,8 +512,7 @@ struct WorkoutShareSheet: View {
                                     .frame(maxWidth: .infinity)
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(AppTheme.accentEmphasis)
+                        .appPrimaryButtonStyle()
                         .disabled(isSaving)
                     }
 

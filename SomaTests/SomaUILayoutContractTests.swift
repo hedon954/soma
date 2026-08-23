@@ -80,4 +80,20 @@ final class SomaUILayoutContractTests: XCTestCase {
             ["近 7 天", "连续性", "容量"]
         )
     }
+
+    func testRecentActivityViewportShowsSixRowsBeforeInternalScrolling() {
+        XCTAssertEqual(ProgressRecentActivityViewport.maximumVisibleRows, 6)
+    }
+
+    func testAssistantFeedbackScrollTargetIsScopedToItsReply() {
+        let messageID = UUID()
+        XCTAssertEqual(
+            AssistantFeedbackScrollTarget(messageID: messageID),
+            AssistantFeedbackScrollTarget(messageID: messageID)
+        )
+        XCTAssertNotEqual(
+            AssistantFeedbackScrollTarget(messageID: messageID),
+            AssistantFeedbackScrollTarget(messageID: UUID())
+        )
+    }
 }

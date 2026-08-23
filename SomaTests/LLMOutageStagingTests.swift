@@ -3,47 +3,45 @@ import SwiftData
 import SwiftOpenAI
 import XCTest
 
-/// ADR 0062：自动恢复与等待用户重试必须分离，队列保持严格 FIFO。
+/// 失败一旦越过 ReAct Loop 就等待用户重试，队列保持严格 FIFO。
 final class LLMOutageStagingTests: XCTestCase {
-    func testTransportFailuresRetryAsNetwork() {
-        XCTAssertEqual(
-            LLMOutageClassifier.disposition(for: URLError(.notConnectedToInternet)),
-            .retryNetwork
-        )
-        XCTAssertEqual(
-            LLMOutageClassifier.disposition(for: APIError.timeOutError),
-            .retryNetwork
-        )
-        XCTAssertEqual(
-            LLMOutageClassifier.disposition(
-                for: NSError(domain: NSURLErrorDomain, code: -1009)
-            ),
-            .retryNetwork
-        )
+    func testTransportFailuresWaitForManualRetryOutsideLoop() {
+        for error in [
+            URLError(.notConnectedToInternet),
+            URLError(.timedOut),
+            URLError(.networkConnectionLost)
+        ] {
+            guard case let .waitForUser(message) =
+                LLMOutageClassifier.disposition(for: error)
+            else {
+                return XCTFail("传输失败越过 Loop 后必须等待用户")
+            }
+            XCTAssertTrue(message.contains("手动重试"))
+        }
     }
 
-    func testMissingConfigurationAndInvalidEndpointAreStaged() {
-        guard case .stage = LLMOutageClassifier.disposition(
+    func testMissingConfigurationAndInvalidEndpointWaitForUser() {
+        guard case .waitForUser = LLMOutageClassifier.disposition(
             for: AIServiceError.missingAPIKey("OpenAI")
         ) else {
-            return XCTFail("缺少 API Key 应该进入暂存")
+            return XCTFail("缺少 API Key 应该等待用户")
         }
         XCTAssertTrue(
             LLMOutageClassifier
                 .signal(for: AIServiceError.missingAPIKey("OpenAI"))
                 .isMissingConfiguration
         )
-        guard case .stage = LLMOutageClassifier.disposition(
+        guard case .waitForUser = LLMOutageClassifier.disposition(
             for: AIServiceError.invalidURL
         ) else {
-            return XCTFail("地址无效应该进入暂存")
+            return XCTFail("地址无效应该等待用户")
         }
     }
 
-    func testRecoverableStatusCodesAreStagedAndRequestErrorsFail() {
+    func testProviderFailuresWaitForUserAndRequestErrorsFail() {
         for status in [401, 403, 408, 409, 425, 429, 500, 502, 503] {
-            guard case .stage = disposition(forStatus: status) else {
-                return XCTFail("\(status) 应该进入暂存")
+            guard case .waitForUser = disposition(forStatus: status) else {
+                return XCTFail("\(status) 应该等待用户手动重试")
             }
         }
         for status in [400, 404, 413, 422] {
@@ -66,8 +64,8 @@ final class LLMOutageStagingTests: XCTestCase {
             return XCTFail("欠费必须等待用户手动重试")
         }
         XCTAssertTrue(message.contains("不会自动继续"))
-        guard case .stage = disposition(forStatus: 429) else {
-            return XCTFail("普通 429 频率限制仍应暂存退避")
+        guard case .waitForUser = disposition(forStatus: 429) else {
+            return XCTFail("普通 429 越过 Loop 后也必须等待用户")
         }
     }
 
@@ -83,15 +81,15 @@ final class LLMOutageStagingTests: XCTestCase {
         )
     }
 
-    func testStagingRetryDelayGrowsAndCapsAtFiveMinutes() {
-        XCTAssertEqual(LLMOutageClassifier.stagingRetryDelay(attemptCount: 0), 1)
-        XCTAssertEqual(LLMOutageClassifier.stagingRetryDelay(attemptCount: 1), 2)
-        XCTAssertEqual(LLMOutageClassifier.stagingRetryDelay(attemptCount: 3), 8)
-        XCTAssertEqual(
-            LLMOutageClassifier.stagingRetryDelay(attemptCount: 40),
-            LLMOutageClassifier.maximumStagingRetryDelay
+    func testOnlyLoopRetryPolicyKeepsThreeExponentialRetries() {
+        XCTAssertEqual(AgentStepRetryPolicy.maximumRetryCount, 3)
+        XCTAssertEqual((1 ... 3).map(AgentStepRetryPolicy.delay), [1, 2, 4])
+        XCTAssertTrue(
+            LLMOutageClassifier.isLoopRetryable(URLError(.networkConnectionLost))
         )
-        XCTAssertEqual(LLMOutageClassifier.maximumStagingRetryDelay, 300)
+        XCTAssertFalse(
+            LLMOutageClassifier.isLoopRetryable(AIServiceError.missingAPIKey("OpenAI"))
+        )
     }
 
     @MainActor
@@ -225,7 +223,7 @@ final class LLMOutageStagingTests: XCTestCase {
         try AgentJobStore.stage(
             job,
             message: "模型服务暂时不可用，消息已暂存。",
-            retryDelay: LLMOutageClassifier.stagingRetryDelay(attemptCount: 40),
+            retryDelay: 300,
             now: now,
             in: context
         )
@@ -308,14 +306,14 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
-    func testCancelledAutomaticRecoveryStaysClaimable() throws {
+    func testWaitingForNetworkRequiresManualRelease() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
         let job = makeJob()
         let response = CoachMessage(
             isFromCoach: true,
-            text: "网络暂时不可用，任务已保留，将在网络恢复后继续。",
-            agentStatus: .cancelled,
+            text: "网络连接中断。请检查网络后手动重试。",
+            agentStatus: .failed,
             turnID: job.turnID
         )
         context.insert(response)
@@ -327,22 +325,19 @@ final class LLMOutageStagingTests: XCTestCase {
         job.nextRetryAt = nil
         try context.save()
 
-        XCTAssertTrue(try AgentJobStore.promoteFailedResponsesToManualRetry(
+        XCTAssertEqual(try AgentJobStore.promoteFailedResponsesToManualRetry(
             dataSpace: .personal,
             in: context
-        ).isEmpty)
-        XCTAssertEqual(job.state, .waitingForNetwork)
-        XCTAssertFalse(
+        ), [job.id])
+        XCTAssertEqual(job.state, .waitingForUser)
+        XCTAssertTrue(
             ConversationTurnProjection.canRetry(response, in: [response], job: job)
         )
-        XCTAssertEqual(
-            try AgentJobStore.claimNext(
-                dataSpace: .personal,
-                owner: "runner",
-                in: context
-            )?.id,
-            job.id
-        )
+        XCTAssertNil(try AgentJobStore.claimNext(
+            dataSpace: .personal,
+            owner: "runner",
+            in: context
+        ))
     }
 
     @MainActor

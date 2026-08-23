@@ -513,27 +513,26 @@ final class SomaTests: XCTestCase {
         )
     }
 
-    func testKnownMultimodalModelsAreRecognized() {
+    func testModelNamesStayUnknownWithoutExplicitCatalogEvidence() {
         XCTAssertEqual(
             ModelCapability.multimodalSupport(provider: .bailian, model: "qwen3.5-plus"),
-            .supported
+            .unknown
         )
         XCTAssertEqual(
             ModelCapability.multimodalSupport(provider: .tencent, model: "hy-vision-2.0-instruct"),
-            .supported
-        )
-        XCTAssertTrue(
-            ModelCapability.supportsDirectVideo(
-                provider: .bailian,
-                model: "qwen3-vl-plus"
-            )
+            .unknown
         )
         XCTAssertFalse(
             ModelCapability.supportsDirectVideo(
-                provider: .openAI,
-                model: "gpt-5"
+                assessment: .unknown
             )
         )
+        XCTAssertTrue(ModelCapability.supportsDirectVideo(
+            assessment: ModelCapability.assessment(
+                inputModalities: ["text", "video"],
+                source: "capabilities.input_modalities"
+            )
+        ))
     }
 
     @MainActor
@@ -588,8 +587,15 @@ final class SomaTests: XCTestCase {
             capturedRequest = request
             let data = try JSONSerialization.data(withJSONObject: [
                 "data": [
-                    ["id": "text-embedding-3-small"],
-                    ["id": "gpt-4.1-mini", "status": "active"],
+                    [
+                        "id": "text-embedding-3-small",
+                        "architecture": ["input_modalities": ["text"]]
+                    ],
+                    [
+                        "id": "gpt-4.1-mini",
+                        "status": "active",
+                        "input_modalities": ["text", "image", "video"]
+                    ],
                     ["id": "retired-model", "status": "inactive"],
                     ["id": "gpt-4.1-mini", "status": "active"]
                 ]
@@ -611,7 +617,21 @@ final class SomaTests: XCTestCase {
 
         XCTAssertEqual(models.map(\.id), ["gpt-4.1-mini", "text-embedding-3-small"])
         XCTAssertEqual(models.first?.multimodalSupport, .supported)
+        XCTAssertEqual(models.first?.multimodalAssessment.directVideoSupport, true)
         XCTAssertEqual(models.last?.multimodalSupport, .unsupported)
+        XCTAssertEqual(models.first?.multimodalAssessment.source, "input_modalities")
+        XCTAssertEqual(
+            models.last?.multimodalAssessment.source,
+            "architecture.input_modalities"
+        )
+        XCTAssertEqual(
+            service.modelMultimodalAssessment(
+                provider: .openAI,
+                baseURL: "https://example.com/v1/chat/completions",
+                model: "gpt-4.1-mini"
+            ).support,
+            .supported
+        )
         XCTAssertEqual(capturedRequest?.url?.absoluteString, "https://example.com/v1/models")
         XCTAssertEqual(
             capturedRequest?.value(forHTTPHeaderField: "Authorization"),
@@ -619,10 +639,10 @@ final class SomaTests: XCTestCase {
         )
     }
 
-    func testDeepSeekWarnsBeforeMediaUpload() {
+    func testDeepSeekModelWithoutCatalogEvidenceStaysUnknown() {
         XCTAssertEqual(
             ModelCapability.multimodalSupport(provider: .deepSeek, model: "deepseek-chat"),
-            .unsupported
+            .unknown
         )
     }
 

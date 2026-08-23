@@ -40,9 +40,17 @@ struct SettingsView: View {
         self.isEmbeddedInTab = isEmbeddedInTab
     }
 
+    private var selectedCapabilityAssessment: MultimodalCapabilityAssessment {
+        models.first(where: { $0.id == model })?.multimodalAssessment
+            ?? ai.modelMultimodalAssessment(
+                provider: provider,
+                baseURL: baseURL,
+                model: model
+            )
+    }
+
     private var selectedCapability: MultimodalSupport {
-        models.first(where: { $0.id == model })?.multimodalSupport
-            ?? ModelCapability.multimodalSupport(provider: provider, model: model)
+        selectedCapabilityAssessment.support
     }
 
     private var locationEnabledBinding: Binding<Bool> {
@@ -457,18 +465,23 @@ struct SettingsView: View {
         }
     }
 
-    /// 只在已经填好模型时出现，并且只占一行：能力标注本身已经说清了后果。
+    /// 模型名不是能力证据；能力结论和实际来源一起显示。
     private var capabilityRow: some View {
         HStack(spacing: 8) {
             Image(systemName: capabilityIcon)
                 .foregroundStyle(capabilityColor)
-            Text(selectedCapability.label)
-                .font(.footnote)
-                .foregroundStyle(
-                    selectedCapability == .unsupported
-                        ? AppTheme.warning
-                        : .secondary
-                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(selectedCapability.label)
+                    .font(.footnote)
+                    .foregroundStyle(
+                        selectedCapability == .unsupported
+                            ? AppTheme.warning
+                            : .secondary
+                    )
+                Text(selectedCapabilityAssessment.sourceLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .accessibilityElement(children: .combine)
     }

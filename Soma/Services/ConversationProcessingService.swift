@@ -20,9 +20,6 @@ final class ConversationProcessingService {
     @ObservationIgnored
     private var processingTask: Task<Void, Never>?
 
-    @ObservationIgnored
-    private var retryTask: Task<Void, Never>?
-
     @ObservationIgnored let titleGenerator = SessionTitleGenerator()
 
     @ObservationIgnored
@@ -586,88 +583,32 @@ final class ConversationProcessingService {
             if job.state == .succeeded {
                 titleGenerator.request(context: context)
             }
-        } catch let fallback as RemoteVideoKeyframeFallbackRequired {
-            guard job.remoteRequestAttempt == 1,
-                  !job.state.isTerminal
-            else {
-                failRemoteJob(
-                    job,
-                    message: "完整视频直传失败，且关键帧降级已用尽。",
-                    context: context
-                )
-                return
-            }
-            if job.state == .remoteRunning {
-                try? job.transition(to: .running)
-            }
-            job.remoteRequestAttempt = 2
-            job.remoteJobID = nil
-            job.remoteEventCursor = 0
-            job.responseTextSnapshot = ""
-            responseMessage.text = ""
-            responseMessage.agentStatus = .running
-            projectRemoteSpan(
-                AgentTraceSpan(
-                    kind: .output,
-                    title: "完整视频降级为关键帧",
-                    status: .succeeded,
-                    startedAt: .now,
-                    endedAt: .now,
-                    metadata: AgentTraceText.jsonObject([
-                        "fallback_reason": fallback.code,
-                        "media_mode": "keyframes",
-                        "request_attempt": 2
-                    ])
-                ),
-                job: job,
-                responseMessage: responseMessage,
-                trace: trace,
-                context: context
-            )
-            try? context.modelContext.save()
-            await runRemoteAttempt(
-                job: job,
-                userMessage: userMessage,
-                context: context
-            )
-            return
         } catch {
-            let message = error.localizedDescription
+            let reason = error.localizedDescription
+            let message = LLMOutageClassifier.disposition(for: error).message(
+                fallback: "这次后台任务没有处理成功：\(reason)"
+            )
             job.submissionAttemptCount += 1
-            if isTransientNetworkError(error) {
-                if job.state == .running {
-                    try? job.transition(to: .waitingForNetwork, error: message)
-                }
-                job.leaseOwner = nil
-                job.leaseExpiresAt = nil
-                job.nextRetryAt = .now.addingTimeInterval(
-                    min(pow(2, Double(job.submissionAttemptCount)), 60)
-                )
-                responseMessage.agentStatus = .running
-                liveAgentActivity = "网络暂时不可用，后台任务仍会继续。"
-                _ = try? AgentJobStore.append(
-                    kind: .waitingForNetwork,
-                    payload: .init(message: liveAgentActivity),
-                    to: job,
-                    in: context.modelContext
-                )
-                try? context.modelContext.save()
-            } else {
-                trace.apply(.failed(
-                    message: message,
-                    cancelled: false,
-                    at: .now
-                ))
-                failRemoteJob(job, message: message, context: context)
-                responseMessage.text = "这次后台任务没有处理成功：\(message)"
-                responseMessage.agentStatus = .failed
-                responseMessage.applyAgentEvent(.failed(
-                    message: message,
-                    cancelled: false,
-                    at: .now
-                ))
-                try? context.modelContext.save()
-            }
+            trace.apply(.failed(
+                message: reason,
+                cancelled: false,
+                at: .now
+            ))
+            failRemoteJob(job, message: message, context: context)
+            responseMessage.text = message
+            responseMessage.agentStatus = .failed
+            responseMessage.applyAgentEvent(.failed(
+                message: message,
+                cancelled: false,
+                at: .now
+            ))
+            try? AgentJobStore.stageFollowingJobs(
+                after: job,
+                message: "前一条消息等待手动重试；本条已按发送顺序暂存。",
+                in: context.modelContext
+            )
+            liveAgentActivity = nil
+            try? context.modelContext.save()
         }
     }
 
@@ -887,7 +828,6 @@ final class ConversationProcessingService {
                 responseMessage: responseMessage
             )
             let message = "后台任务已取消。"
-            stopAutomaticRetry()
             trace.apply(.failed(
                 message: message,
                 cancelled: false,
@@ -914,17 +854,6 @@ final class ConversationProcessingService {
                 responseMessage: responseMessage
             )
             let code = event.payload["code"]?.stringValue ?? "remote_failed"
-            let mediaMode = event.payload["mediaMode"]?.stringValue
-            let requestAttempt = event.payload["requestAttempt"]?.intValue
-            if ["provider_timeout", "provider_unavailable"].contains(code),
-               mediaMode == "direct_video",
-               requestAttempt == 1,
-               job.remoteRequestAttempt == 1,
-               job.responseTextSnapshot.isEmpty,
-               job.mediaAttachments.contains(where: { $0.kind == .video })
-            {
-                throw RemoteVideoKeyframeFallbackRequired(code: code)
-            }
             let message = "后台任务未完成（\(code)）。"
             trace.apply(.failed(
                 message: message,
@@ -1029,10 +958,7 @@ private extension ConversationProcessingService {
                 hasMedia: !media.attachments.isEmpty,
                 hasVideo: media.hasVideo
             )
-            let directVideos = ModelCapability.supportsDirectVideo(
-                provider: route.provider,
-                model: route.model
-            ) ? media.videos : []
+            let directVideos = media.videos
             if media.failedVideoCount > 0,
                directVideos.count != media.videoCount
             {
@@ -1222,8 +1148,7 @@ private extension ConversationProcessingService {
                 activeTrace: activeTrace,
                 performedRecordType: performedRecordType,
                 media: media,
-                context: context,
-                locationService: locationService
+                context: context
             )
             return
         }
@@ -1244,8 +1169,7 @@ extension ConversationProcessingService {
         activeTrace: AgentTrace?,
         performedRecordType: ConversationIntent?,
         media: PreparedConversationMedia,
-        context: ConversationProcessingContext,
-        locationService: LocationContextService?
+        context: ConversationProcessingContext
     ) {
         let reason = error.localizedDescription
         if backgroundLeaseExpired {
@@ -1276,79 +1200,20 @@ extension ConversationProcessingService {
             return
         }
         switch LLMOutageClassifier.disposition(for: error) {
-        case .retryNetwork:
-            let retryDelay = min(
-                pow(2, Double(job.submissionAttemptCount)) * 2,
-                60
-            )
-            job.submissionAttemptCount += 1
-            job.nextRetryAt = Date.now.addingTimeInterval(retryDelay)
-            if job.state == .running {
-                try? job.transition(
-                    to: .waitingForNetwork,
-                    error: reason
-                )
-            }
-            let waitingText = "网络暂时不可用，任务已保留，将在网络恢复后继续。"
-            responseMessage.presentAutomaticRecovery(waitingText: waitingText)
-            _ = try? AgentJobStore.append(
-                kind: .waitingForNetwork,
-                payload: .init(message: waitingText),
-                to: job,
-                in: context.modelContext
-            )
-            try? context.modelContext.save()
-            scheduleRetry(
-                at: job.nextRetryAt,
-                dataSpace: context.dataSpace,
-                ai: context.ai,
-                modelContext: context.modelContext,
-                locationService: locationService
-            )
-            context.session.touch(at: .now)
-            return
-        case let .stage(message):
-            // ADR 0045：缺配置只等配置变更信号，供应商侧故障才按退避重试。
-            let waitsForConfiguration = LLMOutageClassifier
-                .signal(for: error)
-                .isMissingConfiguration
-            job.submissionAttemptCount += 1
-            let waitingText = message + "LLM 恢复后会自动继续。"
-            responseMessage.presentAutomaticRecovery(waitingText: waitingText)
-            if let activeTrace, activeTrace.status == .running {
-                activeTrace.apply(.failed(
-                    message: reason,
-                    cancelled: true,
-                    at: .now
-                ))
-            }
-            try? AgentJobStore.stage(
-                job,
-                message: message,
-                retryDelay: waitsForConfiguration
-                    ? nil
-                    : LLMOutageClassifier.stagingRetryDelay(
-                        attemptCount: job.submissionAttemptCount
-                    ),
-                in: context.modelContext
-            )
-            scheduleRetry(
-                at: job.nextRetryAt,
-                dataSpace: context.dataSpace,
-                ai: context.ai,
-                modelContext: context.modelContext,
-                locationService: locationService
-            )
-            context.session.touch(at: .now)
-            return
         case let .waitForUser(message):
-            stopAutomaticRetry()
             job.submissionAttemptCount += 1
             responseMessage.text = message
             responseMessage.agentStatus = .failed
             if let activeTrace, activeTrace.status == .running {
                 activeTrace.apply(.failed(
                     message: reason,
+                    cancelled: false,
+                    at: .now
+                ))
+            }
+            if !responseMessage.agentTurnItems.contains(where: { $0.kind == .error }) {
+                responseMessage.applyAgentEvent(.failed(
+                    message: message,
                     cancelled: false,
                     at: .now
                 ))
@@ -1368,7 +1233,6 @@ extension ConversationProcessingService {
         case .fail:
             break
         }
-        stopAutomaticRetry()
         let recovery = if performedRecordType != nil {
             "\n\nAgent 已完成的本地记录仍然保留，但生成最终回复时中断。"
         } else if !media.attachments.isEmpty {
@@ -1483,7 +1347,7 @@ extension ConversationProcessingService {
     }
 
     /// ADR 0048：同气泡续跑时复用 CoachMessage，丢掉未完成 step 的 running 卡片。
-    private func prepareResponseMessageForResume(
+    func prepareResponseMessageForResume(
         _ message: CoachMessage,
         job: AgentJob
     ) {
@@ -1572,7 +1436,6 @@ extension ConversationProcessingService {
         locationService: LocationContextService
     ) {
         guard !isProcessing else { return }
-        let now = Date.now
         _ = try? AgentJobStore.promoteFailedResponsesToManualRetry(
             dataSpace: dataSpace,
             in: modelContext
@@ -1589,8 +1452,11 @@ extension ConversationProcessingService {
         }) else {
             return
         }
-        // FIFO 只看队头。等待用户、配置或退避时，任何后续消息都不能越过。
-        if job.state == .waitingForUser || job.state == .staged {
+        // FIFO 只看队头。失败一旦可见，就只能由用户显式释放。
+        if job.state == .waitingForUser
+            || job.state == .waitingForNetwork
+            || job.state == .staged
+        {
             return
         }
         if job.executionKind == .react,
@@ -1605,16 +1471,7 @@ extension ConversationProcessingService {
             return
         }
         guard job.state.isRunnable else { return }
-        guard job.nextRetryAt == nil || job.nextRetryAt! <= now else {
-            scheduleRetry(
-                at: job.nextRetryAt,
-                dataSpace: dataSpace,
-                ai: ai,
-                modelContext: modelContext,
-                locationService: locationService
-            )
-            return
-        }
+        guard job.nextRetryAt == nil else { return }
         let messages = (try? modelContext.fetch(FetchDescriptor<CoachMessage>())) ?? []
         guard let userMessage = messages.first(where: { $0.id == job.userMessageID }),
               var context = ConversationProcessingContextFactory.make(
@@ -1654,44 +1511,6 @@ extension ConversationProcessingService {
             context: context,
             locationService: locationService
         )
-    }
-
-    func stopAutomaticRetry() {
-        retryTask?.cancel()
-        retryTask = nil
-    }
-
-    private func scheduleRetry(
-        at date: Date?,
-        dataSpace: DataSpace,
-        ai: AIService,
-        modelContext: ModelContext,
-        locationService: LocationContextService?
-    ) {
-        guard let date, let locationService else { return }
-        stopAutomaticRetry()
-        retryTask = Task { [weak self] in
-            let delay = max(0, date.timeIntervalSinceNow)
-            if delay > 0 {
-                try? await Task.sleep(for: .seconds(delay))
-            }
-            guard !Task.isCancelled else { return }
-            self?.resumePendingJobs(
-                dataSpace: dataSpace,
-                ai: ai,
-                modelContext: modelContext,
-                locationService: locationService,
-                releaseStaged: true
-            )
-        }
-    }
-
-    private func isTransientNetworkError(_ error: Error) -> Bool {
-        if error is URLError {
-            return true
-        }
-        let value = error as NSError
-        return value.domain == NSURLErrorDomain
     }
 
     private func persistPendingAttachments(

@@ -35,10 +35,19 @@ struct AgentStreamStepRequest {
     var enforceFirstStepDeadline: Bool = false
 }
 
+enum AgentStepRetryPolicy {
+    static let maximumRetryCount = 3
+
+    static func delay(forRetry retry: Int) -> TimeInterval {
+        pow(2, Double(max(0, retry - 1)))
+    }
+}
+
 extension AIService {
     func consumeAgentStepWithRetry(
         messages: inout [ChatCompletionParameters.Message],
         request: AgentStreamStepRequest,
+        maximumRetryCount: Int = 0,
         videoFrameFallback: (() async -> [Data])?,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
@@ -80,9 +89,8 @@ extension AIService {
                 passage,
                 receivedMeaningfulDelta
             ) {
-                guard request.enforceFirstStepDeadline,
-                      requestAttempt == 1,
-                      !receivedMeaningfulDelta,
+                guard !receivedMeaningfulDelta,
+                      requestAttempt <= maximumRetryCount,
                       shouldRetryStream(error)
                 else {
                     throw StreamingFailure.interrupted(
@@ -91,16 +99,10 @@ extension AIService {
                         receivedMeaningfulDelta: receivedMeaningfulDelta
                     )
                 }
-                if !activeVideos.isEmpty {
-                    guard let fallbackFrames = await videoFrameFallback?(),
-                          !fallbackFrames.isEmpty
-                    else {
-                        throw StreamingFailure.interrupted(
-                            error,
-                            passage: passage,
-                            receivedMeaningfulDelta: false
-                        )
-                    }
+                if !activeVideos.isEmpty,
+                   let fallbackFrames = await videoFrameFallback?(),
+                   !fallbackFrames.isEmpty
+                {
                     activeVideos = []
                     mediaMode = .keyframes
                     fallbackReason = agentErrorDescription(error)
@@ -114,11 +116,12 @@ extension AIService {
                         delta: "完整视频直传未在时限内响应，本次已切换为关键帧分析。\n\n"
                     ))
                 }
+                let retryNumber = requestAttempt
                 let retryAt = Date()
                 trace?(.span(AgentTraceSpan(
                     step: request.step,
                     kind: .model,
-                    title: "首响应超时，正在重试 1/1",
+                    title: "模型步骤暂时失败，正在重试 \(retryNumber)/\(maximumRetryCount)",
                     status: .succeeded,
                     startedAt: retryAt,
                     endedAt: retryAt,
@@ -130,6 +133,9 @@ extension AIService {
                             .map { $0 as Any } ?? NSNull()
                     ])
                 )))
+                try await agentRetrySleeper(
+                    AgentStepRetryPolicy.delay(forRetry: retryNumber)
+                )
             }
         }
     }
@@ -358,7 +364,7 @@ extension AIService {
     }
 
     func shouldRetryStream(_ error: Error) -> Bool {
-        error is AgentStreamTimeoutError || error is URLError
+        LLMOutageClassifier.isLoopRetryable(error)
     }
 
     func replaceCurrentUserImages(

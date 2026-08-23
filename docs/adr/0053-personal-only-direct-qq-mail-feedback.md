@@ -6,6 +6,7 @@
 - 部分替代：[ADR 0051](0051-authenticated-in-app-feedback-email-delivery.md) 的当前投递路径与构建地址；[ADR 0052](0052-gmail-self-delivery-for-in-app-feedback.md) 的个人阶段邮件供应商与凭据位置
 - 后续替代：
   - 对外分发前必须由新的服务端凭据边界 ADR 替代
+  - [ADR 0093](0093-bounded-per-reply-multimodal-feedback-context.md) 为用户主动发起的逐回复反馈增加单 Turn 可见文本与脱敏执行摘要
   - [ADR 0083](0083-local-diagnostics-log-and-silent-crash-reporting.md) 在同一投递链路上增加默认
     静默的崩溃诊断报告；「邮件只承载用户明确填写内容」的边界不再覆盖全部出网邮件
 - 上游依据：[PRD 023](../prd/023-in-app-multimodal-feedback.md)

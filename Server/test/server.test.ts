@@ -29,7 +29,10 @@ import type {
 import {
   InMemoryObjectStore,
 } from "../src/object-store.js";
-import { OpenAICompatibleManagedProvider } from "../src/provider.js";
+import {
+  modelStepRetryDelaysSeconds,
+  OpenAICompatibleManagedProvider,
+} from "../src/provider.js";
 import {
   AllowDevelopmentAttestation,
   DeviceIdentityService,
@@ -918,7 +921,7 @@ test("managed provider streams text before completion and limits media", async (
   });
 });
 
-test("verified Qwen provider sends the video without duplicate frames", async () => {
+test("explicit direct-video capability sends video without duplicate frames", async () => {
   const store = new InMemorySomaStore();
   const job = await store.submitJob({
     deviceID: randomUUID(),
@@ -948,6 +951,8 @@ test("verified Qwen provider sends the video without duplicate frames", async ()
         headers: { "content-type": "text/event-stream" },
       });
     },
+    undefined,
+    true,
   );
 
   await provider.run(job, [], [
@@ -963,51 +968,94 @@ test("verified Qwen provider sends the video without duplicate frames", async ()
   assert.doesNotMatch(JSON.stringify(captured), /frame\.jpg/);
 });
 
-test("direct video failure preserves the only retry for keyframes", async () => {
+test("remote model step uses three retries and video fallback stays in that budget", async () => {
   const store = new InMemorySomaStore();
   const directJob = await store.submitJob({
     deviceID: randomUUID(),
-    input: makeJobInput({ mediaMode: "direct_video", requestAttempt: 1 }),
+    input: makeJobInput({
+      mediaMode: "direct_video",
+      requestAttempt: 1,
+      modelInput: makeModelInput(["current-video-0", "current-video-frame-0"]),
+    }),
     bodyDigest: sha256("direct-video-failure"),
     now: new Date(),
   });
-  let directCalls = 0;
+  const capturedBodies: Record<string, unknown>[] = [];
+  const retryDelays: number[] = [];
   const directProvider = new OpenAICompatibleManagedProvider(
     "https://provider.invalid/v1",
     "test-key",
     "qwen3-vl-plus",
-    async () => {
-      directCalls += 1;
-      return new Response("unavailable", { status: 503 });
+    async (_input, init) => {
+      capturedBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (capturedBodies.length <= modelStepRetryDelaysSeconds.length) {
+        return new Response("unavailable", { status: 503 });
+      }
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(
+            'data: {"choices":[{"delta":{"content":"关键帧结果"},"finish_reason":"stop"}]}\n\n',
+          ));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
     },
+    async (seconds) => {
+      retryDelays.push(seconds);
+    },
+    true,
   );
 
-  await assert.rejects(directProvider.run(directJob, [], [
-    { id: "current-image-0", contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
-  ]));
-  assert.equal(directCalls, 1);
+  const step = await directProvider.run(directJob, [], [
+    { id: "current-video-0", contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+    { id: "current-video-frame-0", contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
+  ]);
 
-  const fallbackJob = await store.submitJob({
+  assert.equal(capturedBodies.length, 4);
+  assert.deepEqual(retryDelays, [1, 2, 4]);
+  assert.deepEqual(step, {
+    kind: "completed",
+    answer: "关键帧结果",
+    usage: { input: 0, output: 0 },
+  });
+  assert.match(JSON.stringify(capturedBodies[0]), /video\.mp4/);
+  assert.doesNotMatch(JSON.stringify(capturedBodies[0]), /frame\.jpg/);
+  for (const body of capturedBodies.slice(1)) {
+    assert.match(JSON.stringify(body), /frame\.jpg/);
+    assert.doesNotMatch(JSON.stringify(body), /video\.mp4/);
+  }
+});
+
+test("remote model step stops after the third retry", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({
     deviceID: randomUUID(),
-    input: makeJobInput({ mediaMode: "keyframes", requestAttempt: 2 }),
-    bodyDigest: sha256("keyframe-fallback-failure"),
+    input: makeJobInput(),
+    bodyDigest: sha256("remote-retry-exhausted"),
     now: new Date(),
   });
-  let fallbackCalls = 0;
-  const fallbackProvider = new OpenAICompatibleManagedProvider(
+  let calls = 0;
+  const retryDelays: number[] = [];
+  const provider = new OpenAICompatibleManagedProvider(
     "https://provider.invalid/v1",
     "test-key",
-    "qwen3-vl-plus",
+    "test-model",
     async () => {
-      fallbackCalls += 1;
+      calls += 1;
       return new Response("unavailable", { status: 503 });
+    },
+    async (seconds) => {
+      retryDelays.push(seconds);
     },
   );
 
-  await assert.rejects(fallbackProvider.run(fallbackJob, [], [
-    { id: "current-image-0", contentType: "image/jpeg", url: "https://signed.invalid/frame.jpg" },
-  ]));
-  assert.equal(fallbackCalls, 1);
+  await assert.rejects(provider.run(job, [], []));
+  assert.equal(calls, 4);
+  assert.deepEqual(retryDelays, [1, 2, 4]);
 });
 
 test("HTTP idempotent submission returns one job and no body log surface", async () => {

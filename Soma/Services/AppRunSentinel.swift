@@ -1,8 +1,7 @@
 import Foundation
 
-/// ADR 0083：MetricKit 的崩溃诊断最快也要等下一次启动、且不保证投递。这里额外维护一个
-/// 前台运行哨兵：进入前台置位，退到后台或正常退出清位。启动时如果发现哨兵还在，说明上一次
-/// 前台运行是被异常终止的（崩溃或被系统强杀）。
+/// ADR 0095：这里维护前台运行哨兵，只用于在 MetricKit 后续给出 MXCrashDiagnostic 时关联上下文。
+/// 哨兵未清位可能来自崩溃、系统强杀、模拟器停进程或安装替换，本身绝不是崩溃证据。
 ///
 /// 哨兵同时保存最后活跃的 session 与 turn，让崩溃报告能定位到具体上下文。
 @MainActor
@@ -130,13 +129,14 @@ final class AppRunSentinel {
     }
 }
 
-/// 哨兵只能证明「上一次前台运行没有正常清位」。调试器结束进程会留下同样的痕迹，
-/// 把它当成崩溃会在每次开发运行后发出一封无效报告。
+/// BUG 0032：崩溃报告必须携带系统 MetricKit 的 MXCrashDiagnostic 证据。
 enum CrashReportEligibility {
-    static func shouldReportSentinelTermination(
-        _ previous: AppRunSentinel.PreviousRun
-    ) -> Bool {
-        previous.endedUnexpectedly && !previous.wasUnderDebugger
+    static func isSystemConfirmed(source: String) -> Bool {
+        source == DiagnosticReportEvidenceSource.metricKit.rawValue
+    }
+
+    static func isSystemConfirmed(report: DiagnosticReport) -> Bool {
+        report.evidenceSource == .metricKit
     }
 }
 

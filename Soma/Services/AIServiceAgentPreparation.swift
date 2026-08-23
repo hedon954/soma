@@ -45,10 +45,11 @@ extension AIService {
             hasVideo: request.hasVideo
         )
         let route = routing.route
-        let support = ModelCapability.multimodalSupport(
+        let support = modelMultimodalAssessment(
             provider: route.provider,
+            baseURL: route.baseURL,
             model: route.model
-        )
+        ).support
         let historicalImageCount = request.history.reduce(0) { $0 + $1.images.count }
         let hasVisualInput = !request.images.isEmpty
             || !request.videos.isEmpty
