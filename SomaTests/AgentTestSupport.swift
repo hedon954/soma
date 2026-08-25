@@ -1,6 +1,6 @@
+import Foundation
 @testable import Soma
 import SwiftOpenAI
-import Foundation
 import XCTest
 
 final class MockAgentStreamTransport {

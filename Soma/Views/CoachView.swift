@@ -59,13 +59,13 @@ struct CoachSessionPage: View {
 }
 
 struct CoachSessionView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AIService.self) private var ai
-    @Environment(DataSpaceController.self) private var dataSpace
-    @Environment(ConversationProcessingService.self) private var processor
-    @Environment(ConversationSessionController.self) private var conversationSessions
+    @Environment(\.modelContext) var modelContext
+    @Environment(AIService.self) var ai
+    @Environment(DataSpaceController.self) var dataSpace
+    @Environment(ConversationProcessingService.self) var processor
+    @Environment(ConversationSessionController.self) var conversationSessions
     @Environment(SomaCaptureRouter.self) private var captureRouter
-    @Environment(LocationContextService.self) private var locationContext
+    @Environment(LocationContextService.self) var locationContext
     @AppStorage(ConversationLocationPreference.defaultsKey)
     private var locationPreferenceRaw = ConversationLocationPreference.unasked.rawValue
     @AppStorage(RemoteAgentPreference.enabledKey)
@@ -75,42 +75,42 @@ struct CoachSessionView: View {
     @Query private var gyms: [GymProfile]
     @Query private var agentJobs: [AgentJob]
 
-    @State private var draft = ""
-    @State private var attachments: [PendingAttachment] = []
-    @State private var sheet: CoachSheet?
+    @State var draft = ""
+    @State var attachments: [PendingAttachment] = []
+    @State var sheet: CoachSheet?
     /// 语音服务只在用户第一次点麦克风时创建。即使 SwiftUI 丢弃新构造的
     /// View struct，Tab 切换也不会再额外分配一个未使用的服务实例。
-    @State private var speechInput: SpeechInputService?
-    @State private var draftBeforeSpeech = ""
+    @State var speechInput: SpeechInputService?
+    @State var draftBeforeSpeech = ""
     @State private var showsGyms = false
     @State private var composerFocusRequest = UUID()
-    @State private var composerDismissRequest = UUID()
-    @State private var scrollRequest = UUID()
+    @State var composerDismissRequest = UUID()
+    @State var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
     @State private var showsSessionDeleteBlockedAlert = false
     @State private var showsLocationPrompt = false
-    @State private var useLocalForNextMessage = false
-    @State private var selectedExerciseSuggestion: ExerciseInputSuggestion?
-    @State private var selectedShortcutID: String?
+    @State var useLocalForNextMessage = false
+    @State var selectedExerciseSuggestion: ExerciseInputSuggestion?
+    @State var selectedShortcutID: String?
     /// 标准配置由 Store 缓存；设置保存时通过通知精确刷新，不再在每次 Tab
     /// 重新挂载时重复解码 UserDefaults JSON。
     @State private var inputShortcuts: [AgentInputShortcut] = []
     /// 流式期间合并滚动，避免每批文字都同步触发布局和滚动。
-    @State private var lastLiveScrollAt = Date.distantPast
-    @State private var liveScrollTask: Task<Void, Never>?
-    @State private var isPersistingSubmission = false
+    @State var lastLiveScrollAt = Date.distantPast
+    @State var liveScrollTask: Task<Void, Never>?
+    @State var isPersistingSubmission = false
     @State private var suggestionSnapshot = CoachSuggestionSnapshot.empty
     @State private var suggestionDataRevision = 0
     @State private var loadedSuggestionRevision = -1
     @State private var requestedSuggestionRevision: Int?
     @State private var visibility = CoachVisibilityState()
-    @State private var didFinishInitialScroll = false
-    @State private var isLoadingEarlier = false
-    @State private var paginationAnchorMessageID: UUID?
-    @State private var paginationTriggerID = UUID()
-    @State private var followsLiveMessage = true
-    @State private var hasUserInteractedWithMessageList = false
-    @State private var messageListPosition = CoachMessageScrollPosition(
+    @State var didFinishInitialScroll = false
+    @State var isLoadingEarlier = false
+    @State var paginationAnchorMessageID: UUID?
+    @State var paginationTriggerID = UUID()
+    @State var followsLiveMessage = true
+    @State var hasUserInteractedWithMessageList = false
+    @State var messageListPosition = CoachMessageScrollPosition(
         isAtTop: false,
         isNearBottom: false
     )
@@ -159,7 +159,7 @@ struct CoachSessionView: View {
         self.onRequireAIConfiguration = onRequireAIConfiguration
     }
 
-    private var messages: [CoachMessage] {
+    var messages: [CoachMessage] {
         Array(recentMessages.prefix(messageLimit).reversed())
     }
 
@@ -171,13 +171,13 @@ struct CoachSessionView: View {
         conversationSessions.activeSessionReference
     }
 
-    private var isProcessingHere: Bool {
+    var isProcessingHere: Bool {
         processor.isProcessing
             && processor.dataSpace == dataSpace.activeSpace
             && processor.sessionID == conversationSessions.activeSessionID
     }
 
-    private var locationPreference: ConversationLocationPreference {
+    var locationPreference: ConversationLocationPreference {
         ConversationLocationPreference(rawValue: locationPreferenceRaw) ?? .unasked
     }
 
@@ -191,7 +191,7 @@ struct CoachSessionView: View {
         }
     }
 
-    private var pendingJobCount: Int {
+    var pendingJobCount: Int {
         pendingJobs.count
     }
 
@@ -938,4 +938,3 @@ struct CoachSessionView: View {
         submitCurrentDraft()
     }
 }
-

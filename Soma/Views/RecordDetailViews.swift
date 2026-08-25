@@ -951,4 +951,3 @@ private enum EditorValue {
         return number
     }
 }
-

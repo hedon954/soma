@@ -131,4 +131,3 @@ final class FoldedMediaLayoutTests: XCTestCase {
         )
     }
 }
-

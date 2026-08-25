@@ -110,4 +110,3 @@ final class TrainingVolumeAnalyticsTests: XCTestCase {
         XCTAssertEqual(refreshedPoints.first?.volume, 3280)
     }
 }
-

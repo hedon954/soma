@@ -151,7 +151,6 @@ final class AIService {
         return image
     }
 
-
     func agentErrorDescription(_ error: Error) -> String {
         if let apiError = error as? APIError {
             return apiError.displayDescription

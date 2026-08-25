@@ -198,7 +198,7 @@ if coach_source.match?(/@State[^\n]*AgentInputShortcutStore\.visibleShortcuts/) 
    !coach_source.include?("@State private var inputShortcuts: [AgentInputShortcut] = []")
   fail_check("Coach View construction again synchronously decodes shortcut JSON")
 end
-unless coach_source.include?("@State private var speechInput: SpeechInputService?") &&
+unless coach_source.match?(/@State[^\n]*var speechInput: SpeechInputService\?/) &&
        coach_actions_source.include?("speechInput ?? SpeechInputService()")
   fail_check("Coach again constructs speech services before the first voice action")
 end

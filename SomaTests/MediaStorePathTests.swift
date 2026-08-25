@@ -14,4 +14,3 @@ final class MediaStorePathTests: XCTestCase {
         XCTAssertNotNil(MediaStore.image(at: path))
     }
 }
-

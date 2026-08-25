@@ -1,4 +1,5 @@
 @testable import Soma
+import SwiftOpenAI
 import XCTest
 
 final class AgentToolSchemaAssemblyTests: XCTestCase {
@@ -46,4 +47,3 @@ final class AgentToolSchemaAssemblyTests: XCTestCase {
         XCTAssertTrue(encoded.contains("external_weight_kg"))
     }
 }
-

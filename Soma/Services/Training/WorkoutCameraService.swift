@@ -969,4 +969,3 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         }
     }
 }
-

@@ -231,8 +231,7 @@ final class ConversationRecorderToolTests: XCTestCase {
     }
 }
 
-extension SomaTests {
-
+extension ConversationRecorderToolTests {
     @MainActor
     func testAgentToolsPersistMixedMediaCollections() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -277,4 +276,3 @@ extension SomaTests {
         XCTAssertEqual(workout.mediaPath, attachments.first?.path)
     }
 }
-

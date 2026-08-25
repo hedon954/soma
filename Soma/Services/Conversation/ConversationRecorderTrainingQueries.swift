@@ -216,8 +216,4 @@ extension ConversationRecorder {
     ) -> Int64? {
         exerciseDefinition(internalID: internalID, in: context)?.businessID
     }
-
-    private static func businessIDValue(_ id: Int64?) -> AgentJSONValue {
-        id.map { .number(Double($0)) } ?? .null
-    }
 }

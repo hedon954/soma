@@ -232,7 +232,6 @@ extension ConversationRecorder {
         return [MediaAttachmentReference(kind: legacyKind, path: legacyPath)]
     }
 }
-}
 
 private extension String {
     var trimmed: String {

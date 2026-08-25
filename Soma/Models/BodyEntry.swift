@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 
+@Model
 final class BodyEntry: BusinessIdentifiedModel {
     var id: UUID
     var businessID: Int64?

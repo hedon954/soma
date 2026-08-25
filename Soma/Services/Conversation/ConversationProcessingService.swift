@@ -606,5 +606,4 @@ final class ConversationProcessingService {
             throw error
         }
     }
-
 }

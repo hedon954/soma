@@ -59,4 +59,3 @@ final class GymStructuredDataTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<GymMedia>()).isEmpty)
     }
 }
-

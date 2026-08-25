@@ -146,4 +146,3 @@ final class ConversationSessionFromSomaTests: XCTestCase {
         XCTAssertNotEqual(restored.id, created.id)
     }
 }
-

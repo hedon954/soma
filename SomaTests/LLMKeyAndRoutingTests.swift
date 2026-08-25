@@ -31,7 +31,7 @@ final class LLMKeyAndRoutingTests: XCTestCase {
         ))
     }
 
-    /// ADR 0045：缺少 API Key 不再拒绝发送，而是把回合暂存到 LLM 恢复。
+    // ADR 0045：缺少 API Key 不再拒绝发送，而是把回合暂存到 LLM 恢复。
 
     func testProviderEndpointsUseCompatiblePaths() {
         XCTAssertEqual(
@@ -183,4 +183,3 @@ final class LLMKeyAndRoutingTests: XCTestCase {
         )
     }
 }
-

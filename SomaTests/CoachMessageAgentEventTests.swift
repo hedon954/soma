@@ -157,4 +157,3 @@ final class CoachMessageAgentEventTests: XCTestCase {
         XCTAssertEqual(message.agentTurnItems.last?.errorMessage, "模型不支持图片分析")
     }
 }
-

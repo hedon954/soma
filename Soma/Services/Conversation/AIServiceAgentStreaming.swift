@@ -35,7 +35,6 @@ struct AgentStreamStepRequest {
     var enforceFirstStepDeadline: Bool = false
 }
 
-
 extension AIService {
     func consumeAgentStepWithRetry(
         messages: inout [ChatCompletionParameters.Message],
