@@ -79,7 +79,7 @@ extension ConversationProcessingService {
         context: ConversationProcessingContext
     ) {
         if !job.state.isTerminal {
-            try? AgentJobStore.waitForUser(
+            try? ConversationTurnPersistence.waitForUser(
                 job,
                 message: message,
                 in: context.modelContext
@@ -143,7 +143,7 @@ extension ConversationProcessingService {
     ) {
         trace.apply(.span(span))
         responseMessage.applyAgentEvent(.span(span))
-        _ = try? AgentJobStore.append(
+        _ = try? ConversationTurnPersistence.append(
             kind: .span,
             payload: .init(span: span),
             to: job,
@@ -200,7 +200,7 @@ extension ConversationProcessingService {
             )
             descriptor.fetchLimit = 1
             if let existing = try? context.fetch(descriptor).first {
-                prepareResponseMessageForResume(existing, job: job)
+                ConversationTurnPersistence.prepareResponseMessageForResume(existing, job: job)
                 return existing
             }
         }
@@ -210,7 +210,7 @@ extension ConversationProcessingService {
             text: "",
             agentStatus: .running,
             turnID: turnID,
-            attemptNumber: nextAttemptNumber(for: turnID, in: context)
+            attemptNumber: ConversationTurnPersistence.nextAttemptNumber(for: turnID, in: context)
         )
         context.insert(response)
         job.responseMessageID = response.id

@@ -53,7 +53,7 @@ extension ConversationProcessingService {
         job.deterministicWorkoutDraft = draft
         do {
             context.session.recordUserMessage(text, at: submittedAt)
-            try AgentJobStore.enqueue(
+            try ConversationTurnPersistence.enqueue(
                 job,
                 userMessage: userMessage,
                 in: context.modelContext,
@@ -100,7 +100,7 @@ extension ConversationProcessingService {
                     || $0.state == .waitingForNetwork)
         }) {
             do {
-                try AgentJobStore.releaseForManualRetry(
+                try ConversationTurnPersistence.releaseForManualRetry(
                     existing,
                     dataSpace: context.dataSpace,
                     in: context.modelContext
@@ -186,11 +186,11 @@ extension ConversationProcessingService {
     ) {
         guard !isProcessing else { return }
         do {
-            _ = try AgentJobStore.recoverExpiredLeases(
+            _ = try ConversationTurnPersistence.recoverExpiredLeases(
                 dataSpace: dataSpace,
                 in: modelContext
             )
-            _ = try AgentJobStore.resumeForegroundJobs(
+            _ = try ConversationTurnPersistence.resumeForegroundJobs(
                 dataSpace: dataSpace,
                 in: modelContext
             )
@@ -216,7 +216,7 @@ extension ConversationProcessingService {
     ) -> Bool {
         guard !isProcessing else { return false }
         do {
-            let released = try AgentJobStore.releasePendingQueueForManualRetry(
+            let released = try ConversationTurnPersistence.releasePendingQueueForManualRetry(
                 dataSpace: dataSpace,
                 in: modelContext
             )
@@ -285,7 +285,7 @@ extension ConversationProcessingService {
             for attachment in attachments {
                 _ = MediaStore.removeStoredFile(at: attachment.path)
             }
-            _ = try AgentJobStore.releaseStagedJobs(
+            _ = try ConversationTurnPersistence.releaseStagedJobs(
                 dataSpace: context.dataSpace,
                 in: context.modelContext
             ) { queued in
@@ -368,14 +368,14 @@ extension ConversationProcessingService {
         context: ConversationProcessingContext
     ) async {
         guard let draft = job.deterministicWorkoutDraft else {
-            try? AgentJobStore.waitForUser(
+            try? ConversationTurnPersistence.waitForUser(
                 job,
                 message: "快捷训练数据已损坏，请删除后重新选择建议。",
                 in: context.modelContext
             )
             return
         }
-        let (responseMessage, attemptNumber) = bindResponseMessage(
+        let (responseMessage, attemptNumber) = ConversationTurnPersistence.bindResponseMessage(
             job: job,
             turnID: job.turnID,
             resumable: job.responseMessageID != nil,
@@ -482,7 +482,7 @@ extension ConversationProcessingService {
         guard result.ok else {
             responseMessage.text = result.observation
             responseMessage.agentStatus = .failed
-            try? AgentJobStore.waitForUser(
+            try? ConversationTurnPersistence.waitForUser(
                 job,
                 message: result.observation,
                 in: context.modelContext
@@ -504,7 +504,7 @@ extension ConversationProcessingService {
         responseMessage.agentStatus = .succeeded
         trace.apply(.completed(answer: answer, at: endedAt))
         try? job.transition(to: .succeeded, at: endedAt)
-        _ = try? AgentJobStore.append(
+        _ = try? ConversationTurnPersistence.append(
             kind: .completed,
             payload: .init(text: answer),
             to: job,
