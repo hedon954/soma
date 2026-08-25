@@ -1,9 +1,9 @@
 #!/usr/bin/env ruby
 
-root = File.expand_path("..", __dir__)
+ROOT = File.expand_path("..", __dir__)
 
 def service_file(name)
-  matches = Dir.glob(File.join(root, "Soma/Services/**", name))
+  matches = Dir.glob(File.join(ROOT, "Soma/Services/**", name))
   abort "expected one Soma/Services/**/#{name}, found #{matches}" unless matches.length == 1
   matches.first
 end
@@ -11,7 +11,7 @@ end
 local_preparation = File.read(service_file("AIServiceAgentPreparation.swift"))
 remote_preparation = File.read(service_file("ConversationRemoteModelInput.swift"))
 remote_client = File.read(service_file("RemoteAgentClient.swift"))
-provider = File.read(File.join(root, "Server/src/provider.ts"))
+provider = File.read(File.join(ROOT, "Server/src/provider.ts"))
 
 unless local_preparation.include?("AgentModelInputBuilder.build(") &&
        remote_preparation.include?("AgentModelInputBuilder.build(")

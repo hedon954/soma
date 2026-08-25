@@ -172,7 +172,7 @@ grep -q 'onExpanded(scrollTarget)' \
   Soma/Views/AssistantFeedbackButton.swift ||
   fail "BUG 0031: expanding feedback must request scrolling only after the user taps"
 grep -q 'proxy.scrollTo(target, anchor: \.bottom)' \
-  Soma/Views/CoachView.swift ||
+  Soma/Views/CoachConversationStarter.swift ||
   fail "BUG 0031: feedback expansion must scroll its editor bottom into view"
 grep -q 'onSubmitted:' \
   Soma/Views/AssistantFeedbackButton.swift ||
@@ -226,10 +226,10 @@ grep -q 'MainActor.assertIsolated' Soma/Models/AgentJob.swift ||
 grep -q 'onChunk: @MainActor' "$(service_file AgentStreamDeadline.swift)" ||
   fail "BUG 0024: streaming chunk handling must stay isolated to the main actor"
 grep -q 'skipMovieOutputGeometry = state == .startingRecording' \
-  "$(service_file WorkoutCameraService.swift)" ||
+  "$(service_file WorkoutCameraCaptureLifecycle.swift)" ||
   fail "BUG 0025: capture geometry must skip movie output while starting or recording"
 grep -q 'guard !skipMovieOutputGeometry, !resources.movieOutput.isRecording else' \
-  "$(service_file WorkoutCameraService.swift)" ||
+  "$(service_file WorkoutCameraCaptureLifecycle.swift)" ||
   fail "BUG 0025: capture geometry must not rewrite movie output while recording"
 grep -q 'waitUntilPreviewHostSettled' \
   "$(service_file GuidedWorkoutCoordinator.swift)" ||
