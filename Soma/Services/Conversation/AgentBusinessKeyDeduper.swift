@@ -21,19 +21,22 @@ enum AgentBusinessKeyDeduper {
             reps: reps,
             weight: weight
         )
+        let targetExerciseID: UUID? = exerciseID
         let workouts = (
             try? context.fetch(
                 FetchDescriptor<WorkoutEntry>(
+                    predicate: #Predicate {
+                        $0.externalSource == nil
+                            && $0.exerciseID == targetExerciseID
+                            && $0.date >= day
+                            && $0.date < nextDay
+                    },
                     sortBy: [SortDescriptor(\.date, order: .reverse)]
                 )
             )
         ) ?? []
         return workouts.first { entry in
-            guard entry.externalSource == nil,
-                  entry.exerciseID == exerciseID,
-                  entry.date >= day,
-                  entry.date < nextDay,
-                  entry.sourceTurnID != excludingTurnID
+            guard entry.sourceTurnID != excludingTurnID
             else {
                 return false
             }
@@ -57,18 +60,21 @@ enum AgentBusinessKeyDeduper {
         let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: day) ?? day
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+        let targetCalories: Int? = calories
         let meals = (
             try? context.fetch(
                 FetchDescriptor<MealEntry>(
+                    predicate: #Predicate {
+                        $0.date >= day
+                            && $0.date < nextDay
+                            && $0.calories == targetCalories
+                    },
                     sortBy: [SortDescriptor(\.date, order: .reverse)]
                 )
             )
         ) ?? []
         return meals.first { entry in
-            guard entry.date >= day,
-                  entry.date < nextDay,
-                  entry.sourceTurnID != excludingTurnID,
-                  entry.calories == calories
+            guard entry.sourceTurnID != excludingTurnID
             else {
                 return false
             }
@@ -89,15 +95,17 @@ enum AgentBusinessKeyDeduper {
         let bodies = (
             try? context.fetch(
                 FetchDescriptor<BodyEntry>(
+                    predicate: #Predicate {
+                        $0.externalSource == nil
+                            && $0.date >= day
+                            && $0.date < nextDay
+                    },
                     sortBy: [SortDescriptor(\.date, order: .reverse)]
                 )
             )
         ) ?? []
         return bodies.first { entry in
-            guard entry.externalSource == nil,
-                  entry.date >= day,
-                  entry.date < nextDay,
-                  entry.sourceTurnID != excludingTurnID
+            guard entry.sourceTurnID != excludingTurnID
             else {
                 return false
             }

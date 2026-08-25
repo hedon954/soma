@@ -45,7 +45,9 @@
 | [0032](0032-sentinel-false-crash-reports.md) | 已修复，待真实 MetricKit 崩溃验收 | 启动哨兵把模拟器停止、强杀与安装替换误报为崩溃 | 只有 MetricKit 可入队、证据字段、旧误报清理与静态门禁 |
 | [0033](0033-model-name-multimodal-misclassification.md) | 已修复，待真实供应商目录验收 | provider 与模型名硬编码导致多模态和直传视频误判 | 明确模型目录来源、未知放行与远程显式能力开关 |
 | [0034](0034-large-session-inline-editor-render-hang.md) | 已修复，待真机连续交互复验 | 大会话最新饮食卡预创建几十个输入控件，切换后卡死退出 | 按需单字段编辑、十项虚构饮食卡 UI 回归与真机会话往返 |
-| [0035](0035-long-stream-text-relayout-thermal-jank.md) | 已修复，待真实长对话手感复验 | 长流式更新重复断行和测量全部历史正文，持续占用主线程并发热 | 256 字符可变尾块、懒布局、静态门禁与 Release 真机前后 Trace |
+| [0035](0035-long-stream-text-relayout-thermal-jank.md) | 首次修复不足，后续见 0036 | 长流式更新重复断行和测量全部历史正文，持续占用主线程并发热 | 256 字符可变尾块、懒布局、静态门禁与 Release 真机前后 Trace |
+| [0036](0036-long-stream-continuous-text-and-completion-cliff.md) | 已修复，待 Release 真机量化复验 | 无换行正文尾块失控，完成态同步 Markdown 解析导致性能悬崖 | 单一 TextKit 增量文本面、后台 Markdown、真实完成夹具与真机 Trace |
+| [0037](0037-insights-snapshot-stale-and-overfetch.md) | 已修复，待 Release 真机交互复验 | 进展快照遗漏后台保存、失败永久空白且纯计数物化完整模型 | revision 状态机、同容器失效、fetchCount 压力测试与失败重试 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

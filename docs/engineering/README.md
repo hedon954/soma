@@ -8,6 +8,7 @@
 - [数据库结构与 ER 图](database-schema.md)
 - [全 App 性能审计报告（2026-08-24）](performance-audit-2026-08-24.md)
 - [本轮性能优化收尾与踩坑报告（2026-08-25）](performance-optimization-retrospective-2026-08-25.md)
+- [真机性能录制：一次安装，多次复用](device-performance-profiling.md)
 - [Agent Job 与远程执行协议](agent-job-protocol.md)
 - [Agent Tool 目录](agent-tool-catalog.md)
 - [默认 Prompt 来源目录](prompt-source-catalog.md)

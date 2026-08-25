@@ -5,7 +5,7 @@
 - 日期：2026-07-31
 - 修订自：[PRD 004](004-soma-current-product.md) 的训练记录与动作分析范围
 - 后续修订：
-  - [PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 将专属动作图提升到至少 239，明确用户图优先且无用户图时新版内置图替代旧图
+  - [PRD 042](../../0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 将专属动作图提升到至少 239，明确用户图优先且无用户图时新版内置图替代旧图
   - [PRD 040](../../0.0.9/prd/040-current-state-business-data-with-session-facts.md) 删除计划版本历史、动作内容修订和热量算法版本，当前计划直接更新并由 Session 冻结执行事实
   - [PRD 031](../../0.0.7/prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md) 将动作级聚合处方拆为独立逻辑组与原子执行，并收敛开练、自动推进和完成分享
   - [ADR 0076](../../0.0.7/adr/0076-exercise-owned-laterality-and-target-kind.md) 将侧别与完成方式归动作定义

@@ -7,7 +7,7 @@
   - [ADR 0025](../../0.0.1/adr/0025-tiered-model-profiles-and-routing.md) 的“有可用列表时只用 Picker、
     空列表时才显示手动模型 ID”与档位入口位置
   - [ADR 0027](../../0.0.1/adr/0027-required-ai-configuration-and-send-gate.md) 的「AI 服务」页面命名
-- 后续修订：[ADR 0096](../../../adr/0096-source-backed-model-multimodal-capabilities.md) 删除按 provider 或模型名推断多模态与直传视频能力
+- 后续修订：[ADR 0096](../../0.0.11/adr/0096-source-backed-model-multimodal-capabilities.md) 删除按 provider 或模型名推断多模态与直传视频能力
 - 关联：
   - [PRD 021](../prd/021-llm-staging-explicit-configuration-and-input-suggestions.md)
   - [PRD 020](../prd/020-gui-simplification-and-progressive-disclosure.md)

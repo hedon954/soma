@@ -7,6 +7,25 @@ import UIKit
 /// buffer alone collapses coach replies into a single glued block.
 enum MarkdownAttributedStringBuilder {
     static func attributedString(
+        fromInline parsed: AttributedString,
+        textStyle: UIFont.TextStyle = .body,
+        weight: UIFont.Weight = .regular
+    ) -> NSAttributedString {
+        var rendered = AttributedString()
+        for run in parsed.runs {
+            var fragment = AttributedString(parsed[run.range])
+            applyInlineStyle(
+                &fragment,
+                intent: run.attributes.inlinePresentationIntent,
+                textStyle: textStyle,
+                weight: weight
+            )
+            rendered.append(fragment)
+        }
+        return NSAttributedString(rendered)
+    }
+
+    static func attributedString(
         from markdown: String,
         textStyle: UIFont.TextStyle = .body,
         weight: UIFont.Weight = .regular

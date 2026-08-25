@@ -2,7 +2,7 @@
 
 - 状态：已修复，待真机界面复验
 - 日期：2026-08-23
-- 下游落地：[PRD 042](../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
+- 下游落地：[PRD 042](../archive/0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
 
 ## 症状
 

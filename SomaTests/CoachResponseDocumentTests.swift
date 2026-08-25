@@ -2,6 +2,58 @@
 import XCTest
 
 final class CoachResponseDocumentTests: XCTestCase {
+    func testCompletedTextRenderCachesHeightByWidthScaleAndDynamicType() {
+        let render = CoachCompletedTextRender(NSAttributedString(string: "虚构回复"))
+
+        XCTAssertNil(render.measuredHeight(
+            width: 320,
+            scale: 3,
+            contentSizeCategory: .large
+        ))
+        render.storeMeasuredHeight(
+            480,
+            width: 320,
+            scale: 3,
+            contentSizeCategory: .large
+        )
+
+        XCTAssertEqual(render.measuredHeight(
+            width: 320,
+            scale: 3,
+            contentSizeCategory: .large
+        ), 480)
+        XCTAssertNil(render.measuredHeight(
+            width: 321,
+            scale: 3,
+            contentSizeCategory: .large
+        ))
+        XCTAssertNil(render.measuredHeight(
+            width: 320,
+            scale: 3,
+            contentSizeCategory: .accessibilityLarge
+        ))
+    }
+
+    func testPreparesLargeMarkdownDocumentOffMainWithoutDroppingBlocks() async throws {
+        let markdown = (0 ..< 240).map {
+            PerformanceTestFixture.streamDelta($0, scenario: .markdownCompletion)
+        }.joined()
+
+        let preparation = try await Task.detached {
+            try CoachTextRenderPreparation.make(for: markdown)
+        }.value
+
+        XCTAssertEqual(preparation.document.blocks.count, 720)
+        XCTAssertEqual(
+            preparation.document.blocks.first,
+            .heading(level: 2, text: "第 1 段虚构复盘")
+        )
+        XCTAssertEqual(
+            preparation.document.blocks.last,
+            .unorderedList(["训练容量：保持可审查", "恢复安排：依据用户事实"])
+        )
+    }
+
     func testParsesControlledCoachMarkdownLayout() {
         let document = CoachResponseDocument.parse(
             """

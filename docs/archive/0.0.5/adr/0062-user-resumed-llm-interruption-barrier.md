@@ -4,7 +4,7 @@
 - 日期：2026-08-13
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0045](../../0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md) 中所有可恢复失效都在前台或配置变化后自动补偿的边界
-- 后续替代：[ADR 0092](../../../adr/0092-react-internal-retry-and-user-controlled-recovery.md) 将人工屏障从明确欠费扩展到所有已越过 ReAct Loop 并向用户展示的失败
+- 后续替代：[ADR 0092](../../0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md) 将人工屏障从明确欠费扩展到所有已越过 ReAct Loop 并向用户展示的失败
 - 上游依据：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
 - 下游落地：[Agent Job 与远程执行协议](../../../engineering/agent-job-protocol.md)
 

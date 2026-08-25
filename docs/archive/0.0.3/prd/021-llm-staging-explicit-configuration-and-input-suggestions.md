@@ -9,11 +9,11 @@
   - [PRD 020](020-gui-simplification-and-progressive-disclosure.md) 的 AI 服务折叠分层与输入区动作候选两步选择
 - 后续修订：
   - [PRD 027](../../0.0.5/prd/027-reliable-efficient-react-and-in-context-review.md) 将明确欠费改为仅用户可释放的 FIFO 屏障，并增加暂存消息单删与全清；自动补偿与手动重试按钮互斥
-  - [PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 将所有已向用户展示的 Loop 外失败统一为人工恢复，删除网络、供应商与配置变化自动补偿
+  - [PRD 042](../../0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 将所有已向用户展示的 Loop 外失败统一为人工恢复，删除网络、供应商与配置变化自动补偿
 - 关联决策：
   - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
   - [ADR 0046](../adr/0046-explicit-llm-configuration-and-input-history-suggestions.md)
-  - [ADR 0096](../../../adr/0096-source-backed-model-multimodal-capabilities.md)
+  - [ADR 0096](../../0.0.11/adr/0096-source-backed-model-multimodal-capabilities.md)
 
 ## 背景
 

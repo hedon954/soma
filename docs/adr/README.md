@@ -1,7 +1,7 @@
 # Soma 架构决策记录
 
 活 ADR 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.13`、`0.0.12`、`0.0.11`。0.0.10 及更早的**原文**在 [文档归档](../archive/README.md)，
+`0.0.14`、`0.0.13`、`0.0.12`。0.0.11 及更早的**原文**在 [文档归档](../archive/README.md)，
 仅供人类考古；Agent 默认不要读取归档。
 
 ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答一个问题：当时有哪些选择、最终选了什么、为什么，以及这一选择带来的约束。
@@ -11,7 +11,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 阅读顺序：
 
 ```text
-[ADR 0000 压缩起点] → 0.0.11 → 0.0.12 → 0.0.13
+[ADR 0000 压缩起点] → 0.0.12 → 0.0.13 → 0.0.14
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后仍然成立的最终决策。窗口内最旧活 ADR 的
@@ -25,15 +25,11 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | ADR | 版本 | 状态 | 决策 |
 | --- | --- | --- | --- |
-| [0000](0000-origin-through-0.0.10.md) | ≤0.0.10 | 压缩起点 | 0.0.10 收口后仍约束实现的架构决策 |
-| [0092](0092-react-internal-retry-and-user-controlled-recovery.md) | 0.0.11 | 已采纳 | 无可见增量的模型步骤执行三次 1/2/4 秒退避；失败越过 Loop 后只允许用户释放 |
-| [0093](0093-bounded-per-reply-multimodal-feedback-context.md) | 0.0.11 | 已采纳，个人使用阶段 | 每条 AI 回复可提交文字、媒体和评分，并附带单 Turn 有界脱敏执行摘要 |
-| [0094](0094-user-first-versioned-bundled-action-art.md) | 0.0.11 | 已采纳 | 动作图使用用户图优先、新版内置图次之；专属离线图不少于 239 |
-| [0095](0095-metrickit-confirmed-crash-reports.md) | 0.0.11 | 已采纳，个人使用阶段 | 只有 MetricKit 明确崩溃证据可生成报告；启动哨兵只保留上下文 |
-| [0096](0096-source-backed-model-multimodal-capabilities.md) | 0.0.11 | 已采纳 | 多模态与直传视频能力必须有明确来源；缺少来源时为未知，禁止按模型名硬编码 |
+| [0000](0000-origin-through-0.0.11.md) | ≤0.0.11 | 压缩起点 | 0.0.11 收口后仍约束实现的架构决策 |
 | [0097](0097-current-baseline-performance-budget-and-cache-invalidation.md) | 0.0.12 | 已采纳，Release 真机量化验收中 | 固定当前安装基线、120 Hz 性能预算、分页/后台聚合与图片媒体缓存失效规则 |
 | [0098](0098-user-configurable-react-active-runtime-timeout.md) | 0.0.12 | 已采纳，待真机界面验收 | ReAct 自动 3/5/10 分钟或自定义 3–60 分钟活动执行预算，与步骤上限同区配置 |
 | [0099](0099-behavior-preserving-modernization-and-three-version-docs.md) | 0.0.13 | 已采纳 | 行为保持拆分；活文档为压缩起点加最近 3 个营销版本，滑出时合并进起点 |
+| [0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) | 0.0.14 | 已采纳，Release 真机量化验收中 | 单一连续流式文本面、可恢复进展快照、count/谓词下推与服务端索引 |
 
 新决策使用 [ADR 模板](template.md)。
 

@@ -85,6 +85,13 @@ struct LiveAgentTurnTranscriptContent: View {
                     .padding(.vertical, 3)
                     .accessibilityIdentifier("coach-live-agent-text")
                     .accessibilityLabel("Soma 正在回复")
+                if AppTestRuntime.isRunning {
+                    Text("流式回复底部")
+                        .font(.system(size: 1))
+                        .opacity(0.01)
+                        .frame(height: 2)
+                        .accessibilityIdentifier("coach-live-agent-bottom")
+                }
             } else if !persistedItems.contains(where: { $0.status == .running }) {
                 AgentTurnWaitingCard()
             }
@@ -440,33 +447,13 @@ private struct AgentTurnItemCard: View {
     }
 }
 
-private struct StreamingAgentTextView: View {
+struct StreamingAgentTextView: View {
     let chunks: [LiveAgentTextChunk]
 
     var body: some View {
-        // 物理设备 Time Profiler 证明，普通 VStack 会在尾块增长和滚底时重新测量
-        // 已冻结的全部正文。让分块自身也进入懒栈，屏外前文不再参与每个 5 Hz tick。
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(chunks) { chunk in
-                if !chunk.text.isEmpty {
-                    StreamingAgentTextChunkView(chunk: chunk)
-                        .equatable()
-                }
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-private struct StreamingAgentTextChunkView: View, Equatable {
-    let chunk: LiveAgentTextChunk
-
-    var body: some View {
-        Text(chunk.text)
-            .font(.subheadline.weight(.light))
-            .lineSpacing(4)
-            .foregroundStyle(.primary)
+        IncrementalChatTextView(chunks: chunks)
             .fixedSize(horizontal: false, vertical: true)
+            .accessibilityHidden(true)
     }
 }
 

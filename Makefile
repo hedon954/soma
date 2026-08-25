@@ -17,7 +17,7 @@ help:
 	@echo "  make db-migrate                     Apply pending PostgreSQL migrations"
 	@echo "  make check         Run fast static checks without a Simulator"
 	@echo "  make verify        Run static checks, build, and Simulator tests"
-	@echo "  make perf-profile-device  Record repeatable Instruments traces from an installed physical-device build"
+	@echo "  make perf-profile-device  Reuse an installed Release and run the bounded physical-device profile"
 	@echo "  make online-check  Block external distribution while mail credentials live in the App"
 	@echo "  make install-device Sign, install, and launch on a connected iPhone"
 	@echo "  make archive       Export a signed App Store Connect archive"
@@ -70,7 +70,7 @@ perf-check:
 	@if ruby ./scripts/analyze-tab-signposts.rb --maximum-p95-ms 70 ./scripts/fixtures/tab-signposts.xml >/dev/null 2>&1; then echo "Tab signpost budget fixture must be rejected." >&2; exit 1; fi
 
 perf-profile-device:
-	./scripts/profile-device-performance.sh
+	./scripts/profile-device-harness.sh
 
 db-migrate-create:
 	@test -n "$(name)" || (echo "Usage: make db-migrate-create name=<snake_case_name>" >&2; exit 1)

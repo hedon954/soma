@@ -1,6 +1,8 @@
 # Soma 验收清单
 
-- 上游依据：[ADR 0097：当前安装基线、性能预算与缓存失效](adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+- 上游依据：
+  - [ADR 0097：当前安装基线、性能预算与缓存失效](adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+  - [ADR 0100：有界快照、连续流式文本与查询优先的数据访问](adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 
 本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。自然语言与媒体事实由
 教练对话创建；训练计划可在专用 GUI 中确定性编排，带练可保存用户逐组确认的事实。其他列表
@@ -48,9 +50,9 @@
 | 要求 | 当前证据与验收边界 |
 | --- | --- |
 | 启动与 Tab | 四个 Tab 保留独立导航栈；Root 不订阅全量 Job，深链按稳定 ID 定向读取。普通点击只写一次 selection，禁止全局关闭 UIKit 动画或替换系统 Tab bar。启动、Root 可见、Tab 点击与内容可见使用隐私安全 signpost。warm 常用交互 Release 真机 p95 必须 `<100 ms`，冷页面首个有效内容 p95 必须 `<200 ms`。 |
-| 查询与派生 | 根页面不得无界订阅与首屏无关的历史；详情按 ID，列表带谓词、上限和稳定分页。进展查询与聚合在独立 actor 生成不可变 DTO，主线程只发布完成快照。`make perf-check` 阻止已治理热点回归。 |
+| 查询与派生 | 根页面不得无界订阅与首屏无关的历史；详情按 ID，列表带谓词、上限和稳定分页。进展查询与聚合在独立 actor 生成不可变 DTO，主线程只发布当前 revision；加载与失败可见且可重试，同 container 后台保存必须失效。纯数量指标使用 `fetchCount`，不得物化模型数组。`make perf-check` 阻止已治理热点回归。 |
 | 图片与媒体 | 图片读取、ImageIO 下采样与尺寸探测不进入 View 渲染路径；缩略图缓存成本上限 48 MB，并在内存警告、数据空间切换和文件指纹变化时失效。相同内容通过独立逻辑路径的硬链接复用，孤儿清理以个人/演示引用并集为准。 |
-| Agent 与长列表 | 根投影只观察非终态 Job 或 cursor 落后的 Event；Coach 每个 Session 初始只取最近 10 条，到顶每次追加 10 条并保持视觉锚点。短内容顶部对齐，长内容初始最后一条贴底；用户向上阅读后流式更新不得抢回底部。只有实际进入可见懒栈的消息才写入 64 项有界纯渲染缓存，未打开 Session 和未滚到的历史消息不预热。流式 revision 只更新实时回复叶子，隐藏 Coach Tab 不渲染增量；正文以稳定分块更新，完整字符串只在结束持久化时合并。10,000 消息、5,000 训练记录和 1,000 媒体引用的虚构压力夹具必须通过。 |
+| Agent 与长列表 | 根投影只观察非终态 Job 或 cursor 落后的 Event；Coach 每个 Session 初始只取最近 10 条，到顶每次追加 10 条并保持视觉锚点。短内容顶部对齐，长内容初始最后一条贴底；用户向上阅读后流式更新不得抢回底部。只有实际进入可见懒栈的消息才写入 64 项有界纯渲染缓存，未打开 Session 和未滚到的历史消息不预热。流式 revision 只更新实时回复叶子，隐藏 Coach Tab 不渲染增量；一条回复使用单一 TextKit 文本面追加连续正文，内部 256 字符块不得变成多条消息或插入换行。完成态 Markdown 在后台准备，真实完成夹具必须覆盖保存、live 清理与完成后 Tab 往返。10,000 消息、5,000 训练记录和 1,000 媒体引用的虚构压力夹具必须通过。 |
 | 卡帧与内存 | Release 真机连续滚动 hitch `<1%`，无 `>100 ms` 主线程停顿，重复 `body` 热点 `<1 ms`；连续十轮跨 Tab、媒体和聊天操作不得单调增长。必须保存至少 30 次关键交互样本，模拟器数据不能代替。 |
 | 自动化与交互 | 提交前运行 `make format`、`make check`、`make verify`；模拟器覆盖四 Tab、详情、键盘、滚动、安全区、浅深主题和 Dynamic Type。最终在 iPhone 17 Pro Max 签名安装、启动并完成人工手感验收。 |
 

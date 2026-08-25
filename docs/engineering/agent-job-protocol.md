@@ -11,7 +11,7 @@
   - [ADR 0045](../archive/0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md)
   - [ADR 0062](../archive/0.0.5/adr/0062-user-resumed-llm-interruption-barrier.md)
   - [ADR 0068](../archive/0.0.6/adr/0068-versioned-unified-agent-model-input.md)
-  - [ADR 0092](../adr/0092-react-internal-retry-and-user-controlled-recovery.md)
+  - [ADR 0092](../archive/0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md)
 - 关联：
   - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
   - [PRD 029](../archive/0.0.6/prd/029-unified-local-remote-agent-model-input.md)
@@ -81,7 +81,7 @@ localRunning | waitingForForeground
 执行三次 1/2/4 秒退避；错误一旦越过 Loop，本地与远程 Job 都进入 `waitingForUser`。App 启动、
 回到前台、配置变化、网络恢复和定时器都不得释放；后续 Job 继续 staged 且不能越过队首，只有用户
 重试或删除屏障才能继续。`waitingForNetwork` 仅保留旧数据兼容，不能由 runner 自动领取。
-判定规则见 [ADR 0092](../adr/0092-react-internal-retry-and-user-controlled-recovery.md)。
+判定规则见 [ADR 0092](../archive/0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md)。
 
 远程 Worker 在单个 provider model-step 内也只使用同一组三次退避；直传视频失败时若已有关键帧，
 在这组三次预算内切换媒体模式。Worker 发出 terminal error event 后，App 不得创建自动 fallback Job。

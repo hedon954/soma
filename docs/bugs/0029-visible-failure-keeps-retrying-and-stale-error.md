@@ -2,7 +2,7 @@
 
 - 状态：已修复，待真机网络故障复验
 - 日期：2026-08-23
-- 下游落地：[PRD 042](../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)、[ADR 0092](../adr/0092-react-internal-retry-and-user-controlled-recovery.md)
+- 下游落地：[PRD 042](../archive/0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md)、[ADR 0092](../archive/0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md)
 
 ## 症状
 

@@ -6,7 +6,7 @@
 - 部分替代：
   - [ADR 0053](../../0.0.4/adr/0053-personal-only-direct-qq-mail-feedback.md) 中邮件只承载用户明确填写内容的边界；个人阶段 QQ→Gmail 投递路径与凭据位置继续有效
   - [ADR 0054](../../0.0.4/adr/0054-device-executed-chat-feedback-tool.md) 中只有用户明确意图才触发投递的边界；`submit_feedback` 的模型可控内容与设备执行语义继续有效
-- 后续修订：[ADR 0095](../../../adr/0095-metrickit-confirmed-crash-reports.md) 将启动哨兵降为上下文，只允许 MetricKit 明确崩溃证据生成报告
+- 后续修订：[ADR 0095](../../0.0.11/adr/0095-metrickit-confirmed-crash-reports.md) 将启动哨兵降为上下文，只允许 MetricKit 明确崩溃证据生成报告
 - 上游依据：
   - [PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
   - [BUG 0024](../../../bugs/0024-streaming-cross-actor-swiftdata-crash.md)

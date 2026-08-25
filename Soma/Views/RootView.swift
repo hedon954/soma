@@ -134,10 +134,23 @@ struct RootView: View {
             .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .preferredColorScheme(
-                AppAppearancePolicy.rootColorScheme(storedRawValue: appearanceRaw)
+                testAppearanceColorScheme
+                    ?? AppAppearancePolicy.rootColorScheme(storedRawValue: appearanceRaw)
             )
             .overlay(alignment: .topLeading) {
                 AgentSystemProjectionHost()
+            }
+            .overlay(alignment: .topLeading) {
+                if AppTestRuntime.isRunning,
+                   PerformanceTestFixture.requestedLongStream,
+                   let phase = processor.performanceFixturePhase
+                {
+                    Text(phase)
+                        .frame(width: 1, height: 1)
+                        .opacity(0.001)
+                        .accessibilityIdentifier("performance-fixture-phase")
+                        .accessibilityValue(phase)
+                }
             }
             .sheet(item: $sheet) { destination in
                 switch destination {
@@ -227,12 +240,14 @@ struct RootView: View {
                 )
                 if let performanceSession {
                     conversationSessions.select(
-                        performanceSession,
+                        performanceSession.session,
                         dataSpace: dataSpace.activeSpace
                     )
                     processor.startLongStreamPerformanceFixture(
                         dataSpace: dataSpace.activeSpace,
-                        sessionID: performanceSession.id
+                        sessionID: performanceSession.session.id,
+                        responseMessageID: performanceSession.responseMessageID,
+                        modelContext: modelContext
                     )
                 }
                 startDevicePerformanceHarnessIfRequested()
@@ -278,6 +293,15 @@ struct RootView: View {
                     )
                 }
             }
+    }
+
+    private var testAppearanceColorScheme: ColorScheme? {
+        guard AppTestRuntime.isRunning else { return nil }
+        switch ProcessInfo.processInfo.environment["SOMA_UI_TEST_APPEARANCE"] {
+        case "light": return ColorScheme.light
+        case "dark": return ColorScheme.dark
+        default: return nil
+        }
     }
 
     /// iOS 18 起直接使用 TabContentBuilder。当前 SDK 已把旧的
@@ -451,6 +475,18 @@ struct RootView: View {
         guard let mode = DevicePerformanceHarness.mode else { return }
         let rounds = DevicePerformanceHarness.rounds
         Task { @MainActor in
+            if DevicePerformanceHarness.waitsForFixtureCompletion {
+                let clock = ContinuousClock()
+                let deadline = clock.now.advanced(by: .seconds(90))
+                while processor.performanceFixturePhase != "completed" {
+                    guard !Task.isCancelled, clock.now < deadline else { return }
+                    switch processor.performanceFixturePhase {
+                    case "message-missing", "save-failed": return
+                    default: break
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
             try? await Task.sleep(for: DevicePerformanceHarness.delay)
             guard !Task.isCancelled else { return }
             switch mode {

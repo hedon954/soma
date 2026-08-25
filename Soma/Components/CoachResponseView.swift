@@ -1,10 +1,52 @@
 import SwiftUI
 
-private final class CoachResponseDocumentBox: NSObject {
-    let value: CoachResponseDocument
+final class CoachCompletedTextRender: NSObject {
+    struct LayoutKey: Hashable {
+        let widthInPixels: Int
+        let contentSizeCategory: String
+    }
 
-    init(_ value: CoachResponseDocument) {
-        self.value = value
+    let attributedText: NSAttributedString
+    private var measuredHeights: [LayoutKey: CGFloat] = [:]
+
+    init(_ value: NSAttributedString) {
+        attributedText = value
+    }
+
+    func measuredHeight(
+        width: CGFloat,
+        scale: CGFloat,
+        contentSizeCategory: UIContentSizeCategory
+    ) -> CGFloat? {
+        measuredHeights[layoutKey(
+            width: width,
+            scale: scale,
+            contentSizeCategory: contentSizeCategory
+        )]
+    }
+
+    func storeMeasuredHeight(
+        _ height: CGFloat,
+        width: CGFloat,
+        scale: CGFloat,
+        contentSizeCategory: UIContentSizeCategory
+    ) {
+        measuredHeights[layoutKey(
+            width: width,
+            scale: scale,
+            contentSizeCategory: contentSizeCategory
+        )] = height
+    }
+
+    private func layoutKey(
+        width: CGFloat,
+        scale: CGFloat,
+        contentSizeCategory: UIContentSizeCategory
+    ) -> LayoutKey {
+        LayoutKey(
+            widthInPixels: Int((width * scale).rounded()),
+            contentSizeCategory: contentSizeCategory.rawValue
+        )
     }
 }
 
@@ -16,12 +58,35 @@ private final class CoachAttributedTextBox: NSObject {
     }
 }
 
+struct CoachTextRenderPreparation: Sendable {
+    let document: CoachResponseDocument
+    let attributedTexts: [String: AttributedString]
+
+    static func make(for markdown: String) throws -> CoachTextRenderPreparation {
+        let document = CoachResponseDocument.parse(markdown)
+        var attributedTexts: [String: AttributedString] = [:]
+        for content in document.inlineMarkdownContents {
+            try Task.checkCancellation()
+            attributedTexts[content] = (
+                try? AttributedString(
+                    markdown: content,
+                    options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                )
+            ) ?? AttributedString(content)
+        }
+        return CoachTextRenderPreparation(
+            document: document,
+            attributedTexts: attributedTexts
+        )
+    }
+}
+
 /// 完成态聊天正文不会随 Tab 切换变化。缓存纯值解析结果，避免重新显示 Coach 时
 /// 再次拆整份 Markdown、并为每个段落重建内联 AttributedString。
 @MainActor
 enum CoachTextRenderCache {
-    private static let documents: NSCache<NSString, CoachResponseDocumentBox> = {
-        let cache = NSCache<NSString, CoachResponseDocumentBox>()
+    private static let completedTexts: NSCache<NSString, CoachCompletedTextRender> = {
+        let cache = NSCache<NSString, CoachCompletedTextRender>()
         cache.countLimit = 256
         cache.totalCostLimit = 4 * 1024 * 1024
         return cache
@@ -34,18 +99,33 @@ enum CoachTextRenderCache {
         return cache
     }()
 
-    static func document(for markdown: String) -> CoachResponseDocument {
+    static func completedText(for markdown: String) -> CoachCompletedTextRender? {
         let key = markdown as NSString
-        if let cached = documents.object(forKey: key) {
-            return cached.value
+        return completedTexts.object(forKey: key)
+    }
+
+    @discardableResult
+    static func store(
+        _ preparation: CoachTextRenderPreparation,
+        for markdown: String
+    ) -> CoachCompletedTextRender {
+        let key = markdown as NSString
+        for (content, value) in preparation.attributedTexts {
+            attributedTexts.setObject(
+                CoachAttributedTextBox(value),
+                forKey: content as NSString,
+                cost: content.utf8.count
+            )
         }
-        let value = CoachResponseDocument.parse(markdown)
-        documents.setObject(
-            CoachResponseDocumentBox(value),
+        let completedText = CoachCompletedTextRender(
+            CoachCompletedResponseTextBuilder.make(from: preparation)
+        )
+        completedTexts.setObject(
+            completedText,
             forKey: key,
             cost: markdown.utf8.count
         )
-        return value
+        return completedText
     }
 
     static func attributedText(for content: String) -> AttributedString {
@@ -68,7 +148,7 @@ enum CoachTextRenderCache {
     }
 
     static func removeAll() {
-        documents.removeAllObjects()
+        completedTexts.removeAllObjects()
         attributedTexts.removeAllObjects()
     }
 }
@@ -83,6 +163,20 @@ enum CoachResponseBlock: Equatable, Sendable {
 
 struct CoachResponseDocument: Equatable, Sendable {
     var blocks: [CoachResponseBlock]
+
+    var inlineMarkdownContents: [String] {
+        var seen: Set<String> = []
+        return blocks.flatMap { block -> [String] in
+            switch block {
+            case let .paragraph(text):
+                [text]
+            case let .unorderedList(items), let .orderedList(items):
+                items
+            case .heading, .divider:
+                []
+            }
+        }.filter { seen.insert($0).inserted }
+    }
 
     static func parse(_ markdown: String) -> CoachResponseDocument {
         let lines = markdown
@@ -204,126 +298,184 @@ struct CoachResponseDocument: Equatable, Sendable {
 /// 未识别内容仍按正文显示，模型不能注入任意 SwiftUI 组件。
 struct CoachResponseView: View {
     let markdown: String
+    @State private var completedText: CoachCompletedTextRender?
 
     init(_ markdown: String) {
         self.markdown = markdown
     }
 
-    private var document: CoachResponseDocument {
-        CoachTextRenderCache.document(for: markdown)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(document.blocks.enumerated()), id: \.offset) { index, block in
-                blockView(block, index: index)
+        Group {
+            if let completedText {
+                CompletedChatTextView(render: completedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("coach-completed-agent-markdown")
+                    .onAppear {
+                        AppPerformance.event(
+                            .agentCompletedRender,
+                            detail: "phase=single-semantic-text-visible"
+                        )
+                    }
+            } else {
+                IncrementalChatTextView(chunks: [
+                    LiveAgentTextChunk(id: 0, text: markdown)
+                ])
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(markdown)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
+        .accessibilityIdentifier("coach-completed-agent-text")
+        .accessibilityValue(completedText == nil ? "正文准备中" : "Markdown 已就绪")
+        .task(id: markdown) {
+            await prepareText()
+        }
     }
 
-    @ViewBuilder
-    private func blockView(_ block: CoachResponseBlock, index: Int) -> some View {
-        switch block {
-        case let .heading(level, text):
-            VStack(alignment: .leading, spacing: 12) {
-                if index > 0 {
-                    Divider()
-                        .overlay(AppTheme.separator)
-                }
-                heading(text, level: level)
+    @MainActor
+    private func prepareText() async {
+        if let cached = CoachTextRenderCache.completedText(for: markdown) {
+            completedText = cached
+            return
+        }
+        let interval = AppPerformance.begin(
+            .agentMarkdownParse,
+            detail: "phase=background-parse,bytes=\(markdown.utf8.count)"
+        )
+        let source = markdown
+        let worker = Task.detached(priority: .userInitiated) {
+            try CoachTextRenderPreparation.make(for: source)
+        }
+        do {
+            let preparation = try await withTaskCancellationHandler {
+                try await worker.value
+            } onCancel: {
+                worker.cancel()
             }
-        case let .paragraph(text):
-            SelectableChatText(
-                content: text,
-                color: .label,
-                enablesSelection: false
+            guard !Task.isCancelled else { throw CancellationError() }
+            completedText = CoachTextRenderCache.store(
+                preparation,
+                for: markdown
             )
-        case let .unorderedList(items):
-            list(items, ordered: false)
-        case let .orderedList(items):
-            list(items, ordered: true)
-        case .divider:
-            Divider()
-                .overlay(AppTheme.separator)
-        }
-    }
-
-    private func heading(_ title: String, level: Int) -> some View {
-        let style = CoachResponseSectionStyle.make(for: title)
-        return HStack(spacing: 8) {
-            if let symbol = style.symbol {
-                Image(systemName: symbol)
-                    .foregroundStyle(style.tint)
-                    .accessibilityHidden(true)
-            }
-            Text(title)
-                .font(
-                    level == 1
-                        ? .title3.weight(.medium)
-                        : .headline.weight(.medium)
-                )
-                .foregroundStyle(.primary)
-        }
-        .accessibilityAddTraits(.isHeader)
-    }
-
-    private func list(_ items: [String], ordered: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                HStack(alignment: .top, spacing: 8) {
-                    Text(ordered ? "\(index + 1)." : "•")
-                        .font(.subheadline.weight(.regular))
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 14, alignment: .trailing)
-                        .accessibilityHidden(true)
-                    SelectableChatText(
-                        content: item,
-                        color: .label,
-                        enablesSelection: false
-                    )
-                }
-                .accessibilityElement(children: .combine)
-            }
+            AppPerformance.end(interval, detail: "phase=background-parse,result=ready")
+        } catch {
+            worker.cancel()
+            AppPerformance.end(interval, detail: "phase=background-parse,result=cancelled")
         }
     }
 }
 
-private struct CoachResponseSectionStyle {
-    var symbol: String?
-    var tint: Color
+@MainActor
+enum CoachCompletedResponseTextBuilder {
+    static func make(
+        from preparation: CoachTextRenderPreparation
+    ) -> NSAttributedString {
+        let output = NSMutableAttributedString()
 
-    static func make(for title: String) -> CoachResponseSectionStyle {
-        let normalized = title.lowercased()
-        if normalized.contains("建议") || normalized.contains("下一步") {
-            return CoachResponseSectionStyle(
-                symbol: "sparkles",
-                tint: AppTheme.warning
-            )
+        for (index, block) in preparation.document.blocks.enumerated() {
+            if index > 0 {
+                output.append(spacer())
+            }
+            switch block {
+            case let .heading(level, text):
+                if index > 0 {
+                    output.append(divider())
+                    output.append(NSAttributedString(string: "\n"))
+                }
+                output.append(heading(text, level: level))
+            case let .paragraph(text):
+                output.append(inline(text, from: preparation))
+            case let .unorderedList(items):
+                appendList(items, ordered: false, preparation: preparation, to: output)
+            case let .orderedList(items):
+                appendList(items, ordered: true, preparation: preparation, to: output)
+            case .divider:
+                output.append(divider())
+            }
         }
-        if normalized.contains("分析") || normalized.contains("趋势") {
-            return CoachResponseSectionStyle(
-                symbol: "chart.line.uptrend.xyaxis",
-                tint: AppTheme.trendAccent
+
+        return output
+    }
+
+    private static func inline(
+        _ content: String,
+        from preparation: CoachTextRenderPreparation
+    ) -> NSAttributedString {
+        let parsed = preparation.attributedTexts[content] ?? AttributedString(content)
+        let result = NSMutableAttributedString(
+            attributedString: MarkdownAttributedStringBuilder.attributedString(
+                fromInline: parsed,
+                textStyle: .subheadline,
+                weight: .light
             )
+        )
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 4
+        result.addAttribute(
+            .paragraphStyle,
+            value: paragraph,
+            range: NSRange(location: 0, length: result.length)
+        )
+        return result
+    }
+
+    private static func heading(_ text: String, level: Int) -> NSAttributedString {
+        let style: UIFont.TextStyle = level == 1 ? .title3 : .headline
+        let preferred = UIFont.preferredFont(forTextStyle: style)
+        let font = UIFont.systemFont(ofSize: preferred.pointSize, weight: .medium)
+        return NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: UIColor.label
+        ])
+    }
+
+    private static func appendList(
+        _ items: [String],
+        ordered: Bool,
+        preparation: CoachTextRenderPreparation,
+        to output: NSMutableAttributedString
+    ) {
+        let listStart = output.length
+        for (index, item) in items.enumerated() {
+            if index > 0 {
+                output.append(NSAttributedString(string: "\n"))
+            }
+            let prefix = ordered ? "\(index + 1).\t" : "•\t"
+            let preferred = UIFont.preferredFont(forTextStyle: .subheadline)
+            let font = UIFont.systemFont(ofSize: preferred.pointSize, weight: .regular)
+            output.append(NSAttributedString(string: prefix, attributes: [
+                .font: font,
+                .foregroundColor: UIColor.secondaryLabel
+            ]))
+            output.append(inline(item, from: preparation))
         }
-        if normalized.contains("注意") || normalized.contains("风险")
-            || normalized.contains("安全")
-        {
-            return CoachResponseSectionStyle(
-                symbol: "exclamationmark.triangle.fill",
-                tint: AppTheme.warning
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 4
+        paragraph.tabStops = [NSTextTab(textAlignment: .left, location: 22)]
+        paragraph.defaultTabInterval = 22
+        paragraph.headIndent = 22
+        paragraph.firstLineHeadIndent = 0
+        output.addAttribute(
+            .paragraphStyle,
+            value: paragraph,
+            range: NSRange(
+                location: listStart,
+                length: output.length - listStart
             )
-        }
-        if normalized.contains("训练") || normalized.contains("结论")
-            || normalized.contains("总结")
-        {
-            return CoachResponseSectionStyle(
-                symbol: "dumbbell.fill",
-                tint: AppTheme.trainingAccent
-            )
-        }
-        return CoachResponseSectionStyle(symbol: nil, tint: AppTheme.tint)
+        )
+    }
+
+    private static func spacer() -> NSAttributedString {
+        NSAttributedString(string: "\n\n", attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .subheadline)
+        ])
+    }
+
+    private static func divider() -> NSAttributedString {
+        NSAttributedString(string: "────────────────────────", attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .caption1),
+            .foregroundColor: UIColor.separator
+        ])
     }
 }

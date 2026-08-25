@@ -17,6 +17,9 @@ DEVELOPMENT_TEAM=你的TeamID make install-device
 同一 Bundle ID 的覆盖安装保留 App 沙盒数据。Personal Team 的签名会定期过期，需要重新
 连线安装。
 
+Release 真机安装成功后会写入可复用的产品指纹。性能录制使用
+[一次安装、多次复用的真机协议](device-performance-profiling.md)，不会在每次 Trace 前重新构建或安装。
+
 ## GitHub Release
 
 1. 在 `project.yml` 更新 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`。

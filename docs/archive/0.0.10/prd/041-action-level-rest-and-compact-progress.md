@@ -2,8 +2,8 @@
 
 - 状态：已实现
 - 日期：2026-08-23
-- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.10.md) 的计划参数编辑、逐组间歇配置与进展区块收口
-- 后续修订：[PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 进一步压缩聊天内训练逻辑组，但保留详情页标准密度
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的计划参数编辑、逐组间歇配置与进展区块收口
+- 后续修订：[PRD 042](../../0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 进一步压缩聊天内训练逻辑组，但保留详情页标准密度
 - 下游落地：
   - [ADR 0091](../adr/0091-action-level-planned-rest.md)
   - [训练领域模型与运行时协议](../../../engineering/training-domain-model.md)

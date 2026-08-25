@@ -9,6 +9,13 @@ extension ConversationProcessingService {
             // BUG 0024：这里改的是驱动聊天界面的 `@Observable` 状态。
             MainActor.assertIsolated("Agent 实时状态必须在主 actor 更新")
         #endif
+        let interval = AppPerformance.begin(
+            .agentProjection,
+            detail: "phase=stream-project"
+        )
+        defer {
+            AppPerformance.end(interval, detail: "phase=stream-project")
+        }
         liveEventRevision += 1
         switch event {
         case let .assistantTextDelta(itemID, delta):
@@ -34,38 +41,96 @@ extension ConversationProcessingService {
     /// `PerformanceTestFixture` 双重门控，数据空间也来自 XCTest 内存容器。
     func startLongStreamPerformanceFixture(
         dataSpace: DataSpace,
-        sessionID: UUID
+        sessionID: UUID,
+        responseMessageID: UUID,
+        modelContext: ModelContext
     ) {
-        guard PerformanceTestFixture.requestedLongStream else { return }
+        guard let scenario = PerformanceTestFixture.requestedStreamScenario else { return }
         performanceFixtureTask?.cancel()
+        performanceFixturePhase = "streaming"
         isProcessing = true
         self.dataSpace = dataSpace
         self.sessionID = sessionID
         let itemID = UUID()
 
-        // 先进入足以暴露累计排版问题的长文本状态，再以产品相同的约 5 Hz
-        // 节拍继续增长。这里不写 SwiftData，也不触发网络请求。
-        for index in 0 ..< 160 {
+        let preloadCount = scenario == .paragraphs ? 160 : 1
+        let totalCount = scenario == .paragraphs ? 1060 : 240
+        for index in 0 ..< preloadCount {
             applyLiveAgentEvent(.assistantTextDelta(
                 itemID: itemID,
-                delta: PerformanceTestFixture.streamParagraph(index)
+                delta: PerformanceTestFixture.streamDelta(index, scenario: scenario)
             ))
         }
 
         performanceFixtureTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            for index in 160 ..< 1060 {
-                do {
-                    try await Task.sleep(for: .milliseconds(200))
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                applyLiveAgentEvent(.assistantTextDelta(
+            await PerformanceTestFixture.projectStreamDeltas(
+                from: preloadCount,
+                to: totalCount,
+                scenario: scenario
+            ) { [weak self] batch in
+                self?.applyLiveAgentEvent(.assistantTextDelta(
                     itemID: itemID,
-                    delta: PerformanceTestFixture.streamParagraph(index)
+                    delta: batch
                 ))
             }
+            guard !Task.isCancelled else { return }
+            performanceFixturePhase = "stream-drained"
+            guard scenario.completes,
+                  let liveText = liveAssistantTextSnapshot
+            else { return }
+            performanceFixturePhase = "snapshot-ready"
+            let completedInterval = AppPerformance.begin(
+                .agentProjection,
+                detail: "phase=stream-to-completed,bytes=\(liveText.text.utf8.count)"
+            )
+            var descriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.id == responseMessageID }
+            )
+            descriptor.fetchLimit = 1
+            guard let responseMessage = try? modelContext.fetch(descriptor).first else {
+                performanceFixturePhase = "message-missing"
+                AppPerformance.end(
+                    completedInterval,
+                    detail: "phase=stream-to-completed,result=missing"
+                )
+                return
+            }
+            performanceFixturePhase = "message-fetched"
+            // 在同一个 MainActor 事务中先撤下实时 TextKit，再发布完成态模型。
+            // 不能在二者之间 yield，否则超长回复会短暂同时布局两份全文，完成清理
+            // 反而排在这次昂贵布局之后，形成明显的 stream-to-completed cliff。
+            applyLiveAgentEvent(.assistantTextCompleted(itemID: itemID, at: .now))
+            responseMessage.text = liveText.text
+            responseMessage.agentStatus = .succeeded
+            responseMessage.replaceAgentTurnItems([
+                AgentTurnItem(
+                    id: itemID,
+                    sequence: 1,
+                    kind: .text,
+                    status: .succeeded,
+                    text: liveText.text,
+                    startedAt: responseMessage.date,
+                    endedAt: .now
+                )
+            ])
+            finishProcessing()
+            performanceFixturePhase = "model-transitioned"
+            do {
+                try modelContext.save()
+            } catch {
+                performanceFixturePhase = "save-failed"
+                AppPerformance.end(
+                    completedInterval,
+                    detail: "phase=stream-to-completed,result=save-failed"
+                )
+                return
+            }
+            performanceFixturePhase = "completed"
+            AppPerformance.end(
+                completedInterval,
+                detail: "phase=stream-to-completed,result=visible"
+            )
         }
     }
 

@@ -59,8 +59,9 @@ edges.each do |source, targets|
 
     next if edges.fetch(target, []).include?(source)
 
-    # 归档原文是考古；活链以压缩起点为前驱。跨归档/活文档的边不要求互链。
-    next if archive?(source) != archive?(target)
+    # 归档原文是考古；只验证活链。归档内部或跨归档/活文档的历史边
+    # 不要求为窗口滚动反向改写原始决策正文。
+    next if archive?(source) || archive?(target)
 
     failures << [
       source.relative_path_from(root),

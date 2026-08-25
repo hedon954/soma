@@ -5,6 +5,53 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-08-26
+
+本版本继续治理 0.0.12 未完全收敛的长回复与进展页性能：一条 AI 回复使用单一连续文本面增量追加，
+完成态 Markdown 在后台准备；进展快照具有可靠失效、失败重试与数据库 count 下推。设备端宽查询
+同步收窄，Agent Server 用向前 migration 补齐真实清理和按设备删除路径的索引。
+
+### Changed
+
+- 流式增量仍归属同一条 AI 消息，内部最多 256 字符的块只作为存储边界；UI 使用单一 TextKit
+  文本面追加后缀，不把 chunk 渲染成多条正文或多条消息。
+- 完成态受控 Markdown 与 inline attributed text 在后台解析并缓存；准备期间继续显示连续正文，
+  完成后以单一属性 TextKit 文本面展示标题、列表、分隔线与内联样式，避免数百个 Markdown block
+  子 View 在 Tab 返回时重新排版。
+- 流式期间始终跟随当前 AI 消息稳定 ID 的底边；用户不需要手动向下追赶不断增长的回复。
+- 进展页使用显式加载、成功、失败状态和单调 revision；同一数据空间的后台保存会原位失效，旧请求
+  不能覆盖新数据，首次失败和刷新失败都提供重试。
+- 纯数量指标统一使用 `fetchCount`；训练/身体图表只读 95 天窗口，饮食最近活动只取 30 条，当前
+  健身房与本地 Job 领取只返回一条候选。
+
+### Fixed
+
+- 修复长段落没有换行时尾块继续无限增长、后段流式越来越卡的问题。
+- 修复流式完成后同步 Markdown 解析和全文视图切换继续拖慢滚动、Session 与 Tab 的问题。
+- 修复长流内容增长或 Lazy row 回收后自动跟随永久停止、用户必须手动滚到底部的问题。
+- 修复进展快照错误被静默吞掉、后台 context 保存遗漏和异步请求乱序导致永久空白的问题。
+- 修复业务去重、HealthKit 去重与本地 Job 领取把无关完整表拉入内存的问题。
+
+### Privacy
+
+- 不新增账户、身体数据出网、远程日志字段或生产性能夹具；长流压力数据仍只在显式测试环境使用
+  内存数据库和虚构内容。
+
+### Data and migration
+
+- 不改变 SwiftData 持久字段、唯一约束或最低系统；个人与演示空间旧数据无需重建。iOS 17 没有
+  SwiftData `#Index`，本版通过谓词、排序、`fetchLimit` 与 `fetchCount` 收窄设备端读取。
+- 新增 PostgreSQL `002_performance_indexes.sql`：为 nonce/challenge 过期清理、撤销设备清理、按设备
+  Activity token 删除和 outbox 聚合清理补索引，并删除与 Event 唯一约束重复的 cursor 索引。
+
+### Known limitations
+
+- 设备端物理 `#Index` 需要把最低系统提高到 iOS 18 并制定 SwiftData schema 迁移；本版保持 iOS 17，
+  不直接修改 SwiftData 管理的 SQLite。
+- PostgreSQL migration 只有部署者显式运行 `make db-migrate-status` 与 `make db-migrate` 后才在目标
+  Server 生效；源码合并不等于已部署。
+- GitHub Release 只包含源码与变更说明，不包含 TestFlight 安装包。
+
 ## [0.0.13] - 2026-08-25
 
 本版本保持 0.0.12 的用户行为与数据协议不变，完成一次面向后续性能治理的工程现代化：把对话、

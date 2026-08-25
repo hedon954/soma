@@ -12,6 +12,7 @@ profile_pause_seconds="${SOMA_PROFILE_PAUSE_SECONDS:-2}"
 profile_interaction="${SOMA_PROFILE_INTERACTION:-manual}"
 profile_interaction_rounds="${SOMA_PROFILE_INTERACTION_ROUNDS:-1}"
 profile_timeout_seconds="${SOMA_PROFILE_TIMEOUT_SECONDS:-300}"
+profile_start_timeout_seconds="${SOMA_PROFILE_START_TIMEOUT_SECONDS:-20}"
 profile_subsystem="${SOMA_PROFILE_SUBSYSTEM:-top.hedon.soma}"
 profile_tab_p95_budget_ms="${SOMA_PROFILE_TAB_P95_BUDGET_MS:-100}"
 profile_session_p95_budget_ms="${SOMA_PROFILE_SESSION_P95_BUDGET_MS:-200}"
@@ -55,6 +56,11 @@ fi
 
 if [[ ! "${profile_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || ((profile_timeout_seconds > 3600)); then
   echo "SOMA_PROFILE_TIMEOUT_SECONDS must be an integer from 1 through 3600." >&2
+  exit 1
+fi
+if [[ ! "${profile_start_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] ||
+  ((profile_start_timeout_seconds > 120)); then
+  echo "SOMA_PROFILE_START_TIMEOUT_SECONDS must be an integer from 1 through 120." >&2
   exit 1
 fi
 
@@ -113,7 +119,7 @@ trap 'stop_active_record; exit 143' TERM
 record_trace() {
   local profile_template="$1"
   local output_path="$2"
-  local deadline state record_log ready_posted
+  local deadline start_deadline state record_log ready_posted record_started
 
   record_log="${output_path}.record.log"
   : >"${record_log}"
@@ -126,20 +132,29 @@ record_trace() {
     --no-prompt > >(tee "${record_log}") 2>&1 &
   active_record_pid=$!
   deadline=$((SECONDS + profile_timeout_seconds))
+  start_deadline=$((SECONDS + profile_start_timeout_seconds))
   ready_posted=0
+  record_started=0
 
   while kill -0 "${active_record_pid}" 2>/dev/null; do
-    if ((ready_posted == 0)) && [[ -n "${profile_ready_notification}" ]] &&
-      grep -q "Ctrl-C to stop the recording" "${record_log}"; then
-      xcrun devicectl device notification post \
-        --device "${profile_device}" \
-        --name "${profile_ready_notification}" \
-        --quiet
-      ready_posted=1
-      echo "Posted profiler-ready notification: ${profile_ready_notification}"
+    if ((record_started == 0)) && grep -q "Ctrl-C to stop the recording" "${record_log}"; then
+      record_started=1
+      if [[ -n "${profile_ready_notification}" ]]; then
+        xcrun devicectl device notification post \
+          --device "${profile_device}" \
+          --name "${profile_ready_notification}" \
+          --quiet
+        ready_posted=1
+        echo "Posted profiler-ready notification: ${profile_ready_notification}"
+      fi
     fi
     state="$(ps -p "${active_record_pid}" -o stat= 2>/dev/null | tr -d '[:space:]')"
     [[ -z "${state}" || "${state}" == Z* ]] && break
+    if ((record_started == 0 && SECONDS >= start_deadline)); then
+      echo "xctrace did not start within ${profile_start_timeout_seconds}s; terminating before the long recording window." >&2
+      stop_active_record
+      return 125
+    fi
     if ((SECONDS >= deadline)); then
       echo "xctrace exceeded ${profile_timeout_seconds}s; terminating incomplete recording." >&2
       stop_active_record
@@ -153,6 +168,9 @@ record_trace() {
   local record_status=$?
   set -e
   active_record_pid=""
+  if ((record_status != 0 && record_started == 1)); then
+    return 126
+  fi
   if [[ -n "${profile_ready_notification}" ]] && ((ready_posted == 0)); then
     echo "Trace ended before the profiler-ready notification could be posted." >&2
     return 1
@@ -183,10 +201,16 @@ for raw_template in "${templates[@]}"; do
     started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "[${profile_template} ${run}/${profile_runs}] Recording ${profile_duration} to ${output_path}"
 
-    if record_trace "${profile_template}" "${output_path}"; then
+    record_status=0
+    record_trace "${profile_template}" "${output_path}" || record_status=$?
+    if ((record_status == 0)); then
       status="passed"
-    elif [[ "$?" -eq 124 ]]; then
+    elif ((record_status == 124)); then
       status="timed_out"
+    elif ((record_status == 125)); then
+      status="start_timed_out"
+    elif ((record_status == 126)); then
+      status="record_failed_after_start"
     else
       status="record_failed"
     fi

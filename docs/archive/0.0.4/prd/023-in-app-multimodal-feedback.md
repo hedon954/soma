@@ -6,7 +6,7 @@
 - 后续修订：
   - [PRD 024](024-chat-agent-feedback-tool.md) 增加聊天中的固定反馈 Tool，设置页入口继续保留
   - [PRD 027](../../0.0.5/prd/027-reliable-efficient-react-and-in-context-review.md) 将反馈直接内嵌在设置页底部，并增加维护者 Gmail 到 Draft PR 自动化边界
-  - [PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 增加逐条 AI 回复的评分、多模态反馈与单 Turn 脱敏执行摘要
+  - [PRD 042](../../0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 增加逐条 AI 回复的评分、多模态反馈与单 Turn 脱敏执行摘要
 - 上游依据：维护者明确要求反馈不跳转系统邮件 App
 - 下游落地：[ADR 0051](../adr/0051-authenticated-in-app-feedback-email-delivery.md)、[ADR 0052](../adr/0052-gmail-self-delivery-for-in-app-feedback.md)、[ADR 0053](../adr/0053-personal-only-direct-qq-mail-feedback.md)
 

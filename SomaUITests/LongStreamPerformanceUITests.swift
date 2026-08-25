@@ -40,6 +40,39 @@ final class LongStreamPerformanceUITests: XCTestCase {
         keepScreenshot(of: app, named: "long-stream-coach-after-loop")
     }
 
+    func testLongStreamContinuesFollowingBottomAfterUserScroll() {
+        let app = XCUIApplication()
+        app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "long-stream"
+        app.launch()
+
+        let messageList = app.scrollViews["coach-message-list"]
+        XCTAssertTrue(messageList.waitForExistence(timeout: 15))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["coach-live-agent-text"]
+                .waitForExistence(timeout: 15)
+        )
+
+        // 流式期间即使用户尝试上滑查看历史，也必须在下一次投影时回到底部；
+        // 这是产品明确要求的持续跟随，不依赖用户手动追赶最新 token。
+        messageList.swipeDown()
+        let bottom = app.descendants(matching: .any)["coach-live-agent-bottom"]
+        let deadline = Date().addingTimeInterval(5)
+        var bottomIsVisible = false
+        while Date() < deadline, !bottomIsVisible {
+            bottomIsVisible = bottom.exists
+                && bottom.isHittable
+                && (messageList.value as? String ?? "").contains("streaming=true")
+            if !bottomIsVisible {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+        }
+        XCTAssertTrue(
+            bottomIsVisible,
+            "流式回复没有持续跟随可见底部：\(messageList.value as? String ?? "nil")"
+        )
+    }
+
     func testConversationHistoryCanReturnToLargeSession() {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
@@ -120,10 +153,89 @@ final class LongStreamPerformanceUITests: XCTestCase {
         )
     }
 
+    func testNoNewlineLongStreamCompletesAndKeepsTabsResponsive() {
+        let app = XCUIApplication()
+        app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "long-stream-no-newline"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FAST_STREAM"] = "1"
+        app.launch()
+
+        let liveText = app.descendants(matching: .any)["coach-live-agent-text"]
+        XCTAssertTrue(liveText.waitForExistence(timeout: 15))
+        let completed = app.descendants(matching: .any)["coach-completed-agent-text"]
+        XCTAssertTrue(
+            completed.waitForExistence(timeout: 15),
+            "无换行长流没有走到持久化和完成态 Markdown 渲染"
+        )
+
+        let targets: [CGFloat] = [0.375, 0.625, 0.875, 0.125]
+        for x in targets {
+            app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.93)).tap()
+        }
+        XCTAssertTrue(app.navigationBars["Soma"].waitForExistence(timeout: 3))
+        keepScreenshot(of: app, named: "no-newline-completed-after-tabs")
+    }
+
+    func testMarkdownLongStreamCompletesBackgroundPreparation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] =
+            "long-stream-markdown-completion"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FAST_STREAM"] = "1"
+        app.launch()
+
+        let phase = app.descendants(matching: .any)["performance-fixture-phase"]
+        XCTAssertTrue(
+            phase.waitForExistence(timeout: 15),
+            "混合 Markdown 性能夹具没有启动"
+        )
+        XCTAssertTrue(
+            waitForValuePrefix("completed", on: phase, timeout: 15),
+            "混合 Markdown 长流没有完成持久化切换；阶段="
+                + (phase.value as? String ?? "missing")
+        )
+
+        let preparedResponse = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier == %@ AND value == %@ AND label CONTAINS %@",
+                "coach-completed-agent-text",
+                "Markdown 已就绪",
+                "第 1 段虚构复盘"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            preparedResponse.waitForExistence(timeout: 10),
+            "混合 Markdown 长流没有完成后台解析并提交语义布局；阶段="
+                + (phase.value as? String ?? "missing")
+        )
+
+        let tabBar = app.tabBars.firstMatch
+        for label in ["训练", "进展", "设置", "教练"] {
+            tabBar.buttons[label].tap()
+        }
+        XCTAssertTrue(app.navigationBars["Soma"].waitForExistence(timeout: 3))
+        keepScreenshot(of: app, named: "markdown-completed-after-tabs")
+    }
+
     private func keepScreenshot(of app: XCUIApplication, named name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func waitForValuePrefix(
+        _ prefix: String,
+        on element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if (element.value as? String)?.hasPrefix(prefix) == true {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return false
     }
 }

@@ -114,6 +114,103 @@ final class PerformancePressureTests: XCTestCase {
     }
 
     @MainActor
+    func testInsightsSaveImpactAcceptsBackgroundContextInSameContainer() throws {
+        let container = try makeContainer()
+        let background = ModelContext(container)
+        let notification = try notificationWhenSaving(background) {
+            background.insert(BodyEntry(weight: 70, notes: "虚构后台写入"))
+        }
+
+        XCTAssertTrue(
+            ModelContextSaveImpact.affectsInsights(
+                notification,
+                in: container.mainContext
+            )
+        )
+    }
+
+    @MainActor
+    func testInsightsSaveImpactRejectsAnotherContainer() throws {
+        let target = try makeContainer()
+        let unrelated = try makeContainer()
+        let notification = try notificationWhenSaving(unrelated.mainContext) {
+            unrelated.mainContext.insert(WorkoutEntry(exercise: "虚构其他空间记录"))
+        }
+
+        XCTAssertFalse(
+            ModelContextSaveImpact.affectsInsights(
+                notification,
+                in: target.mainContext
+            )
+        )
+    }
+
+    @MainActor
+    func testInsightsSnapshotRejectsStaleCompletionAndRequestsLatestRevision() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let state = InsightsSnapshotRevisionState()
+        let first = state.requestKey(
+            excluding: nil,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertNotNil(first)
+
+        state.markDataChanged()
+
+        XCTAssertFalse(
+            try state.acceptsCompletion(
+                for: XCTUnwrap(first),
+                now: now,
+                calendar: calendar
+            )
+        )
+        let latest = state.requestKey(
+            excluding: first,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(latest?.dataRevision, 1)
+        XCTAssertTrue(
+            try state.acceptsCompletion(
+                for: XCTUnwrap(latest),
+                now: now,
+                calendar: calendar
+            )
+        )
+    }
+
+    @MainActor
+    func testInsightsCountsDoNotMaterializeOrCapSuccessfulMessages() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        for index in 0 ..< 1005 {
+            context.insert(CoachMessage(
+                date: Date(timeIntervalSince1970: Double(index)),
+                sessionID: UUID(),
+                isFromCoach: true,
+                text: "虚构回复 \(index)",
+                agentStatus: .succeeded,
+                turnID: UUID()
+            ))
+        }
+        context.insert(CoachMessage(
+            isFromCoach: false,
+            text: "不计入足迹",
+            agentStatus: .succeeded,
+            turnID: UUID()
+        ))
+        try context.save()
+
+        XCTAssertEqual(
+            try InsightsCountQueries.successfulFootprintCount(in: context),
+            1005
+        )
+    }
+
+    @MainActor
     func testCoachSuggestionSnapshotBuildsPureValuesOffViewPath() async throws {
         let container = try makeContainer()
         let context = container.mainContext

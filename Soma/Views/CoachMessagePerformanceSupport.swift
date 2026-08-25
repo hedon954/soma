@@ -36,6 +36,25 @@ struct CoachPerformanceScrollModifier: ViewModifier {
     }
 }
 
+/// 独立叶子负责观察高频 revision。即使用户把 LazyVStack 的最后一条消息滚出
+/// 挂载区，驱动仍在，流式底部跟随不会因为 live row 被回收而永久停止。
+struct CoachLiveAutoScrollDriver: View {
+    @Environment(ConversationProcessingService.self) private var processor
+
+    let isActive: Bool
+    let onRevision: () -> Void
+
+    var body: some View {
+        let revision = isActive ? processor.liveEventRevision : 0
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: revision) {
+                guard isActive else { return }
+                onRevision()
+            }
+    }
+}
+
 struct CoachMessageTopPagingModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
