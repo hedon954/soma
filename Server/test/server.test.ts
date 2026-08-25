@@ -39,7 +39,7 @@ import {
   sha256,
   TokenCipher,
 } from "../src/security.js";
-import { InMemorySomaStore } from "../src/store.js";
+import { InMemorySomaStore } from "../src/in-memory-store.js";
 import {
   deviceToolRegistry,
   effectiveAllowedDeviceTools,

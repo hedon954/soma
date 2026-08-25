@@ -33,7 +33,7 @@ import {
   sha256,
   TokenCipher,
 } from "./security.js";
-import type { SomaStore } from "./store.js";
+import type { SomaStore } from "./store-contract.js";
 
 interface Dependencies {
   store: SomaStore;

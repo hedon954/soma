@@ -6,7 +6,7 @@ import {
 import { connect } from "node:http2";
 import type { ActivityToken, AgentEvent } from "./domain.js";
 import type { TokenCipher } from "./security.js";
-import type { SomaStore } from "./store.js";
+import type { SomaStore } from "./store-contract.js";
 
 export interface APNsProvider {
   sendActivityUpdate(input: {

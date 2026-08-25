@@ -19,7 +19,7 @@ import type {
   Upload,
 } from "./domain.js";
 import { isTerminal, ProtocolError } from "./domain.js";
-import type { CleanupResult, SomaStore } from "./store.js";
+import type { CleanupResult, SomaStore } from "./store-contract.js";
 
 export class PostgresSomaStore implements SomaStore {
   private listenerPromise: Promise<PoolClient> | undefined;

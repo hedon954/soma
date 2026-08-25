@@ -8,7 +8,7 @@ import {
   timingSafeEqual,
   verify,
 } from "node:crypto";
-import type { SomaStore } from "./store.js";
+import type { SomaStore } from "./store-contract.js";
 import { ProtocolError } from "./domain.js";
 
 interface TokenClaims {
