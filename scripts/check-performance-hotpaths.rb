@@ -35,6 +35,8 @@ ceilings = {
   ["Soma/Components/StoredMediaStrip.swift", /MediaStore\.image\(at:/] => 0,
   ["Soma/Components/MediaPicker.swift", /if let data = image\.jpegData/] => 0,
   ["Soma/Services/GuidedWorkoutCoordinator.swift", /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
+  ["Soma/Services/GuidedWorkoutCoordinator+Timeline.swift", /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
+  ["Soma/Services/GuidedWorkoutCoordinator+Recording.swift", /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
   ["Soma/Services/ConversationSessionDeletion.swift", /FetchDescriptor<[^>]+>\(\)/] => 0,
   ["Soma/Services/ConversationProcessingQueueActions.swift", /FetchDescriptor<(AgentJob|CoachMessage|PersistentAgentEvent|AgentTrace)>\(\)/] => 0,
   ["Soma/Services/GuidedWorkoutRecordStore.swift", /FetchDescriptor<(WorkoutEntry|ExerciseDefinition|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
@@ -108,6 +110,8 @@ unless root_source.include?("guard didFinishInitialMaintenance else { return }")
 end
 
 coach_source = File.read(File.join(ROOT, "Soma/Views/CoachView.swift"))
+coach_actions_source = File.read(File.join(ROOT, "Soma/Views/CoachSessionView+Actions.swift"))
+coach_screen_source = "#{coach_source}\n#{coach_actions_source}"
 coach_support_source = File.read(File.join(ROOT, "Soma/Views/CoachMessagePerformanceSupport.swift"))
 coach_bubble_source = File.read(File.join(ROOT, "Soma/Views/CoachBubble.swift"))
 chat_record_source = File.read(File.join(ROOT, "Soma/Views/ChatRecordEditorCards.swift"))
@@ -185,7 +189,7 @@ if coach_source.match?(/@State[^\n]*AgentInputShortcutStore\.visibleShortcuts/) 
   fail_check("Coach View construction again synchronously decodes shortcut JSON")
 end
 unless coach_source.include?("@State private var speechInput: SpeechInputService?") &&
-       coach_source.include?("speechInput ?? SpeechInputService()")
+       coach_actions_source.include?("speechInput ?? SpeechInputService()")
   fail_check("Coach again constructs speech services before the first voice action")
 end
 if coach_source.include?("GeometryReader") ||
@@ -320,13 +324,14 @@ unless delta_projection&.include?("return") &&
 end
 
 processing_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingService.swift"))
+processing_live_source = File.read(File.join(ROOT, "Soma/Services/ConversationTurnLiveProjection.swift"))
 processing_models_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingModels.swift"))
 if processing_source.match?(/private\(set\) var liveAssistantText\s*=/) ||
    processing_models_source.include?("private(set) var text = \"\"")
   fail_check("live stream again stores duplicate full growing strings beside stable chunks")
 end
-unless processing_source.include?("projectRemoteTextDelta") &&
-       processing_source.include?("liveAssistantRenderSnapshot") &&
+unless processing_live_source.include?("projectRemoteTextDelta") &&
+       processing_live_source.include?("liveAssistantRenderSnapshot") &&
        processing_models_source.match?(/var text: String\s*\{.*?chunks\.map/m)
   fail_check("live text no longer keeps one chunk source of truth and a render-only snapshot")
 end
@@ -339,11 +344,11 @@ end
 
 transcript_source = File.read(File.join(ROOT, "Soma/Views/AgentTurnTranscript.swift"))
 chat_presentation_source = File.read(File.join(ROOT, "Soma/Services/AgentChatPresentation.swift"))
-if coach_source.include?("AgentTurnLiveProjection.make") ||
+if coach_screen_source.include?("AgentTurnLiveProjection.make") ||
    transcript_source.include?("streamingChunks")
   fail_check("live text again builds and sanitizes one full growing AgentTurnItem per UI tick")
 end
-unless coach_source.include?("let interval: TimeInterval = 0.2") &&
+unless coach_actions_source.include?("let interval: TimeInterval = 0.2") &&
        transcript_source.include?("struct LiveAgentTurnTranscriptContent") &&
        transcript_source.scan(/processor\.liveEventRevision/).length == 1 &&
        transcript_source.include?("struct CoachLiveAgentTurnTranscript") &&
