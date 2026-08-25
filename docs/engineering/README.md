@@ -16,6 +16,7 @@
 - [可选 Agent Server 部署与运维](../../Server/README.md)
 - [个人设备 QQ 邮箱反馈配置](personal-feedback-qq-mail.md)
 - [Soma 反馈到 Draft PR 自动化](feedback-to-pr-automation.md)
+- [匿名反馈处置记录](feedback-triage/README.md)
 - [仓库与开发工作流](repository-workflow.md)
 - [GitHub 仓库设置](github-settings.md)
 - [版本、GitHub Release 与 TestFlight](release.md)
