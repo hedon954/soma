@@ -9,8 +9,8 @@ settings:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
-    CURRENT_PROJECT_VERSION: 15
-    MARKETING_VERSION: 0.0.11
+    CURRENT_PROJECT_VERSION: 16
+    MARKETING_VERSION: 0.0.12
 packages:
   SwiftOpenAI:
     url: https://github.com/jamesrochabrun/SwiftOpenAI.git
