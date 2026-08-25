@@ -4,8 +4,8 @@
 - 发现日期：2026-07-31
 - 影响范围：远程 Agent 的 SSE、ReAct 多轮调用、本地 Tool 执行和最终回复
 - 下游落地：
-  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
-  - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
+  - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
+  - [ADR 0031](../archive/0.0.1/adr/0031-durable-agent-jobs-event-log-and-projections.md)
 - 后续修订：[BUG 0005](0005-remote-agent-streaming-latency-regression.md) 修复远程持续执行引入的非流式与固定轮询延迟
 
 ## 症状
@@ -54,8 +54,8 @@ iOS 允许普通 App 在退到后台后运行很短的收尾代码，随后会�
 ## 修复
 
 修复分成三个连续闭环，并由
-[ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md) 修订
-[ADR 0008](../adr/0008-app-scoped-conversation-processing.md) 的后台边界。
+[ADR 0031](../archive/0.0.1/adr/0031-durable-agent-jobs-event-log-and-projections.md) 修订
+[ADR 0008](../archive/0.0.1/adr/0008-app-scoped-conversation-processing.md) 的后台边界。
 
 完整的持久任务、事件投影、类似系统与 Live Activity 评估见
 [持久化 Agent 任务、事件流与 Live Activities 调研](../research/2026-07-31-durable-agent-jobs-live-activities.md)。
@@ -104,7 +104,7 @@ AI 配置和 `ModelContext` 的构建上移到 App/Services 边界，使 `RootVi
 
 ### 3. 可选远程持续执行（已实现）
 
-[PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md) 已授权通过统一
+[PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md) 已授权通过统一
 `AgentExecutionBackend` 增加可选服务器队列：
 
 1. 本地 Outbox 以 `clientJobID` 幂等投递；

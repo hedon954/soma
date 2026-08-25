@@ -6,9 +6,9 @@
 - 修订自：[BUG 0004](0004-agent-background-stream-interruption.md) 的远程持续执行闭环
 - 后续修订：[BUG 0012](0012-direct-video-and-first-delta-timeout.md) 增加 Provider 首增量、idle 与 total timeout
 - 下游落地：
-  - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
-  - [ADR 0058](../adr/0058-first-delta-deadline-and-bounded-retry.md)
-  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
+  - [ADR 0037](../archive/0.0.1/adr/0037-backend-transparent-streaming-and-notification-wake.md)
+  - [ADR 0058](../archive/0.0.4/adr/0058-first-delta-deadline-and-bounded-retry.md)
+  - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
 
 ## 症状
 
@@ -27,7 +27,7 @@
 
 ## 修复
 
-按 [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)：
+按 [ADR 0037](../archive/0.0.1/adr/0037-backend-transparent-streaming-and-notification-wake.md)：
 
 - Local/Remote 输出同一种体验 Event；
 - Provider 使用流式 Tool Calling并合并文本 chunk；

@@ -10,11 +10,11 @@
   - [BUG 0026](0026-guided-auto-recording-still-stops-without-reason.md) 定位到开组时预览宿主交接
     与自动放大取景仍会掐断录像，且极短文件被当成正常保存
 - 上游依据：
-  - [ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
+  - [ADR 0074](../archive/0.0.7/adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
 - 下游落地：
-  - [PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
-  - [PRD 034](../prd/034-history-media-tabs-and-guided-capture-polish.md)
-  - [ADR 0083](../adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
+  - [PRD 033](../archive/0.0.7/prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
+  - [PRD 034](../archive/0.0.8/prd/034-history-media-tabs-and-guided-capture-polish.md)
+  - [ADR 0083](../archive/0.0.7/adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
 
 ## 症状
 

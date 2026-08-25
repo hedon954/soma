@@ -1,11 +1,11 @@
 #!/usr/bin/env ruby
 
 root = File.expand_path("..", __dir__)
-swift_source_paths = [
-  "Soma/Services/ReActAgent.swift",
-  "Soma/Services/AgentToolCallSignature.swift",
-].freeze
-swift = swift_source_paths.map { |path| File.read(File.join(root, path)) }.join("\n")
+swift_source_paths = Dir.glob(
+  File.join(root, "Soma/Services/**/{AgentToolName,AgentToolCallSignature}.swift")
+).sort
+abort "Cannot locate AgentToolName / AgentToolCallSignature" if swift_source_paths.length != 2
+swift = swift_source_paths.map { |path| File.read(path) }.join("\n")
 server = File.read(File.join(root, "Server/src/tool-registry.ts"))
 
 enum_body = swift[/enum AgentToolName:.*?\{(.*?)\n\s+var isMutation/m, 1]

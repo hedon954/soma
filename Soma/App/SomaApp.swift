@@ -309,7 +309,7 @@ enum DataMigrationState: Equatable {
 }
 
 @main
-struct SomaApp: App {
+struct SomaApp: App { // 组合根：只装配依赖并注入 environment
     @UIApplicationDelegateAdaptor(SomaAppDelegate.self)
     private var appDelegate
     @Environment(\.scenePhase) private var scenePhase

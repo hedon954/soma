@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { canonicalJSON } from "./canonical-json.js";
+import { sameToolRequest } from "./canonical-json.js";
 import {
   Pool,
   type Notification,
@@ -19,7 +19,7 @@ import type {
   Upload,
 } from "./domain.js";
 import { isTerminal, ProtocolError } from "./domain.js";
-import type { CleanupResult, SomaStore } from "./store.js";
+import type { CleanupResult, SomaStore } from "./store-contract.js";
 
 export class PostgresSomaStore implements SomaStore {
   private listenerPromise: Promise<PoolClient> | undefined;
@@ -1321,16 +1321,4 @@ function mapOutbox(row: OutboxRow): OutboxMessage {
 function requiredRow<T>(row: T | undefined): T {
   if (row === undefined) throw new Error("database row missing");
   return row;
-}
-
-function sameToolRequest(
-  lhs: ToolRequest,
-  rhs: Omit<ToolRequest, "id">,
-): boolean {
-  return (
-    lhs.toolName === rhs.toolName &&
-    lhs.schemaVersion === rhs.schemaVersion &&
-    lhs.mutation === rhs.mutation &&
-    canonicalJSON(lhs.arguments) === canonicalJSON(rhs.arguments)
-  );
 }

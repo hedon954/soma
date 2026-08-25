@@ -1,0 +1,4 @@
+# Historical PRD/ADR compressed out of the 3-version living window.
+# Blocks Agent, Tab, and @-file mentions. Does not block terminal or MCP.
+# Official: https://cursor.com/docs/reference/ignore-file
+docs/archive/

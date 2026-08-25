@@ -2,10 +2,8 @@
 
 - 状态：已采纳，已实施；待真机界面验收
 - 日期：2026-08-25
-- 修订自：
-  - [PRD 004](004-soma-current-product.md) 的 Agent 分层超时基线
-  - [PRD 028](028-retry-active-runtime-budget.md) 的固定 3/5/10 分钟活动执行预算
-- 后续修订：暂无
+- 修订自：[PRD 000](000-origin-through-0.0.9.md) 的 Agent 分层超时与固定 3/5/10 分钟活动执行预算
+- 后续修订：[PRD 044](044-behavior-preserving-modernization.md) 行为保持的工程现代化，不改变本文件的超时产品规则
 - 上游依据：维护者明确要求把运行超时与 ReAct 步骤上限放在一起配置
 - 下游落地：[ADR 0098](../adr/0098-user-configurable-react-active-runtime-timeout.md)
 

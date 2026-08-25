@@ -4,7 +4,7 @@
 - 发现日期：2026-08-13
 - 影响范围：Agent Job 恢复、聊天队列、供应商额度与用户信任
 - 上游依据：无
-- 下游落地：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
+- 下游落地：[PRD 027](../archive/0.0.5/prd/027-reliable-efficient-react-and-in-context-review.md)
 
 ## 症状
 

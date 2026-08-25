@@ -4,7 +4,7 @@
 
 | 内容 | 唯一事实来源 |
 | --- | --- |
-| 产品当前范围 | `docs/prd/004-soma-current-product.md` |
+| 产品当前范围 | `docs/prd/README.md`（压缩起点 + 最近 3 个营销版本） |
 | 长期决策 | `docs/adr/README.md` |
 | 关键 Bug 与回归门禁 | `docs/bugs/README.md` |
 | 工程规则 | `CLAUDE.md` |

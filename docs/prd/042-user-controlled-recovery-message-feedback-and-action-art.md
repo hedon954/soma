@@ -3,12 +3,7 @@
 - 状态：已实现，待真机交互验收
 - 日期：2026-08-23
 - 修订自：
-  - [PRD 004](004-soma-current-product.md) 的教练失败、反馈与训练入口基线
-  - [PRD 010](010-exercise-library-plans-guided-training.md) 的动作图目录与图片来源优先级
-  - [PRD 021](021-llm-staging-explicit-configuration-and-input-suggestions.md) 的 Loop 外自动补偿语义
-  - [PRD 023](023-in-app-multimodal-feedback.md) 的“只发送表单内容、不带聊天与 Trace”边界
-  - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 的失败恢复、原位审查卡与百图门槛
-  - [PRD 039](039-frequency-first-dual-theme-ui.md) 的黑白主操作和聊天记录卡密度
+  - [PRD 000](000-origin-through-0.0.9.md) 的教练失败、反馈、动作图、暂存补偿、原位审查与主操作收口
   - [PRD 041](041-action-level-rest-and-compact-progress.md) 的紧凑训练信息层级
 - 上游依据：
   - [BUG 0029](../bugs/0029-visible-failure-keeps-retrying-and-stale-error.md)

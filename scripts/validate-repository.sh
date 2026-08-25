@@ -11,6 +11,18 @@ fail() {
   exit 1
 }
 
+service_file() {
+  local name="$1"
+  local matches=()
+  while IFS= read -r line; do
+    matches+=("$line")
+  done < <(find Soma/Services -name "$name" -print)
+  if [[ "${#matches[@]}" -ne 1 ]]; then
+    fail "expected exactly one Soma/Services/**/${name}, found ${#matches[@]}"
+  fi
+  printf '%s' "${matches[0]}"
+}
+
 assert_link() {
   local path="$1"
   local expected="$2"
@@ -28,9 +40,15 @@ required_files=(
   SECURITY.md
   project.yml
   docs/acceptance.md
-  docs/prd/004-soma-current-product.md
-  docs/prd/010-exercise-library-plans-guided-training.md
-  docs/prd/011-durable-agent-jobs-remote-continuity.md
+  docs/prd/README.md
+  docs/prd/000-origin-through-0.0.9.md
+  docs/prd/041-action-level-rest-and-compact-progress.md
+  docs/prd/042-user-controlled-recovery-message-feedback-and-action-art.md
+  docs/prd/043-configurable-react-runtime-timeout.md
+  docs/prd/044-behavior-preserving-modernization.md
+  docs/adr/0000-origin-through-0.0.9.md
+  docs/adr/0099-behavior-preserving-modernization-and-three-version-docs.md
+  docs/archive/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md
@@ -98,10 +116,10 @@ grep -q "exactVersion:" project.yml ||
   fail "Swift package versions must be pinned"
 
 grep -q 'NWEndpoint.Host("smtp.qq.com")' \
-  Soma/Services/FeedbackSMTPTransport.swift ||
+  "$(service_file FeedbackSMTPTransport.swift)" ||
   fail "personal-only feedback must use the fixed QQ SMTP endpoint"
 grep -q 'static let recipient = "hedonwang@gmail.com"' \
-  Soma/Services/FeedbackSubmission.swift ||
+  "$(service_file FeedbackSubmission.swift)" ||
   fail "personal-only feedback must keep the fixed Gmail recipient"
 if grep -R -n \
   --exclude=validate-repository.sh \
@@ -154,7 +172,7 @@ grep -q 'onExpanded(scrollTarget)' \
   Soma/Views/AssistantFeedbackButton.swift ||
   fail "BUG 0031: expanding feedback must request scrolling only after the user taps"
 grep -q 'proxy.scrollTo(target, anchor: \.bottom)' \
-  Soma/Views/CoachView.swift ||
+  Soma/Views/CoachConversationStarter.swift ||
   fail "BUG 0031: feedback expansion must scroll its editor bottom into view"
 grep -q 'onSubmitted:' \
   Soma/Views/AssistantFeedbackButton.swift ||
@@ -163,17 +181,17 @@ grep -q 'isExpanded = false' \
   Soma/Views/AssistantFeedbackButton.swift ||
   fail "BUG 0031: successful per-reply feedback must collapse its inline editor"
 if grep -nE 'enqueueSentinelReport|source: "sentinel"' \
-  Soma/Services/CrashDiagnosticsCoordinator.swift >/dev/null 2>&1; then
+  "$(service_file CrashDiagnosticsCoordinator.swift)" >/dev/null 2>&1; then
   fail "BUG 0032: sentinel state must never generate a crash report"
 fi
 grep -q 'evidenceSource: \.metricKit' \
-  Soma/Services/CrashDiagnosticsCoordinator.swift ||
+  "$(service_file CrashDiagnosticsCoordinator.swift)" ||
   fail "BUG 0032: crash reports require MetricKit evidence"
 if grep -nE 'verifiedPrefixes|supportsDirectVideo\([^)]*provider|supportsDirectVideo\([^)]*model' \
-  Soma/Services/AIProvider.swift >/dev/null 2>&1; then
+  "$(service_file AIProvider.swift)" >/dev/null 2>&1; then
   fail "BUG 0033: model/provider names must never determine multimodal capability"
 fi
-grep -q 'source.map { "来源：平台模型目录' Soma/Services/AIProvider.swift ||
+grep -q 'source.map { "来源：平台模型目录' "$(service_file AIProvider.swift)" ||
   fail "BUG 0033: model capability decisions must expose their source"
 grep -q 'SOMA_PROVIDER_SUPPORTS_DIRECT_VIDEO' Server/src/main.ts ||
   fail "BUG 0033: remote direct-video capability must come from explicit deployment evidence"
@@ -205,25 +223,25 @@ fi
 
 grep -q 'MainActor.assertIsolated' Soma/Models/AgentJob.swift ||
   fail "BUG 0024: agent event projection must assert main actor isolation"
-grep -q 'onChunk: @MainActor' Soma/Services/AgentStreamDeadline.swift ||
+grep -q 'onChunk: @MainActor' "$(service_file AgentStreamDeadline.swift)" ||
   fail "BUG 0024: streaming chunk handling must stay isolated to the main actor"
 grep -q 'skipMovieOutputGeometry = state == .startingRecording' \
-  Soma/Services/WorkoutCameraService.swift ||
+  "$(service_file WorkoutCameraCaptureLifecycle.swift)" ||
   fail "BUG 0025: capture geometry must skip movie output while starting or recording"
 grep -q 'guard !skipMovieOutputGeometry, !resources.movieOutput.isRecording else' \
-  Soma/Services/WorkoutCameraService.swift ||
+  "$(service_file WorkoutCameraCaptureLifecycle.swift)" ||
   fail "BUG 0025: capture geometry must not rewrite movie output while recording"
 grep -q 'waitUntilPreviewHostSettled' \
-  Soma/Services/GuidedWorkoutCoordinator.swift ||
+  "$(service_file GuidedWorkoutCoordinator.swift)" ||
   fail "BUG 0026: beginCurrentSet must wait for the set preview host before recording"
 grep -q 'shouldRebuildCaptureConnections' \
-  Soma/Services/WorkoutCameraService.swift ||
+  "$(service_file WorkoutCameraService.swift)" ||
   fail "BUG 0026: live recording must not rebuild capture connections on preview host handoff"
 grep -q 'hasLivePreview' \
   Soma/Views/GuidedWorkoutInteractionState.swift ||
   fail "BUG 0026: live preview host handoff must not rebuild capture connections"
 grep -q 'prepare-reused-running-session' \
-  Soma/Services/WorkoutCameraService.swift ||
+  "$(service_file WorkoutCameraService.swift)" ||
   fail "BUG 0026: startRecording must reuse a running capture session instead of reconfiguring"
 grep -q 'shouldIgnoreTransientPreviewInterruption' \
   Soma/Views/GuidedWorkoutInteractionState.swift ||

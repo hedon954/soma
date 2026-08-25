@@ -1,11 +1,11 @@
 # ReAct Agent
 
 本文描述当前持久 Job、本地 ReAct 与可选远程 Backend 运行时。产品范围
-见 [PRD 003](prd/003-streaming-react-agent.md)、
-[PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
-[PRD 022](prd/022-react-reliability-and-context-awareness.md) 和
-[PRD 025](prd/025-trusted-context-direct-video-and-reviewable-meals.md)、
-[PRD 030](prd/030-agent-prompt-skill-context-and-tool-v3.md)，详细协议见
+见 [PRD 003](archive/0.0.1/prd/003-streaming-react-agent.md)、
+[PRD 011](archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md) 和
+[PRD 022](archive/0.0.3/prd/022-react-reliability-and-context-awareness.md) 和
+[PRD 025](archive/0.0.4/prd/025-trusted-context-direct-video-and-reviewable-meals.md)、
+[PRD 030](archive/0.0.6/prd/030-agent-prompt-skill-context-and-tool-v3.md)，详细协议见
 [Agent Job 与远程执行协议](engineering/agent-job-protocol.md)。
 
 ## 当前运行时
@@ -32,7 +32,7 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 
 图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库和业务 Tool 始终留在
 设备上；本地模式标准档没有 API Key 时，消息仍然落盘并进入暂存，首次遇到时同时打开「LLM 配置」，
-恢复后按发送顺序自动补偿消费（见 [ADR 0045](adr/0045-llm-outage-staging-and-compensating-drain.md)）。用户明确启用
+恢复后按发送顺序自动补偿消费（见 [ADR 0045](archive/0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md)）。用户明确启用
 远程持续模式后，当前图片或媒体能力注册允许的规范化视频可作为短期任务素材上传；用户 BYOK
 不上传。直传和关键帧模式不会在同一个 Provider 请求里重复发送。
 
@@ -60,7 +60,7 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 快捷按钮是可完整增删改的本机实体：名称、图标、绑定 Skill（可为空）、工具白名单、是否显示与排序，
 以 JSON 存 UserDefaults，不进入 SwiftData。默认可见三个：饮食分析、训练记录、近期分析；聊天输入区
 最多显示六个。工具默认全选，可按分组删减，也可让小模型推荐一份清单与理由后一键采纳。详见
-[ADR 0082](adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)。
+[ADR 0082](archive/0.0.7/adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)。
 
 ## 本地工具
 
@@ -115,27 +115,31 @@ SwiftData；DEBUG 下投影入口断言主 actor 隔离（见
 
 除 Trace 之外还有一条本机滚动诊断日志，记录生命周期、每次模型调用的工具清单、Tool 结果、Turn 终态
 与录像阶段，用于崩溃后复盘；边界与上报规则见
-[ADR 0083](adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)。
+[ADR 0083](archive/0.0.7/adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)。
 
 ## 关键实现
 
-- 分层 Prompt：`Soma/Services/ReActAgentPrompt.swift`
-- Tool Schema：`Soma/Services/ReActAgent.swift`
-- Skill 注册表：`Soma/Services/AgentSkillRegistry.swift`
-- 快捷按钮与工具曝光：`Soma/Services/AgentInputShortcut.swift`、
-  `Soma/Services/AgentToolExposurePolicy.swift`
-- 诊断日志与崩溃上报：`Soma/Services/DiagnosticsLogStore.swift`、
-  `Soma/Services/CrashDiagnosticsCoordinator.swift`
-- 会话滚动压缩：`Soma/Services/ConversationCompactionMiddleware.swift`
-- 流式 ReAct 编排与供应商适配：`Soma/Services/AppServices.swift`
-- 本地工具执行：`Soma/Services/ConversationRecorder.swift`
+- 分层 Prompt：`Soma/Services/Conversation/ReActAgentPrompt.swift`
+- Tool Schema：`Soma/Services/Conversation/AgentToolName.swift`、
+  `Soma/Services/Conversation/AgentToolJSONSchema.swift`
+- ReAct 循环门面：`Soma/Services/Conversation/ReActAgent.swift`（上限与错误）；
+  循环本体 `AIService+ReActLoop.swift`；重试 `AgentStepRetryPolicy.swift`；
+  原生 tool_calls 流式累积 `AgentStreamingToolCall.swift` / `AgentStreamWorker.swift`
+- Skill 注册表：`Soma/Services/Settings/AgentSkillRegistry.swift`
+- 快捷按钮与工具曝光：`Soma/Services/Settings/AgentInputShortcut.swift`、
+  `Soma/Services/Conversation/AgentToolExposurePolicy.swift`
+- 诊断日志与崩溃上报：`Soma/Services/Settings/DiagnosticsLogStore.swift`、
+  `Soma/Services/Settings/CrashDiagnosticsCoordinator.swift`
+- 会话滚动压缩：`Soma/Services/Conversation/ConversationCompactionMiddleware.swift`
+- 流式 ReAct 编排与供应商适配：`Soma/Services/Conversation/AIService.swift`
+- 本地工具执行：`Soma/Services/Conversation/ConversationRecorder.swift`
 - 流式聊天 UI：`Soma/Views/CoachView.swift`
 - Event Card UI：`Soma/Views/AgentTurnTranscript.swift`
-- Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/Models.swift`
-- Trace 数据结构：`Soma/Models/Models.swift`
+- Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/CoachMessage.swift`
+- Trace 数据结构：`Soma/Models/AgentTrace.swift`
 - 持久 Job、Event 与投影：`Soma/Models/AgentJob.swift`、
-  `Soma/Services/ConversationProcessingService.swift`
-- 可选远程 Backend：`Soma/Services/RemoteAgentClient.swift`、`Server/`
+  `Soma/Services/Conversation/ConversationProcessingService.swift`
+- 可选远程 Backend：`Soma/Services/Conversation/RemoteAgentClient.swift`、`Server/`
 - 动作与训练计划：`Soma/Models/ExerciseDefinition.swift`、
   `Soma/Models/TrainingPlan.swift`
 

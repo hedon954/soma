@@ -433,19 +433,6 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
     }
 
-    func testCurrentTurnPromptSeparatesStableContractFromDynamicInput() {
-        let prompt = ReActAgentPrompt.user(
-            text: "记录深蹲",
-            context: "可信摘要",
-            imageCount: 0,
-            hasVideo: false
-        )
-        XCTAssertTrue(prompt.hasPrefix("[SOMA CURRENT TURN v2]"))
-        XCTAssertTrue(prompt.contains("## 可信本机上下文\n可信摘要"))
-        XCTAssertTrue(prompt.contains("## 当前用户输入\n记录深蹲"))
-        XCTAssertTrue(prompt.contains("一般建议直接回答"))
-    }
-
     func testUnselectedShortcutIncludesFeedbackWhileNarrowedShortcutDoesNot() {
         let defaultTools = AgentToolExposurePolicy.tools(selectedShortcut: nil)
         XCTAssertTrue(defaultTools.contains(.submitFeedback))

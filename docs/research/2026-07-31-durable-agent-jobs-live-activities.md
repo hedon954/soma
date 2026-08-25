@@ -4,10 +4,10 @@
 - 状态：已转化为正式 PRD、ADR 与工程协议
 - 适用范围：Soma 远程 Agent、后台恢复、聊天事件投影、通知与灵动岛
 - 下游落地：
-  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
-  - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
-  - [ADR 0032](../adr/0032-optional-remote-agent-execution.md)
-  - [ADR 0033](../adr/0033-live-activity-agent-job-projection.md)
+  - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
+  - [ADR 0031](../archive/0.0.1/adr/0031-durable-agent-jobs-event-log-and-projections.md)
+  - [ADR 0032](../archive/0.0.1/adr/0032-optional-remote-agent-execution.md)
+  - [ADR 0033](../archive/0.0.1/adr/0033-live-activity-agent-job-projection.md)
 
 ## 结论
 

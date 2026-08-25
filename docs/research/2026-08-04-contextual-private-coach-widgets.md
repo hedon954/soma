@@ -3,7 +3,7 @@
 - 日期：2026-08-04
 - 状态：已转化并实现
 - 修订自：无
-- 下游落地：[PRD 017](../prd/017-contextual-private-coach-widgets.md)、[ADR 0042](../adr/0042-contextual-widget-snapshot-and-privacy.md)
+- 下游落地：[PRD 017](../archive/0.0.1/prd/017-contextual-private-coach-widgets.md)、[ADR 0042](../archive/0.0.1/adr/0042-contextual-widget-snapshot-and-privacy.md)
 
 ## 结论
 

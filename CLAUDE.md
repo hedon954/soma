@@ -27,8 +27,20 @@
   文档直接删除，不留“曾经有过 / 现已删除 / 不再兼容 / 隐藏路径”等过渡说明。只有 HEAD 里
   已有的 PRD、ADR、Bug 或工程协议被这次提交改变时，才建立后续修订或替代关系。
 - `scripts/check-document-lifecycle-links.rb` 是双向关系的自动门禁。新增生命周期链接时必须让
-  `make check` 验证反向边存在。
-- 长期依据见 [ADR 0034](docs/adr/0034-bidirectional-document-lifecycle-links.md)。
+  `make check` 验证反向边存在。门禁验证**活文档**互链；`docs/archive/` 原文是考古，不要求与
+  活文档互链。
+- **活文档窗口**：`docs/prd/` 与 `docs/adr/` 的阅读顺序是「压缩起点 → 最近 3 个营销版本」
+  （以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md` 版本标题为准，不按文件日期）。
+  压缩起点（`docs/prd/000-origin-through-0.0.9.md`、`docs/adr/0000-origin-through-0.0.9.md`）
+  是滑出窗口内容的滚动收口：只保留仍有效的最终要求与决策，不是旧文件清单。窗口最旧活文档的
+  修订自 / 部分替代指向压缩起点；起点没有更早的活前驱。
+- **发布时合并，不要只搬家**：每次新 App 发布，把滑出窗口的原文 `git mv` 进
+  `docs/archive/<version>/`，并把「现有压缩起点 + 该版本仍有效的最终状态」合并成新起点，
+  替换旧起点。归档留在 Git，不加入 gitignore。这与 Agent 消息滚动压缩相同。
+- **不要默认读取 `docs/archive/`**，除非维护者明确要求查阅历史。Cursor 使用根
+  `.cursorignore`；Claude Code 使用 `.claude/settings.json` 的 `Read(./docs/archive/**)`
+  deny；Codex 没有可靠的 `.codexignore`（openai/codex#24993 仍开放），必须遵守本条。
+  不要新增 `.claudeignore` 或 `.codexignore` 作为替代。
 
 ## Product contract
 
@@ -50,17 +62,17 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能：
 - **Non-diagnostic**：动作、体态和饮食反馈是一般建议，不冒充医疗诊断。
 - **Scope discipline**：只实现当前 PRD 或明确需求，不为可能的未来功能预建入口。
 
-当前实现基线见 `docs/prd/004-soma-current-product.md`；已采纳待实现的训练智能和可靠 Agent
-分别见 `docs/prd/010-exercise-library-plans-guided-training.md` 与
-`docs/prd/011-durable-agent-jobs-remote-continuity.md`；验收矩阵见 `docs/acceptance.md`。
+当前产品不变量以本节为准；活 PRD 链见 `docs/prd/README.md`（压缩起点 + 0.0.10–0.0.12）。
+验收矩阵见 `docs/acceptance.md`。远程 Job 协议见 `docs/engineering/agent-job-protocol.md`。
 
 ## Architecture
 
 当前技术栈和边界：
 
 - SwiftUI + SwiftData，最低 iOS 17。
-- [PRD 011](docs/prd/011-durable-agent-jobs-remote-continuity.md) 实施后，`Server/` 保存独立
-  TypeScript API/Worker；PostgreSQL 是远程 Job/Event 事实来源，服务器不成为身体业务数据库。
+- 可选远程 Agent 实施后，`Server/` 保存独立 TypeScript API/Worker；PostgreSQL 是远程
+  Job/Event 事实来源，服务器不成为身体业务数据库。协议见
+  `docs/engineering/agent-job-protocol.md`。
 - `project.yml` 是 Xcode 工程唯一事实来源；`Soma.xcodeproj` 由 XcodeGen 生成，
   不进入 Git。
 - `Soma/App` 负责根生命周期和依赖注入。

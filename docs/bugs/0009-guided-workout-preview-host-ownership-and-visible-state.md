@@ -5,8 +5,8 @@
 - 影响范围：计划带练紧凑/放大相机切换、相机错误反馈与竖屏动作信息
 - 修订自：[BUG 0008](0008-guided-workout-realtime-camera-projection.md) 的首次共享预览层修复
 - 后续修订：[BUG 0010](0010-guided-recording-state-and-cue-gaps.md)
-- 关联需求：[PRD 013](../prd/013-guided-workout-experience-and-capture.md)
-- 关联决策：[ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
+- 关联需求：[PRD 013](../archive/0.0.1/prd/013-guided-workout-experience-and-capture.md)
+- 关联决策：[ADR 0038](../archive/0.0.1/adr/0038-focused-guided-workout-and-capture-geometry.md)
 
 ## 症状
 

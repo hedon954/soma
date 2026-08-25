@@ -7,9 +7,9 @@
   - [BUG 0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) 的 movieOutput
     几何守卫与「PIP 上先 startRecording 再切组」策略
 - 上游依据：
-  - [ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
+  - [ADR 0074](../archive/0.0.7/adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
 - 下游落地：
-  - [PRD 035](../prd/035-guided-preview-then-record-and-immediate-share.md)
+  - [PRD 035](../archive/0.0.9/prd/035-guided-preview-then-record-and-immediate-share.md)
 
 ## 症状
 

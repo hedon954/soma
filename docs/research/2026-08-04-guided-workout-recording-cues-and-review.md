@@ -4,8 +4,8 @@
 - 状态：已转化为正式 PRD、ADR 与 Bug 修复契约
 - 修订自：[训练计划编排、沉浸式带练与真实取景调研](2026-08-03-guided-workout-flow-and-capture.md) 的录像触发、语音提示和训练结束部分
 - 下游落地：
-  - [PRD 014](../prd/014-guided-workout-recording-cues-and-review.md)
-  - [ADR 0039](../adr/0039-event-driven-guided-recording-cues-and-review.md)
+  - [PRD 014](../archive/0.0.1/prd/014-guided-workout-recording-cues-and-review.md)
+  - [ADR 0039](../archive/0.0.1/adr/0039-event-driven-guided-recording-cues-and-review.md)
   - [BUG 0010](../bugs/0010-guided-recording-state-and-cue-gaps.md)
 
 ## 结论

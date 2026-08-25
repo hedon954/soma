@@ -12,5 +12,5 @@
 
 ## 关联
 
-- [PRD 018](../prd/018-free-team-widget-fallback.md)
-- [ADR 0043](../adr/0043-free-team-widget-fallback.md)
+- [PRD 018](../archive/0.0.1/prd/018-free-team-widget-fallback.md)
+- [ADR 0043](../archive/0.0.1/adr/0043-free-team-widget-fallback.md)

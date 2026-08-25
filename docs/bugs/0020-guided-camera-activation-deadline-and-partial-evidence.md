@@ -9,7 +9,7 @@
 - 后续修订：
   - [BUG 0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) 定位到录像开始后
     预览交接重放几何会改写视频连接并提前终止录像，并把失败原因具体化
-- 下游落地：[ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
+- 下游落地：[ADR 0074](../archive/0.0.7/adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
 
 ## 症状
 
@@ -39,7 +39,7 @@
 
 ## 修复
 
-- 按 [ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md) 把 request 建立前移到
+- 按 [ADR 0074](../archive/0.0.7/adr/0074-bounded-guided-camera-activation-and-partial-evidence.md) 把 request 建立前移到
   prepare 之前，权限返回后的配置、Session 启动、连接验证和文件启动全部具有有限终态。
 - 用 request generation 隔离迟到的系统结果；失败或超时后新 retry 不复用旧 preparation task。
 - 用户选择自动录像后在动作介绍/倒计时阶段执行可见 camera-ready preflight；“不录像”继续按需，

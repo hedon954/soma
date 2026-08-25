@@ -29,7 +29,7 @@ iOS 26.3.1 的 WidgetKit 无法把这种动态 `Text` 作为扩展元数据透�
 - Widget 配置直接使用本地化字符串重载，不再把运行时拼接内容包装为 `Text`；
 - 构建号从 1 提升到 2，确保真机重新注册修复后的扩展。
 
-修复不改变 [ADR 0013](../adr/0013-widget-and-app-intent-capture-routing.md) 的路由、数据或
+修复不改变 [ADR 0013](../archive/0.0.1/adr/0013-widget-and-app-intent-capture-routing.md) 的路由、数据或
 隐私边界。
 
 ## 回归门禁

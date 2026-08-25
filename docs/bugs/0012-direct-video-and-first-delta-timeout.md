@@ -7,9 +7,9 @@
   - [BUG 0002](0002-video-frame-extraction-silent-fallback.md) 的视频准备与诚实降级边界
   - [BUG 0005](0005-remote-agent-streaming-latency-regression.md) 的远程流式延迟边界
 - 下游落地：
-  - [ADR 0057](../adr/0057-direct-video-capability-and-observable-fallback.md)
-  - [ADR 0058](../adr/0058-first-delta-deadline-and-bounded-retry.md)
-  - [PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
+  - [ADR 0057](../archive/0.0.4/adr/0057-direct-video-capability-and-observable-fallback.md)
+  - [ADR 0058](../archive/0.0.4/adr/0058-first-delta-deadline-and-bounded-retry.md)
+  - [PRD 025](../archive/0.0.4/prd/025-trusted-context-direct-video-and-reviewable-meals.md)
 
 ## 症状
 

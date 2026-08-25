@@ -5,9 +5,9 @@
 - 完成标准：代码、自动化门禁、真机安装和远端 CI 有运行证据；无法自动化的真机体验项保留
   未勾选并移交维护者，不伪造通过状态
 - 关联：
-  - [PRD 010](../prd/010-exercise-library-plans-guided-training.md)
-  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
-  - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
+  - [PRD 010](../archive/0.0.1/prd/010-exercise-library-plans-guided-training.md)
+  - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
+  - [PRD 013](../archive/0.0.1/prd/013-guided-workout-experience-and-capture.md)
   - [实施次序](implementation-sequence.md)
 
 本文件是本轮“一次性完成所有任务”的持久跟踪面。复选框只能在证据充分时勾选；已有相近代码

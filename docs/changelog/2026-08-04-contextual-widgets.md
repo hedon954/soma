@@ -16,6 +16,6 @@ Soma 主屏组件从纯快捷按钮升级为“当前下一步”入口：可继
 
 ## 关联
 
-- [PRD 017](../prd/017-contextual-private-coach-widgets.md)
-- [ADR 0042](../adr/0042-contextual-widget-snapshot-and-privacy.md)
+- [PRD 017](../archive/0.0.1/prd/017-contextual-private-coach-widgets.md)
+- [ADR 0042](../archive/0.0.1/adr/0042-contextual-widget-snapshot-and-privacy.md)
 - [组件调研](../research/2026-08-04-contextual-private-coach-widgets.md)

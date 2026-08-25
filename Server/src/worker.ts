@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentEvent, AgentJob, ToolRequest } from "./domain.js";
 import { isTerminal, ProtocolError } from "./domain.js";
-import type { SomaStore } from "./store.js";
+import type { SomaStore } from "./store-contract.js";
 import {
   type DeviceToolDefinition,
   effectiveAllowedDeviceTools,

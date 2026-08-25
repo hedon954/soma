@@ -1,0 +1,135 @@
+# Soma 0.0.1 归档摘要
+
+本目录保存已滑出最近 3 个营销版本窗口的原始 PRD/ADR。Agent 默认不读取；
+只有维护者明确要求历史时才打开原始文件。
+
+## 产品要求摘要
+
+- PRD 001：私人 AI 健身教练基础
+- PRD 002：聊天优先与审查闭环
+- PRD 003：流式 ReAct Agent 平台
+- PRD 004：Soma 当前产品基线
+- PRD 005：对话 Session 与发送反馈
+- PRD 006：足迹、位置上下文与失败重试
+- PRD 007：数据导出、自动备份与主动清除
+- PRD 008：连续对话、逐组训练与自适应模型
+- PRD 009：记录媒体归档与单张解绑
+- PRD 010：动作库、训练计划、程序化带练与视频复盘
+- PRD 011：持久 Agent Job、可选远程执行与系统进度
+- PRD 012：GUI 训练计划编排
+- PRD 013：低摩擦训练计划编排与沉浸式带练
+- PRD 014：按需录像、完整语音节奏与训练完成复盘
+- PRD 015：对话启动计划带练
+- PRD 016：训练成为一级执行入口
+- PRD 017：情境化私人教练主屏组件
+- PRD 018：免费签名下的 Widget 能力降级
+
+## 架构决策摘要
+
+- ADR 0001：无账户、本地优先与双数据空间
+- ADR 0002：聊天是唯一创建路径，GUI 负责审查
+- ADR 0003：使用原生流式 Tool Calling 构建 ReAct
+- ADR 0004：Skills 渐进披露，Tool 协议固定
+- ADR 0005：一条消息一条 Trace，Span 通过 Event 流式渲染
+- ADR 0006：缺失值为空，派生指标使用确定性规则
+- ADR 0007：外部健康数据先归一化，并使用增量游标去重
+- ADR 0008：对话处理属于 App 生命周期
+- ADR 0009：全量迁移为 Soma
+- ADR 0010：统一仓库契约、质量门禁与 XcodeGen 事实来源
+- ADR 0011：分离快速静态检查与完整模拟器验证
+- ADR 0012：有序混合媒体作为一等数据
+- ADR 0013：Widget 与 App Intent 只负责进入聊天录入
+- ADR 0014：Agent Turn 使用有序异构 Event Cards
+- ADR 0015：在进入前台时按自然日解析当前对话 Session
+- ADR 0016：Turn、Attempt 与足迹成功投影
+- ADR 0017：位置与天气作为受控的 Turn 上下文
+- ADR 0018：业务记录使用来源与多维证据确定性合并
+- ADR 0019：GitHub Actions 按成本分层执行质量门禁
+- ADR 0020：使用 Open-Meteo 提供临时天气上下文
+- ADR 0021：分离开放导出、加密备份与个人数据清除
+- ADR 0022：由用户控制可继续的对话 Session
+- ADR 0023：训练以有序逐组证据为事实来源
+- ADR 0024：投影最近十个 Session 来回并恢复历史媒体
+- ADR 0025：使用双档模型配置与本地保守路由
+- ADR 0026：受限归档紧邻上一轮的健身房照片
+- ADR 0027：AI 必配与发送前配置门禁
+- ADR 0028：动作使用稳定 ID，大模型基于完整名称列表完成语义归一
+- ADR 0029：计划版本、执行快照与逐组事实分层
+- ADR 0030：带练使用确定性状态机，并按 Session 自动录制目标组
+- ADR 0031：Agent 使用持久 Job、语义 Event Log 与独立投影
+- ADR 0032：以匿名设备身份提供可选远程 Agent 执行
+- ADR 0033：Live Activity 只投影 Agent Job 的隐私安全状态
+- ADR 0034：文档修订与替代关系使用双向生命周期索引
+- ADR 0035：内置动作内容保持静默，图片只在动作激活后关联并按需生成
+- ADR 0036：训练计划允许 GUI 确定性创建与编排
+- ADR 0037：Backend 透明流式体验与通知驱动唤醒
+- ADR 0038：带练使用聚焦投影并锁定录像几何
+- ADR 0039：带练录像、语音与复盘由确定性事件驱动
+- ADR 0040：Agent 通过受控计划工具启动本地带练
+- ADR 0041：训练计划与带练使用一级训练 Tab
+- ADR 0042：情境化组件使用最小本地快照与私密默认值
+- ADR 0043：免费签名阶段使用静态 Widget 入口
+
+## 原始文件
+
+- [PRD 001：私人 AI 健身教练基础](prd/001-private-ai-fitness-coach.md)
+- [PRD 002：聊天优先与审查闭环](prd/002-chat-first-review-loop.md)
+- [PRD 003：流式 ReAct Agent 平台](prd/003-streaming-react-agent.md)
+- [PRD 004：Soma 当前产品基线](prd/004-soma-current-product.md)
+- [PRD 005：对话 Session 与发送反馈](prd/005-conversation-sessions-and-send-feedback.md)
+- [PRD 006：足迹、位置上下文与失败重试](prd/006-footprints-location-and-retry.md)
+- [PRD 007：数据导出、自动备份与主动清除](prd/007-data-export-backup-and-erasure.md)
+- [PRD 008：连续对话、逐组训练与自适应模型](prd/008-coach-continuity-and-adaptive-models.md)
+- [PRD 009：记录媒体归档与单张解绑](prd/009-record-media-association-and-detachment.md)
+- [PRD 010：动作库、训练计划、程序化带练与视频复盘](prd/010-exercise-library-plans-guided-training.md)
+- [PRD 011：持久 Agent Job、可选远程执行与系统进度](prd/011-durable-agent-jobs-remote-continuity.md)
+- [PRD 012：GUI 训练计划编排](prd/012-gui-training-program-authoring.md)
+- [PRD 013：低摩擦训练计划编排与沉浸式带练](prd/013-guided-workout-experience-and-capture.md)
+- [PRD 014：按需录像、完整语音节奏与训练完成复盘](prd/014-guided-workout-recording-cues-and-review.md)
+- [PRD 015：对话启动计划带练](prd/015-agent-guided-workout-launch.md)
+- [PRD 016：训练成为一级执行入口](prd/016-training-primary-tab.md)
+- [PRD 017：情境化私人教练主屏组件](prd/017-contextual-private-coach-widgets.md)
+- [PRD 018：免费签名下的 Widget 能力降级](prd/018-free-team-widget-fallback.md)
+- [ADR 0001：无账户、本地优先与双数据空间](adr/0001-local-first-dual-data-spaces.md)
+- [ADR 0002：聊天是唯一创建路径，GUI 负责审查](adr/0002-chat-write-path-review-gui.md)
+- [ADR 0003：使用原生流式 Tool Calling 构建 ReAct](adr/0003-native-streaming-react-tool-calling.md)
+- [ADR 0004：Skills 渐进披露，Tool 协议固定](adr/0004-progressive-skills-fixed-tool-contract.md)
+- [ADR 0005：一条消息一条 Trace，Span 通过 Event 流式渲染](adr/0005-trace-span-event-observability.md)
+- [ADR 0006：缺失值为空，派生指标使用确定性规则](adr/0006-data-truth-and-derived-metrics.md)
+- [ADR 0007：外部健康数据先归一化，并使用增量游标去重](adr/0007-health-import-normalization-and-dedup.md)
+- [ADR 0008：对话处理属于 App 生命周期](adr/0008-app-scoped-conversation-processing.md)
+- [ADR 0009：全量迁移为 Soma](adr/0009-soma-brand-migration.md)
+- [ADR 0010：统一仓库契约、质量门禁与 XcodeGen 事实来源](adr/0010-repository-governance-and-xcodegen.md)
+- [ADR 0011：分离快速静态检查与完整模拟器验证](adr/0011-fast-check-full-verify.md)
+- [ADR 0012：有序混合媒体作为一等数据](adr/0012-ordered-mixed-media-collections.md)
+- [ADR 0013：Widget 与 App Intent 只负责进入聊天录入](adr/0013-widget-and-app-intent-capture-routing.md)
+- [ADR 0014：Agent Turn 使用有序异构 Event Cards](adr/0014-agent-turn-ordered-event-cards.md)
+- [ADR 0015：在进入前台时按自然日解析当前对话 Session](adr/0015-daily-conversation-session-lifecycle.md)
+- [ADR 0016：Turn、Attempt 与足迹成功投影](adr/0016-conversation-turn-attempt-and-footprint-projection.md)
+- [ADR 0017：位置与天气作为受控的 Turn 上下文](adr/0017-location-and-weather-context.md)
+- [ADR 0018：业务记录使用来源与多维证据确定性合并](adr/0018-provenance-aware-record-merge.md)
+- [ADR 0019：GitHub Actions 按成本分层执行质量门禁](adr/0019-cost-aware-github-actions-gates.md)
+- [ADR 0020：使用 Open-Meteo 提供临时天气上下文](adr/0020-open-meteo-transient-weather-provider.md)
+- [ADR 0021：分离开放导出、加密备份与个人数据清除](adr/0021-portable-export-encrypted-backup-and-erasure.md)
+- [ADR 0022：由用户控制可继续的对话 Session](adr/0022-user-controlled-conversation-sessions.md)
+- [ADR 0023：训练以有序逐组证据为事实来源](adr/0023-ordered-workout-set-evidence.md)
+- [ADR 0024：投影最近十个 Session 来回并恢复历史媒体](adr/0024-session-context-projection-and-compaction.md)
+- [ADR 0025：使用双档模型配置与本地保守路由](adr/0025-tiered-model-profiles-and-routing.md)
+- [ADR 0026：受限归档紧邻上一轮的健身房照片](adr/0026-bounded-gym-media-attribution.md)
+- [ADR 0027：AI 必配与发送前配置门禁](adr/0027-required-ai-configuration-and-send-gate.md)
+- [ADR 0028：动作使用稳定 ID，大模型基于完整名称列表完成语义归一](adr/0028-semantic-exercise-identity.md)
+- [ADR 0029：计划版本、执行快照与逐组事实分层](adr/0029-versioned-training-plans-and-session-facts.md)
+- [ADR 0030：带练使用确定性状态机，并按 Session 自动录制目标组](adr/0030-deterministic-guided-workout-and-session-recording.md)
+- [ADR 0031：Agent 使用持久 Job、语义 Event Log 与独立投影](adr/0031-durable-agent-jobs-event-log-and-projections.md)
+- [ADR 0032：以匿名设备身份提供可选远程 Agent 执行](adr/0032-optional-remote-agent-execution.md)
+- [ADR 0033：Live Activity 只投影 Agent Job 的隐私安全状态](adr/0033-live-activity-agent-job-projection.md)
+- [ADR 0034：文档修订与替代关系使用双向生命周期索引](adr/0034-bidirectional-document-lifecycle-links.md)
+- [ADR 0035：内置动作内容保持静默，图片只在动作激活后关联并按需生成](adr/0035-silent-bundled-exercise-content-and-on-demand-images.md)
+- [ADR 0036：训练计划允许 GUI 确定性创建与编排](adr/0036-gui-training-program-authoring.md)
+- [ADR 0037：Backend 透明流式体验与通知驱动唤醒](adr/0037-backend-transparent-streaming-and-notification-wake.md)
+- [ADR 0038：带练使用聚焦投影并锁定录像几何](adr/0038-focused-guided-workout-and-capture-geometry.md)
+- [ADR 0039：带练录像、语音与复盘由确定性事件驱动](adr/0039-event-driven-guided-recording-cues-and-review.md)
+- [ADR 0040：Agent 通过受控计划工具启动本地带练](adr/0040-agent-guided-workout-launch.md)
+- [ADR 0041：训练计划与带练使用一级训练 Tab](adr/0041-training-primary-tab.md)
+- [ADR 0042：情境化组件使用最小本地快照与私密默认值](adr/0042-contextual-widget-snapshot-and-privacy.md)
+- [ADR 0043：免费签名阶段使用静态 Widget 入口](adr/0043-free-team-widget-fallback.md)

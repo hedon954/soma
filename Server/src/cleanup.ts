@@ -1,5 +1,5 @@
 import type { TemporaryObjectStore } from "./object-store.js";
-import type { CleanupResult, SomaStore } from "./store.js";
+import type { CleanupResult, SomaStore } from "./store-contract.js";
 
 export class RetentionCleaner {
   constructor(

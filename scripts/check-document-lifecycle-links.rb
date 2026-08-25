@@ -19,6 +19,10 @@ documents = Dir[root.join("docs/**/*.md")].map { |path| Pathname.new(path) }.sor
 edges = Hash.new { |hash, key| hash[key] = [] }
 failures = []
 
+def archive?(pathname)
+  pathname.to_s.include?("/docs/archive/")
+end
+
 documents.each do |document|
   lifecycle_block = false
 
@@ -54,6 +58,9 @@ edges.each do |source, targets|
     end
 
     next if edges.fetch(target, []).include?(source)
+
+    # 归档原文是考古；活链以压缩起点为前驱。跨归档/活文档的边不要求互链。
+    next if archive?(source) != archive?(target)
 
     failures << [
       source.relative_path_from(root),

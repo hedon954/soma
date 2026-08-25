@@ -581,26 +581,6 @@ struct EmptyStateCard: View {
     }
 }
 
-struct LoadingButtonLabel: View {
-    let title: String
-    let isLoading: Bool
-    var systemImage: String?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if isLoading {
-                ProgressView()
-                    .tint(.white)
-            } else if let systemImage {
-                Image(systemName: systemImage)
-            }
-            Text(isLoading ? "AI 正在分析…" : title)
-        }
-        .fontWeight(.semibold)
-        .frame(maxWidth: .infinity)
-    }
-}
-
 struct LocalImageView: View {
     let path: String?
     var maxPixelSize = 1024

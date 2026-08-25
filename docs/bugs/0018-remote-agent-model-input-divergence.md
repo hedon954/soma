@@ -5,8 +5,8 @@
 - 影响范围：远程持续执行、Prompt、Skills、历史媒体、并行 Tool 与恢复
 - 上游依据：无
 - 下游落地：
-  - [PRD 029](../prd/029-unified-local-remote-agent-model-input.md)
-  - [ADR 0068](../adr/0068-versioned-unified-agent-model-input.md)
+  - [PRD 029](../archive/0.0.6/prd/029-unified-local-remote-agent-model-input.md)
+  - [ADR 0068](../archive/0.0.6/adr/0068-versioned-unified-agent-model-input.md)
 
 ## 症状
 
