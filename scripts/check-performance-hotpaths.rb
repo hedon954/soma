@@ -13,6 +13,16 @@ def fail_check(message)
   exit 1
 end
 
+SERVICE_FILES = Dir.glob(File.join(ROOT, "Soma/Services/**/*.swift")).each_with_object({}) do |path, acc|
+  name = File.basename(path)
+  fail_check("duplicate Soma/Services basename #{name}") if acc.key?(name)
+  acc[name] = path.delete_prefix("#{ROOT}/")
+end
+
+def service_file(name)
+  SERVICE_FILES.fetch(name) { fail_check("missing Soma/Services/**/#{name}") }
+end
+
 # These ceilings capture the audited baseline. Every remediation must lower the
 # corresponding value; new regressions fail immediately even before all legacy
 # occurrences have been removed.
@@ -34,18 +44,18 @@ ceilings = {
   ["Soma/Components/MediaViewer.swift", /MediaStore\.image\(at:/] => 0,
   ["Soma/Components/StoredMediaStrip.swift", /MediaStore\.image\(at:/] => 0,
   ["Soma/Components/MediaPicker.swift", /if let data = image\.jpegData/] => 0,
-  ["Soma/Services/GuidedWorkoutCoordinator.swift", /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
-  ["Soma/Services/GuidedWorkoutCoordinator+Timeline.swift", /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
-  ["Soma/Services/GuidedWorkoutCoordinator+Recording.swift", /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
-  ["Soma/Services/ConversationSessionDeletion.swift", /FetchDescriptor<[^>]+>\(\)/] => 0,
-  ["Soma/Services/ConversationProcessingQueueActions.swift", /FetchDescriptor<(AgentJob|CoachMessage|PersistentAgentEvent|AgentTrace)>\(\)/] => 0,
-  ["Soma/Services/GuidedWorkoutRecordStore.swift", /FetchDescriptor<(WorkoutEntry|ExerciseDefinition|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
+  [service_file("GuidedWorkoutCoordinator.swift"), /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
+  [service_file("GuidedWorkoutCoordinator+Timeline.swift"), /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
+  [service_file("GuidedWorkoutCoordinator+Recording.swift"), /FetchDescriptor<(WorkoutSession|ExercisePerformance|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
+  [service_file("ConversationSessionDeletion.swift"), /FetchDescriptor<[^>]+>\(\)/] => 0,
+  [service_file("ConversationProcessingQueueActions.swift"), /FetchDescriptor<(AgentJob|CoachMessage|PersistentAgentEvent|AgentTrace)>\(\)/] => 0,
+  [service_file("GuidedWorkoutRecordStore.swift"), /FetchDescriptor<(WorkoutEntry|ExerciseDefinition|WorkoutSet|WorkoutEffort)>\(\)/] => 0,
   ["Soma/Views/WorkoutShareViews.swift", /FetchDescriptor<(ExercisePerformance|WorkoutSet|ExerciseDefinition|WorkoutEntry)>\(\)/] => 0,
-  ["Soma/Services/ConversationCompactionMiddleware.swift", /FetchDescriptor<(CoachMessage|ConversationCompactionSummary)>\(\)/] => 0,
-  ["Soma/Services/ConversationProcessingRemoteTrace.swift", /FetchDescriptor<(CoachMessage|AgentTrace)>\(\)/] => 0,
-  ["Soma/Services/ConversationRecorderTrainingPlans.swift", /FetchDescriptor<(TrainingProgram|WorkoutSession|ExercisePerformance|PerformanceAnalysis|AgentJob|ExerciseDefinition)>\(\)/] => 0,
-  ["Soma/Services/ConversationRecorderTrainingQueries.swift", /FetchDescriptor<(ExercisePerformance|WorkoutSet|ExerciseDefinition)>\(\)/] => 0,
-  ["Soma/Services/AgentContextPackBuilder.swift", /FetchDescriptor<ExerciseDefinition>\(\)/] => 0,
+  [service_file("ConversationCompactionMiddleware.swift"), /FetchDescriptor<(CoachMessage|ConversationCompactionSummary)>\(\)/] => 0,
+  [service_file("ConversationProcessingRemoteTrace.swift"), /FetchDescriptor<(CoachMessage|AgentTrace)>\(\)/] => 0,
+  [service_file("ConversationRecorderTrainingPlans.swift"), /FetchDescriptor<(TrainingProgram|WorkoutSession|ExercisePerformance|PerformanceAnalysis|AgentJob|ExerciseDefinition)>\(\)/] => 0,
+  [service_file("ConversationRecorderTrainingQueries.swift"), /FetchDescriptor<(ExercisePerformance|WorkoutSet|ExerciseDefinition)>\(\)/] => 0,
+  [service_file("AgentContextPackBuilder.swift"), /FetchDescriptor<ExerciseDefinition>\(\)/] => 0,
   ["Soma/Models/ExerciseDefinition.swift", /FetchDescriptor<[^>]+>\(\)/] => 2
 }
 
@@ -90,7 +100,7 @@ unless root_source.match?(/case let \.switchTo\(tab\):.*?selectedTab = tab/m) &&
        root_source.match?(/case let \.resetStack\(tab\):.*?tabStackIDs\[tab\] = UUID\(\)/m)
   fail_check("Tab selection or reselect no longer has one bounded state mutation")
 end
-tab_performance_source = File.read(File.join(ROOT, "Soma/Services/AppPerformance.swift"))
+tab_performance_source = File.read(File.join(ROOT, service_file("AppPerformance.swift")))
 unless tab_performance_source.include?("final class AppTabTransitionCoordinator")
   fail_check("Tab transition signpost coordinator was removed")
 end
@@ -118,7 +128,7 @@ chat_record_source = File.read(File.join(ROOT, "Soma/Views/ChatRecordEditorCards
 coach_response_source = File.read(File.join(ROOT, "Soma/Components/CoachResponseView.swift"))
 selectable_chat_source = File.read(File.join(ROOT, "Soma/Components/SelectableChatText.swift"))
 agent_transcript_source = File.read(File.join(ROOT, "Soma/Views/AgentTurnTranscript.swift"))
-processing_models_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingModels.swift"))
+processing_models_source = File.read(File.join(ROOT, service_file("ConversationProcessingModels.swift")))
 if coach_response_source.include?("MarkdownText(") ||
    selectable_chat_source.include?("struct SelectableChatText: UIViewRepresentable") ||
    selectable_chat_source.match?(/func makeUIView.*?UITextView/m)
@@ -205,7 +215,7 @@ unless coach_source.match?(/AVAudioSession 停用.*?await Task\.yield\(\).*?spee
   fail_check("Coach disappearance can again synchronously deactivate audio in the Tab commit frame")
 end
 
-coach_snapshot_source = File.read(File.join(ROOT, "Soma/Services/CoachSuggestionSnapshot.swift"))
+coach_snapshot_source = File.read(File.join(ROOT, service_file("CoachSuggestionSnapshot.swift")))
 if coach_snapshot_source.include?("performanceDescriptor.fetchLimit = 400") ||
    coach_snapshot_source.include?("setDescriptor.fetchLimit = 1500") ||
    !coach_snapshot_source.include?(".flatMap(\\.performances)") ||
@@ -279,22 +289,22 @@ unless settings_source.match?(/DeveloperSettingsView.*?await refreshSummaryAfter
   fail_check("advanced-settings summary decoding returned to the navigation commit frame")
 end
 
-ai_profiles_source = File.read(File.join(ROOT, "Soma/Services/AIModelProfiles.swift"))
+ai_profiles_source = File.read(File.join(ROOT, service_file("AIModelProfiles.swift")))
 unless ai_profiles_source.include?("warmRequiredAPIKeyCache")
   fail_check("Settings can again perform an uncached Keychain lookup on first Tab selection")
 end
 
-save_impact_source = File.read(File.join(ROOT, "Soma/Services/ModelContextSaveImpact.swift"))
+save_impact_source = File.read(File.join(ROOT, service_file("ModelContextSaveImpact.swift")))
 unless save_impact_source.include?("entities.contains($0.entityName)")
   fail_check("save notifications again resolve every unrelated Agent model on the MainActor")
 end
 
-queue_actions_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingQueueActions.swift"))
+queue_actions_source = File.read(File.join(ROOT, service_file("ConversationProcessingQueueActions.swift")))
 if queue_actions_source.include?("AgentJobStore.promoteFailedResponsesToManualRetry")
   fail_check("foreground queue recovery restored a duplicate failed-response scan")
 end
 
-stream_deadline_source = File.read(File.join(ROOT, "Soma/Services/AgentStreamDeadline.swift"))
+stream_deadline_source = File.read(File.join(ROOT, service_file("AgentStreamDeadline.swift")))
 if stream_deadline_source.match?(/@MainActor\s+static func consume/) ||
    !stream_deadline_source.include?(
      "onChunk: @MainActor (ChatCompletionChunkObject) async throws -> Bool"
@@ -303,14 +313,14 @@ if stream_deadline_source.match?(/@MainActor\s+static func consume/) ||
   fail_check("raw Agent stream reading or MainActor projection isolation regressed")
 end
 
-streaming_source = File.read(File.join(ROOT, "Soma/Services/AIServiceAgentStreaming.swift"))
+streaming_source = File.read(File.join(ROOT, service_file("AgentStreamWorker.swift")))
 unless streaming_source.include?("enum AgentStreamWorker") &&
        streaming_source.include?("project: @escaping @MainActor (AgentTraceEvent) -> Void") &&
        streaming_source.include?("var coalescer = AgentTextDeltaCoalescer()")
   fail_check("local stream parsing no longer uses a non-main coalescing worker")
 end
 
-coalescer_source = File.read(File.join(ROOT, "Soma/Services/AgentTextDeltaCoalescer.swift"))
+coalescer_source = File.read(File.join(ROOT, service_file("AgentTextDeltaCoalescer.swift")))
 unless coalescer_source.include?("minimumInterval: TimeInterval = 0.2")
   fail_check("visible Agent text projection exceeded the audited 5 Hz budget")
 end
@@ -323,9 +333,9 @@ unless delta_projection&.include?("return") &&
   fail_check("every text delta can again rewrite SwiftData and the full transcript JSON")
 end
 
-processing_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingService.swift"))
-processing_live_source = File.read(File.join(ROOT, "Soma/Services/ConversationTurnLiveProjection.swift"))
-processing_models_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingModels.swift"))
+processing_source = File.read(File.join(ROOT, service_file("ConversationProcessingService.swift")))
+processing_live_source = File.read(File.join(ROOT, service_file("ConversationTurnLiveProjection.swift")))
+processing_models_source = File.read(File.join(ROOT, service_file("ConversationProcessingModels.swift")))
 if processing_source.match?(/private\(set\) var liveAssistantText\s*=/) ||
    processing_models_source.include?("private(set) var text = \"\"")
   fail_check("live stream again stores duplicate full growing strings beside stable chunks")
@@ -336,14 +346,14 @@ unless processing_live_source.include?("projectRemoteTextDelta") &&
   fail_check("live text no longer keeps one chunk source of truth and a render-only snapshot")
 end
 
-remote_projection_source = File.read(File.join(ROOT, "Soma/Services/ConversationProcessingRemoteTrace.swift"))
+remote_projection_source = File.read(File.join(ROOT, service_file("ConversationProcessingRemoteTrace.swift")))
 unless remote_projection_source.include?("if !event.isTransientTextUpdate") &&
        remote_projection_source.include?("var isTransientTextUpdate: Bool")
   fail_check("remote text deltas can again save their cursor and SwiftData event one by one")
 end
 
 transcript_source = File.read(File.join(ROOT, "Soma/Views/AgentTurnTranscript.swift"))
-chat_presentation_source = File.read(File.join(ROOT, "Soma/Services/AgentChatPresentation.swift"))
+chat_presentation_source = File.read(File.join(ROOT, service_file("AgentChatPresentation.swift")))
 if coach_screen_source.include?("AgentTurnLiveProjection.make") ||
    transcript_source.include?("streamingChunks")
   fail_check("live text again builds and sanitizes one full growing AgentTurnItem per UI tick")
@@ -357,18 +367,18 @@ unless coach_actions_source.include?("let interval: TimeInterval = 0.2") &&
   fail_check("running text no longer renders directly from stable chunks")
 end
 
-shortcut_source = File.read(File.join(ROOT, "Soma/Services/AgentInputShortcut.swift"))
+shortcut_source = File.read(File.join(ROOT, service_file("AgentInputShortcut.swift")))
 unless shortcut_source.include?("AgentInputShortcutMemoryCache") &&
        shortcut_source.include?("agentInputShortcutsDidChange")
   fail_check("Coach shortcut JSON can again be decoded on every Tab appearance")
 end
 
-media_preparation_source = File.read(File.join(ROOT, "Soma/Services/ConversationMediaPreparation.swift"))
+media_preparation_source = File.read(File.join(ROOT, service_file("ConversationMediaPreparation.swift")))
 unless media_preparation_source.include?("nonisolated func prepareStoredMedia")
   fail_check("Agent media preparation can again synchronously read files on MainActor")
 end
 
-guided_record_source = File.read(File.join(ROOT, "Soma/Services/GuidedWorkoutRecordStore.swift"))
+guided_record_source = File.read(File.join(ROOT, service_file("GuidedWorkoutRecordStore.swift")))
 if guided_record_source.match?(/FetchDescriptor<(WorkoutSet|WorkoutEffort|ExerciseDefinition)>/)
   fail_check("guided workout materialization restored current-relationship fallback queries")
 end
@@ -381,21 +391,21 @@ unless share_source.include?("Task.detached(priority: .userInitiated)")
   fail_check("workout share PNG encoding returned to MainActor")
 end
 
-calorie_source = File.read(File.join(ROOT, "Soma/Services/WorkoutCalorieCalculator.swift"))
+calorie_source = File.read(File.join(ROOT, service_file("WorkoutCalorieCalculator.swift")))
 unless calorie_source.include?("bodyDescriptor.fetchLimit = 50") &&
        calorie_source.include?("profileDescriptor.fetchLimit = 20")
   fail_check("reference-weight lookup is no longer date-filtered and bounded")
 end
 
-crash_source = File.read(File.join(ROOT, "Soma/Services/CrashDiagnosticsCoordinator.swift"))
-diagnostic_store_source = File.read(File.join(ROOT, "Soma/Services/DiagnosticReportStore.swift"))
+crash_source = File.read(File.join(ROOT, service_file("CrashDiagnosticsCoordinator.swift")))
+diagnostic_store_source = File.read(File.join(ROOT, service_file("DiagnosticReportStore.swift")))
 unless crash_source.include?("await reports.pendingReportsAsync()") &&
        diagnostic_store_source.include?("cachedReports")
   fail_check("startup diagnostics can again repeatedly decode large reports on MainActor")
 end
 
 diagnostic_settings_source = File.read(File.join(ROOT, "Soma/Views/DiagnosticReportSettingsView.swift"))
-diagnostic_log_source = File.read(File.join(ROOT, "Soma/Services/DiagnosticsLogStore.swift"))
+diagnostic_log_source = File.read(File.join(ROOT, service_file("DiagnosticsLogStore.swift")))
 if diagnostic_settings_source.include?(".onAppear(perform: reload)") ||
    !diagnostic_settings_source.include?("recentTextAsync()") ||
    !diagnostic_settings_source.include?("latestReportTextAsync()") ||
@@ -417,7 +427,7 @@ if training_source.match?(/ForEach\(prescriptions\.sorted/)
   fail_check("training program detail again sorts stable prescriptions in every body update")
 end
 
-training_store_source = File.read(File.join(ROOT, "Soma/Services/TrainingPlanStore.swift"))
+training_store_source = File.read(File.join(ROOT, service_file("TrainingPlanStore.swift")))
 summary_section = training_store_source[/static func summary\(.*?\n    static func deleteSession/m]
 if summary_section&.match?(/FetchDescriptor<(ExercisePerformance|WorkoutSet|WorkoutEffort|WorkoutEntry)>/)
   fail_check("current training summary restored per-relation compatibility fetches")
@@ -480,7 +490,7 @@ if exercise_detail_source.include?("private struct ExerciseLibraryRow: View {\n 
   fail_check("exercise library restored one live workout query per row")
 end
 
-speech_source = File.read(File.join(ROOT, "Soma/Services/SpeechInputService.swift"))
+speech_source = File.read(File.join(ROOT, service_file("SpeechInputService.swift")))
 if speech_source.match?(/private (?:let|var) recognizer\s*=\s*SFSpeechRecognizer/) ||
    speech_source.match?(/private (?:let|var) audioEngine\s*=\s*AVAudioEngine\(\)/)
   fail_check("speech recognition resources are initialized before the first voice action")

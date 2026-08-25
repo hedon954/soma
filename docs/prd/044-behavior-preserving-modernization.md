@@ -38,6 +38,14 @@ Soma 在 0.0.12 已经具备完整产品闭环，但代码与文档按多年增�
 - 生产 Server 继续只用 Postgres；测试假存储实现同一契约，不改 HTTP。
 - 单元测试按领域拆分后断言含义不变；只删除无逻辑价值的字符串镜像断言。
 - 若一项改动等于 schema/API/框架迁移，跳过并列入后续。
+- `ReActAgent.swift` 只保留循环门面（步骤上限、超时、错误）；循环本体、无可见增量重试、
+  原生 `tool_calls` 流式累积、会话滚动压缩各有唯一所有者文件。不改变重试次数、截止期限、
+  暂存或 Tool 执行顺序。
+- `Models.swift` 按真实实体拆到 `Meal` / `WorkoutEntry` / `Gym` / `BodyEntry` /
+  `CoachMessage` / `AgentTrace` 等文件；不增加平行 DTO 层。
+- `Soma/Services/` 按能力目录分组：`Conversation`、`Training`、`Media`、`Settings`。
+  对话改动应命中 `Conversation/`，训练改动应命中 `Training/`。禁止引入 DDD 的
+  application / use-case / repository / entity 层，也禁止新的 `AppServices` 上帝对象。
 
 ## 数据与隐私
 
@@ -48,7 +56,7 @@ Soma 在 0.0.12 已经具备完整产品闭环，但代码与文档按多年增�
 ## 明确不在范围
 
 - Swift 6 language mode、SwiftData VersionedSchema、PostgreSQL schema 变更。
-- 新的 `AppServices` 工厂类型、Tool 列表或 HTTP 路由重写。
+- 新的 `AppServices` 工厂类型、DDD application / use-case / repository 层、Tool 列表或 HTTP 路由重写。
 - 重写已归档 PRD/ADR 决策正文。
 - 在 Linux/cloud VM 上宣称已完成模拟器或真机验收。
 
@@ -60,5 +68,7 @@ Soma 在 0.0.12 已经具备完整产品闭环，但代码与文档按多年增�
 - `docs/archive/<version>/` 含 0.0.9 及更早未压缩原文；根 `.cursorignore` 忽略该目录；
   `.claude/settings.json` deny `Read(./docs/archive/**)`；`CLAUDE.md` 要求 Codex 默认不读归档。
 - 公开工具列表与 Server HTTP API 与现代化前一致。
+- `Soma/Services/ReActAgent.swift` 与 `Soma/Models/Models.swift` 不再作为上帝文件存在。
+- `Soma/Services/` 按 `Conversation` / `Training` / `Media` / `Settings` 分组。
 - Linux 上可运行的 `make server-check`、`make server-test`、`make perf-check` 通过；
   `make check` / `make verify` 仍需 macOS 与 Simulator。

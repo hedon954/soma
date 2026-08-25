@@ -5,24 +5,24 @@
 
 | Prompt / 上下文 | 默认源码位置 | 组装或调用入口 | 是否可编辑 |
 | --- | --- | --- | --- |
-| ReAct 固定身份、安全、真实性与授权契约 | `Soma/Services/ReActAgentPrompt.swift` → `ReActAgentPrompt.system` | `AgentModelInputBuilder.build` | 不可编辑；设置页只读预览 |
-| ReAct 人格 | `Soma/Services/ReActAgentPrompt.swift` → `ReActPromptSection.persona` | `ReActAgentPrompt.system(defaults:)` | 可编辑、可恢复；旧角色自定义迁移到此处 |
-| Skill 元数据目录 | `Soma/Services/AgentSkillRegistry.swift` → `AgentSkillRegistry.descriptors` | `ReActAgentPrompt.system(skillDescriptors:)` | 内置目录可 override，支持自定义 Skill；只注入 `name/description/when_to_use` |
-| 选中 Skill 完整文本 | `Soma/Services/AgentSkillRegistry.swift` | `AgentModelInputBuilder.build` → `ReActAgentPrompt.user` | 用户点选快捷按钮后首轮直载；工具白名单由按钮持有，Skill 只提供方法 |
-| 各健身 Skill 默认 Markdown | `Soma/Services/AgentSkillRegistry.swift` → `AgentSkillRegistry.builtInMarkdown` | `AIService.loadSkill` / `load_skill` | 支持内置 override、自定义、预览与恢复 |
-| Tool 名称、描述与参数 | `Soma/Services/ReActAgent.swift` → `AgentToolName.toolDescription/toolParameters` | `AgentToolName.chatTool` | 不可编辑，系统固定 |
+| ReAct 固定身份、安全、真实性与授权契约 | `Soma/Services/Conversation/ReActAgentPrompt.swift` → `ReActAgentPrompt.system` | `AgentModelInputBuilder.build` | 不可编辑；设置页只读预览 |
+| ReAct 人格 | `Soma/Services/Conversation/ReActAgentPrompt.swift` → `ReActPromptSection.persona` | `ReActAgentPrompt.system(defaults:)` | 可编辑、可恢复；旧角色自定义迁移到此处 |
+| Skill 元数据目录 | `Soma/Services/Settings/AgentSkillRegistry.swift` → `AgentSkillRegistry.descriptors` | `ReActAgentPrompt.system(skillDescriptors:)` | 内置目录可 override，支持自定义 Skill；只注入 `name/description/when_to_use` |
+| 选中 Skill 完整文本 | `Soma/Services/Settings/AgentSkillRegistry.swift` | `AgentModelInputBuilder.build` → `ReActAgentPrompt.user` | 用户点选快捷按钮后首轮直载；工具白名单由按钮持有，Skill 只提供方法 |
+| 各健身 Skill 默认 Markdown | `Soma/Services/Settings/AgentSkillRegistry.swift` → `AgentSkillRegistry.builtInMarkdown` | `AIService.loadSkill` / `load_skill` | 支持内置 override、自定义、预览与恢复 |
+| Tool 名称、描述与参数 | `Soma/Services/Conversation/AgentToolJSONSchema.swift` → `AgentToolName.toolDescription/toolParameters` | `AgentToolName.chatTool` | 不可编辑，系统固定 |
 | Session businessDate 与可信 Turn/Loop 时间 | `Soma/Models/AgentTurnContext.swift` → `TrustedTurnContext.promptText` | `AgentTurnContextBuilder.build`、Job 创建时冻结 `effectiveBusinessDate/defaultOccurredAt`、首次 claim 冻结 `loopStartedAt` | 不可编辑；自然语言日期只影响当前 Turn，日期芯片才持久修改 Session |
-| 确定性业务上下文包 | `Soma/Services/AgentContextPackBuilder.swift` | `ConversationProcessingContextFactory.make` | 不可编辑，本机事实派生 |
-| 最近十对原生历史、滚动摘要与媒体选择 | `Soma/Services/ConversationCompactionMiddleware.swift`、`AgentTurnContextBuilder.swift`、`ConversationContextProjection.swift` | 每次 ReAct Loop 前压缩；Loop 内不压缩 | 不可编辑；小模型优先、标准模型回退、确定性 digest 兜底；压缩生成 Chat 事件卡 |
-| 位置、健身房和天气 Turn 上下文 | `Soma/Services/ConversationProcessingService.swift` → `turnContext`；`WeatherContextProvider.swift` | `composePersistentContext` | 不可编辑，按授权临时生成 |
-| 版本化当前 Turn User Prompt | `Soma/Services/ReActAgentPrompt.swift` → `ReActAgentPrompt.user`、`historicalUser` | `AgentModelInputBuilder.build` | 不可编辑；固定 v2 section 顺序，空事实块完全省略，动态输入与媒体位于后部 |
-| 本地/远程 Agent system/user/history 消息与媒体 ID | `Soma/Services/AgentModelInput.swift` → `AgentModelInputBuilder` | `AIService.prepareAgentRun`、`ConversationProcessingService.prepareRemoteSubmission` | 不可编辑；两种 Backend 消费同一版本化 Envelope |
-| 中断恢复的检查点观察 | `Soma/Services/AppServices.swift` → `compactedCheckpointPrompt` | `AIService.runAgent` | 不可编辑，只包含已持久化短观察；与会话滚动摘要是不同机制 |
-| 快捷按钮工具推荐提示 | `Soma/Services/AgentToolRecommendationService.swift` → `AgentToolRecommendationService.prompt` | `AgentInputShortcutEditor` 用户点按推荐 | 不可编辑；只发送按钮名称、Skill 正文与工具目录，优先小模型档 |
-| 训练计划优化提示 | `Soma/Services/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.optimize` 内 `prompt` | `AIService.runAgent` | 不可编辑，由计划与真实历史生成 |
-| 动作说明生成提示 | `Soma/Services/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.generateContent` 内 `prompt` | `AIService.runAgent` | 不可编辑，要求固定 JSON 输出 |
-| 计划训练视频复盘提示 | `Soma/Services/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.performanceReviewPrompt` | `ConversationProcessingService.submit` | 不可编辑，绑定 Performance ID 与输入指纹 |
-| 训练动作插图生成提示 | `Soma/Services/TrainingIntelligenceService.swift` → `ExerciseImageGenerationService.prompt` | `AIService.generateImage` | 不可编辑，按动作事实生成 |
+| 确定性业务上下文包 | `Soma/Services/Conversation/AgentContextPackBuilder.swift` | `ConversationProcessingContextFactory.make` | 不可编辑，本机事实派生 |
+| 最近十对原生历史、滚动摘要与媒体选择 | `Soma/Services/Conversation/ConversationCompactionMiddleware.swift`、`AgentTurnContextBuilder.swift`、`ConversationContextProjection.swift` | 每次 ReAct Loop 前压缩；Loop 内不压缩 | 不可编辑；小模型优先、标准模型回退、确定性 digest 兜底；压缩生成 Chat 事件卡 |
+| 位置、健身房和天气 Turn 上下文 | `Soma/Services/Conversation/ConversationProcessingService.swift` → `turnContext`；`WeatherContextProvider.swift` | `composePersistentContext` | 不可编辑，按授权临时生成 |
+| 版本化当前 Turn User Prompt | `Soma/Services/Conversation/ReActAgentPrompt.swift` → `ReActAgentPrompt.user`、`historicalUser` | `AgentModelInputBuilder.build` | 不可编辑；固定 v2 section 顺序，空事实块完全省略，动态输入与媒体位于后部 |
+| 本地/远程 Agent system/user/history 消息与媒体 ID | `Soma/Services/Conversation/AgentModelInput.swift` → `AgentModelInputBuilder` | `AIService.prepareAgentRun`、`ConversationProcessingService.prepareRemoteSubmission` | 不可编辑；两种 Backend 消费同一版本化 Envelope |
+| 中断恢复的检查点观察 | `Soma/Services/Conversation/AIService+ReActLoop.swift` → `compactedCheckpointPrompt` | `AIService.runAgent` | 不可编辑，只包含已持久化短观察；与会话滚动摘要是不同机制 |
+| 快捷按钮工具推荐提示 | `Soma/Services/Settings/AgentToolRecommendationService.swift` → `AgentToolRecommendationService.prompt` | `AgentInputShortcutEditor` 用户点按推荐 | 不可编辑；只发送按钮名称、Skill 正文与工具目录，优先小模型档 |
+| 训练计划优化提示 | `Soma/Services/Training/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.optimize` 内 `prompt` | `AIService.runAgent` | 不可编辑，由计划与真实历史生成 |
+| 动作说明生成提示 | `Soma/Services/Training/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.generateContent` 内 `prompt` | `AIService.runAgent` | 不可编辑，要求固定 JSON 输出 |
+| 计划训练视频复盘提示 | `Soma/Services/Training/TrainingIntelligenceService.swift` → `TrainingIntelligenceService.performanceReviewPrompt` | `ConversationProcessingService.submit` | 不可编辑，绑定 Performance ID 与输入指纹 |
+| 训练动作插图生成提示 | `Soma/Services/Training/TrainingIntelligenceService.swift` → `ExerciseImageGenerationService.prompt` | `AIService.generateImage` | 不可编辑，按动作事实生成 |
 
 ## 更新规则
 

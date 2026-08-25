@@ -5,10 +5,11 @@
 
 ## 事实来源
 
-- 名称、描述、严格参数 Schema：`Soma/Services/ReActAgent.swift`。
-- 分组与 Loop 开始时的暴露：`Soma/Services/AgentToolExposurePolicy.swift`。
-- 快捷按钮的工具白名单：`Soma/Services/AgentInputShortcut.swift`。
-- 设备执行：`Soma/Services/ConversationRecorderTypedTools.swift` 及各领域扩展。
+- 名称、描述、严格参数 Schema：`Soma/Services/Conversation/AgentToolName.swift`、
+  `Soma/Services/Conversation/AgentToolJSONSchema.swift`。
+- 分组与 Loop 开始时的暴露：`Soma/Services/Conversation/AgentToolExposurePolicy.swift`。
+- 快捷按钮的工具白名单：`Soma/Services/Settings/AgentInputShortcut.swift`。
+- 设备执行：`Soma/Services/Conversation/ConversationRecorderTypedTools.swift` 及各领域扩展。
 - 公共结果与本地二次校验：`AgentToolResultV2.swift`、`ConversationRecorderToolV2.swift`。
 - 本地/远程统一输入：`AgentModelInput.swift`；远程注册表：`Server/src/tool-registry.ts`。
 - 回归：`SomaTests/AgentPromptMigrationRefactorTests.swift`、`AgentReliabilityTests.swift`、

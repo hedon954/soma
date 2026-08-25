@@ -42,6 +42,15 @@ Agent 默认会把全部 PRD/ADR 读进上下文，既增加噪声，也让真�
      明确：默认不要读取 `docs/archive/`，除非维护者要求历史。
 9. **生命周期门禁验证活文档互链**。归档原文是考古，不要求与活文档互链；不要为通过门禁而
    改写归档决策正文。
+10. **按能力目录拆分实现，不引入 DDD 应用层**：
+    - ReAct 循环本体在 `AIService+ReActLoop`，重试策略在 `AgentStepRetryPolicy`，原生
+      `tool_calls` 流式累积在 `AgentStreamingToolCall` / `AgentStreamWorker`，滚动压缩在
+      `ConversationCompactionMiddleware`。`ReActAgent` 只保留可配置上限与错误门面。
+    - SwiftData 业务类型按实体文件拆分；不增加平行 DTO。
+    - `Soma/Services/` 分为 `Conversation`、`Training`、`Media`、`Settings`。后续改动按能力
+      目录查找，不把 100+ 文件摊回单层。
+    - 禁止引入 application / use-case / repository / entity 分层或新的 `AppServices`
+      上帝对象。相同的 `sameToolRequest` 比较只允许抽成共享函数，不另建存储架构。
 
 ## 未选择的方案
 
@@ -51,6 +60,7 @@ Agent 默认会把全部 PRD/ADR 读进上下文，既增加噪声，也让真�
 - 不把归档加入 gitignore：未压缩原文必须留在仓库，供人类考古。
 - 不把本次当作 schema 或 Swift 6 迁移：那会改变启动、数据或工具链契约。
 - 不引入新的全局 `AppServices` 工厂：组合根已经是 `SomaApp`。
+- 不引入 DDD application / use-case / repository 层：本次只移动和拆分现有类型。
 - 不为 Codex 发明 `.codexignore`：上游忽略文件能力尚未稳定。
 
 ## 结果
@@ -59,7 +69,8 @@ Agent 默认会把全部 PRD/ADR 读进上下文，既增加噪声，也让真�
 
 - Agent 默认先读压缩起点，再读三个营销版本的增量。
 - 滑出窗口时把该版本折叠进起点，活链长度保持稳定。
-- 超长写入路径、带练相机、组合根和测试夹具按领域拆分，后续改动的审查面更小。
+- 超长写入路径、带练相机、组合根、ReAct 循环、SwiftData 实体和 Services 按能力目录拆分，
+  后续改动的审查面更小。
 - 生产 Store 与测试假存储共用契约，HTTP 面保持不变。
 
 ### 成本与限制

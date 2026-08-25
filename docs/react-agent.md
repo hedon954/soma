@@ -119,23 +119,27 @@ SwiftData；DEBUG 下投影入口断言主 actor 隔离（见
 
 ## 关键实现
 
-- 分层 Prompt：`Soma/Services/ReActAgentPrompt.swift`
-- Tool Schema：`Soma/Services/ReActAgent.swift`
-- Skill 注册表：`Soma/Services/AgentSkillRegistry.swift`
-- 快捷按钮与工具曝光：`Soma/Services/AgentInputShortcut.swift`、
-  `Soma/Services/AgentToolExposurePolicy.swift`
-- 诊断日志与崩溃上报：`Soma/Services/DiagnosticsLogStore.swift`、
-  `Soma/Services/CrashDiagnosticsCoordinator.swift`
-- 会话滚动压缩：`Soma/Services/ConversationCompactionMiddleware.swift`
-- 流式 ReAct 编排与供应商适配：`Soma/Services/AppServices.swift`
-- 本地工具执行：`Soma/Services/ConversationRecorder.swift`
+- 分层 Prompt：`Soma/Services/Conversation/ReActAgentPrompt.swift`
+- Tool Schema：`Soma/Services/Conversation/AgentToolName.swift`、
+  `Soma/Services/Conversation/AgentToolJSONSchema.swift`
+- ReAct 循环门面：`Soma/Services/Conversation/ReActAgent.swift`（上限与错误）；
+  循环本体 `AIService+ReActLoop.swift`；重试 `AgentStepRetryPolicy.swift`；
+  原生 tool_calls 流式累积 `AgentStreamingToolCall.swift` / `AgentStreamWorker.swift`
+- Skill 注册表：`Soma/Services/Settings/AgentSkillRegistry.swift`
+- 快捷按钮与工具曝光：`Soma/Services/Settings/AgentInputShortcut.swift`、
+  `Soma/Services/Conversation/AgentToolExposurePolicy.swift`
+- 诊断日志与崩溃上报：`Soma/Services/Settings/DiagnosticsLogStore.swift`、
+  `Soma/Services/Settings/CrashDiagnosticsCoordinator.swift`
+- 会话滚动压缩：`Soma/Services/Conversation/ConversationCompactionMiddleware.swift`
+- 流式 ReAct 编排与供应商适配：`Soma/Services/Conversation/AIService.swift`
+- 本地工具执行：`Soma/Services/Conversation/ConversationRecorder.swift`
 - 流式聊天 UI：`Soma/Views/CoachView.swift`
 - Event Card UI：`Soma/Views/AgentTurnTranscript.swift`
-- Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/Models.swift`
-- Trace 数据结构：`Soma/Models/Models.swift`
+- Turn Item 与 reducer：`Soma/Models/AgentTurnItem.swift`、`Soma/Models/CoachMessage.swift`
+- Trace 数据结构：`Soma/Models/AgentTrace.swift`
 - 持久 Job、Event 与投影：`Soma/Models/AgentJob.swift`、
-  `Soma/Services/ConversationProcessingService.swift`
-- 可选远程 Backend：`Soma/Services/RemoteAgentClient.swift`、`Server/`
+  `Soma/Services/Conversation/ConversationProcessingService.swift`
+- 可选远程 Backend：`Soma/Services/Conversation/RemoteAgentClient.swift`、`Server/`
 - 动作与训练计划：`Soma/Models/ExerciseDefinition.swift`、
   `Soma/Models/TrainingPlan.swift`
 

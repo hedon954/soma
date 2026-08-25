@@ -5,8 +5,13 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root_dir"
 
-if grep -q 'NWEndpoint.Host("smtp.qq.com")' \
-  Soma/Services/FeedbackSMTPTransport.swift; then
+smtp_file="$(find Soma/Services -name FeedbackSMTPTransport.swift -print)"
+if [[ -z "$smtp_file" ]]; then
+  echo "Online check failed: FeedbackSMTPTransport.swift is missing." >&2
+  exit 1
+fi
+
+if grep -q 'NWEndpoint.Host("smtp.qq.com")' "$smtp_file"; then
   cat >&2 <<'MESSAGE'
 Online check failed: feedback still sends directly from the iOS app with a bundled QQ Mail authorization code.
 

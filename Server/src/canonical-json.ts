@@ -11,3 +11,26 @@ export function canonicalJSON(value: unknown): string {
     .map((key) => `${JSON.stringify(key)}:${canonicalJSON(object[key])}`)
     .join(",")}}`;
 }
+
+export function sameToolRequest(
+  lhs: {
+    toolName: string;
+    schemaVersion: number;
+    mutation: boolean;
+    arguments: unknown;
+  },
+  rhs: {
+    toolName: string;
+    schemaVersion: number;
+    mutation: boolean;
+    arguments: unknown;
+  },
+): boolean {
+  return (
+    lhs.toolName === rhs.toolName &&
+    lhs.schemaVersion === rhs.schemaVersion &&
+    lhs.mutation === rhs.mutation &&
+    canonicalJSON(lhs.arguments) === canonicalJSON(rhs.arguments)
+  );
+}
+

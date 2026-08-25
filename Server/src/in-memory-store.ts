@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { canonicalJSON } from "./canonical-json.js";
+import { sameToolRequest } from "./canonical-json.js";
 import type {
   ActivityToken,
   AgentEvent,
@@ -708,16 +708,4 @@ export class InMemorySomaStore implements SomaStore {
       if (sequence > waiter.afterSequence) waiter.resolve();
     }
   }
-}
-
-function sameToolRequest(
-  lhs: ToolRequest,
-  rhs: Omit<ToolRequest, "id">,
-): boolean {
-  return (
-    lhs.toolName === rhs.toolName &&
-    lhs.schemaVersion === rhs.schemaVersion &&
-    lhs.mutation === rhs.mutation &&
-    canonicalJSON(lhs.arguments) === canonicalJSON(rhs.arguments)
-  );
 }
