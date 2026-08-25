@@ -248,17 +248,26 @@ enum WorkoutCalorieCalculator {
         at date: Date,
         in context: ModelContext
     ) -> Double? {
-        let bodyEntries = (try? context.fetch(FetchDescriptor<BodyEntry>(
+        let cutoff = date
+        var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate {
+                $0.date <= cutoff && $0.weight != nil
+            },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))) ?? []
+        )
+        bodyDescriptor.fetchLimit = 50
+        let bodyEntries = (try? context.fetch(bodyDescriptor)) ?? []
         if let weight = bodyEntries.first(where: {
-            $0.date <= date && ($0.weight ?? 0) > 0
+            ($0.weight ?? 0) > 0
         })?.weight {
             return weight
         }
-        let profiles = (try? context.fetch(FetchDescriptor<UserProfile>(
+        var profileDescriptor = FetchDescriptor<UserProfile>(
+            predicate: #Predicate { $0.referenceWeight != nil },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        ))) ?? []
+        )
+        profileDescriptor.fetchLimit = 20
+        let profiles = (try? context.fetch(profileDescriptor)) ?? []
         return profiles.compactMap(\.referenceWeight).first(where: { $0 > 0 })
     }
 

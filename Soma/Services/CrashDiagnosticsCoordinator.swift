@@ -49,9 +49,8 @@ final class CrashDiagnosticsCoordinator: NSObject {
         hasActivated = true
         self.previousRun = previousRun
         MXMetricManager.shared.add(self)
-        purgeUnconfirmedReports()
-        pendingReportCount = reports.pendingReports().count
-        lastReportSummary = reports.latestReport().map(Self.summary(of:))
+        // 报告正文最大可达 2 MB。这里只完成必须尽早注册的 MetricKit，
+        // 磁盘扫描交给 Root 可见后的异步 flush。
     }
 
     /// 启动后只清理旧哨兵标记并投递已有的系统确认报告，不查询业务数据库。
@@ -114,13 +113,26 @@ final class CrashDiagnosticsCoordinator: NSObject {
     }
 
     func deliverPendingReports() async {
+        let loaded = await reports.pendingReportsAsync()
+        let unconfirmed = loaded.filter {
+            !CrashReportEligibility.isSystemConfirmed(report: $0)
+        }
+        for report in unconfirmed {
+            reports.remove(report.id)
+        }
+        if !unconfirmed.isEmpty {
+            logs.append(
+                category: "diagnostics",
+                message: "已清理缺少 MetricKit 证据的旧崩溃报告",
+                fields: ["count": "\(unconfirmed.count)"]
+            )
+        }
+        let confirmed = loaded.filter(CrashReportEligibility.isSystemConfirmed)
+        pendingReportCount = confirmed.count
+        lastReportSummary = confirmed.last.map(Self.summary(of:))
         guard isAutoSendEnabled else { return }
-        purgeUnconfirmedReports()
-        for report in reports.pendingReports() {
-            guard CrashReportEligibility.isSystemConfirmed(report: report) else {
-                reports.remove(report.id)
-                continue
-            }
+
+        for report in confirmed {
             guard report.deliveryAttemptCount
                 < DiagnosticReportStore.maximumDeliveryAttempts
             else {
@@ -150,16 +162,18 @@ final class CrashDiagnosticsCoordinator: NSObject {
                 )
             }
         }
-        pendingReportCount = reports.pendingReports().count
+        let remaining = await reports.pendingReportsAsync()
+        pendingReportCount = remaining.count
+        lastReportSummary = remaining.last.map(Self.summary(of:))
     }
 
-    func latestReportText() -> String? {
-        reports.latestReport()?.body
+    func latestReportTextAsync() async -> String? {
+        await reports.latestReportAsync()?.body
     }
 
     /// 丢弃排队中的报告。误判产生的报告会一直重试，用户需要一个立即停手的开关。
-    func discardPendingReports() {
-        reports.removeAll()
+    func discardPendingReportsAsync() async {
+        await reports.removeAllAsync()
         pendingReportCount = 0
         lastReportSummary = nil
         logs.append(
@@ -169,21 +183,6 @@ final class CrashDiagnosticsCoordinator: NSObject {
     }
 
     /// 旧版本可能已经把 sentinel 误判落盘；升级后在任何投递前直接清除。
-    private func purgeUnconfirmedReports() {
-        let unconfirmed = reports.pendingReports().filter {
-            !CrashReportEligibility.isSystemConfirmed(report: $0)
-        }
-        guard !unconfirmed.isEmpty else { return }
-        for report in unconfirmed {
-            reports.remove(report.id)
-        }
-        logs.append(
-            category: "diagnostics",
-            message: "已清理缺少 MetricKit 证据的旧崩溃报告",
-            fields: ["count": "\(unconfirmed.count)"]
-        )
-    }
-
     static func summary(of report: DiagnosticReport) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"

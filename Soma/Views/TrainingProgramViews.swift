@@ -2,48 +2,91 @@ import Charts
 import SwiftData
 import SwiftUI
 
+private struct TrainingProgramLibraryProjection {
+    let active: [TrainingProgram]
+    let archived: [TrainingProgram]
+    let namesByID: [UUID: String]
+
+    init(programs: [TrainingProgram]) {
+        var active: [TrainingProgram] = []
+        var archived: [TrainingProgram] = []
+        var namesByID: [UUID: String] = [:]
+        active.reserveCapacity(programs.count)
+        archived.reserveCapacity(programs.count)
+        for program in programs {
+            namesByID[program.id] = program.name
+            switch program.status {
+            case .active:
+                active.append(program)
+            case .archived:
+                archived.append(program)
+            }
+        }
+        self.active = active
+        self.archived = archived
+        self.namesByID = namesByID
+    }
+}
+
 struct TrainingProgramLibraryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \TrainingProgram.updatedAt, order: .reverse)
-    private var programs: [TrainingProgram]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
-    private var sessions: [WorkoutSession]
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var definitions: [ExerciseDefinition]
+    @Query private var programs: [TrainingProgram]
+    @Query private var resumableSessions: [WorkoutSession]
+    @Query private var completedSessions: [WorkoutSession]
     @State private var showsCreation = false
     @State private var resumedSession: WorkoutSession?
     @State private var errorMessage: String?
-    private var activePrograms: [TrainingProgram] {
-        programs.filter { $0.status == .active }
+    init() {
+        let activeStatus = TrainingProgramStatus.active.rawValue
+        let archivedStatus = TrainingProgramStatus.archived.rawValue
+        var programDescriptor = FetchDescriptor<TrainingProgram>(
+            predicate: #Predicate {
+                $0.statusRaw == activeStatus || $0.statusRaw == archivedStatus
+            },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        programDescriptor.fetchLimit = 200
+        _programs = Query(programDescriptor)
+
+        let active = WorkoutSessionStatus.active.rawValue
+        let paused = WorkoutSessionStatus.paused.rawValue
+        var resumableDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate {
+                $0.statusRaw == active || $0.statusRaw == paused
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        resumableDescriptor.fetchLimit = 1
+        _resumableSessions = Query(resumableDescriptor)
+
+        let completed = WorkoutSessionStatus.completed.rawValue
+        let abandoned = WorkoutSessionStatus.abandoned.rawValue
+        var recentDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate {
+                $0.statusRaw == completed || $0.statusRaw == abandoned
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        recentDescriptor.fetchLimit = 4
+        _completedSessions = Query(recentDescriptor)
     }
 
     private var resumableSession: WorkoutSession? {
-        sessions.first {
-            $0.status == .active || $0.status == .paused
-        }
-    }
-
-    private var completedSessions: [WorkoutSession] {
-        sessions.filter {
-            $0.status == .completed || $0.status == .abandoned
-        }
-    }
-
-    private var archivedPrograms: [TrainingProgram] {
-        programs.filter { $0.status == .archived }
+        resumableSessions.first
     }
 
     var body: some View {
+        let projection = TrainingProgramLibraryProjection(programs: programs)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
                 ForEach(
                     TrainingHomeSection.visible(
                         hasResumableSession: resumableSession != nil,
                         hasRecentSessions: !completedSessions.isEmpty,
-                        hasArchivedPrograms: !archivedPrograms.isEmpty
+                        hasArchivedPrograms: !projection.archived.isEmpty
                     )
                 ) { section in
-                    trainingHomeSection(section)
+                    trainingHomeSection(section, projection: projection)
                 }
             }
             .padding(AppTheme.pagePadding)
@@ -54,9 +97,6 @@ struct TrainingProgramLibraryView: View {
         .appPageBackground()
         .navigationTitle("训练")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            TrainingPlanStore.backfillProgramSources(in: modelContext)
-        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -69,7 +109,7 @@ struct TrainingProgramLibraryView: View {
         }
         .sheet(isPresented: $showsCreation) {
             NavigationStack {
-                TrainingProgramCreationView(definitions: definitions)
+                TrainingProgramCreationContainer()
             }
         }
         .fullScreenCover(item: $resumedSession) { session in
@@ -95,7 +135,10 @@ struct TrainingProgramLibraryView: View {
     }
 
     @ViewBuilder
-    private func trainingHomeSection(_ section: TrainingHomeSection) -> some View {
+    private func trainingHomeSection(
+        _ section: TrainingHomeSection,
+        projection: TrainingProgramLibraryProjection
+    ) -> some View {
         switch section {
         case .resume:
             if let resumableSession {
@@ -110,14 +153,14 @@ struct TrainingProgramLibraryView: View {
             }
         case .programs:
             SectionHeading(title: "我的计划")
-            if activePrograms.isEmpty {
+            if projection.active.isEmpty {
                 EmptyStateCard(
                     icon: "list.bullet.clipboard",
                     title: "还没有训练计划",
                     message: "点右上角＋选择动作组合，或在教练中描述目标让 Soma 帮你生成。"
                 )
             } else {
-                ForEach(activePrograms) { program in
+                ForEach(projection.active) { program in
                     NavigationLink {
                         TrainingProgramDetailView(program: program)
                     } label: {
@@ -136,7 +179,9 @@ struct TrainingProgramLibraryView: View {
                         } label: {
                             TrainingSessionHomeRow(
                                 session: session,
-                                programs: programs
+                                fallbackProgramName: session.programID.flatMap {
+                                    projection.namesByID[$0]
+                                }
                             )
                         }
                         .buttonStyle(.plain)
@@ -157,7 +202,7 @@ struct TrainingProgramLibraryView: View {
             }
         case .archived:
             SectionHeading(title: "已归档")
-            ForEach(archivedPrograms) { program in
+            ForEach(projection.archived) { program in
                 NavigationLink {
                     TrainingProgramDetailView(program: program)
                 } label: {
@@ -177,22 +222,33 @@ struct TrainingProgramLibraryView: View {
     }
 }
 
+private struct TrainingProgramCreationContainer: View {
+    @Query private var definitions: [ExerciseDefinition]
+
+    init() {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.canonicalName)]
+        )
+        descriptor.fetchLimit = 2000
+        _definitions = Query(descriptor)
+    }
+
+    var body: some View {
+        TrainingProgramCreationView(definitions: definitions)
+    }
+}
+
 private struct TrainingProgramDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var definitions: [ExerciseDefinition]
-    @Query(sort: \WorkoutEntry.date, order: .reverse)
-    private var workouts: [WorkoutEntry]
-    @Query(sort: \BodyEntry.date, order: .reverse)
-    private var bodyEntries: [BodyEntry]
-    @Query(sort: \UserProfile.updatedAt, order: .reverse)
-    private var userProfiles: [UserProfile]
-    @Query(sort: \RecommendationSnapshot.createdAt, order: .reverse)
-    private var recommendations: [RecommendationSnapshot]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
-    private var sessions: [WorkoutSession]
+    @Query private var definitions: [ExerciseDefinition]
+    @Query private var workouts: [WorkoutEntry]
+    @Query private var bodyEntries: [BodyEntry]
+    @Query private var userProfiles: [UserProfile]
+    @Query private var recommendations: [RecommendationSnapshot]
+    @Query private var sessions: [WorkoutSession]
 
     let program: TrainingProgram
     @State private var showsEditor = false
@@ -206,13 +262,63 @@ private struct TrainingProgramDetailView: View {
     @State private var isOptimizing = false
     @State private var confirmsDelete = false
     @State private var statsExpanded = false
+    @State private var statsSnapshot = TrainingProgramStatsSnapshot.empty
+    @State private var isLoadingStats = false
     @State private var adviceExpanded = false
+    @State private var prescriptions: [TemplateExercisePrescription]
 
-    private var prescriptions: [TemplateExercisePrescription] {
-        TrainingPlanStore.prescriptions(
-            for: program,
-            in: modelContext
+    init(program: TrainingProgram) {
+        self.program = program
+
+        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
+            sortBy: [SortDescriptor(\.canonicalName)]
         )
+        definitionDescriptor.fetchLimit = 2000
+        _definitions = Query(definitionDescriptor)
+        _prescriptions = State(
+            initialValue: TrainingPlanStore.currentPrescriptions(for: program)
+        )
+
+        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = 100
+        _workouts = Query(workoutDescriptor)
+
+        var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        bodyDescriptor.fetchLimit = 10
+        _bodyEntries = Query(bodyDescriptor)
+
+        var profileDescriptor = FetchDescriptor<UserProfile>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        profileDescriptor.fetchLimit = 1
+        _userProfiles = Query(profileDescriptor)
+
+        let programID = program.id
+        let targetKind = "training_program"
+        var recommendationDescriptor = FetchDescriptor<RecommendationSnapshot>(
+            predicate: #Predicate {
+                $0.targetKind == targetKind && $0.targetID == programID
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        recommendationDescriptor.fetchLimit = 10
+        _recommendations = Query(recommendationDescriptor)
+
+        let completed = WorkoutSessionStatus.completed.rawValue
+        let abandoned = WorkoutSessionStatus.abandoned.rawValue
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate {
+                $0.programID == programID
+                    && ($0.statusRaw == completed || $0.statusRaw == abandoned)
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        sessionDescriptor.fetchLimit = 50
+        _sessions = Query(sessionDescriptor)
     }
 
     private func readiness(
@@ -250,24 +356,16 @@ private struct TrainingProgramDetailView: View {
             || userProfiles.contains { ($0.referenceWeight ?? 0) > 0 }
     }
 
-    private var programSessions: [WorkoutSession] {
-        sessions.filter { session in
-            guard session.status == .completed || session.status == .abandoned else {
-                return false
-            }
-            return session.programID == program.id
-        }
-    }
-
     private var recentVolumePoints: [(id: UUID, date: Date, volume: Double)] {
-        programSessions.prefix(12).reversed().map { session in
-            (
+        sessions.prefix(12).reversed().compactMap { session in
+            guard let summary = statsSnapshot.summariesBySessionID[session.id]
+            else {
+                return nil
+            }
+            return (
                 id: session.id,
                 date: session.startedAt,
-                volume: TrainingPlanStore.summary(
-                    for: session.id,
-                    in: modelContext
-                ).completedVolume
+                volume: summary.completedVolume
             )
         }
     }
@@ -275,11 +373,12 @@ private struct TrainingProgramDetailView: View {
     /// PRD 020：统计默认折叠，首屏聚焦动作列表与开始训练。
     @ViewBuilder
     private var programStatsSection: some View {
-        if !programSessions.isEmpty {
+        let volumePoints = recentVolumePoints
+        if !sessions.isEmpty {
             Section {
                 DisclosureGroup(isExpanded: $statsExpanded) {
-                    LabeledContent("完成次数", value: "\(programSessions.count) 次")
-                    if let latest = programSessions.first {
+                    LabeledContent("完成次数", value: "\(sessions.count) 次")
+                    if let latest = sessions.first {
                         LabeledContent(
                             "最近一次",
                             value: latest.startedAt.formatted(
@@ -288,8 +387,17 @@ private struct TrainingProgramDetailView: View {
                             )
                         )
                     }
-                    if recentVolumePoints.contains(where: { $0.volume > 0 }) {
-                        Chart(recentVolumePoints, id: \.id) { point in
+                    if isLoadingStats,
+                       statsSnapshot.summariesBySessionID.isEmpty
+                    {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("正在载入训练统计…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if volumePoints.contains(where: { $0.volume > 0 }) {
+                        Chart(volumePoints, id: \.id) { point in
                             BarMark(
                                 x: .value("日期", point.date),
                                 y: .value("有效容量", point.volume)
@@ -299,25 +407,27 @@ private struct TrainingProgramDetailView: View {
                         .frame(height: 160)
                         .accessibilityLabel("该计划近几次训练的有效容量趋势")
                     }
-                    ForEach(programSessions.prefix(5)) { session in
+                    ForEach(sessions.prefix(5)) { session in
                         NavigationLink {
                             WorkoutSessionReviewView(session: session)
                         } label: {
                             WorkoutSessionHistoryRow(
                                 session: session,
-                                preferredProgramName: program.name
+                                preferredProgramName: program.name,
+                                summary: statsSnapshot.summariesBySessionID[session.id]
                             )
                         }
                     }
                 } label: {
                     Text("训练统计")
                 }
-                .accessibilityLabel("训练统计，共 \(programSessions.count) 次")
+                .accessibilityLabel("训练统计，共 \(sessions.count) 次")
             }
         }
     }
 
     var body: some View {
+        let recommendation = currentRecommendation
         List {
             Section {
                 Button {
@@ -351,7 +461,7 @@ private struct TrainingProgramDetailView: View {
                     Text("这份计划还没有动作。")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(prescriptions.sorted(by: { $0.order < $1.order })) { item in
+                ForEach(prescriptions) { item in
                     prescriptionRow(item)
                 }
             } header: {
@@ -374,13 +484,13 @@ private struct TrainingProgramDetailView: View {
 
             programStatsSection
 
-            if isOptimizing || currentRecommendation != nil {
+            if isOptimizing || recommendation != nil {
                 Section {
                     DisclosureGroup(isExpanded: $adviceExpanded) {
-                        if let currentRecommendation {
-                            Text(currentRecommendation.advice)
+                        if let recommendation {
+                            Text(recommendation.advice)
                                 .textSelection(.enabled)
-                            Text("生成于 \(currentRecommendation.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                            Text("生成于 \(recommendation.createdAt.formatted(date: .abbreviated, time: .shortened))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -406,7 +516,7 @@ private struct TrainingProgramDetailView: View {
                             optimize()
                         } label: {
                             Label(
-                                currentRecommendation == nil
+                                recommendation == nil
                                     ? "优化本次训练"
                                     : "当前建议已缓存",
                                 systemImage: "sparkles"
@@ -415,7 +525,7 @@ private struct TrainingProgramDetailView: View {
                         .disabled(
                             isOptimizing
                                 || prescriptions.isEmpty
-                                || currentRecommendation != nil
+                                || recommendation != nil
                         )
 
                         Divider()
@@ -584,6 +694,13 @@ private struct TrainingProgramDetailView: View {
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(false)
         }
+        .onChange(of: program.updatedAt) {
+            prescriptions = TrainingPlanStore.currentPrescriptions(for: program)
+        }
+        .task(id: statsExpanded) {
+            guard statsExpanded else { return }
+            await loadStatsSnapshot()
+        }
         .fullScreenCover(item: $startedSession, onDismiss: {
             if returnToTrainingHomeAfterWorkout {
                 returnToTrainingHomeAfterWorkout = false
@@ -625,6 +742,53 @@ private struct TrainingProgramDetailView: View {
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(false)
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadStatsSnapshot() async {
+        guard !isLoadingStats else { return }
+        isLoadingStats = true
+        defer { isLoadingStats = false }
+        let interval = AppPerformance.begin(
+            .derivedSnapshot,
+            detail: "screen=training-program,kind=stats"
+        )
+        let container = modelContext.container
+        let programID = program.id
+        let worker = Task.detached(priority: .userInitiated) {
+            let loader = TrainingProgramStatsSnapshotLoader(
+                modelContainer: container
+            )
+            return try await loader.load(programID: programID)
+        }
+        do {
+            let loaded = try await withTaskCancellationHandler {
+                try await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled else {
+                AppPerformance.end(
+                    interval,
+                    detail: "screen=training-program,kind=stats,cancelled=true"
+                )
+                return
+            }
+            statsSnapshot = loaded
+            AppPerformance.end(
+                interval,
+                detail: "screen=training-program,kind=stats"
+            )
+        } catch is CancellationError {
+            AppPerformance.end(
+                interval,
+                detail: "screen=training-program,kind=stats,cancelled=true"
+            )
+        } catch {
+            AppPerformance.end(
+                interval,
+                detail: "screen=training-program,kind=stats,failed=true"
+            )
         }
     }
 
@@ -876,6 +1040,7 @@ private struct WorkoutSessionHistoryRow: View {
     let session: WorkoutSession
     var programs: [TrainingProgram] = []
     var preferredProgramName: String?
+    var summary: TrainingSessionSummary?
 
     private var planLabel: String {
         if let source = TrainingPlanStore.programSourceLabel(
@@ -903,15 +1068,10 @@ private struct WorkoutSessionHistoryRow: View {
             ))
             .font(.subheadline)
             .foregroundStyle(.secondary)
-            Text(
-                TrainingPlanStore.summary(
-                    for: session.id,
-                    in: modelContext
-                ).text
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
+            Text(summary?.text ?? "训练总结载入中…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
@@ -922,15 +1082,24 @@ private struct WorkoutSessionHistoryRow: View {
 
 private struct WorkoutSessionReviewView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ExercisePerformance.order)
-    private var allPerformances: [ExercisePerformance]
-    @Query(sort: \WorkoutSet.order) private var allSets: [WorkoutSet]
+    @Query private var performances: [ExercisePerformance]
+    @Query private var sets: [WorkoutSet]
 
     let session: WorkoutSession
     @State private var shareModel: WorkoutSharePosterModel?
+    @State private var summary: TrainingSessionSummary?
 
-    private var performances: [ExercisePerformance] {
-        allPerformances.filter { $0.sessionID == session.id }
+    init(session: WorkoutSession) {
+        self.session = session
+        let sessionID = session.id
+        _performances = Query(FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.sessionID == sessionID },
+            sortBy: [SortDescriptor(\.order)]
+        ))
+        _sets = Query(FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.performance?.sessionID == sessionID },
+            sortBy: [SortDescriptor(\.order)]
+        ))
     }
 
     private var planLabel: String? {
@@ -938,17 +1107,16 @@ private struct WorkoutSessionReviewView: View {
     }
 
     var body: some View {
+        let completedSetsByPerformanceID = Dictionary(
+            grouping: sets.lazy.filter { $0.status == .completed },
+            by: \WorkoutSet.performanceID
+        )
         List {
             Section("本地总结") {
                 if let planLabel {
                     LabeledContent("训练计划", value: planLabel)
                 }
-                Text(
-                    TrainingPlanStore.summary(
-                        for: session.id,
-                        in: modelContext
-                    ).text
-                )
+                Text(summary?.text ?? "正在载入训练总结…")
                 if session.status == .abandoned {
                     Label("本次训练提前结束，未确认组没有计为完成。", systemImage: "exclamationmark.circle")
                         .foregroundStyle(.secondary)
@@ -962,16 +1130,15 @@ private struct WorkoutSessionReviewView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(performance.exerciseName)
                                 .font(.headline)
-                            let sets = allSets.filter {
-                                $0.performanceID == performance.id
-                                    && $0.status == .completed
-                            }
+                            let performanceSets =
+                                completedSetsByPerformanceID[performance.id]
+                                    ?? []
                             let videoCount = Set(
-                                sets.compactMap(\.recordedVideoPath)
+                                performanceSets.compactMap(\.recordedVideoPath)
                                     + [performance.activeVideoPath].compactMap { $0 }
                             ).count
                             Text(
-                                "\(sets.count) 组已确认"
+                                "\(performanceSets.count) 组已确认"
                                     + (videoCount == 0
                                         ? ""
                                         : " · \(videoCount) 段录像")
@@ -985,13 +1152,8 @@ private struct WorkoutSessionReviewView: View {
         }
         .navigationTitle("训练复盘")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if TrainingPlanStore.backfillProgramSource(
-                for: session,
-                in: modelContext
-            ) {
-                try? modelContext.save()
-            }
+        .task(id: session.id) {
+            await loadSummary()
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -1027,6 +1189,24 @@ private struct WorkoutSessionReviewView: View {
             WorkoutShareSheet(model: model)
         }
     }
+
+    private func loadSummary() async {
+        let container = modelContext.container
+        let sessionID = session.id
+        let worker = Task.detached(priority: .userInitiated) {
+            let loader = TrainingProgramStatsSnapshotLoader(
+                modelContainer: container
+            )
+            return try await loader.load(sessionID: sessionID)
+        }
+        let loaded = try? await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        guard let loaded, !Task.isCancelled else { return }
+        summary = loaded
+    }
 }
 
 struct PerformanceReviewView: View {
@@ -1037,9 +1217,8 @@ struct PerformanceReviewView: View {
     @Environment(ConversationSessionController.self)
     private var conversationSessions
     @Environment(LocationContextService.self) private var locationContext
-    @Query(sort: \PerformanceAnalysis.createdAt, order: .reverse)
-    private var allAnalyses: [PerformanceAnalysis]
-    @Query(sort: \WorkoutSet.order) private var allSets: [WorkoutSet]
+    @Query private var analyses: [PerformanceAnalysis]
+    @Query private var sets: [WorkoutSet]
 
     let performance: ExercisePerformance
     @State private var evidence = ""
@@ -1053,7 +1232,7 @@ struct PerformanceReviewView: View {
     @State private var errorMessage: String?
 
     private var analysis: PerformanceAnalysis? {
-        allAnalyses.first { $0.performanceID == performance.id }
+        analyses.first
     }
 
     private var videoAttachment: MediaAttachmentReference? {
@@ -1063,11 +1242,22 @@ struct PerformanceReviewView: View {
     }
 
     private var recordedSets: [WorkoutSet] {
-        allSets.filter {
-            $0.performanceID == performance.id
-                && $0.recordedVideoPath != nil
-        }
-        .sorted { $0.order < $1.order }
+        sets.filter { $0.recordedVideoPath != nil }
+    }
+
+    init(performance: ExercisePerformance) {
+        self.performance = performance
+        let performanceID = performance.id
+        var analysisDescriptor = FetchDescriptor<PerformanceAnalysis>(
+            predicate: #Predicate { $0.performanceID == performanceID },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        analysisDescriptor.fetchLimit = 1
+        _analyses = Query(analysisDescriptor)
+        _sets = Query(FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.performanceID == performanceID },
+            sortBy: [SortDescriptor(\.order)]
+        ))
     }
 
     var body: some View {
@@ -1232,44 +1422,50 @@ struct PerformanceReviewView: View {
     }
 
     private func analyze() {
-        do {
-            let fingerprint = try TrainingIntelligenceService
-                .performanceFingerprint(for: performance)
-            let prompt = TrainingIntelligenceService.performanceReviewPrompt(
-                performance: performance,
-                sets: allSets,
-                fingerprint: fingerprint
-            )
-            let attachment = try TrainingIntelligenceService
-                .makePendingPerformanceVideo(performance: performance)
-            let session = conversationSessions.ensureActiveSession(
-                dataSpace: dataSpace.activeSpace,
-                in: modelContext
-            )
-            guard let context = ConversationProcessingContextFactory.make(
-                sessionID: session.id,
-                dataSpace: dataSpace.activeSpace,
-                ai: ai,
-                in: modelContext
-            ) else {
-                errorMessage = "无法建立本次教练任务。"
-                return
+        guard !isAnalyzing else { return }
+        isAnalyzing = true
+        Task { @MainActor in
+            do {
+                let fingerprint = try await TrainingIntelligenceService
+                    .performanceFingerprintAsync(for: performance)
+                let prompt = TrainingIntelligenceService.performanceReviewPrompt(
+                    performance: performance,
+                    sets: sets,
+                    fingerprint: fingerprint
+                )
+                let attachment = try TrainingIntelligenceService
+                    .makePendingPerformanceVideo(performance: performance)
+                let session = conversationSessions.ensureActiveSession(
+                    dataSpace: dataSpace.activeSpace,
+                    in: modelContext
+                )
+                guard let context = ConversationProcessingContextFactory.make(
+                    sessionID: session.id,
+                    dataSpace: dataSpace.activeSpace,
+                    ai: ai,
+                    in: modelContext
+                ) else {
+                    isAnalyzing = false
+                    errorMessage = "无法建立本次教练任务。"
+                    return
+                }
+                let accepted = await processor.submitAsync(
+                    text: prompt,
+                    attachments: [attachment],
+                    context: context,
+                    includeLocation: false,
+                    locationService: locationContext
+                )
+                // ADR 0045：落盘成功即接受，模型不可用只会让任务进入暂存。
+                guard accepted else {
+                    isAnalyzing = false
+                    errorMessage = "无法保存本次复盘任务，请稍后重试。"
+                    return
+                }
+            } catch {
+                isAnalyzing = false
+                errorMessage = error.localizedDescription
             }
-            let accepted = processor.submit(
-                text: prompt,
-                attachments: [attachment],
-                context: context,
-                includeLocation: false,
-                locationService: locationContext
-            )
-            // ADR 0045：落盘成功即接受，模型不可用只会让任务进入暂存。
-            guard accepted else {
-                errorMessage = "无法保存本次复盘任务，请稍后重试。"
-                return
-            }
-            isAnalyzing = true
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 
@@ -1319,37 +1515,35 @@ struct PerformanceReviewView: View {
             errorMessage = "请选择或拍摄一段视频。"
             return
         }
-        var newPath: String?
-        do {
-            let storedPath = try MediaStore.saveVideo(from: url)
-            newPath = storedPath
-            let oldPath = performance.activeVideoPath
-            performance.activeVideoPath = storedPath
-            for analysis in allAnalyses
-                where analysis.performanceID == performance.id
-            {
-                modelContext.delete(analysis)
+        Task { @MainActor in
+            var newPath: String?
+            do {
+                let storedPath = try await MediaStore.saveVideoAsync(from: url)
+                newPath = storedPath
+                let oldPath = performance.activeVideoPath
+                performance.activeVideoPath = storedPath
+                for analysis in analyses {
+                    modelContext.delete(analysis)
+                }
+                try modelContext.save()
+                if let oldPath {
+                    _ = MediaStore.removeStoredFile(at: oldPath)
+                }
+                loadAnalysis()
+            } catch {
+                modelContext.rollback()
+                if let newPath {
+                    _ = MediaStore.removeStoredFile(at: newPath)
+                }
+                errorMessage = error.localizedDescription
             }
-            try modelContext.save()
-            if let oldPath {
-                _ = MediaStore.removeStoredFile(at: oldPath)
-            }
-            loadAnalysis()
-        } catch {
-            modelContext.rollback()
-            if let newPath {
-                _ = MediaStore.removeStoredFile(at: newPath)
-            }
-            errorMessage = error.localizedDescription
         }
     }
 
     private func removeVideo() {
         guard let path = performance.activeVideoPath else { return }
         performance.activeVideoPath = nil
-        for analysis in allAnalyses
-            where analysis.performanceID == performance.id
-        {
+        for analysis in analyses {
             modelContext.delete(analysis)
         }
         do {

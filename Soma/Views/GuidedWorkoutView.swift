@@ -26,19 +26,65 @@ private struct GuidedWorkoutAlertItem: Identifiable {
     }
 }
 
+private struct GuidedProjectionRevision: Hashable {
+    let statusRaw: String
+    let phaseRaw: String
+    let currentSetID: UUID?
+    let currentEffortID: UUID?
+    let restTargetEndAt: Date?
+    let completedSetCount: Int
+}
+
+private struct GuidedTimelineRevision: Hashable {
+    let statusRaw: String
+    let phaseRaw: String
+    let transitionRevision: Int
+    let phaseDeadlineAt: Date?
+}
+
+private struct GuidedExerciseReplacementList: View {
+    @Query private var definitions: [ExerciseDefinition]
+    let onSelect: (ExerciseDefinition) -> Void
+
+    init(onSelect: @escaping (ExerciseDefinition) -> Void) {
+        self.onSelect = onSelect
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.canonicalName)]
+        )
+        descriptor.fetchLimit = 2000
+        _definitions = Query(descriptor)
+    }
+
+    var body: some View {
+        List(definitions) { exercise in
+            Button {
+                onSelect(exercise)
+            } label: {
+                HStack(spacing: 12) {
+                    ExerciseArtworkView(
+                        reference: exercise.preferredActionIllustration
+                    )
+                    .frame(width: 54, height: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    Text(exercise.canonicalName)
+                }
+            }
+            .foregroundStyle(.primary)
+        }
+        .navigationTitle("替换当前动作")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct GuidedWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(GuidedWorkoutCoordinator.self) private var coordinator
     @Environment(WorkoutCameraService.self) private var camera
-    @Query(sort: \ExercisePerformance.order)
-    private var allPerformances: [ExercisePerformance]
-    @Query(sort: \WorkoutSet.order)
-    private var allSets: [WorkoutSet]
-    @Query(sort: \WorkoutEffort.order)
-    private var allEfforts: [WorkoutEffort]
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var definitions: [ExerciseDefinition]
+    @Query private var allPerformances: [ExercisePerformance]
+    @Query private var allSets: [WorkoutSet]
+    @Query private var allEfforts: [WorkoutEffort]
 
     let session: WorkoutSession
     var onFinishedReturnHome: () -> Void = {}
@@ -63,6 +109,29 @@ struct GuidedWorkoutView: View {
     ) {
         self.session = session
         self.onFinishedReturnHome = onFinishedReturnHome
+        let sessionID = session.id
+        _allPerformances = Query(
+            FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.sessionID == sessionID },
+                sortBy: [SortDescriptor(\.order)]
+            )
+        )
+        _allSets = Query(
+            FetchDescriptor<WorkoutSet>(
+                predicate: #Predicate {
+                    $0.performance?.sessionID == sessionID
+                },
+                sortBy: [SortDescriptor(\.order)]
+            )
+        )
+        _allEfforts = Query(
+            FetchDescriptor<WorkoutEffort>(
+                predicate: #Predicate {
+                    $0.workoutSet?.performance?.sessionID == sessionID
+                },
+                sortBy: [SortDescriptor(\.order)]
+            )
+        )
         #if DEBUG
             if ProcessInfo.processInfo.environment["SOMA_GUIDED_CAPTURE_PREVIEW"] == "1" {
                 _presentation = State(initialValue: GuidedWorkoutPresentationState(
@@ -74,8 +143,6 @@ struct GuidedWorkoutView: View {
 
     private var performances: [ExercisePerformance] {
         allPerformances
-            .filter { $0.sessionID == session.id }
-            .sorted { $0.order < $1.order }
     }
 
     private var currentPerformance: ExercisePerformance? {
@@ -95,14 +162,11 @@ struct GuidedWorkoutView: View {
 
     private var currentPerformanceSets: [WorkoutSet] {
         guard let id = currentPerformance?.id else { return [] }
-        return allSets
-            .filter { $0.performanceID == id }
-            .sorted { $0.order < $1.order }
+        return allSets.filter { $0.performanceID == id }
     }
 
     private var sessionSets: [WorkoutSet] {
-        let performanceIDs = Set(performances.map(\.id))
-        return allSets.filter { performanceIDs.contains($0.performanceID) }
+        allSets
     }
 
     private var completedSetCount: Int {
@@ -110,14 +174,18 @@ struct GuidedWorkoutView: View {
     }
 
     private var workoutProgressExercises: [GuidedWorkoutProgressExercise] {
-        performances.map { performance in
-            let sets = allSets
-                .filter { $0.performanceID == performance.id }
-                .sorted { $0.order < $1.order }
+        let setsByPerformanceID = Dictionary(
+            grouping: allSets,
+            by: \.performanceID
+        )
+        let effortsBySetID = Dictionary(
+            grouping: allEfforts,
+            by: \.workoutSetID
+        )
+        return performances.map { performance in
+            let sets = (setsByPerformanceID[performance.id] ?? [])
                 .map { set in
-                    let efforts = allEfforts.filter {
-                        $0.workoutSetID == set.id
-                    }
+                    let efforts = effortsBySetID[set.id] ?? []
                     let state: GuidedWorkoutProgressSetState = switch set.status {
                     case .completed:
                         .completed
@@ -149,30 +217,28 @@ struct GuidedWorkoutView: View {
         }
     }
 
-    private var projectionKey: String {
-        [
-            session.statusRaw,
-            session.guidedPhaseRaw,
-            session.currentSetID?.uuidString ?? "none",
-            session.currentEffortID?.uuidString ?? "none",
-            session.restTargetEndAt?.timeIntervalSince1970.formatted() ?? "none",
-            String(completedSetCount)
-        ].joined(separator: ":")
+    private var projectionKey: GuidedProjectionRevision {
+        GuidedProjectionRevision(
+            statusRaw: session.statusRaw,
+            phaseRaw: session.guidedPhaseRaw,
+            currentSetID: session.currentSetID,
+            currentEffortID: session.currentEffortID,
+            restTargetEndAt: session.restTargetEndAt,
+            completedSetCount: completedSetCount
+        )
     }
 
-    private var timelineKey: String {
-        [
-            session.statusRaw,
-            session.guidedPhaseRaw,
-            String(session.transitionRevision),
-            session.phaseDeadlineAt?.timeIntervalSince1970.formatted()
-                ?? "none"
-        ].joined(separator: ":")
+    private var timelineKey: GuidedTimelineRevision {
+        GuidedTimelineRevision(
+            statusRaw: session.statusRaw,
+            phaseRaw: session.guidedPhaseRaw,
+            transitionRevision: session.transitionRevision,
+            phaseDeadlineAt: session.phaseDeadlineAt
+        )
     }
 
     private var currentExerciseDefinition: ExerciseDefinition? {
-        guard let id = currentPerformance?.exerciseID else { return nil }
-        return definitions.first { $0.id == id }
+        currentPerformance?.exerciseDefinition
     }
 
     var body: some View {
@@ -352,23 +418,9 @@ struct GuidedWorkoutView: View {
         }
         .sheet(isPresented: $showsReplacement) {
             NavigationStack {
-                List(definitions.filter { !$0.isArchived }) { exercise in
-                    Button {
-                        replaceCurrentExercise(with: exercise)
-                    } label: {
-                        HStack(spacing: 12) {
-                            ExerciseArtworkView(
-                                reference: exercise.preferredActionIllustration
-                            )
-                            .frame(width: 54, height: 54)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            Text(exercise.canonicalName)
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                }
-                .navigationTitle("替换当前动作")
-                .navigationBarTitleDisplayMode(.inline)
+                GuidedExerciseReplacementList(
+                    onSelect: replaceCurrentExercise
+                )
             }
         }
         .sheet(item: $shareModel, onDismiss: {

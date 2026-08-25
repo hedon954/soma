@@ -44,13 +44,20 @@ enum AgentContextPackBuilder {
             limit: 1,
             in: context
         )
-        let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
-            .filter { $0.status == .active }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        var programDescriptor = FetchDescriptor<TrainingProgram>(
+            predicate: #Predicate { $0.statusRaw == "active" },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        programDescriptor.fetchLimit = 10
+        let programs = (try? context.fetch(programDescriptor)) ?? []
         let sessions = fetchRecent(
             WorkoutSession.self,
             sort: \WorkoutSession.startedAt,
             limit: 8,
+            in: context
+        )
+        let definitions = exerciseDefinitions(
+            for: workouts,
             in: context
         )
 
@@ -61,7 +68,7 @@ enum AgentContextPackBuilder {
             workouts: workouts,
             businessDate: businessDate,
             calendar: calendar,
-            in: context
+            definitions: definitions
         ))
         sections.append(dayMealLine(
             meals: meals,
@@ -70,7 +77,11 @@ enum AgentContextPackBuilder {
         ))
         sections.append(trainingFrequencyLine(workouts: workouts, since: day7, label: "近7天"))
         sections.append(trainingFrequencyLine(workouts: workouts, since: day28, label: "近28天"))
-        if let muscle = muscleDistribution(workouts: workouts, since: day28, in: context) {
+        if let muscle = muscleDistribution(
+            workouts: workouts,
+            since: day28,
+            definitions: definitions
+        ) {
             sections.append(muscle)
         }
         if let recentDays = recentTrainingDays(workouts: workouts, limit: 3) {
@@ -97,6 +108,30 @@ enum AgentContextPackBuilder {
         }
 
         return truncate(sections.filter { !$0.isEmpty }.joined(separator: "\n"))
+    }
+
+    private static func exerciseDefinitions(
+        for workouts: [WorkoutEntry],
+        in context: ModelContext
+    ) -> [ExerciseDefinition] {
+        Array(workouts.reduce(into: [UUID: ExerciseDefinition]()) { result, workout in
+            if let related = workout.exerciseDefinition {
+                result[related.id] = related
+                return
+            }
+            guard let exerciseID = workout.exerciseID,
+                  result[exerciseID] == nil
+            else {
+                return
+            }
+            var descriptor = FetchDescriptor<ExerciseDefinition>(
+                predicate: #Predicate { $0.id == exerciseID }
+            )
+            descriptor.fetchLimit = 1
+            if let definition = try? context.fetch(descriptor).first {
+                result[definition.id] = definition
+            }
+        }.values)
     }
 
     private static func profileLine(_ profile: UserProfile?) -> String {
@@ -144,15 +179,12 @@ enum AgentContextPackBuilder {
         workouts: [WorkoutEntry],
         businessDate: Date,
         calendar: Calendar,
-        in context: ModelContext
+        definitions: [ExerciseDefinition]
     ) -> String {
         let values = workouts.filter {
             calendar.isDate($0.date, inSameDayAs: businessDate)
         }
         guard !values.isEmpty else { return "" }
-        let definitions = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
         let exerciseBusinessIDs = Dictionary(
             uniqueKeysWithValues: definitions.compactMap { definition in
                 definition.businessID.map { (definition.id, $0) }
@@ -189,9 +221,8 @@ enum AgentContextPackBuilder {
     private static func muscleDistribution(
         workouts: [WorkoutEntry],
         since: Date,
-        in context: ModelContext
+        definitions: [ExerciseDefinition]
     ) -> String? {
-        let definitions = (try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? []
         let byID = Dictionary(uniqueKeysWithValues: definitions.map { ($0.id, $0) })
         var counts: [String: Int] = [:]
         for workout in workouts where workout.date >= since && workout.externalSource == nil {

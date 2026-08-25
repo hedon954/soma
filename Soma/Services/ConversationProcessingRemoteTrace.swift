@@ -30,7 +30,7 @@ extension ConversationProcessingService {
         context: ConversationProcessingContext,
         client: RemoteAgentClient
     ) async throws {
-        for event in events where event.sequence > job.remoteEventCursor {
+        for event in events where event.sequence > currentRemoteProjectionCursor(for: job) {
             guard !job.state.isTerminal,
                   job.dataSpace == context.dataSpace
             else {
@@ -47,9 +47,30 @@ extension ConversationProcessingService {
                 context: context,
                 client: client
             )
-            job.remoteEventCursor = event.sequence
-            try context.modelContext.save()
+            remoteProjectionCursor = event.sequence
+            if !event.isTransientTextUpdate {
+                persistRemoteProjectionCursor(for: job)
+                try context.modelContext.save()
+            }
         }
+    }
+
+    func currentRemoteProjectionCursor(for job: AgentJob) -> Int {
+        if remoteProjectionJobID != job.id {
+            remoteProjectionJobID = job.id
+            remoteProjectionCursor = job.remoteEventCursor
+        }
+        return remoteProjectionCursor
+    }
+
+    func resetRemoteProjectionCursor(for job: AgentJob) {
+        remoteProjectionJobID = job.id
+        remoteProjectionCursor = job.remoteEventCursor
+    }
+
+    func persistRemoteProjectionCursor(for job: AgentJob) {
+        guard remoteProjectionJobID == job.id else { return }
+        job.remoteEventCursor = remoteProjectionCursor
     }
 
     func failRemoteJob(
@@ -173,14 +194,15 @@ extension ConversationProcessingService {
         sessionID: UUID,
         in context: ModelContext
     ) -> CoachMessage {
-        let messages = (
-            try? context.fetch(FetchDescriptor<CoachMessage>())
-        ) ?? []
-        if let responseID = job.responseMessageID,
-           let existing = messages.first(where: { $0.id == responseID })
-        {
-            prepareResponseMessageForResume(existing, job: job)
-            return existing
+        if let responseID = job.responseMessageID {
+            var descriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.id == responseID }
+            )
+            descriptor.fetchLimit = 1
+            if let existing = try? context.fetch(descriptor).first {
+                prepareResponseMessageForResume(existing, job: job)
+                return existing
+            }
         }
         let response = CoachMessage(
             sessionID: sessionID,
@@ -204,12 +226,16 @@ extension ConversationProcessingService {
         input: String,
         in context: ModelContext
     ) -> AgentTrace {
-        let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
-        if let traceID = response.agentTraceID,
-           let existing = traces.first(where: { $0.id == traceID }),
-           existing.status == .running
-        {
-            return existing
+        if let traceID = response.agentTraceID {
+            var descriptor = FetchDescriptor<AgentTrace>(
+                predicate: #Predicate { $0.id == traceID }
+            )
+            descriptor.fetchLimit = 1
+            if let existing = try? context.fetch(descriptor).first,
+               existing.status == .running
+            {
+                return existing
+            }
         }
         let trace = AgentTrace(
             provider: "Soma Managed",
@@ -229,5 +255,11 @@ extension ConversationProcessingService {
         response.agentTraceID = trace.id
         try? context.save()
         return trace
+    }
+}
+
+private extension RemoteAgentEvent {
+    var isTransientTextUpdate: Bool {
+        kind == "text" && phase == "updated"
     }
 }

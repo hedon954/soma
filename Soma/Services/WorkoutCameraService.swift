@@ -727,7 +727,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             completeRecordingAttempt(attempt, with: .cancelled)
         case .persist:
             do {
-                let path = try MediaStore.saveVideo(from: url)
+                let path = try await MediaStore.saveVideoAsync(from: url)
                 try? FileManager.default.removeItem(at: url)
                 lastSavedPath = path
                 completeRecordingAttempt(
@@ -749,7 +749,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             }
         case let .persistPartial(message):
             do {
-                let path = try MediaStore.saveVideo(from: url)
+                let path = try await MediaStore.saveVideoAsync(from: url)
                 try? FileManager.default.removeItem(at: url)
                 lastSavedPath = path
                 completeRecordingAttempt(
@@ -1563,7 +1563,7 @@ extension WorkoutCameraService {
             switch disposition {
             case .savePartial:
                 do {
-                    let path = try MediaStore.saveVideo(from: url)
+                    let path = try await MediaStore.saveVideoAsync(from: url)
                     try? FileManager.default.removeItem(at: url)
                     lastSavedPath = path
                     let message = recordingAttemptLifecycles[attempt.id]?

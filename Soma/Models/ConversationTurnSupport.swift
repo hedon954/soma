@@ -191,100 +191,45 @@ enum ConversationTurnProjection {
         in messages: [CoachMessage],
         job: AgentJob? = nil
     ) -> Bool {
-        guard message.isFromCoach,
-              [.failed, .cancelled].contains(message.agentStatus),
-              let turnID = message.turnID,
-              latestAttempt(for: turnID, in: messages)?.id == message.id,
-              !successfulTurnIDs(in: messages).contains(turnID)
-        else {
-            return false
-        }
-        if let job {
-            return !job.state.awaitsAutomaticRecovery
-        }
-        // 没有 Job 时，取消态表示系统仍会续跑；只有失败态才交给用户手动重试。
-        return message.agentStatus == .failed
+        retryableAssistantMessageIDs(
+            in: messages,
+            jobByResponseMessageID: job.map { [message.id: $0] } ?? [:]
+        ).contains(message.id)
     }
-}
 
-extension DataIntegrityRepair {
-    static func backfillConversationTurns(in context: ModelContext) {
-        let messages = (
-            try? context.fetch(
-                FetchDescriptor<CoachMessage>(
-                    sortBy: [SortDescriptor(\.date)]
-                )
-            )
-        ) ?? []
-        guard messages.contains(where: { $0.turnID == nil }) else { return }
-        let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
-        let traceByID = Dictionary(uniqueKeysWithValues: traces.map { ($0.id, $0) })
-        let grouped = Dictionary(grouping: messages) {
-            $0.sessionID?.uuidString ?? "legacy-without-session"
-        }
-        var changed = false
-
-        for sessionMessages in grouped.values {
-            var activeTurnID: UUID?
-            var attemptNumber = 0
-            for message in sessionMessages.sorted(by: { $0.date < $1.date }) {
-                if !message.isFromCoach {
-                    activeTurnID = message.turnID ?? UUID()
-                    attemptNumber = 0
-                    if message.turnID == nil {
-                        message.turnID = activeTurnID
-                        changed = true
-                    }
-                    continue
-                }
-
-                guard let turnID = message.turnID ?? activeTurnID else { continue }
-                attemptNumber += 1
-                if message.turnID == nil {
-                    message.turnID = turnID
-                    changed = true
-                }
-                if message.attemptNumber == 0 {
-                    message.attemptNumber = attemptNumber
-                    changed = true
-                }
-                if message.agentStatus == nil {
-                    if let traceID = message.agentTraceID,
-                       let trace = traceByID[traceID]
-                    {
-                        message.agentStatus = trace.status
-                    } else {
-                        message.agentStatus = legacyStatus(for: message)
-                    }
-                    changed = true
-                }
-                if let traceID = message.agentTraceID,
-                   let trace = traceByID[traceID]
-                {
-                    if trace.turnID == nil {
-                        trace.turnID = turnID
-                        changed = true
-                    }
-                    if trace.attemptNumber == 1, attemptNumber > 1 {
-                        trace.attemptNumber = attemptNumber
-                        changed = true
-                    }
-                }
+    /// 一次线性扫描生成整页可重试集合，供聊天气泡按 ID O(1) 读取。
+    static func retryableAssistantMessageIDs(
+        in messages: [CoachMessage],
+        jobByResponseMessageID: [UUID: AgentJob]
+    ) -> Set<UUID> {
+        let successful = successfulTurnIDs(in: messages)
+        var latestByTurnID: [UUID: CoachMessage] = [:]
+        for message in messages where message.isFromCoach {
+            guard let turnID = message.turnID else { continue }
+            guard let existing = latestByTurnID[turnID] else {
+                latestByTurnID[turnID] = message
+                continue
+            }
+            if message.attemptNumber > existing.attemptNumber
+                || (message.attemptNumber == existing.attemptNumber
+                    && message.date > existing.date)
+            {
+                latestByTurnID[turnID] = message
             }
         }
 
-        if changed {
-            try? context.save()
-        }
-    }
-
-    private static func legacyStatus(for message: CoachMessage) -> AgentTraceStatus {
-        let normalized = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.hasPrefix("这次没有处理成功")
-            || message.agentTurnItems.contains(where: { $0.kind == .error })
-        {
-            return .failed
-        }
-        return .succeeded
+        return Set(latestByTurnID.values.compactMap { message in
+            guard let turnID = message.turnID,
+                  !successful.contains(turnID),
+                  [.failed, .cancelled].contains(message.agentStatus)
+            else {
+                return nil
+            }
+            if let job = jobByResponseMessageID[message.id] {
+                return job.state.awaitsAutomaticRecovery ? nil : message.id
+            }
+            // 没有 Job 时，取消态表示系统仍会续跑；只有失败态才交给用户手动重试。
+            return message.agentStatus == .failed ? message.id : nil
+        })
     }
 }

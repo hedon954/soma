@@ -3,12 +3,15 @@ import SwiftData
 
 extension ConversationRecorder {
     static func listTrainingPrograms(in context: ModelContext) -> AgentToolResult {
-        let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
-            .filter {
-                $0.status == .active
-                    && !TrainingPlanStore.prescriptions(for: $0, in: context).isEmpty
-            }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        let active = TrainingProgramStatus.active.rawValue
+        var descriptor = FetchDescriptor<TrainingProgram>(
+            predicate: #Predicate { $0.statusRaw == active },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 100
+        let programs = ((try? context.fetch(descriptor)) ?? []).filter {
+            !TrainingPlanStore.prescriptions(for: $0, in: context).isEmpty
+        }
         let values = programs.map { program in
             "[id:\(program.businessID ?? 0)] \(program.name)"
                 + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
@@ -25,8 +28,7 @@ extension ConversationRecorder {
         else {
             return .failure("get_training_program 需要有效的 program_id。")
         }
-        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard let program = programs.first(where: { $0.businessID == programID }) else {
+        guard let program = trainingProgram(businessID: programID, in: context) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         let prescriptions = TrainingPlanStore.prescriptions(for: program, in: context)
@@ -64,8 +66,12 @@ extension ConversationRecorder {
         do {
             let prescriptions = try planPrescriptions(arguments, in: context)
             let contentKey = TrainingPlanStore.contentFingerprint(prescriptions)
-            let programs = ((try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? [])
-                .filter { $0.status == .active }
+            let active = TrainingProgramStatus.active.rawValue
+            var descriptor = FetchDescriptor<TrainingProgram>(
+                predicate: #Predicate { $0.statusRaw == active }
+            )
+            descriptor.fetchLimit = 100
+            let programs = (try? context.fetch(descriptor)) ?? []
             if let existing = programs.first(where: {
                 $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
                     .localizedCaseInsensitiveCompare(name) == .orderedSame
@@ -99,10 +105,7 @@ extension ConversationRecorder {
         guard let programID = arguments.programID, programID > 0 else {
             return .failure("update_program 需要有效的 program_id。")
         }
-        let programs = (
-            try? context.fetch(FetchDescriptor<TrainingProgram>())
-        ) ?? []
-        guard let program = programs.first(where: { $0.businessID == programID }) else {
+        guard let program = trainingProgram(businessID: programID, in: context) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
@@ -131,10 +134,7 @@ extension ConversationRecorder {
                 "archive_training_program 需要有效的 program_id。"
             )
         }
-        let programs = (
-            try? context.fetch(FetchDescriptor<TrainingProgram>())
-        ) ?? []
-        guard let program = programs.first(where: { $0.businessID == programID }) else {
+        guard let program = trainingProgram(businessID: programID, in: context) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
@@ -153,8 +153,7 @@ extension ConversationRecorder {
         else {
             return .failure("delete_training_program 需要有效的 program_id。")
         }
-        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard let program = programs.first(where: { $0.businessID == programID }) else {
+        guard let program = trainingProgram(businessID: programID, in: context) else {
             return .failure("没有找到训练计划，请重新查询。")
         }
         do {
@@ -173,10 +172,9 @@ extension ConversationRecorder {
         else {
             return .failure("start_program 需要 list_programs 或 get_program 返回的有效 program_id。")
         }
-        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard let program = programs.first(where: {
-            $0.businessID == programID && $0.status == .active
-        }) else {
+        guard let program = trainingProgram(businessID: programID, in: context),
+              program.status == .active
+        else {
             return .failure("没有找到可执行的训练计划，请重新查询。")
         }
         let policy: AutoRecordingPolicy
@@ -187,17 +185,21 @@ extension ConversationRecorder {
         default:
             return .failure("录像策略仅支持 disabled、one_per_exercise 或 every_set。")
         }
-        let sessions = (
-            try? context.fetch(
-                FetchDescriptor<WorkoutSession>(
-                    sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-                )
-            )
-        ) ?? []
-        if let existing = sessions.first(where: {
-            $0.programID == program.id
-                && [.draft, .active, .paused].contains($0.status)
-        }) {
+        let programInternalID = program.id
+        let draftStatus = WorkoutSessionStatus.draft.rawValue
+        let activeStatus = WorkoutSessionStatus.active.rawValue
+        let pausedStatus = WorkoutSessionStatus.paused.rawValue
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate {
+                $0.programID == programInternalID
+                    && ($0.statusRaw == draftStatus
+                        || $0.statusRaw == activeStatus
+                        || $0.statusRaw == pausedStatus)
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        sessionDescriptor.fetchLimit = 1
+        if let existing = try? context.fetch(sessionDescriptor).first {
             SomaCaptureRouter.shared.requestWorkoutSession(existing.id)
             return .success(
                 "已有未完成的「\(program.name)」带练 [session_id:\(existing.businessID ?? 0)]，已继续该 Session。"
@@ -233,12 +235,12 @@ extension ConversationRecorder {
                 "record_performance_analysis 缺少 Performance、输入指纹或可审查反馈。"
             )
         }
-        let performances = (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>())
-        ) ?? []
-        guard let performance = performances.first(where: {
-            $0.businessID == performanceID
-        }), let path = performance.activeVideoPath
+        var performanceDescriptor = FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.businessID == performanceID }
+        )
+        performanceDescriptor.fetchLimit = 1
+        guard let performance = try? context.fetch(performanceDescriptor).first,
+              let path = performance.activeVideoPath
         else {
             return .failure("目标 Performance 或其当前视频已不存在。")
         }
@@ -248,21 +250,26 @@ extension ConversationRecorder {
             guard expected == fingerprint else {
                 return .failure("视频已变化，请基于当前视频重新发起复盘。")
             }
-            let analyses = (
-                try? context.fetch(FetchDescriptor<PerformanceAnalysis>())
-            ) ?? []
-            if let existing = analyses.first(where: {
-                $0.performanceID == performance.id
-                    && $0.inputFingerprint == fingerprint
-            }) {
+            let performanceInternalID = performance.id
+            var analysisDescriptor = FetchDescriptor<PerformanceAnalysis>(
+                predicate: #Predicate {
+                    $0.performanceID == performanceInternalID
+                        && $0.inputFingerprint == fingerprint
+                }
+            )
+            analysisDescriptor.fetchLimit = 1
+            if let existing = try? context.fetch(analysisDescriptor).first {
                 return .success(
                     "该视频复盘已保存 [id:\(existing.businessID ?? 0)]。"
                 )
             }
             let sourceJobID = sourceTurnID.flatMap { turnID in
-                (
-                    try? context.fetch(FetchDescriptor<AgentJob>())
-                )?.first { $0.turnID == turnID }?.id
+                var descriptor = FetchDescriptor<AgentJob>(
+                    predicate: #Predicate { $0.turnID == turnID },
+                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+                )
+                descriptor.fetchLimit = 1
+                return try? context.fetch(descriptor).first?.id
             }
             let analysis = PerformanceAnalysis(
                 performanceID: performance.id,
@@ -288,6 +295,39 @@ extension ConversationRecorder {
         }
     }
 
+    static func trainingProgram(
+        businessID: Int64,
+        in context: ModelContext
+    ) -> TrainingProgram? {
+        var descriptor = FetchDescriptor<TrainingProgram>(
+            predicate: #Predicate { $0.businessID == businessID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    static func exerciseDefinition(
+        businessID: Int64,
+        in context: ModelContext
+    ) -> ExerciseDefinition? {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.businessID == businessID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    static func exerciseDefinition(
+        internalID: UUID,
+        in context: ModelContext
+    ) -> ExerciseDefinition? {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == internalID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
     private static func planPrescriptions(
         _ arguments: AgentToolArguments,
         in context: ModelContext
@@ -295,11 +335,11 @@ extension ConversationRecorder {
         guard let inputs = arguments.templateExercises, !inputs.isEmpty else {
             throw TrainingPlanError.emptyTemplate
         }
-        let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
         return try inputs.map { input in
-            guard let definition = definitions.first(where: {
-                $0.businessID == input.exerciseID && !$0.isArchived
-            })
+            guard let definition = exerciseDefinition(
+                businessID: input.exerciseID,
+                in: context
+            ), !definition.isArchived
             else {
                 throw ExerciseLibraryError.invalidReference
             }
@@ -351,10 +391,17 @@ extension ConversationRecorder {
         prescriptions: [TemplateExercisePrescription],
         in context: ModelContext
     ) -> AgentJSONValue {
-        let definitions = (try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? []
-        let definitionIDs = Dictionary(uniqueKeysWithValues: definitions.compactMap { definition in
-            definition.businessID.map { (definition.id, $0) }
-        })
+        let definitionIDs = prescriptions.reduce(into: [UUID: Int64]()) { result, prescription in
+            guard result[prescription.exerciseID] == nil,
+                  let definition = exerciseDefinition(
+                      internalID: prescription.exerciseID,
+                      in: context
+                  ), let businessID = definition.businessID
+            else {
+                return
+            }
+            result[definition.id] = businessID
+        }
         return .object([
             "program_id": .number(Double(program.businessID ?? 0)),
             "program_name": .string(program.name),

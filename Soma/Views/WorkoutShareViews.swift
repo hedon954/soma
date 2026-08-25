@@ -3,6 +3,18 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+private final class SendableWorkoutShareImage: @unchecked Sendable {
+    let image: UIImage
+
+    init(_ image: UIImage) {
+        self.image = image
+    }
+}
+
+private enum WorkoutShareRenderError: Error {
+    case encodingFailed
+}
+
 struct WorkoutSharePosterModel: Equatable, Identifiable {
     var id = UUID()
     var dateText: String
@@ -35,50 +47,24 @@ enum WorkoutSharePosterBuilder {
         session: WorkoutSession,
         in context: ModelContext
     ) -> WorkoutSharePosterModel {
-        let summary = TrainingPlanStore.summary(for: session.id, in: context)
-        let relatedPerformances = session.performances
-        let performances = (relatedPerformances.isEmpty
-            ? ((try? context.fetch(FetchDescriptor<ExercisePerformance>())) ?? [])
-            .filter { $0.sessionID == session.id }
-            : relatedPerformances)
+        let summary = TrainingPlanStore.summary(for: session)
+        let performances = session.performances
             .sorted { $0.order < $1.order }
-        let sets = (try? context.fetch(FetchDescriptor<WorkoutSet>())) ?? []
-        let definitions = Dictionary(
-            uniqueKeysWithValues: ((try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? [])
-                .map { ($0.id, $0) }
-        )
-        let projectedWorkouts = ((try? context.fetch(
-            FetchDescriptor<WorkoutEntry>()
-        )) ?? [])
-        let workoutsByProjectionKey = Dictionary(grouping: projectedWorkouts) {
-            $0.projectionKey
-        }.reduce(into: [String: WorkoutEntry]()) { result, element in
-            let (key, candidates) = element
-            // A missing key is legacy/non-projected data. More than one row
-            // for the same key is ambiguous, so never pick one by fetch order.
-            guard let key, candidates.count == 1,
-                  let candidate = candidates.first
-            else { return }
-            result[key] = candidate
-        }
+        let sets = performances.flatMap(\.workoutSets)
+        let setsByPerformanceID = Dictionary(grouping: sets, by: \.performanceID)
+        let definitions = exerciseDefinitions(for: performances)
         let workoutsByPerformanceID = performances.reduce(
             into: [UUID: WorkoutEntry]()
         ) { result, performance in
-            guard !performance.workoutProjectionSuppressed else { return }
-            let key = SomaDataMigration.projectionKey(for: performance.id)
-            if let related = performance.projectedWorkout,
-               related.projectionKey == key
-            {
-                result[performance.id] = related
-            } else if let keyed = workoutsByProjectionKey[key] {
-                result[performance.id] = keyed
-            }
+            guard !performance.workoutProjectionSuppressed,
+                  let projectedWorkout = performance.projectedWorkout
+            else { return }
+            result[performance.id] = projectedWorkout
         }
         let intensityInputs: [(primary: [String], secondary: [String], sets: Int)] = performances.map { performance in
-            let evidenced = sets.filter {
-                $0.performanceID == performance.id
-                    && ($0.status == .completed || $0.status == .partial)
-            }.count
+            let evidenced = setsByPerformanceID[performance.id, default: []].count {
+                $0.status == .completed || $0.status == .partial
+            }
             let definition = definitions[performance.exerciseID]
             return (
                 primary: definition?.primaryMuscles ?? [],
@@ -90,10 +76,9 @@ enum WorkoutSharePosterBuilder {
         let focusMuscles = topMuscleNames(from: intensities, limit: 3)
 
         let exerciseLines: [WorkoutSharePosterModel.ExerciseLine] = performances.compactMap { performance in
-            let evidenced = sets
+            let evidenced = setsByPerformanceID[performance.id, default: []]
                 .filter {
-                    $0.performanceID == performance.id
-                        && ($0.status == .completed || $0.status == .partial)
+                    $0.status == .completed || $0.status == .partial
                 }
                 .sorted { $0.order < $1.order }
             guard !evidenced.isEmpty else { return nil }
@@ -142,6 +127,15 @@ enum WorkoutSharePosterBuilder {
             intensities: intensities,
             exercises: exerciseLines
         )
+    }
+
+    private static func exerciseDefinitions(
+        for performances: [ExercisePerformance]
+    ) -> [UUID: ExerciseDefinition] {
+        performances.reduce(into: [:]) { result, performance in
+            guard let definition = performance.exerciseDefinition else { return }
+            result[definition.id] = definition
+        }
     }
 
     private static func topMuscleNames(
@@ -607,16 +601,23 @@ struct WorkoutShareSheet: View {
             .environment(\.colorScheme, .light)
         let renderer = ImageRenderer(content: poster)
         renderer.scale = max(UIScreen.main.scale, 2)
-        guard let image = renderer.uiImage,
-              let data = image.pngData()
-        else {
+        guard let image = renderer.uiImage else {
             errorMessage = "本机渲染失败，请稍后重试。"
             return
         }
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("soma-workout-share-\(UUID().uuidString).png")
+        let imageBox = SendableWorkoutShareImage(image)
         do {
-            try data.write(to: url, options: .atomic)
+            let url = try await Task.detached(priority: .userInitiated) {
+                guard let data = imageBox.image.pngData() else {
+                    throw WorkoutShareRenderError.encodingFailed
+                }
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(
+                        "soma-workout-share-\(UUID().uuidString).png"
+                    )
+                try data.write(to: url, options: .atomic)
+                return url
+            }.value
             renderedImage = image
             shareURL = url
         } catch {

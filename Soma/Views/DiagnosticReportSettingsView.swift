@@ -43,13 +43,15 @@ struct DiagnosticReportSettingsView: View {
                 Button("立即尝试发送") {
                     Task {
                         await coordinator.deliverPendingReports()
-                        reload()
+                        await reload()
                     }
                 }
                 .disabled(coordinator.pendingReportCount == 0)
                 Button("丢弃待发送报告", role: .destructive) {
-                    coordinator.discardPendingReports()
-                    reload()
+                    Task {
+                        await coordinator.discardPendingReportsAsync()
+                        await reload()
+                    }
                 }
                 .disabled(coordinator.pendingReportCount == 0)
             } header: {
@@ -68,8 +70,10 @@ struct DiagnosticReportSettingsView: View {
                     Label("查看本机诊断日志", systemImage: "doc.text.magnifyingglass")
                 }
                 Button("清空本机诊断日志", role: .destructive) {
-                    DiagnosticsLogStore.shared.clear()
-                    reload()
+                    Task {
+                        await DiagnosticsLogStore.shared.clearAsync()
+                        await reload()
+                    }
                 }
             } footer: {
                 Text("日志只保留最近的运行面包屑，API Key、授权头与媒体内容恒定脱敏。")
@@ -77,13 +81,19 @@ struct DiagnosticReportSettingsView: View {
         }
         .navigationTitle("崩溃诊断")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: reload)
+        .task {
+            await Task.yield()
+            await reload()
+        }
     }
 
-    private func reload() {
+    @MainActor
+    private func reload() async {
         isAutoSendEnabled = coordinator.isAutoSendEnabled
-        reportText = coordinator.latestReportText()
-        logText = DiagnosticsLogStore.shared.recentText()
+        async let latestReport = coordinator.latestReportTextAsync()
+        async let recentLog = DiagnosticsLogStore.shared.recentTextAsync()
+        reportText = await latestReport
+        logText = await recentLog
     }
 }
 

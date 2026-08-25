@@ -26,6 +26,19 @@ struct ExerciseContentEditorView: View {
 
     init(exercise: ExerciseDefinition) {
         self.exercise = exercise
+        let exerciseID = exercise.id
+        _definitions = Query(FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.canonicalName)]
+        ))
+        var mergeDescriptor = FetchDescriptor<ExerciseMergeRecord>(
+            predicate: #Predicate {
+                $0.sourceExerciseID == exerciseID && $0.undoneAt == nil
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        mergeDescriptor.fetchLimit = 1
+        _mergeRecords = Query(mergeDescriptor)
         _name = State(initialValue: exercise.canonicalName)
         _coachingNotes = State(initialValue: exercise.coachingNotes)
         _primaryMuscles = State(initialValue: exercise.primaryMuscles.joined(
@@ -42,13 +55,11 @@ struct ExerciseContentEditorView: View {
     }
 
     private var mergeTargets: [ExerciseDefinition] {
-        definitions.filter { $0.id != exercise.id && !$0.isArchived }
+        definitions.filter { $0.id != exercise.id }
     }
 
     private var latestMerge: ExerciseMergeRecord? {
-        mergeRecords.first {
-            $0.sourceExerciseID == exercise.id && $0.undoneAt == nil
-        }
+        mergeRecords.first
     }
 
     var body: some View {
@@ -443,14 +454,16 @@ struct ExerciseMediaEditorView: View {
     }
 
     private func addUserVideos(_ media: [PickedMedia]) {
-        do {
-            try ExerciseDemoVideoLibrary.add(
-                media,
-                to: exercise,
-                in: modelContext
-            )
-        } catch {
-            errorMessage = error.localizedDescription
+        Task { @MainActor in
+            do {
+                try await ExerciseDemoVideoLibrary.add(
+                    media,
+                    to: exercise,
+                    in: modelContext
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -458,32 +471,34 @@ struct ExerciseMediaEditorView: View {
         _ media: [PickedMedia],
         kind: ExerciseImageKind
     ) {
-        let originalValues = exercise.imageReferences
-        var values = originalValues
-        var createdPaths: [String] = []
-        do {
-            for item in media {
-                guard case let .image(data) = item else { continue }
-                let path = try MediaStore.saveImage(data)
-                createdPaths.append(path)
-                values.append(ExerciseImageReference(
-                    kind: kind,
-                    source: .user,
-                    title: kind == .actionIllustration
-                        ? "我的动作图"
-                        : "我的肌群图",
-                    localPath: path
-                ))
+        Task { @MainActor in
+            let originalValues = exercise.imageReferences
+            var values = originalValues
+            var createdPaths: [String] = []
+            do {
+                for item in media {
+                    guard case let .image(data) = item else { continue }
+                    let path = try await MediaStore.saveImageAsync(data)
+                    createdPaths.append(path)
+                    values.append(ExerciseImageReference(
+                        kind: kind,
+                        source: .user,
+                        title: kind == .actionIllustration
+                            ? "我的动作图"
+                            : "我的肌群图",
+                        localPath: path
+                    ))
+                }
+                exercise.imageReferences = values
+                try modelContext.save()
+            } catch {
+                exercise.imageReferences = originalValues
+                modelContext.rollback()
+                for path in createdPaths {
+                    _ = MediaStore.removeStoredFile(at: path)
+                }
+                errorMessage = error.localizedDescription
             }
-            exercise.imageReferences = values
-            try modelContext.save()
-        } catch {
-            exercise.imageReferences = originalValues
-            modelContext.rollback()
-            for path in createdPaths {
-                _ = MediaStore.removeStoredFile(at: path)
-            }
-            errorMessage = error.localizedDescription
         }
     }
 
@@ -553,14 +568,14 @@ enum ExerciseDemoVideoLibrary {
         _ media: [PickedMedia],
         to exercise: ExerciseDefinition,
         in modelContext: ModelContext
-    ) throws {
+    ) async throws {
         let originalValues = exercise.userDemoVideos
         var values = originalValues
         var createdPaths: [String] = []
         do {
             for item in media {
                 guard case let .video(url) = item else { continue }
-                let path = try MediaStore.saveVideo(from: url)
+                let path = try await MediaStore.saveVideoAsync(from: url)
                 createdPaths.append(path)
                 values.append(MediaAttachmentReference(
                     kind: .video,

@@ -87,8 +87,12 @@ struct AgentSkillsListView: View {
         .navigationTitle("Skills")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { EditButton() }
-        .onAppear(perform: reload)
-        .sheet(item: $editingCustomSkill, onDismiss: reload) { skill in
+        .task {
+            await refreshAfterTransition()
+        }
+        .sheet(item: $editingCustomSkill, onDismiss: {
+            Task { await refreshAfterTransition() }
+        }) { skill in
             NavigationStack {
                 AgentCustomSkillEditor(skill: skill)
             }
@@ -104,16 +108,28 @@ struct AgentSkillsListView: View {
         }
     }
 
-    private func reload() {
-        customizedSkills = Set(AgentSkill.allCases.filter { $0.isCustomized() })
-        customSkills = AgentSkillRegistry.customSkills()
+    @MainActor
+    private func refreshAfterTransition() async {
+        await Task.yield()
+        let loaded = await Task.detached(priority: .userInitiated) {
+            let customizedIDs = AgentSkill.allCases
+                .filter { $0.isCustomized() }
+                .map(\.rawValue)
+            return (customizedIDs, AgentSkillRegistry.customSkills())
+        }.value
+        guard !Task.isCancelled else { return }
+        customizedSkills = Set(
+            AgentSkill.allCases.filter { loaded.0.contains($0.rawValue) }
+        )
+        customSkills = loaded.1
     }
 
     private func deleteCustomSkills(at offsets: IndexSet) {
-        for offset in offsets {
-            AgentSkillRegistry.delete(id: customSkills[offset].id)
+        let ids = offsets.map { customSkills[$0].id }
+        customSkills.remove(atOffsets: offsets)
+        for id in ids {
+            AgentSkillRegistry.delete(id: id)
         }
-        reload()
     }
 }
 

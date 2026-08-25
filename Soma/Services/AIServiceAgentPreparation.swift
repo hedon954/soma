@@ -86,6 +86,10 @@ extension AIService {
             : request.history.map(removingImages)
         let exposedTools = exposedTools(request)
         let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
+        let deadlinePolicy = ReActAgentPreference.deadlinePolicy(
+            streamDeadlinePolicy,
+            defaults: defaults
+        )
         let modelInput = try AgentModelInputBuilder.build(
             systemPrompt: systemPrompt,
             history: historyForPrompt,
@@ -96,7 +100,7 @@ extension AIService {
             tools: exposedTools,
             selectedSkillID: selectedSkill?.id,
             maxSteps: maxSteps,
-            deadlinePolicy: streamDeadlinePolicy
+            deadlinePolicy: deadlinePolicy
         )
         var messages = chatMessages(from: modelInput)
         let isLegacyCheckpoint = request.checkpoint != nil

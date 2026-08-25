@@ -3,8 +3,28 @@ import SwiftData
 
 extension DataIntegrityRepair {
     static func finalizeInterruptedAgentTraces(in context: ModelContext) {
-        let traces = (try? context.fetch(FetchDescriptor<AgentTrace>())) ?? []
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        let runningStatus = AgentTraceStatus.running.rawValue
+        let traces = (
+            try? context.fetch(
+                FetchDescriptor<AgentTrace>(
+                    predicate: #Predicate { $0.statusRaw == runningStatus }
+                )
+            )
+        ) ?? []
+        let succeeded = AgentJobState.succeeded.rawValue
+        let failed = AgentJobState.failed.rawValue
+        let cancelled = AgentJobState.cancelled.rawValue
+        let jobs = (
+            try? context.fetch(
+                FetchDescriptor<AgentJob>(
+                    predicate: #Predicate {
+                        $0.stateRaw != succeeded
+                            && $0.stateRaw != failed
+                            && $0.stateRaw != cancelled
+                    }
+                )
+            )
+        ) ?? []
         let durableRemoteTurnIDs = Set(jobs.compactMap { job in
             job.backend == .remote && !job.state.isTerminal
                 ? job.turnID
@@ -16,14 +36,18 @@ extension DataIntegrityRepair {
                 : nil
         })
         let interrupted = traces.filter {
-            $0.status == .running
-                && !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
+            !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
                 && !($0.turnID.map(resumableTurnIDs.contains) ?? false)
         }
-        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
+        let messages = (
+            try? context.fetch(
+                FetchDescriptor<CoachMessage>(
+                    predicate: #Predicate { $0.agentStatusRaw == runningStatus }
+                )
+            )
+        ) ?? []
         let interruptedMessages = messages.filter {
-            $0.agentStatus == .running
-                && !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
+            !($0.turnID.map(durableRemoteTurnIDs.contains) ?? false)
         }
         guard !interrupted.isEmpty || !interruptedMessages.isEmpty else { return }
 

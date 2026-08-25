@@ -344,18 +344,37 @@ struct InlineTextValue: View {
     var suffix: String?
     let accessibilityTitle: String
 
+    @State private var isEditing = false
     @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 2) {
-            TextField(placeholder, text: $text)
-                .keyboardType(keyboard)
-                .textFieldStyle(.plain)
-                .font(font)
-                .foregroundStyle(tint)
-                .focused($isFocused)
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(minWidth: 22, alignment: .leading)
+            Group {
+                if isEditing {
+                    TextField(placeholder, text: $text)
+                        .keyboardType(keyboard)
+                        .textFieldStyle(.plain)
+                        .focused($isFocused)
+                        .onSubmit(endEditing)
+                        .onChange(of: isFocused) { _, focused in
+                            if !focused {
+                                isEditing = false
+                            }
+                        }
+                        .accessibilityIdentifier("meal-inline-value-editor")
+                } else {
+                    Button(action: beginEditing) {
+                        Text(text.isEmpty ? placeholder : text)
+                            .foregroundStyle(text.isEmpty ? Color.secondary : tint)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("meal-inline-value-display")
+                }
+            }
+            .font(font)
+            .foregroundStyle(tint)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(minWidth: 22, alignment: .leading)
             if let suffix, !text.isEmpty {
                 Text(suffix)
                     .font(.caption2)
@@ -371,6 +390,21 @@ struct InlineTextValue: View {
         .animation(.easeInOut(duration: 0.15), value: isFocused)
         .accessibilityLabel(accessibilityTitle)
         .accessibilityValue(text.isEmpty ? "未填写" : text)
+        .accessibilityHint(isEditing ? "正在编辑" : "点按编辑")
+    }
+
+    private func beginEditing() {
+        isEditing = true
+        Task { @MainActor in
+            await Task.yield()
+            guard isEditing else { return }
+            isFocused = true
+        }
+    }
+
+    private func endEditing() {
+        isFocused = false
+        isEditing = false
     }
 }
 

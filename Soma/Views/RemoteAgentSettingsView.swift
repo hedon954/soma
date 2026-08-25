@@ -15,6 +15,19 @@ struct RemoteAgentSettingsView: View {
     @State private var validationMessage: String?
     @State private var dataBoundaryExpanded = false
 
+    init() {
+        var descriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.backendRaw == "remote"
+                    && $0.stateRaw != "succeeded"
+                    && $0.stateRaw != "failed"
+                    && $0.stateRaw != "cancelled"
+            }
+        )
+        descriptor.fetchLimit = 100
+        _jobs = Query(descriptor)
+    }
+
     var body: some View {
         Form {
             Section {

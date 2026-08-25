@@ -100,4 +100,20 @@ final class DiagnosticsLogStoreTests: XCTestCase {
         XCTAssertEqual(store.storedByteCount(), 0)
         XCTAssertTrue(store.recentText().isEmpty)
     }
+
+    func testAsyncReadAndClearPreserveOrderingAndRemoveFiles() async {
+        let store = DiagnosticsLogStore(directory: directory)
+        store.append(category: "lifecycle", message: "启动")
+        store.append(category: "agent", message: "完成")
+
+        let text = await store.recentTextAsync()
+        XCTAssertTrue(text.contains("启动"))
+        XCTAssertTrue(text.contains("完成"))
+
+        await store.clearAsync()
+
+        XCTAssertEqual(store.storedByteCount(), 0)
+        let clearedText = await store.recentTextAsync()
+        XCTAssertTrue(clearedText.isEmpty)
+    }
 }

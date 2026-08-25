@@ -3,14 +3,13 @@ import SwiftUI
 
 struct WorkoutHistoryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ExerciseDefinition.canonicalName) private var exercises: [ExerciseDefinition]
-    @Query(sort: \WorkoutEntry.date, order: .reverse) private var allWorkouts: [WorkoutEntry]
 
     @State private var filter = WorkoutHistoryDateFilter.all
     @State private var loaded: [WorkoutEntry] = []
     @State private var hasMore = true
     @State private var isLoading = false
     @State private var collapsedDays: Set<Date> = []
+    @State private var availableDates: Set<Date> = []
 
     private var dayGroups: [WorkoutHistoryDayGroup] {
         WorkoutHistoryQuery.groupedByDay(loaded)
@@ -21,7 +20,7 @@ struct WorkoutHistoryView: View {
         monthsByYear: [Int: [Int]],
         daysByYearMonth: [Int: [Int: [Int]]]
     ) {
-        WorkoutHistoryQuery.filterChoices(from: allWorkouts.map(\.date))
+        WorkoutHistoryQuery.filterChoices(from: Array(availableDates))
     }
 
     private var monthChips: [(filter: WorkoutHistoryDateFilter, title: String)] {
@@ -66,7 +65,7 @@ struct WorkoutHistoryView: View {
                                 } label: {
                                     WorkoutHistoryRow(
                                         workout: workout,
-                                        exercise: resolvedExercise(for: workout)
+                                        exercise: workout.exerciseDefinition
                                     )
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -113,8 +112,9 @@ struct WorkoutHistoryView: View {
             chips: monthChips,
             onSelect: { filter = $0 }
         )
-        .onAppear {
+        .task {
             if loaded.isEmpty {
+                await Task.yield()
                 reload()
             }
         }
@@ -128,20 +128,6 @@ struct WorkoutHistoryView: View {
             collapsedDays.remove(day)
         } else {
             collapsedDays.insert(day)
-        }
-    }
-
-    private func resolvedExercise(for workout: WorkoutEntry) -> ExerciseDefinition? {
-        if let exerciseID = workout.exerciseID {
-            if let match = exercises.first(where: { $0.id == exerciseID }) {
-                return match
-            }
-        }
-        let name = workout.exercise.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return nil }
-        let key = ExerciseLibraryStore.canonicalNameKey(name)
-        return exercises.first {
-            !$0.isArchived && $0.canonicalNameKey == key
         }
     }
 
@@ -168,6 +154,7 @@ struct WorkoutHistoryView: View {
                 in: modelContext
             )
             loaded.append(contentsOf: page)
+            availableDates.formUnion(page.map(\.date))
             hasMore = page.count >= WorkoutHistoryQuery.pageSize
         } catch {
             hasMore = false
@@ -185,13 +172,13 @@ struct WorkoutHistoryView: View {
 
 struct MealHistoryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \MealEntry.date, order: .reverse) private var allMeals: [MealEntry]
 
     @State private var filter = WorkoutHistoryDateFilter.all
     @State private var loaded: [MealEntry] = []
     @State private var hasMore = true
     @State private var isLoading = false
     @State private var collapsedDays: Set<Date> = []
+    @State private var availableDates: Set<Date> = []
 
     private var dayGroups: [MealHistoryDayGroup] {
         MealHistoryQuery.groupedByDay(loaded)
@@ -199,7 +186,7 @@ struct MealHistoryView: View {
 
     private var monthChips: [(filter: WorkoutHistoryDateFilter, title: String)] {
         HistoryMonthFilterChips.chips(
-            from: WorkoutHistoryQuery.filterChoices(from: allMeals.map(\.date))
+            from: WorkoutHistoryQuery.filterChoices(from: Array(availableDates))
         )
     }
 
@@ -285,8 +272,9 @@ struct MealHistoryView: View {
             chips: monthChips,
             onSelect: { filter = $0 }
         )
-        .onAppear {
+        .task {
             if loaded.isEmpty {
+                await Task.yield()
                 reload()
             }
         }
@@ -322,6 +310,7 @@ struct MealHistoryView: View {
         do {
             let page = try modelContext.fetch(descriptor)
             loaded.append(contentsOf: page)
+            availableDates.formUnion(page.map(\.date))
             hasMore = page.count >= MealHistoryQuery.pageSize
         } catch {
             hasMore = false
@@ -340,7 +329,11 @@ struct MealHistoryView: View {
 
 struct BodyHistoryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \BodyEntry.date, order: .reverse) private var entries: [BodyEntry]
+    @State private var entries: [BodyEntry] = []
+    @State private var hasMore = true
+    @State private var isLoading = false
+
+    private static let pageSize = 50
 
     var body: some View {
         List {
@@ -361,14 +354,23 @@ struct BodyHistoryView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
-                            modelContext.delete(entry)
-                            try? modelContext.save()
+                            delete(entry)
                         } label: {
                             Image(systemName: "trash")
                         }
                         .accessibilityLabel("删除身体记录")
                         .tint(.red)
                     }
+                }
+                if hasMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(.vertical, 12)
+                        Spacer()
+                    }
+                    .listRowSeparator(.hidden)
+                    .onAppear(perform: loadMore)
                 }
             }
         }
@@ -377,6 +379,39 @@ struct BodyHistoryView: View {
         .appPageBackground()
         .navigationTitle("体重记录")
         .navigationBarTitleDisplayMode(.large)
+        .task {
+            if entries.isEmpty {
+                await Task.yield()
+                loadMore()
+            }
+        }
+    }
+
+    private func loadMore() {
+        guard hasMore, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        var descriptor = FetchDescriptor<BodyEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchOffset = entries.count
+        descriptor.fetchLimit = Self.pageSize
+        do {
+            let page = try modelContext.fetch(descriptor)
+            entries.append(contentsOf: page)
+            hasMore = page.count >= Self.pageSize
+        } catch {
+            hasMore = false
+        }
+    }
+
+    private func delete(_ entry: BodyEntry) {
+        entries.removeAll { $0.id == entry.id }
+        modelContext.delete(entry)
+        try? modelContext.save()
+        if entries.count < Self.pageSize, hasMore {
+            loadMore()
+        }
     }
 }
 

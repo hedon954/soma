@@ -41,17 +41,25 @@ struct ConversationContextProjection {
                 !message.isFromCoach && message.turnID != excludingTurnID
             }
             .suffix(maximumExchangeCount)
+        let assistantsByTurnID = sessionMessages.reduce(
+            into: [UUID: CoachMessage]()
+        ) { result, message in
+            guard message.isFromCoach, let turnID = message.turnID else { return }
+            guard let current = result[turnID] else {
+                result[turnID] = message
+                return
+            }
+            if message.attemptNumber > current.attemptNumber
+                || (message.attemptNumber == current.attemptNumber
+                    && message.date > current.date)
+            {
+                result[turnID] = message
+            }
+        }
 
         let exchanges = candidates.map { userMessage in
-            let assistantMessage = userMessage.turnID.flatMap { turnID in
-                sessionMessages
-                    .filter { $0.isFromCoach && $0.turnID == turnID }
-                    .max { lhs, rhs in
-                        if lhs.attemptNumber == rhs.attemptNumber {
-                            return lhs.date < rhs.date
-                        }
-                        return lhs.attemptNumber < rhs.attemptNumber
-                    }
+            let assistantMessage = userMessage.turnID.flatMap {
+                assistantsByTurnID[$0]
             }
             let assistantText = [
                 assistantMessage?.text,

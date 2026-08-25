@@ -154,8 +154,6 @@ struct BodyRecordDetailView: View {
 
 private struct WorkoutRecordEditor: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var definitions: [ExerciseDefinition]
     let workout: WorkoutEntry
 
     @State private var date: Date
@@ -175,6 +173,7 @@ private struct WorkoutRecordEditor: View {
     @State private var caloriesExpanded = false
     @State private var analysisExpanded = false
     @State private var notesExpanded = false
+    @State private var hasCalorieReferenceWeight: Bool?
     init(workout: WorkoutEntry) {
         self.workout = workout
         _date = State(initialValue: workout.date)
@@ -195,20 +194,7 @@ private struct WorkoutRecordEditor: View {
     }
 
     private var linkedExercise: ExerciseDefinition? {
-        if let exerciseID = workout.exerciseID {
-            return definitions.first { $0.id == exerciseID }
-        }
-        let key = ExerciseLibraryStore.canonicalNameKey(exercise)
-        return definitions.first {
-            !$0.isArchived && $0.canonicalNameKey == key
-        }
-    }
-
-    private var hasCalorieReferenceWeight: Bool {
-        WorkoutCalorieCalculator.referenceWeight(
-            at: date,
-            in: modelContext
-        ) != nil
+        workout.exerciseDefinition
     }
 
     var body: some View {
@@ -312,7 +298,7 @@ private struct WorkoutRecordEditor: View {
                     Toggle("计算时长来自推算", isOn: $calorieDurationEstimated)
                         .appToggleStyle()
 
-                    if !hasCalorieReferenceWeight {
+                    if hasCalorieReferenceWeight == false {
                         NavigationLink {
                             PersonalBodyInfoView()
                         } label: {
@@ -380,6 +366,17 @@ private struct WorkoutRecordEditor: View {
         .onAppear {
             sanitizeMistakenDurationIfNeeded()
         }
+        .task(id: date) {
+            hasCalorieReferenceWeight = nil
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            let available = WorkoutCalorieCalculator.referenceWeight(
+                at: date,
+                in: modelContext
+            ) != nil
+            guard !Task.isCancelled else { return }
+            hasCalorieReferenceWeight = available
+        }
     }
 
     private var isValid: Bool {
@@ -444,12 +441,12 @@ private struct WorkoutRecordEditor: View {
         let normalizedExercise = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let nameKey = ExerciseLibraryStore.canonicalNameKey(normalizedExercise)
-        if let exerciseID = workout.exerciseID,
-           let current = definitions.first(where: { $0.id == exerciseID }),
+        if let current = workout.exerciseDefinition,
            current.canonicalNameKey != nameKey
         {
             // Name changed away from the previous linked exercise; re-resolve.
             workout.exerciseID = nil
+            workout.exerciseDefinition = nil
         }
         workout.exercise = normalizedExercise
         let definition = try? ExerciseLibraryStore.linkedExercise(

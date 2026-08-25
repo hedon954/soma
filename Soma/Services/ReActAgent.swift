@@ -823,12 +823,16 @@ struct AgentConversationExchange: Sendable {
     }
 }
 
-/// ReAct 循环步数上限：高级设置可改，默认 100。
+/// ReAct 循环资源上限：高级设置可改，默认 100 步并沿用媒体自适应超时。
 enum ReActAgentPreference {
     static let maxStepsKey = "agent.react.maxSteps"
+    static let runtimeTimeoutMinutesKey = "agent.react.runtimeTimeoutMinutes"
     static let defaultMaxSteps = 100
     static let minimumMaxSteps = 1
     static let maximumMaxSteps = 500
+    static let automaticRuntimeTimeoutMinutes = 0
+    static let minimumRuntimeTimeoutMinutes = 3
+    static let maximumRuntimeTimeoutMinutes = 60
 
     static func maxSteps(defaults: UserDefaults = .standard) -> Int {
         let stored = defaults.object(forKey: maxStepsKey) as? Int
@@ -841,6 +845,51 @@ enum ReActAgentPreference {
             min(maximumMaxSteps, max(minimumMaxSteps, value)),
             forKey: maxStepsKey
         )
+    }
+
+    /// `nil` 表示沿用文字/图片/视频 3/5/10 分钟的媒体自适应预算。
+    static func runtimeTimeoutMinutes(defaults: UserDefaults = .standard) -> Int? {
+        guard let stored = defaults.object(forKey: runtimeTimeoutMinutesKey) as? Int,
+              stored != automaticRuntimeTimeoutMinutes
+        else {
+            return nil
+        }
+        return min(
+            maximumRuntimeTimeoutMinutes,
+            max(minimumRuntimeTimeoutMinutes, stored)
+        )
+    }
+
+    static func setRuntimeTimeoutMinutes(
+        _ value: Int?,
+        defaults: UserDefaults = .standard
+    ) {
+        guard let value else {
+            defaults.removeObject(forKey: runtimeTimeoutMinutesKey)
+            return
+        }
+        defaults.set(
+            min(
+                maximumRuntimeTimeoutMinutes,
+                max(minimumRuntimeTimeoutMinutes, value)
+            ),
+            forKey: runtimeTimeoutMinutesKey
+        )
+    }
+
+    static func deadlinePolicy(
+        _ policy: AgentStreamDeadlinePolicy,
+        defaults: UserDefaults = .standard
+    ) -> AgentStreamDeadlinePolicy {
+        guard let minutes = runtimeTimeoutMinutes(defaults: defaults) else {
+            return policy
+        }
+        var result = policy
+        let seconds = TimeInterval(minutes * 60)
+        result.textLoopTotal = seconds
+        result.imageLoopTotal = seconds
+        result.videoLoopTotal = seconds
+        return result
     }
 }
 

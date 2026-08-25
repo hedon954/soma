@@ -441,14 +441,14 @@ enum ExerciseLibraryStore {
     }
 
     static func activeDefinitions(in context: ModelContext) -> [ExerciseDefinition] {
-        let values = (
+        (
             try? context.fetch(
                 FetchDescriptor<ExerciseDefinition>(
+                    predicate: #Predicate { $0.archivedAt == nil },
                     sortBy: [SortDescriptor(\.canonicalName)]
                 )
             )
         ) ?? []
-        return values.filter { !$0.isArchived }
     }
 
     static func nameReferences(in context: ModelContext) -> [ExerciseNameReference] {
@@ -461,9 +461,11 @@ enum ExerciseLibraryStore {
         id: UUID,
         in context: ModelContext
     ) throws -> ExerciseDefinition {
-        guard let value = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        )?.first(where: { $0.id == id }) else {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        guard let value = (try? context.fetch(descriptor))?.first else {
             throw ExerciseLibraryError.missingExercise(id)
         }
         guard !value.isArchived else {
@@ -476,11 +478,16 @@ enum ExerciseLibraryStore {
         businessID: Int64,
         in context: ModelContext
     ) throws -> ExerciseDefinition {
-        guard businessID > 0,
-              let value = activeDefinitions(in: context).first(where: {
-                  $0.businessID == businessID
-              })
-        else {
+        guard businessID > 0 else {
+            throw ExerciseLibraryError.invalidReference
+        }
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate {
+                $0.businessID == businessID && $0.archivedAt == nil
+            }
+        )
+        descriptor.fetchLimit = 1
+        guard let value = (try? context.fetch(descriptor))?.first else {
             throw ExerciseLibraryError.invalidReference
         }
         return value
@@ -493,12 +500,13 @@ enum ExerciseLibraryStore {
         let name = canonicalName.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = canonicalNameKey(name)
         guard !key.isEmpty else { throw ExerciseLibraryError.emptyName }
-        let values = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        if let existing = values.first(where: {
-            $0.canonicalNameKey == key && !$0.isArchived
-        }) {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate {
+                $0.canonicalNameKey == key && $0.archivedAt == nil
+            }
+        )
+        descriptor.fetchLimit = 1
+        if let existing = (try? context.fetch(descriptor))?.first {
             try BusinessIDAllocator.assign(
                 existing,
                 namespace: "exercise",
@@ -529,23 +537,28 @@ enum ExerciseLibraryStore {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = canonicalNameKey(trimmed)
         guard !key.isEmpty else { throw ExerciseLibraryError.emptyName }
-        let values = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        guard !values.contains(where: {
-            $0.id != exercise.id
-                && $0.canonicalNameKey == key
-                && !$0.isArchived
-        }) else {
+        let exerciseID = exercise.id
+        var duplicateDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate {
+                $0.id != exerciseID
+                    && $0.canonicalNameKey == key
+                    && $0.archivedAt == nil
+            }
+        )
+        duplicateDescriptor.fetchLimit = 1
+        guard (try? context.fetch(duplicateDescriptor))?.isEmpty != false else {
             throw ExerciseLibraryError.duplicateName(trimmed)
         }
         exercise.canonicalName = trimmed
         exercise.canonicalNameKey = key
         _ = BundledExerciseCatalog.activateIfAvailable(exercise)
         exercise.updatedAt = .now
-        for workout in fetchWorkouts(in: context)
-            where workout.exerciseID == exercise.id
-        {
+        let workouts = (
+            try? context.fetch(FetchDescriptor<WorkoutEntry>(
+                predicate: #Predicate { $0.exerciseID == exerciseID }
+            ))
+        ) ?? []
+        for workout in workouts {
             workout.exercise = trimmed
         }
         try context.save()
@@ -571,24 +584,31 @@ enum ExerciseLibraryStore {
         else {
             throw ExerciseLibraryError.invalidMerge
         }
-        let affected = fetchWorkouts(in: context).filter {
-            $0.exerciseID == source.id
-        }
+        let sourceID = source.id
+        let affected = (
+            try? context.fetch(FetchDescriptor<WorkoutEntry>(
+                predicate: #Predicate { $0.exerciseID == sourceID }
+            ))
+        ) ?? []
         for workout in affected {
             workout.exerciseID = target.id
             workout.exerciseDefinition = target
             workout.exercise = target.canonicalName
         }
         let affectedTemplateExercises = (
-            try? context.fetch(FetchDescriptor<TemplateExercise>())
-        )?.filter { $0.exerciseID == source.id } ?? []
+            try? context.fetch(FetchDescriptor<TemplateExercise>(
+                predicate: #Predicate { $0.exerciseID == sourceID }
+            ))
+        ) ?? []
         for templateExercise in affectedTemplateExercises {
             templateExercise.exerciseID = target.id
             templateExercise.exerciseDefinition = target
         }
         let affectedPerformances = (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>())
-        )?.filter { $0.exerciseID == source.id } ?? []
+            try? context.fetch(FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.exerciseID == sourceID }
+            ))
+        ) ?? []
         for performance in affectedPerformances {
             performance.exerciseID = target.id
             performance.exerciseDefinition = target
@@ -602,10 +622,12 @@ enum ExerciseLibraryStore {
             }
         }
         let affectedRecommendations = (
-            try? context.fetch(FetchDescriptor<RecommendationSnapshot>())
-        )?.filter {
-            $0.targetKind == "exercise" && $0.targetID == source.id
-        } ?? []
+            try? context.fetch(FetchDescriptor<RecommendationSnapshot>(
+                predicate: #Predicate {
+                    $0.targetKind == "exercise" && $0.targetID == sourceID
+                }
+            ))
+        ) ?? []
         for recommendation in affectedRecommendations {
             recommendation.targetID = target.id
         }
@@ -663,16 +685,19 @@ enum ExerciseLibraryStore {
         guard record.undoneAt == nil else {
             throw ExerciseLibraryError.mergeNotUndoable
         }
-        let definitions = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        guard let source = definitions.first(where: {
-            $0.id == record.sourceExerciseID
-        }),
-            let target = definitions.first(where: {
-                $0.id == record.targetExerciseID
-            }),
-            source.mergedIntoID == record.targetExerciseID
+        let sourceID = record.sourceExerciseID
+        let targetID = record.targetExerciseID
+        var sourceDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == sourceID }
+        )
+        sourceDescriptor.fetchLimit = 1
+        var targetDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        targetDescriptor.fetchLimit = 1
+        guard let source = (try? context.fetch(sourceDescriptor))?.first,
+              let target = (try? context.fetch(targetDescriptor))?.first,
+              source.mergedIntoID == record.targetExerciseID
         else {
             throw ExerciseLibraryError.mergeNotUndoable
         }
@@ -694,7 +719,12 @@ enum ExerciseLibraryStore {
             throw ExerciseLibraryError.mergeNotUndoable
         }
         let affectedIDs = Set(record.affectedWorkoutIDs)
-        for workout in fetchWorkouts(in: context)
+        let targetWorkouts = (
+            try? context.fetch(FetchDescriptor<WorkoutEntry>(
+                predicate: #Predicate { $0.exerciseID == targetID }
+            ))
+        ) ?? []
+        for workout in targetWorkouts
             where affectedIDs.contains(workout.id)
             && workout.exerciseID == record.targetExerciseID
         {
@@ -704,7 +734,9 @@ enum ExerciseLibraryStore {
         }
         let affectedTemplateIDs = Set(record.affectedTemplateExerciseIDs)
         for templateExercise in (
-            try? context.fetch(FetchDescriptor<TemplateExercise>())
+            try? context.fetch(FetchDescriptor<TemplateExercise>(
+                predicate: #Predicate { $0.exerciseID == targetID }
+            ))
         ) ?? [] where affectedTemplateIDs.contains(templateExercise.id)
             && templateExercise.exerciseID == target.id
         {
@@ -713,7 +745,9 @@ enum ExerciseLibraryStore {
         }
         let affectedPerformanceIDs = Set(record.affectedPerformanceIDs)
         for performance in (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>())
+            try? context.fetch(FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.exerciseID == targetID }
+            ))
         ) ?? [] where affectedPerformanceIDs.contains(performance.id)
             && performance.exerciseID == target.id
         {
@@ -730,7 +764,11 @@ enum ExerciseLibraryStore {
         }
         let affectedRecommendationIDs = Set(record.affectedRecommendationIDs)
         for recommendation in (
-            try? context.fetch(FetchDescriptor<RecommendationSnapshot>())
+            try? context.fetch(FetchDescriptor<RecommendationSnapshot>(
+                predicate: #Predicate {
+                    $0.targetKind == "exercise" && $0.targetID == targetID
+                }
+            ))
         ) ?? [] where affectedRecommendationIDs.contains(recommendation.id)
             && recommendation.targetKind == "exercise"
             && recommendation.targetID == target.id
@@ -792,17 +830,25 @@ enum ExerciseLibraryStore {
         persist: Bool = true,
         allowCreate: Bool = false
     ) throws -> ExerciseDefinition? {
+        if let related = workout.exerciseDefinition,
+           related.id == workout.exerciseID,
+           related.mergedIntoID == nil
+        {
+            return related
+        }
         if let exerciseID = workout.exerciseID {
-            if let match = activeDefinitions(in: context)
-                .first(where: { $0.id == exerciseID })
-            {
-                return match
-            }
-            let any = (
-                try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-            )?.first(where: { $0.id == exerciseID && $0.mergedIntoID == nil })
-            if let any {
-                return any
+            var linkedDescriptor = FetchDescriptor<ExerciseDefinition>(
+                predicate: #Predicate {
+                    $0.id == exerciseID && $0.mergedIntoID == nil
+                }
+            )
+            linkedDescriptor.fetchLimit = 1
+            if let linked = (try? context.fetch(linkedDescriptor))?.first {
+                if persist, workout.exerciseDefinition?.id != linked.id {
+                    workout.exerciseDefinition = linked
+                    try? context.save()
+                }
+                return linked
             }
         }
 
@@ -814,16 +860,23 @@ enum ExerciseLibraryStore {
             definition = try resolveOrCreateExact(canonicalName: name, in: context)
         } else {
             let key = canonicalNameKey(name)
-            definition = activeDefinitions(in: context)
-                .first { $0.canonicalNameKey == key }
+            var nameDescriptor = FetchDescriptor<ExerciseDefinition>(
+                predicate: #Predicate {
+                    $0.canonicalNameKey == key && $0.archivedAt == nil
+                }
+            )
+            nameDescriptor.fetchLimit = 1
+            definition = (try? context.fetch(nameDescriptor))?.first
         }
         guard let definition else { return nil }
 
         if persist,
            workout.exerciseID != definition.id
+           || workout.exerciseDefinition?.id != definition.id
            || workout.exercise != definition.canonicalName
         {
             workout.exerciseID = definition.id
+            workout.exerciseDefinition = definition
             workout.exercise = definition.canonicalName
             try? context.save()
         }
@@ -844,6 +897,7 @@ enum ExerciseLibraryStore {
                 allowCreate: false
             ) {
                 workout.exerciseID = linked.id
+                workout.exerciseDefinition = linked
                 workout.exercise = linked.canonicalName
                 changed = true
             }

@@ -69,3 +69,23 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma.tests
         GENERATE_INFOPLIST_FILE: YES
+  SomaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: SomaUITests
+    dependencies:
+      - target: Soma
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma.ui-tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  SomaPerformance:
+    build:
+      targets:
+        Soma: all
+        SomaUITests: all
+    test:
+      targets:
+        - SomaUITests

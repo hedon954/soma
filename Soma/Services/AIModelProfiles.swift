@@ -116,15 +116,37 @@ extension AIService {
             normalized,
             for: keychainAccount(for: provider, tier: tier)
         )
+        apiKeyCache[keychainAccount(for: provider, tier: tier)] = normalized
         if changed {
             notifyConfigurationChanged()
         }
     }
 
     func apiKey(for provider: AIProvider, tier: AIModelTier) -> String {
-        apiKeyOverride
-            ?? KeychainStore.read(keychainAccount(for: provider, tier: tier))
-            ?? ""
+        if let apiKeyOverride {
+            return apiKeyOverride
+        }
+        let account = keychainAccount(for: provider, tier: tier)
+        if let cached = apiKeyCache[account] {
+            return cached
+        }
+        let resolved = KeychainStore.read(account) ?? ""
+        apiKeyCache[account] = resolved
+        return resolved
+    }
+
+    /// Warm the credential cache outside the Tab selection path. The key stays
+    /// in memory only; this avoids a synchronous Security framework lookup when
+    /// Settings first asks for its summary label.
+    func warmRequiredAPIKeyCache() async {
+        guard apiKeyOverride == nil else { return }
+        let provider = provider(for: .standard)
+        let account = keychainAccount(for: provider, tier: .standard)
+        guard apiKeyCache[account] == nil else { return }
+        let resolved = await Task.detached(priority: .utility) {
+            KeychainStore.read(account) ?? ""
+        }.value
+        apiKeyCache[account] = resolved
     }
 
     func isTierEnabled(_ tier: AIModelTier) -> Bool {

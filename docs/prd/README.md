@@ -54,6 +54,7 @@
 | [040：业务数据只保留当前状态与执行事实](040-current-state-business-data-with-session-facts.md) | 已实现 | 删除计划、动作内容与热量结果的业务版本追踪；当前计划直接更新，已开始训练由 Session 快照保护 |
 | [041：动作级间歇与紧凑进展总览](041-action-level-rest-and-compact-progress.md) | 已实现 | 两类计划间歇归动作；进展三视图合并为分段卡，最近活动增加记录快捷入口，Switch 状态统一 |
 | [042：用户控制的失败恢复、逐回复反馈与动作图扩容](042-user-controlled-recovery-message-feedback-and-action-art.md) | 已实现，待真机交互验收 | 主按钮与聊天卡密度、Loop 内三次退避/Loop 外人工恢复、逐回复多模态评分反馈、239 图门槛与用户图优先 |
+| [043：可配置 ReAct 运行超时](043-configurable-react-runtime-timeout.md) | 已实施，待真机界面验收 | 步骤上限旁增加自动或 3–60 分钟运行超时；等待不计时，手动重试读取新预算 |
 
 ## 阅读约定
 

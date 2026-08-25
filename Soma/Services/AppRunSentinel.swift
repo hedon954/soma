@@ -36,10 +36,7 @@ final class AppRunSentinel {
     /// 单测宿主就是 App 本身，测试结束时进程被直接杀掉，哨兵会把它读成崩溃。
     /// 测试进程里完全关闭崩溃诊断，既不置位也不上报。
     nonisolated static var isRunningUnderTests: Bool {
-        let environment = ProcessInfo.processInfo.environment
-        return environment["XCTestConfigurationFilePath"] != nil
-            || environment["XCTestBundlePath"] != nil
-            || environment["XCTestSessionIdentifier"] != nil
+        AppTestRuntime.isRunning
     }
 
     /// Xcode 里按停止按钮和崩溃一样会留下哨兵，附着调试器的运行不作为崩溃证据。

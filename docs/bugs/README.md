@@ -44,6 +44,8 @@
 | [0031](0031-feedback-sheet-transition-jank.md) | 已修复，待真机手感复验 | 逐回复反馈页进出场卡顿，图标与时间相距过远 | 原位反馈编辑器、发送时定向读取上下文与静态门禁 |
 | [0032](0032-sentinel-false-crash-reports.md) | 已修复，待真实 MetricKit 崩溃验收 | 启动哨兵把模拟器停止、强杀与安装替换误报为崩溃 | 只有 MetricKit 可入队、证据字段、旧误报清理与静态门禁 |
 | [0033](0033-model-name-multimodal-misclassification.md) | 已修复，待真实供应商目录验收 | provider 与模型名硬编码导致多模态和直传视频误判 | 明确模型目录来源、未知放行与远程显式能力开关 |
+| [0034](0034-large-session-inline-editor-render-hang.md) | 已修复，待真机连续交互复验 | 大会话最新饮食卡预创建几十个输入控件，切换后卡死退出 | 按需单字段编辑、十项虚构饮食卡 UI 回归与真机会话往返 |
+| [0035](0035-long-stream-text-relayout-thermal-jank.md) | 已修复，待真实长对话手感复验 | 长流式更新重复断行和测量全部历史正文，持续占用主线程并发热 | 256 字符可变尾块、懒布局、静态门禁与 Release 真机前后 Trace |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

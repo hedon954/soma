@@ -7,6 +7,7 @@
 - 修订自：[PRD 003](003-streaming-react-agent.md)
 - 后续修订：
   - [PRD 042](042-user-controlled-recovery-message-feedback-and-action-art.md)
+  - [PRD 043](043-configurable-react-runtime-timeout.md)
   - [PRD 041](041-action-level-rest-and-compact-progress.md)
   - [PRD 040](040-current-state-business-data-with-session-facts.md)
   - [PRD 005](005-conversation-sessions-and-send-feedback.md)
@@ -232,7 +233,7 @@ Soma 不以“功能数量”为价值，而以四个闭环为价值：
   provider 不作为证据。缺少来源时保持未知、允许真实请求验证，错误以可操作语言显示并保留 Trace。
 - 每个 LLM invoke 和 Tool Call 都是独立可恢复 step；重试复用同一气泡与冻结的 Loop 时间，保留
   原生 assistant/tool 消息链，并从首个未完成 step 继续。首个模型处理使用 20/40/60 秒首增量
-  门禁，后续 step 只受 3/5/10 分钟执行预算约束；等待用户、网络或前台不消耗预算，用户显式
+  门禁，后续 step 默认受 3/5/10 分钟执行预算约束，也可在高级设置统一改为 3–60 分钟；等待用户、网络或前台不消耗预算，用户显式
   重试为未完成 step 开启新的执行窗口，但不改变业务时间或重跑成功 step。
 -   数据查询返回稳定业务记录 ID；Agent 可显式更新或删除用户指定的训练、饮食和身体记录。
   新事实每次创建都是独立记录；纠正、补图必须使用更新工具和查询得到的记录 ID。

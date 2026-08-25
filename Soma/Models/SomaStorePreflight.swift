@@ -19,6 +19,10 @@ enum SomaStorePreflight {
         defer { sqlite3_close(database) }
         try execute(database, "PRAGMA busy_timeout = 2000;")
 
+        if hasCompletedCurrentMigration(database) {
+            return
+        }
+
         guard table(database, named: "ZWORKOUTENTRY"),
               column(database, table: "ZWORKOUTENTRY", named: "ZPROJECTIONKEY"),
               column(database, table: "ZWORKOUTENTRY", named: "ZID")
@@ -41,6 +45,28 @@ enum SomaStorePreflight {
             """
         )
         try execute(database, "PRAGMA wal_checkpoint(FULL);")
+    }
+
+    private static func hasCompletedCurrentMigration(
+        _ database: OpaquePointer
+    ) -> Bool {
+        guard table(database, named: "ZDATAMIGRATIONMARKER"),
+              column(
+                  database,
+                  table: "ZDATAMIGRATIONMARKER",
+                  named: "ZSCHEMAVERSION"
+              )
+        else {
+            return false
+        }
+        var statement: OpaquePointer?
+        let sql = "SELECT 1 FROM ZDATAMIGRATIONMARKER WHERE ZSCHEMAVERSION >= ? LIMIT 1"
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            return false
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, Int64(SomaDataMigration.currentVersion))
+        return sqlite3_step(statement) == SQLITE_ROW
     }
 
     static func entryKey(fromUUIDBlobHex hex: String) -> String? {

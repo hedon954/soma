@@ -1260,57 +1260,6 @@ extension SomaTests {
     }
 
     @MainActor
-    func testIntegrityRepairRemovesPreviouslyInventedWorkoutMetrics() throws {
-        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(
-            for: ExternalSyncCursor.self,
-            UserProfile.self,
-            GymProfile.self,
-            GymEquipment.self,
-            GymMedia.self,
-            MealEntry.self,
-            BodyEntry.self,
-            WorkoutEntry.self,
-            CoachMessage.self,
-            configurations: configuration
-        )
-        let context = ModelContext(container)
-        let workout = WorkoutEntry(
-            exercise: "俯卧撑",
-            sets: 4,
-            reps: 12,
-            weight: 0,
-            restSeconds: 60,
-            durationMinutes: 45,
-            notes: "俯卧撑 12x4",
-            formScore: 82,
-            intensity: "适中",
-            feedback: "用户记录"
-        )
-        context.insert(workout)
-        try context.save()
-
-        DataIntegrityRepair.removeUnsupportedInferences(in: context)
-
-        XCTAssertEqual(workout.sets, 4)
-        XCTAssertEqual(workout.reps, 12)
-        XCTAssertNil(workout.weight)
-        XCTAssertNil(workout.restSeconds)
-        XCTAssertNil(workout.durationMinutes)
-        XCTAssertNil(workout.formScore)
-        XCTAssertNil(workout.intensity)
-        XCTAssertNil(workout.feedback)
-
-        DataIntegrityRepair.migrateLegacyWorkoutSets(in: context)
-
-        XCTAssertEqual(workout.setCount, 4)
-        XCTAssertEqual(workout.representativeReps, 12)
-        XCTAssertNil(workout.representativeWeight)
-        XCTAssertNil(workout.sets)
-        XCTAssertFalse(workout.setEntriesData.isEmpty)
-    }
-
-    @MainActor
     func testAIServiceRunsMultipleRemoteReActTurns() async throws {
         let suiteName = "SomaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

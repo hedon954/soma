@@ -16,13 +16,19 @@ enum ConversationCompactionMiddleware {
         ai: AIService,
         in context: ModelContext
     ) async -> ConversationCompactionResult {
-        let messages = ((try? context.fetch(
-            FetchDescriptor<CoachMessage>(sortBy: [SortDescriptor(\.date)])
-        )) ?? []).filter { $0.sessionID == sessionID }
+        let messages = (try? context.fetch(
+            FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.sessionID == sessionID },
+                sortBy: [SortDescriptor(\.date)]
+            )
+        )) ?? []
         let pairs = completedPairs(messages: messages, excludingTurnID: excludingTurnID)
         let evicted = Array(pairs.dropLast(min(10, pairs.count)))
-        let stored = ((try? context.fetch(FetchDescriptor<ConversationCompactionSummary>())) ?? [])
-            .first { $0.sessionID == sessionID }
+        var summaryDescriptor = FetchDescriptor<ConversationCompactionSummary>(
+            predicate: #Predicate { $0.sessionID == sessionID }
+        )
+        summaryDescriptor.fetchLimit = 1
+        let stored = try? context.fetch(summaryDescriptor).first
         guard !evicted.isEmpty else {
             return ConversationCompactionResult(
                 summary: stored?.summary,

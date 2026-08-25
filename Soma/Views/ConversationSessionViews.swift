@@ -2,6 +2,9 @@ import SwiftData
 import SwiftUI
 
 struct ConversationSessionDrawer: View {
+    private static let pageSize = 80
+
+    @Environment(\.modelContext) private var modelContext
     let currentSessionID: UUID?
     let isProcessing: Bool
     let onNewSession: () -> Void
@@ -10,20 +13,13 @@ struct ConversationSessionDrawer: View {
     let onRestoreAutomaticTitle: (ConversationSession) -> Bool
     let onDeleteSession: (ConversationSession) -> Void
 
-    @Query(sort: \ConversationSession.updatedAt, order: .reverse)
-    private var sessions: [ConversationSession]
-    @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
+    @State private var sessions: [ConversationSession] = []
+    @State private var sessionLimit = 80
+    @State private var hasMoreSessions = false
     @State private var renamingSessionID: UUID?
     @State private var renameDraft = ""
     @State private var showsRenameAlert = false
     @State private var showsRenameFailureAlert = false
-
-    private var visibleSessions: [ConversationSession] {
-        sessions.filter { session in
-            session.id == currentSessionID
-                || messages.contains(where: { $0.sessionID == session.id })
-        }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -40,7 +36,7 @@ struct ConversationSessionDrawer: View {
             .padding(.horizontal, 18)
             .padding(.top, 18)
 
-            if visibleSessions.isEmpty {
+            if sessions.isEmpty {
                 ContentUnavailableView(
                     "暂无对话",
                     systemImage: "bubble.left.and.bubble.right",
@@ -49,7 +45,7 @@ struct ConversationSessionDrawer: View {
                 .frame(maxHeight: .infinity)
             } else {
                 List {
-                    ForEach(visibleSessions) { session in
+                    ForEach(sessions) { session in
                         sessionListRow(session)
                             .listRowInsets(EdgeInsets(
                                 top: 3,
@@ -59,6 +55,13 @@ struct ConversationSessionDrawer: View {
                             ))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
+                    }
+                    if hasMoreSessions {
+                        Button("加载更早对话") {
+                            sessionLimit += Self.pageSize
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .listRowSeparator(.hidden)
                     }
                 }
                 .listStyle(.plain)
@@ -74,6 +77,9 @@ struct ConversationSessionDrawer: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
+        .task(id: sessionLimit) {
+            loadSessions()
+        }
         .alert("重命名对话", isPresented: $showsRenameAlert) {
             TextField("对话标题", text: $renameDraft)
             Button("取消", role: .cancel) {
@@ -110,18 +116,25 @@ struct ConversationSessionDrawer: View {
         return sessions.first { $0.id == renamingSessionID }
     }
 
-    private func sessionListRow(_ session: ConversationSession) -> some View {
+    private func sessionListRow(
+        _ session: ConversationSession
+    ) -> some View {
         Button {
             onSelectSession(session)
         } label: {
             sessionRowContent(session)
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in beginRename(session) }
+        )
         .accessibilityHint(
             session.id == currentSessionID
                 ? "当前对话，长按标题可重命名"
                 : "切换后可继续对话，长按标题可重命名"
         )
+        .accessibilityValue(session.id == currentSessionID ? "当前对话" : "")
         .accessibilityAction(named: "重命名对话") {
             beginRename(session)
         }
@@ -134,6 +147,7 @@ struct ConversationSessionDrawer: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 onDeleteSession(session)
+                loadSessions()
             } label: {
                 Image(systemName: "trash")
             }
@@ -142,20 +156,14 @@ struct ConversationSessionDrawer: View {
         }
     }
 
-    private func sessionRowContent(_ session: ConversationSession) -> some View {
-        let messageCount = messages.count { $0.sessionID == session.id }
-        return VStack(alignment: .leading, spacing: 5) {
+    private func sessionRowContent(
+        _ session: ConversationSession
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(session.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                    .contentShape(Rectangle())
-                    .highPriorityGesture(
-                        LongPressGesture(minimumDuration: 0.5)
-                            .onEnded { _ in
-                                beginRename(session)
-                            }
-                    )
                 Spacer()
                 if session.id == currentSessionID {
                     Image(systemName: "checkmark.circle.fill")
@@ -163,15 +171,14 @@ struct ConversationSessionDrawer: View {
                         .accessibilityHidden(true)
                 }
             }
-            Text(
-                "\(session.updatedAt.formatted(date: .abbreviated, time: .shortened)) · \(messageCount) 条"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Text(session.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 
     private func beginRename(_ session: ConversationSession) {
@@ -200,5 +207,15 @@ struct ConversationSessionDrawer: View {
             showsRenameFailureAlert = true
         }
         renamingSessionID = nil
+    }
+
+    private func loadSessions() {
+        var descriptor = FetchDescriptor<ConversationSession>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = sessionLimit + 1
+        let fetched = (try? modelContext.fetch(descriptor)) ?? []
+        hasMoreSessions = fetched.count > sessionLimit
+        sessions = Array(fetched.prefix(sessionLimit))
     }
 }

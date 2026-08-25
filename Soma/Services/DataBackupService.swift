@@ -63,6 +63,7 @@ enum DataBackupService {
             )
             var mediaDescriptors: [DataBackupMediaDescriptor] = []
             for (offset, logicalPath) in snapshot.referencedMediaPaths.sorted().enumerated() {
+                try Task.checkCancellation()
                 guard let sourceURL = mediaURL(logicalPath),
                       fileManager.fileExists(atPath: sourceURL.path)
                 else {
@@ -198,6 +199,7 @@ enum DataBackupService {
         var mapping: [String: String] = [:]
         do {
             for descriptor in envelope.media {
+                try Task.checkCancellation()
                 guard descriptor.encryptedFilename
                     == URL(fileURLWithPath: descriptor.encryptedFilename).lastPathComponent
                 else {

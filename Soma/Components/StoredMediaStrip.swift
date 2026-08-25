@@ -114,6 +114,7 @@ struct StoredMediaStrip: View {
     @Namespace private var mediaZoomNamespace
     @State private var isExpanded = false
     @State private var presentedAttachment: MediaAttachmentReference?
+    @State private var aspectRatios: [String: CGFloat] = [:]
 
     var body: some View {
         Group {
@@ -147,6 +148,18 @@ struct StoredMediaStrip: View {
             attachments: attachments,
             namespace: mediaZoomNamespace
         )
+        .task(id: attachmentIdentity) {
+            var values: [String: CGFloat] = [:]
+            for attachment in attachments where attachment.kind == .image {
+                if let ratio = await ImagePipeline.shared.aspectRatio(
+                    atStoredPath: attachment.path
+                ) {
+                    values[attachment.id] = ratio
+                }
+            }
+            guard !Task.isCancelled else { return }
+            aspectRatios = values
+        }
     }
 
     private var foldedCard: some View {
@@ -351,17 +364,16 @@ struct StoredMediaStrip: View {
     private func aspectRatio(
         for attachment: MediaAttachmentReference
     ) -> CGFloat {
-        guard attachment.kind == .image,
-              let image = MediaStore.image(at: attachment.path),
-              image.size.width > 0,
-              image.size.height > 0
-        else {
+        guard attachment.kind == .image else {
             return attachment.kind == .video
                 ? WorkoutCaptureLayout.previewAspectRatio(isLandscape: false)
                 : 1
         }
+        return aspectRatios[attachment.id] ?? 1
+    }
 
-        return image.size.width / image.size.height
+    private var attachmentIdentity: String {
+        attachments.map { "\($0.id):\($0.path)" }.joined(separator: "|")
     }
 
     private func foldedAttachment(offset: Int) -> MediaAttachmentReference {

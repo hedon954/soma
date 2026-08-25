@@ -1,5 +1,19 @@
 import SwiftUI
 
+struct AgentTraceTimelineEntry: Identifiable {
+    let span: AgentTraceSpan
+    let ordinal: Int
+    let traceStartedAt: Date
+
+    var id: UUID {
+        span.id
+    }
+
+    var relativeMilliseconds: Double {
+        max(0, span.endedAt.timeIntervalSince(traceStartedAt) * 1000)
+    }
+}
+
 struct AgentTraceSpanPayloadSection: Equatable, Identifiable {
     let title: String
     let value: String

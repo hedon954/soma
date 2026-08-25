@@ -119,9 +119,9 @@ enum ConversationRecorder {
         case "overview":
             let gyms = fetchGyms(in: context)
             let equipment = fetchEquipment(in: context)
-            let workouts = fetchWorkouts(in: context)
-            let meals = fetchMeals(in: context)
-            let body = fetchBodyEntries(in: context)
+            let workouts = fetchWorkouts(in: context, limit: 1)
+            let meals = fetchMeals(in: context, limit: 1)
+            let body = fetchBodyEntries(in: context, limit: 1)
             let gym = preferredGymID
                 .flatMap { id in gyms.first(where: { $0.id == id }) }
                 ?? GymSelection.current(in: gyms)
@@ -131,9 +131,17 @@ enum ConversationRecorder {
             let workout = workouts.first.map {
                 "[id:\($0.businessID ?? 0)] \(workoutSummary($0))"
             } ?? "暂无"
-            let todayMeals = meals.filter {
-                Calendar.current.isDateInToday($0.date)
-            }
+            let todayStart = Calendar.current.startOfDay(for: .now)
+            let tomorrow = Calendar.current.date(
+                byAdding: .day,
+                value: 1,
+                to: todayStart
+            ) ?? .distantFuture
+            let todayMeals = (try? context.fetch(FetchDescriptor<MealEntry>(
+                predicate: #Predicate {
+                    $0.date >= todayStart && $0.date < tomorrow
+                }
+            ))) ?? []
             let knownTodayCalories = todayMeals.compactMap(\.calories)
             let todayCalories = knownTodayCalories.count == todayMeals.count
                 ? "\(knownTodayCalories.reduce(0, +))kcal"
@@ -151,88 +159,97 @@ enum ConversationRecorder {
             )
 
         case "workouts":
-            let values = filteredByDate(fetchWorkouts(in: context), arguments: arguments, date: \.date)
-                .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
-                .map { entry in
-                    var value = [
-                        "record_id": businessIDValue(entry.businessID),
-                        "date": .string(entry.date.ISO8601Format()),
-                        "title": .string(entry.exercise),
-                        "summary": .string(workoutSummary(entry))
-                    ] as [String: AgentJSONValue]
-                    if arguments.projection == "detail" {
-                        let definitions = (try? context.fetch(
-                            FetchDescriptor<ExerciseDefinition>()
-                        )) ?? []
-                        let definitionID = entry.exerciseID.flatMap { internalID in
-                            definitions.first(where: { $0.id == internalID })?.businessID
+            let values = filteredByDate(
+                queryWorkouts(arguments, limit: limit, in: context),
+                arguments: arguments,
+                date: \.date
+            )
+            .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
+            .map { entry in
+                var value = [
+                    "record_id": businessIDValue(entry.businessID),
+                    "date": .string(entry.date.ISO8601Format()),
+                    "title": .string(entry.exercise),
+                    "summary": .string(workoutSummary(entry))
+                ] as [String: AgentJSONValue]
+                if arguments.projection == "detail" {
+                    let definitionID = entry.exerciseDefinition?.businessID
+                        ?? entry.exerciseID.flatMap { internalID in
+                            exerciseDefinition(
+                                internalID: internalID,
+                                in: context
+                            )?.businessID
                         }
-                        value["exercise_id"] = businessIDValue(definitionID)
-                        value["set_entries"] = .array(entry.setEntries.map { set in
-                            .object([
-                                "reps": set.reps.map { .number(Double($0)) } ?? .null,
-                                "external_weight_kg": set.externalWeightKG
-                                    .map(AgentJSONValue.number) ?? .null
-                            ])
-                        })
-                        value["rest_seconds"] = entry.restSeconds
-                            .map { .number(Double($0)) } ?? .null
-                        value["duration_minutes"] = entry.durationMinutes
-                            .map { .number(Double($0)) } ?? .null
-                        value["feedback"] = entry.feedback?.nilIfEmpty
-                            .map(AgentJSONValue.string) ?? .null
-                    }
-                    return value
+                    value["exercise_id"] = businessIDValue(definitionID)
+                    value["set_entries"] = .array(entry.setEntries.map { set in
+                        .object([
+                            "reps": set.reps.map { .number(Double($0)) } ?? .null,
+                            "external_weight_kg": set.externalWeightKG
+                                .map(AgentJSONValue.number) ?? .null
+                        ])
+                    })
+                    value["rest_seconds"] = entry.restSeconds
+                        .map { .number(Double($0)) } ?? .null
+                    value["duration_minutes"] = entry.durationMinutes
+                        .map { .number(Double($0)) } ?? .null
+                    value["feedback"] = entry.feedback?.nilIfEmpty
+                        .map(AgentJSONValue.string) ?? .null
                 }
+                return value
+            }
             return pagedResult(values, noun: "训练记录", arguments: arguments, limit: limit)
 
         case "meals":
-            let values = filteredByDate(fetchMeals(in: context), arguments: arguments, date: \.date)
-                .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
-                .map { entry in
-                    var value = [
-                        "record_id": businessIDValue(entry.businessID),
-                        "date": .string(entry.date.ISO8601Format()),
-                        "meal_type": .string(entry.mealType.rawValue),
-                        "title": .string(entry.title),
-                        "calories": entry.calories.map { .number(Double($0)) } ?? .null
-                    ] as [String: AgentJSONValue]
-                    if arguments.projection == "detail" {
-                        value["protein"] = entry.protein.map(AgentJSONValue.number) ?? .null
-                        value["carbs"] = entry.carbs.map(AgentJSONValue.number) ?? .null
-                        value["fat"] = entry.fat.map(AgentJSONValue.number) ?? .null
-                        value["total_sugar"] = entry.totalSugar
-                            .map(AgentJSONValue.number) ?? .null
-                        value["glycemic_speed"] = entry.glycemicSpeedRaw
-                            .map(AgentJSONValue.string) ?? .null
-                        value["glycemic_assessment"] = entry.glycemicAssessment.nilIfEmpty
-                            .map(AgentJSONValue.string) ?? .null
-                        value["note"] = entry.notes.nilIfEmpty
-                            .map(AgentJSONValue.string) ?? .null
-                        let encodedItems: [AgentJSONValue] = entry.items.map { item in
-                            .object([
-                                "id": .string(item.id.uuidString),
-                                "name": .string(item.name),
-                                "portion_description": item.portionDescription
-                                    .map(AgentJSONValue.string) ?? .null,
-                                "calories": item.calories
-                                    .map { .number(Double($0)) } ?? .null,
-                                "protein": item.protein.map(AgentJSONValue.number) ?? .null,
-                                "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
-                                "fat": item.fat.map(AgentJSONValue.number) ?? .null,
-                                "total_sugar": item.totalSugar
-                                    .map(AgentJSONValue.number) ?? .null
-                            ])
-                        }
-                        value["items"] = .array(encodedItems)
+            let values = filteredByDate(
+                queryMeals(arguments, limit: limit, in: context),
+                arguments: arguments,
+                date: \.date
+            )
+            .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
+            .map { entry in
+                var value = [
+                    "record_id": businessIDValue(entry.businessID),
+                    "date": .string(entry.date.ISO8601Format()),
+                    "meal_type": .string(entry.mealType.rawValue),
+                    "title": .string(entry.title),
+                    "calories": entry.calories.map { .number(Double($0)) } ?? .null
+                ] as [String: AgentJSONValue]
+                if arguments.projection == "detail" {
+                    value["protein"] = entry.protein.map(AgentJSONValue.number) ?? .null
+                    value["carbs"] = entry.carbs.map(AgentJSONValue.number) ?? .null
+                    value["fat"] = entry.fat.map(AgentJSONValue.number) ?? .null
+                    value["total_sugar"] = entry.totalSugar
+                        .map(AgentJSONValue.number) ?? .null
+                    value["glycemic_speed"] = entry.glycemicSpeedRaw
+                        .map(AgentJSONValue.string) ?? .null
+                    value["glycemic_assessment"] = entry.glycemicAssessment.nilIfEmpty
+                        .map(AgentJSONValue.string) ?? .null
+                    value["note"] = entry.notes.nilIfEmpty
+                        .map(AgentJSONValue.string) ?? .null
+                    let encodedItems: [AgentJSONValue] = entry.items.map { item in
+                        .object([
+                            "id": .string(item.id.uuidString),
+                            "name": .string(item.name),
+                            "portion_description": item.portionDescription
+                                .map(AgentJSONValue.string) ?? .null,
+                            "calories": item.calories
+                                .map { .number(Double($0)) } ?? .null,
+                            "protein": item.protein.map(AgentJSONValue.number) ?? .null,
+                            "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
+                            "fat": item.fat.map(AgentJSONValue.number) ?? .null,
+                            "total_sugar": item.totalSugar
+                                .map(AgentJSONValue.number) ?? .null
+                        ])
                     }
-                    return value
+                    value["items"] = .array(encodedItems)
                 }
+                return value
+            }
             return pagedResult(values, noun: "饮食记录", arguments: arguments, limit: limit)
 
         case "body":
             let values = filteredByDate(
-                fetchBodyEntries(in: context),
+                queryBodyEntries(arguments, limit: limit, in: context),
                 arguments: arguments,
                 date: \.date
             )
@@ -304,15 +321,23 @@ enum ConversationRecorder {
             else {
                 return .failure("exercise_history 需要有效的 exercise_id。")
             }
-            let values = filteredByDate(fetchWorkouts(in: context), arguments: arguments, date: \.date)
-                .filter { $0.exerciseID == exercise.id }
-                .map {
-                    [
-                        "record_id": businessIDValue($0.businessID),
-                        "date": .string($0.date.ISO8601Format()),
-                        "summary": .string(workoutSummary($0))
-                    ] as [String: AgentJSONValue]
-                }
+            let values = filteredByDate(
+                queryWorkouts(
+                    arguments,
+                    limit: limit,
+                    exerciseID: exercise.id,
+                    in: context
+                ),
+                arguments: arguments,
+                date: \.date
+            )
+            .map {
+                [
+                    "record_id": businessIDValue($0.businessID),
+                    "date": .string($0.date.ISO8601Format()),
+                    "summary": .string(workoutSummary($0))
+                ] as [String: AgentJSONValue]
+            }
             return pagedResult(values, noun: "动作训练历史", arguments: arguments, limit: limit)
 
         case "programs":
@@ -657,7 +682,7 @@ extension ConversationRecorder {
         guard let id = recordID(from: arguments) else {
             return .failure("update_workout 需要有效的 record_id。")
         }
-        guard let entry = fetchWorkouts(in: context).first(where: { $0.businessID == id }) else {
+        guard let entry = workout(businessID: id, in: context) else {
             return .failure("没有找到指定训练记录，请重新查询。")
         }
         if let occurredAt {
@@ -753,7 +778,7 @@ extension ConversationRecorder {
         guard let id = recordID(from: arguments) else {
             return .failure("update_meal 需要有效的 record_id。")
         }
-        guard let entry = fetchMeals(in: context).first(where: { $0.businessID == id }) else {
+        guard let entry = meal(businessID: id, in: context) else {
             return .failure("没有找到指定饮食记录，请重新查询。")
         }
         if let occurredAt {
@@ -850,7 +875,7 @@ extension ConversationRecorder {
         guard let id = recordID(from: arguments) else {
             return .failure("update_body 需要有效的 record_id。")
         }
-        guard let entry = fetchBodyEntries(in: context).first(where: { $0.businessID == id }) else {
+        guard let entry = bodyEntry(businessID: id, in: context) else {
             return .failure("没有找到指定身体记录，请重新查询。")
         }
         if let occurredAt {
@@ -910,7 +935,7 @@ extension ConversationRecorder {
 
         switch type {
         case "workout":
-            guard let entry = fetchWorkouts(in: context).first(where: { $0.businessID == id }) else {
+            guard let entry = workout(businessID: id, in: context) else {
                 return .failure("没有找到指定训练记录，请重新查询。")
             }
             do {
@@ -919,12 +944,12 @@ extension ConversationRecorder {
                 return .failure("删除训练记录失败：\(error.localizedDescription)")
             }
         case "meal":
-            guard let entry = fetchMeals(in: context).first(where: { $0.businessID == id }) else {
+            guard let entry = meal(businessID: id, in: context) else {
                 return .failure("没有找到指定饮食记录，请重新查询。")
             }
             context.delete(entry)
         case "body":
-            guard let entry = fetchBodyEntries(in: context).first(where: { $0.businessID == id }) else {
+            guard let entry = bodyEntry(businessID: id, in: context) else {
                 return .failure("没有找到指定身体记录，请重新查询。")
             }
             context.delete(entry)
@@ -980,7 +1005,12 @@ extension ConversationRecorder {
         }
         if let coverPath = imageAttachments.first?.path {
             target.coverImagePath = coverPath
-            let existingMedia = (try? context.fetch(FetchDescriptor<GymMedia>())) ?? []
+            let targetID = target.id
+            let existingMedia = (
+                try? context.fetch(FetchDescriptor<GymMedia>(
+                    predicate: #Predicate { $0.gymID == targetID }
+                ))
+            ) ?? []
             for attachment in imageAttachments where
                 !existingMedia.contains(where: {
                     $0.gymID == target.id && $0.path == attachment.path
@@ -1060,28 +1090,239 @@ extension ConversationRecorder {
         ))) ?? []
     }
 
-    private static func fetchWorkouts(in context: ModelContext) -> [WorkoutEntry] {
-        (try? context.fetch(FetchDescriptor<WorkoutEntry>(
+    private static func fetchWorkouts(
+        in context: ModelContext,
+        limit: Int? = nil
+    ) -> [WorkoutEntry] {
+        var descriptor = FetchDescriptor<WorkoutEntry>(
             sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))) ?? []
+        )
+        descriptor.fetchLimit = limit
+        return (try? context.fetch(descriptor)) ?? []
     }
 
-    private static func fetchMeals(in context: ModelContext) -> [MealEntry] {
-        (try? context.fetch(FetchDescriptor<MealEntry>(
+    private static func fetchMeals(
+        in context: ModelContext,
+        limit: Int? = nil
+    ) -> [MealEntry] {
+        var descriptor = FetchDescriptor<MealEntry>(
             sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))) ?? []
+        )
+        descriptor.fetchLimit = limit
+        return (try? context.fetch(descriptor)) ?? []
     }
 
-    private static func fetchBodyEntries(in context: ModelContext) -> [BodyEntry] {
-        (try? context.fetch(FetchDescriptor<BodyEntry>(
+    private static func fetchBodyEntries(
+        in context: ModelContext,
+        limit: Int? = nil
+    ) -> [BodyEntry] {
+        var descriptor = FetchDescriptor<BodyEntry>(
             sortBy: [SortDescriptor(\.date, order: .reverse)]
-        ))) ?? []
+        )
+        descriptor.fetchLimit = limit
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     private static func fetchProfiles(in context: ModelContext) -> [UserProfile] {
-        (try? context.fetch(FetchDescriptor<UserProfile>(
+        var descriptor = FetchDescriptor<UserProfile>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        ))) ?? []
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func queryWorkouts(
+        _ arguments: AgentToolArguments,
+        limit: Int,
+        exerciseID: UUID? = nil,
+        in context: ModelContext
+    ) -> [WorkoutEntry] {
+        if let recordID = arguments.recordID {
+            return workout(businessID: recordID, in: context).map { [$0] } ?? []
+        }
+        let range = queryDateRange(arguments)
+        let sort = [SortDescriptor(
+            \WorkoutEntry.date,
+            order: arguments.sort == "oldest" ? .forward : .reverse
+        )]
+        var descriptor: FetchDescriptor<WorkoutEntry> = switch (exerciseID, range.lower, range.upper) {
+        case let (exerciseID?, lower?, upper?):
+            FetchDescriptor(
+                predicate: #Predicate {
+                    $0.exerciseID == exerciseID
+                        && $0.date >= lower && $0.date < upper
+                },
+                sortBy: sort
+            )
+        case let (exerciseID?, lower?, nil):
+            FetchDescriptor(
+                predicate: #Predicate {
+                    $0.exerciseID == exerciseID && $0.date >= lower
+                },
+                sortBy: sort
+            )
+        case let (exerciseID?, nil, upper?):
+            FetchDescriptor(
+                predicate: #Predicate {
+                    $0.exerciseID == exerciseID && $0.date < upper
+                },
+                sortBy: sort
+            )
+        case let (exerciseID?, nil, nil):
+            FetchDescriptor(
+                predicate: #Predicate { $0.exerciseID == exerciseID },
+                sortBy: sort
+            )
+        case let (nil, lower?, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date >= lower && $0.date < upper },
+                sortBy: sort
+            )
+        case let (nil, lower?, nil):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date >= lower },
+                sortBy: sort
+            )
+        case let (nil, nil, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date < upper },
+                sortBy: sort
+            )
+        case (nil, nil, nil):
+            FetchDescriptor(sortBy: sort)
+        }
+        if arguments.sort != "name" {
+            descriptor.fetchLimit = queryFetchLimit(arguments, pageSize: limit)
+        }
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func queryMeals(
+        _ arguments: AgentToolArguments,
+        limit: Int,
+        in context: ModelContext
+    ) -> [MealEntry] {
+        if let recordID = arguments.recordID {
+            return meal(businessID: recordID, in: context).map { [$0] } ?? []
+        }
+        let range = queryDateRange(arguments)
+        let sort = [SortDescriptor(
+            \MealEntry.date,
+            order: arguments.sort == "oldest" ? .forward : .reverse
+        )]
+        var descriptor: FetchDescriptor<MealEntry> = switch (range.lower, range.upper) {
+        case let (lower?, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date >= lower && $0.date < upper },
+                sortBy: sort
+            )
+        case let (lower?, nil):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date >= lower },
+                sortBy: sort
+            )
+        case let (nil, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date < upper },
+                sortBy: sort
+            )
+        case (nil, nil):
+            FetchDescriptor(sortBy: sort)
+        }
+        if arguments.sort != "name" {
+            descriptor.fetchLimit = queryFetchLimit(arguments, pageSize: limit)
+        }
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func queryBodyEntries(
+        _ arguments: AgentToolArguments,
+        limit: Int,
+        in context: ModelContext
+    ) -> [BodyEntry] {
+        if let recordID = arguments.recordID {
+            return bodyEntry(businessID: recordID, in: context).map { [$0] } ?? []
+        }
+        let range = queryDateRange(arguments)
+        let sort = [SortDescriptor(
+            \BodyEntry.date,
+            order: arguments.sort == "oldest" ? .forward : .reverse
+        )]
+        var descriptor: FetchDescriptor<BodyEntry> = switch (range.lower, range.upper) {
+        case let (lower?, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date >= lower && $0.date < upper },
+                sortBy: sort
+            )
+        case let (lower?, nil):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date >= lower },
+                sortBy: sort
+            )
+        case let (nil, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.date < upper },
+                sortBy: sort
+            )
+        case (nil, nil):
+            FetchDescriptor(sortBy: sort)
+        }
+        descriptor.fetchLimit = queryFetchLimit(arguments, pageSize: limit)
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func queryDateRange(
+        _ arguments: AgentToolArguments
+    ) -> (lower: Date?, upper: Date?) {
+        let lower = parsedQueryDate(arguments.dateFrom)
+        let rawUpper = parsedQueryDate(arguments.dateTo)
+        let upper = rawUpper.flatMap { value in
+            guard arguments.dateTo?.count == 10 else { return value }
+            return Calendar.current.date(byAdding: .day, value: 1, to: value)
+        }
+        return (lower, upper)
+    }
+
+    private static func queryFetchLimit(
+        _ arguments: AgentToolArguments,
+        pageSize: Int
+    ) -> Int {
+        let offset = cursorOffset(arguments.cursor)
+        guard offset != .max else { return pageSize + 1 }
+        return offset + pageSize + 1
+    }
+
+    private static func workout(
+        businessID: Int64,
+        in context: ModelContext
+    ) -> WorkoutEntry? {
+        var descriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.businessID == businessID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private static func meal(
+        businessID: Int64,
+        in context: ModelContext
+    ) -> MealEntry? {
+        var descriptor = FetchDescriptor<MealEntry>(
+            predicate: #Predicate { $0.businessID == businessID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private static func bodyEntry(
+        businessID: Int64,
+        in context: ModelContext
+    ) -> BodyEntry? {
+        var descriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.businessID == businessID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     /// 餐次按这条记录真正发生的时刻推断。补记昨天午餐时不能用现在的钟点，
@@ -1286,8 +1527,11 @@ extension ConversationRecorder {
         ).filter { $0.kind == .image }
         if let coverPath = imageAttachments.first?.path {
             target.coverImagePath = coverPath
+            let targetID = target.id
             let existingMedia = (
-                try? context.fetch(FetchDescriptor<GymMedia>())
+                try? context.fetch(FetchDescriptor<GymMedia>(
+                    predicate: #Predicate { $0.gymID == targetID }
+                ))
             ) ?? []
             for imageAttachment in imageAttachments where
                 !existingMedia.contains(where: {

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env generate build test format format-check lint server-check server-test db-migrate-create db-migrate-status db-migrate check verify online-check install-device archive clean
+.PHONY: help setup env generate build test format format-check lint server-check server-test perf-check perf-profile-device db-migrate-create db-migrate-status db-migrate check verify online-check install-device archive clean
 
 help:
 	@echo "Soma development commands:"
@@ -17,6 +17,7 @@ help:
 	@echo "  make db-migrate                     Apply pending PostgreSQL migrations"
 	@echo "  make check         Run fast static checks without a Simulator"
 	@echo "  make verify        Run static checks, build, and Simulator tests"
+	@echo "  make perf-profile-device  Record repeatable Instruments traces from an installed physical-device build"
 	@echo "  make online-check  Block external distribution while mail credentials live in the App"
 	@echo "  make install-device Sign, install, and launch on a connected iPhone"
 	@echo "  make archive       Export a signed App Store Connect archive"
@@ -43,10 +44,10 @@ test: generate
 	./scripts/xcodebuild.sh test
 
 format:
-	swiftformat Soma SomaWidget SomaTests
+	swiftformat Soma SomaWidget SomaTests SomaUITests
 
 format-check:
-	swiftformat Soma SomaWidget SomaTests --lint
+	swiftformat Soma SomaWidget SomaTests SomaUITests --lint
 
 lint:
 	swiftlint lint --strict --config .swiftlint.yml
@@ -59,6 +60,17 @@ server-check:
 
 server-test:
 	npm --prefix Server test
+
+perf-check:
+	ruby ./scripts/check-performance-hotpaths.rb
+	ruby -c ./scripts/analyze-app-launch-life-cycle.rb >/dev/null
+	ruby -c ./scripts/analyze-animation-hitches.rb >/dev/null
+	ruby -c ./scripts/analyze-tab-signposts.rb >/dev/null
+	ruby ./scripts/analyze-tab-signposts.rb --minimum-samples 4 --minimum-per-target 1 --maximum-p95-ms 100 ./scripts/fixtures/tab-signposts.xml >/dev/null
+	@if ruby ./scripts/analyze-tab-signposts.rb --maximum-p95-ms 70 ./scripts/fixtures/tab-signposts.xml >/dev/null 2>&1; then echo "Tab signpost budget fixture must be rejected." >&2; exit 1; fi
+
+perf-profile-device:
+	./scripts/profile-device-performance.sh
 
 db-migrate-create:
 	@test -n "$(name)" || (echo "Usage: make db-migrate-create name=<snake_case_name>" >&2; exit 1)
@@ -74,6 +86,7 @@ check:
 	@$(MAKE) env
 	@$(MAKE) format-check
 	@$(MAKE) lint
+	@$(MAKE) perf-check
 	@$(MAKE) server-check
 
 verify:

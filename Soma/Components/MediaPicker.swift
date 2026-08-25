@@ -8,6 +8,14 @@ enum PickedMedia {
     case video(URL)
 }
 
+private final class SendableImageBox: @unchecked Sendable {
+    let image: UIImage
+
+    init(_ image: UIImage) {
+        self.image = image
+    }
+}
+
 struct MediaPicker: UIViewControllerRepresentable {
     static let maximumSelectionCount = 10
 
@@ -84,11 +92,23 @@ struct MediaPicker: UIViewControllerRepresentable {
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
-            if let image = info[.originalImage] as? UIImage,
-               let data = image.jpegData(compressionQuality: 0.84)
-            {
-                onPick([.image(data)])
-            } else if let url = info[.mediaURL] as? URL {
+            if let image = info[.originalImage] as? UIImage {
+                let imageBox = SendableImageBox(image)
+                let onPick = onPick
+                dismissAction()
+                Task.detached(priority: .userInitiated) {
+                    guard let data = imageBox.image.jpegData(
+                        compressionQuality: 0.84
+                    ) else {
+                        return
+                    }
+                    await MainActor.run {
+                        onPick([.image(data)])
+                    }
+                }
+                return
+            }
+            if let url = info[.mediaURL] as? URL {
                 onPick([.video(url)])
             }
             dismissAction()

@@ -696,6 +696,7 @@ final class GuidedWorkoutRecordingRecoveryTests: XCTestCase {
                 order: performanceOrder,
                 prescriptionSnapshot: prescription
             )
+            performance.exerciseDefinition = definition
             performances.append(performance)
             for setOrder in 1 ... setCount {
                 let set = WorkoutSet(

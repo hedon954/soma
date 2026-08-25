@@ -15,15 +15,17 @@ enum AgentTurnContextBuilder {
         timeZone: TimeZone = .current,
         calendar: Calendar = .current
     ) -> AgentTurnContextEnvelope {
-        let messages = (
-            try? context.fetch(
-                FetchDescriptor<CoachMessage>(
-                    sortBy: [SortDescriptor(\.date)]
-                )
-            )
-        ) ?? []
-        let session = ((try? context.fetch(FetchDescriptor<ConversationSession>())) ?? [])
-            .first { $0.id == sessionID }
+        var messageDescriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate { $0.sessionID == sessionID },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        messageDescriptor.fetchLimit = 80
+        let messages = (try? context.fetch(messageDescriptor)) ?? []
+        var sessionDescriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        sessionDescriptor.fetchLimit = 1
+        let session = try? context.fetch(sessionDescriptor).first
         let effectiveTimeZone = session?.businessTimeZone ?? timeZone
         let turnBusinessDate = effectiveBusinessDate ?? BusinessDateResolver.turnBusinessDate(
             in: userText,

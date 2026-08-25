@@ -221,6 +221,19 @@ final class CrashDiagnosticsTests: XCTestCase {
         XCTAssertNil(store.latestReport())
     }
 
+    func testAsyncLatestAndRemoveAllUseTheSerializedStoreQueue() async {
+        let store = DiagnosticReportStore(directory: directory)
+        store.save(DiagnosticReport(subject: "报告", body: "正文"))
+
+        let latest = await store.latestReportAsync()
+        XCTAssertEqual(latest?.subject, "报告")
+
+        await store.removeAllAsync()
+
+        let pending = await store.pendingReportsAsync()
+        XCTAssertTrue(pending.isEmpty)
+    }
+
     // MARK: - 邮件封装
 
     func testMailMessageCarriesSubjectAndTextAttachment() throws {

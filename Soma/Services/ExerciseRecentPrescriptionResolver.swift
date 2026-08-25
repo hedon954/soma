@@ -47,17 +47,38 @@ enum ExerciseRecentPrescriptionResolver {
         exerciseID: UUID,
         in context: ModelContext
     ) -> RecentExercisePrescription? {
-        let workouts = (
-            try? context.fetch(FetchDescriptor<WorkoutEntry>())
-        ) ?? []
-        let sessions = (
-            try? context.fetch(FetchDescriptor<WorkoutSession>())
-        ) ?? []
+        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.exerciseID == exerciseID },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = 100
+        let workouts = (try? context.fetch(workoutDescriptor)) ?? []
         let performances = (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>())
+            try? context.fetch(FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.exerciseID == exerciseID }
+            ))
         ) ?? []
+        let sessions = performances.reduce(into: [UUID: WorkoutSession]()) { result, performance in
+            if let session = performance.session {
+                result[session.id] = session
+                return
+            }
+            guard result[performance.sessionID] == nil else { return }
+            let sessionID = performance.sessionID
+            var descriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { $0.id == sessionID }
+            )
+            descriptor.fetchLimit = 1
+            if let session = try? context.fetch(descriptor).first {
+                result[session.id] = session
+            }
+        }.values.map { $0 }
         let sets = (
-            try? context.fetch(FetchDescriptor<WorkoutSet>())
+            try? context.fetch(FetchDescriptor<WorkoutSet>(
+                predicate: #Predicate {
+                    $0.performance?.exerciseID == exerciseID
+                }
+            ))
         ) ?? []
         return latest(
             exerciseID: exerciseID,

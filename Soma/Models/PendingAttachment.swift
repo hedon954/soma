@@ -1,6 +1,6 @@
 import Foundation
 
-struct PendingAttachment: Identifiable {
+struct PendingAttachment: Identifiable, Sendable {
     let id = UUID()
     let kind: MediaKind
     let imageData: Data?

@@ -1,5 +1,7 @@
 # Soma 验收清单
 
+- 上游依据：[ADR 0097：当前安装基线、性能预算与缓存失效](adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+
 本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。自然语言与媒体事实由
 教练对话创建；训练计划可在专用 GUI 中确定性编排，带练可保存用户逐组确认的事实。其他列表
 和详情用于审查、纠错与删除结构化结果。
@@ -10,9 +12,9 @@
 | --- | --- |
 | 无账户、本地私有 | `DataSpaceController` 使用两个关闭 CloudKit 的 SwiftData 容器；媒体位于 App 沙盒，API Key 位于 ThisDeviceOnly Keychain。 |
 | 演示/个人数据一键切换 | 高级设置提供分段选择；两个容器隔离，低频入口不会占用聊天页或造成误触。 |
-| 启动数据迁移 | App 根层先显示迁移门禁，按个人空间、演示空间顺序用当前 `SomaDataSchema` 打开容器（不带历史 VersionedSchema 计划），再完成 Int64 分配、关系修复、旧聚合处方展开为 independent sets、旧 Set 变为单 `.none` Effort、为每条训练记录补齐不重复 projection key 并校验非空快照后才创建业务页面。失败保持可重试错误态，不允许在半迁移容器上继续读写；失败诊断必须含堆栈、错误 Mirror/Dump、SQLite 表结构、空/重复 projection key 计数和截断训练记录样例，且不含身体测量、饮食原文、聊天正文与媒体文件。当前 schema 上的预修复与 nil-key 回填测试必须通过；打开路径不依赖历史版本磁盘夹具。 |
+| 启动数据迁移 | App 根层先显示迁移门禁，按个人空间、演示空间顺序用当前 `SomaDataSchema` 打开容器（不带历史 VersionedSchema 计划）。每个空间先按 key 与 schema version 6 定向检查当前 marker；命中后立即返回，不扫描业务表。仅未完成 marker 时执行 Int64 分配、关系修复、旧聚合处方展开为 independent sets、旧 Set 变为单 `.none` Effort、projection key 回填和快照校验。失败保持可重试错误态，不允许在半迁移容器上继续读写；脱敏诊断不含身体测量、饮食原文、聊天正文与媒体文件。打开路径不依赖历史版本磁盘夹具。 |
 | 聊天、图片、视频、语音 | `CoachView` 统一接收文字和媒体；单条消息最多混合选择十项图片/视频，三项起使用主图在前的稳定画布，后续媒体在同一画布上缩小、旋转并从右侧露出，避免极端横竖比破坏聊天节奏；显式展开后保留各自比例并可收起，点击任一聊天媒体进入只读全屏查看，图片可缩放、多项可左右切换；视频按模型能力直传或关键帧降级并明示实际模式；`SpeechInputService` 使用系统语音识别；AI 正文使用受控 Markdown 的标题、段落、分隔线和列表，用户消息使用主题灰色气泡；两者都保留原生范围选择、复制及高对比系统前景色。`MarkdownAttributedStringBuilder` 从 `presentationIntent` 重建段落与列表断行，避免教练回复黏连。 |
-| 对话 Session | `ConversationSessionController` 在根层首次加载和 Scene 重新进入前台时解析当前 Session；今天有最后消息则复用，否则新建当天 Session；旧消息按自然日归档。历史抽屉可回看、继续，并支持左滑删除该对话的聊天图；训练、饮食、身体记录不随会话删除。在途 Agent Job 拒绝删除。 |
+| 对话 Session | `ConversationSessionController` 在根层首次加载和 Scene 重新进入前台时解析当前 Session；今天有最后消息则复用，否则新建当天 Session；旧消息按自然日归档。历史抽屉整行任意区域点击即可切换，长按仍重命名，并支持左滑删除该对话的聊天图；训练、饮食、身体记录不随会话删除。在途 Agent Job 拒绝删除。 |
 | 发送反馈 | 提交被接受后清空草稿与附件、撤销文本焦点并滚到稳定底部锚点；用户消息和 Agent Event 更新继续保持在底部等待回复。 |
 | Widget 与系统快捷入口 | 免费签名阶段 `SomaWidget` 仅提供中尺寸文字、拍照、照片/视频快速记录；三种锁屏快捷组件与 App Shortcuts 提供相同入口。均只深链进入既有录入路径，不读取训练状态、不在扩展内写记录或运行 Agent。情境化组件见暂缓的 PRD 017 与 ADR 0042。 |
 | 异步对话处理 | 发送先原子保存 Turn、媒体、上下文与 `AgentJob`；App 根层 runner 串行领取，有限后台租约到期进入 `waitingForForeground`。有有效 step 检查点时回前台或重启复用同一条回复气泡从下一步续跑且不递增 `attemptNumber`。无可见增量的瞬态模型步骤在 Loop 内最多重试三次并按 1/2/4 秒退避；错误一旦显示给用户，本地/远程都进入人工屏障，启动、前台、网络、配置和计时器不得自动重跑。 |
@@ -37,6 +39,21 @@
 | 备份与恢复 | 首次选择外部目录并设置密码后立即备份，进入后台时尽力自动更新；完整个人空间与媒体经认证加密，错误密码或损坏快照不会改变当前数据。 |
 | 主动清除 | 二次确认后删除个人空间和未共享沙盒媒体，保留演示数据、API Key、系统相册、Apple 健康及外部备份，并断开自动备份。 |
 
+## 性能预算与回归
+
+性能结论与证据分级见[全 App 性能审计报告](engineering/performance-audit-2026-08-24.md)，长期边界见
+[ADR 0097](adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)。Debug Simulator
+只用于功能回归与发现热点，不作为 120 Hz 达标证明。
+
+| 要求 | 当前证据与验收边界 |
+| --- | --- |
+| 启动与 Tab | 四个 Tab 保留独立导航栈；Root 不订阅全量 Job，深链按稳定 ID 定向读取。普通点击只写一次 selection，禁止全局关闭 UIKit 动画或替换系统 Tab bar。启动、Root 可见、Tab 点击与内容可见使用隐私安全 signpost。warm 常用交互 Release 真机 p95 必须 `<100 ms`，冷页面首个有效内容 p95 必须 `<200 ms`。 |
+| 查询与派生 | 根页面不得无界订阅与首屏无关的历史；详情按 ID，列表带谓词、上限和稳定分页。进展查询与聚合在独立 actor 生成不可变 DTO，主线程只发布完成快照。`make perf-check` 阻止已治理热点回归。 |
+| 图片与媒体 | 图片读取、ImageIO 下采样与尺寸探测不进入 View 渲染路径；缩略图缓存成本上限 48 MB，并在内存警告、数据空间切换和文件指纹变化时失效。相同内容通过独立逻辑路径的硬链接复用，孤儿清理以个人/演示引用并集为准。 |
+| Agent 与长列表 | 根投影只观察非终态 Job 或 cursor 落后的 Event；Coach 每个 Session 初始只取最近 10 条，到顶每次追加 10 条并保持视觉锚点。短内容顶部对齐，长内容初始最后一条贴底；用户向上阅读后流式更新不得抢回底部。只有实际进入可见懒栈的消息才写入 64 项有界纯渲染缓存，未打开 Session 和未滚到的历史消息不预热。流式 revision 只更新实时回复叶子，隐藏 Coach Tab 不渲染增量；正文以稳定分块更新，完整字符串只在结束持久化时合并。10,000 消息、5,000 训练记录和 1,000 媒体引用的虚构压力夹具必须通过。 |
+| 卡帧与内存 | Release 真机连续滚动 hitch `<1%`，无 `>100 ms` 主线程停顿，重复 `body` 热点 `<1 ms`；连续十轮跨 Tab、媒体和聊天操作不得单调增长。必须保存至少 30 次关键交互样本，模拟器数据不能代替。 |
+| 自动化与交互 | 提交前运行 `make format`、`make check`、`make verify`；模拟器覆盖四 Tab、详情、键盘、滚动、安全区、浅深主题和 Dynamic Type。最终在 iPhone 17 Pro Max 签名安装、启动并完成人工手感验收。 |
+
 ## Agent 闭环
 
 | 要求 | 当前证据 |
@@ -45,7 +62,7 @@
 | 动态模型 | 模型是纯文本输入框；保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以输入历史式建议列表出现在输入框下方，可点选也可手输。候选行只显示模型 ID，不截断列表，超过五条时列表内部滚动。刷新候选不覆盖已填写的模型，只在为空时补一个默认值。 |
 | 多模态提示位置 | 能力说明只在模型已填写后出现；支持、不支持必须同时显示平台模型目录中的明确字段来源。平台没有提供能力元数据时显示“未知”，模型名、平台名和 `vision` / `vl` 字样均不得作为证据。 |
 | 多模态提醒 | 只有来源明确且标注不支持的模型才在上传前阻止；未知能力允许发送并由平台验证，失败时把平台原始原因展示到聊天和 Trace。直传视频同样只接受明确 `video` 输入元数据或远程部署显式能力开关，默认关闭。 |
-| 真正 ReAct | 可配置步数上限（默认 100，高级设置 `ReAct 步骤上限`）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。当前 32 个单一职责 Tool：未选快捷按钮注册全部，选中快捷按钮只注册该按钮工具白名单。未知名称解码失败。过长 Tool 结果可展开；原位审查卡与 Event Cards 同时保留。原始 JSON 只在开发者 Trace 中保留。 |
+| 真正 ReAct | 可配置步数上限（默认 100）和运行超时（默认自动 3/5/10 分钟，可统一设为 3–60 分钟）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；两项在高级设置 `ReAct 循环` 同区呈现。规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。当前 32 个单一职责 Tool：未选快捷按钮注册全部，选中快捷按钮只注册该按钮工具白名单。未知名称解码失败。过长 Tool 结果可展开；原位审查卡与 Event Cards 同时保留。原始 JSON 只在开发者 Trace 中保留。 |
 | Agent 纠错与删除 | 数据查询返回稳定记录 ID；训练、饮食和身体支持显式 update 工具原位纠错并合并新媒体；delete 工具仅接受用户当前消息的明确意图，且不级联删除聊天和共享媒体。create 每次新增，不能用创建代替更新。 |
 | 跨消息去重 | 相同 Tool Call 由回执幂等；跨 Turn 训练/身体业务键返回疑似重复、不静默改写。纠正必须绑定查询得到的记录 ID。歧义时保持独立记录。 |
 | 可继续 Session | 教练页左上角时间按钮、左边界右滑与 VoiceOver 操作打开同一个历史会话抽屉；可新建或选择旧 Session 继续发送，跨天不自动抢走当前选择。 |
@@ -200,7 +217,7 @@ HealthKit 与真机 VoiceOver 继续单列。
 | Loop 内恢复与手动重试互斥 | 只有未产生可见增量的模型步骤可在 Loop 内执行三次 1/2/4 秒退避；失败一旦显示即停止自动领取。重试复用同一气泡，移除旧错误和失败文字，保留成功 step。 |
 | 每个 step 精确续跑 | 检查点持久化原生 `assistant.tool_calls` 和逐条 `role=tool` 结果；模型成功后、每个 Tool 成功后都立即落盘。双 Tool 回归证明第二个失败后只重试第二个，恢复请求的 System/User 前缀不变。 |
 | 同气泡与固定时间 | 重试复用 `responseMessageID`，清理旧 error/running 投影；Job 创建时冻结原始 Turn 时间、`effectiveBusinessDate`、时区和 `defaultOccurredAt`，首次 claim 再冻结 `loopStartedAt`。create/update 的 `occurred_at` 省略时复用稳定默认值，排队、跨午夜和重试不使用新墙钟。 |
-| 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁。`AgentLoopDeadline` 以 3/5/10 分钟活动执行预算取消当前窗口，等待用户、网络或前台不计时；自动恢复保留已耗时长，用户显式重试刷新预算但保留固定业务时间与成功 step。 |
+| 两层超时 | `AgentStreamDeadlinePolicy` 为文字/图片/视频 20/40/60 秒，仅首个模型处理启用；后续模型无单步门禁。`AgentLoopDeadline` 默认以 3/5/10 分钟活动执行预算取消当前窗口，用户可统一设为 3–60 分钟；等待用户、网络或前台不计时。自动恢复保留已耗时长，用户显式重试刷新预算并读取最新设置，但保留固定业务时间与成功 step。 |
 | 确定性快捷训练 | typed 最近训练草稿 trim 后未改且无附件时使用 `deterministicWorkout` Job；空 Key 测试证明不调用 LLM、执行时间实时读取并产生同构 Trace/Event/结果卡。 |
 | 最新回复原位 CRUD | 四类稳定 record reference 投影训练、饮食、身体和健身房卡；同一 Turn 不同动作各成一条记录、各有一张卡，卡片插在产生它的那一步之后，写入前后的文字保持原顺序。最后一条消息必须是 AI 回复才可编辑，发送用户消息后立即锁定。保存成功显示已保存态；删除写入有界 correction block。连续成功 Skill/Tool 收成一条可展开过程摘要，失败卡单独露出，Event Cards 不被结果卡替换。 |
 | 计划与一级页面 | 计划动作设定同屏提供两类适用间歇，独立组提供次数/时长和重量；进展用单卡切换近七天、连续性和容量，最近活动直达训练/饮食记录；设置底部直接嵌入反馈。 |
@@ -249,7 +266,7 @@ HealthKit 与真机 VoiceOver 继续单列。
 | 饮食行复用 | 详情 `MealRecordEditor` 与聊天共用 `MealItemDraftRow`；聊天 `InlineRecordShell` 内边距 10/7，菜名 footnote、宏量 caption2。 |
 | 历史芯片与折叠 | `historyListChrome` 使用 inline 标题加图标；`HistoryMonthFilterBar` 无 `.bar` 实心底。每一天是 `HistoryDayHeader` 卡片，日期与条数与行缩略图共用 `HistoryDayCardLayout.horizontalInset`，折叠后仍显示条数与已知容量/热量。`WorkoutHistoryQueryTests` 覆盖饮食按天分组、摘要只累加完整容量/热量，以及同年芯片省略年份。 |
 | Span 独立页 | `AgentTraceSpanRow` 是 `NavigationLink`；`AgentTraceSpanPayloads.sections` 分段入参/返回。`AgentTraceSpanPayloadsTests` 覆盖超长入参不依赖时间线内嵌。 |
-| Tab 再选 | `AppTabReselect.stackID` 仅在 selected == incoming 时换 UUID；`RootView` 用 `.id` 重建该 Tab 栈。`AppTabReselectTests` 覆盖再选与切换。 |
+| Tab 再选 | `AppTabReselect.effect` 将普通切换限定为一次 selection 写入，将再选限定为一次栈重建；`RootView` 只在 `.resetStack` 时更新对应 `.id`。`AppTabTransitionCoordinator` 只记录隐私安全 signpost，不改变全局动画状态。`AppTabReselectTests` 与 `perf-check` 覆盖副作用和四 Tab 结构。 |
 | 自动录像宿主 | `beginCurrentSet` 先进入 `.setInProgress` 并打开放大取景，`waitUntilPreviewHostSettled` 后再 `startRecording`。已有预览连接时换宿主不重建、不因 `session-interruption` 停掉 Session；`prepare()` 复用仍在跑的 Session。录像中可缩小。非目标组不显示取景。`GuidedWorkoutCoordinatorTests` / `WorkoutCameraServiceTests` / `GuidedWorkoutLayoutTests` 覆盖时序与居中；`validate-repository.sh` 静态守卫。 |
 | 预览 fill | `WorkoutCameraSurface` 与 `CameraPreviewView` 默认 `.resizeAspectFill`；历史录像缩略按取景比例 `scaledToFill`。 |
 | 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。 |
@@ -302,7 +319,7 @@ JSON 和有序媒体；设置密码备份后让 App 进入后台，再返回确�
 追问，确认 Agent 能引用前一轮画面；新建或切换到另一个 Session 后发送相同追问，确认不会
 携带旧 Session 媒体。构造十一轮以上对话，确认远程请求只包含最近十个完整来回。
 
-教练页手工验收：点击左上角时间按钮打开会话抽屉，再关闭并从左边界右滑打开同一抽屉；新建两个非空 Session 后来回切换并继续发送；
+教练页手工验收：点击左上角时间按钮打开会话抽屉，再关闭并从左边界右滑打开同一抽屉；新建两个非空 Session 后分别点击标题外的行尾空白切换、长按标题重命名并继续发送；确认每次进入只出现最近 10 条，到顶再增加 10 条且当前位置不跳；短对话顶部对齐，长对话最后一条初始贴底；长流期间向上阅读不会被自动拉回底部；持续流式至少 35 秒后继续滚动、切 Session 和切 Tab，确认没有随正文增长而逐渐加重的卡顿或发热；
 首次发送分别验证允许和拒绝位置都只出现一次确认；准备 0、1、2 个健身房验证只有两馆时
 显示切换入口；长按用户主题灰色气泡并拖动选区，分别在浅色、深色外观确认选区与气泡明显区分，
 且复制菜单仍可用；确认 AI 正文从消息区左边界开始、没有重复头像或装饰列；长按 Agent 的列表、链接和多段回复验证可精确选择复制。分别点击聊天中的

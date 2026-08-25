@@ -1,5 +1,78 @@
 import SwiftUI
 
+private final class CoachResponseDocumentBox: NSObject {
+    let value: CoachResponseDocument
+
+    init(_ value: CoachResponseDocument) {
+        self.value = value
+    }
+}
+
+private final class CoachAttributedTextBox: NSObject {
+    let value: AttributedString
+
+    init(_ value: AttributedString) {
+        self.value = value
+    }
+}
+
+/// 完成态聊天正文不会随 Tab 切换变化。缓存纯值解析结果，避免重新显示 Coach 时
+/// 再次拆整份 Markdown、并为每个段落重建内联 AttributedString。
+@MainActor
+enum CoachTextRenderCache {
+    private static let documents: NSCache<NSString, CoachResponseDocumentBox> = {
+        let cache = NSCache<NSString, CoachResponseDocumentBox>()
+        cache.countLimit = 256
+        cache.totalCostLimit = 4 * 1024 * 1024
+        return cache
+    }()
+
+    private static let attributedTexts: NSCache<NSString, CoachAttributedTextBox> = {
+        let cache = NSCache<NSString, CoachAttributedTextBox>()
+        cache.countLimit = 512
+        cache.totalCostLimit = 4 * 1024 * 1024
+        return cache
+    }()
+
+    static func document(for markdown: String) -> CoachResponseDocument {
+        let key = markdown as NSString
+        if let cached = documents.object(forKey: key) {
+            return cached.value
+        }
+        let value = CoachResponseDocument.parse(markdown)
+        documents.setObject(
+            CoachResponseDocumentBox(value),
+            forKey: key,
+            cost: markdown.utf8.count
+        )
+        return value
+    }
+
+    static func attributedText(for content: String) -> AttributedString {
+        let key = content as NSString
+        if let cached = attributedTexts.object(forKey: key) {
+            return cached.value
+        }
+        let value = (
+            try? AttributedString(
+                markdown: content,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            )
+        ) ?? AttributedString(content)
+        attributedTexts.setObject(
+            CoachAttributedTextBox(value),
+            forKey: key,
+            cost: content.utf8.count
+        )
+        return value
+    }
+
+    static func removeAll() {
+        documents.removeAllObjects()
+        attributedTexts.removeAllObjects()
+    }
+}
+
 enum CoachResponseBlock: Equatable, Sendable {
     case heading(level: Int, text: String)
     case paragraph(String)
@@ -137,7 +210,7 @@ struct CoachResponseView: View {
     }
 
     private var document: CoachResponseDocument {
-        CoachResponseDocument.parse(markdown)
+        CoachTextRenderCache.document(for: markdown)
     }
 
     var body: some View {
@@ -162,7 +235,11 @@ struct CoachResponseView: View {
                 heading(text, level: level)
             }
         case let .paragraph(text):
-            MarkdownText(text, textStyle: .subheadline, weight: .light)
+            SelectableChatText(
+                content: text,
+                color: .label,
+                enablesSelection: false
+            )
         case let .unorderedList(items):
             list(items, ordered: false)
         case let .orderedList(items):
@@ -201,7 +278,11 @@ struct CoachResponseView: View {
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 14, alignment: .trailing)
                         .accessibilityHidden(true)
-                    MarkdownText(item, textStyle: .subheadline, weight: .light)
+                    SelectableChatText(
+                        content: item,
+                        color: .label,
+                        enablesSelection: false
+                    )
                 }
                 .accessibilityElement(children: .combine)
             }

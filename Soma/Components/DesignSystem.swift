@@ -603,10 +603,13 @@ struct LoadingButtonLabel: View {
 
 struct LocalImageView: View {
     let path: String?
+    var maxPixelSize = 1024
+
+    @State private var image: UIImage?
 
     var body: some View {
         Group {
-            if let image = MediaStore.image(at: path) {
+            if let image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -620,6 +623,43 @@ struct LocalImageView: View {
             }
         }
         .clipped()
+        .task(id: path) {
+            image = nil
+            let loaded = await ImagePipeline.shared.image(
+                atStoredPath: path,
+                maxPixelSize: maxPixelSize
+            )
+            guard !Task.isCancelled else { return }
+            image = loaded
+        }
+    }
+}
+
+struct PendingImagePreview: View {
+    let id: UUID
+    let data: Data
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.secondary.opacity(0.12)
+            }
+        }
+        .task(id: id) {
+            let loaded = await ImagePipeline.shared.image(
+                data: data,
+                cacheKey: id.uuidString,
+                maxPixelSize: 256
+            )
+            guard !Task.isCancelled else { return }
+            image = loaded
+        }
     }
 }
 

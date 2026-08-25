@@ -3,146 +3,27 @@ import SwiftData
 import SwiftUI
 
 struct InsightsView: View {
-    @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
-    @Query(sort: \MealEntry.date) private var meals: [MealEntry]
-    @Query(sort: \BodyEntry.date) private var bodyEntries: [BodyEntry]
-    @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
-    @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
-    @Query(sort: \CoachMessage.date) private var messages: [CoachMessage]
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var exerciseDefinitions: [ExerciseDefinition]
-    @Query(sort: \WorkoutSession.startedAt)
-    private var workoutSessions: [WorkoutSession]
-    @Query(sort: \ExercisePerformance.order)
-    private var exercisePerformances: [ExercisePerformance]
-    @Query(sort: \WorkoutSet.order) private var workoutSets: [WorkoutSet]
-
-    private var weekStart: Date {
-        Calendar.current.date(byAdding: .day, value: -6, to: .now) ?? .distantPast
-    }
-
-    private var completedSessions: [WorkoutSession] {
-        workoutSessions.filter {
-            $0.status == .completed || $0.status == .abandoned
-        }
-    }
-
-    private var trainingDates: [Date] {
-        workouts.filter { $0.sourceWorkoutSessionID == nil }.map(\.date)
-            + completedSessions.map(\.startedAt)
-    }
-
-    private var weekTrainingCount: Int {
-        let standaloneCount = workouts.count {
-            $0.sourceWorkoutSessionID == nil && $0.date >= weekStart
-        }
-        let projectedSessionIDs = Set(workouts.compactMap { workout in
-            workout.date >= weekStart ? workout.sourceWorkoutSessionID : nil
-        })
-        let recentCompletedSessionIDs = Set(completedSessions.compactMap { session in
-            session.startedAt >= weekStart ? session.id : nil
-        })
-        return standaloneCount + projectedSessionIDs.union(recentCompletedSessionIDs).count
-    }
-
-    private var combinedVolumePoints: [TrainingVolumePoint] {
-        TrainingVolumeAnalytics.dailyPoints(
-            from: workouts,
-            sessions: completedSessions,
-            performances: exercisePerformances,
-            sets: workoutSets
-        )
-    }
-
-    private var weekVolume: Double? {
-        let total = combinedVolumePoints
-            .filter { $0.date >= weekStart }
-            .reduce(0) { $0 + $1.volume }
-        return total > 0 ? total : nil
-    }
-
-    private var weekTrainingDays: Set<Date> {
-        Set(trainingDates.filter { $0 >= weekStart }.map(Calendar.current.startOfDay(for:)))
-    }
-
-    private var weekWeightChange: Double? {
-        let values = weightedBodyEntries
-            .filter { $0.date >= weekStart }
-            .compactMap(\.weight)
-        guard let first = values.first, let last = values.last, values.count >= 2 else {
-            return nil
-        }
-        return last - first
-    }
-
-    private var dateRangeText: String {
-        let format = Date.FormatStyle(date: .abbreviated, time: .omitted)
-        return "\(weekStart.formatted(format))—\(Date.now.formatted(format))"
-    }
-
-    private var recentActivities: [ProgressRecentActivity] {
-        let workoutValues = workouts.map {
-            ProgressRecentActivity(
-                id: $0.id,
-                kind: .workout,
-                date: $0.date,
-                title: $0.exercise,
-                detail: $0.setEvidenceSummary ?? "训练记录",
-                metric: $0.estimatedVolume.map { "\($0.formatted()) kg" }
-            )
-        }
-        let mealValues = meals.map {
-            ProgressRecentActivity(
-                id: $0.id,
-                kind: .meal,
-                date: $0.date,
-                title: $0.title,
-                detail: $0.mealType.rawValue,
-                metric: $0.calories.map { "\($0) kcal" }
-            )
-        }
-        let bodyValues = bodyEntries.map {
-            ProgressRecentActivity(
-                id: $0.id,
-                kind: .body,
-                date: $0.date,
-                title: "身体记录",
-                detail: $0.notes.isEmpty ? "身体变化" : $0.notes,
-                metric: $0.weight.map { "\($0.formatted()) kg" }
-            )
-        }
-        return (workoutValues + mealValues + bodyValues)
-            .sorted { $0.date > $1.date }
-    }
-
-    private var weightedBodyEntries: [BodyEntry] {
-        bodyEntries.filter { $0.weight != nil }
-    }
-
-    private var currentGym: GymProfile? {
-        GymSelection.current(in: gyms)
-    }
-
-    private var currentEquipmentCount: Int {
-        guard let currentGym else { return 0 }
-        return equipment.filter { $0.gymID == currentGym.id }.count
-    }
+    @Environment(\.modelContext) private var modelContext
+    @State private var recordCounts = InsightsRecordCounts()
+    @State private var snapshot = InsightsScreenSnapshot.empty
+    @State private var cacheState = InsightsSnapshotCacheState()
+    @State private var requestedCacheKey: InsightsSnapshotCacheKey?
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
-                Text(dateRangeText)
+                Text(snapshot.dateRangeText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
 
                 ForEach(
                     ProgressHomeSection.visible(
-                        hasRecentActivities: !recentActivities.isEmpty,
-                        hasWeightTrend: weightedBodyEntries.count >= 2
+                        hasRecentActivities: !snapshot.recentActivities.isEmpty,
+                        hasWeightTrend: snapshot.weightedBodyEntries.count >= 2
                     )
                 ) { section in
-                    progressHomeSection(section)
+                    progressHomeSection(section, snapshot: snapshot)
                 }
             }
             .padding(AppTheme.pagePadding)
@@ -153,25 +34,57 @@ struct InsightsView: View {
         .appPageBackground()
         .navigationTitle("进展")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            // 快照请求不参与 TabView 提交选中外观的同一 MainActor 周期。
+            await Task.yield()
+            requestSnapshotIfNeeded()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: ModelContext.didSave,
+                object: modelContext
+            )
+        ) { notification in
+            guard ModelContextSaveImpact.affectsInsights(
+                notification,
+                in: modelContext
+            ) else {
+                return
+            }
+            // 只标记失效，不在保存通知中启动重查询。这样 Agent 流式保存不会
+            // 让隐藏的进展 Tab 反复重建；下次进入时合并为一次刷新。
+            cacheState.markDataChanged()
+        }
+        .task(id: requestedCacheKey) {
+            guard let requestedCacheKey else { return }
+            await refreshSnapshot(for: requestedCacheKey)
+        }
+        .refreshable {
+            let cacheKey = cacheState.currentKey()
+            await refreshSnapshot(for: cacheKey)
+        }
     }
 
     @ViewBuilder
-    private func progressHomeSection(_ section: ProgressHomeSection) -> some View {
+    private func progressHomeSection(
+        _ section: ProgressHomeSection,
+        snapshot: InsightsScreenSnapshot
+    ) -> some View {
         switch section {
         case .trainingOverview:
             ProgressTrainingOverviewCard(
-                trainingCount: weekTrainingCount,
-                volume: weekVolume,
-                weightChange: weekWeightChange,
-                trainingDays: weekTrainingDays,
-                trainingDates: trainingDates,
-                volumePoints: combinedVolumePoints
+                trainingCount: snapshot.weekTrainingCount,
+                volume: snapshot.weekVolume,
+                weightChange: snapshot.weekWeightChange,
+                trainingDays: snapshot.weekTrainingDays,
+                trainingDayCounts: snapshot.trainingDayCounts,
+                volumePoints: snapshot.volumePoints
             )
         case .conclusion:
             ProgressConclusionCard(
-                title: conclusionTitle,
-                detail: conclusionDetail,
-                status: conclusionStatus
+                title: snapshot.conclusionTitle,
+                detail: snapshot.conclusionDetail,
+                status: snapshot.conclusionStatus
             )
         case .recentActivities:
             HStack(alignment: .center, spacing: 12) {
@@ -203,7 +116,7 @@ struct InsightsView: View {
                 ScrollView(.vertical) {
                     LazyVStack(spacing: 0) {
                         ForEach(
-                            Array(recentActivities.enumerated()),
+                            Array(snapshot.recentActivities.enumerated()),
                             id: \.element.id
                         ) { index, activity in
                             NavigationLink {
@@ -212,7 +125,7 @@ struct InsightsView: View {
                                 ProgressRecentActivityRow(activity: activity)
                             }
                             .buttonStyle(.plain)
-                            if index < recentActivities.count - 1 {
+                            if index < snapshot.recentActivities.count - 1 {
                                 Divider()
                                     .overlay(AppTheme.separator)
                             }
@@ -221,11 +134,11 @@ struct InsightsView: View {
                 }
                 .frame(
                     height: ProgressRecentActivityViewport.height(
-                        activityCount: recentActivities.count
+                        activityCount: snapshot.recentActivities.count
                     )
                 )
                 .scrollIndicators(
-                    recentActivities.count
+                    snapshot.recentActivities.count
                         > ProgressRecentActivityViewport.maximumVisibleRows
                         ? .visible
                         : .hidden
@@ -233,26 +146,26 @@ struct InsightsView: View {
                 .scrollBounceBehavior(.basedOnSize)
             }
         case .weightTrend:
-            WeightTrendCard(entries: weightedBodyEntries)
+            WeightTrendCard(entries: snapshot.weightedBodyEntries)
         case .allData:
             SectionHeading(title: "数据与全部记录")
             RecentRecordsCard(
-                workoutCount: workouts.count,
-                mealCount: meals.count,
-                bodyCount: bodyEntries.count,
-                latestWorkout: workouts.last?.exercise,
-                latestMeal: meals.last?.title,
-                latestWeight: weightedBodyEntries.last?.weight
+                workoutCount: recordCounts.workouts,
+                mealCount: recordCounts.meals,
+                bodyCount: recordCounts.bodyEntries,
+                latestWorkout: snapshot.latestWorkout,
+                latestMeal: snapshot.latestMeal,
+                latestWeight: snapshot.latestWeight
             )
         case .currentGym:
             NavigationLink {
                 GymLibraryView()
             } label: {
                 CurrentGymContextCard(
-                    gymName: currentGym?.name ?? "尚未建立",
-                    coverImagePath: currentGym?.coverImagePath,
-                    note: currentGym?.notes,
-                    equipmentCount: currentEquipmentCount
+                    gymName: snapshot.currentGymName,
+                    coverImagePath: snapshot.currentGymCoverImagePath,
+                    note: snapshot.currentGymNote,
+                    equipmentCount: snapshot.currentEquipmentCount
                 )
             }
             .buttonStyle(.plain)
@@ -266,8 +179,8 @@ struct InsightsView: View {
                             icon: "shoeprints.fill",
                             role: .trend,
                             title: "足迹",
-                            count: successfulFootprintCount,
-                            latest: successfulFootprintCount == 0
+                            count: snapshot.successfulFootprintCount,
+                            latest: snapshot.successfulFootprintCount == 0
                                 ? "Agent 成功后自动收录"
                                 : "回顾你的文字与影像"
                         )
@@ -283,8 +196,8 @@ struct InsightsView: View {
                             icon: "books.vertical",
                             role: .training,
                             title: "动作库",
-                            count: exerciseDefinitions.count { !$0.isArchived },
-                            latest: exerciseDefinitions.contains(where: { !$0.isArchived })
+                            count: snapshot.activeExerciseCount,
+                            latest: snapshot.activeExerciseCount > 0
                                 ? "查看动作详情与受力"
                                 : "随训练自然形成"
                         )
@@ -312,7 +225,536 @@ struct InsightsView: View {
         .contentShape(Rectangle())
     }
 
-    private var conclusionTitle: String {
+    @MainActor
+    private func requestSnapshotIfNeeded() {
+        let cacheKey = cacheState.currentKey()
+        guard cacheState.loadedKey != cacheKey,
+              requestedCacheKey != cacheKey
+        else {
+            return
+        }
+        requestedCacheKey = cacheKey
+    }
+
+    private func refreshSnapshot(for cacheKey: InsightsSnapshotCacheKey) async {
+        let interval = AppPerformance.begin(
+            .derivedSnapshot,
+            detail: "screen=insights,kind=refresh"
+        )
+        let container = modelContext.container
+        let worker = Task.detached(priority: .userInitiated) {
+            let loader = InsightsSnapshotLoader(modelContainer: container)
+            return try await loader.load()
+        }
+        let payload = try? await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        guard let payload, !Task.isCancelled else {
+            if requestedCacheKey == cacheKey {
+                requestedCacheKey = nil
+            }
+            AppPerformance.end(interval, detail: "screen=insights,kind=refresh,cancelled=true")
+            return
+        }
+        snapshot = payload.snapshot
+        recordCounts = payload.counts
+        cacheState.loadedKey = cacheKey
+        AppPerformance.end(interval, detail: "screen=insights,kind=refresh")
+    }
+
+    private func recentActivityDestination(_ activity: ProgressRecentActivity) -> some View {
+        ProgressRecentActivityDestination(activity: activity)
+    }
+}
+
+private struct InsightsSnapshotCacheKey: Hashable, Sendable {
+    let day: Date
+    let timeZoneIdentifier: String
+    let dataRevision: Int
+}
+
+/// 这是失效元数据，不是 SwiftUI 可观察状态。保存通知只更新一个整数，
+/// 不会让隐藏的 Tab body 失效；真正进入页面时才把最新 key 提交给 SwiftUI task。
+@MainActor
+private final class InsightsSnapshotCacheState {
+    private var dataRevision = 0
+    var loadedKey: InsightsSnapshotCacheKey?
+
+    func markDataChanged() {
+        dataRevision &+= 1
+    }
+
+    func currentKey(
+        now: Date = .now,
+        calendar sourceCalendar: Calendar = .current
+    ) -> InsightsSnapshotCacheKey {
+        var calendar = sourceCalendar
+        calendar.timeZone = .current
+        return InsightsSnapshotCacheKey(
+            day: calendar.startOfDay(for: now),
+            timeZoneIdentifier: calendar.timeZone.identifier,
+            dataRevision: dataRevision
+        )
+    }
+}
+
+private struct InsightsSnapshotPayload: Sendable {
+    let snapshot: InsightsScreenSnapshot
+    let counts: InsightsRecordCounts
+}
+
+@ModelActor
+private actor InsightsSnapshotLoader {
+    func load(now: Date = .now) throws -> InsightsSnapshotPayload {
+        try Task.checkCancellation()
+        let calendar = Calendar.current
+        let trendStart = calendar.date(byAdding: .day, value: -95, to: now)
+            ?? .distantPast
+
+        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.date >= trendStart },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = 1000
+
+        var mealDescriptor = FetchDescriptor<MealEntry>(
+            predicate: #Predicate { $0.date >= trendStart },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        mealDescriptor.fetchLimit = 500
+
+        var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.date >= trendStart },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        bodyDescriptor.fetchLimit = 500
+
+        let succeeded = AgentTraceStatus.succeeded.rawValue
+        var messageDescriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate {
+                $0.isFromCoach
+                    && $0.agentStatusRaw == succeeded
+                    && $0.turnID != nil
+            },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        messageDescriptor.fetchLimit = 1000
+
+        var gymDescriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        gymDescriptor.fetchLimit = 100
+
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.startedAt >= trendStart },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        sessionDescriptor.fetchLimit = 500
+
+        let workouts = try modelContext.fetch(workoutDescriptor)
+        let meals = try modelContext.fetch(mealDescriptor)
+        let bodyEntries = try modelContext.fetch(bodyDescriptor)
+        try Task.checkCancellation()
+        let gyms = try modelContext.fetch(gymDescriptor)
+        let currentGymID = (gyms.first(where: \.isCurrent) ?? gyms.first)?.id
+        let currentEquipmentCount: Int = if let currentGymID {
+            try modelContext.fetchCount(
+                FetchDescriptor<GymEquipment>(
+                    predicate: #Predicate { $0.gymID == currentGymID }
+                )
+            )
+        } else {
+            0
+        }
+        let messages = try modelContext.fetch(messageDescriptor)
+        try Task.checkCancellation()
+        let activeExerciseCount = try modelContext.fetchCount(
+            FetchDescriptor<ExerciseDefinition>(
+                predicate: #Predicate { $0.archivedAt == nil }
+            )
+        )
+        let workoutSessions = try modelContext.fetch(sessionDescriptor)
+        // 趋势窗口只需要这批会话的子图。直接沿当前关系读取，避免全库
+        // 2,000/5,000 行扫描、无关旧数据抢占上限以及错误的趋势截断。
+        let exercisePerformances = workoutSessions
+            .flatMap(\.performances)
+            .sorted { lhs, rhs in lhs.order < rhs.order }
+        let workoutSets = exercisePerformances
+            .flatMap(\.workoutSets)
+            .sorted { lhs, rhs in lhs.order < rhs.order }
+        try Task.checkCancellation()
+
+        let input = InsightsSnapshotInput(
+            workouts: workouts,
+            meals: meals,
+            bodyEntries: bodyEntries,
+            gyms: gyms,
+            messages: messages,
+            currentEquipmentCount: currentEquipmentCount,
+            activeExerciseCount: activeExerciseCount,
+            workoutSessions: workoutSessions,
+            exercisePerformances: exercisePerformances,
+            workoutSets: workoutSets
+        )
+        return try InsightsSnapshotPayload(
+            snapshot: InsightsScreenSnapshot(
+                input: input,
+                calendar: calendar,
+                now: now
+            ),
+            counts: InsightsRecordCounts(
+                workouts: modelContext.fetchCount(FetchDescriptor<WorkoutEntry>()),
+                meals: modelContext.fetchCount(FetchDescriptor<MealEntry>()),
+                bodyEntries: modelContext.fetchCount(FetchDescriptor<BodyEntry>())
+            )
+        )
+    }
+}
+
+private struct ProgressRecentActivityDestination: View {
+    let activity: ProgressRecentActivity
+
+    var body: some View {
+        switch activity.kind {
+        case .workout:
+            ProgressWorkoutDestination(recordID: activity.id)
+        case .meal:
+            ProgressMealDestination(recordID: activity.id)
+        case .body:
+            ProgressBodyDestination(recordID: activity.id)
+        }
+    }
+}
+
+private struct ProgressWorkoutDestination: View {
+    @Query private var records: [WorkoutEntry]
+
+    init(recordID: UUID) {
+        var descriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.id == recordID }
+        )
+        descriptor.fetchLimit = 1
+        _records = Query(descriptor)
+    }
+
+    var body: some View {
+        if let record = records.first {
+            WorkoutRecordDetailView(workout: record)
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+private struct ProgressMealDestination: View {
+    @Query private var records: [MealEntry]
+
+    init(recordID: UUID) {
+        var descriptor = FetchDescriptor<MealEntry>(
+            predicate: #Predicate { $0.id == recordID }
+        )
+        descriptor.fetchLimit = 1
+        _records = Query(descriptor)
+    }
+
+    var body: some View {
+        if let record = records.first {
+            MealRecordDetailView(meal: record)
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+private struct ProgressBodyDestination: View {
+    @Query private var records: [BodyEntry]
+
+    init(recordID: UUID) {
+        var descriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.id == recordID }
+        )
+        descriptor.fetchLimit = 1
+        _records = Query(descriptor)
+    }
+
+    var body: some View {
+        if let record = records.first {
+            BodyRecordDetailView(entry: record)
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+private struct InsightsRecordCounts: Equatable, Sendable {
+    var workouts = 0
+    var meals = 0
+    var bodyEntries = 0
+}
+
+private struct WeightTrendPoint: Identifiable, Sendable {
+    let id: UUID
+    let date: Date
+    let weight: Double
+}
+
+private struct InsightsSnapshotInput: Sendable {
+    struct Workout: Sendable {
+        let id: UUID
+        let date: Date
+        let exercise: String
+        let setEntriesData: Data
+        let legacySets: Int?
+        let legacyReps: Int?
+        let legacyWeight: Double?
+        let sourceWorkoutSessionID: UUID?
+        let sourcePerformanceID: UUID?
+
+        var resolved: ResolvedWorkout {
+            let entries = setEntriesData.isEmpty
+                ? []
+                : (WorkoutSetStorage.decode(setEntriesData) ?? [])
+            let completeVolumes = entries.compactMap { entry -> Double? in
+                guard let reps = entry.reps,
+                      let weight = entry.externalWeightKG,
+                      reps > 0,
+                      weight > 0
+                else {
+                    return nil
+                }
+                return Double(reps) * weight
+            }
+            let volume: Double? = if !entries.isEmpty {
+                completeVolumes.isEmpty ? nil : completeVolumes.reduce(0, +)
+            } else if setEntriesData.isEmpty,
+                      let legacySets,
+                      let legacyReps,
+                      let legacyWeight
+            {
+                Double(legacySets * legacyReps) * legacyWeight
+            } else {
+                nil
+            }
+            return ResolvedWorkout(
+                id: id,
+                date: date,
+                exercise: exercise,
+                volume: volume,
+                setSummary: Self.setSummary(entries: entries),
+                sourceWorkoutSessionID: sourceWorkoutSessionID,
+                sourcePerformanceID: sourcePerformanceID
+            )
+        }
+
+        private static func setSummary(entries: [WorkoutSetEvidence]) -> String? {
+            guard !entries.isEmpty else { return nil }
+            let reps = entries.compactMap(\.reps)
+            let weights = entries.compactMap(\.externalWeightKG)
+            let representativeReps = reps.count == entries.count && Set(reps).count == 1
+                ? reps.first
+                : nil
+            let representativeWeight = weights.count == entries.count && Set(weights).count == 1
+                ? weights.first
+                : nil
+            let logicalIndexes = Set(entries.compactMap(\.logicalSetIndex))
+            let setCount = logicalIndexes.isEmpty ? entries.count : logicalIndexes.count
+            if let representativeReps, let representativeWeight {
+                return "\(setCount)组 × \(representativeReps)次 · \(representativeWeight.formatted())kg"
+            }
+            return entries.enumerated().map { index, entry in
+                var parts = ["第\(entry.logicalSetIndex ?? index + 1)组"]
+                switch entry.side {
+                case .some(.left):
+                    parts.append("左侧")
+                case .some(.right):
+                    parts.append("右侧")
+                case nil, .some(.none):
+                    break
+                }
+                if let weight = entry.externalWeightKG {
+                    parts.append("\(weight.formatted())kg")
+                }
+                if let reps = entry.reps {
+                    parts.append("\(reps)次")
+                } else if let seconds = entry.durationSeconds {
+                    parts.append("\(seconds)秒")
+                }
+                return parts.joined(separator: " ")
+            }.joined(separator: "，")
+        }
+    }
+
+    struct ResolvedWorkout: Sendable {
+        let id: UUID
+        let date: Date
+        let exercise: String
+        let volume: Double?
+        let setSummary: String?
+        let sourceWorkoutSessionID: UUID?
+        let sourcePerformanceID: UUID?
+    }
+
+    struct Meal: Sendable {
+        let id: UUID
+        let date: Date
+        let title: String
+        let mealType: String
+        let calories: Int?
+    }
+
+    struct Body: Sendable {
+        let id: UUID
+        let date: Date
+        let weight: Double?
+        let notes: String
+    }
+
+    struct Gym: Sendable {
+        let id: UUID
+        let name: String
+        let notes: String
+        let coverImagePath: String?
+        let isCurrent: Bool
+    }
+
+    struct Session: Sendable {
+        let id: UUID
+        let startedAt: Date
+        let status: WorkoutSessionStatus
+    }
+
+    struct Performance: Sendable {
+        let id: UUID
+        let sessionID: UUID
+        let workoutProjectionSuppressed: Bool
+    }
+
+    struct SetValue: Sendable {
+        let performanceID: UUID
+        let status: WorkoutSetStatus
+        let completedVolume: Double?
+    }
+
+    let workouts: [Workout]
+    let meals: [Meal]
+    let bodyEntries: [Body]
+    let gyms: [Gym]
+    let successfulFootprintCount: Int
+    let currentEquipmentCount: Int
+    let activeExerciseCount: Int
+    let workoutSessions: [Session]
+    let exercisePerformances: [Performance]
+    let workoutSets: [SetValue]
+
+    static let empty = InsightsSnapshotInput()
+
+    private init() {
+        workouts = []
+        meals = []
+        bodyEntries = []
+        gyms = []
+        successfulFootprintCount = 0
+        currentEquipmentCount = 0
+        activeExerciseCount = 0
+        workoutSessions = []
+        exercisePerformances = []
+        workoutSets = []
+    }
+
+    init(
+        workouts: [WorkoutEntry],
+        meals: [MealEntry],
+        bodyEntries: [BodyEntry],
+        gyms: [GymProfile],
+        messages: [CoachMessage],
+        currentEquipmentCount: Int,
+        activeExerciseCount: Int,
+        workoutSessions: [WorkoutSession],
+        exercisePerformances: [ExercisePerformance],
+        workoutSets: [WorkoutSet]
+    ) {
+        self.workouts = workouts.map {
+            Workout(
+                id: $0.id,
+                date: $0.date,
+                exercise: $0.exercise,
+                setEntriesData: $0.setEntriesData,
+                legacySets: $0.sets,
+                legacyReps: $0.reps,
+                legacyWeight: $0.weight,
+                sourceWorkoutSessionID: $0.sourceWorkoutSessionID,
+                sourcePerformanceID: $0.sourcePerformanceID
+            )
+        }
+        self.meals = meals.map {
+            Meal(
+                id: $0.id,
+                date: $0.date,
+                title: $0.title,
+                mealType: $0.mealTypeRaw,
+                calories: $0.calories
+            )
+        }
+        self.bodyEntries = bodyEntries.map {
+            Body(id: $0.id, date: $0.date, weight: $0.weight, notes: $0.notes)
+        }
+        self.gyms = gyms.map {
+            Gym(
+                id: $0.id,
+                name: $0.name,
+                notes: $0.notes,
+                coverImagePath: $0.coverImagePath,
+                isCurrent: $0.isCurrent
+            )
+        }
+        successfulFootprintCount = Set(messages.compactMap(\.turnID)).count
+        self.currentEquipmentCount = currentEquipmentCount
+        self.activeExerciseCount = activeExerciseCount
+        self.workoutSessions = workoutSessions.map {
+            Session(id: $0.id, startedAt: $0.startedAt, status: $0.status)
+        }
+        self.exercisePerformances = exercisePerformances.map {
+            Performance(
+                id: $0.id,
+                sessionID: $0.sessionID,
+                workoutProjectionSuppressed: $0.workoutProjectionSuppressed
+            )
+        }
+        self.workoutSets = workoutSets.map {
+            SetValue(
+                performanceID: $0.performanceID,
+                status: $0.status,
+                completedVolume: $0.completedVolume
+            )
+        }
+    }
+}
+
+private struct InsightsScreenSnapshot: Sendable {
+    static let empty = InsightsScreenSnapshot(input: .empty)
+
+    let dateRangeText: String
+    let weekTrainingCount: Int
+    let weekVolume: Double?
+    let weekWeightChange: Double?
+    let weekTrainingDays: Set<Date>
+    let trainingDayCounts: [Date: Int]
+    let volumePoints: [TrainingVolumePoint]
+    let recentActivities: [ProgressRecentActivity]
+    let weightedBodyEntries: [WeightTrendPoint]
+    let latestWorkout: String?
+    let latestMeal: String?
+    let latestWeight: Double?
+    let currentGymName: String
+    let currentGymCoverImagePath: String?
+    let currentGymNote: String?
+    let currentEquipmentCount: Int
+    let successfulFootprintCount: Int
+    let activeExerciseCount: Int
+
+    var conclusionTitle: String {
         switch weekTrainingCount {
         case 0: "等待新的训练节奏"
         case 1 ... 2: "训练正在积累"
@@ -320,7 +762,7 @@ struct InsightsView: View {
         }
     }
 
-    private var conclusionDetail: String {
+    var conclusionDetail: String {
         switch weekTrainingCount {
         case 0: "最近 7 天还没有完整训练记录。"
         case 1 ... 2: "本周完成 \(weekTrainingCount) 次训练，继续保持规律即可。"
@@ -328,7 +770,7 @@ struct InsightsView: View {
         }
     }
 
-    private var conclusionStatus: AppStatusRole {
+    var conclusionStatus: AppStatusRole {
         switch weekTrainingCount {
         case 0: .neutral
         case 1 ... 2: .attention
@@ -336,31 +778,138 @@ struct InsightsView: View {
         }
     }
 
-    @ViewBuilder
-    private func recentActivityDestination(_ activity: ProgressRecentActivity) -> some View {
-        switch activity.kind {
-        case .workout:
-            if let workout = workouts.first(where: { $0.id == activity.id }) {
-                WorkoutRecordDetailView(workout: workout)
-            }
-        case .meal:
-            if let meal = meals.first(where: { $0.id == activity.id }) {
-                MealRecordDetailView(meal: meal)
-            }
-        case .body:
-            if let entry = bodyEntries.first(where: { $0.id == activity.id }) {
-                BodyRecordDetailView(entry: entry)
-            }
+    init(
+        input: InsightsSnapshotInput,
+        calendar: Calendar = .current,
+        now: Date = .now
+    ) {
+        let workouts = input.workouts.map(\.resolved)
+        let weekStart = calendar.date(byAdding: .day, value: -6, to: now)
+            ?? .distantPast
+        let completedSessions = input.workoutSessions.filter {
+            $0.status == .completed || $0.status == .abandoned
         }
-    }
-
-    private var successfulFootprintCount: Int {
-        let successful = ConversationTurnProjection.successfulTurnIDs(
-            in: messages
+        let trainingDates = workouts
+            .filter { $0.sourceWorkoutSessionID == nil }
+            .map(\.date) + completedSessions.map(\.startedAt)
+        trainingDayCounts = trainingDates.reduce(into: [Date: Int]()) { counts, date in
+            counts[calendar.startOfDay(for: date), default: 0] += 1
+        }
+        weekTrainingDays = Set(
+            trainingDayCounts.keys.filter { $0 >= calendar.startOfDay(for: weekStart) }
         )
-        return messages.count {
-            !$0.isFromCoach && $0.turnID.map(successful.contains) == true
+
+        let standaloneCount = workouts.count {
+            $0.sourceWorkoutSessionID == nil && $0.date >= weekStart
         }
+        let projectedSessionIDs = Set(workouts.compactMap { workout in
+            workout.date >= weekStart ? workout.sourceWorkoutSessionID : nil
+        })
+        let recentCompletedSessionIDs = Set(completedSessions.compactMap { session in
+            session.startedAt >= weekStart ? session.id : nil
+        })
+        weekTrainingCount = standaloneCount
+            + projectedSessionIDs.union(recentCompletedSessionIDs).count
+
+        var dailyVolumes = workouts.reduce(into: [Date: Double]()) { result, workout in
+            guard let volume = workout.volume, volume > 0 else { return }
+            result[calendar.startOfDay(for: workout.date), default: 0] += volume
+        }
+        let performancesByID = Dictionary(
+            uniqueKeysWithValues: input.exercisePerformances.map { ($0.id, $0) }
+        )
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: completedSessions.map { ($0.id, $0) }
+        )
+        let projectedPerformanceIDs = Set(workouts.compactMap(\.sourcePerformanceID))
+        for set in input.workoutSets where set.status == .completed {
+            guard let volume = set.completedVolume,
+                  volume > 0,
+                  let performance = performancesByID[set.performanceID],
+                  !projectedPerformanceIDs.contains(performance.id),
+                  !performance.workoutProjectionSuppressed,
+                  let session = sessionsByID[performance.sessionID]
+            else {
+                continue
+            }
+            dailyVolumes[
+                calendar.startOfDay(for: session.startedAt),
+                default: 0
+            ] += volume
+        }
+        volumePoints = dailyVolumes.map {
+            TrainingVolumePoint(date: $0.key, volume: $0.value)
+        }.sorted { $0.date < $1.date }
+        let recentVolume = volumePoints
+            .filter { $0.date >= weekStart }
+            .reduce(0) { $0 + $1.volume }
+        weekVolume = recentVolume > 0 ? recentVolume : nil
+
+        weightedBodyEntries = input.bodyEntries
+            .compactMap { entry in
+                entry.weight.map {
+                    WeightTrendPoint(id: entry.id, date: entry.date, weight: $0)
+                }
+            }
+            .sorted { $0.date < $1.date }
+        let weekWeights = weightedBodyEntries.filter { $0.date >= weekStart }
+        if weekWeights.count >= 2 {
+            weekWeightChange = (weekWeights.last?.weight ?? 0)
+                - (weekWeights.first?.weight ?? 0)
+        } else {
+            weekWeightChange = nil
+        }
+
+        let workoutActivities = workouts.map {
+            ProgressRecentActivity(
+                id: $0.id,
+                kind: .workout,
+                date: $0.date,
+                title: $0.exercise,
+                detail: $0.setSummary ?? "训练记录",
+                metric: $0.volume.map { "\($0.formatted()) kg" }
+            )
+        }
+        let mealActivities = input.meals.map {
+            ProgressRecentActivity(
+                id: $0.id,
+                kind: .meal,
+                date: $0.date,
+                title: $0.title,
+                detail: $0.mealType,
+                metric: $0.calories.map { "\($0) kcal" }
+            )
+        }
+        let bodyActivities = input.bodyEntries.map {
+            ProgressRecentActivity(
+                id: $0.id,
+                kind: .body,
+                date: $0.date,
+                title: "身体记录",
+                detail: $0.notes.isEmpty ? "身体变化" : $0.notes,
+                metric: $0.weight.map { "\($0.formatted()) kg" }
+            )
+        }
+        recentActivities = Array(
+            (workoutActivities + mealActivities + bodyActivities)
+                .sorted { $0.date > $1.date }
+                .prefix(30)
+        )
+
+        latestWorkout = workouts.first?.exercise
+        latestMeal = input.meals.first?.title
+        latestWeight = weightedBodyEntries.last?.weight
+
+        let currentGym = input.gyms.first(where: \.isCurrent) ?? input.gyms.first
+        currentGymName = currentGym?.name ?? "尚未建立"
+        currentGymCoverImagePath = currentGym?.coverImagePath
+        currentGymNote = currentGym?.notes
+        currentEquipmentCount = input.currentEquipmentCount
+        successfulFootprintCount = input.successfulFootprintCount
+        activeExerciseCount = input.activeExerciseCount
+
+        let format = Date.FormatStyle(date: .abbreviated, time: .omitted)
+        dateRangeText = "\(weekStart.formatted(format))—\(now.formatted(format))"
     }
 }
 
@@ -369,7 +918,7 @@ private struct ProgressTrainingOverviewCard: View {
     let volume: Double?
     let weightChange: Double?
     let trainingDays: Set<Date>
-    let trainingDates: [Date]
+    let trainingDayCounts: [Date: Int]
     let volumePoints: [TrainingVolumePoint]
     @State private var selection = ProgressTrainingOverviewTab.recentWeek
 
@@ -394,7 +943,7 @@ private struct ProgressTrainingOverviewCard: View {
                     )
                 case .continuity:
                     ContributionCard(
-                        trainingDates: trainingDates,
+                        trainingDayCounts: trainingDayCounts,
                         embedded: true
                     )
                 case .volume:
@@ -509,7 +1058,7 @@ private struct RecordIndexRow: View {
 }
 
 private struct ContributionCard: View {
-    let trainingDates: [Date]
+    let trainingDayCounts: [Date: Int]
     var embedded = false
 
     var body: some View {
@@ -598,9 +1147,7 @@ private struct ContributionCard: View {
 
     private func contributionCell(for day: Date) -> some View {
         let isFuture = day > Calendar.current.startOfDay(for: .now)
-        let count = trainingDates.count {
-            Calendar.current.isDate($0, inSameDayAs: day)
-        }
+        let count = trainingDayCounts[Calendar.current.startOfDay(for: day), default: 0]
 
         return RoundedRectangle(cornerRadius: 3)
             .fill(isFuture ? Color.clear : color(for: count))
@@ -674,7 +1221,7 @@ private enum TrendRange: Int, CaseIterable, Identifiable {
 }
 
 private struct WeightTrendCard: View {
-    let entries: [BodyEntry]
+    let entries: [WeightTrendPoint]
     @State private var range: TrendRange = .month
     @State private var scrollStart = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
 
@@ -683,15 +1230,19 @@ private struct WeightTrendCard: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let weights = entries.compactMap(\.weight)
-        let lower = (weights.min() ?? 0) - 1.5
-        let upper = (weights.max() ?? 100) + 1.5
-        return lower ... upper
+        guard let first = entries.first else { return -1.5 ... 101.5 }
+        var minimum = first.weight
+        var maximum = first.weight
+        for entry in entries.dropFirst() {
+            minimum = min(minimum, entry.weight)
+            maximum = max(maximum, entry.weight)
+        }
+        return (minimum - 1.5) ... (maximum + 1.5)
     }
 
     private var xDomain: ClosedRange<Date> {
         let ninetyDaysAgo = Calendar.current.date(byAdding: .day, value: -90, to: .now) ?? .now
-        let firstEntry = entries.first(where: { $0.weight != nil })?.date ?? .now
+        let firstEntry = entries.first?.date ?? .now
         return min(ninetyDaysAgo, firstEntry) ... Date.now
     }
 
@@ -712,26 +1263,24 @@ private struct WeightTrendCard: View {
                         .foregroundStyle(.secondary)
 
                     Chart(entries) { entry in
-                        if let weight = entry.weight {
-                            LineMark(
-                                x: .value("日期", entry.date),
-                                y: .value("体重", weight)
+                        LineMark(
+                            x: .value("日期", entry.date),
+                            y: .value("体重", entry.weight)
+                        )
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(
+                            StrokeStyle(
+                                lineWidth: 2.25,
+                                lineCap: .round,
+                                lineJoin: .round
                             )
-                            .interpolationMethod(.catmullRom)
-                            .lineStyle(
-                                StrokeStyle(
-                                    lineWidth: 2.25,
-                                    lineCap: .round,
-                                    lineJoin: .round
-                                )
-                            )
-                            .foregroundStyle(AppMetricRole.body.accent)
-                            PointMark(
-                                x: .value("日期", entry.date),
-                                y: .value("体重", weight)
-                            )
-                            .foregroundStyle(AppMetricRole.body.accent)
-                        }
+                        )
+                        .foregroundStyle(AppMetricRole.body.accent)
+                        PointMark(
+                            x: .value("日期", entry.date),
+                            y: .value("体重", entry.weight)
+                        )
+                        .foregroundStyle(AppMetricRole.body.accent)
                     }
                     .chartScrollableAxes(.horizontal)
                     .chartXScale(domain: xDomain)
@@ -772,7 +1321,7 @@ private struct WeightTrendCard: View {
     }
 }
 
-struct TrainingVolumePoint: Identifiable, Equatable {
+struct TrainingVolumePoint: Identifiable, Equatable, Sendable {
     let date: Date
     let volume: Double
 
@@ -842,9 +1391,11 @@ enum TrainingVolumeAnalytics {
         in interval: Range<Date>,
         points: [TrainingVolumePoint]
     ) -> Double {
-        points
-            .filter { interval.contains($0.date) }
-            .reduce(0) { $0 + $1.volume }
+        var total = 0.0
+        for point in points where interval.contains(point.date) {
+            total += point.volume
+        }
+        return total
     }
 
     static func formatted(_ volume: Double) -> String {
@@ -868,33 +1419,32 @@ private struct TrainingVolumeTrendCard: View {
         scrollStart.addingTimeInterval(range.duration)
     }
 
-    private var currentTotal: Double {
-        TrainingVolumeAnalytics.total(
-            in: scrollStart ..< visibleEnd,
-            points: points
-        )
-    }
-
     private var previousStart: Date {
         scrollStart.addingTimeInterval(-range.duration)
     }
 
-    private var previousTotal: Double {
-        TrainingVolumeAnalytics.total(
-            in: previousStart ..< scrollStart,
-            points: points
-        )
-    }
-
-    private var changePercent: Double? {
-        guard
-            let firstPoint = points.first,
-            firstPoint.date <= previousStart,
-            previousTotal > 0
-        else {
-            return nil
+    private var periodSummary: (currentTotal: Double, changePercent: Double?) {
+        var currentTotal = 0.0
+        var previousTotal = 0.0
+        let currentEnd = visibleEnd
+        let previousWindowStart = previousStart
+        for point in points {
+            if point.date >= scrollStart, point.date < currentEnd {
+                currentTotal += point.volume
+            } else if point.date >= previousWindowStart, point.date < scrollStart {
+                previousTotal += point.volume
+            }
         }
-        return (currentTotal - previousTotal) / previousTotal * 100
+        guard let firstPoint = points.first,
+              firstPoint.date <= previousWindowStart,
+              previousTotal > 0
+        else {
+            return (currentTotal, nil)
+        }
+        return (
+            currentTotal,
+            (currentTotal - previousTotal) / previousTotal * 100
+        )
     }
 
     private var xDomain: ClosedRange<Date> {
@@ -904,7 +1454,11 @@ private struct TrainingVolumeTrendCard: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let upper = max(points.map(\.volume).max() ?? 1, 1) * 1.15
+        var maximum = 1.0
+        for point in points {
+            maximum = max(maximum, point.volume)
+        }
+        let upper = maximum * 1.15
         return 0 ... upper
     }
 
@@ -920,7 +1474,8 @@ private struct TrainingVolumeTrendCard: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let summary = periodSummary
+        return VStack(alignment: .leading, spacing: 12) {
             Picker("时间粒度", selection: $range) {
                 ForEach(TrendRange.allCases) { option in
                     Text(option.label).tag(option)
@@ -941,13 +1496,13 @@ private struct TrainingVolumeTrendCard: View {
                         Text("本期总容量")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text("\(TrainingVolumeAnalytics.formatted(currentTotal)) kg")
+                        Text("\(TrainingVolumeAnalytics.formatted(summary.currentTotal)) kg")
                             .font(.title3.bold().monospacedDigit())
                     }
 
                     Spacer()
 
-                    if let changePercent {
+                    if let changePercent = summary.changePercent {
                         Label(
                             String(format: "%+.0f%% 较上期", changePercent),
                             systemImage: changePercent >= 0

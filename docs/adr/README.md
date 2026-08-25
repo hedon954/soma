@@ -70,7 +70,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0064](0064-deterministic-quick-write-and-latest-inline-review.md) | 部分已替代 | 未修改 typed 快捷训练直写本地，最新 AI 回复提供原位记录 CRUD 与修订上下文；原位卡与 Event Cards 共存、保存确认由 0077 修订，饮食整餐字段编辑由 0084 替代 |
 | [0065](0065-intent-scoped-tools-and-prefix-stable-prompts.md) | 部分已替代 | 明确副作用意图和原生协议保留；Prompt v2 与 Skill 最小工具集由 0069 修订；按意图预选 Tool 由 0081 替代 |
 | [0066](0066-bundled-action-illustration-coverage.md) | 已采纳 | 静默内置目录至少维持一百个 common action 专属离线图 |
-| [0067](0067-separate-business-time-and-active-loop-budget.md) | 部分已替代 | 活动执行预算保持；记录发生时间由 0072 从 Loop 时间拆分 |
+| [0067](0067-separate-business-time-and-active-loop-budget.md) | 部分已替代 | 活动执行预算保持；记录发生时间由 0072 拆分，固定预算由 0098 改为可配置 |
 | [0068](0068-versioned-unified-agent-model-input.md) | 部分已替代 | 设备生成统一输入保持；Prompt、Skill 与 Tool v3 由 0069 升级 |
 | [0069](0069-layered-agent-prompt-skill-middleware-and-typed-tools.md) | 部分已替代 | 分层 Prompt、动态 Skill Middleware 与按领域强类型 Tool；批量 create 与本机分配记录 ID 由 0078 修订；未选 Skill 剪枝由 0081 替代；Skill 绑定工具白名单由 0082 替代 |
 | [0070](0070-reviewable-rolling-session-compaction.md) | 已采纳 | 十轮外对话在 Loop 前形成可追溯、可回退的替代式滚动摘要 |
@@ -78,7 +78,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0072](0072-session-business-date-and-record-occurrence-time.md) | 已采纳 | Session 业务日与记录发生时间分离，Tool 可显式覆盖 occurred_at |
 | [0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) | 部分已替代 | 独立逻辑组、Effort 归属与自动收口保留；相机 activation 由 0074 细化，历史 VersionedSchema 链由 0075 替代，侧别/完成方式改由 0076 归动作定义，业务版本字段由 0090 删除 |
 | [0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) | 已采纳，实施与真机验收中 | 相机完整 activation 有界、camera-ready preflight、部分录像证据和系统中断恢复 |
-| [0075](0075-current-swiftdata-schema-without-historical-versions.md) | 已采纳 | 只打开当前 SomaDataSchema，不维护历史 VersionedSchema 链；启动门禁继续做业务回填 |
+| [0075](0075-current-swiftdata-schema-without-historical-versions.md) | 部分已替代 | 只打开当前 SomaDataSchema，不维护历史 VersionedSchema 链；当前 marker 命中后的整表回填边界由 0097 修订 |
 | [0076](0076-exercise-owned-laterality-and-target-kind.md) | 已采纳 | 侧别与按次数/按时长归 `ExerciseDefinition`；组与记录只编辑动作定义下有意义的参数 |
 | [0077](0077-same-turn-identity-merge-and-additive-inline-review.md) | 部分已替代 | 原位审查卡不得替换 Event Cards，保存需可见确认；同一 Turn 按身份合并由 0079 删除，一条饮食记录只投影一张卡由 0084 替代，卡片位置由 0085 替代 |
 | [0078](0078-batch-create-exercise-and-workout.md) | 部分已替代 | `create_exercise` / `create_workout` 一次写入多条；新建训练记录 ID 由本机分配；整批重试身份合并由 0079 删除 |
@@ -100,6 +100,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0094](0094-user-first-versioned-bundled-action-art.md) | 已采纳 | 动作图使用用户图优先、新版内置图次之；专属离线图不少于 239 |
 | [0095](0095-metrickit-confirmed-crash-reports.md) | 已采纳，个人使用阶段 | 只有 MetricKit 明确崩溃证据可生成报告；启动哨兵只保留上下文 |
 | [0096](0096-source-backed-model-multimodal-capabilities.md) | 已采纳 | 多模态与直传视频能力必须有明确来源；缺少来源时为未知，禁止按模型名硬编码 |
+| [0097](0097-current-baseline-performance-budget-and-cache-invalidation.md) | 已采纳，Release 真机量化验收中 | 固定当前安装基线、120 Hz 性能预算、分页/后台聚合与图片媒体缓存失效规则 |
+| [0098](0098-user-configurable-react-active-runtime-timeout.md) | 已采纳，待真机界面验收 | ReAct 自动 3/5/10 分钟或自定义 3–60 分钟活动执行预算，与步骤上限同区配置 |
 
 新决策使用 [ADR 模板](template.md)。
 

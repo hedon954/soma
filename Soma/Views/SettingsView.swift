@@ -10,22 +10,6 @@ struct SettingsView: View {
     private var voiceCuesEnabled = true
     @AppStorage(AppAppearancePreference.defaultsKey)
     private var appearanceRaw = AppAppearancePreference.system.rawValue
-    @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
-
-    @State private var modelTier: AIModelTier = .standard
-    @State private var smallModelEnabled = false
-    @State private var provider: AIProvider = .openAI
-    @State private var baseURL = ""
-    @State private var model = ""
-    @State private var imageModel = ""
-    @State private var apiKey = ""
-    @State private var models: [AIModelInfo] = []
-    @State private var isLoadingModels = false
-    @State private var modelError: String?
-    @State private var keySaved = false
-    @State private var showKey = false
-    @State private var didLoadConfiguration = false
-    @FocusState private var modelFieldFocused: Bool
     @State private var path: [SettingsRoute]
     private let showsAIConfigurationReminder: Bool
     private let isEmbeddedInTab: Bool
@@ -38,19 +22,6 @@ struct SettingsView: View {
         _path = State(initialValue: initialRoute.map { [$0] } ?? [])
         self.showsAIConfigurationReminder = showsAIConfigurationReminder
         self.isEmbeddedInTab = isEmbeddedInTab
-    }
-
-    private var selectedCapabilityAssessment: MultimodalCapabilityAssessment {
-        models.first(where: { $0.id == model })?.multimodalAssessment
-            ?? ai.modelMultimodalAssessment(
-                provider: provider,
-                baseURL: baseURL,
-                model: model
-            )
-    }
-
-    private var selectedCapability: MultimodalSupport {
-        selectedCapabilityAssessment.support
     }
 
     private var locationEnabledBinding: Binding<Bool> {
@@ -86,38 +57,20 @@ struct SettingsView: View {
                 if !isEmbeddedInTab {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("完成") {
-                            persistConfiguration()
                             dismiss()
                         }
                     }
                 }
             }
-            .onChange(of: smallModelEnabled) {
-                ai.setTierEnabled(smallModelEnabled, tier: .small)
-            }
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
                 case .llm:
-                    Form {
-                        if showsAIConfigurationReminder {
-                            AIConfigurationReminder()
-                        }
-                        llmSections
-                    }
-                    .navigationTitle("LLM 配置")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .onDisappear {
-                        ai.notifyConfigurationChanged()
-                    }
+                    LLMConfigurationView(
+                        showsAIConfigurationReminder: showsAIConfigurationReminder
+                    )
                 }
             }
-            .task(id: "\(modelTier.rawValue).\(provider.rawValue)") {
-                guard !apiKey.isEmpty else { return }
-                await refreshModels()
-            }
         }
-        // 初始路由直接进入 LLM 子页时，根 Form 不会出现；加载必须挂在容器上。
-        .onAppear(perform: loadInitialConfiguration)
     }
 
     private func settingsSection(_ section: SettingsHomeSection) -> some View {
@@ -164,9 +117,7 @@ struct SettingsView: View {
                 SettingsSummaryRow(
                     item: .llm,
                     title: "LLM 配置",
-                    detail: ai.hasRequiredAPIKey
-                        ? "\(ai.provider.displayName) · \(ai.model(for: ai.provider).isEmpty ? "未填写模型" : ai.model(for: ai.provider))"
-                        : "需要配置 API Key"
+                    detail: "\(ai.provider.displayName) · \(ai.model(for: ai.provider))"
                 )
             }
 
@@ -219,15 +170,7 @@ struct SettingsView: View {
             NavigationLink {
                 DeveloperSettingsView()
             } label: {
-                HStack {
-                    SettingsHomeRowLabel(item: .advanced, title: "高级设置")
-                    Spacer()
-                    if !agentTraces.isEmpty {
-                        Text("\(agentTraces.count) 条日志")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                SettingsHomeRowLabel(item: .advanced, title: "高级设置")
             }
         } header: {
             settingsHomeSectionHeader("更多")
@@ -268,7 +211,7 @@ struct SettingsView: View {
 
     private var feedbackSection: some View {
         Section {
-            FeedbackView(isEmbedded: true)
+            DeferredSettingsFeedbackView()
                 .listRowInsets(
                     EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0)
                 )
@@ -298,210 +241,6 @@ struct SettingsView: View {
         }
     }
 
-    /// ADR 0046：配置页不折叠配置本身。两档在顶部分段切换，
-    /// 平台、Base URL、API Key 与模型同屏可见可改，改动即时落盘。
-    @ViewBuilder
-    private var llmSections: some View {
-        Section {
-            Picker("模型档位", selection: modelTierBinding) {
-                ForEach(AIModelTier.allCases) { tier in
-                    Text(tier.title).tag(tier)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-        } footer: {
-            Text(
-                modelTier == .standard
-                    ? "标准模型负责所有含媒体、含业务写入和复杂纠错的任务，是聊天的能力下限。"
-                    : "小模型可不配置。配置并启用后，Agent 只把短文本、无媒体且无业务写入意图的简单任务交给它。"
-            )
-        }
-
-        Section {
-            Picker("平台", selection: providerBinding) {
-                ForEach(AIProvider.allCases) { option in
-                    Text(option.displayName).tag(option)
-                }
-            }
-
-            TextField("Base URL", text: $baseURL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .onChange(of: baseURL) { persistConfiguration() }
-
-            HStack {
-                Group {
-                    if showKey {
-                        TextField("API Key", text: $apiKey)
-                    } else {
-                        SecureField("API Key", text: $apiKey)
-                    }
-                }
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-                Button {
-                    showKey.toggle()
-                } label: {
-                    Image(systemName: showKey ? "eye.slash" : "eye")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(showKey ? "隐藏 API Key" : "显示 API Key")
-            }
-
-            Button {
-                saveKeyAndRefresh()
-            } label: {
-                if isLoadingModels {
-                    HStack {
-                        ProgressView()
-                        Text("正在获取模型…")
-                    }
-                } else {
-                    Text(keySaved ? "保存并重新获取模型" : "保存并获取模型")
-                }
-            }
-            .disabled(
-                apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || isLoadingModels
-            )
-        } header: {
-            Text("平台与凭据")
-        } footer: {
-            Text("Base URL 会按所选平台预填，可以改成自建或代理地址。API Key 只保存在本机 Keychain。")
-        }
-
-        modelSection
-
-        if modelTier == .standard {
-            Section {
-                TextField("例如 gpt-image-2", text: $imageModel)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onChange(of: imageModel) { persistConfiguration() }
-            } header: {
-                Text("图片生成模型")
-            } footer: {
-                Text("留空表示不启用。动作图片只在动作详情主动点击生成时请求。")
-            }
-        } else {
-            Section {
-                Toggle("启用小模型", isOn: $smallModelEnabled)
-                    .appToggleStyle()
-            } footer: {
-                Text("关闭时所有任务都走标准模型，这里的配置会被保留。")
-            }
-        }
-    }
-
-    /// ADR 0046：模型是纯输入框，`/models` 结果只作为输入历史式建议。
-    private var modelSection: some View {
-        Section {
-            TextField("输入模型 ID", text: $model)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($modelFieldFocused)
-                .onChange(of: model) { persistConfiguration() }
-
-            if showsModelSuggestions {
-                InputSuggestionList(
-                    items: modelSuggestions,
-                    selectionHint: "填入模型输入框",
-                    scrollAfter: 5
-                ) { item in
-                    model = item.id
-                    modelFieldFocused = false
-                }
-                .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 8, trailing: 16))
-                .listRowBackground(Color.clear)
-            }
-
-            if isLoadingModels {
-                LabeledContent("可用模型") {
-                    ProgressView().controlSize(.small)
-                }
-            }
-
-            if !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                capabilityRow
-            }
-
-            if let modelError {
-                Label(modelError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.warning)
-            }
-        } header: {
-            Text("模型")
-        } footer: {
-            Text(modelFooterText)
-        }
-    }
-
-    private var modelFooterText: String {
-        if models.isEmpty {
-            return "可以直接输入平台的模型 ID。保存 API Key 后 Soma 会尝试拉取 /models，成功时在输入框下方给出候选。"
-        }
-        return "点选候选或直接输入都可以，输入的值会立即保存，重新拉取候选不会覆盖它。"
-    }
-
-    private var showsModelSuggestions: Bool {
-        modelFieldFocused && !modelSuggestions.isEmpty
-    }
-
-    /// 候选行只给模型 ID：能力标注在选定之后由下方那一行说明，不在每行重复。
-    private var modelSuggestions: [InputSuggestionItem] {
-        let query = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matched = query.isEmpty
-            ? models
-            : models.filter { $0.id.localizedCaseInsensitiveContains(query) }
-        if matched.count == 1, matched[0].id == query {
-            return []
-        }
-        return matched.map { option in
-            InputSuggestionItem(id: option.id, title: option.id, icon: "cpu")
-        }
-    }
-
-    /// 模型名不是能力证据；能力结论和实际来源一起显示。
-    private var capabilityRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: capabilityIcon)
-                .foregroundStyle(capabilityColor)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(selectedCapability.label)
-                    .font(.footnote)
-                    .foregroundStyle(
-                        selectedCapability == .unsupported
-                            ? AppTheme.warning
-                            : .secondary
-                    )
-                Text(selectedCapabilityAssessment.sourceLabel)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var capabilityIcon: String {
-        switch selectedCapability {
-        case .supported: "photo.badge.checkmark"
-        case .unsupported: "photo.badge.exclamationmark"
-        case .unknown: "questionmark.circle"
-        }
-    }
-
-    private var capabilityColor: Color {
-        switch selectedCapability {
-        case .supported: AppTheme.success
-        case .unsupported: AppTheme.warning
-        case .unknown: .secondary
-        }
-    }
-
     private var safetySection: some View {
         Section("动作安全") {
             Label("AI 反馈用于训练记录和一般性建议，不能替代医生、物理治疗师或现场教练。", systemImage: "cross.case")
@@ -510,129 +249,27 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
     }
+}
 
-    /// 只在首次出现时载入。返回上一层会再次触发 `onAppear`，重新载入会覆盖
-    /// 子页刚改过的值——这正是「选了模型但没保存」缺陷的成因（ADR 0046）。
-    private func loadInitialConfiguration() {
-        locationPreferenceRaw = ConversationLocationPreference.current().rawValue
-        guard !didLoadConfiguration else { return }
-        didLoadConfiguration = true
-        smallModelEnabled = ai.isTierEnabled(.small)
-        loadTierConfiguration(.standard)
-    }
+/// Form 会为屏外 Section 提前求值 View body。反馈编辑器包含媒体选择、评分和
+/// 投递状态，只需在设置页已经提交选中外观后再挂载；一次加载后由 Tab 栈保留。
+private struct DeferredSettingsFeedbackView: View {
+    @State private var didLoad = false
 
-    private var modelTierBinding: Binding<AIModelTier> {
-        Binding(
-            get: { modelTier },
-            set: { newTier in
-                guard newTier != modelTier else { return }
-                modelFieldFocused = false
-                modelTier = newTier
-                loadTierConfiguration(newTier)
-            }
-        )
-    }
-
-    private var providerBinding: Binding<AIProvider> {
-        Binding(
-            get: { provider },
-            set: { newProvider in
-                guard newProvider != provider else { return }
-                modelFieldFocused = false
-                provider = newProvider
-                loadProviderConfiguration()
-            }
-        )
-    }
-
-    private func loadTierConfiguration(_ tier: AIModelTier) {
-        applyConfigurationDraft(
-            SettingsLLMConfigurationDraft.load(from: ai, tier: tier)
-        )
-    }
-
-    private func loadProviderConfiguration() {
-        applyConfigurationDraft(
-            SettingsLLMConfigurationDraft.load(
-                from: ai,
-                tier: modelTier,
-                provider: provider
-            )
-        )
-    }
-
-    private func applyConfigurationDraft(_ draft: SettingsLLMConfigurationDraft) {
-        provider = draft.provider
-        baseURL = draft.baseURL
-        model = draft.model
-        imageModel = draft.imageModel
-        apiKey = draft.apiKey
-        models = []
-        modelError = nil
-        keySaved = !apiKey.isEmpty
-    }
-
-    private func persistConfiguration(
-        tier: AIModelTier? = nil,
-        provider configuredProvider: AIProvider? = nil
-    ) {
-        ai.configure(
-            tier: tier ?? modelTier,
-            provider: configuredProvider ?? provider,
-            baseURL: baseURL,
-            model: model
-        )
-        if (tier ?? modelTier) == .standard {
-            ai.configureImageModel(
-                imageModel,
-                for: configuredProvider ?? provider
-            )
-        }
-    }
-
-    private func saveKeyAndRefresh() {
-        persistConfiguration()
-        ai.saveAPIKey(apiKey, for: provider, tier: modelTier)
-        keySaved = true
-        Task { await refreshModels() }
-    }
-
-    @MainActor
-    private func refreshModels() async {
-        let requestedProvider = provider
-        let requestedBaseURL = baseURL
-        let requestedAPIKey = apiKey
-        isLoadingModels = true
-        modelError = nil
-        defer {
-            if provider == requestedProvider {
-                isLoadingModels = false
+    var body: some View {
+        Group {
+            if didLoad {
+                FeedbackView(isEmbedded: true)
+            } else {
+                Color.clear
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
             }
         }
-
-        do {
-            let fetched = try await ai.fetchAvailableModels(
-                provider: requestedProvider,
-                baseURL: requestedBaseURL,
-                apiKey: requestedAPIKey
-            )
-            try Task.checkCancellation()
-            guard provider == requestedProvider else { return }
-            models = fetched
-            // ADR 0046：刷新候选不覆盖已填写的模型，只在为空时补一个默认值。
-            guard model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  let suggested = fetched.first(where: {
-                      $0.multimodalSupport == .supported
-                  }) ?? fetched.first
-            else {
-                return
-            }
-            model = suggested.id
-            persistConfiguration()
-        } catch {
-            guard !Task.isCancelled, provider == requestedProvider else { return }
-            models = []
-            modelError = error.localizedDescription
+        .task {
+            guard !didLoad else { return }
+            await Task.yield()
+            didLoad = true
         }
     }
 }
@@ -834,8 +471,12 @@ private struct HealthDataIntegrationsView: View {
 
 struct PersonalBodyInfoView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \UserProfile.updatedAt, order: .reverse) private var profiles: [UserProfile]
-    @Query(sort: \BodyEntry.date, order: .reverse) private var bodyEntries: [BodyEntry]
+    @Query private var profiles: [UserProfile]
+    @Query(
+        filter: #Predicate<BodyEntry> { $0.imagePath != nil },
+        sort: \BodyEntry.date,
+        order: .reverse
+    ) private var bodyEntries: [BodyEntry]
 
     @State private var displayName = ""
     @State private var biologicalSex: BiologicalSex = .unspecified
@@ -852,6 +493,20 @@ struct PersonalBodyInfoView: View {
     @State private var loadedProfileID: UUID?
     @State private var moreBasicsExpanded = false
     @State private var contextExpanded = false
+
+    init() {
+        var descriptor = FetchDescriptor<UserProfile>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        _profiles = Query(descriptor)
+        var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.imagePath != nil },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        bodyDescriptor.fetchLimit = 500
+        _bodyEntries = Query(bodyDescriptor)
+    }
 
     private var profile: UserProfile? {
         loadedProfileID.flatMap { id in profiles.first(where: { $0.id == id }) }
@@ -1140,7 +795,6 @@ private struct ProfileFieldRow: View {
 
 private struct DeveloperSettingsView: View {
     @Environment(DataSpaceController.self) private var dataSpace
-    @Query(sort: \AgentTrace.startedAt, order: .reverse) private var agentTraces: [AgentTrace]
     @State private var customizedSections = Set<ReActPromptSection>()
     @State private var customizedSkillCount = 0
     @State private var visibleShortcutCount = 0
@@ -1152,12 +806,7 @@ private struct DeveloperSettingsView: View {
                 NavigationLink {
                     AgentExecutionLogView()
                 } label: {
-                    HStack {
-                        Label("执行日志", systemImage: "point.3.connected.trianglepath.dotted")
-                        Spacer()
-                        Text("\(agentTraces.count)")
-                            .foregroundStyle(.secondary)
-                    }
+                    Label("执行日志", systemImage: "point.3.connected.trianglepath.dotted")
                 }
                 NavigationLink {
                     DiagnosticReportSettingsView()
@@ -1278,10 +927,8 @@ private struct DeveloperSettingsView: View {
         }
         .navigationTitle("高级设置")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            customizedSections = Set(ReActPromptSection.userEditableCases.filter { $0.isCustomized() })
-            customizedSkillCount = AgentSkill.allCases.count { $0.isCustomized() }
-            visibleShortcutCount = AgentInputShortcutStore.visibleShortcuts().count
+        .task {
+            await refreshSummaryAfterTransition()
         }
         .alert("恢复全部默认提示词？", isPresented: $confirmsResetAllPrompts) {
             Button("恢复默认", role: .destructive) {
@@ -1292,6 +939,27 @@ private struct DeveloperSettingsView: View {
         } message: {
             Text("你保存的教练人格自定义内容会被移除；固定契约不会改变。")
         }
+    }
+
+    @MainActor
+    private func refreshSummaryAfterTransition() async {
+        await Task.yield()
+        let summary = await Task.detached(priority: .userInitiated) {
+            let sectionIDs = ReActPromptSection.userEditableCases
+                .filter { $0.isCustomized() }
+                .map(\.rawValue)
+            let skillCount = AgentSkill.allCases.count { $0.isCustomized() }
+            let shortcutCount = AgentInputShortcutStore.visibleShortcuts().count
+            return (sectionIDs, skillCount, shortcutCount)
+        }.value
+        guard !Task.isCancelled else { return }
+        customizedSections = Set(
+            ReActPromptSection.userEditableCases.filter {
+                summary.0.contains($0.rawValue)
+            }
+        )
+        customizedSkillCount = summary.1
+        visibleShortcutCount = summary.2
     }
 }
 
@@ -1482,19 +1150,63 @@ private enum AgentTraceFilter: String, CaseIterable, Identifiable {
 }
 
 private struct AgentExecutionLogView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \AgentTrace.startedAt, order: .reverse) private var traces: [AgentTrace]
+    @State private var limit = 30
     @State private var filter: AgentTraceFilter = .all
 
-    private var filteredTraces: [AgentTrace] {
-        switch filter {
+    var body: some View {
+        AgentExecutionLogPage(
+            filter: $filter,
+            limit: limit,
+            onLoadMore: { limit += 30 }
+        )
+        .onChange(of: filter) { _, _ in limit = 30 }
+    }
+}
+
+private struct AgentExecutionLogPage: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query private var loadedTraces: [AgentTrace]
+    @Binding var filter: AgentTraceFilter
+    let limit: Int
+    let onLoadMore: () -> Void
+
+    init(
+        filter: Binding<AgentTraceFilter>,
+        limit: Int,
+        onLoadMore: @escaping () -> Void
+    ) {
+        let baseDescriptor: FetchDescriptor<AgentTrace> = switch filter.wrappedValue {
         case .all:
-            traces
+            FetchDescriptor(
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
         case .succeeded:
-            traces.filter { $0.status == .succeeded }
+            FetchDescriptor(
+                predicate: #Predicate { $0.statusRaw == "succeeded" },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
         case .failed:
-            traces.filter { [.failed, .cancelled].contains($0.status) }
+            FetchDescriptor(
+                predicate: #Predicate {
+                    $0.statusRaw == "failed" || $0.statusRaw == "cancelled"
+                },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
         }
+        var descriptor = baseDescriptor
+        descriptor.fetchLimit = limit + 1
+        _loadedTraces = Query(descriptor)
+        _filter = filter
+        self.limit = limit
+        self.onLoadMore = onLoadMore
+    }
+
+    private var traces: [AgentTrace] {
+        Array(loadedTraces.prefix(limit))
+    }
+
+    private var hasMore: Bool {
+        loadedTraces.count > limit
     }
 
     var body: some View {
@@ -1509,7 +1221,7 @@ private struct AgentExecutionLogView: View {
                 .listRowBackground(Color.clear)
             }
 
-            if filteredTraces.isEmpty {
+            if traces.isEmpty {
                 ContentUnavailableView(
                     filter == .all ? "暂无执行日志" : "没有\(filter.rawValue)日志",
                     systemImage: "point.3.connected.trianglepath.dotted",
@@ -1519,7 +1231,7 @@ private struct AgentExecutionLogView: View {
                 .listRowSeparator(.hidden)
             } else {
                 Section {
-                    ForEach(filteredTraces) { trace in
+                    ForEach(traces) { trace in
                         NavigationLink {
                             AgentTraceDetailView(trace: trace)
                         } label: {
@@ -1535,6 +1247,11 @@ private struct AgentExecutionLogView: View {
                             .accessibilityLabel("删除执行日志")
                             .tint(.red)
                         }
+                    }
+                    if hasMore {
+                        Button("加载更多", action: onLoadMore)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityHint("每次再加载 30 条执行日志")
                     }
                 } footer: {
                     Text("Trace 只保存在当前数据空间。日志不包含 API Key、Authorization 头或图片 Base64。")
@@ -1809,19 +1526,5 @@ private struct AgentTraceDetailView: View {
 
     private func timelineOrdinal(for span: AgentTraceSpan) -> Int {
         timelineEntries.first(where: { $0.id == span.id })?.ordinal ?? 1
-    }
-}
-
-struct AgentTraceTimelineEntry: Identifiable {
-    let span: AgentTraceSpan
-    let ordinal: Int
-    let traceStartedAt: Date
-
-    var id: UUID {
-        span.id
-    }
-
-    var relativeMilliseconds: Double {
-        max(0, span.endedAt.timeIntervalSince(traceStartedAt) * 1000)
     }
 }

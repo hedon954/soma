@@ -14,30 +14,42 @@ enum AgentCrossTurnFactSummary {
             var date: Date
             var line: String
         }
-        let workouts = ((try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? [])
-            .filter {
+        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate {
                 $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
-            }
+            },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = limit
+        let workouts = ((try? context.fetch(workoutDescriptor)) ?? [])
             .map {
                 Fact(
                     date: $0.date,
                     line: "- write workout id=\($0.id.uuidString.lowercased()) title=\($0.exercise) time=\($0.date.ISO8601Format())"
                 )
             }
-        let meals = ((try? context.fetch(FetchDescriptor<MealEntry>())) ?? [])
-            .filter {
+        var mealDescriptor = FetchDescriptor<MealEntry>(
+            predicate: #Predicate {
                 $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
-            }
+            },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        mealDescriptor.fetchLimit = limit
+        let meals = ((try? context.fetch(mealDescriptor)) ?? [])
             .map {
                 Fact(
                     date: $0.date,
                     line: "- write meal id=\($0.id.uuidString.lowercased()) title=\($0.title) time=\($0.date.ISO8601Format())"
                 )
             }
-        let bodies = ((try? context.fetch(FetchDescriptor<BodyEntry>())) ?? [])
-            .filter {
+        var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate {
                 $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
-            }
+            },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        bodyDescriptor.fetchLimit = limit
+        let bodies = ((try? context.fetch(bodyDescriptor)) ?? [])
             .map {
                 Fact(
                     date: $0.date,
@@ -64,14 +76,24 @@ enum AgentCrossTurnFactSummary {
         let userTurns = sessionMessages.filter { !$0.isFromCoach && $0.turnID != excludingTurnID }
         guard userTurns.count > keepingLatest else { return nil }
         let older = userTurns.dropLast(keepingLatest).suffix(8)
+        let recordHintsByTurnID = sessionMessages.reduce(
+            into: [UUID: [CoachMessage]]()
+        ) { result, message in
+            guard message.isFromCoach,
+                  message.agentStatus == .succeeded,
+                  let turnID = message.turnID
+            else { return }
+            result[turnID, default: []].append(message)
+        }
         let lines = older.map { message -> String in
             let keywords = keywordDigest(message.text)
-            let recordHints = sessionMessages
-                .filter { $0.isFromCoach && $0.turnID == message.turnID && $0.agentStatus == .succeeded }
+            let recordHints = message.turnID.flatMap { recordHintsByTurnID[$0] }
+                ?? []
+            let recordTypes = recordHints
                 .compactMap(\.recordType?.rawValue)
-            let records = recordHints.isEmpty
+            let records = recordTypes.isEmpty
                 ? ""
-                : "；落库 \(recordHints.joined(separator: "/"))"
+                : "；落库 \(recordTypes.joined(separator: "/"))"
             return "- \(keywords)\(records)"
         }
         guard !lines.isEmpty else { return nil }

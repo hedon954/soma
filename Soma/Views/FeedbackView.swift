@@ -393,12 +393,8 @@ private struct FeedbackAttachmentPreview: View {
 
     @ViewBuilder
     private func preview(for attachment: PendingAttachment) -> some View {
-        if let data = attachment.imageData,
-           let image = UIImage(data: data)
-        {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
+        if let data = attachment.imageData {
+            PendingImagePreview(id: attachment.id, data: data)
         } else {
             ZStack {
                 Color.black.opacity(0.84)

@@ -641,12 +641,15 @@ enum AgentJobStore {
         now: Date = .now,
         in context: ModelContext
     ) throws -> [UUID] {
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        let dataSpaceRaw = dataSpace.rawValue
+        let runningRaw = AgentJobState.running.rawValue
+        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw == runningRaw
+            }
+        ))) ?? []
         var recovered: [UUID] = []
-        for job in jobs where job.dataSpace == dataSpace
-            && job.state == .running
-            && (job.leaseExpiresAt ?? .distantPast) <= now
-        {
+        for job in jobs where (job.leaseExpiresAt ?? .distantPast) <= now {
             // App 被系统结束后，离线等待不能被算作 ReAct 实际执行时间。
             job.pauseLoopRuntime(at: min(job.leaseExpiresAt ?? now, now))
             try job.transition(to: .waitingForForeground, at: now)
@@ -669,18 +672,26 @@ enum AgentJobStore {
         now: Date = .now,
         in context: ModelContext
     ) throws -> [UUID] {
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
-        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
-        let messageByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+        let dataSpaceRaw = dataSpace.rawValue
+        let waitingRaw = AgentJobState.waitingForForeground.rawValue
+        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw == waitingRaw
+            }
+        ))) ?? []
         var resumed: [UUID] = []
         var changed = false
-        for job in jobs where job.dataSpace == dataSpace
-            && job.state == .waitingForForeground
-        {
+        for job in jobs {
             // 回复气泡已失败时不自动续跑，留给用户手动重试。
-            if let responseID = job.responseMessageID,
-               messageByID[responseID]?.agentStatus == .failed
-            {
+            var response: CoachMessage?
+            if let responseID = job.responseMessageID {
+                var descriptor = FetchDescriptor<CoachMessage>(
+                    predicate: #Predicate { $0.id == responseID }
+                )
+                descriptor.fetchLimit = 1
+                response = try? context.fetch(descriptor).first
+            }
+            if response?.agentStatus == .failed {
                 if job.state.canTransition(to: .waitingForUser) {
                     try job.transition(
                         to: .waitingForUser,
@@ -711,17 +722,31 @@ enum AgentJobStore {
         now: Date = .now,
         in context: ModelContext
     ) throws -> [UUID] {
+        let dataSpaceRaw = dataSpace.rawValue
+        let succeeded = AgentJobState.succeeded.rawValue
+        let failed = AgentJobState.failed.rawValue
+        let cancelled = AgentJobState.cancelled.rawValue
         let jobs = (
             try? context.fetch(
-                FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
+                FetchDescriptor<AgentJob>(
+                    predicate: #Predicate {
+                        $0.dataSpaceRaw == dataSpaceRaw
+                            && $0.stateRaw != succeeded
+                            && $0.stateRaw != failed
+                            && $0.stateRaw != cancelled
+                    },
+                    sortBy: [SortDescriptor(\.createdAt)]
+                )
             )
         ) ?? []
-        let messages = (try? context.fetch(FetchDescriptor<CoachMessage>())) ?? []
-        let messageByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
         var promoted: [UUID] = []
-        for job in jobs where job.dataSpace == dataSpace && !job.state.isTerminal {
-            guard let responseID = job.responseMessageID,
-                  messageByID[responseID]?.agentStatus == .failed
+        for job in jobs {
+            guard let responseID = job.responseMessageID else { continue }
+            var descriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.id == responseID }
+            )
+            descriptor.fetchLimit = 1
+            guard (try? context.fetch(descriptor).first?.agentStatus) == .failed
             else {
                 continue
             }
@@ -790,15 +815,26 @@ enum AgentJobStore {
         now: Date = .now,
         in context: ModelContext
     ) throws {
+        let dataSpaceRaw = blockingJob.dataSpaceRaw
+        let createdAt = blockingJob.createdAt
+        let succeeded = AgentJobState.succeeded.rawValue
+        let failed = AgentJobState.failed.rawValue
+        let cancelled = AgentJobState.cancelled.rawValue
         let jobs = (
             try? context.fetch(
-                FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
+                FetchDescriptor<AgentJob>(
+                    predicate: #Predicate {
+                        $0.dataSpaceRaw == dataSpaceRaw
+                            && $0.createdAt > createdAt
+                            && $0.stateRaw != succeeded
+                            && $0.stateRaw != failed
+                            && $0.stateRaw != cancelled
+                    },
+                    sortBy: [SortDescriptor(\.createdAt)]
+                )
             )
         ) ?? []
-        for job in jobs where job.dataSpace == blockingJob.dataSpace
-            && job.createdAt > blockingJob.createdAt
-            && !job.state.isTerminal
-            && job.state != .staged
+        for job in jobs where job.state != .staged
             && job.state != .waitingForUser
         {
             guard job.state.canTransition(to: .staged) else { continue }
@@ -845,24 +881,23 @@ enum AgentJobStore {
         now: Date = .now,
         in context: ModelContext
     ) throws -> [UUID] {
+        let dataSpaceRaw = dataSpace.rawValue
         let jobs = (
             try? context.fetch(
                 FetchDescriptor<AgentJob>(
+                    predicate: #Predicate {
+                        $0.dataSpaceRaw == dataSpaceRaw
+                            && ($0.stateRaw == "staged"
+                                || $0.stateRaw == "waitingForUser"
+                                || $0.stateRaw == "queued"
+                                || $0.stateRaw == "waitingForNetwork")
+                    },
                     sortBy: [SortDescriptor(\.createdAt)]
                 )
             )
         ) ?? []
-        let pendingStates: Set<AgentJobState> = [
-            .staged,
-            .waitingForUser,
-            .queued,
-            .waitingForNetwork
-        ]
-        let targets = jobs.filter {
-            $0.dataSpace == dataSpace && pendingStates.contains($0.state)
-        }
-        guard !targets.isEmpty else { return [] }
-        for job in targets {
+        guard !jobs.isEmpty else { return [] }
+        for job in jobs {
             if job.state != .queued {
                 try job.transition(to: .queued, at: now)
             }
@@ -870,7 +905,7 @@ enum AgentJobStore {
             job.nextRetryAt = nil
         }
         try context.save()
-        return targets.map(\.id)
+        return jobs.map(\.id)
     }
 
     /// LLM 恢复后解除暂存，让既有 FIFO 领取逻辑立即消费。
@@ -880,12 +915,15 @@ enum AgentJobStore {
         in context: ModelContext,
         isReady: (AgentJob) -> Bool = { _ in true }
     ) throws -> [UUID] {
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
+        let dataSpaceRaw = dataSpace.rawValue
+        let staged = AgentJobState.staged.rawValue
+        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw == staged
+            }
+        ))) ?? []
         var released: [UUID] = []
-        for job in jobs where job.dataSpace == dataSpace
-            && job.state == .staged
-            && isReady(job)
-        {
+        for job in jobs where isReady(job) {
             try job.transition(to: .queued, at: now)
             job.nextRetryAt = nil
             released.append(job.id)
@@ -900,11 +938,15 @@ enum AgentJobStore {
         dataSpace: DataSpace,
         in context: ModelContext
     ) -> Int {
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>())) ?? []
-        return jobs.filter {
-            $0.dataSpace == dataSpace
-                && ($0.state == .staged || $0.state == .waitingForUser)
-        }.count
+        let dataSpaceRaw = dataSpace.rawValue
+        let descriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw
+                    && ($0.stateRaw == "staged"
+                        || $0.stateRaw == "waitingForUser")
+            }
+        )
+        return (try? context.fetchCount(descriptor)) ?? 0
     }
 }
 
@@ -915,6 +957,7 @@ enum PersistentAgentEventProjection {
         job: AgentJob,
         responseMessage: CoachMessage,
         trace: AgentTrace,
+        liveText: LiveAgentTextSnapshot? = nil,
         in context: ModelContext
     ) {
         #if DEBUG
@@ -925,12 +968,18 @@ enum PersistentAgentEventProjection {
         trace.apply(event)
 
         switch event {
-        case let .assistantTextDelta(_, delta):
-            job.responseTextSnapshot += delta
-            responseMessage.text += delta
-            responseMessage.applyAgentEvent(event)
+        case .assistantTextDelta:
+            // 高频增量由 ConversationProcessingService 的瞬态缓冲驱动 UI。
+            // 这里不再反复修改三份增长中的字符串、解码/编码完整
+            // agentTurnItems JSON，或使 SwiftData 观察者整页失效。
             return
         case let .assistantTextCompleted(itemID, date):
+            commitLiveText(
+                liveText,
+                expectedItemID: itemID,
+                job: job,
+                responseMessage: responseMessage
+            )
             persist(
                 kind: .assistantTextCompleted,
                 payload: .init(
@@ -950,6 +999,12 @@ enum PersistentAgentEventProjection {
                 at: span.endedAt
             )
         case let .completed(answer, date):
+            commitLiveText(
+                liveText,
+                expectedItemID: nil,
+                job: job,
+                responseMessage: responseMessage
+            )
             persist(
                 kind: .completed,
                 payload: .init(text: answer),
@@ -958,6 +1013,12 @@ enum PersistentAgentEventProjection {
                 at: date
             )
         case let .failed(message, cancelled, date):
+            commitLiveText(
+                liveText,
+                expectedItemID: nil,
+                job: job,
+                responseMessage: responseMessage
+            )
             persist(
                 kind: cancelled ? .cancelled : .failed,
                 payload: .init(
@@ -972,6 +1033,26 @@ enum PersistentAgentEventProjection {
 
         projectChat(event, onto: responseMessage, job: job)
         try? context.save()
+    }
+
+    private static func commitLiveText(
+        _ liveText: LiveAgentTextSnapshot?,
+        expectedItemID: UUID?,
+        job: AgentJob,
+        responseMessage: CoachMessage
+    ) {
+        guard let liveText,
+              expectedItemID == nil || expectedItemID == liveText.itemID,
+              !liveText.text.isEmpty
+        else {
+            return
+        }
+        job.responseTextSnapshot += liveText.text
+        responseMessage.text += liveText.text
+        responseMessage.applyAgentEvent(.assistantTextDelta(
+            itemID: liveText.itemID,
+            delta: liveText.text
+        ))
     }
 
     static func replayChat(

@@ -759,7 +759,9 @@ final class GuidedWorkoutCoordinator {
         session.restTargetEndAt = nil
         session.autoRecordingPolicy = .cancelled
         clearQueuedRecording(for: session)
-        _ = GuidedWorkoutRecordStore.backfill(in: context)
+        for performance in performances(for: session, in: context) {
+            _ = try? materializePerformance(performance, session, context)
+        }
         activeSessionID = nil
         activeSessionReference = nil
         activeContext = nil
@@ -983,10 +985,14 @@ extension GuidedWorkoutCoordinator {
     private func activeSession(
         in context: ModelContext
     ) throws -> WorkoutSession {
-        guard let activeSessionID,
-              let session = (
-                  try? context.fetch(FetchDescriptor<WorkoutSession>())
-              )?.first(where: { $0.id == activeSessionID }),
+        guard let activeSessionID else {
+            throw GuidedWorkoutError.missingSession
+        }
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.id == activeSessionID }
+        )
+        descriptor.fetchLimit = 1
+        guard let session = try? context.fetch(descriptor).first,
               session.status == .active || session.status == .paused
         else {
             throw GuidedWorkoutError.missingSession
@@ -999,7 +1005,11 @@ extension GuidedWorkoutCoordinator {
         in context: ModelContext
     ) -> ExercisePerformance? {
         guard let id = session.currentPerformanceID else { return nil }
-        return performances(for: session, in: context).first { $0.id == id }
+        var descriptor = FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     private func currentSet(
@@ -1007,9 +1017,11 @@ extension GuidedWorkoutCoordinator {
         in context: ModelContext
     ) -> WorkoutSet? {
         guard let id = session.currentSetID else { return nil }
-        return (
-            try? context.fetch(FetchDescriptor<WorkoutSet>())
-        )?.first { $0.id == id }
+        var descriptor = FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     private func currentEffort(
@@ -1017,8 +1029,11 @@ extension GuidedWorkoutCoordinator {
         in context: ModelContext
     ) -> WorkoutEffort? {
         guard let id = session.currentEffortID else { return nil }
-        return ((try? context.fetch(FetchDescriptor<WorkoutEffort>())) ?? [])
-            .first { $0.id == id }
+        var descriptor = FetchDescriptor<WorkoutEffort>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     private func firstPendingSet(
@@ -1032,29 +1047,36 @@ extension GuidedWorkoutCoordinator {
         for session: WorkoutSession,
         in context: ModelContext
     ) -> [ExercisePerformance] {
-        (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>())
-        )?.filter { $0.sessionID == session.id }
-            .sorted { $0.order < $1.order } ?? []
+        let sessionID = session.id
+        let descriptor = FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.sessionID == sessionID },
+            sortBy: [SortDescriptor(\.order)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     private func sets(
         for performance: ExercisePerformance,
         in context: ModelContext
     ) -> [WorkoutSet] {
-        (
-            try? context.fetch(FetchDescriptor<WorkoutSet>())
-        )?.filter { $0.performanceID == performance.id }
-            .sorted { $0.order < $1.order } ?? []
+        let performanceID = performance.id
+        let descriptor = FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.performanceID == performanceID },
+            sortBy: [SortDescriptor(\.order)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     private func efforts(
         for set: WorkoutSet,
         in context: ModelContext
     ) -> [WorkoutEffort] {
-        ((try? context.fetch(FetchDescriptor<WorkoutEffort>())) ?? [])
-            .filter { $0.workoutSetID == set.id }
-            .sorted { $0.order < $1.order }
+        let setID = set.id
+        let descriptor = FetchDescriptor<WorkoutEffort>(
+            predicate: #Predicate { $0.workoutSetID == setID },
+            sortBy: [SortDescriptor(\.order)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     private func firstPendingEffort(
@@ -1356,26 +1378,6 @@ extension GuidedWorkoutCoordinator {
         }
     }
 
-    static func terminalSetStatus(
-        for effortStatuses: [WorkoutEffortStatus]
-    ) -> WorkoutSetStatus? {
-        guard !effortStatuses.isEmpty,
-              effortStatuses.allSatisfy({
-                  $0 == .completed || $0 == .skipped || $0 == .failed
-              })
-        else { return nil }
-        if effortStatuses.allSatisfy({ $0 == .completed }) {
-            return .completed
-        }
-        if effortStatuses.contains(.completed) {
-            return .partial
-        }
-        if effortStatuses.contains(.failed) {
-            return .failed
-        }
-        return .skipped
-    }
-
     private func elapsedDuration(for effort: WorkoutEffort) -> Int? {
         guard let startedAt = effort.startedAt else {
             return effort.plannedDurationSeconds
@@ -1657,11 +1659,15 @@ extension GuidedWorkoutCoordinator {
         performance: ExercisePerformance,
         in context: ModelContext
     ) {
-        if let effortID = attempt.effortID,
-           let effort = ((try? context.fetch(
-               FetchDescriptor<WorkoutEffort>()
-           )) ?? []).first(where: { $0.id == effortID })
-        {
+        var effort: WorkoutEffort?
+        if let effortID = attempt.effortID {
+            var descriptor = FetchDescriptor<WorkoutEffort>(
+                predicate: #Predicate { $0.id == effortID }
+            )
+            descriptor.fetchLimit = 1
+            effort = try? context.fetch(descriptor).first
+        }
+        if let effort {
             effort.recordedVideoPath = path
             effort.recordedVideoKind = kind
             if set.recordedVideoPath == nil {
@@ -1724,28 +1730,38 @@ extension GuidedWorkoutCoordinator {
         sessionID: UUID?,
         in context: ModelContext
     ) -> Bool {
-        guard let sessionID,
-              fact.sessionID == sessionID,
-              let session = ((try? context.fetch(
-                  FetchDescriptor<WorkoutSession>()
-              )) ?? []).first(where: { $0.id == fact.sessionID }),
-              let performance = ((try? context.fetch(
-                  FetchDescriptor<ExercisePerformance>()
-              )) ?? []).first(where: { $0.id == fact.attempt.performanceID }),
+        guard let sessionID, fact.sessionID == sessionID else { return false }
+        let factSessionID = fact.sessionID
+        let factPerformanceID = fact.attempt.performanceID
+        let factSetID = fact.attempt.setID
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.id == factSessionID }
+        )
+        sessionDescriptor.fetchLimit = 1
+        var performanceDescriptor = FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.id == factPerformanceID }
+        )
+        performanceDescriptor.fetchLimit = 1
+        var setDescriptor = FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.id == factSetID }
+        )
+        setDescriptor.fetchLimit = 1
+        guard let session = try? context.fetch(sessionDescriptor).first,
+              let performance = try? context.fetch(performanceDescriptor).first,
               performance.sessionID == session.id,
               performance.session?.id == session.id,
-              let set = ((try? context.fetch(
-                  FetchDescriptor<WorkoutSet>()
-              )) ?? []).first(where: { $0.id == fact.attempt.setID }),
+              let set = try? context.fetch(setDescriptor).first,
               set.performanceID == performance.id,
               set.performance?.id == performance.id
         else { return false }
         if let effortID = fact.attempt.effortID {
-            guard let effort = ((try? context.fetch(
-                FetchDescriptor<WorkoutEffort>()
-            )) ?? []).first(where: { $0.id == effortID }),
-                effort.workoutSetID == set.id,
-                effort.workoutSet?.id == set.id
+            var effortDescriptor = FetchDescriptor<WorkoutEffort>(
+                predicate: #Predicate { $0.id == effortID }
+            )
+            effortDescriptor.fetchLimit = 1
+            guard let effort = try? context.fetch(effortDescriptor).first,
+                  effort.workoutSetID == set.id,
+                  effort.workoutSet?.id == set.id
             else { return false }
         }
         persistRecordingPath(
@@ -1809,11 +1825,9 @@ extension GuidedWorkoutCoordinator {
         for session: WorkoutSession,
         in context: ModelContext
     ) -> [WorkoutSet] {
-        let performanceIDs = Set(
-            performances(for: session, in: context).map(\.id)
-        )
-        return ((try? context.fetch(FetchDescriptor<WorkoutSet>())) ?? [])
-            .filter { performanceIDs.contains($0.performanceID) }
+        performances(for: session, in: context).flatMap {
+            sets(for: $0, in: context)
+        }
     }
 
     private func resolvedRestTargetEndAt(
@@ -1842,22 +1856,6 @@ extension GuidedWorkoutCoordinator {
         session.phaseStartedAt = now()
         session.phaseDeadlineAt = deadline
         session.transitionRevision += 1
-    }
-
-    static func friendlyRecordingError(_ error: Error) -> String {
-        if let cameraError = error as? WorkoutCameraError {
-            return cameraError.localizedDescription
-        }
-        let nsError = error as NSError
-        if nsError.domain == AVFoundationErrorDomain {
-            return "相机会话中断，请重试本组录像。训练仍可继续。"
-        }
-        let description = error.localizedDescription
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if description.isEmpty {
-            return "录像未能开始；训练仍可继续，可稍后重试。"
-        }
-        return description
     }
 
     private static func pausedRecordingStatus(

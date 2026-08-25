@@ -5,6 +5,8 @@ struct ExerciseArtworkView: View {
     let reference: ExerciseImageReference
     var contentMode: ContentMode = .fit
 
+    @State private var image: UIImage?
+
     var body: some View {
         ZStack {
             Color.secondary.opacity(0.08)
@@ -19,23 +21,36 @@ struct ExerciseArtworkView: View {
             }
         }
         .accessibilityLabel(reference.title)
+        .task(id: imageIdentity) {
+            image = nil
+            let loaded: UIImage? = if let path = reference.localPath {
+                await ImagePipeline.shared.image(
+                    atStoredPath: path,
+                    maxPixelSize: 1024
+                )
+            } else if let resourceName = reference.resourceName,
+                      let url = Bundle.main.url(
+                          forResource: resourceName,
+                          withExtension: nil
+                      )
+            {
+                await ImagePipeline.shared.image(
+                    at: url,
+                    cacheKey: "bundle:\(resourceName)",
+                    maxPixelSize: 1024
+                )
+            } else if let resourceName = reference.resourceName {
+                UIImage(named: resourceName)
+            } else {
+                nil
+            }
+            guard !Task.isCancelled else { return }
+            image = loaded
+        }
     }
 
-    private var image: UIImage? {
-        if let path = reference.localPath {
-            return MediaStore.image(at: path)
-        }
-        guard let resourceName = reference.resourceName else { return nil }
-        if let value = UIImage(named: resourceName) {
-            return value
-        }
-        guard let url = Bundle.main.url(
-            forResource: resourceName,
-            withExtension: nil
-        ) else {
-            return nil
-        }
-        return UIImage(contentsOfFile: url.path)
+    private var imageIdentity: String {
+        reference.localPath ?? reference.resourceName ?? "missing"
     }
 }
 

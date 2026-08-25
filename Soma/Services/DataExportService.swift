@@ -62,6 +62,7 @@ enum DataExportService {
             var recordMediaPaths = Set<String>()
 
             for meal in payload.meals.sorted(by: recordSort) {
+                try Task.checkCancellation()
                 let outcome = try writeMeal(
                     meal,
                     payload: payload,
@@ -74,6 +75,7 @@ enum DataExportService {
                 recordMediaPaths.formUnion(outcome.sourcePaths)
             }
             for workout in payload.workouts.sorted(by: recordSort) {
+                try Task.checkCancellation()
                 let outcome = try writeWorkout(
                     workout,
                     payload: payload,
@@ -358,6 +360,7 @@ enum DataExportService {
         var descriptors: [PortableExportMedia] = []
         var missing: [PortableExportMissingMedia] = []
         for (offset, attachment) in attachments.enumerated() {
+            try Task.checkCancellation()
             let index = offset + 1
             guard let sourceURL = mediaURL(attachment.path),
                   FileManager.default.fileExists(atPath: sourceURL.path)
@@ -411,6 +414,7 @@ enum DataExportService {
         var missing: [PortableExportMissingMedia] = []
         var index: [PortableExportMediaIndex] = []
         for (offset, path) in paths.sorted().enumerated() {
+            try Task.checkCancellation()
             let identifier = pathIdentifier(path)
             guard let sourceURL = mediaURL(path),
                   FileManager.default.fileExists(atPath: sourceURL.path)

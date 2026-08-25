@@ -21,21 +21,34 @@ final class AgentSystemProjectionCoordinator {
         events: [PersistentAgentEvent],
         defaults: UserDefaults = .standard
     ) async {
+        await project(
+            jobs: jobs,
+            operationCounts: Dictionary(
+                grouping: events.filter { $0.kind == .span },
+                by: \.jobID
+            ).mapValues(\.count),
+            defaults: defaults
+        )
+    }
+
+    func project(
+        jobs: [AgentJob],
+        operationCounts: [UUID: Int],
+        defaults: UserDefaults = .standard
+    ) async {
         let liveEnabled = defaults.bool(
             forKey: AgentSystemPreference.liveActivitiesKey
         )
         let notificationEnabled = defaults.bool(
             forKey: AgentSystemPreference.completionNotificationsKey
         )
-        let eventsByJob = Dictionary(grouping: events, by: \.jobID)
         let currentJob = jobs
             .filter { !$0.state.isTerminal && shouldDisplay($0) }
             .sorted { $0.createdAt < $1.createdAt }
             .first
 
         for job in jobs {
-            let jobEvents = eventsByJob[job.id] ?? []
-            let operationCount = jobEvents.count { $0.kind == .span }
+            let operationCount = operationCounts[job.id, default: 0]
             let queuedCount = jobs.count {
                 !$0.state.isTerminal && $0.id != job.id
             }

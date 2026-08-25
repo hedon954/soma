@@ -2,23 +2,17 @@
 import XCTest
 
 final class AppTabReselectTests: XCTestCase {
-    func testReselectingTheSameTabIssuesANewStackID() {
-        let current = UUID()
-        let next = AppTabReselect.stackID(
-            selected: .insights,
-            incoming: .insights,
-            current: current
+    func testSwitchingTabsRequestsOnlyASelectionChange() {
+        XCTAssertEqual(
+            AppTabReselect.effect(selected: .coach, incoming: .training),
+            .switchTo(.training)
         )
-        XCTAssertNotEqual(next, current)
     }
 
-    func testSwitchingTabsKeepsTheIncomingStackID() {
-        let current = UUID()
-        let next = AppTabReselect.stackID(
-            selected: .coach,
-            incoming: .insights,
-            current: current
+    func testReselectingTabRequestsOnlyAStackReset() {
+        XCTAssertEqual(
+            AppTabReselect.effect(selected: .insights, incoming: .insights),
+            .resetStack(.insights)
         )
-        XCTAssertEqual(next, current)
     }
 }

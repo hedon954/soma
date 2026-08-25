@@ -1,6 +1,6 @@
 import Foundation
 
-struct ExerciseInputSuggestion: Identifiable, Equatable {
+struct ExerciseInputSuggestion: Identifiable, Equatable, Sendable {
     let id: UUID
     let exerciseName: String
     let recentSummary: String?
@@ -30,7 +30,7 @@ struct ExerciseQuickRecordDraft: Codable, Equatable, Sendable {
 enum ExerciseInputSuggestionBuilder {
     static let defaultLimit = 5
 
-    struct ExerciseInput: Equatable {
+    struct ExerciseInput: Equatable, Sendable {
         let id: UUID
         let name: String
         let isArchived: Bool
@@ -42,7 +42,7 @@ enum ExerciseInputSuggestionBuilder {
         }
     }
 
-    struct RecentCapacityInput: Equatable {
+    struct RecentCapacityInput: Equatable, Sendable {
         let exerciseID: UUID
         let date: Date
         let text: String

@@ -20,17 +20,21 @@ final class SessionTitleGenerator {
         modelContext: ModelContext
     ) {
         guard tasks[sessionID] == nil else { return }
-        let sessions = (
-            try? modelContext.fetch(FetchDescriptor<ConversationSession>())
-        ) ?? []
-        guard let session = sessions.first(where: { $0.id == sessionID }),
+        var sessionDescriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        sessionDescriptor.fetchLimit = 1
+        guard let session = try? modelContext.fetch(sessionDescriptor).first,
               session.canGenerateTitle
         else {
             return
         }
         let messages = (
             try? modelContext.fetch(
-                FetchDescriptor<CoachMessage>(sortBy: [SortDescriptor(\.date)])
+                FetchDescriptor<CoachMessage>(
+                    predicate: #Predicate { $0.sessionID == sessionID },
+                    sortBy: [SortDescriptor(\.date)]
+                )
             )
         ) ?? []
         guard let input = ConversationSessionTitleService.firstSuccessfulInput(
@@ -49,10 +53,7 @@ final class SessionTitleGenerator {
             else {
                 return
             }
-            let refreshed = (
-                try? modelContext.fetch(FetchDescriptor<ConversationSession>())
-            ) ?? []
-            guard let target = refreshed.first(where: { $0.id == sessionID }) else {
+            guard let target = try? modelContext.fetch(sessionDescriptor).first else {
                 return
             }
             let previousTitle = target.title

@@ -60,19 +60,33 @@ final class DiagnosticsLogStore: @unchecked Sendable {
     /// 读取最近的日志文本，最多 `maximumBytes`。滚动文件在前，当前文件在后。
     func recentText(maximumBytes: Int = 256 * 1024) -> String {
         queue.sync {
-            let rotated = (try? String(contentsOf: rotatedURL, encoding: .utf8)) ?? ""
-            let current = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? ""
-            let combined = rotated + current
-            guard combined.utf8.count > maximumBytes else { return combined }
-            let tail = combined.suffix(maximumBytes / 3)
-            return "…（更早日志已省略）\n" + String(tail)
+            recentTextLocked(maximumBytes: maximumBytes)
+        }
+    }
+
+    /// 设置详情等 UI 路径用异步队列读取，避免文件 I/O 与导航动画争夺 MainActor。
+    func recentTextAsync(maximumBytes: Int = 256 * 1024) async -> String {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(
+                    returning: self.recentTextLocked(maximumBytes: maximumBytes)
+                )
+            }
         }
     }
 
     func clear() {
         queue.sync {
-            try? fileManager.removeItem(at: currentURL)
-            try? fileManager.removeItem(at: rotatedURL)
+            clearLocked()
+        }
+    }
+
+    func clearAsync() async {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                self.clearLocked()
+                continuation.resume()
+            }
         }
     }
 
@@ -133,6 +147,20 @@ final class DiagnosticsLogStore: @unchecked Sendable {
     }()
 
     // MARK: - 写入
+
+    private func recentTextLocked(maximumBytes: Int) -> String {
+        let rotated = (try? String(contentsOf: rotatedURL, encoding: .utf8)) ?? ""
+        let current = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? ""
+        let combined = rotated + current
+        guard combined.utf8.count > maximumBytes else { return combined }
+        let tail = combined.suffix(maximumBytes / 3)
+        return "…（更早日志已省略）\n" + String(tail)
+    }
+
+    private func clearLocked() {
+        try? fileManager.removeItem(at: currentURL)
+        try? fileManager.removeItem(at: rotatedURL)
+    }
 
     private func write(_ line: String) {
         do {

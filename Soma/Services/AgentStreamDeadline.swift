@@ -75,21 +75,19 @@ private enum AgentStreamRaceResult: @unchecked Sendable {
 }
 
 enum AgentStreamDeadline {
-    /// BUG 0024：`onChunk` 会把增量投影到 SwiftData 与 `@Observable` 状态上，必须在主 actor
-    /// 执行。这里显式标注隔离，让每次 `await` 之后的恢复点回到主 actor，而不是停在读取
-    /// chunk 的私有 actor 或 URLSession 执行器上。
-    @MainActor
+    /// 原始网络 chunk 由私有 reader actor 顺序读取；chunk 回调会触及 SwiftData 和
+    /// 可观察投影，因此必须明确回到 MainActor。这里保留异步回调，避免恢复旧的同步全文处理。
     static func consume(
         stream: AsyncThrowingStream<ChatCompletionChunkObject, Error>,
         mode: AgentMediaMode,
         policy: AgentStreamDeadlinePolicy,
         enforceFirstDelta: Bool,
-        onChunk: @MainActor (ChatCompletionChunkObject) throws -> Bool
+        onChunk: @MainActor (ChatCompletionChunkObject) async throws -> Bool
     ) async throws {
         let reader = AgentStreamChunkReader(stream: stream)
         guard enforceFirstDelta else {
             while let chunk = try await reader.next() {
-                _ = try onChunk(chunk)
+                _ = try await onChunk(chunk)
             }
             return
         }
@@ -100,7 +98,7 @@ enum AgentStreamDeadline {
         while true {
             if receivedFirstDelta {
                 while let chunk = try await reader.next() {
-                    _ = try onChunk(chunk)
+                    _ = try await onChunk(chunk)
                 }
                 return
             }
@@ -110,7 +108,7 @@ enum AgentStreamDeadline {
             switch result {
             case let .chunk(chunk):
                 guard let chunk else { return }
-                if try onChunk(chunk) {
+                if try await onChunk(chunk) {
                     receivedFirstDelta = true
                 }
             case .timeout:

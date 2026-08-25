@@ -1,6 +1,5 @@
 import Foundation
 
-@MainActor
 enum AgentFeedbackTool {
     static func submit(
         id: UUID,
@@ -8,7 +7,7 @@ enum AgentFeedbackTool {
         mediaAttachments: [MediaAttachmentReference],
         credentials: FeedbackQQMailCredentials? = nil,
         transport: any FeedbackSMTPTransport = QQSMTPTransport(),
-        mediaURL: (String) -> URL? = { MediaStore.url(at: $0) }
+        mediaURL: @Sendable (String) -> URL? = { MediaStore.url(at: $0) }
     ) async throws -> AgentToolResult {
         do {
             let resolvedCredentials: FeedbackQQMailCredentials = if let credentials {

@@ -4,12 +4,13 @@ import Foundation
 /// `agentTurnItems` 全量 JSON 解码-编码和 `UITextView` 重排。这里按固定节拍合批，
 /// 首个增量立即出，后续增量攒够间隔再出，既保留"边说边显示"，又把投影次数降到十几次。
 struct AgentTextDeltaCoalescer {
-    /// 两次投影之间的最小间隔。约 10Hz，低于人眼察觉阅读卡顿的阈值。
+    /// 两次投影之间的最小间隔。默认约 5Hz；首批和尾批仍立即显示。
+    /// 人眼仍能感知连续生成，但两分钟响应不再制造上千次文本重排。
     let minimumInterval: TimeInterval
     private var pending = ""
     private var lastEmittedAt: Date?
 
-    init(minimumInterval: TimeInterval = 0.1) {
+    init(minimumInterval: TimeInterval = 0.2) {
         self.minimumInterval = max(0, minimumInterval)
     }
 

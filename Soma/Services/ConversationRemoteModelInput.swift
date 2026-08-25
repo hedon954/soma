@@ -134,7 +134,10 @@ extension ConversationProcessingService {
             tools: AgentToolExposurePolicy.tools(selectedShortcut: selectedShortcut),
             selectedSkillID: selectedSkill?.id,
             maxSteps: ReActAgentPreference.maxSteps(defaults: context.ai.defaults),
-            deadlinePolicy: context.ai.streamDeadlinePolicy
+            deadlinePolicy: ReActAgentPreference.deadlinePolicy(
+                context.ai.streamDeadlinePolicy,
+                defaults: context.ai.defaults
+            )
         )
         return PreparedRemoteAgentSubmission(
             modelInput: modelInput,

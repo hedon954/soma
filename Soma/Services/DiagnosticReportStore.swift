@@ -44,6 +44,7 @@ final class DiagnosticReportStore: @unchecked Sendable {
     private let directory: URL
     private let fileManager = FileManager.default
     private let queue = DispatchQueue(label: "top.hedon.soma.diagnostic-reports")
+    private var cachedReports: [DiagnosticReport]?
 
     init(directory: URL? = nil) {
         if let directory {
@@ -68,6 +69,7 @@ final class DiagnosticReportStore: @unchecked Sendable {
             )
             guard let data = try? JSONEncoder().encode(report) else { return }
             try? data.write(to: url(for: report.id), options: .atomic)
+            cachedReports = nil
             pruneLocked()
         }
     }
@@ -75,6 +77,7 @@ final class DiagnosticReportStore: @unchecked Sendable {
     func remove(_ id: UUID) {
         queue.sync {
             try? fileManager.removeItem(at: url(for: id))
+            cachedReports?.removeAll { $0.id == id }
         }
     }
 
@@ -85,15 +88,35 @@ final class DiagnosticReportStore: @unchecked Sendable {
         }
     }
 
+    /// 启动和投递路径用异步队列读取，避免最大 5 份大报告的 JSON 解码阻塞 MainActor。
+    func pendingReportsAsync() async -> [DiagnosticReport] {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: self.loadLocked())
+            }
+        }
+    }
+
     func latestReport() -> DiagnosticReport? {
         queue.sync {
             loadLocked().last
         }
     }
 
-    func removeAll() {
-        queue.sync {
-            try? fileManager.removeItem(at: directory)
+    func latestReportAsync() async -> DiagnosticReport? {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: self.loadLocked().last)
+            }
+        }
+    }
+
+    func removeAllAsync() async {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                self.removeAllLocked()
+                continuation.resume()
+            }
         }
     }
 
@@ -102,11 +125,14 @@ final class DiagnosticReportStore: @unchecked Sendable {
     }
 
     private func loadLocked() -> [DiagnosticReport] {
+        if let cachedReports {
+            return cachedReports
+        }
         let urls = (try? fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil
         )) ?? []
-        return urls
+        let reports: [DiagnosticReport] = urls
             .filter { $0.pathExtension == "json" }
             .compactMap { url in
                 guard let data = try? Data(contentsOf: url) else { return nil }
@@ -116,6 +142,8 @@ final class DiagnosticReportStore: @unchecked Sendable {
                 )
             }
             .sorted { $0.createdAt < $1.createdAt }
+        cachedReports = reports
+        return reports
     }
 
     private func pruneLocked() {
@@ -124,5 +152,11 @@ final class DiagnosticReportStore: @unchecked Sendable {
         for report in reports.prefix(reports.count - Self.maximumRetainedReports) {
             try? fileManager.removeItem(at: url(for: report.id))
         }
+        cachedReports = Array(reports.suffix(Self.maximumRetainedReports))
+    }
+
+    private func removeAllLocked() {
+        try? fileManager.removeItem(at: directory)
+        cachedReports = []
     }
 }

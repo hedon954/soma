@@ -194,13 +194,11 @@ extension ConversationProcessingService {
                 dataSpace: dataSpace,
                 in: modelContext
             )
-            _ = try AgentJobStore.promoteFailedResponsesToManualRetry(
-                dataSpace: dataSpace,
-                in: modelContext
-            )
         } catch {
             return
         }
+        // startNextPendingJob 会在领取 FIFO 队头前统一收口失败回复；
+        // 这里不再对同一组非终态 Job 重复扫描一次。
         startNextPendingJob(
             dataSpace: dataSpace,
             ai: ai,
@@ -243,33 +241,41 @@ extension ConversationProcessingService {
         locationService: LocationContextService
     ) -> Bool {
         guard !isProcessing else { return false }
-        let jobs = (
-            try? context.modelContext.fetch(FetchDescriptor<AgentJob>())
-        ) ?? []
-        guard let job = jobs.first(where: {
-            $0.turnID == turnID
-                && [.staged, .waitingForUser, .queued, .waitingForNetwork]
-                .contains($0.state)
-        }) else {
+        var jobDescriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate { $0.turnID == turnID }
+        )
+        jobDescriptor.fetchLimit = 1
+        guard let job = try? context.modelContext.fetch(jobDescriptor).first,
+              [.staged, .waitingForUser, .queued, .waitingForNetwork]
+              .contains(job.state)
+        else {
             return false
         }
-        let messages = (
-            try? context.modelContext.fetch(FetchDescriptor<CoachMessage>())
-        ) ?? []
-        let events = (
-            try? context.modelContext.fetch(FetchDescriptor<PersistentAgentEvent>())
-        ) ?? []
-        let traces = (
-            try? context.modelContext.fetch(FetchDescriptor<AgentTrace>())
-        ) ?? []
         let attachments = job.mediaAttachments
         let messageIDs = Set([job.userMessageID, job.responseMessageID].compactMap { $0 })
-        events.filter { $0.jobID == job.id }.forEach(context.modelContext.delete)
-        messages.filter { messageIDs.contains($0.id) }.forEach { message in
-            if let traceID = message.agentTraceID,
-               let trace = traces.first(where: { $0.id == traceID })
-            {
-                context.modelContext.delete(trace)
+        let jobID = job.id
+        let events = (try? context.modelContext.fetch(
+            FetchDescriptor<PersistentAgentEvent>(
+                predicate: #Predicate { $0.jobID == jobID }
+            )
+        )) ?? []
+        events.forEach(context.modelContext.delete)
+        for messageID in messageIDs {
+            var messageDescriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.id == messageID }
+            )
+            messageDescriptor.fetchLimit = 1
+            guard let message = try? context.modelContext.fetch(messageDescriptor).first else {
+                continue
+            }
+            if let traceID = message.agentTraceID {
+                var traceDescriptor = FetchDescriptor<AgentTrace>(
+                    predicate: #Predicate { $0.id == traceID }
+                )
+                traceDescriptor.fetchLimit = 1
+                if let trace = try? context.modelContext.fetch(traceDescriptor).first {
+                    context.modelContext.delete(trace)
+                }
             }
             context.modelContext.delete(message)
         }
@@ -303,35 +309,43 @@ extension ConversationProcessingService {
         context: ConversationProcessingContext
     ) -> Bool {
         guard !isProcessing else { return false }
-        let jobs = (
-            try? context.modelContext.fetch(FetchDescriptor<AgentJob>())
-        ) ?? []
-        let targets = jobs.filter {
-            $0.dataSpace == context.dataSpace
-                && [.staged, .waitingForUser, .queued, .waitingForNetwork]
-                .contains($0.state)
+        let dataSpaceRaw = context.dataSpace.rawValue
+        let candidates = (try? context.modelContext.fetch(FetchDescriptor<AgentJob>(
+            predicate: #Predicate { $0.dataSpaceRaw == dataSpaceRaw }
+        ))) ?? []
+        let targets = candidates.filter {
+            [.staged, .waitingForUser, .queued, .waitingForNetwork].contains($0.state)
         }
         guard !targets.isEmpty else { return false }
-        let targetIDs = Set(targets.map(\.id))
         let messageIDs = Set(targets.flatMap {
             [$0.userMessageID, $0.responseMessageID].compactMap { $0 }
         })
         let attachments = targets.flatMap(\.mediaAttachments)
-        let events = (
-            try? context.modelContext.fetch(FetchDescriptor<PersistentAgentEvent>())
-        ) ?? []
-        let messages = (
-            try? context.modelContext.fetch(FetchDescriptor<CoachMessage>())
-        ) ?? []
-        let traces = (
-            try? context.modelContext.fetch(FetchDescriptor<AgentTrace>())
-        ) ?? []
-        events.filter { targetIDs.contains($0.jobID) }.forEach(context.modelContext.delete)
-        messages.filter { messageIDs.contains($0.id) }.forEach { message in
-            if let traceID = message.agentTraceID,
-               let trace = traces.first(where: { $0.id == traceID })
-            {
-                context.modelContext.delete(trace)
+        for target in targets {
+            let targetID = target.id
+            let events = (try? context.modelContext.fetch(
+                FetchDescriptor<PersistentAgentEvent>(
+                    predicate: #Predicate { $0.jobID == targetID }
+                )
+            )) ?? []
+            events.forEach(context.modelContext.delete)
+        }
+        for messageID in messageIDs {
+            var messageDescriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.id == messageID }
+            )
+            messageDescriptor.fetchLimit = 1
+            guard let message = try? context.modelContext.fetch(messageDescriptor).first else {
+                continue
+            }
+            if let traceID = message.agentTraceID {
+                var traceDescriptor = FetchDescriptor<AgentTrace>(
+                    predicate: #Predicate { $0.id == traceID }
+                )
+                traceDescriptor.fetchLimit = 1
+                if let trace = try? context.modelContext.fetch(traceDescriptor).first {
+                    context.modelContext.delete(trace)
+                }
             }
             context.modelContext.delete(message)
         }
@@ -384,12 +398,14 @@ extension ConversationProcessingService {
         responseMessage.agentTraceID = trace.id
         context.modelContext.insert(trace)
         try? BusinessIDAllocator.assignMissingIDs(in: context.modelContext)
-        let definitions = (
-            try? context.modelContext.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        let exerciseBusinessID = definitions.first(where: {
-            $0.id == draft.exerciseID
-        })?.businessID ?? 0
+        let exerciseID = draft.exerciseID
+        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == exerciseID }
+        )
+        definitionDescriptor.fetchLimit = 1
+        let exerciseBusinessID = (
+            try? context.modelContext.fetch(definitionDescriptor).first?.businessID
+        ) ?? 0
         let call = AgentToolCall(
             name: .createWorkout,
             arguments: AgentToolArguments(
@@ -476,17 +492,11 @@ extension ConversationProcessingService {
         let answer = "已按你选择的最近一次训练数据完成记录。"
         let itemID = UUID()
         PersistentAgentEventProjection.persistAndProject(
-            .assistantTextDelta(itemID: itemID, delta: answer),
-            job: job,
-            responseMessage: responseMessage,
-            trace: trace,
-            in: context.modelContext
-        )
-        PersistentAgentEventProjection.persistAndProject(
             .assistantTextCompleted(itemID: itemID, at: endedAt),
             job: job,
             responseMessage: responseMessage,
             trace: trace,
+            liveText: LiveAgentTextSnapshot(itemID: itemID, text: answer),
             in: context.modelContext
         )
         responseMessage.text = answer

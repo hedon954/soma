@@ -7,18 +7,21 @@ extension ConversationRecorder {
         limit: Int,
         in context: ModelContext
     ) -> AgentToolResult {
-        let programs = (
-            try? context.fetch(FetchDescriptor<TrainingProgram>())
-        ) ?? []
-        let sortedPrograms: [TrainingProgram] = programs.sorted {
-            $0.updatedAt > $1.updatedAt
-        }
         let filteredPrograms: [TrainingProgram] = if let programID = arguments.programID {
-            sortedPrograms.filter {
-                $0.businessID == programID
-            }
+            trainingProgram(businessID: programID, in: context).map { [$0] } ?? []
         } else {
-            sortedPrograms
+            {
+                var descriptor = FetchDescriptor<TrainingProgram>(
+                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+                )
+                if arguments.sort != "name" {
+                    let offset = cursorOffset(arguments.cursor)
+                    descriptor.fetchLimit = offset == .max
+                        ? limit + 1
+                        : offset + limit + 1
+                }
+                return (try? context.fetch(descriptor)) ?? []
+            }()
         }
 
         var values = [[String: AgentJSONValue]]()
@@ -73,20 +76,17 @@ extension ConversationRecorder {
         limit: Int,
         in context: ModelContext
     ) -> AgentToolResult {
-        let sessions = (
-            try? context.fetch(FetchDescriptor<WorkoutSession>())
-        ) ?? []
         let filtered: [WorkoutSession] = if let sessionID = arguments.sessionID {
-            sessions.filter { $0.businessID == sessionID }
+            {
+                var descriptor = FetchDescriptor<WorkoutSession>(
+                    predicate: #Predicate { $0.businessID == sessionID }
+                )
+                descriptor.fetchLimit = 1
+                return (try? context.fetch(descriptor)) ?? []
+            }()
         } else {
-            sessions
+            querySessionsPage(arguments, limit: limit, in: context)
         }
-        let performances = (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>())
-        ) ?? []
-        let sets = (
-            try? context.fetch(FetchDescriptor<WorkoutSet>())
-        ) ?? []
         let values = filteredByDate(
             filtered,
             arguments: arguments,
@@ -100,8 +100,7 @@ extension ConversationRecorder {
             )
             let details = sessionDetails(
                 sessionID: session.id,
-                performances: performances,
-                sets: sets
+                in: context
             )
             return [
                 "session_id": businessIDValue(session.businessID),
@@ -121,12 +120,25 @@ extension ConversationRecorder {
 
     private static func sessionDetails(
         sessionID: UUID,
-        performances: [ExercisePerformance],
-        sets: [WorkoutSet]
+        in context: ModelContext
     ) -> String {
-        performances
-            .filter { $0.sessionID == sessionID }
-            .sorted { $0.order < $1.order }
+        let performances = (
+            try? context.fetch(FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.sessionID == sessionID },
+                sortBy: [SortDescriptor(\.order)]
+            ))
+        ) ?? []
+        let sets = performances.flatMap { performance in
+            guard performance.workoutSets.isEmpty else {
+                return performance.workoutSets
+            }
+            let performanceID = performance.id
+            return (try? context.fetch(FetchDescriptor<WorkoutSet>(
+                predicate: #Predicate { $0.performanceID == performanceID },
+                sortBy: [SortDescriptor(\.order)]
+            ))) ?? []
+        }
+        return performances
             .map { performance in
                 let completed = sets.filter {
                     $0.performanceID == performance.id
@@ -150,6 +162,49 @@ extension ConversationRecorder {
             .joined(separator: "；")
     }
 
+    private static func querySessionsPage(
+        _ arguments: AgentToolArguments,
+        limit: Int,
+        in context: ModelContext
+    ) -> [WorkoutSession] {
+        let lower = parsedQueryDate(arguments.dateFrom)
+        let rawUpper = parsedQueryDate(arguments.dateTo)
+        let upper = rawUpper.flatMap { value in
+            guard arguments.dateTo?.count == 10 else { return value }
+            return Calendar.current.date(byAdding: .day, value: 1, to: value)
+        }
+        let sort = [SortDescriptor(
+            \WorkoutSession.startedAt,
+            order: arguments.sort == "oldest" ? .forward : .reverse
+        )]
+        var descriptor: FetchDescriptor<WorkoutSession> = switch (lower, upper) {
+        case let (lower?, upper?):
+            FetchDescriptor(
+                predicate: #Predicate {
+                    $0.startedAt >= lower && $0.startedAt < upper
+                },
+                sortBy: sort
+            )
+        case let (lower?, nil):
+            FetchDescriptor(
+                predicate: #Predicate { $0.startedAt >= lower },
+                sortBy: sort
+            )
+        case let (nil, upper?):
+            FetchDescriptor(
+                predicate: #Predicate { $0.startedAt < upper },
+                sortBy: sort
+            )
+        case (nil, nil):
+            FetchDescriptor(sortBy: sort)
+        }
+        let offset = cursorOffset(arguments.cursor)
+        descriptor.fetchLimit = offset == .max
+            ? limit + 1
+            : offset + limit + 1
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
     private static func optionalText(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -159,10 +214,7 @@ extension ConversationRecorder {
         _ internalID: UUID,
         in context: ModelContext
     ) -> Int64? {
-        let definitions = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        return definitions.first(where: { $0.id == internalID })?.businessID
+        exerciseDefinition(internalID: internalID, in: context)?.businessID
     }
 
     private static func businessIDValue(_ id: Int64?) -> AgentJSONValue {

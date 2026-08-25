@@ -232,6 +232,44 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
+    func testProgramStatsSnapshotLoadsSummariesOffTheViewRenderPath() async throws {
+        let (context, defaults) = try makeContext()
+        defer { defaults.removePersistentDomain(forName: suite(defaults)) }
+        let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "虚构硬拉",
+            in: context
+        )
+        let program = try TrainingPlanStore.createProgram(
+            name: "虚构后链计划",
+            prescriptions: [
+                prescription(exercise: exercise, order: 1, sets: 1)
+            ],
+            in: context
+        )
+        let session = try TrainingPlanStore.startSession(
+            program: program,
+            in: context
+        )
+        let set = try XCTUnwrap(session.performances.first?.workoutSets.first)
+        set.actualReps = 5
+        set.actualWeightKG = 40
+        set.status = .completed
+        session.status = .completed
+        session.endedAt = session.startedAt.addingTimeInterval(90)
+        try context.save()
+
+        let loader = TrainingProgramStatsSnapshotLoader(
+            modelContainer: context.container
+        )
+        let snapshot = try await loader.load(programID: program.id)
+        let summary = try XCTUnwrap(snapshot.summariesBySessionID[session.id])
+
+        XCTAssertEqual(summary.completedSets, 1)
+        XCTAssertEqual(summary.completedVolume, 200)
+        XCTAssertEqual(summary.durationSeconds, 90)
+    }
+
+    @MainActor
     func testSummaryIncludesDurationVideosAndDeleteRemovesSessionGraph() throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }
@@ -282,11 +320,7 @@ final class TrainingPlanTests: XCTestCase {
             limitations: "单一视角",
             feedback: "保持稳定"
         )
-        context.insert(session)
-        context.insert(performance)
-        context.insert(set)
-        context.insert(analysis)
-        context.insert(WorkoutEntry(
+        let projectedWorkout = WorkoutEntry(
             date: startedAt,
             exercise: exercise.canonicalName,
             exerciseID: exercise.id,
@@ -295,7 +329,18 @@ final class TrainingPlanTests: XCTestCase {
             ],
             sourceWorkoutSessionID: session.id,
             sourcePerformanceID: performance.id
-        ))
+        )
+        performance.session = session
+        performance.exerciseDefinition = exercise
+        performance.projectedWorkout = projectedWorkout
+        set.performance = performance
+        projectedWorkout.exerciseDefinition = exercise
+        projectedWorkout.sourcePerformance = performance
+        context.insert(session)
+        context.insert(performance)
+        context.insert(set)
+        context.insert(analysis)
+        context.insert(projectedWorkout)
         try context.save()
 
         let summary = TrainingPlanStore.summary(
@@ -517,7 +562,7 @@ final class TrainingPlanTests: XCTestCase {
     }
 
     @MainActor
-    func testPerformanceReviewToolBindsEvidenceToSourceJobIdempotently() throws {
+    func testPerformanceReviewToolBindsEvidenceToSourceJobIdempotently() async throws {
         let (context, defaults) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suite(defaults)) }
         let path = try MediaStore.saveRestoredMedia(
@@ -568,8 +613,11 @@ final class TrainingPlanTests: XCTestCase {
         performance.exerciseDefinition = exercise
         try BusinessIDAllocator.assignMissingIDs(in: context)
         try context.save()
+        let asyncFingerprint = try await TrainingIntelligenceService
+            .performanceFingerprintAsync(for: performance)
         let fingerprint = try TrainingIntelligenceService
             .performanceFingerprint(for: performance)
+        XCTAssertEqual(asyncFingerprint, fingerprint)
         let arguments = try AgentToolArguments(
             feedback: "保持肩胛稳定",
             performanceID: XCTUnwrap(performance.businessID),
@@ -664,7 +712,6 @@ final class TrainingPlanTests: XCTestCase {
         )
         context.insert(projected)
         try context.save()
-        DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
         let retainedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
         XCTAssertEqual(retainedWorkouts.count, 2)
 

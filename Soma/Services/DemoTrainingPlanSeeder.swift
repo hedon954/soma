@@ -1,10 +1,17 @@
+import Foundation
 import SwiftData
 
 @MainActor
 enum DemoTrainingPlanSeeder {
+    private static let currentBaselineKey = "demo.trainingPlan.currentBaseline.v1"
+
     static func seedIfNeeded(in context: ModelContext) {
+        guard !UserDefaults.standard.bool(forKey: currentBaselineKey) else { return }
         let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        guard programs.isEmpty else { return }
+        guard programs.isEmpty else {
+            UserDefaults.standard.set(true, forKey: currentBaselineKey)
+            return
+        }
 
         let definitions = (
             try? context.fetch(FetchDescriptor<ExerciseDefinition>())
@@ -35,5 +42,6 @@ enum DemoTrainingPlanSeeder {
             prescriptions: prescriptions,
             in: context
         )
+        UserDefaults.standard.set(true, forKey: currentBaselineKey)
     }
 }

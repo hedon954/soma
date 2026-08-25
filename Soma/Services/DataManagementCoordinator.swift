@@ -35,14 +35,21 @@ final class DataManagementCoordinator {
     }
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let backupBackgroundLease: BackgroundExecutionLease
+    @ObservationIgnored private var automaticBackupTask: Task<Void, Never>?
     private(set) var activity: DataManagementActivity?
     private(set) var lastBackupAt: Date?
     private(set) var lastErrorMessage: String?
     private(set) var backupDestinationName: String?
     private(set) var lastExportResult: PortableExportResult?
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        backupBackgroundLease: BackgroundExecutionLease? = nil
+    ) {
         self.defaults = defaults
+        self.backupBackgroundLease = backupBackgroundLease
+            ?? UIKitBackgroundExecutionLease()
         lastBackupAt = defaults.object(forKey: DefaultsKey.lastBackupAt) as? Date
         lastErrorMessage = defaults.string(forKey: DefaultsKey.lastError)
         backupDestinationName = defaults.string(forKey: DefaultsKey.destinationName)
@@ -67,15 +74,13 @@ final class DataManagementCoordinator {
         defer { activity = nil }
         lastExportResult = nil
 
-        let snapshot = try PersonalDataSnapshot.capture(
-            from: personalContainer.mainContext
-        )
+        let snapshot = try await captureSnapshot(from: personalContainer)
         let payload = PortableExportPayload(snapshot: snapshot)
         do {
             let result = try await withSecurityScopedAccess(to: destination) {
-                try await Task.detached(priority: .userInitiated) {
+                try await runDetached(priority: .userInitiated) {
                     try DataExportService.export(payload, to: destination)
-                }.value
+                }
             }
             lastExportResult = result
             return result
@@ -95,32 +100,30 @@ final class DataManagementCoordinator {
 
         let salt = try DataBackupCrypto.randomSalt()
         let iterations = DataBackupCrypto.defaultIterations
-        let keyData = try await Task.detached(priority: .userInitiated) {
+        let keyData = try await runDetached(priority: .userInitiated) {
             try DataBackupCrypto.deriveKeyData(
                 password: password,
                 salt: salt,
                 iterations: iterations
             )
-        }.value
+        }
         let credential = DataBackupCredential(
             salt: salt,
             iterations: iterations,
             keyData: keyData
         )
-        let snapshot = try PersonalDataSnapshot.capture(
-            from: personalContainer.mainContext
-        )
+        let snapshot = try await captureSnapshot(from: personalContainer)
 
         do {
             let configured = try await withSecurityScopedAccess(to: destination) {
                 let bookmark = try destination.bookmarkData()
-                let result = try await Task.detached(priority: .userInitiated) {
+                let result = try await runDetached(priority: .userInitiated) {
                     try DataBackupService.write(
                         snapshot: snapshot,
                         to: destination,
                         credential: credential
                     )
-                }.value
+                }
                 return (result, bookmark)
             }
             defaults.set(configured.1, forKey: DefaultsKey.bookmark)
@@ -166,9 +169,7 @@ final class DataManagementCoordinator {
             recordBackupFailure(error)
             throw DataArchiveError.destinationUnavailable
         }
-        let snapshot = try PersonalDataSnapshot.capture(
-            from: personalContainer.mainContext
-        )
+        let snapshot = try await captureSnapshot(from: personalContainer)
         let fingerprint = try snapshot.contentFingerprint()
         if skipIfUnchanged,
            fingerprint == defaults.string(forKey: DefaultsKey.contentFingerprint)
@@ -180,13 +181,13 @@ final class DataManagementCoordinator {
                 let refreshedBookmark = bookmarkIsStale
                     ? try destination.bookmarkData()
                     : nil
-                let result = try await Task.detached(priority: .utility) {
+                let result = try await runDetached(priority: .utility) {
                     try DataBackupService.write(
                         snapshot: snapshot,
                         to: destination,
                         credential: credential
                     )
-                }.value
+                }
                 return (result, refreshedBookmark)
             }
             if let refreshedBookmark = backedUp.1 {
@@ -204,26 +205,22 @@ final class DataManagementCoordinator {
     func backupWhenEnteringBackground(
         personalContainer: ModelContainer
     ) {
-        guard isBackupConfigured else { return }
-        var backgroundTask = UIBackgroundTaskIdentifier.invalid
-        backgroundTask = UIApplication.shared.beginBackgroundTask(
-            withName: "SomaDataBackup"
-        ) {
-            if backgroundTask != .invalid {
-                UIApplication.shared.endBackgroundTask(backgroundTask)
-                backgroundTask = .invalid
-            }
+        guard isBackupConfigured, automaticBackupTask == nil else { return }
+        backupBackgroundLease.begin { [weak self] in
+            self?.automaticBackupTask?.cancel()
+            self?.automaticBackupTask = nil
         }
-        Task {
+        automaticBackupTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                backupBackgroundLease.end()
+                automaticBackupTask = nil
+            }
             _ = try? await backupNow(
                 personalContainer: personalContainer,
                 allowBusySkip: true,
                 skipIfUnchanged: true
             )
-            if backgroundTask != .invalid {
-                UIApplication.shared.endBackgroundTask(backgroundTask)
-                backgroundTask = .invalid
-            }
         }
     }
 
@@ -239,32 +236,41 @@ final class DataManagementCoordinator {
         let prepared: PreparedDataRestore
         do {
             prepared = try await withSecurityScopedAccess(to: selectedDirectory) {
-                try await Task.detached(priority: .userInitiated) {
+                try await runDetached(priority: .userInitiated) {
                     try DataBackupService.prepareRestore(
                         from: selectedDirectory,
                         password: password
                     )
-                }.value
+                }
             }
         } catch {
             throw userFacing(error, fallback: "无法读取这份备份，当前数据没有改变。")
         }
 
-        let personalContext = dataSpace.personalContainer.mainContext
-        let demoContext = dataSpace.demoContainer.mainContext
+        let personalContainer: ModelContainer = dataSpace.personalContainer
+        let demoContainer: ModelContainer = dataSpace.demoContainer
+        let personalContext = personalContainer.mainContext
         let oldMedia: Set<String>
         let demoMedia: Set<String>
         do {
-            oldMedia = try PersonalDataSnapshot.capture(from: personalContext)
-                .referencedMediaPaths
-            demoMedia = try PersonalDataSnapshot.capture(from: demoContext)
-                .referencedMediaPaths
+            let containers = (
+                personal: personalContainer,
+                demo: demoContainer
+            )
+            let references = try await runDetached(priority: .utility) {
+                try (
+                    MediaReferenceStore.referencedPaths(in: containers.personal),
+                    MediaReferenceStore.referencedPaths(in: containers.demo)
+                )
+            }
+            oldMedia = references.0
+            demoMedia = references.1
             try prepared.snapshot.replace(
                 in: personalContext,
                 mediaPathMapping: prepared.mediaPathMapping
             )
             try SomaDataMigration.migrateIfNeeded(
-                container: dataSpace.personalContainer,
+                container: personalContainer,
                 dataSpace: .personal
             )
         } catch {
@@ -321,6 +327,30 @@ final class DataManagementCoordinator {
             iterations: iterations > 0 ? iterations : DataBackupCrypto.defaultIterations,
             keyData: keyData
         )
+    }
+
+    private func captureSnapshot(
+        from container: ModelContainer
+    ) async throws -> PersonalDataSnapshot {
+        try await runDetached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let loader = PersonalDataSnapshotLoader(modelContainer: container)
+            return try await loader.capture()
+        }
+    }
+
+    private func runDetached<T: Sendable>(
+        priority: TaskPriority,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        let worker = Task.detached(priority: priority) {
+            try await operation()
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
     }
 
     private func resolveBackupDestination() throws -> (URL, Bool) {

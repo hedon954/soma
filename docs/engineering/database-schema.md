@@ -4,7 +4,7 @@
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
 - 状态：当前 schema 快照；实现收口后仍需以数据库结构门禁复核
-- 最近同步：2026-08-23
+- 最近同步：2026-08-24
 - SwiftData 注册来源：[`Soma/App/SomaApp.swift`](../../Soma/App/SomaApp.swift)
 - SwiftData 版本与启动迁移来源：[`Soma/Models/SomaDataMigration.swift`](../../Soma/Models/SomaDataMigration.swift)
 - SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models/)
@@ -16,6 +16,7 @@
   - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0090](../adr/0090-current-state-business-models-and-session-facts.md)
   - [ADR 0091](../adr/0091-action-level-planned-rest.md)
+  - [ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
 - 相关决策：ADR 0001、0031、0032，以及
   [`训练领域模型与运行时协议`](training-domain-model.md)
 
@@ -46,6 +47,11 @@ Effort、修复关系/投影键、收敛当前计划、分配业务 ID 并写入
 [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)；任一数据空间
 失败时不开放业务 Root。
 
+schema version 6 marker 是当前唯一安装基线。启动先用 `key + schemaVersion` 谓词和
+`fetchLimit = 1` 检查 marker；命中后立即返回，不再扫描业务表。marker 尚未完成时才执行当前
+收口步骤并在完整校验通过后写入。缓存与性能边界见
+[ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)。
+
 ### 用户、场馆与外部同步
 
 <!-- schema-model: ExternalSyncCursor | id,source,stream,cursorData,updatedAt -->
@@ -55,7 +61,7 @@ Effort、修复关系/投影键、收敛当前计划、分配业务 ID 并写入
 | <!-- schema-model: UserProfile | id,businessID,updatedAt,displayName,biologicalSexRaw,birthDate,age,height,referenceWeight,fitnessGoal,healthNotes --> `UserProfile` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体资料字段 | `age` 只用于旧数据兼容；可由生日推导时不应成为新事实来源。 |
 | <!-- schema-model: GymProfile | id,businessID,name,createdAt,notes,coverImagePath,isCurrent,latitude,longitude,locationLabel,locationAccuracy,locationUpdatedAt,matchRadiusMeters --> `GymProfile` | `businessID: Int64?`、`id: UUID`（迁移锚点）及场馆字段 | 每个数据空间只能有一个当前健身房，由共享规则维护。 |
 | <!-- schema-model: GymEquipment | id,businessID,gymID,name,category,capabilities,confidence,imagePath,createdAt --> `GymEquipment` | `businessID: Int64?`、`id: UUID`（迁移锚点）、`gymID: UUID` 及设备字段 | `gymID → GymProfile.id`；后续关系迁移前保留旧锚点。 |
-| <!-- schema-model: GymMedia | id,gymID,path,createdAt --> `GymMedia` | `id: UUID`、`gymID: UUID`、`path: String`、`createdAt: Date` | `gymID → GymProfile.id`；`path` 是 App 沙盒媒体引用。 |
+| <!-- schema-model: GymMedia | id,gymID,path,createdAt --> `GymMedia` | `id: UUID`、`gymID: UUID`、`path: String`、`createdAt: Date` | `gymID → GymProfile.id`；`path` 是独立逻辑媒体引用。相同内容允许由不同路径通过硬链接复用物理文件，单条记录删除不会破坏其他引用。 |
 
 ### 用户记录
 

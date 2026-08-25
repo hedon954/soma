@@ -19,7 +19,7 @@ extension ConversationProcessingService {
         return parts.isEmpty ? "发送了媒体" : "发送了" + parts.joined(separator: "和")
     }
 
-    func prepareStoredMedia(
+    nonisolated func prepareStoredMedia(
         _ attachments: [MediaAttachmentReference],
         frameLimit: Int,
         directVideoCapability: DirectVideoCapability? = nil
@@ -124,7 +124,7 @@ extension ConversationProcessingService {
         )
     }
 
-    private func balancedFrames(
+    private nonisolated func balancedFrames(
         from groups: [[Data]],
         limit: Int
     ) -> [Data] {

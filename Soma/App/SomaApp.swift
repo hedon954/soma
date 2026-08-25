@@ -58,9 +58,7 @@ final class DataSpaceController {
 
     init(
         defaults: UserDefaults = .standard,
-        isStoredInMemoryOnly: Bool = ProcessInfo.processInfo.environment[
-            "XCTestConfigurationFilePath"
-        ] != nil
+        isStoredInMemoryOnly: Bool = AppTestRuntime.isRunning
     ) {
         self.defaults = defaults
         self.isStoredInMemoryOnly = isStoredInMemoryOnly
@@ -105,6 +103,9 @@ final class DataSpaceController {
         guard activeSpace != space else { return }
         activeSpace = space
         defaults.set(space.rawValue, forKey: Self.defaultsKey)
+        Task {
+            await ImagePipeline.shared.removeAllCachedImages()
+        }
     }
 
     func toggle() {
@@ -113,6 +114,17 @@ final class DataSpaceController {
 
     func runLaunchMigration() async {
         guard migrationState != .running, migrationState != .ready else { return }
+        let performanceInterval = AppPerformance.begin(
+            .launchMigration,
+            detail: "path=launch"
+        )
+        var performanceOutcome = "success"
+        defer {
+            AppPerformance.end(
+                performanceInterval,
+                detail: "result=\(performanceOutcome)"
+            )
+        }
         recoveryMode = .none
         migrationState = .running
         migrationFailureDetail = nil
@@ -129,6 +141,7 @@ final class DataSpaceController {
             )
             migrationState = .ready
         } catch {
+            performanceOutcome = "failure"
             recoveryMode = .clearPersonalOnly
             migrationFailureDetail = SomaMigrationDiagnostics.report(
                 error: error,
@@ -147,6 +160,17 @@ final class DataSpaceController {
     ) async {
         guard migrationState != .running, migrationState != .ready else {
             return
+        }
+        let performanceInterval = AppPerformance.begin(
+            .launchMigration,
+            detail: clearAllStores ? "path=reset_all" : "path=reset_personal"
+        )
+        var performanceOutcome = "success"
+        defer {
+            AppPerformance.end(
+                performanceInterval,
+                detail: "result=\(performanceOutcome)"
+            )
         }
         migrationState = .running
         recoveryMode = .none
@@ -173,6 +197,7 @@ final class DataSpaceController {
             )
             migrationState = .ready
         } catch {
+            performanceOutcome = "failure"
             recoveryMode = clearAllStores ? .clearAllStores : .clearPersonalOnly
             migrationFailureDetail = SomaMigrationDiagnostics.report(
                 error: error,

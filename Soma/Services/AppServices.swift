@@ -1,11 +1,9 @@
-import AVFoundation
 import Foundation
 import HealthKit
 import Observation
 import Security
 import SwiftData
 import SwiftOpenAI
-import UIKit
 
 typealias AIRequestLoader = (URLRequest) async throws -> (Data, URLResponse)
 typealias AgentStreamLoader = (
@@ -141,17 +139,18 @@ enum HealthKitImporter {
         bodyCursor: ExternalSyncCursor?,
         into context: ModelContext
     ) throws -> HealthKitImportResult {
-        let existingWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
-        let existingBodyEntries = try context.fetch(FetchDescriptor<BodyEntry>())
+        let source = sourceName
+        let existingWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.externalSource == source }
+        ))
+        let existingBodyEntries = try context.fetch(FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.externalSource == source }
+        ))
         var existingWorkoutIDs = Set(
-            existingWorkouts
-                .filter { $0.externalSource == sourceName }
-                .compactMap(\.externalID)
+            existingWorkouts.compactMap(\.externalID)
         )
         var existingBodyIDs = Set(
-            existingBodyEntries
-                .filter { $0.externalSource == sourceName }
-                .compactMap(\.externalID)
+            existingBodyEntries.compactMap(\.externalID)
         )
         let deletedWorkoutIDs = Set(workoutChanges.deleted.map(\.uuid.uuidString))
         let deletedBodyIDs = Set(bodyChanges.deleted.map(\.uuid.uuidString))
@@ -385,6 +384,8 @@ final class AIService {
     let defaults: UserDefaults
     @ObservationIgnored
     let apiKeyOverride: String?
+    @ObservationIgnored
+    var apiKeyCache: [String: String] = [:]
     @ObservationIgnored
     private let requestLoader: AIRequestLoader
     @ObservationIgnored
@@ -1220,145 +1221,12 @@ private extension String {
     }
 }
 
-enum MediaStore {
-    static func saveImage(_ data: Data) throws -> String {
-        try save(data: normalizedJPEG(data), extension: "jpg")
-    }
-
-    static func saveVideo(from source: URL) throws -> String {
-        let destination = try mediaDirectory()
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(source.pathExtension.isEmpty ? "mov" : source.pathExtension)
-        try FileManager.default.copyItem(at: source, to: destination)
-        return storedPath(for: destination)
-    }
-
-    static func image(at path: String?) -> UIImage? {
-        guard let url = url(at: path),
-              let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
-    }
-
-    static func url(at path: String?) -> URL? {
-        guard let path, !path.isEmpty else { return nil }
-        let original = URL(fileURLWithPath: path)
-        if path.hasPrefix("/"), FileManager.default.fileExists(atPath: original.path) {
-            return original
-        }
-
-        guard let media = try? mediaDirectory() else { return nil }
-        let filename = original.lastPathComponent
-        let relocated = media.appendingPathComponent(filename)
-        return FileManager.default.fileExists(atPath: relocated.path) ? relocated : nil
-    }
-
-    static func saveRestoredMedia(
-        _ data: Data,
-        fileExtension: String
-    ) throws -> String {
-        let sanitized = fileExtension
-            .lowercased()
-            .filter { $0.isLetter || $0.isNumber }
-        return try save(
-            data: data,
-            extension: String((sanitized.isEmpty ? "bin" : sanitized).prefix(10))
-        )
-    }
-
-    @discardableResult
-    static func removeStoredFile(at path: String) -> Bool {
-        guard let media = try? mediaDirectory() else { return false }
-        let filename = URL(fileURLWithPath: path).lastPathComponent
-        guard !filename.isEmpty else { return false }
-        let target = media.appending(path: filename)
-        guard target.deletingLastPathComponent().standardizedFileURL
-            == media.standardizedFileURL,
-            FileManager.default.fileExists(atPath: target.path)
-        else {
-            return false
-        }
-        do {
-            try FileManager.default.removeItem(at: target)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    static func allStoredPaths() -> Set<String> {
-        guard let media = try? mediaDirectory(),
-              let urls = try? FileManager.default.contentsOfDirectory(
-                  at: media,
-                  includingPropertiesForKeys: [.isRegularFileKey],
-                  options: [.skipsHiddenFiles]
-              )
-        else {
-            return []
-        }
-        return Set(urls.compactMap { url in
-            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
-            return values?.isRegularFile == true ? storedPath(for: url) : nil
-        })
-    }
-
-    private static func save(data: Data, extension ext: String) throws -> String {
-        let url = try mediaDirectory()
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(ext)
-        try data.write(to: url, options: [.atomic, .completeFileProtection])
-        return storedPath(for: url)
-    }
-
-    private static func mediaDirectory() throws -> URL {
-        let root = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let media = root.appendingPathComponent("PrivateMedia", isDirectory: true)
-        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
-        return media
-    }
-
-    private static func storedPath(for url: URL) -> String {
-        "PrivateMedia/\(url.lastPathComponent)"
-    }
-
-    private static func normalizedJPEG(_ data: Data) -> Data {
-        guard let image = UIImage(data: data),
-              let resized = image.preparingThumbnail(of: CGSize(width: 1600, height: 1600)),
-              let jpeg = resized.jpegData(compressionQuality: 0.82) else { return data }
-        return jpeg
-    }
-}
-
-enum VideoFrameExtractor {
-    static func frames(from url: URL, count: Int = 4) async -> [Data] {
-        let asset = AVURLAsset(url: url)
-        guard let duration = try? await asset.load(.duration),
-              duration.seconds.isFinite,
-              duration.seconds > 0 else { return [] }
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 960, height: 960)
-        var frames: [Data] = []
-        for index in 1 ... count {
-            let second = duration.seconds * Double(index) / Double(count + 1)
-            let time = CMTime(seconds: second, preferredTimescale: 600)
-            if let image = try? await generator.image(at: time).image,
-               let data = UIImage(cgImage: image).jpegData(compressionQuality: 0.72)
-            {
-                frames.append(data)
-            }
-        }
-        return frames
-    }
-}
-
 @MainActor
 enum DemoSeeder {
+    private static let currentBaselineKey = "demo.currentBaseline.v1"
+
     static func seedIfNeeded(_ context: ModelContext) {
+        guard !UserDefaults.standard.bool(forKey: currentBaselineKey) else { return }
         seedTraceLogsIfNeeded(in: context)
         backfillDemoProfileAndCaloriesIfNeeded(in: context)
         backfillDemoAgentTurnIfNeeded(in: context)
@@ -1366,6 +1234,7 @@ enum DemoSeeder {
         let existingGyms = (try? context.fetch(descriptor)) ?? []
         guard existingGyms.isEmpty else {
             backfillBundledMediaIfNeeded(in: context, gyms: existingGyms)
+            UserDefaults.standard.set(true, forKey: currentBaselineKey)
             return
         }
 
@@ -1463,6 +1332,7 @@ enum DemoSeeder {
         ))
         try? context.save()
         UserDefaults.standard.set(true, forKey: "demo.bundledMedia.v1")
+        UserDefaults.standard.set(true, forKey: currentBaselineKey)
     }
 
     private static func backfillDemoProfileAndCaloriesIfNeeded(in context: ModelContext) {
@@ -1728,8 +1598,48 @@ enum DemoSeeder {
                   $0.name == "我的健身房" && $0.notes == "家附近 · 步行 8 分钟"
               }) else { return }
 
-        let media = installBundledMedia()
-        guard media.hasAnyValue else { return }
+        let equipment = (try? context.fetch(FetchDescriptor<GymEquipment>())) ?? []
+        let missingEquipment = equipment.filter {
+            $0.gymID == gym.id && $0.imagePath == nil
+        }
+
+        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = 1
+        let workout = (try? context.fetch(workoutDescriptor))?.first
+
+        var mealDescriptor = FetchDescriptor<MealEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        mealDescriptor.fetchLimit = 1
+        let meal = (try? context.fetch(mealDescriptor))?.first
+
+        var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        bodyDescriptor.fetchLimit = 1
+        let body = (try? context.fetch(bodyDescriptor))?.first
+
+        let needsGymWide = gym.coverImagePath == nil
+            || missingEquipment.contains {
+                !["可调哑铃", "高位下拉机"].contains($0.name)
+            }
+        let needsGymEquipment = gym.coverImagePath == nil
+            || missingEquipment.contains {
+                ["可调哑铃", "高位下拉机"].contains($0.name)
+            }
+        let media = installBundledMedia(
+            gymWide: needsGymWide,
+            gymEquipment: needsGymEquipment,
+            meal: meal != nil && meal?.imagePath == nil,
+            workout: workout != nil && workout?.mediaPath == nil,
+            body: body != nil && body?.imagePath == nil
+        )
+        guard media.hasAnyValue else {
+            UserDefaults.standard.set(true, forKey: "demo.bundledMedia.v1")
+            return
+        }
 
         if gym.coverImagePath == nil {
             gym.coverImagePath = media.gymWide
@@ -1741,18 +1651,13 @@ enum DemoSeeder {
             }
         }
 
-        let equipment = (try? context.fetch(FetchDescriptor<GymEquipment>())) ?? []
-        for item in equipment where item.gymID == gym.id && item.imagePath == nil {
+        for item in missingEquipment {
             item.imagePath = ["可调哑铃", "高位下拉机"].contains(item.name)
                 ? media.gymEquipment
                 : media.gymWide
         }
 
-        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        workoutDescriptor.fetchLimit = 1
-        if let workout = try? context.fetch(workoutDescriptor).first,
+        if let workout,
            workout.mediaPath == nil,
            let path = media.workout
         {
@@ -1761,22 +1666,14 @@ enum DemoSeeder {
             workout.notes = "今天状态不错，最后两次略吃力。"
         }
 
-        var mealDescriptor = FetchDescriptor<MealEntry>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        mealDescriptor.fetchLimit = 1
-        if let meal = try? context.fetch(mealDescriptor).first,
+        if let meal,
            meal.imagePath == nil
         {
             meal.imagePath = media.meal
             meal.notes = "演示餐食照片 · AI 按可见份量估算"
         }
 
-        var bodyDescriptor = FetchDescriptor<BodyEntry>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        bodyDescriptor.fetchLimit = 1
-        if let body = try? context.fetch(bodyDescriptor).first,
+        if let body,
            body.imagePath == nil
         {
             body.imagePath = media.body
@@ -1789,12 +1686,28 @@ enum DemoSeeder {
     }
 
     private static func installBundledMedia() -> DemoMediaPaths {
+        installBundledMedia(
+            gymWide: true,
+            gymEquipment: true,
+            meal: true,
+            workout: true,
+            body: true
+        )
+    }
+
+    private static func installBundledMedia(
+        gymWide: Bool,
+        gymEquipment: Bool,
+        meal: Bool,
+        workout: Bool,
+        body: Bool
+    ) -> DemoMediaPaths {
         DemoMediaPaths(
-            gymWide: installImage(named: "gym-wide"),
-            gymEquipment: installImage(named: "gym-equipment"),
-            meal: installImage(named: "meal-chicken-bowl"),
-            workout: installImage(named: "workout-squat"),
-            body: installImage(named: "body-progress")
+            gymWide: gymWide ? installImage(named: "gym-wide") : nil,
+            gymEquipment: gymEquipment ? installImage(named: "gym-equipment") : nil,
+            meal: meal ? installImage(named: "meal-chicken-bowl") : nil,
+            workout: workout ? installImage(named: "workout-squat") : nil,
+            body: body ? installImage(named: "body-progress") : nil
         )
     }
 

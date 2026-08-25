@@ -7,7 +7,29 @@ struct GymLibraryView: View {
     @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
     @Query(sort: \GymMedia.createdAt) private var media: [GymMedia]
 
+    init() {
+        var gymDescriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        gymDescriptor.fetchLimit = 100
+        _gyms = Query(gymDescriptor)
+
+        var equipmentDescriptor = FetchDescriptor<GymEquipment>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        equipmentDescriptor.fetchLimit = 1000
+        _equipment = Query(equipmentDescriptor)
+
+        var mediaDescriptor = FetchDescriptor<GymMedia>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        mediaDescriptor.fetchLimit = 1000
+        _media = Query(mediaDescriptor)
+    }
+
     var body: some View {
+        let equipmentCounts = Dictionary(grouping: equipment, by: \.gymID)
+            .mapValues(\.count)
         List {
             if gyms.isEmpty {
                 ContentUnavailableView(
@@ -26,7 +48,7 @@ struct GymLibraryView: View {
                             } label: {
                                 GymLibraryRow(
                                     gym: gym,
-                                    equipmentCount: equipment.filter { $0.gymID == gym.id }.count
+                                    equipmentCount: equipmentCounts[gym.id, default: 0]
                                 )
                             }
 
@@ -116,8 +138,8 @@ struct GymDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
-    @Query(sort: \GymEquipment.createdAt) private var allEquipment: [GymEquipment]
-    @Query(sort: \GymMedia.createdAt, order: .reverse) private var allMedia: [GymMedia]
+    @Query private var equipment: [GymEquipment]
+    @Query private var media: [GymMedia]
     let gym: GymProfile
     @State private var editingGym: GymProfile?
     @State private var editingEquipment: GymEquipment?
@@ -126,13 +148,21 @@ struct GymDetailView: View {
     @State private var presentedPhoto: MediaAttachmentReference?
     @State private var confirmsGymDeletion = false
 
-    private var equipment: [GymEquipment] {
-        allEquipment.filter { $0.gymID == gym.id }
+    init(gym: GymProfile) {
+        self.gym = gym
+        let gymID = gym.id
+        _equipment = Query(FetchDescriptor<GymEquipment>(
+            predicate: #Predicate { $0.gymID == gymID },
+            sortBy: [SortDescriptor(\.createdAt)]
+        ))
+        _media = Query(FetchDescriptor<GymMedia>(
+            predicate: #Predicate { $0.gymID == gymID },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))
     }
 
     private var photos: [MediaAttachmentReference] {
-        let recorded = allMedia
-            .filter { $0.gymID == gym.id }
+        let recorded = media
             .map { MediaAttachmentReference(kind: .image, path: $0.path) }
         if !recorded.isEmpty {
             return recorded
@@ -250,8 +280,8 @@ struct GymDetailView: View {
                 MediaAssociationStore.detachGymPhoto(
                     at: $0.path,
                     from: gym,
-                    equipment: allEquipment,
-                    media: allMedia,
+                    equipment: equipment,
+                    media: media,
                     in: modelContext
                 )
             }
@@ -261,8 +291,8 @@ struct GymDetailView: View {
                 StructuredDataStore.deleteGym(
                     gym,
                     gyms: gyms,
-                    equipment: allEquipment,
-                    media: allMedia,
+                    equipment: equipment,
+                    media: media,
                     in: modelContext
                 )
                 dismiss()

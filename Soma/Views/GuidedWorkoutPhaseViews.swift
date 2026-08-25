@@ -82,7 +82,7 @@ struct GuidedSetCountdownView: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.2)) { context in
+        TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(spacing: 16) {
                 Text("即将开始")
                     .font(.title2.weight(.semibold))

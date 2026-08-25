@@ -1,5 +1,11 @@
 import Foundation
 
+extension Notification.Name {
+    static let agentInputShortcutsDidChange = Notification.Name(
+        "top.hedon.soma.agent-input-shortcuts-did-change"
+    )
+}
+
 /// PRD 033：输入框快捷按钮是用户可完整增删改的实体。它决定一次发送要走哪个 Skill、
 /// 以及本次允许模型看到哪些 Tool；Skill 只提供专业方法，不再自带工具权限。
 struct AgentInputShortcut: Codable, Identifiable, Equatable, Sendable {
@@ -78,6 +84,7 @@ struct AgentInputShortcut: Codable, Identifiable, Equatable, Sendable {
 enum AgentInputShortcutStore {
     static let storageKey = "ai.react.input-shortcuts.v1"
     static let maximumVisibleCount = 6
+    private static let cache = AgentInputShortcutMemoryCache()
 
     /// 默认只保留三个：饮食分析、训练记录、近期分析。其余内置 Skill 仍可在设置里绑定，
     /// 但不占用聊天输入区。
@@ -122,15 +129,28 @@ enum AgentInputShortcutStore {
     static func shortcuts(
         defaults: UserDefaults = .standard
     ) -> [AgentInputShortcut] {
+        if defaults === UserDefaults.standard,
+           let cached = cache.value()
+        {
+            return cached
+        }
         guard let data = defaults.data(forKey: storageKey),
               let stored = try? JSONDecoder().decode(
                   [AgentInputShortcut].self,
                   from: data
               )
         else {
-            return defaultShortcuts
+            let fallback = defaultShortcuts
+            if defaults === UserDefaults.standard {
+                cache.replace(with: fallback)
+            }
+            return fallback
         }
-        return stored.sorted { $0.order < $1.order }
+        let sorted = stored.sorted { $0.order < $1.order }
+        if defaults === UserDefaults.standard {
+            cache.replace(with: sorted)
+        }
+        return sorted
     }
 
     static func visibleShortcuts(
@@ -189,11 +209,44 @@ enum AgentInputShortcutStore {
             }
         if let data = try? JSONEncoder().encode(normalized) {
             defaults.set(data, forKey: storageKey)
+            if defaults === UserDefaults.standard {
+                cache.replace(with: normalized)
+                NotificationCenter.default.post(
+                    name: .agentInputShortcutsDidChange,
+                    object: nil
+                )
+            }
         }
     }
 
     /// 恢复到内置三个按钮，用于设置页的重置入口。
     static func resetToDefaults(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: storageKey)
+        if defaults === UserDefaults.standard {
+            cache.replace(with: defaultShortcuts)
+            NotificationCenter.default.post(
+                name: .agentInputShortcutsDidChange,
+                object: nil
+            )
+        }
+    }
+}
+
+/// UserDefaults 本身线程安全；这里仅为标准配置保留一份已解码的不可变值。
+/// 测试和显式注入的 suite 仍逐次读取，避免跨 suite 污染。
+private final class AgentInputShortcutMemoryCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var shortcuts: [AgentInputShortcut]?
+
+    func value() -> [AgentInputShortcut]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return shortcuts
+    }
+
+    func replace(with shortcuts: [AgentInputShortcut]) {
+        lock.lock()
+        self.shortcuts = shortcuts
+        lock.unlock()
     }
 }

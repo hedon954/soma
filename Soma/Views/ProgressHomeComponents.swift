@@ -13,8 +13,8 @@ enum ProgressRecentActivityViewport {
     }
 }
 
-struct ProgressRecentActivity: Identifiable {
-    enum Kind {
+struct ProgressRecentActivity: Identifiable, Sendable {
+    enum Kind: Sendable {
         case workout
         case meal
         case body

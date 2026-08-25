@@ -832,6 +832,30 @@ extension TrainingDomainV5Tests {
         )
     }
 
+    @MainActor
+    func testCompletedCurrentMarkerSkipsLegacyRepairs() throws {
+        let fixture = try makeContext()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let workout = WorkoutEntry(exercise: "当前基线虚构动作")
+        workout.projectionKey = nil
+        fixture.context.insert(workout)
+        fixture.context.insert(DataMigrationMarker(
+            schemaVersion: SomaDataMigration.currentVersion
+        ))
+        try fixture.context.save()
+
+        try SomaDataMigration.migrateIfNeeded(
+            container: fixture.container,
+            dataSpace: .personal
+        )
+
+        XCTAssertNil(workout.projectionKey)
+        XCTAssertEqual(
+            try fixture.context.fetch(FetchDescriptor<DataMigrationMarker>()).count,
+            1
+        )
+    }
+
     func testStorePreflightFormatsUUIDBlobHexAsEntryKey() {
         XCTAssertEqual(
             SomaStorePreflight.entryKey(
@@ -901,6 +925,54 @@ extension TrainingDomainV5Tests {
             Set(expectedIDs.map(SomaDataMigration.entryKey(for:))),
             keys
         )
+    }
+
+    @MainActor
+    func testStorePreflightSkipsCurrentBaselineStore() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SomaCurrentPreflight-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("current.store")
+        do {
+            let schema = Schema(SomaDataSchema.models)
+            let container = try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(
+                    "CurrentPreflightSource",
+                    schema: schema,
+                    url: storeURL,
+                    cloudKitDatabase: .none
+                )]
+            )
+            let workout = WorkoutEntry(exercise: "当前基线虚构动作")
+            workout.projectionKey = nil
+            container.mainContext.insert(workout)
+            container.mainContext.insert(DataMigrationMarker(
+                schemaVersion: SomaDataMigration.currentVersion
+            ))
+            try container.mainContext.save()
+        }
+
+        try SomaStorePreflight.repairProjectionKeysIfNeeded(at: storeURL)
+
+        let schema = Schema(SomaDataSchema.models)
+        let reopened = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(
+                "CurrentPreflightReopened",
+                schema: schema,
+                url: storeURL,
+                cloudKitDatabase: .none
+            )]
+        )
+        let workout = try XCTUnwrap(
+            try reopened.mainContext.fetch(FetchDescriptor<WorkoutEntry>()).first
+        )
+        XCTAssertNil(workout.projectionKey)
     }
 
     @MainActor

@@ -4,26 +4,22 @@ import SwiftUI
 import UIKit
 
 struct ExerciseLibraryView: View {
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var definitions: [ExerciseDefinition]
-    @Query(sort: \WorkoutEntry.date, order: .reverse)
-    private var workouts: [WorkoutEntry]
-    @Query(sort: \ExercisePerformance.order)
-    private var performances: [ExercisePerformance]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
-    private var sessions: [WorkoutSession]
-    @Query(sort: \WorkoutSet.order) private var workoutSets: [WorkoutSet]
+    @Environment(\.modelContext) private var modelContext
+    @Query private var definitions: [ExerciseDefinition]
     @State private var searchText = ""
+    @State private var latestWorkouts: [UUID: ExerciseLibraryRecentWorkout] = [:]
+    @State private var recentWorkoutRevision = 0
 
-    private var activeDefinitions: [ExerciseDefinition] {
-        filtered(definitions.filter { !$0.isArchived })
-    }
-
-    private var archivedDefinitions: [ExerciseDefinition] {
-        filtered(definitions.filter(\.isArchived))
+    init() {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            sortBy: [SortDescriptor(\.canonicalName)]
+        )
+        descriptor.fetchLimit = 2000
+        _definitions = Query(descriptor)
     }
 
     var body: some View {
+        let sections = visibleSections()
         List {
             if definitions.isEmpty {
                 ContentUnavailableView(
@@ -33,19 +29,19 @@ struct ExerciseLibraryView: View {
                 )
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
-            } else if activeDefinitions.isEmpty, archivedDefinitions.isEmpty {
+            } else if sections.active.isEmpty, sections.archived.isEmpty {
                 ContentUnavailableView.search(text: searchText)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
                 Section("动作") {
-                    ForEach(activeDefinitions) { definition in
+                    ForEach(sections.active) { definition in
                         exerciseLink(definition)
                     }
                 }
-                if !archivedDefinitions.isEmpty {
+                if !sections.archived.isEmpty {
                     Section("已归档") {
-                        ForEach(archivedDefinitions) { definition in
+                        ForEach(sections.archived) { definition in
                             exerciseLink(definition)
                         }
                     }
@@ -57,6 +53,26 @@ struct ExerciseLibraryView: View {
         .appPageBackground()
         .navigationTitle("动作库")
         .searchable(text: $searchText, prompt: "搜索标准动作名称")
+        .task(id: ExerciseLibraryRecentWorkoutLoadRequest(
+            exerciseIDs: definitions.map(\.id),
+            revision: recentWorkoutRevision
+        )) {
+            await loadRecentWorkouts()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: ModelContext.didSave,
+                object: modelContext
+            )
+        ) { notification in
+            guard ModelContextSaveImpact.affectsExerciseLibraryRecents(
+                notification,
+                in: modelContext
+            ) else {
+                return
+            }
+            recentWorkoutRevision &+= 1
+        }
     }
 
     private func exerciseLink(
@@ -65,109 +81,117 @@ struct ExerciseLibraryView: View {
         NavigationLink {
             ExerciseDetailView(exercise: definition)
         } label: {
-            // PRD 020：列表行降密度——缩小缩略图、副文案压到一行。
-            HStack(spacing: 12) {
-                ExerciseArtworkView(
-                    reference: definition.actionIllustrations.last
-                        ?? BundledExerciseCatalog.fallbackActionIllustration,
-                    contentMode: .fill
-                )
-                .frame(
-                    width: AppTheme.listThumbnailSize.width,
-                    height: AppTheme.listThumbnailSize.height
-                )
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.controlRadius))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(definition.canonicalName)
-                            .font(.headline)
-                        if definition.isArchived {
-                            Text("已归档")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let latest = latestHistory(for: definition) {
-                        Text("最近：\(latest.date.formatted(date: .abbreviated, time: .omitted)) · \(latest.summary)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else {
-                        Text("暂无训练历史")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.vertical, AppTheme.listRowVerticalPadding)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                "\(definition.canonicalName)，\(latestHistory(for: definition)?.summary ?? "暂无训练历史")"
+            ExerciseLibraryRow(
+                definition: definition,
+                latest: latestWorkouts[definition.id]
             )
         }
     }
 
-    private func filtered(
-        _ values: [ExerciseDefinition]
-    ) -> [ExerciseDefinition] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return values }
-        return values.filter {
-            $0.canonicalName.localizedCaseInsensitiveContains(query)
+    private func loadRecentWorkouts() async {
+        let container = modelContext.container
+        let worker = Task.detached(priority: .utility) {
+            let loader = ExerciseRecentWorkoutSnapshotLoader(
+                modelContainer: container
+            )
+            return try await loader.load()
         }
+        let loaded = try? await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        guard let loaded, !Task.isCancelled else { return }
+        latestWorkouts = loaded
     }
 
-    private func latestHistory(
-        for definition: ExerciseDefinition
-    ) -> ExerciseHistoryItem? {
-        let legacy = workouts
-            .filter { $0.exerciseID == definition.id }
-            .map(ExerciseHistoryItem.legacy)
-        let projectedPerformanceIDs = Set(
-            workouts.compactMap(\.sourcePerformanceID)
-        )
-        let guided: [ExerciseHistoryItem] = performances.compactMap { performance in
-            guard performance.exerciseID == definition.id,
-                  !projectedPerformanceIDs.contains(performance.id),
-                  !performance.workoutProjectionSuppressed,
-                  let session = sessions.first(where: {
-                      $0.id == performance.sessionID
-                  })
-            else {
-                return nil
+    private func visibleSections() -> (
+        active: [ExerciseDefinition],
+        archived: [ExerciseDefinition]
+    ) {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var active: [ExerciseDefinition] = []
+        var archived: [ExerciseDefinition] = []
+        active.reserveCapacity(definitions.count)
+        archived.reserveCapacity(definitions.count / 4)
+        for definition in definitions where query.isEmpty
+            || definition.canonicalName.localizedCaseInsensitiveContains(query)
+        {
+            if definition.isArchived {
+                archived.append(definition)
+            } else {
+                active.append(definition)
             }
-            let sets = workoutSets.filter {
-                $0.performanceID == performance.id
-                    && $0.status == .completed
-            }
-            guard !sets.isEmpty else { return nil }
-            return ExerciseHistoryItem.session(ExerciseSessionHistory(
-                performance: performance,
-                session: session,
-                sets: sets
-            ))
         }
-        return (legacy + guided).max { $0.date < $1.date }
+        return (active, archived)
     }
+}
+
+private struct ExerciseLibraryRow: View {
+    let definition: ExerciseDefinition
+    let latest: ExerciseLibraryRecentWorkout?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ExerciseArtworkView(
+                reference: definition.actionIllustrations.last
+                    ?? BundledExerciseCatalog.fallbackActionIllustration,
+                contentMode: .fill
+            )
+            .frame(
+                width: AppTheme.listThumbnailSize.width,
+                height: AppTheme.listThumbnailSize.height
+            )
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.controlRadius))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(definition.canonicalName)
+                        .font(.headline)
+                    if definition.isArchived {
+                        Text("已归档")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let latest {
+                    Text("最近：\(latest.date.formatted(date: .abbreviated, time: .omitted)) · \(latest.summary)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("暂无训练历史")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, AppTheme.listRowVerticalPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(definition.canonicalName)，\(latest?.summary ?? "暂无训练历史")"
+        )
+    }
+}
+
+private struct ExerciseLibraryRecentWorkoutLoadRequest: Hashable {
+    let exerciseIDs: [UUID]
+    let revision: Int
 }
 
 /// PRD 020：动作详情首屏只读——示意图、名称、教练提示（折叠）、
 /// 紧凑肌群图与最近训练；编辑、媒体与管理下沉到工具栏菜单的子页。
 struct ExerciseDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \WorkoutEntry.date, order: .reverse)
-    private var workouts: [WorkoutEntry]
-    @Query(sort: \ExercisePerformance.order)
-    private var performances: [ExercisePerformance]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
-    private var sessions: [WorkoutSession]
-    @Query(sort: \WorkoutSet.order)
-    private var workoutSets: [WorkoutSet]
 
     let exercise: ExerciseDefinition
     let planPrescription: TemplateExercisePrescription?
 
+    @State private var workouts: [WorkoutEntry] = []
+    @State private var performances: [ExercisePerformance] = []
+    @State private var historyLimit = 50
+    @State private var historyRevision = 0
+    @State private var sourceHasMoreHistory = false
     @State private var olderHistoryExpanded = false
     @State private var showsContentEditor = false
     @State private var showsMediaEditor = false
@@ -184,78 +208,16 @@ struct ExerciseDetailView: View {
         self.planPrescription = planPrescription
     }
 
-    private var history: [WorkoutEntry] {
-        workouts.filter { $0.exerciseID == exercise.id }
-    }
-
-    private var sessionHistory: [ExerciseSessionHistory] {
-        let projectedPerformanceIDs = Set(
-            workouts.compactMap(\.sourcePerformanceID)
-        )
-        return performances.compactMap { performance in
-            guard performance.exerciseID == exercise.id,
-                  !projectedPerformanceIDs.contains(performance.id),
-                  !performance.workoutProjectionSuppressed,
-                  let session = sessions.first(where: {
-                      $0.id == performance.sessionID
-                  })
-            else {
-                return nil
-            }
-            let sets = workoutSets.filter {
-                $0.performanceID == performance.id
-                    && $0.status == .completed
-            }
-            guard !sets.isEmpty else { return nil }
-            return ExerciseSessionHistory(
-                performance: performance,
-                session: session,
-                sets: sets
-            )
-        }
-        .sorted { $0.date > $1.date }
-    }
-
-    private var allHistory: [ExerciseHistoryItem] {
-        (
-            history.map(ExerciseHistoryItem.legacy)
-                + sessionHistory.map(ExerciseHistoryItem.session)
-        ).sorted { $0.date > $1.date }
-    }
-
-    private var volumeTrend: [ExerciseVolumePoint] {
-        allHistory.compactMap { item in
-            guard let volume = item.volume, volume > 0 else { return nil }
-            return ExerciseVolumePoint(
-                id: item.id,
-                date: item.date,
-                volume: volume
-            )
-        }
-        .sorted { $0.date < $1.date }
-    }
-
-    private var displayedVolumeTrend: [ExerciseVolumePoint] {
-        Array(volumeTrend.suffix(12))
-    }
-
-    private var latestVolume: Double? {
-        displayedVolumeTrend.last?.volume
-    }
-
-    private var volumeChange: Double? {
-        guard displayedVolumeTrend.count >= 2,
-              let latest = displayedVolumeTrend.last?.volume,
-              let previous = displayedVolumeTrend.dropLast().last?.volume,
-              previous > 0
-        else {
-            return nil
-        }
-        return (latest - previous) / previous
-    }
-
     var body: some View {
-        Form {
+        let historyProjection = ExerciseDetailHistoryProjection(
+            workouts: workouts,
+            performances: performances,
+            exerciseID: exercise.id,
+            historyLimit: historyLimit,
+            sourceHasMoreHistory: sourceHasMoreHistory
+        )
+
+        return Form {
             if let planPrescription {
                 Section("本计划目标") {
                     VStack(alignment: .leading, spacing: 10) {
@@ -367,7 +329,7 @@ struct ExerciseDetailView: View {
             }
 
             Section {
-                if let latest = allHistory.first {
+                if let latest = historyProjection.allHistory.first {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("最近一次")
                             .font(.caption)
@@ -384,8 +346,12 @@ struct ExerciseDetailView: View {
                     }
                     .padding(.vertical, 4)
 
-                    if let latestVolume {
-                        volumeTrendView(latestVolume: latestVolume)
+                    if let latestVolume = historyProjection.latestVolume {
+                        volumeTrendView(
+                            latestVolume: latestVolume,
+                            points: historyProjection.displayedVolumeTrend,
+                            change: historyProjection.volumeChange
+                        )
                     }
                 } else {
                     Text("完成一次这个动作后，这里会显示最近记录与容量趋势。")
@@ -396,39 +362,69 @@ struct ExerciseDetailView: View {
             } header: {
                 Text("训练概览")
             } footer: {
-                if latestVolume != nil {
+                if historyProjection.latestVolume != nil {
                     Text("容量只统计同时记录了次数和外部重量的完成组；缺失值与自重不参与计算。")
                 }
             }
 
-            if !allHistory.isEmpty {
+            if !historyProjection.displayedHistory.isEmpty {
                 Section {
-                    ForEach(Array(allHistory.prefix(5))) { item in
+                    ForEach(historyProjection.displayedHistory.prefix(5)) { item in
                         historyLink(item)
                     }
-                    if allHistory.count > 5 {
+                    if historyProjection.displayedHistory.count > 5 {
                         DisclosureGroup(
-                            "更早记录（\(allHistory.count - 5) 条）",
+                            "更早记录（\(historyProjection.displayedHistory.count - 5) 条）",
                             isExpanded: $olderHistoryExpanded
                         ) {
-                            ForEach(Array(allHistory.dropFirst(5))) { item in
+                            ForEach(historyProjection.displayedHistory.dropFirst(5)) { item in
                                 historyLink(item)
                             }
                         }
+                    }
+                    if historyProjection.hasMoreHistory {
+                        Button("再加载 50 条") {
+                            historyLimit += 50
+                            olderHistoryExpanded = true
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 } header: {
                     HStack {
                         Text("训练记录")
                         Spacer()
-                        Text("\(allHistory.count) 条")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            "\(historyProjection.displayedHistory.count) 条\(historyProjection.hasMoreHistory ? "+" : "")"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
         }
         .navigationTitle(exercise.canonicalName)
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: ExerciseHistoryLoadRequest(
+            limit: historyLimit,
+            revision: historyRevision
+        )) {
+            loadHistory()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: ModelContext.didSave,
+                object: modelContext
+            )
+        ) { notification in
+            guard ModelContextSaveImpact.affectsExerciseHistory(
+                notification,
+                exerciseID: exercise.id,
+                in: modelContext
+            ) else {
+                return
+            }
+            historyRevision &+= 1
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -498,14 +494,16 @@ struct ExerciseDetailView: View {
     }
 
     private func addDemoVideos(_ media: [PickedMedia]) {
-        do {
-            try ExerciseDemoVideoLibrary.add(
-                media,
-                to: exercise,
-                in: modelContext
-            )
-        } catch {
-            demoVideoError = error.localizedDescription
+        Task { @MainActor in
+            do {
+                try await ExerciseDemoVideoLibrary.add(
+                    media,
+                    to: exercise,
+                    in: modelContext
+                )
+            } catch {
+                demoVideoError = error.localizedDescription
+            }
         }
     }
 
@@ -519,6 +517,28 @@ struct ExerciseDetailView: View {
         } catch {
             demoVideoError = error.localizedDescription
         }
+    }
+
+    private func loadHistory() {
+        let exerciseID = exercise.id
+        var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.exerciseID == exerciseID },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = historyLimit + 1
+
+        var performanceDescriptor = FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.exerciseID == exerciseID }
+        )
+        // 未物化的旧 Session 只是当前投影的兜底，按同一页长增量读取并设 200 条硬上限。
+        performanceDescriptor.fetchLimit = min(historyLimit + 1, 201)
+
+        let fetchedWorkouts = (try? modelContext.fetch(workoutDescriptor)) ?? []
+        let fetchedPerformances = (try? modelContext.fetch(performanceDescriptor)) ?? []
+        sourceHasMoreHistory = fetchedWorkouts.count > historyLimit
+            || (historyLimit < 200 && fetchedPerformances.count > historyLimit)
+        workouts = Array(fetchedWorkouts.prefix(historyLimit))
+        performances = Array(fetchedPerformances.prefix(min(historyLimit, 200)))
     }
 
     @ViewBuilder
@@ -556,7 +576,11 @@ struct ExerciseDetailView: View {
         .padding(.vertical, 3)
     }
 
-    private func volumeTrendView(latestVolume: Double) -> some View {
+    private func volumeTrendView(
+        latestVolume: Double,
+        points: [ExerciseVolumePoint],
+        change: Double?
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Divider()
             HStack(alignment: .firstTextBaseline, spacing: 24) {
@@ -564,17 +588,17 @@ struct ExerciseDetailView: View {
                     value: "\(number(latestVolume)) kg",
                     label: "最近容量"
                 )
-                if let volumeChange {
+                if let change {
                     volumeMetric(
-                        value: volumeChange.formatted(
+                        value: change.formatted(
                             .percent.precision(.fractionLength(0))
                         ),
                         label: "较上次"
                     )
                 }
             }
-            if displayedVolumeTrend.count > 1 {
-                Chart(displayedVolumeTrend) { point in
+            if points.count > 1 {
+                Chart(points) { point in
                     LineMark(
                         x: .value("日期", point.date),
                         y: .value("容量", point.volume)
@@ -594,7 +618,7 @@ struct ExerciseDetailView: View {
                     )
                     .symbolSize(34)
                     .foregroundStyle(AppMetricRole.trainingLoad.accent)
-                    if displayedVolumeTrend.count <= 4 {
+                    if points.count <= 4 {
                         PointMark(
                             x: .value("日期", point.date),
                             y: .value("容量", point.volume)
@@ -608,7 +632,7 @@ struct ExerciseDetailView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: displayedVolumeTrend.map(\.date)) {
+                    AxisMarks(values: points.map(\.date)) {
                         AxisGridLine()
                             .foregroundStyle(AppTheme.separator)
                         AxisTick()
@@ -619,7 +643,7 @@ struct ExerciseDetailView: View {
                 }
                 .frame(height: 150)
                 .accessibilityLabel("最近有效训练容量趋势")
-                .accessibilityValue(volumeTrendAccessibilityValue)
+                .accessibilityValue(volumeTrendAccessibilityValue(points))
             }
         }
     }
@@ -634,14 +658,92 @@ struct ExerciseDetailView: View {
         }
     }
 
-    private var volumeTrendAccessibilityValue: String {
-        displayedVolumeTrend.map {
+    private func volumeTrendAccessibilityValue(
+        _ points: [ExerciseVolumePoint]
+    ) -> String {
+        points.map {
             "\($0.date.formatted(date: .abbreviated, time: .omitted)) \(number($0.volume)) 千克"
         }.joined(separator: "，")
     }
 
     private func number(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0 ... 1)))
+    }
+}
+
+private struct ExerciseHistoryLoadRequest: Hashable {
+    let limit: Int
+    let revision: Int
+}
+
+/// 动作详情一次 body 只构建一份历史投影。此前 `allHistory`、分页列表、趋势和
+/// 变化率会沿多个 computed property 重复合并、排序与扫描同一批记录。
+private struct ExerciseDetailHistoryProjection {
+    let allHistory: [ExerciseHistoryItem]
+    let displayedHistory: [ExerciseHistoryItem]
+    let hasMoreHistory: Bool
+    let displayedVolumeTrend: [ExerciseVolumePoint]
+    let latestVolume: Double?
+    let volumeChange: Double?
+
+    init(
+        workouts: [WorkoutEntry],
+        performances: [ExercisePerformance],
+        exerciseID: UUID,
+        historyLimit: Int,
+        sourceHasMoreHistory: Bool
+    ) {
+        let projectedPerformanceIDs = Set(
+            workouts.compactMap(\.sourcePerformanceID)
+        )
+        let sessionHistory: [ExerciseSessionHistory] = performances.compactMap { performance in
+            guard performance.exerciseID == exerciseID,
+                  !projectedPerformanceIDs.contains(performance.id),
+                  !performance.workoutProjectionSuppressed,
+                  let session = performance.session
+            else {
+                return nil
+            }
+            let sets = performance.workoutSets.filter {
+                $0.status == .completed
+            }
+            guard !sets.isEmpty else { return nil }
+            return ExerciseSessionHistory(
+                performance: performance,
+                session: session,
+                sets: sets
+            )
+        }
+
+        let history = (
+            workouts.map(ExerciseHistoryItem.legacy)
+                + sessionHistory.map(ExerciseHistoryItem.session)
+        ).sorted { $0.date > $1.date }
+        allHistory = history
+        displayedHistory = Array(history.prefix(historyLimit))
+        hasMoreHistory = sourceHasMoreHistory || history.count > historyLimit
+
+        let trend: [ExerciseVolumePoint] = history.compactMap { item in
+            guard let volume = item.volume, volume > 0 else { return nil }
+            return ExerciseVolumePoint(
+                id: item.id,
+                date: item.date,
+                volume: volume
+            )
+        }
+        .sorted { $0.date < $1.date }
+        let displayedTrend = Array(trend.suffix(12))
+        displayedVolumeTrend = displayedTrend
+        latestVolume = displayedTrend.last?.volume
+        if displayedTrend.count >= 2,
+           let latest = displayedTrend.last?.volume,
+           let previous = displayedTrend.dropLast().last?.volume,
+           previous > 0
+        {
+            volumeChange = (latest - previous) / previous
+        } else {
+            volumeChange = nil
+        }
     }
 }
 

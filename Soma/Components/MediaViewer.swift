@@ -267,34 +267,50 @@ private struct MediaViewerPage: View {
 private struct ZoomableLocalImage: View {
     let path: String
 
+    @State private var image: UIImage?
+    @State private var didLoad = false
     @State private var scale: CGFloat = 1
     @GestureState private var gestureScale: CGFloat = 1
 
     var body: some View {
-        if let image = MediaStore.image(at: path) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(min(max(scale * gestureScale, 1), 4))
-                .gesture(
-                    MagnifyGesture()
-                        .updating($gestureScale) { value, state, _ in
-                            state = value.magnification
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(min(max(scale * gestureScale, 1), 4))
+                    .gesture(
+                        MagnifyGesture()
+                            .updating($gestureScale) { value, state, _ in
+                                state = value.magnification
+                            }
+                            .onEnded { value in
+                                scale = min(max(scale * value.magnification, 1), 4)
+                            }
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.snappy) {
+                            scale = scale > 1 ? 1 : 2
                         }
-                        .onEnded { value in
-                            scale = min(max(scale * value.magnification, 1), 4)
-                        }
-                )
-                .onTapGesture(count: 2) {
-                    withAnimation(.snappy) {
-                        scale = scale > 1 ? 1 : 2
                     }
-                }
-                .accessibilityLabel("放大的照片")
-                .accessibilityHint("双击切换缩放")
-        } else {
-            ContentUnavailableView("照片不可用", systemImage: "photo.badge.exclamationmark")
-                .foregroundStyle(.white)
+                    .accessibilityLabel("放大的照片")
+                    .accessibilityHint("双击切换缩放")
+            } else if didLoad {
+                ContentUnavailableView("照片不可用", systemImage: "photo.badge.exclamationmark")
+                    .foregroundStyle(.white)
+            } else {
+                ProgressView()
+                    .tint(.white)
+            }
+        }
+        .task(id: path) {
+            didLoad = false
+            image = await ImagePipeline.shared.image(
+                atStoredPath: path,
+                maxPixelSize: 4096
+            )
+            guard !Task.isCancelled else { return }
+            didLoad = true
         }
     }
 }

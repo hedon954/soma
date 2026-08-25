@@ -9,8 +9,11 @@ enum ConversationProcessingContextFactory {
         ai: AIService,
         in context: ModelContext
     ) -> ConversationProcessingContext? {
-        let sessions = (try? context.fetch(FetchDescriptor<ConversationSession>())) ?? []
-        guard let session = sessions.first(where: { $0.id == sessionID }) else {
+        var descriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        descriptor.fetchLimit = 1
+        guard let session = try? context.fetch(descriptor).first else {
             return nil
         }
         let gyms = (

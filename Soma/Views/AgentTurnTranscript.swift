@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AgentTurnTranscript: View {
     let items: [AgentTurnItem]
+    var preparedSegments: [AgentTurnTranscriptSegment]?
     let isLive: Bool
     var sourceMessage: CoachMessage?
     var isEditable = false
@@ -14,7 +15,7 @@ struct AgentTurnTranscript: View {
     }
 
     private var segments: [AgentTurnTranscriptSegment] {
-        AgentTurnTranscriptSegments.make(from: items)
+        preparedSegments ?? AgentTurnTranscriptSegments.make(from: items)
     }
 
     /// ADR 0014 / ADR 0077 / ADR 0085：按 Item 顺序渲染全部 Event Card，不按 kind 重排。
@@ -49,6 +50,96 @@ struct AgentTurnTranscript: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 实时正文直接消费稳定分块，不再先构造一个携带完整增长字符串的临时
+/// `AgentTurnItem`。这样每个 UI tick 只更新尾块，避免反复清洗和扫描全文。
+struct LiveAgentTurnTranscriptContent: View {
+    let persistedItems: [AgentTurnItem]
+    let liveText: LiveAgentTextRenderSnapshot?
+    let sourceMessage: CoachMessage
+    let isEditable: Bool
+    let canRetry: Bool
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !persistedItems.isEmpty {
+                AgentTurnTranscript(
+                    items: persistedItems,
+                    isLive: false,
+                    sourceMessage: sourceMessage,
+                    isEditable: isEditable,
+                    canRetry: canRetry,
+                    onRetry: onRetry
+                )
+            }
+
+            if let liveText,
+               !liveText.chunks.isEmpty,
+               !persistedItems.contains(where: { $0.id == liveText.itemID })
+            {
+                StreamingAgentTextView(chunks: liveText.chunks)
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 3)
+                    .accessibilityIdentifier("coach-live-agent-text")
+                    .accessibilityLabel("Soma 正在回复")
+            } else if !persistedItems.contains(where: { $0.status == .running }) {
+                AgentTurnWaitingCard()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 只有这一层读取高频流式 revision。稳定消息、列表投影、输入区和页面 toolbar
+/// 都不会因为正文每批增量而重新求值；Tab 隐藏时连这一层也停止观察。
+struct CoachLiveAgentTurnTranscript: View {
+    let persistedItems: [AgentTurnItem]
+    let observesLiveText: Bool
+    let sourceMessage: CoachMessage
+    let isEditable: Bool
+    let canRetry: Bool
+    let onRetry: () -> Void
+    let onLiveRevision: () -> Void
+
+    var body: some View {
+        CoachLiveScrollObserver(
+            observesLiveText: observesLiveText,
+            onLiveRevision: onLiveRevision
+        ) { liveText in
+            LiveAgentTurnTranscriptContent(
+                persistedItems: persistedItems,
+                liveText: liveText,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable,
+                canRetry: canRetry,
+                onRetry: onRetry
+            )
+        }
+    }
+}
+
+/// 把 Observation 依赖和滚动副作用一起限制在实时回复叶子。隐藏 Tab 不读取
+/// revision；再次进入时直接取得内存中的最新 snapshot，只补一次当前画面。
+private struct CoachLiveScrollObserver<Content: View>: View {
+    @Environment(ConversationProcessingService.self) private var processor
+
+    let observesLiveText: Bool
+    let onLiveRevision: () -> Void
+    @ViewBuilder let content: (LiveAgentTextRenderSnapshot?) -> Content
+
+    var body: some View {
+        let revision = observesLiveText ? processor.liveEventRevision : 0
+        let liveText = observesLiveText
+            ? processor.liveAssistantRenderSnapshot
+            : nil
+        content(liveText)
+            .onChange(of: revision) {
+                guard observesLiveText else { return }
+                onLiveRevision()
+            }
     }
 }
 
@@ -149,10 +240,19 @@ private struct AgentTurnItemCard: View {
 
     private var textCard: some View {
         let text = AgentVisibleTextSanitizer.sanitize(item.text)
-        return CoachResponseView(text)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 3)
-            .accessibilityLabel(text)
+        return Group {
+            if item.status == .running {
+                Text(text)
+                    .font(.subheadline.weight(.light))
+                    .lineSpacing(4)
+                    .foregroundStyle(.primary)
+            } else {
+                CoachResponseView(text)
+            }
+        }
+        .padding(.horizontal, 2)
+        .padding(.vertical, 3)
+        .accessibilityLabel(item.status == .running ? "Soma 正在回复" : text)
     }
 
     private var operationCard: some View {
@@ -337,6 +437,36 @@ private struct AgentTurnItemCard: View {
 
     private var processAccessibilityLabel: String {
         compactSubtitle.map { "\(item.title)，\($0)" } ?? item.title
+    }
+}
+
+private struct StreamingAgentTextView: View {
+    let chunks: [LiveAgentTextChunk]
+
+    var body: some View {
+        // 物理设备 Time Profiler 证明，普通 VStack 会在尾块增长和滚底时重新测量
+        // 已冻结的全部正文。让分块自身也进入懒栈，屏外前文不再参与每个 5 Hz tick。
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(chunks) { chunk in
+                if !chunk.text.isEmpty {
+                    StreamingAgentTextChunkView(chunk: chunk)
+                        .equatable()
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct StreamingAgentTextChunkView: View, Equatable {
+    let chunk: LiveAgentTextChunk
+
+    var body: some View {
+        Text(chunk.text)
+            .font(.subheadline.weight(.light))
+            .lineSpacing(4)
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

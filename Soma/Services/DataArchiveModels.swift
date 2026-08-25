@@ -87,7 +87,6 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         }
     }
 
-    @MainActor
     static func capture(
         from context: ModelContext,
         now: Date = .now
@@ -273,6 +272,13 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         for event in agentEvents ?? [] {
             context.insert(event.makeModel())
         }
+    }
+}
+
+@ModelActor
+actor PersonalDataSnapshotLoader {
+    func capture(now: Date = .now) throws -> PersonalDataSnapshot {
+        try PersonalDataSnapshot.capture(from: modelContext, now: now)
     }
 }
 

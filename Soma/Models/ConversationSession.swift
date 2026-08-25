@@ -296,6 +296,7 @@ final class ConversationSessionController {
     private(set) var activeSessionID: UUID?
     private(set) var dataSpace: DataSpace?
     private(set) var hasManualSessionOverride = false
+    private(set) var activeSessionReference: ConversationSession?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -308,39 +309,94 @@ final class ConversationSessionController {
         calendar: Calendar = .current,
         in context: ModelContext
     ) -> ConversationSession {
+        if self.dataSpace == dataSpace,
+           !hasManualSessionOverride,
+           let activeSessionReference,
+           calendar.isDate(activeSessionReference.startedAt, inSameDayAs: now)
+        {
+            return activeSessionReference
+        }
         hasManualSessionOverride = false
-        let messages = (
-            try? context.fetch(
-                FetchDescriptor<CoachMessage>(
-                    sortBy: [SortDescriptor(\.date)]
-                )
-            )
-        ) ?? []
-        let sessions = (
-            try? context.fetch(
-                FetchDescriptor<ConversationSession>(
-                    sortBy: [SortDescriptor(\.startedAt)]
-                )
-            )
-        ) ?? []
-        let session = ConversationSessionStore.resolveForEntry(
-            messages: messages,
-            sessions: sessions,
-            preferredSessionID: storedSessionID(for: dataSpace),
-            now: now,
-            calendar: calendar,
-            in: context
+
+        var latestMessageDescriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate {
+                !$0.isFromCoach && $0.sessionID != nil
+            },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
+        latestMessageDescriptor.fetchLimit = 1
+        if let latest = try? context.fetch(latestMessageDescriptor).first,
+           calendar.isDate(latest.date, inSameDayAs: now),
+           let sessionID = latest.sessionID,
+           let existing = session(id: sessionID, in: context)
+        {
+            activate(existing, dataSpace: dataSpace)
+            return existing
+        }
+
+        let dayStart = calendar.startOfDay(for: now)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart)
+            ?? now.addingTimeInterval(86400)
+        var todayDescriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate {
+                $0.startedAt >= dayStart && $0.startedAt < nextDay
+            },
+            sortBy: [SortDescriptor(\.startedAt)]
+        )
+        todayDescriptor.fetchLimit = 100
+        let todaySessions = (try? context.fetch(todayDescriptor)) ?? []
+        let emptySessions = todaySessions.filter { candidate in
+            let candidateID = candidate.id
+            var messageDescriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.sessionID == candidateID }
+            )
+            messageDescriptor.fetchLimit = 1
+            return (try? context.fetch(messageDescriptor).isEmpty) != false
+        }
+
+        let preferredID = storedSessionID(for: dataSpace)
+        if let reusable = preferredID.flatMap({ preferredID in
+            emptySessions.first { $0.id == preferredID }
+        }) ?? emptySessions.first {
+            for duplicate in emptySessions where duplicate.id != reusable.id {
+                context.delete(duplicate)
+            }
+            try? context.save()
+            activate(reusable, dataSpace: dataSpace)
+            return reusable
+        }
+
+        let session = ConversationSession(startedAt: now)
+        context.insert(session)
+        try? context.save()
         activate(session, dataSpace: dataSpace)
         return session
     }
 
+    private func session(
+        id: UUID,
+        in context: ModelContext
+    ) -> ConversationSession? {
+        var descriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
     func activeSession(in context: ModelContext) -> ConversationSession? {
         guard let activeSessionID else { return nil }
-        let sessions = (
-            try? context.fetch(FetchDescriptor<ConversationSession>())
-        ) ?? []
-        return sessions.first { $0.id == activeSessionID }
+        if activeSessionReference?.id == activeSessionID {
+            return activeSessionReference
+        }
+        var descriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { session in
+                session.id == activeSessionID
+            }
+        )
+        descriptor.fetchLimit = 1
+        activeSessionReference = try? context.fetch(descriptor).first
+        return activeSessionReference
     }
 
     @discardableResult
@@ -372,10 +428,14 @@ final class ConversationSessionController {
         if self.dataSpace == dataSpace,
            let active = activeSession(in: context)
         {
-            let messages = (
-                try? context.fetch(FetchDescriptor<CoachMessage>())
-            ) ?? []
-            if !messages.contains(where: { $0.sessionID == active.id }) {
+            let activeID = active.id
+            var messageDescriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { message in
+                    message.sessionID == activeID
+                }
+            )
+            messageDescriptor.fetchLimit = 1
+            if (try? context.fetch(messageDescriptor).isEmpty) == true {
                 return active
             }
         }
@@ -400,13 +460,16 @@ final class ConversationSessionController {
         dataSpace: DataSpace,
         in context: ModelContext
     ) {
-        let remaining = (
-            try? context.fetch(
-                FetchDescriptor<ConversationSession>(
-                    sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-                )
-            )
-        ) ?? []
+        activeSessionID = nil
+        activeSessionReference = nil
+        self.dataSpace = dataSpace
+        defaults.removeObject(forKey: Self.activeSessionDefaultsKey(for: dataSpace))
+
+        var descriptor = FetchDescriptor<ConversationSession>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        let remaining = (try? context.fetch(descriptor)) ?? []
         if let newest = remaining.first {
             activate(newest, dataSpace: dataSpace)
             hasManualSessionOverride = true
@@ -420,6 +483,7 @@ final class ConversationSessionController {
         dataSpace: DataSpace
     ) {
         activeSessionID = session.id
+        activeSessionReference = session
         self.dataSpace = dataSpace
         defaults.set(
             session.id.uuidString,

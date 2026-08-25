@@ -6,7 +6,8 @@
 - 部分替代：
   - [ADR 0071](0071-integer-business-identities-and-explicit-relations.md) 中使用 VersionedSchema 分阶段打开历史 store 的打开路径
   - [ADR 0073](0073-independent-set-prescriptions-efforts-and-guided-finalization.md) 中冻结历史 schema、注册连续 versioned migration，以及用跨级磁盘夹具自证打开路径的要求
-- 后续替代：暂无
+- 后续修订：
+  - [ADR 0097](0097-current-baseline-performance-budget-and-cache-invalidation.md) 部分替代每次启动继续执行整表业务回填的边界；当前 marker 命中后立即返回
 - 上游依据：
   - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
   - [BUG 0022](../bugs/0022-installed-v5-schema-checksum-blocks-container-open.md)

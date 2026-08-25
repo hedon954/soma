@@ -561,6 +561,7 @@ final class ExerciseLibraryTests: XCTestCase {
         )
 
         XCTAssertEqual(known.exerciseID, squat.id)
+        XCTAssertEqual(known.exerciseDefinition?.id, squat.id)
         XCTAssertEqual(known.exercise, "杠铃深蹲")
         XCTAssertNil(unknown.exerciseID)
 
@@ -572,6 +573,7 @@ final class ExerciseLibraryTests: XCTestCase {
         )
         XCTAssertEqual(created?.canonicalName, "从未见过的动作XYZ")
         XCTAssertEqual(unknown.exerciseID, created?.id)
+        XCTAssertEqual(unknown.exerciseDefinition?.id, created?.id)
     }
 
     func testQuickFillUsesLatestRecordedCapacityWithoutInventingValues() {

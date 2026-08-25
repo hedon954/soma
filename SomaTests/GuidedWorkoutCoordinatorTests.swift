@@ -558,14 +558,22 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
         XCTAssertEqual(workout.setEntries.count, 2)
         XCTAssertEqual(workout.setEntries.map(\.reps), [8, nil])
         XCTAssertEqual(workout.setEntries.map(\.externalWeightKG), [20, nil])
-        XCTAssertEqual(GuidedWorkoutRecordStore.backfill(in: fixture.context), 0)
+        XCTAssertNotNil(try GuidedWorkoutRecordStore.materialize(
+            performance: fixture.performance,
+            session: fixture.session,
+            in: fixture.context
+        ))
         XCTAssertEqual(
             try fixture.context.fetch(FetchDescriptor<WorkoutEntry>()).count,
             1
         )
         try GuidedWorkoutRecordStore.delete(workout, in: fixture.context)
         XCTAssertTrue(fixture.performance.workoutProjectionSuppressed)
-        XCTAssertEqual(GuidedWorkoutRecordStore.backfill(in: fixture.context), 0)
+        XCTAssertNil(try GuidedWorkoutRecordStore.materialize(
+            performance: fixture.performance,
+            session: fixture.session,
+            in: fixture.context
+        ))
         XCTAssertTrue(
             try fixture.context.fetch(FetchDescriptor<WorkoutEntry>()).isEmpty
         )
@@ -1736,6 +1744,13 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
 
         fixture.performance.exerciseID = definitionID
+        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == definitionID }
+        )
+        definitionDescriptor.fetchLimit = 1
+        fixture.performance.exerciseDefinition = try XCTUnwrap(
+            fixture.context.fetch(definitionDescriptor).first
+        )
         try fixture.context.save()
         try coordinator.complete(in: fixture.context)
 
@@ -1851,6 +1866,7 @@ extension GuidedWorkoutCoordinatorTests {
         session.currentSetID = sets.first?.id
         session.currentEffortID = efforts.first?.id
         performance.session = session
+        performance.exerciseDefinition = exercise
         for set in sets {
             set.performance = performance
         }

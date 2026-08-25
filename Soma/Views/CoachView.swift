@@ -4,24 +4,61 @@ import SwiftData
 import SwiftUI
 import UIKit
 
-private enum CoachSheet: Identifiable {
-    case media
-    case pendingQueue
-    case quickCapture(CaptureEntryRequest)
+struct CoachView: View {
+    @Environment(DataSpaceController.self) private var dataSpace
+    @Environment(ConversationSessionController.self) private var conversationSessions
+    @State private var sessionTransition = CoachSessionTransitionCoordinator()
 
-    var id: String {
-        switch self {
-        case .media:
-            "media"
-        case .pendingQueue:
-            "pending-queue"
-        case let .quickCapture(request):
-            "capture-\(request.id)"
-        }
+    let isTabActive: Bool
+    let onRequireAIConfiguration: () -> Void
+
+    init(
+        isTabActive: Bool = true,
+        onRequireAIConfiguration: @escaping () -> Void = {}
+    ) {
+        self.isTabActive = isTabActive
+        self.onRequireAIConfiguration = onRequireAIConfiguration
+    }
+
+    var body: some View {
+        CoachSessionPage(
+            sessionID: conversationSessions.activeSessionID,
+            dataSpace: dataSpace.activeSpace,
+            isTabActive: isTabActive,
+            sessionTransition: sessionTransition,
+            onRequireAIConfiguration: onRequireAIConfiguration
+        )
+        // Session 身份变化时在查询创建前同步回到 10 条，不能先拿上一条
+        // Session 的分页上限构造一次重视图，再在 onChange 里补救。
+        .id(conversationSessions.activeSessionID)
     }
 }
 
-struct CoachView: View {
+private struct CoachSessionPage: View {
+    let sessionID: UUID?
+    let dataSpace: DataSpace
+    let isTabActive: Bool
+    let sessionTransition: CoachSessionTransitionCoordinator
+    let onRequireAIConfiguration: () -> Void
+
+    @State private var messageLimit = CoachMessagePagePolicy.pageSize
+
+    var body: some View {
+        CoachSessionView(
+            sessionID: sessionID,
+            dataSpace: dataSpace,
+            messageLimit: messageLimit,
+            isTabActive: isTabActive,
+            sessionTransition: sessionTransition,
+            onLoadEarlier: {
+                messageLimit = CoachMessagePagePolicy.nextLimit(after: messageLimit)
+            },
+            onRequireAIConfiguration: onRequireAIConfiguration
+        )
+    }
+}
+
+private struct CoachSessionView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AIService.self) private var ai
     @Environment(DataSpaceController.self) private var dataSpace
@@ -34,25 +71,16 @@ struct CoachView: View {
     @AppStorage(RemoteAgentPreference.enabledKey)
     private var remoteExecutionEnabled = false
 
-    @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
-    @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
-    @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var exerciseDefinitions: [ExerciseDefinition]
-    @Query(sort: \WorkoutEntry.date, order: .reverse)
-    private var workouts: [WorkoutEntry]
-    @Query(sort: \ExercisePerformance.order)
-    private var exercisePerformances: [ExercisePerformance]
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
-    private var workoutSessions: [WorkoutSession]
-    @Query(sort: \WorkoutSet.order)
-    private var workoutSets: [WorkoutSet]
-    @Query(sort: \AgentJob.createdAt) private var agentJobs: [AgentJob]
+    @Query private var recentMessages: [CoachMessage]
+    @Query private var gyms: [GymProfile]
+    @Query private var agentJobs: [AgentJob]
 
     @State private var draft = ""
     @State private var attachments: [PendingAttachment] = []
     @State private var sheet: CoachSheet?
-    @State private var speechInput = SpeechInputService()
+    /// 语音服务只在用户第一次点麦克风时创建。即使 SwiftUI 丢弃新构造的
+    /// View struct，Tab 切换也不会再额外分配一个未使用的服务实例。
+    @State private var speechInput: SpeechInputService?
     @State private var draftBeforeSpeech = ""
     @State private var showsGyms = false
     @State private var composerFocusRequest = UUID()
@@ -64,27 +92,75 @@ struct CoachView: View {
     @State private var useLocalForNextMessage = false
     @State private var selectedExerciseSuggestion: ExerciseInputSuggestion?
     @State private var selectedShortcutID: String?
-    /// 设置页可能在返回聊天前改动快捷按钮，这里在出现时重新读一次。
-    @State private var inputShortcuts = AgentInputShortcutStore.visibleShortcuts()
-    /// 流式期间合并滚动，避免每个 token 启动一次 250ms 动画反压 MainActor。
+    /// 标准配置由 Store 缓存；设置保存时通过通知精确刷新，不再在每次 Tab
+    /// 重新挂载时重复解码 UserDefaults JSON。
+    @State private var inputShortcuts: [AgentInputShortcut] = []
+    /// 流式期间合并滚动，避免每批文字都同步触发布局和滚动。
     @State private var lastLiveScrollAt = Date.distantPast
     @State private var liveScrollTask: Task<Void, Never>?
+    @State private var isPersistingSubmission = false
+    @State private var suggestionSnapshot = CoachSuggestionSnapshot.empty
+    @State private var suggestionDataRevision = 0
+    @State private var loadedSuggestionRevision = -1
+    @State private var requestedSuggestionRevision: Int?
+    @State private var visibility = CoachVisibilityState()
+    @State private var didFinishInitialScroll = false
+    @State private var isLoadingEarlier = false
+    @State private var paginationAnchorMessageID: UUID?
+    @State private var paginationTriggerID = UUID()
+    @State private var followsLiveMessage = true
+    @State private var hasUserInteractedWithMessageList = false
+    @State private var messageListPosition = CoachMessageScrollPosition(
+        isAtTop: false,
+        isNearBottom: false
+    )
 
+    let messageLimit: Int
+    let isTabActive: Bool
+    let sessionTransition: CoachSessionTransitionCoordinator
+    let onLoadEarlier: () -> Void
     let onRequireAIConfiguration: () -> Void
 
-    init(onRequireAIConfiguration: @escaping () -> Void = {}) {
+    init(
+        sessionID: UUID?,
+        dataSpace: DataSpace,
+        messageLimit: Int,
+        isTabActive: Bool,
+        sessionTransition: CoachSessionTransitionCoordinator,
+        onLoadEarlier: @escaping () -> Void,
+        onRequireAIConfiguration: @escaping () -> Void
+    ) {
+        let targetSessionID = sessionID ?? UUID()
+        var messageDescriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate { $0.sessionID == targetSessionID },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        messageDescriptor.fetchLimit = messageLimit + 1
+        _recentMessages = Query(messageDescriptor)
+
+        var gymDescriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        gymDescriptor.fetchLimit = 100
+        _gyms = Query(gymDescriptor)
+
+        let dataSpaceRaw = dataSpace.rawValue
+        var jobDescriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate { $0.dataSpaceRaw == dataSpaceRaw },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        jobDescriptor.fetchLimit = 100
+        _agentJobs = Query(jobDescriptor)
+
+        self.messageLimit = messageLimit
+        self.isTabActive = isTabActive
+        self.sessionTransition = sessionTransition
+        self.onLoadEarlier = onLoadEarlier
         self.onRequireAIConfiguration = onRequireAIConfiguration
     }
 
     private var messages: [CoachMessage] {
-        guard let activeSessionID = conversationSessions.activeSessionID else {
-            return []
-        }
-        return allMessages.filter { $0.sessionID == activeSessionID }
-    }
-
-    private var latestAssistantMessageID: UUID? {
-        ChatRecordEditPolicy.latestEditableAssistantMessageID(in: messages)
+        Array(recentMessages.prefix(messageLimit).reversed())
     }
 
     private var currentGym: GymProfile? {
@@ -92,17 +168,17 @@ struct CoachView: View {
     }
 
     private var currentSession: ConversationSession? {
-        conversationSessions.activeSession(in: modelContext)
-    }
-
-    private var locationPreference: ConversationLocationPreference {
-        ConversationLocationPreference(rawValue: locationPreferenceRaw) ?? .unasked
+        conversationSessions.activeSessionReference
     }
 
     private var isProcessingHere: Bool {
         processor.isProcessing
             && processor.dataSpace == dataSpace.activeSpace
             && processor.sessionID == conversationSessions.activeSessionID
+    }
+
+    private var locationPreference: ConversationLocationPreference {
+        ConversationLocationPreference(rawValue: locationPreferenceRaw) ?? .unasked
     }
 
     /// ADR 0045：暂存队列按数据空间统计，不区分 Session——
@@ -119,36 +195,15 @@ struct CoachView: View {
         pendingJobs.count
     }
 
-    private var stagedTurnIDs: Set<UUID> {
-        Set(
-            agentJobs
-                .filter {
-                    $0.dataSpace == dataSpace.activeSpace && $0.state == .staged
-                        || $0.dataSpace == dataSpace.activeSpace
-                        && $0.state == .waitingForUser
-                }
-                .map(\.turnID)
-        )
-    }
-
     var body: some View {
-        GeometryReader { geometry in
-            let drawerWidth = min(340, geometry.size.width * 0.84)
-            ZStack(alignment: .leading) {
-                conversationArea
-                    .offset(x: sessionDrawerPresented ? drawerWidth : 0)
+        ZStack(alignment: .leading) {
+            conversationArea
 
-                if sessionDrawerPresented {
-                    HStack(spacing: 0) {
-                        Color.clear
-                            .frame(width: drawerWidth)
-                            .allowsHitTesting(false)
-                        Color.black.opacity(0.16)
-                            .contentShape(Rectangle())
-                            .onTapGesture(perform: closeSessionDrawer)
-                    }
+            if sessionDrawerPresented {
+                Color.black.opacity(0.16)
+                    .contentShape(Rectangle())
+                    .onTapGesture { closeSessionDrawer() }
                     .ignoresSafeArea()
-                }
 
                 ConversationSessionDrawer(
                     currentSessionID: conversationSessions.activeSessionID,
@@ -159,13 +214,13 @@ struct CoachView: View {
                     onRestoreAutomaticTitle: restoreAutomaticTitle,
                     onDeleteSession: deleteSession
                 )
-                .frame(width: drawerWidth)
-                .offset(x: sessionDrawerPresented ? 0 : -drawerWidth)
+                .containerRelativeFrame(.horizontal) { width, _ in
+                    min(340, width * 0.84)
+                }
+                .transition(.move(edge: .leading))
             }
-            .clipped()
-            .animation(.snappy(duration: 0.24), value: sessionDrawerPresented)
-            .simultaneousGesture(sessionDrawerGesture(drawerWidth: drawerWidth))
         }
+        .clipped()
         .appPageBackground()
         .navigationTitle("Soma")
         .navigationBarTitleDisplayMode(.inline)
@@ -261,11 +316,44 @@ struct CoachView: View {
             draft = text
             composerFocusRequest = UUID()
         }
+        .modifier(CoachPerformanceSessionSelectionModifier(onSelect: selectSession))
         .task(id: captureRouter.mediaDelivery?.id) {
             handleMediaDelivery()
         }
+        .task(id: requestedSuggestionRevision) {
+            guard let requestedSuggestionRevision else { return }
+            await refreshSuggestionSnapshot(
+                targetRevision: requestedSuggestionRevision
+            )
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: ModelContext.didSave,
+                object: modelContext
+            )
+        ) { notification in
+            guard ModelContextSaveImpact.affectsCoachSuggestions(
+                notification,
+                in: modelContext
+            ) else {
+                return
+            }
+            suggestionDataRevision &+= 1
+            requestSuggestionSnapshotIfNeeded()
+        }
         .onAppear {
-            locationPreferenceRaw = ConversationLocationPreference.current().rawValue
+            visibility.isVisible = true
+        }
+        .task {
+            // 先让 TabView 提交选中外观；次要快照请求不参与点击当帧。
+            await Task.yield()
+            guard visibility.isVisible else { return }
+            refreshInputShortcuts()
+            requestSuggestionSnapshotIfNeeded()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .agentInputShortcutsDidChange)
+        ) { _ in
             refreshInputShortcuts()
         }
         .onChange(of: draft) {
@@ -277,20 +365,47 @@ struct CoachView: View {
             }
         }
         .onDisappear {
-            speechInput.stop()
+            visibility.isVisible = false
+            guard let speechInput, speechInput.isListening else { return }
+            Task { @MainActor in
+                // AVAudioSession 停用可能同步等待系统音频服务；先让 Tab 切换提交。
+                await Task.yield()
+                speechInput.stop()
+            }
         }
     }
 
     private var conversationArea: some View {
-        ScrollViewReader { proxy in
-            messageList(scrollProxy: proxy)
+        let projection = CoachMessageRenderProjection(
+            recentMessages: recentMessages,
+            messageLimit: messageLimit,
+            agentJobs: agentJobs
+        )
+        return ScrollViewReader { proxy in
+            messageList(scrollProxy: proxy, projection: projection)
                 .scrollDismissesKeyboard(.interactively)
                 .appPageBackground()
                 .safeAreaInset(edge: .bottom) {
-                    composer
+                    composer(pendingCount: projection.pendingJobCount)
                 }
-                .onChange(of: messages.last?.id, initial: true) {
+                .onChange(of: projection.messages.last?.id, initial: true) { _, messageID in
+                    guard messageID != nil else { return }
+                    if !didFinishInitialScroll {
+                        _ = visibility.autoScrollGate.shouldScroll(to: messageID)
+                        finishInitialScrollSetup(using: proxy)
+                        return
+                    }
+                    guard visibility.autoScrollGate.shouldScroll(to: messageID) else {
+                        return
+                    }
+                    guard followsLiveMessage else { return }
                     scrollToBottomAfterLayout(proxy)
+                }
+                .onChange(of: projection.messages.first?.id) {
+                    restorePositionAfterLoadingEarlier(
+                        using: proxy,
+                        projection: projection
+                    )
                 }
                 .onChange(of: processor.isProcessing) { _, isProcessing in
                     if isProcessing {
@@ -298,89 +413,179 @@ struct CoachView: View {
                     } else {
                         liveScrollTask?.cancel()
                         liveScrollTask = nil
-                        scrollToBottom(proxy)
+                        if followsLiveMessage {
+                            scrollToBottom(proxy)
+                        }
                     }
                 }
-                .onChange(of: processor.liveAssistantText) {
-                    scheduleLiveScroll(proxy)
-                }
-                .onChange(of: processor.liveAgentActivity) {
-                    scheduleLiveScroll(proxy)
-                }
-                .onChange(of: processor.liveEventRevision) {
-                    scheduleLiveScroll(proxy)
-                }
                 .onChange(of: scrollRequest) {
+                    followsLiveMessage = true
                     scrollToBottomAfterLayout(proxy)
                 }
-                .onChange(of: speechInput.transcript) {
+                .onChange(of: speechInput?.transcript) {
                     updateDraftFromSpeech()
                 }
+                .modifier(
+                    CoachPerformanceScrollModifier(
+                        proxy: proxy,
+                        firstMessageID: projection.messages.first?.id
+                    )
+                )
         }
     }
 
-    private func messageList(scrollProxy proxy: ScrollViewProxy) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 14) {
-                if ConversationStarterPolicy.shouldShow(for: messages) {
-                    ConversationStarter(
-                        suggestions: sessionStarterSuggestions,
-                        onSelect: sendStarter
-                    )
+    private func messageList(
+        scrollProxy proxy: ScrollViewProxy,
+        projection: CoachMessageRenderProjection
+    ) -> some View {
+        let processorIsProcessing = processor.isProcessing
+        let processingHere = processorIsProcessing
+            && processor.dataSpace == dataSpace.activeSpace
+            && processor.sessionID == conversationSessions.activeSessionID
+        return ScrollView {
+            Group {
+                if CoachMessageStackPolicy.usesLazyStack(
+                    messageCount: projection.messages.count
+                ) {
+                    LazyVStack(spacing: 14) {
+                        coachMessageRows(
+                            scrollProxy: proxy,
+                            projection: projection,
+                            processorIsProcessing: processorIsProcessing,
+                            processingHere: processingHere
+                        )
+                    }
+                } else {
+                    VStack(spacing: 14) {
+                        coachMessageRows(
+                            scrollProxy: proxy,
+                            projection: projection,
+                            processorIsProcessing: processorIsProcessing,
+                            processingHere: processingHere
+                        )
+                    }
                 }
-
-                ForEach(messages) { message in
-                    CoachBubble(
-                        message: message,
-                        isLatestAssistantMessage: message.id == latestAssistantMessageID,
-                        isLive: isProcessingHere
-                            && message.agentStatus == .running,
-                        isStaged: message.turnID.map(stagedTurnIDs.contains) ?? false,
-                        canRetry: !processor.isProcessing
-                            && ConversationTurnProjection.canRetry(
-                                message,
-                                in: messages,
-                                job: agentJobs.last { $0.responseMessageID == message.id }
-                            ),
-                        onRetry: { retry(message) },
-                        onDiscardPending: message.turnID.map(stagedTurnIDs.contains) == true
-                            ? { discardPending(message) }
-                            : nil,
-                        onFeedbackExpanded: { target in
-                            AssistantFeedbackScroller.scrollAfterLayout(
-                                to: target,
-                                using: proxy
-                            )
-                        }
-                    )
-                    .id(message.id)
-                }
-
-                Color.clear.frame(height: 1).id("bottom")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(maxWidth: AppTheme.readableContentMaxWidth)
             .frame(maxWidth: .infinity)
         }
+        .modifier(CoachMessageTopPagingModifier())
+        .modifier(CoachMessageScrollTrackingModifier { position in
+            messageListPosition = position
+            if didFinishInitialScroll, !position.isNearBottom {
+                stopFollowingLiveMessage()
+            }
+            guard hasUserInteractedWithMessageList, position.isAtTop else {
+                return
+            }
+            loadEarlierKeepingPosition(
+                using: proxy,
+                projection: projection
+            )
+        } onUserInteraction: {
+            beginMessageHistoryInteraction()
+        })
+        .accessibilityIdentifier("coach-message-list")
+        .accessibilityValue(
+            Text(verbatim: AppTestRuntime.isRunning
+                ? "count=\(projection.messages.count)"
+                : "")
+        )
     }
 
-    private var composer: some View {
+    @ViewBuilder
+    private func coachMessageRows(
+        scrollProxy proxy: ScrollViewProxy,
+        projection: CoachMessageRenderProjection,
+        processorIsProcessing: Bool,
+        processingHere: Bool
+    ) -> some View {
+        if projection.hasEarlierMessages {
+            Button {
+                beginMessageHistoryInteraction()
+                loadEarlierKeepingPosition(
+                    using: proxy,
+                    projection: projection
+                )
+            } label: {
+                if isLoadingEarlier {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text("加载更早的消息")
+                }
+            }
+            .font(.caption.weight(.medium))
+            .buttonStyle(.borderless)
+            .accessibilityHint("上滑到这里会自动再加载 10 条")
+            .disabled(isLoadingEarlier)
+            .id(paginationTriggerID)
+            .modifier(CoachOlderMessageVisibilityModifier {
+                loadEarlierKeepingPosition(
+                    using: proxy,
+                    projection: projection
+                )
+            })
+        }
+
+        if ConversationStarterPolicy.shouldShow(for: projection.messages) {
+            ConversationStarter(
+                suggestions: sessionStarterSuggestions,
+                onSelect: sendStarter
+            )
+        }
+
+        ForEach(projection.messages) { message in
+            CoachBubble(
+                message: message,
+                isLatestAssistantMessage: message.id
+                    == projection.latestAssistantMessageID,
+                isLive: processingHere
+                    && message.agentStatus == .running,
+                observesLiveText: isTabActive,
+                isStaged: message.turnID.map(
+                    projection.stagedTurnIDs.contains
+                ) ?? false,
+                canRetry: !processorIsProcessing
+                    && projection.retryableMessageIDs.contains(message.id),
+                onRetry: { retry(message) },
+                onDiscardPending: message.turnID.map(
+                    projection.stagedTurnIDs.contains
+                ) == true
+                    ? { discardPending(message) }
+                    : nil,
+                onFeedbackExpanded: { target in
+                    AssistantFeedbackScroller.scrollAfterLayout(
+                        to: target,
+                        using: proxy
+                    )
+                },
+                onLiveRevision: { scheduleLiveScroll(proxy) }
+            )
+            .id(message.id)
+        }
+
+        Color.clear.frame(height: 1).id("bottom")
+    }
+
+    private func composer(pendingCount: Int) -> some View {
         CoachComposer(
             draft: $draft,
             attachments: $attachments,
             gyms: gyms,
             currentGym: currentGym,
             exerciseSuggestions: exerciseSuggestions,
-            pendingCount: pendingJobCount,
+            pendingCount: pendingCount,
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
             useLocalForNextMessage: $useLocalForNextMessage,
             selectedShortcutID: $selectedShortcutID,
             shortcuts: inputShortcuts,
-            isSending: processor.isProcessing,
-            isListening: speechInput.isListening,
-            speechMessage: speechInput.errorMessage,
+            isSending: processor.isProcessing || isPersistingSubmission,
+            isListening: speechInput?.isListening == true,
+            speechMessage: speechInput?.errorMessage,
             focusRequest: composerFocusRequest,
             dismissRequest: composerDismissRequest,
             onAddMedia: showMedia,
@@ -400,11 +605,61 @@ struct CoachView: View {
     }
 
     private func refreshInputShortcuts() {
-        inputShortcuts = AgentInputShortcutStore.visibleShortcuts()
+        let currentShortcuts = AgentInputShortcutStore.visibleShortcuts()
+        guard visibility.isVisible else { return }
+        if inputShortcuts != currentShortcuts {
+            inputShortcuts = currentShortcuts
+        }
         if let selectedShortcutID,
            !inputShortcuts.contains(where: { $0.id == selectedShortcutID })
         {
             self.selectedShortcutID = nil
+        }
+    }
+
+    private func requestSuggestionSnapshotIfNeeded() {
+        guard visibility.isVisible,
+              loadedSuggestionRevision != suggestionDataRevision,
+              requestedSuggestionRevision != suggestionDataRevision
+        else {
+            return
+        }
+        requestedSuggestionRevision = suggestionDataRevision
+    }
+
+    @MainActor
+    private func refreshSuggestionSnapshot(targetRevision: Int) async {
+        let interval = AppPerformance.begin(
+            .derivedSnapshot,
+            detail: "screen=coach,kind=suggestions"
+        )
+        let container = modelContext.container
+        let worker = Task.detached(priority: .utility) {
+            let loader = CoachSuggestionSnapshotLoader(modelContainer: container)
+            return try await loader.load()
+        }
+        let payload = try? await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        guard let payload, !Task.isCancelled else {
+            if requestedSuggestionRevision == targetRevision {
+                requestedSuggestionRevision = nil
+            }
+            AppPerformance.end(
+                interval,
+                detail: "screen=coach,kind=suggestions,cancelled=true"
+            )
+            return
+        }
+
+        suggestionSnapshot = payload
+        loadedSuggestionRevision = targetRevision
+        AppPerformance.end(interval, detail: "screen=coach,kind=suggestions")
+        if suggestionDataRevision != targetRevision {
+            requestedSuggestionRevision = nil
+            requestSuggestionSnapshotIfNeeded()
         }
     }
 
@@ -414,34 +669,21 @@ struct CoachView: View {
         try? modelContext.save()
     }
 
-    private func sessionDrawerGesture(drawerWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 18, coordinateSpace: .global)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                guard abs(horizontal) > abs(value.translation.height) else {
-                    return
-                }
-                if sessionDrawerPresented,
-                   horizontal < -60,
-                   value.startLocation.x > drawerWidth
-                {
-                    closeSessionDrawer()
-                } else if !sessionDrawerPresented,
-                          value.startLocation.x <= 28,
-                          horizontal > 60
-                {
-                    openSessionDrawer()
-                }
-            }
-    }
-
     private func openSessionDrawer() {
-        speechInput.stop()
-        sessionDrawerPresented = true
+        speechInput?.stop()
+        withAnimation(.snappy(duration: 0.24)) {
+            sessionDrawerPresented = true
+        }
     }
 
-    private func closeSessionDrawer() {
-        sessionDrawerPresented = false
+    private func closeSessionDrawer(animated: Bool = true) {
+        if animated {
+            withAnimation(.snappy(duration: 0.24)) {
+                sessionDrawerPresented = false
+            }
+        } else {
+            sessionDrawerPresented = false
+        }
     }
 
     private func createSession() {
@@ -453,6 +695,10 @@ struct CoachView: View {
     }
 
     private func selectSession(_ session: ConversationSession) {
+        sessionTransition.begin(
+            from: conversationSessions.activeSessionID,
+            to: session.id
+        )
         conversationSessions.select(
             session,
             dataSpace: dataSpace.activeSpace
@@ -507,9 +753,17 @@ struct CoachView: View {
     private func restoreAutomaticTitle(_ session: ConversationSession) -> Bool {
         let previousTitle = session.title
         let previousSourceRaw = session.titleSourceRaw
+        let sessionID = session.id
+        var descriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate {
+                $0.sessionID == sessionID && !$0.isFromCoach
+            },
+            sortBy: [SortDescriptor(\.date)]
+        )
+        descriptor.fetchLimit = 1
         let fallbackText = ConversationSessionTitleService.fallbackText(
             sessionID: session.id,
-            messages: allMessages
+            messages: (try? modelContext.fetch(descriptor)) ?? []
         )
         session.restoreAutomaticTitle(from: fallbackText)
         do {
@@ -529,14 +783,16 @@ struct CoachView: View {
 
     private func switchToSession(_: ConversationSession) {
         prepareComposerForSessionChange()
-        closeSessionDrawer()
+        // Session 内容树不参与抽屉退场动画，避免把两组不同高度的消息、
+        // Markdown 和原位记录卡放进同一个动画事务里反复测量。
+        closeSessionDrawer(animated: false)
     }
 
     private func prepareComposerForSessionChange() {
         draft = ""
         attachments = []
         useLocalForNextMessage = false
-        speechInput.stop()
+        speechInput?.stop()
         composerDismissRequest = UUID()
         scrollRequest = UUID()
     }
@@ -603,7 +859,7 @@ struct CoachView: View {
         draft = quickRecord.draftText
         selectedExerciseSuggestion = quickRecord
         guard locationPreference != .unasked else {
-            speechInput.stop()
+            speechInput?.stop()
             showsLocationPrompt = true
             return
         }
@@ -616,29 +872,29 @@ struct CoachView: View {
             let prompt = "我到\(currentGym.name)了，今天怎么练？"
             values.append(.init(title: prompt, prompt: prompt))
         }
-        if let recent = recentExerciseCapacities
+        if let recent = suggestionSnapshot.recentCapacities
             .filter({
                 !$0.text.isEmpty && $0.recordDraft?.setEntries.isEmpty == false
             })
             .max(by: { $0.date < $1.date }),
-            let exercise = exerciseDefinitions.first(where: {
+            let exercise = suggestionSnapshot.exercises.first(where: {
                 $0.id == recent.exerciseID
             })
         {
             let quickRecord = ExerciseInputSuggestion(
                 id: exercise.id,
-                exerciseName: exercise.canonicalName,
+                exerciseName: exercise.name,
                 recentSummary: recent.text,
                 recentDate: recent.date,
                 recordDraft: recent.recordDraft
             )
             values.append(.init(
-                title: "继续记录\(exercise.canonicalName)",
+                title: "继续记录\(exercise.name)",
                 prompt: quickRecord.draftText,
                 quickRecord: quickRecord
             ))
-        } else if let latest = workouts.first {
-            let prompt = "继续记录\(latest.exercise)"
+        } else if let latestExerciseName = suggestionSnapshot.latestWorkoutExerciseName {
+            let prompt = "继续记录\(latestExerciseName)"
             values.append(.init(title: prompt, prompt: prompt))
         }
         let hour = Calendar.current.component(.hour, from: .now)
@@ -655,14 +911,8 @@ struct CoachView: View {
         guard !query.isEmpty else { return [] }
         let suggestions = ExerciseInputSuggestionBuilder.suggestions(
             query: query,
-            exercises: exerciseDefinitions.map {
-                ExerciseInputSuggestionBuilder.ExerciseInput(
-                    id: $0.id,
-                    name: $0.canonicalName,
-                    isArchived: $0.isArchived
-                )
-            },
-            recentCapacities: recentExerciseCapacities
+            exercises: suggestionSnapshot.exercises,
+            recentCapacities: suggestionSnapshot.recentCapacities
         )
         // 草稿已经等于唯一建议时不再重复提示。
         if suggestions.count == 1, suggestions[0].draftText == query {
@@ -671,100 +921,32 @@ struct CoachView: View {
         return suggestions
     }
 
-    private var recentExerciseCapacities:
-        [ExerciseInputSuggestionBuilder.RecentCapacityInput]
-    {
-        let legacy = workouts.compactMap { workout -> ExerciseInputSuggestionBuilder.RecentCapacityInput? in
-            guard let exerciseID = workout.exerciseID else { return nil }
-            return ExerciseInputSuggestionBuilder.RecentCapacityInput(
-                exerciseID: exerciseID,
-                date: workout.date,
-                text: ExerciseQuickFill.text(for: workout),
-                recordDraft: ExerciseQuickRecordDraft(
-                    exerciseID: exerciseID,
-                    exerciseName: workout.exercise,
-                    setEntries: workout.setEntries,
-                    restSeconds: workout.restSeconds,
-                    durationMinutes: workout.durationMinutes
-                )
-            )
-        }
-        let projectedPerformanceIDs = Set(
-            workouts.compactMap(\.sourcePerformanceID)
-        )
-        let guided = exercisePerformances.compactMap { performance -> ExerciseInputSuggestionBuilder.RecentCapacityInput? in
-            guard !projectedPerformanceIDs.contains(performance.id),
-                  !performance.workoutProjectionSuppressed,
-                  let session = workoutSessions.first(where: {
-                      $0.id == performance.sessionID
-                  })
-            else {
-                return nil
-            }
-            return ExerciseInputSuggestionBuilder.RecentCapacityInput(
-                exerciseID: performance.exerciseID,
-                date: session.startedAt,
-                text: ExerciseQuickFill.text(for: workoutSets.filter {
-                    $0.performanceID == performance.id
-                }),
-                recordDraft: guidedQuickRecordDraft(
-                    performance: performance,
-                    sets: workoutSets.filter { $0.performanceID == performance.id }
-                )
-            )
-        }
-        return legacy + guided
-    }
-
     private func applySuggestion(_ suggestion: ExerciseInputSuggestion) {
         draft = suggestion.draftText
         selectedExerciseSuggestion = suggestion
         composerFocusRequest = UUID()
     }
 
-    private func guidedQuickRecordDraft(
-        performance: ExercisePerformance,
-        sets: [WorkoutSet]
-    ) -> ExerciseQuickRecordDraft? {
-        let completed = sets
-            .filter { $0.status == .completed }
-            .sorted { $0.order < $1.order }
-        guard !completed.isEmpty else { return nil }
-        let rests = completed.compactMap(\.actualRestSeconds)
-        let rest = rests.count == completed.count && Set(rests).count == 1
-            ? rests.first
-            : nil
-        return ExerciseQuickRecordDraft(
-            exerciseID: performance.exerciseID,
-            exerciseName: performance.exerciseName,
-            setEntries: completed.map {
-                WorkoutSetEvidence(
-                    reps: $0.actualReps,
-                    externalWeightKG: $0.actualWeightKG
-                )
-            },
-            restSeconds: rest,
-            durationMinutes: nil
-        )
-    }
-
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return }
         guard locationPreference != .unasked else {
-            speechInput.stop()
+            speechInput?.stop()
             showsLocationPrompt = true
             return
         }
         submitCurrentDraft()
     }
+}
 
-    private func submitCurrentDraft(
+private extension CoachSessionView {
+    func submitCurrentDraft(
         quickRecordOverride: ExerciseInputSuggestion? = nil
     ) {
+        guard !isPersistingSubmission else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return }
-        speechInput.stop()
+        speechInput?.stop()
         let pending = attachments
         let session = conversationSessions.ensureActiveSession(
             dataSpace: dataSpace.activeSpace,
@@ -787,15 +969,23 @@ struct CoachView: View {
         // 其他路径仍要在落盘前判断：提交后暂存计数会从 0 变成 1。
         let needsConfigurationGuidance = exactQuickDraft == nil
             && needsConfigurationGuidance(forceLocal: useLocalForNextMessage)
-        let accepted = if let exactQuickDraft {
-            processor.submitQuickWorkout(
+        if let exactQuickDraft {
+            let accepted = processor.submitQuickWorkout(
                 text: text,
                 draft: exactQuickDraft,
                 context: processingContext,
                 locationService: locationContext
             )
-        } else {
-            processor.submit(
+            if accepted {
+                finishAcceptedSubmission(
+                    needsConfigurationGuidance: needsConfigurationGuidance
+                )
+            }
+            return
+        }
+        isPersistingSubmission = true
+        Task { @MainActor in
+            let accepted = await processor.submitAsync(
                 text: text,
                 attachments: pending,
                 context: processingContext,
@@ -804,18 +994,27 @@ struct CoachView: View {
                 selectedShortcutID: selectedShortcutID,
                 forceLocal: useLocalForNextMessage
             )
-        }
-        if accepted {
-            draft = ""
-            attachments = []
-            useLocalForNextMessage = false
-            selectedExerciseSuggestion = nil
-            selectedShortcutID = nil
-            composerDismissRequest = UUID()
-            scrollRequest = UUID()
-            if needsConfigurationGuidance {
-                openLLMConfiguration()
+            isPersistingSubmission = false
+            if accepted {
+                finishAcceptedSubmission(
+                    needsConfigurationGuidance: needsConfigurationGuidance
+                )
             }
+        }
+    }
+
+    private func finishAcceptedSubmission(
+        needsConfigurationGuidance: Bool
+    ) {
+        draft = ""
+        attachments = []
+        useLocalForNextMessage = false
+        selectedExerciseSuggestion = nil
+        selectedShortcutID = nil
+        composerDismissRequest = UUID()
+        scrollRequest = UUID()
+        if needsConfigurationGuidance {
+            openLLMConfiguration()
         }
     }
 
@@ -916,7 +1115,7 @@ struct CoachView: View {
     }
 
     private func openLLMConfiguration() {
-        speechInput.stop()
+        speechInput?.stop()
         onRequireAIConfiguration()
     }
 
@@ -929,18 +1128,21 @@ struct CoachView: View {
     }
 
     private func toggleVoice() {
-        if speechInput.isListening {
-            speechInput.stop()
+        if speechInput?.isListening == true {
+            speechInput?.stop()
             return
         }
 
         draftBeforeSpeech = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let service = speechInput ?? SpeechInputService()
+        speechInput = service
         Task {
-            await speechInput.start()
+            await service.start()
         }
     }
 
     private func updateDraftFromSpeech() {
+        guard let speechInput else { return }
         let transcript = speechInput.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { return }
         draft = [draftBeforeSpeech, transcript]
@@ -961,10 +1163,10 @@ struct CoachView: View {
         }
     }
 
-    /// 约 10Hz 非动画跟随；流式结束后由 `isProcessing` 的 off 分支做一次动画归位。
+    /// 与文字投影一致约 5Hz 非动画跟随；结束后再做一次动画归位。
     private func scheduleLiveScroll(_ proxy: ScrollViewProxy) {
-        guard isProcessingHere else { return }
-        let interval: TimeInterval = 0.1
+        guard isProcessingHere, followsLiveMessage else { return }
+        let interval: TimeInterval = 0.2
         let elapsed = Date().timeIntervalSince(lastLiveScrollAt)
         if elapsed >= interval {
             lastLiveScrollAt = Date()
@@ -976,17 +1178,94 @@ struct CoachView: View {
         liveScrollTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             liveScrollTask = nil
-            guard !Task.isCancelled, isProcessingHere else { return }
+            guard !Task.isCancelled, isProcessingHere, followsLiveMessage else {
+                return
+            }
             lastLiveScrollAt = Date()
             scrollToBottom(proxy, animated: false)
         }
     }
 
-    private func scrollToBottomAfterLayout(_ proxy: ScrollViewProxy) {
+    private func scrollToBottomAfterLayout(
+        _ proxy: ScrollViewProxy,
+        completion: (() -> Void)? = nil
+    ) {
         Task { @MainActor in
             await Task.yield()
             guard !Task.isCancelled else { return }
             scrollToBottom(proxy, animated: false)
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            completion?()
+        }
+    }
+
+    private func finishInitialScrollSetup(using proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            await Task.yield()
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            if !messageListPosition.isNearBottom {
+                followsLiveMessage = true
+                scrollToBottom(proxy, animated: false)
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+            }
+            didFinishInitialScroll = true
+            paginationTriggerID = UUID()
+            if let activeSessionID = conversationSessions.activeSessionID {
+                sessionTransition.contentDidBecomeVisible(activeSessionID)
+            }
+        }
+    }
+
+    private func loadEarlierKeepingPosition(
+        using _: ScrollViewProxy,
+        projection: CoachMessageRenderProjection
+    ) {
+        guard didFinishInitialScroll,
+              hasUserInteractedWithMessageList,
+              !isLoadingEarlier,
+              projection.hasEarlierMessages,
+              let anchor = projection.messages.first?.id
+        else {
+            return
+        }
+        isLoadingEarlier = true
+        paginationAnchorMessageID = anchor
+        onLoadEarlier()
+    }
+
+    private func beginMessageHistoryInteraction() {
+        hasUserInteractedWithMessageList = true
+        stopFollowingLiveMessage()
+    }
+
+    private func stopFollowingLiveMessage() {
+        followsLiveMessage = false
+        liveScrollTask?.cancel()
+        liveScrollTask = nil
+    }
+
+    private func restorePositionAfterLoadingEarlier(
+        using proxy: ScrollViewProxy,
+        projection: CoachMessageRenderProjection
+    ) {
+        guard isLoadingEarlier,
+              let anchor = paginationAnchorMessageID,
+              projection.messages.first?.id != anchor
+        else {
+            return
+        }
+        Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            proxy.scrollTo(anchor, anchor: .top)
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            paginationAnchorMessageID = nil
+            isLoadingEarlier = false
+            paginationTriggerID = UUID()
         }
     }
 }
@@ -1124,217 +1403,6 @@ private struct ConversationStarter: View {
     }
 }
 
-enum ChatTextSelectionStyle {
-    static let tintColor = UIColor.label
-}
-
-private struct SelectableChatText: UIViewRepresentable {
-    let content: String
-    let color: UIColor
-
-    func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
-        textView.backgroundColor = .clear
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isScrollEnabled = false
-        textView.adjustsFontForContentSizeCategory = true
-        textView.textContainerInset = .zero
-        textView.textContainer.lineFragmentPadding = 0
-        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        textView.setContentHuggingPriority(.required, for: .vertical)
-        textView.tintColor = ChatTextSelectionStyle.tintColor
-        textView.accessibilityTraits = .staticText
-        return textView
-    }
-
-    func updateUIView(_ textView: UITextView, context: Context) {
-        guard textView.attributedText?.string != content else { return }
-        textView.attributedText = attributedContent
-        textView.accessibilityLabel = content
-    }
-
-    func sizeThatFits(
-        _ proposal: ProposedViewSize,
-        uiView: UITextView,
-        context: Context
-    ) -> CGSize? {
-        let maximumWidth = max(proposal.width ?? 320, 1)
-        let bounds = uiView.attributedText.boundingRect(
-            with: CGSize(width: maximumWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
-        )
-        let width = min(max(ceil(bounds.width), 1), maximumWidth)
-        let height = ceil(uiView.sizeThatFits(
-            CGSize(width: width, height: .greatestFiniteMagnitude)
-        ).height)
-        return CGSize(width: width, height: height)
-    }
-
-    private var attributedContent: NSAttributedString {
-        var attributed = (
-            try? AttributedString(
-                markdown: content,
-                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-            )
-        ) ?? AttributedString(content)
-        let runs = attributed.runs.map {
-            ($0.range, $0.inlinePresentationIntent)
-        }
-
-        for (range, intent) in runs {
-            let preferred = UIFont.preferredFont(forTextStyle: .subheadline)
-            let baseFont = UIFont.systemFont(ofSize: preferred.pointSize, weight: .light)
-            let font: UIFont
-            if intent?.contains(.code) == true {
-                font = UIFont.monospacedSystemFont(
-                    ofSize: baseFont.pointSize,
-                    weight: .regular
-                )
-            } else {
-                let resolvedBase = intent?.contains(.stronglyEmphasized) == true
-                    ? UIFont.systemFont(ofSize: preferred.pointSize, weight: .medium)
-                    : baseFont
-                var traits: UIFontDescriptor.SymbolicTraits = []
-                if intent?.contains(.emphasized) == true {
-                    traits.insert(.traitItalic)
-                }
-                let descriptor = resolvedBase.fontDescriptor
-                    .withSymbolicTraits(traits)
-                    ?? resolvedBase.fontDescriptor
-                font = UIFont(descriptor: descriptor, size: resolvedBase.pointSize)
-            }
-            attributed[range].font = font
-            attributed[range].foregroundColor = color
-        }
-        return NSAttributedString(attributed)
-    }
-}
-
-struct CoachBubble: View {
-    let message: CoachMessage
-    var isLatestAssistantMessage = false
-    var isLive = false
-    var isStaged = false
-    var canRetry = false
-    var onRetry: () -> Void = {}
-    var onDiscardPending: (() -> Void)?
-    var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
-
-    var body: some View {
-        let visibleMessageText = message.isFromCoach
-            ? AgentVisibleTextSanitizer.sanitize(message.text)
-            : message.text
-
-        HStack(alignment: .top, spacing: 8) {
-            if !message.isFromCoach {
-                Spacer(minLength: 52)
-            }
-
-            VStack(alignment: message.isFromCoach ? .leading : .trailing, spacing: 7) {
-                if let label = message.recordType?.recordedLabel {
-                    Label(label, systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.success)
-                }
-
-                if !message.mediaAttachments.isEmpty {
-                    StoredMediaStrip(attachments: message.mediaAttachments)
-                }
-
-                if message.isFromCoach,
-                   !message.agentTurnItems.isEmpty || isLive
-                {
-                    AgentTurnTranscript(
-                        items: message.agentTurnItems,
-                        isLive: isLive,
-                        sourceMessage: message,
-                        isEditable: isLatestAssistantMessage,
-                        canRetry: canRetry,
-                        onRetry: onRetry
-                    )
-                } else if !visibleMessageText.isEmpty, !message.isAutomaticMediaSummary {
-                    Group {
-                        if message.isFromCoach {
-                            CoachResponseView(visibleMessageText)
-                        } else {
-                            SelectableChatText(
-                                content: visibleMessageText,
-                                color: .label
-                            )
-                        }
-                    }
-                    .padding(.horizontal, message.isFromCoach ? 2 : 12)
-                    .padding(.vertical, message.isFromCoach ? 3 : 8)
-                    .background {
-                        if !message.isFromCoach {
-                            RoundedRectangle(cornerRadius: 17, style: .continuous)
-                                .fill(AppTheme.insetBackground)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 17, style: .continuous)
-                                        .stroke(AppTheme.separator, lineWidth: 0.5)
-                                }
-                        }
-                    }
-                }
-
-                if isStaged, !message.isFromCoach {
-                    HStack(spacing: 8) {
-                        Label("已暂存，等待队首处理", systemImage: "tray.full")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                        if let onDiscardPending {
-                            Button(role: .destructive, action: onDiscardPending) {
-                                Image(systemName: "trash")
-                                    .frame(
-                                        width: AppTheme.minimumTapTarget,
-                                        height: AppTheme.minimumTapTarget
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("删除这条暂存消息")
-                        }
-                    }
-                }
-
-                metaLine
-            }
-
-            if message.isFromCoach {
-                Spacer(minLength: 32)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// PRD 033：时间与位置合并成一行 caption，位置不再单独占一个胶囊。
-    @ViewBuilder
-    private var metaLine: some View {
-        let content = ChatMessageMetaLine.make(
-            date: message.date,
-            locationName: message.location?.displayName,
-            isFromCoach: message.isFromCoach
-        )
-        if message.isFromCoach, !isLive {
-            AssistantFeedbackButton(
-                messageID: message.id,
-                timestamp: content.text,
-                timestampAccessibilityLabel: content.accessibilityLabel,
-                onExpanded: onFeedbackExpanded
-            )
-        } else {
-            Text(content.text)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .accessibilityLabel(content.accessibilityLabel)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-    }
-}
-
 /// PRD 033：导航栏标题区的两行结构：上面是 App 名，下面是当前 Session 的记录日期入口。
 private struct CoachTitleWithBusinessDate: View {
     let businessDate: Date
@@ -1390,22 +1458,6 @@ private struct CoachTitleWithBusinessDate: View {
             }
             .presentationDetents([.medium])
         }
-    }
-}
-
-private extension CoachMessage {
-    var isAutomaticMediaSummary: Bool {
-        guard !isFromCoach, !mediaAttachments.isEmpty else { return false }
-        let normalized = text
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "个", with: "")
-        let imageCount = mediaAttachments.count { $0.kind == .image }
-        let videoCount = mediaAttachments.count { $0.kind == .video }
-        let parts = [
-            imageCount > 0 ? "\(imageCount)张图片" : nil,
-            videoCount > 0 ? "\(videoCount)视频" : nil
-        ].compactMap { $0 }
-        return normalized == "发送了" + parts.joined(separator: "和")
     }
 }
 
@@ -1802,10 +1854,8 @@ private struct AttachmentPreview: View {
                 ForEach(attachments) { attachment in
                     ZStack(alignment: .topTrailing) {
                         Group {
-                            if let data = attachment.imageData,
-                               let image = UIImage(data: data)
-                            {
-                                Image(uiImage: image).resizable().scaledToFill()
+                            if let data = attachment.imageData {
+                                PendingImagePreview(id: attachment.id, data: data)
                             } else {
                                 ZStack {
                                     Color.black.opacity(0.82)

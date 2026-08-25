@@ -43,6 +43,93 @@ enum AgentStepRetryPolicy {
     }
 }
 
+/// 原始 SSE chunk、长字符串和 Tool Call 参数都在通用执行器上累积；只有已经合批的
+/// 可见文字回到 MainActor。这样模型流得越久，也不会持续占用触摸与 SwiftUI 提交队列。
+enum AgentStreamWorker {
+    static func consume(
+        stream: AsyncThrowingStream<ChatCompletionChunkObject, Error>,
+        mediaMode: AgentMediaMode,
+        policy: AgentStreamDeadlinePolicy,
+        enforceFirstDelta: Bool,
+        textItemID: UUID,
+        project: @escaping @MainActor (AgentTraceEvent) -> Void
+    ) async throws -> AgentStreamOutcome {
+        var outcome = AgentStreamOutcome()
+        var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
+        var coalescer = AgentTextDeltaCoalescer()
+
+        func projectBatch(_ text: String) async {
+            let startedAt = Date()
+            await project(.assistantTextDelta(itemID: textItemID, delta: text))
+            outcome.projectionSeconds += Date().timeIntervalSince(startedAt)
+        }
+
+        do {
+            try await AgentStreamDeadline.consume(
+                stream: stream,
+                mode: mediaMode,
+                policy: policy,
+                enforceFirstDelta: enforceFirstDelta
+            ) { chunk in
+                if let chunkUsage = chunk.usage {
+                    outcome.usage = chunkUsage
+                }
+                var meaningful = false
+                for choice in chunk.choices ?? [] where (choice.index ?? 0) == 0 {
+                    guard let delta = choice.delta else { continue }
+                    if outcome.firstDeltaAt == nil,
+                       delta.content?.isEmpty == false || delta.toolCalls?.isEmpty == false
+                    {
+                        outcome.firstDeltaAt = Date()
+                        meaningful = true
+                    }
+                    if let content = delta.content, !content.isEmpty {
+                        outcome.passage += content
+                        if let batched = coalescer.append(content, now: Date()) {
+                            await projectBatch(batched)
+                        }
+                    }
+                    if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
+                        outcome.ignoredReasoning = true
+                    }
+                    if delta.toolCalls?.isEmpty == false,
+                       let tail = coalescer.flush()
+                    {
+                        await projectBatch(tail)
+                    }
+                    for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
+                        let index = toolDelta.index ?? position
+                        var accumulator = toolCallDeltas[index]
+                            ?? AgentStreamingToolCall()
+                        accumulator.append(toolDelta)
+                        toolCallDeltas[index] = accumulator
+                    }
+                }
+                return meaningful
+            }
+        } catch {
+            if let tail = coalescer.flush() {
+                await projectBatch(tail)
+            }
+            throw StreamingFailure.interrupted(
+                error,
+                passage: outcome.passage,
+                receivedMeaningfulDelta: outcome.firstDeltaAt != nil
+            )
+        }
+        if let tail = coalescer.flush() {
+            await projectBatch(tail)
+        }
+        outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap {
+            toolCallDeltas[$0]
+        }
+        outcome.ttftBudgetMilliseconds = Int(
+            (policy.ttft(for: mediaMode) * 1000).rounded()
+        )
+        return outcome
+    }
+}
+
 extension AIService {
     func consumeAgentStepWithRetry(
         messages: inout [ChatCompletionParameters.Message],
@@ -140,9 +227,7 @@ extension AIService {
         }
     }
 
-    /// 消费一步推理的流式响应。BUG 0024：读取 chunk 在私有 actor，投影必须回到主 actor，
-    /// 且文字增量按 `AgentTextDeltaCoalescer` 的节拍合批，不再逐 token 写库。
-    /// deadline 在底层 stream 之上统一执行。
+    /// 建立流以后立即交给非 MainActor worker；主 actor 只接收已经合批的可见事件。
     func consumeAgentStream(
         parameters: ChatCompletionParameters,
         videos: [AgentVideoInput],
@@ -153,82 +238,24 @@ extension AIService {
         enforceFirstDelta: Bool,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
-        var outcome = AgentStreamOutcome()
-        var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
-        var coalescer = AgentTextDeltaCoalescer()
-
-        func project(_ text: String) {
-            let projectionStartedAt = Date()
-            trace?(.assistantTextDelta(itemID: textItemID, delta: text))
-            outcome.projectionSeconds += Date()
-                .timeIntervalSince(projectionStartedAt)
-        }
-
-        do {
-            let stream = try await agentStream(
-                parameters: parameters,
-                videos: videos,
-                provider: route.provider,
-                baseURL: route.baseURL,
-                apiKey: apiKey
-            )
-            try await AgentStreamDeadline.consume(
-                stream: stream,
-                mode: mediaMode,
-                policy: streamDeadlinePolicy,
-                enforceFirstDelta: enforceFirstDelta
-            ) { chunk in
-                if let chunkUsage = chunk.usage {
-                    outcome.usage = chunkUsage
-                }
-                var meaningful = false
-                for choice in chunk.choices ?? [] where (choice.index ?? 0) == 0 {
-                    guard let delta = choice.delta else { continue }
-                    if outcome.firstDeltaAt == nil,
-                       delta.content?.isEmpty == false || delta.toolCalls?.isEmpty == false
-                    {
-                        outcome.firstDeltaAt = Date()
-                        meaningful = true
-                    }
-                    if let content = delta.content, !content.isEmpty {
-                        outcome.passage += content
-                        if let batched = coalescer.append(content, now: Date()) {
-                            project(batched)
-                        }
-                    }
-                    if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
-                        outcome.ignoredReasoning = true
-                    }
-                    if delta.toolCalls?.isEmpty == false, let tail = coalescer.flush() {
-                        project(tail)
-                    }
-                    for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
-                        let index = toolDelta.index ?? position
-                        var accumulator = toolCallDeltas[index] ?? AgentStreamingToolCall()
-                        accumulator.append(toolDelta)
-                        toolCallDeltas[index] = accumulator
-                    }
-                }
-                return meaningful
-            }
-        } catch {
-            if let tail = coalescer.flush() {
-                project(tail)
-            }
-            throw StreamingFailure.interrupted(
-                error,
-                passage: outcome.passage,
-                receivedMeaningfulDelta: outcome.firstDeltaAt != nil
-            )
-        }
-        if let tail = coalescer.flush() {
-            project(tail)
-        }
-        outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap { toolCallDeltas[$0] }
-        outcome.ttftBudgetMilliseconds = milliseconds(
-            streamDeadlinePolicy.ttft(for: mediaMode)
+        let stream = try await agentStream(
+            parameters: parameters,
+            videos: videos,
+            provider: route.provider,
+            baseURL: route.baseURL,
+            apiKey: apiKey
         )
-        return outcome
+        return try await AgentStreamWorker.consume(
+            stream: stream,
+            mediaMode: mediaMode,
+            policy: ReActAgentPreference.deadlinePolicy(
+                streamDeadlinePolicy,
+                defaults: defaults
+            ),
+            enforceFirstDelta: enforceFirstDelta,
+            textItemID: textItemID,
+            project: { event in trace?(event) }
+        )
     }
 
     /// 开始一步推理：写 running Span，并把绑定工具列表写进诊断日志。

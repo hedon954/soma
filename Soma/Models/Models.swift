@@ -144,7 +144,7 @@ struct WorkoutSetEvidence: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-private enum WorkoutSetStorage {
+enum WorkoutSetStorage {
     static func encode(_ entries: [WorkoutSetEvidence]) -> Data {
         (try? JSONEncoder().encode(entries)) ?? Data()
     }

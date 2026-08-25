@@ -59,6 +59,129 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
         XCTAssertFalse(coalescer.hasPendingText)
     }
 
+    func testTwoMinuteHighFrequencyStreamStaysWithinBoundedUIProjectionCount() {
+        var coalescer = AgentTextDeltaCoalescer()
+        let start = Date(timeIntervalSince1970: 1000)
+        var projectionCount = 0
+        var projected = ""
+
+        for index in 0 ..< 12000 {
+            let now = start.addingTimeInterval(Double(index) * 0.01)
+            if let batch = coalescer.append("字", now: now) {
+                projectionCount += 1
+                projected += batch
+            }
+        }
+        if let tail = coalescer.flush(now: start.addingTimeInterval(120)) {
+            projectionCount += 1
+            projected += tail
+        }
+
+        XCTAssertEqual(projected.count, 12000)
+        XCTAssertLessThanOrEqual(
+            projectionCount,
+            610,
+            "两分钟碎片流不能制造逐 chunk 或 10Hz 以上的 UI 重排"
+        )
+    }
+
+    func testLiveTextBufferPreservesAllCharactersAcrossStableChunks() {
+        var buffer = LiveAgentTextBuffer()
+        let deltas = (0 ..< 200).map { index in
+            "第\(index)段虚构训练建议：保持动作稳定，不追求极限重量。\n"
+        }
+
+        for delta in deltas {
+            buffer.append(delta)
+        }
+
+        XCTAssertEqual(buffer.text, deltas.joined())
+        XCTAssertEqual(buffer.chunks.map(\.text).joined(), buffer.text)
+        XCTAssertEqual(Set(buffer.chunks.map(\.id)).count, buffer.chunks.count)
+        XCTAssertGreaterThan(buffer.chunks.count, 1)
+    }
+
+    func testParagraphStreamKeepsTheMutableTailSmall() {
+        var buffer = LiveAgentTextBuffer()
+        for index in 0 ..< 200 {
+            buffer.append("第\(index)段虚构训练建议：只测量当前流式尾块。\n")
+        }
+
+        XCTAssertGreaterThan(buffer.chunks.count, 10)
+        XCTAssertLessThan(
+            buffer.chunks.last?.text.count ?? .max,
+            LiveAgentTextBuffer.defaultTargetCharacterCount,
+            "带换行的长流式必须及时冻结前文，不能让可变尾块持续放大 CoreText 重排"
+        )
+    }
+
+    func testLongStreamFixtureRequiresExplicitUITestSentinelAndFixtureName() {
+        XCTAssertFalse(PerformanceTestFixture.requestsLongStream(in: [
+            PerformanceTestFixture.environmentKey: PerformanceTestFixture.longStream
+        ]))
+        XCTAssertFalse(PerformanceTestFixture.requestsLongStream(in: [
+            AppTestRuntime.uiTestEnvironmentKey: "1"
+        ]))
+        XCTAssertTrue(PerformanceTestFixture.requestsLongStream(in: [
+            AppTestRuntime.uiTestEnvironmentKey: "1",
+            PerformanceTestFixture.environmentKey: PerformanceTestFixture.longStream
+        ]))
+    }
+
+    func testLiveTextBufferOnlyMutatesItsTailChunk() {
+        var buffer = LiveAgentTextBuffer(targetCharacterCount: 96)
+        for index in 0 ..< 40 {
+            buffer.append("第\(index)段虚构内容，用于稳定流式分块。\n")
+        }
+        XCTAssertGreaterThan(buffer.chunks.count, 2)
+        let frozenPrefix = Array(buffer.chunks.dropLast())
+
+        for index in 40 ..< 80 {
+            buffer.append("第\(index)段继续追加，不得改写已经完成的分块。\n")
+        }
+
+        XCTAssertEqual(
+            Array(buffer.chunks.prefix(frozenPrefix.count)),
+            frozenPrefix,
+            "长流式只能继续追加新块或修改尾块，不能让前文重新布局"
+        )
+    }
+
+    func testLongSingleParagraphIsNotSplitWithVisibleLineBreaks() {
+        var buffer = LiveAgentTextBuffer(targetCharacterCount: 32)
+        let paragraph = String(repeating: "连续文字", count: 100)
+
+        buffer.append(paragraph)
+
+        XCTAssertEqual(buffer.chunks.count, 1)
+        XCTAssertEqual(buffer.chunks[0].text, paragraph)
+    }
+
+    func testLiveTextProjectionAddsOnlyOneTransientItem() {
+        let completed = AgentTurnItem(
+            kind: .tool,
+            status: .succeeded,
+            title: "保存饮食"
+        )
+        let itemID = UUID()
+        let snapshot = LiveAgentTextSnapshot(itemID: itemID, text: "正在整理")
+
+        let projected = AgentTurnLiveProjection.make(
+            persisted: [completed],
+            liveText: snapshot
+        )
+        let alreadyCommitted = AgentTurnLiveProjection.make(
+            persisted: projected,
+            liveText: snapshot
+        )
+
+        XCTAssertEqual(projected.count, 2)
+        XCTAssertEqual(projected.last?.id, itemID)
+        XCTAssertEqual(projected.last?.status, .running)
+        XCTAssertEqual(alreadyCommitted.count, 2)
+        XCTAssertEqual(snapshot.chunks.map(\.text).joined(), snapshot.text)
+    }
+
     func testSingleAndGroupedProcessSegmentsUseDistinctIdentities() {
         let first = AgentTurnItem(
             kind: .tool,

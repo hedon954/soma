@@ -182,50 +182,6 @@ final class RecordMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testLegacyMealDuplicatesMergeIntoOneMultiImageRecord() throws {
-        let context = try makeContext()
-        let date = Date(timeIntervalSince1970: 1_785_386_220)
-        let firstMedia = MediaAttachmentReference(
-            kind: .image,
-            path: "PrivateMedia/legacy-1.jpg"
-        )
-        let secondMedia = MediaAttachmentReference(
-            kind: .image,
-            path: "PrivateMedia/legacy-2.jpg"
-        )
-        context.insert(MealEntry(
-            date: date,
-            mealType: .lunch,
-            title: "荞麦面套餐（含鱼、蛋、蔬菜）+ 蔬菜清汤",
-            calories: 520,
-            protein: 32,
-            carbs: 58,
-            fat: 16,
-            mediaAttachments: [firstMedia]
-        ))
-        context.insert(MealEntry(
-            date: date,
-            mealType: .lunch,
-            title: "荞麦面套餐 + 蔬菜清汤",
-            calories: 520,
-            protein: 32,
-            carbs: 58,
-            fat: 16,
-            mediaAttachments: [secondMedia]
-        ))
-        try context.save()
-
-        DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
-        let meals = try context.fetch(FetchDescriptor<MealEntry>())
-
-        XCTAssertEqual(meals.count, 1)
-        XCTAssertEqual(
-            Set(meals[0].mediaAttachments.map(\.path)),
-            Set([firstMedia.path, secondMedia.path])
-        )
-    }
-
-    @MainActor
     func testCreateDoesNotAbsorbCorrectionsAndUpdateUsesRecordID() throws {
         let context = try makeContext()
         let sessionID = UUID()
@@ -629,8 +585,6 @@ final class RecordMutationTests: XCTestCase {
             }
         }
 
-        DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
-
         XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 2)
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<BodyEntry>()).count, 1)
@@ -709,8 +663,6 @@ final class RecordMutationTests: XCTestCase {
             mediaPath: nil,
             in: context
         )
-
-        DataIntegrityRepair.mergeObviousDuplicateRecords(in: context)
 
         XCTAssertEqual(try context.fetch(FetchDescriptor<MealEntry>()).count, 2)
         XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).count, 2)

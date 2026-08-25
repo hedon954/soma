@@ -224,20 +224,19 @@ enum GuidedWorkoutRecordStore {
     ) throws -> WorkoutEntry? {
         guard !performance.workoutProjectionSuppressed else { return nil }
         let projectionKey = SomaDataMigration.projectionKey(for: performance.id)
-        let fetchedExisting = try context.fetch(FetchDescriptor<WorkoutEntry>())
-            .first(where: {
+        let performanceID = performance.id
+        var existingDescriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate {
                 $0.projectionKey == projectionKey
-                    || $0.sourcePerformanceID == performance.id
-            })
+                    || $0.sourcePerformanceID == performanceID
+            }
+        )
+        existingDescriptor.fetchLimit = 1
+        let fetchedExisting = try context.fetch(existingDescriptor).first
         if let existing = performance.projectedWorkout
             ?? fetchedExisting
         {
-            let fetchedDefinition = try context.fetch(
-                FetchDescriptor<ExerciseDefinition>()
-            ).first(where: { $0.id == performance.exerciseID })
-            let definition = performance.exerciseDefinition
-                ?? fetchedDefinition
-            guard let definition else {
+            guard let definition = performance.exerciseDefinition else {
                 throw TrainingPlanError.missingExercise(performance.exerciseID)
             }
             existing.projectionKey = projectionKey
@@ -259,9 +258,7 @@ enum GuidedWorkoutRecordStore {
             return existing
         }
 
-        let sets = try context.fetch(FetchDescriptor<WorkoutSet>())
-            .filter { $0.performanceID == performance.id }
-            .sorted { $0.order < $1.order }
+        let sets = performance.workoutSets.sorted { $0.order < $1.order }
         guard !sets.isEmpty,
               sets.allSatisfy({
                   $0.status == .completed
@@ -273,9 +270,7 @@ enum GuidedWorkoutRecordStore {
             return nil
         }
 
-        let setIDs = Set(sets.map(\.id))
-        let efforts = try context.fetch(FetchDescriptor<WorkoutEffort>())
-            .filter { setIDs.contains($0.workoutSetID) }
+        let efforts = sets.flatMap(\.efforts)
         let usesEffortEvidence = efforts.contains { $0.status != .pending }
         if usesEffortEvidence,
            !efforts.allSatisfy({
@@ -293,13 +288,7 @@ enum GuidedWorkoutRecordStore {
         let completedEfforts = efforts.filter { $0.status == .completed }
         guard !completed.isEmpty || !completedEfforts.isEmpty else { return nil }
 
-        let fetchedDefinition = try context.fetch(
-            FetchDescriptor<ExerciseDefinition>()
-        ).first {
-            $0.id == performance.exerciseID
-        }
-        let definition = performance.exerciseDefinition ?? fetchedDefinition
-        guard let definition else {
+        guard let definition = performance.exerciseDefinition else {
             throw TrainingPlanError.missingExercise(performance.exerciseID)
         }
 
@@ -415,48 +404,19 @@ enum GuidedWorkoutRecordStore {
         _ workout: WorkoutEntry,
         in context: ModelContext
     ) throws {
-        if let performanceID = workout.sourcePerformanceID,
-           let performance = try context
-           .fetch(FetchDescriptor<ExercisePerformance>())
-           .first(where: { $0.id == performanceID })
-        {
-            performance.workoutProjectionSuppressed = true
-            performance.projectedWorkout = nil
+        if let performanceID = workout.sourcePerformanceID {
+            var descriptor = FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.id == performanceID }
+            )
+            descriptor.fetchLimit = 1
+            if let performance = try context.fetch(descriptor).first {
+                performance.workoutProjectionSuppressed = true
+                performance.projectedWorkout = nil
+            }
         }
         workout.sourcePerformance = nil
         context.delete(workout)
         try context.save()
-    }
-
-    @discardableResult
-    static func backfill(in context: ModelContext) -> Int {
-        let sessions = (try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? []
-        let sessionsByID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
-        let existingPerformanceIDs = Set(
-            ((try? context.fetch(FetchDescriptor<WorkoutEntry>())) ?? [])
-                .compactMap(\.sourcePerformanceID)
-        )
-        let performances = (
-            (try? context.fetch(FetchDescriptor<ExercisePerformance>())) ?? []
-        ).filter { !existingPerformanceIDs.contains($0.id) }
-
-        var created = 0
-        for performance in performances {
-            guard let session = sessionsByID[performance.sessionID],
-                  (try? materialize(
-                      performance: performance,
-                      session: session,
-                      in: context
-                  )) != nil
-            else {
-                continue
-            }
-            created += 1
-        }
-        if created > 0 {
-            try? context.save()
-        }
-        return created
     }
 
     private static func validReps(_ value: Int?) -> Int? {

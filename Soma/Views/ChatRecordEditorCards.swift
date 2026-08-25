@@ -12,76 +12,206 @@ enum ChatRecordEditPolicy {
 
 /// ADR 0085：一条记录引用一张原位卡，卡片由 `AgentTurnTranscript` 插在产生它的那一步之后。
 struct ChatRecordEditorCard: View {
-    @Query private var workouts: [WorkoutEntry]
-    @Query private var meals: [MealEntry]
-    @Query private var bodies: [BodyEntry]
-    @Query private var gyms: [GymProfile]
-
     let reference: AgentRecordReference
     let sourceMessage: CoachMessage?
     let isEditable: Bool
 
     var body: some View {
-        if reference.recordType == ConversationIntent.workout.rawValue,
-           let workout = workouts.first(where: {
-               $0.businessID == reference.recordID
-           })
-        {
+        switch reference.recordType {
+        case ConversationIntent.workout.rawValue:
+            WorkoutRecordCardLookup(
+                recordID: reference.recordID,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        case ConversationIntent.meal.rawValue:
+            MealRecordCardLookup(
+                recordID: reference.recordID,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        case ConversationIntent.body.rawValue:
+            BodyRecordCardLookup(
+                recordID: reference.recordID,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        case ConversationIntent.gym.rawValue:
+            GymRecordCardLookup(
+                recordID: reference.recordID,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        default:
+            EmptyView()
+        }
+    }
+}
+
+private struct WorkoutRecordCardLookup: View {
+    @Environment(\.modelContext) private var modelContext
+    let sourceMessage: CoachMessage?
+    let isEditable: Bool
+    private let recordID: Int64
+    @State private var record: WorkoutEntry?
+
+    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+        self.recordID = recordID
+        self.sourceMessage = sourceMessage
+        self.isEditable = isEditable
+    }
+
+    var body: some View {
+        if let record {
             InlineWorkoutCard(
-                workout: workout,
-                sourceMessage: sourceMessage,
-                isEditable: isEditable
-            )
-        } else if reference.recordType == ConversationIntent.meal.rawValue,
-                  let meal = meals.first(where: {
-                      $0.businessID == reference.recordID
-                  })
-        {
-            InlineMealCards(
-                meal: meal,
-                sourceMessage: sourceMessage,
-                isEditable: isEditable
-            )
-        } else if reference.recordType == ConversationIntent.body.rawValue,
-                  let body = bodies.first(where: {
-                      $0.businessID == reference.recordID
-                  })
-        {
-            InlineBodyCard(
-                entry: body,
-                sourceMessage: sourceMessage,
-                isEditable: isEditable
-            )
-        } else if reference.recordType == ConversationIntent.gym.rawValue,
-                  let gym = gyms.first(where: {
-                      $0.businessID == reference.recordID
-                  })
-        {
-            InlineGymCard(
-                gym: gym,
+                workout: record,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
         }
+        Color.clear.frame(height: record == nil ? 1 : 0)
+            .task(id: recordID) { await loadRecord() }
+    }
+
+    private func loadRecord() async {
+        guard record == nil else { return }
+        await Task.yield()
+        var descriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.businessID == recordID }
+        )
+        descriptor.fetchLimit = 1
+        guard !Task.isCancelled,
+              let loaded = try? modelContext.fetch(descriptor).first
+        else { return }
+        record = loaded
+    }
+}
+
+private struct MealRecordCardLookup: View {
+    @Environment(\.modelContext) private var modelContext
+    let sourceMessage: CoachMessage?
+    let isEditable: Bool
+    private let recordID: Int64
+    @State private var record: MealEntry?
+
+    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+        self.recordID = recordID
+        self.sourceMessage = sourceMessage
+        self.isEditable = isEditable
+    }
+
+    var body: some View {
+        if let record {
+            InlineMealCards(
+                meal: record,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        }
+        Color.clear.frame(height: record == nil ? 1 : 0)
+            .task(id: recordID) { await loadRecord() }
+    }
+
+    private func loadRecord() async {
+        guard record == nil else { return }
+        await Task.yield()
+        var descriptor = FetchDescriptor<MealEntry>(
+            predicate: #Predicate { $0.businessID == recordID }
+        )
+        descriptor.fetchLimit = 1
+        guard !Task.isCancelled,
+              let loaded = try? modelContext.fetch(descriptor).first
+        else { return }
+        record = loaded
+    }
+}
+
+private struct BodyRecordCardLookup: View {
+    @Environment(\.modelContext) private var modelContext
+    let sourceMessage: CoachMessage?
+    let isEditable: Bool
+    private let recordID: Int64
+    @State private var record: BodyEntry?
+
+    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+        self.recordID = recordID
+        self.sourceMessage = sourceMessage
+        self.isEditable = isEditable
+    }
+
+    var body: some View {
+        if let record {
+            InlineBodyCard(
+                entry: record,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        }
+        Color.clear.frame(height: record == nil ? 1 : 0)
+            .task(id: recordID) { await loadRecord() }
+    }
+
+    private func loadRecord() async {
+        guard record == nil else { return }
+        await Task.yield()
+        var descriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.businessID == recordID }
+        )
+        descriptor.fetchLimit = 1
+        guard !Task.isCancelled,
+              let loaded = try? modelContext.fetch(descriptor).first
+        else { return }
+        record = loaded
+    }
+}
+
+private struct GymRecordCardLookup: View {
+    @Environment(\.modelContext) private var modelContext
+    let sourceMessage: CoachMessage?
+    let isEditable: Bool
+    private let recordID: Int64
+    @State private var record: GymProfile?
+
+    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+        self.recordID = recordID
+        self.sourceMessage = sourceMessage
+        self.isEditable = isEditable
+    }
+
+    var body: some View {
+        if let record {
+            InlineGymCard(
+                gym: record,
+                sourceMessage: sourceMessage,
+                isEditable: isEditable
+            )
+        }
+        Color.clear.frame(height: record == nil ? 1 : 0)
+            .task(id: recordID) { await loadRecord() }
+    }
+
+    private func loadRecord() async {
+        guard record == nil else { return }
+        await Task.yield()
+        var descriptor = FetchDescriptor<GymProfile>(
+            predicate: #Predicate { $0.businessID == recordID }
+        )
+        descriptor.fetchLimit = 1
+        guard !Task.isCancelled,
+              let loaded = try? modelContext.fetch(descriptor).first
+        else { return }
+        record = loaded
     }
 }
 
 private struct InlineWorkoutCard: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var definitions: [ExerciseDefinition]
     let workout: WorkoutEntry
     let sourceMessage: CoachMessage?
     let isEditable: Bool
     @State private var exercise: String
     @State private var workoutDraft: WorkoutRecordDraft
     @State private var showsDelete = false
-
-    private var linkedDefinition: ExerciseDefinition? {
-        if let exerciseID = workout.exerciseID {
-            return definitions.first { $0.id == exerciseID }
-        }
-        return nil
-    }
 
     init(workout: WorkoutEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.workout = workout
@@ -121,11 +251,16 @@ private struct InlineWorkoutCard: View {
         let normalized = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty, workoutDraft.isValid else { return false }
         let nameKey = ExerciseLibraryStore.canonicalNameKey(normalized)
-        if let exerciseID = workout.exerciseID,
-           let current = definitions.first(where: { $0.id == exerciseID }),
-           current.canonicalNameKey != nameKey
-        {
-            workout.exerciseID = nil
+        if let exerciseID = workout.exerciseID {
+            var descriptor = FetchDescriptor<ExerciseDefinition>(
+                predicate: #Predicate { $0.id == exerciseID }
+            )
+            descriptor.fetchLimit = 1
+            if let current = try? modelContext.fetch(descriptor).first,
+               current.canonicalNameKey != nameKey
+            {
+                workout.exerciseID = nil
+            }
         }
         workout.exercise = normalized
         let definition = try? ExerciseLibraryStore.linkedExercise(
@@ -241,7 +376,6 @@ private struct InlineBodyCard: View {
 
 private struct InlineGymCard: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var allGyms: [GymProfile]
     let gym: GymProfile
     let sourceMessage: CoachMessage?
     let isEditable: Bool
@@ -294,6 +428,7 @@ private struct InlineGymCard: View {
         gym.name = normalized
         gym.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         if isCurrent {
+            let allGyms = (try? modelContext.fetch(FetchDescriptor<GymProfile>())) ?? []
             GymSelection.activate(gym, among: allGyms)
         }
         sourceMessage?.recordManualCorrection(
@@ -305,11 +440,17 @@ private struct InlineGymCard: View {
 
     private func deleteRecord() {
         sourceMessage?.recordManualCorrection("健身房记录 \(gym.id.uuidString) 已由用户删除")
+        let allGyms = (try? modelContext.fetch(FetchDescriptor<GymProfile>())) ?? []
+        let gymID = gym.id
         StructuredDataStore.deleteGym(
             gym,
             gyms: allGyms,
-            equipment: (try? modelContext.fetch(FetchDescriptor<GymEquipment>())) ?? [],
-            media: (try? modelContext.fetch(FetchDescriptor<GymMedia>())) ?? [],
+            equipment: (try? modelContext.fetch(FetchDescriptor<GymEquipment>(
+                predicate: #Predicate { $0.gymID == gymID }
+            ))) ?? [],
+            media: (try? modelContext.fetch(FetchDescriptor<GymMedia>(
+                predicate: #Predicate { $0.gymID == gymID }
+            ))) ?? [],
             in: modelContext
         )
     }

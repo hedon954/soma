@@ -19,24 +19,32 @@ enum ConversationSessionDeletion {
             return .refusedBusy
         }
 
-        let sessions = try context.fetch(FetchDescriptor<ConversationSession>())
-        guard sessions.contains(where: { $0.id == sessionID }) else {
+        var sessionDescriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        sessionDescriptor.fetchLimit = 1
+        guard let session = try context.fetch(sessionDescriptor).first else {
             return .notFound
         }
 
-        let jobs = try context.fetch(FetchDescriptor<AgentJob>())
-        let sessionJobs = jobs.filter { $0.sessionID == sessionID }
+        let sessionJobs = try context.fetch(FetchDescriptor<AgentJob>(
+            predicate: #Predicate { $0.sessionID == sessionID }
+        ))
         if sessionJobs.contains(where: { !$0.state.isTerminal }) {
             return .refusedBusy
         }
 
-        let messages = try context.fetch(FetchDescriptor<CoachMessage>())
-        let sessionMessages = messages.filter { $0.sessionID == sessionID }
+        let sessionMessages = try context.fetch(FetchDescriptor<CoachMessage>(
+            predicate: #Predicate { $0.sessionID == sessionID }
+        ))
         let jobIDs = Set(sessionJobs.map(\.id))
         let turnIDs = Set(sessionJobs.map(\.turnID))
             .union(sessionMessages.compactMap(\.turnID))
         let traceIDs = Set(sessionMessages.compactMap(\.agentTraceID))
-        let oldMedia = try PersonalDataSnapshot.capture(from: context).referencedMediaPaths
+        let candidateMedia = Set(
+            sessionJobs.flatMap(\.mediaAttachments).map(\.path)
+                + sessionMessages.flatMap(\.mediaAttachments).map(\.path)
+        )
 
         try context.transaction {
             for message in sessionMessages {
@@ -46,42 +54,58 @@ enum ConversationSessionDeletion {
                 context.delete(job)
             }
 
-            let events = try context.fetch(FetchDescriptor<PersistentAgentEvent>())
-            for event in events
-                where jobIDs.contains(event.jobID) || turnIDs.contains(event.turnID)
-            {
+            var eventsByID: [UUID: PersistentAgentEvent] = [:]
+            for jobID in jobIDs {
+                let events = try context.fetch(FetchDescriptor<PersistentAgentEvent>(
+                    predicate: #Predicate { $0.jobID == jobID }
+                ))
+                events.forEach { eventsByID[$0.id] = $0 }
+            }
+            for turnID in turnIDs {
+                let events = try context.fetch(FetchDescriptor<PersistentAgentEvent>(
+                    predicate: #Predicate { $0.turnID == turnID }
+                ))
+                events.forEach { eventsByID[$0.id] = $0 }
+            }
+            for event in eventsByID.values {
                 context.delete(event)
             }
 
-            let traces = try context.fetch(FetchDescriptor<AgentTrace>())
-            for trace in traces where shouldDeleteTrace(
-                trace,
-                turnIDs: turnIDs,
-                traceIDs: traceIDs
-            ) {
+            var tracesByID: [UUID: AgentTrace] = [:]
+            for traceID in traceIDs {
+                let traces = try context.fetch(FetchDescriptor<AgentTrace>(
+                    predicate: #Predicate { $0.id == traceID }
+                ))
+                traces.forEach { tracesByID[$0.id] = $0 }
+            }
+            for turnID in turnIDs {
+                let traces = try context.fetch(FetchDescriptor<AgentTrace>(
+                    predicate: #Predicate { $0.turnID == turnID }
+                ))
+                traces.forEach { tracesByID[$0.id] = $0 }
+            }
+            for trace in tracesByID.values {
                 context.delete(trace)
             }
 
-            let receipts = try context.fetch(FetchDescriptor<AgentMutationReceipt>())
-            for receipt in receipts where turnIDs.contains(receipt.turnID) {
-                context.delete(receipt)
+            for turnID in turnIDs {
+                let receipts = try context.fetch(FetchDescriptor<AgentMutationReceipt>(
+                    predicate: #Predicate { $0.turnID == turnID }
+                ))
+                receipts.forEach(context.delete)
             }
 
-            let summaries = try context.fetch(
-                FetchDescriptor<ConversationCompactionSummary>()
-            )
-            for summary in summaries where summary.sessionID == sessionID {
-                context.delete(summary)
-            }
+            let summaries = try context.fetch(FetchDescriptor<ConversationCompactionSummary>(
+                predicate: #Predicate { $0.sessionID == sessionID }
+            ))
+            summaries.forEach(context.delete)
 
-            for session in sessions where session.id == sessionID {
-                context.delete(session)
-            }
+            context.delete(session)
             try context.save()
         }
 
-        let retained = try PersonalDataSnapshot.capture(from: context).referencedMediaPaths
-        _ = PersonalDataStore.reclaimMedia(oldMedia, excluding: retained)
+        let retained = try MediaReferenceStore.referencedPaths(in: context)
+        _ = PersonalDataStore.reclaimMedia(candidateMedia, excluding: retained)
         return .deleted
     }
 
@@ -102,17 +126,5 @@ enum ConversationSessionDeletion {
         guard outcome == .deleted, wasActive else { return outcome }
         controller.activateFallbackAfterDeletion(dataSpace: dataSpace, in: context)
         return outcome
-    }
-
-    private static func shouldDeleteTrace(
-        _ trace: AgentTrace,
-        turnIDs: Set<UUID>,
-        traceIDs: Set<UUID>
-    ) -> Bool {
-        if traceIDs.contains(trace.id) {
-            return true
-        }
-        guard let turnID = trace.turnID else { return false }
-        return turnIDs.contains(turnID)
     }
 }

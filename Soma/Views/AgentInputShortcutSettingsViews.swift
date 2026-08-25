@@ -50,8 +50,12 @@ struct AgentInputShortcutListView: View {
         .navigationTitle("输入框快捷按钮")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { EditButton() }
-        .onAppear(perform: reload)
-        .sheet(item: $editing, onDismiss: reload) { shortcut in
+        .task {
+            await refreshAfterTransition()
+        }
+        .sheet(item: $editing, onDismiss: {
+            Task { await refreshAfterTransition() }
+        }) { shortcut in
             NavigationStack {
                 AgentInputShortcutEditor(shortcut: shortcut)
             }
@@ -59,7 +63,7 @@ struct AgentInputShortcutListView: View {
         .alert("恢复默认快捷按钮？", isPresented: $confirmsReset) {
             Button("恢复默认", role: .destructive) {
                 AgentInputShortcutStore.resetToDefaults()
-                reload()
+                shortcuts = AgentInputShortcutStore.defaultShortcuts
             }
             Button("取消", role: .cancel) {}
         } message: {
@@ -112,25 +116,38 @@ struct AgentInputShortcutListView: View {
                     $0.id == shortcut.id
                 }) else { return }
                 shortcuts[index].isVisible = isVisible
-                AgentInputShortcutStore.replaceAll(shortcuts)
-                reload()
+                persistCurrentShortcuts()
             }
         )
     }
 
-    private func reload() {
-        shortcuts = AgentInputShortcutStore.shortcuts()
+    @MainActor
+    private func refreshAfterTransition() async {
+        await Task.yield()
+        let loaded = await Task.detached(priority: .userInitiated) {
+            AgentInputShortcutStore.shortcuts()
+        }.value
+        guard !Task.isCancelled else { return }
+        shortcuts = loaded
+    }
+
+    private func persistCurrentShortcuts() {
+        shortcuts = shortcuts.enumerated().map { index, shortcut in
+            var normalized = shortcut
+            normalized.order = index
+            normalized.toolNames = shortcut.normalizedToolNames
+            return normalized
+        }
+        AgentInputShortcutStore.replaceAll(shortcuts)
     }
 
     private func delete(at offsets: IndexSet) {
         shortcuts.remove(atOffsets: offsets)
-        AgentInputShortcutStore.replaceAll(shortcuts)
-        reload()
+        persistCurrentShortcuts()
     }
 
     private func move(from offsets: IndexSet, to destination: Int) {
         shortcuts.move(fromOffsets: offsets, toOffset: destination)
-        AgentInputShortcutStore.replaceAll(shortcuts)
-        reload()
+        persistCurrentShortcuts()
     }
 }

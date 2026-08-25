@@ -29,22 +29,26 @@ enum AgentUserDataAggregator {
             return .failure("frequency 不支持 muscle_group；请改用 day、week 或 exercise。")
         }
         let range = dateRange(from: arguments.dateFrom, to: arguments.dateTo)
-        let workouts = ((try? context.fetch(
+        let rangeStart = range.start
+        let rangeEnd = range.end
+        let workouts = (try? context.fetch(
             FetchDescriptor<WorkoutEntry>(
+                predicate: #Predicate {
+                    $0.externalSource == nil
+                        && $0.date >= rangeStart
+                        && $0.date <= rangeEnd
+                },
                 sortBy: [SortDescriptor(\.date, order: .reverse)]
             )
-        )) ?? []).filter {
-            $0.externalSource == nil
-                && $0.date >= range.start
-                && $0.date <= range.end
-        }
-        let meals = ((try? context.fetch(
+        )) ?? []
+        let meals = (try? context.fetch(
             FetchDescriptor<MealEntry>(
+                predicate: #Predicate {
+                    $0.date >= rangeStart && $0.date <= rangeEnd
+                },
                 sortBy: [SortDescriptor(\.date, order: .reverse)]
             )
-        )) ?? []).filter {
-            $0.date >= range.start && $0.date <= range.end
-        }
+        )) ?? []
 
         switch metric {
         case "calories" where groupBy == "day" || groupBy == "week":
@@ -62,7 +66,6 @@ enum AgentUserDataAggregator {
                 workoutBuckets(
                     workouts: workouts,
                     groupBy: groupBy,
-                    in: context,
                     value: volume(of:)
                 ),
                 arguments: arguments
@@ -72,7 +75,6 @@ enum AgentUserDataAggregator {
                 workoutBuckets(
                     workouts: workouts,
                     groupBy: groupBy,
-                    in: context,
                     value: { $0.setCount.map(Double.init) }
                 ),
                 arguments: arguments
@@ -136,12 +138,9 @@ enum AgentUserDataAggregator {
     private static func workoutBuckets(
         workouts: [WorkoutEntry],
         groupBy: String,
-        in context: ModelContext,
         value: (WorkoutEntry) -> Double?
     ) -> [String: Bucket] {
         var buckets: [String: Bucket] = [:]
-        let definitions = (try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? []
-        let byID = Dictionary(uniqueKeysWithValues: definitions.map { ($0.id, $0) })
         for workout in workouts {
             let keys: [String]
             switch groupBy {
@@ -152,7 +151,7 @@ enum AgentUserDataAggregator {
             case "exercise":
                 keys = [workout.exercise]
             case "muscle_group":
-                let muscles = workout.exerciseID.flatMap { byID[$0]?.primaryMuscles } ?? []
+                let muscles = workout.exerciseDefinition?.primaryMuscles ?? []
                 let groups = MuscleGroupMapping.resolve(muscles)
                 keys = groups.isEmpty
                     ? ["未映射"]

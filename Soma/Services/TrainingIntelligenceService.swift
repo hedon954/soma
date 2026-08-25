@@ -9,6 +9,28 @@ private struct GeneratedExerciseContent: Decodable {
     var movementPatterns: [String]
 }
 
+private final class PerformanceFingerprintCache {
+    static let shared = PerformanceFingerprintCache()
+
+    private let values = NSCache<NSString, NSString>()
+
+    private init() {
+        values.countLimit = 32
+    }
+
+    func value(for key: String) -> String? {
+        values.object(forKey: key as NSString) as String?
+    }
+
+    func insert(_ value: String, for key: String) {
+        values.setObject(value as NSString, forKey: key as NSString)
+    }
+
+    func removeAll() {
+        values.removeAllObjects()
+    }
+}
+
 @MainActor
 enum TrainingIntelligenceService {
     static func optimize(
@@ -17,29 +39,31 @@ enum TrainingIntelligenceService {
         ai: AIService,
         in context: ModelContext
     ) async throws -> RecommendationSnapshot {
-        let workouts = (
-            try? context.fetch(
-                FetchDescriptor<WorkoutEntry>(
-                    sortBy: [SortDescriptor(\.date, order: .reverse)]
-                )
+        let exerciseIDs = Set(prescriptions.map(\.exerciseID))
+        let relevant = exerciseIDs.flatMap { exerciseID in
+            var descriptor = FetchDescriptor<WorkoutEntry>(
+                predicate: #Predicate { $0.exerciseID == exerciseID },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
             )
-        ) ?? []
-        let relevant = workouts.filter { workout in
-            workout.exerciseID.map {
-                Set(prescriptions.map(\.exerciseID)).contains($0)
-            } ?? false
+            descriptor.fetchLimit = 30
+            return (try? context.fetch(descriptor)) ?? []
         }
+        .sorted { $0.date > $1.date }
         let fingerprint = planFingerprint(
             prescriptions: prescriptions,
             workouts: Array(relevant.prefix(30))
         )
-        let existing = (
-            try? context.fetch(FetchDescriptor<RecommendationSnapshot>())
-        )?.first {
-            $0.targetKind == "training_program"
-                && $0.targetID == program.id
-                && $0.inputFingerprint == fingerprint
-        }
+        let programID = program.id
+        let targetKind = "training_program"
+        var recommendationDescriptor = FetchDescriptor<RecommendationSnapshot>(
+            predicate: #Predicate {
+                $0.targetKind == targetKind
+                    && $0.targetID == programID
+                    && $0.inputFingerprint == fingerprint
+            }
+        )
+        recommendationDescriptor.fetchLimit = 1
+        let existing = try? context.fetch(recommendationDescriptor).first
         if let existing {
             return existing
         }
@@ -128,13 +152,66 @@ enum TrainingIntelligenceService {
     static func performanceFingerprint(
         for performance: ExercisePerformance
     ) throws -> String {
+        let input = try performanceFingerprintInput(for: performance)
+        if let cached = PerformanceFingerprintCache.shared.value(for: input.key) {
+            return cached
+        }
+        let value = try hashPerformanceVideo(
+            performanceID: input.performanceID,
+            url: input.url
+        )
+        PerformanceFingerprintCache.shared.insert(value, for: input.key)
+        return value
+    }
+
+    static func performanceFingerprintAsync(
+        for performance: ExercisePerformance
+    ) async throws -> String {
+        let input = try performanceFingerprintInput(for: performance)
+        if let cached = PerformanceFingerprintCache.shared.value(for: input.key) {
+            return cached
+        }
+        let value = try await Task.detached(priority: .userInitiated) {
+            try hashPerformanceVideo(
+                performanceID: input.performanceID,
+                url: input.url
+            )
+        }.value
+        PerformanceFingerprintCache.shared.insert(value, for: input.key)
+        return value
+    }
+
+    static func removeCachedPerformanceFingerprints() {
+        PerformanceFingerprintCache.shared.removeAll()
+    }
+
+    private static func performanceFingerprintInput(
+        for performance: ExercisePerformance
+    ) throws -> (key: String, performanceID: UUID, url: URL) {
         guard let path = performance.activeVideoPath,
               let url = MediaStore.url(at: path)
         else {
             throw TrainingIntelligenceError.videoMissing
         }
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attributes[.size] as? NSNumber)?.int64Value ?? -1
+        let modified = (attributes[.modificationDate] as? Date)?
+            .timeIntervalSince1970 ?? -1
+        let key = [
+            performance.id.uuidString,
+            url.path,
+            String(size),
+            String(modified)
+        ].joined(separator: "|")
+        return (key, performance.id, url)
+    }
+
+    private nonisolated static func hashPerformanceVideo(
+        performanceID: UUID,
+        url: URL
+    ) throws -> String {
         var hash = SHA256()
-        hash.update(data: Data(performance.id.uuidString.utf8))
+        hash.update(data: Data(performanceID.uuidString.utf8))
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         while let chunk = try handle.read(upToCount: 1_048_576),
@@ -179,19 +256,6 @@ enum TrainingIntelligenceService {
         并分别填写：按阶段描述的 evidence、镜头/遮挡/采样造成的 limitations、以及中性可执行的 feedback。
         不要调用 create_workout 或 update_workout，也不要修改任何训练事实。
         """
-    }
-
-    static func existingPerformanceAnalysis(
-        performance: ExercisePerformance,
-        in context: ModelContext
-    ) throws -> PerformanceAnalysis? {
-        let fingerprint = try performanceFingerprint(for: performance)
-        return (
-            try? context.fetch(FetchDescriptor<PerformanceAnalysis>())
-        )?.first(where: {
-            $0.performanceID == performance.id
-                && $0.inputFingerprint == fingerprint
-        })
     }
 
     static func makePendingPerformanceVideo(
@@ -267,7 +331,7 @@ enum ExerciseImageGenerationService {
             kind: kind,
             exercise: exercise
         ))
-        let path = try MediaStore.saveImage(imageData)
+        let path = try await MediaStore.saveImageAsync(imageData)
         let reference = ExerciseImageReference(
             kind: kind,
             source: .generated,

@@ -13,12 +13,35 @@ final class ConversationProcessingService {
     private(set) var isProcessing = false
     private(set) var dataSpace: DataSpace?
     private(set) var sessionID: UUID?
-    private(set) var liveAssistantText = ""
-    private(set) var liveAgentActivity: String?
+
+    @ObservationIgnored
+    private(set) var liveAssistantItemID: UUID?
+
+    @ObservationIgnored
+    private var liveAssistantTextBuffer = LiveAgentTextBuffer()
+
     private(set) var liveEventRevision = 0
 
     @ObservationIgnored
+    private var remoteTextCoalescer = AgentTextDeltaCoalescer()
+
+    @ObservationIgnored
+    private var remoteTextItemID: UUID?
+
+    @ObservationIgnored
+    private var remoteModelReceivedFirstDelta = false
+
+    @ObservationIgnored
+    var remoteProjectionJobID: UUID?
+
+    @ObservationIgnored
+    var remoteProjectionCursor = 0
+
+    @ObservationIgnored
     private var processingTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var performanceFixtureTask: Task<Void, Never>?
 
     @ObservationIgnored let titleGenerator = SessionTitleGenerator()
 
@@ -44,16 +67,63 @@ final class ConversationProcessingService {
         selectedShortcutID: String? = nil,
         forceLocal: Bool = false
     ) -> Bool {
-        // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
-        let useRemote = !forceLocal && RemoteAgentPreference.isEnabled()
-        let selectedShortcut = selectedShortcutID.flatMap {
-            AgentInputShortcutStore.shortcut(id: $0)
-        }
         let persistedAttachments: [MediaAttachmentReference]
         do {
             persistedAttachments = try persistPendingAttachments(attachments)
         } catch {
             return false
+        }
+        return submitPersisted(
+            text: text,
+            attachments: persistedAttachments,
+            context: context,
+            includeLocation: includeLocation,
+            locationService: locationService,
+            selectedShortcutID: selectedShortcutID,
+            forceLocal: forceLocal
+        )
+    }
+
+    @discardableResult
+    func submitAsync(
+        text: String,
+        attachments: [PendingAttachment],
+        context: ConversationProcessingContext,
+        includeLocation: Bool,
+        locationService: LocationContextService,
+        selectedShortcutID: String? = nil,
+        forceLocal: Bool = false
+    ) async -> Bool {
+        let persistedAttachments: [MediaAttachmentReference]
+        do {
+            persistedAttachments = try await persistPendingAttachmentsAsync(attachments)
+        } catch {
+            return false
+        }
+        return submitPersisted(
+            text: text,
+            attachments: persistedAttachments,
+            context: context,
+            includeLocation: includeLocation,
+            locationService: locationService,
+            selectedShortcutID: selectedShortcutID,
+            forceLocal: forceLocal
+        )
+    }
+
+    private func submitPersisted(
+        text: String,
+        attachments persistedAttachments: [MediaAttachmentReference],
+        context: ConversationProcessingContext,
+        includeLocation: Bool,
+        locationService: LocationContextService,
+        selectedShortcutID: String?,
+        forceLocal: Bool
+    ) -> Bool {
+        // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
+        let useRemote = !forceLocal && RemoteAgentPreference.isEnabled()
+        let selectedShortcut = selectedShortcutID.flatMap {
+            AgentInputShortcutStore.shortcut(id: $0)
         }
 
         let displayText = text.isEmpty
@@ -137,17 +207,20 @@ final class ConversationProcessingService {
         context: ConversationProcessingContext,
         locationService: LocationContextService?
     ) {
-        let jobs = (
-            try? context.modelContext.fetch(
-                FetchDescriptor<AgentJob>(sortBy: [SortDescriptor(\.createdAt)])
-            )
-        ) ?? []
-        if jobs.contains(where: {
-            $0.dataSpace == context.dataSpace
-                && $0.id != job.id
-                && $0.createdAt <= job.createdAt
-                && $0.state == .waitingForUser
-        }) {
+        let dataSpaceRaw = context.dataSpace.rawValue
+        let jobID = job.id
+        let jobCreatedAt = job.createdAt
+        let waitingForUser = AgentJobState.waitingForUser.rawValue
+        var blockingDescriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw
+                    && $0.id != jobID
+                    && $0.createdAt <= jobCreatedAt
+                    && $0.stateRaw == waitingForUser
+            }
+        )
+        blockingDescriptor.fetchLimit = 1
+        if ((try? context.modelContext.fetchCount(blockingDescriptor)) ?? 0) > 0 {
             try? AgentJobStore.stage(
                 job,
                 message: "前一条消息等待手动重试；本条已按发送顺序暂存。",
@@ -219,8 +292,13 @@ final class ConversationProcessingService {
         isProcessing = true
         self.dataSpace = dataSpace
         self.sessionID = sessionID
-        liveAssistantText = ""
-        liveAgentActivity = "正在启动 Agent…"
+        liveAssistantItemID = nil
+        liveAssistantTextBuffer.reset()
+        remoteTextCoalescer = AgentTextDeltaCoalescer()
+        remoteTextItemID = nil
+        remoteModelReceivedFirstDelta = false
+        remoteProjectionJobID = nil
+        remoteProjectionCursor = 0
         return true
     }
 
@@ -288,7 +366,6 @@ final class ConversationProcessingService {
                userMessage.location == nil,
                let locationService
             {
-                liveAgentActivity = "正在获取本次位置…"
                 userMessage.location = await locationService.requestSnapshot()
                 try? context.modelContext.save()
             }
@@ -357,7 +434,6 @@ final class ConversationProcessingService {
                userMessage.location == nil,
                let locationService
             {
-                liveAgentActivity = "正在获取本次位置…"
                 userMessage.location = await locationService.requestSnapshot()
                 try? context.modelContext.save()
             }
@@ -413,9 +489,6 @@ final class ConversationProcessingService {
         )
 
         do {
-            liveAgentActivity = job.remoteJobID == nil
-                ? "正在投递后台任务…"
-                : "正在同步后台进度…"
             if job.remoteJobID == nil {
                 let submissionStartedAt = Date.now
                 let prepared = try await prepareRemoteSubmission(
@@ -462,6 +535,7 @@ final class ConversationProcessingService {
                 }
                 job.remoteJobID = submitted.id
                 job.remoteEventCursor = 0
+                resetRemoteProjectionCursor(for: job)
                 let submissionEndedAt = Date.now
                 projectRemoteSpan(
                     AgentTraceSpan(
@@ -498,7 +572,7 @@ final class ConversationProcessingService {
 
             let catchUpPage = try await client.events(
                 remoteJobID: remoteJobID,
-                after: job.remoteEventCursor
+                after: currentRemoteProjectionCursor(for: job)
             )
             try await applyRemoteEvents(
                 catchUpPage.events,
@@ -523,7 +597,7 @@ final class ConversationProcessingService {
 
                 for try await event in client.eventStream(
                     remoteJobID: remoteJobID,
-                    after: job.remoteEventCursor
+                    after: currentRemoteProjectionCursor(for: job)
                 ) {
                     try await applyRemoteEvents(
                         [event],
@@ -543,7 +617,7 @@ final class ConversationProcessingService {
 
             let finalPage = try await client.events(
                 remoteJobID: remoteJobID,
-                after: job.remoteEventCursor
+                after: currentRemoteProjectionCursor(for: job)
             )
             try await applyRemoteEvents(
                 finalPage.events,
@@ -555,8 +629,9 @@ final class ConversationProcessingService {
                 context: context,
                 client: client
             )
-            if job.remoteEventCursor > 0 {
-                let acknowledgedCursor = job.remoteEventCursor
+            let projectedCursor = currentRemoteProjectionCursor(for: job)
+            if projectedCursor > 0 {
+                let acknowledgedCursor = projectedCursor
                 Task {
                     try? await client.acknowledge(
                         remoteJobID: remoteJobID,
@@ -578,6 +653,7 @@ final class ConversationProcessingService {
             } else {
                 throw URLError(.networkConnectionLost)
             }
+            persistRemoteProjectionCursor(for: job)
             context.session.touch(at: .now)
             try context.modelContext.save()
             if job.state == .succeeded {
@@ -607,7 +683,6 @@ final class ConversationProcessingService {
                 message: "前一条消息等待手动重试；本条已按发送顺序暂存。",
                 in: context.modelContext
             )
-            liveAgentActivity = nil
             try? context.modelContext.save()
         }
     }
@@ -709,13 +784,16 @@ final class ConversationProcessingService {
            event.phase == "updated",
            let delta = event.payload["delta"]?.stringValue
         {
-            updateRemoteModelSpan(
-                firstDeltaAt: event.createdAt,
-                completedAt: nil,
-                status: nil,
-                trace: trace,
-                responseMessage: responseMessage
-            )
+            if !remoteModelReceivedFirstDelta {
+                updateRemoteModelSpan(
+                    firstDeltaAt: event.createdAt,
+                    completedAt: nil,
+                    status: nil,
+                    trace: trace,
+                    responseMessage: responseMessage
+                )
+                remoteModelReceivedFirstDelta = true
+            }
             let itemID = event.payload["itemID"]?.stringValue
                 .flatMap(UUID.init(uuidString:))
                 ?? UUID(uuidString: event.id)
@@ -724,19 +802,7 @@ final class ConversationProcessingService {
                 itemID: itemID,
                 delta: delta
             )
-            trace.apply(traceEvent)
-            job.responseTextSnapshot += delta
-            responseMessage.text += delta
-            responseMessage.agentStatus = .running
-            responseMessage.applyAgentEvent(traceEvent)
-            applyLiveAgentEvent(traceEvent)
-            _ = try? AgentJobStore.append(
-                kind: .assistantTextDelta,
-                payload: .init(itemID: itemID, text: delta),
-                to: job,
-                in: context.modelContext,
-                at: event.createdAt
-            )
+            projectRemoteTextDelta(traceEvent, at: event.createdAt)
         } else if event.kind == "text", event.phase == "completed" {
             let itemID = event.payload["itemID"]?.stringValue
                 .flatMap(UUID.init(uuidString:))
@@ -746,17 +812,21 @@ final class ConversationProcessingService {
                 itemID: itemID,
                 at: event.createdAt
             )
-            trace.apply(traceEvent)
-            responseMessage.applyAgentEvent(traceEvent)
-            applyLiveAgentEvent(traceEvent)
-            _ = try? AgentJobStore.append(
-                kind: .assistantTextCompleted,
-                payload: .init(itemID: itemID),
-                to: job,
-                in: context.modelContext,
-                at: event.createdAt
+            flushRemoteTextDelta(itemID: itemID, at: event.createdAt)
+            let liveText = pendingLiveTextSnapshot(for: traceEvent)
+            PersistentAgentEventProjection.persistAndProject(
+                traceEvent,
+                job: job,
+                responseMessage: responseMessage,
+                trace: trace,
+                liveText: liveText,
+                in: context.modelContext
             )
+            applyLiveAgentEvent(traceEvent)
+            remoteTextCoalescer = AgentTextDeltaCoalescer()
+            remoteTextItemID = nil
         } else if event.kind == "model", event.phase == "started" {
+            remoteModelReceivedFirstDelta = false
             let exposedToolNames = event.payload["exposedToolNames"]?
                 .stringArrayValue ?? []
             projectRemoteSpan(
@@ -1036,17 +1106,14 @@ private extension ConversationProcessingService {
                     ? "本次使用完整视频分析。\n\n"
                     : "本次使用关键帧分析；未覆盖的动作阶段不会据此推断。\n\n"
                 PersistentAgentEventProjection.persistAndProject(
-                    .assistantTextDelta(itemID: modeItemID, delta: notice),
-                    job: job,
-                    responseMessage: responseMessage,
-                    trace: trace,
-                    in: context.modelContext
-                )
-                PersistentAgentEventProjection.persistAndProject(
                     .assistantTextCompleted(itemID: modeItemID, at: traceNow),
                     job: job,
                     responseMessage: responseMessage,
                     trace: trace,
+                    liveText: LiveAgentTextSnapshot(
+                        itemID: modeItemID,
+                        text: notice
+                    ),
                     in: context.modelContext
                 )
             }
@@ -1056,7 +1123,11 @@ private extension ConversationProcessingService {
             let firstStepDeadlineEnabled = !job.firstStepDeadlineConsumed
             job.firstStepDeadlineConsumed = true
             try? context.modelContext.save()
-            let loopBudget = context.ai.streamDeadlinePolicy.loopTotal(
+            let deadlinePolicy = ReActAgentPreference.deadlinePolicy(
+                context.ai.streamDeadlinePolicy,
+                defaults: context.ai.defaults
+            )
+            let loopBudget = deadlinePolicy.loopTotal(
                 hasImages: media.imageCount > 0,
                 hasVideo: media.hasVideo
             )
@@ -1094,7 +1165,7 @@ private extension ConversationProcessingService {
                         return fallback.frames
                     } : nil,
                     trace: { [weak self] event in
-                        self?.applyLiveAgentEvent(event)
+                        let liveText = self?.pendingLiveTextSnapshot(for: event)
                         if case .failed = event,
                            self?.backgroundLeaseExpired == true
                         {
@@ -1105,9 +1176,11 @@ private extension ConversationProcessingService {
                                 job: job,
                                 responseMessage: responseMessage,
                                 trace: trace,
+                                liveText: liveText,
                                 in: context.modelContext
                             )
                         }
+                        self?.applyLiveAgentEvent(event)
                     }
                 ) { call in
                     let attributedMedia = AgentToolMediaAttribution.attachments(
@@ -1307,8 +1380,7 @@ extension ConversationProcessingService {
     ) -> (CoachMessage, Int) {
         if resumable,
            let existingID = job.responseMessageID,
-           let existing = allMessages(in: context.modelContext)
-           .first(where: { $0.id == existingID })
+           let existing = message(id: existingID, in: context.modelContext)
         {
             let attemptNumber = max(existing.attemptNumber, 1)
             job.activeAttemptNumber = attemptNumber
@@ -1374,25 +1446,35 @@ extension ConversationProcessingService {
         for turnID: UUID,
         in context: ModelContext
     ) -> Int {
-        let messages = (
-            try? context.fetch(FetchDescriptor<CoachMessage>())
-        ) ?? []
-        return messages
-            .filter { $0.isFromCoach && $0.turnID == turnID }
-            .map(\.attemptNumber)
-            .max()
-            .map { $0 + 1 }
-            ?? 1
+        var descriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate {
+                $0.isFromCoach && $0.turnID == turnID
+            },
+            sortBy: [SortDescriptor(\.attemptNumber, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return ((try? context.fetch(descriptor).first?.attemptNumber) ?? 0) + 1
     }
 
-    private func allMessages(in context: ModelContext) -> [CoachMessage] {
-        (
-            try? context.fetch(
-                FetchDescriptor<CoachMessage>(
-                    sortBy: [SortDescriptor(\.date)]
-                )
-            )
-        ) ?? []
+    private func message(id: UUID, in context: ModelContext) -> CoachMessage? {
+        var descriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func recentMessages(
+        sessionID: UUID,
+        limit: Int = 80,
+        in context: ModelContext
+    ) -> [CoachMessage] {
+        var descriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate { $0.sessionID == sessionID },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     private func turnContext(
@@ -1416,8 +1498,13 @@ extension ConversationProcessingService {
     private func finishProcessing() {
         backgroundLease.end()
         backgroundLeaseExpired = false
-        liveAssistantText = ""
-        liveAgentActivity = nil
+        liveAssistantItemID = nil
+        liveAssistantTextBuffer.reset()
+        remoteTextCoalescer = AgentTextDeltaCoalescer()
+        remoteTextItemID = nil
+        remoteModelReceivedFirstDelta = false
+        remoteProjectionJobID = nil
+        remoteProjectionCursor = 0
         isProcessing = false
         AppRunSentinel.shared.recordActivity(
             sessionID: sessionID,
@@ -1440,16 +1527,21 @@ extension ConversationProcessingService {
             dataSpace: dataSpace,
             in: modelContext
         )
-        let jobs = (
-            try? modelContext.fetch(
-                FetchDescriptor<AgentJob>(
-                    sortBy: [SortDescriptor(\.createdAt)]
-                )
-            )
-        ) ?? []
-        guard let job = jobs.first(where: {
-            $0.dataSpace == dataSpace && !$0.state.isTerminal
-        }) else {
+        let dataSpaceRaw = dataSpace.rawValue
+        let succeeded = AgentJobState.succeeded.rawValue
+        let failed = AgentJobState.failed.rawValue
+        let cancelled = AgentJobState.cancelled.rawValue
+        var jobDescriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw
+                    && $0.stateRaw != succeeded
+                    && $0.stateRaw != failed
+                    && $0.stateRaw != cancelled
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        jobDescriptor.fetchLimit = 1
+        guard let job = try? modelContext.fetch(jobDescriptor).first else {
             return
         }
         // FIFO 只看队头。失败一旦可见，就只能由用户显式释放。
@@ -1472,8 +1564,7 @@ extension ConversationProcessingService {
         }
         guard job.state.isRunnable else { return }
         guard job.nextRetryAt == nil else { return }
-        let messages = (try? modelContext.fetch(FetchDescriptor<CoachMessage>())) ?? []
-        guard let userMessage = messages.first(where: { $0.id == job.userMessageID }),
+        guard let userMessage = message(id: job.userMessageID, in: modelContext),
               var context = ConversationProcessingContextFactory.make(
                   sessionID: job.sessionID,
                   dataSpace: dataSpace,
@@ -1552,6 +1643,41 @@ extension ConversationProcessingService {
         }
     }
 
+    private func persistPendingAttachmentsAsync(
+        _ attachments: [PendingAttachment]
+    ) async throws -> [MediaAttachmentReference] {
+        var references: [MediaAttachmentReference] = []
+        do {
+            for attachment in attachments {
+                switch attachment.kind {
+                case .none:
+                    continue
+                case .image:
+                    guard let data = attachment.imageData else {
+                        throw ConversationMediaPreparationError.attachmentPersistenceFailed
+                    }
+                    let path = try await MediaStore.saveImageAsync(data)
+                    references.append(.init(kind: .image, path: path))
+                case .video:
+                    guard let url = attachment.videoURL else {
+                        throw ConversationMediaPreparationError.attachmentPersistenceFailed
+                    }
+                    let path = try await MediaStore.saveVideoAsync(from: url)
+                    references.append(.init(kind: .video, path: path))
+                }
+            }
+            guard references.count == attachments.count(where: { $0.kind != .none }) else {
+                throw ConversationMediaPreparationError.attachmentPersistenceFailed
+            }
+            return references
+        } catch {
+            for reference in references {
+                _ = MediaStore.removeStoredFile(at: reference.path)
+            }
+            throw error
+        }
+    }
+
     /// 首个请求发出前的本地准备（上下文投影 + 历史媒体重新抽帧）需要单独计时，
     /// 否则一次「慢」无法区分是供应商排队还是我们自己的准备开销。
     func prepareHistory(
@@ -1564,7 +1690,10 @@ extension ConversationProcessingService {
     ) async -> PreparedAgentHistory {
         let startedAt = Date.now
         let projection = ConversationContextProjection.make(
-            messages: allMessages(in: context.modelContext),
+            messages: recentMessages(
+                sessionID: context.session.id,
+                in: context.modelContext
+            ),
             sessionID: context.session.id,
             excludingTurnID: turnID
         )
@@ -1627,27 +1756,130 @@ extension ConversationProcessingService {
         #endif
         liveEventRevision += 1
         switch event {
-        case let .assistantTextDelta(_, delta):
-            liveAssistantText += delta
-            liveAgentActivity = "正在生成回复…"
-        case .assistantTextCompleted:
-            liveAgentActivity = nil
-        case let .span(span):
-            guard span.status == .running else { return }
-            switch span.kind {
-            case .model:
-                liveAgentActivity = span.title == "LLM 推理"
-                    ? "模型正在响应…"
-                    : span.title
-            case .skill:
-                liveAgentActivity = "正在加载 Skill：\(span.title)"
-            case .tool:
-                liveAgentActivity = "正在执行：\(span.title)"
-            case .output:
-                liveAgentActivity = "正在整理结果…"
+        case let .assistantTextDelta(itemID, delta):
+            if liveAssistantItemID != itemID {
+                liveAssistantItemID = itemID
+                liveAssistantTextBuffer.reset()
             }
+            liveAssistantTextBuffer.append(delta)
+        case let .assistantTextCompleted(itemID, _):
+            if liveAssistantItemID == itemID {
+                liveAssistantItemID = nil
+                liveAssistantTextBuffer.reset()
+            }
+        case .span:
+            break
         case .completed, .failed:
-            liveAgentActivity = nil
+            liveAssistantItemID = nil
+            liveAssistantTextBuffer.reset()
+        }
+    }
+
+    /// 物理设备和 Simulator 共用的长流式性能路径。调用方已由
+    /// `PerformanceTestFixture` 双重门控，数据空间也来自 XCTest 内存容器。
+    func startLongStreamPerformanceFixture(
+        dataSpace: DataSpace,
+        sessionID: UUID
+    ) {
+        guard PerformanceTestFixture.requestedLongStream else { return }
+        performanceFixtureTask?.cancel()
+        isProcessing = true
+        self.dataSpace = dataSpace
+        self.sessionID = sessionID
+        let itemID = UUID()
+
+        // 先进入足以暴露累计排版问题的长文本状态，再以产品相同的约 5 Hz
+        // 节拍继续增长。这里不写 SwiftData，也不触发网络请求。
+        for index in 0 ..< 160 {
+            applyLiveAgentEvent(.assistantTextDelta(
+                itemID: itemID,
+                delta: PerformanceTestFixture.streamParagraph(index)
+            ))
+        }
+
+        performanceFixtureTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for index in 160 ..< 1060 {
+                do {
+                    try await Task.sleep(for: .milliseconds(200))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                applyLiveAgentEvent(.assistantTextDelta(
+                    itemID: itemID,
+                    delta: PerformanceTestFixture.streamParagraph(index)
+                ))
+            }
+        }
+    }
+
+    private func projectRemoteTextDelta(
+        _ event: AgentTraceEvent,
+        at date: Date
+    ) {
+        guard case let .assistantTextDelta(itemID, delta) = event else { return }
+        if remoteTextItemID != itemID {
+            if let previousID = remoteTextItemID,
+               let tail = remoteTextCoalescer.flush(now: date)
+            {
+                applyLiveAgentEvent(.assistantTextDelta(
+                    itemID: previousID,
+                    delta: tail
+                ))
+            }
+            remoteTextCoalescer = AgentTextDeltaCoalescer()
+            remoteTextItemID = itemID
+        }
+        if let batch = remoteTextCoalescer.append(delta, now: date) {
+            applyLiveAgentEvent(.assistantTextDelta(itemID: itemID, delta: batch))
+        }
+    }
+
+    private func flushRemoteTextDelta(itemID: UUID, at date: Date) {
+        guard remoteTextItemID == itemID,
+              let tail = remoteTextCoalescer.flush(now: date)
+        else {
+            return
+        }
+        applyLiveAgentEvent(.assistantTextDelta(itemID: itemID, delta: tail))
+    }
+
+    var liveAssistantRenderSnapshot: LiveAgentTextRenderSnapshot? {
+        guard let liveAssistantItemID,
+              !liveAssistantTextBuffer.chunks.isEmpty
+        else {
+            return nil
+        }
+        return LiveAgentTextRenderSnapshot(
+            itemID: liveAssistantItemID,
+            chunks: liveAssistantTextBuffer.chunks
+        )
+    }
+
+    /// 完整正文只在持久化边界合并一次，不参与 5Hz UI 投影。
+    private var liveAssistantTextSnapshot: LiveAgentTextSnapshot? {
+        guard let renderSnapshot = liveAssistantRenderSnapshot else { return nil }
+        let text = liveAssistantTextBuffer.text
+        guard !text.isEmpty else { return nil }
+        return LiveAgentTextSnapshot(
+            itemID: renderSnapshot.itemID,
+            text: text,
+            chunks: renderSnapshot.chunks
+        )
+    }
+
+    private func pendingLiveTextSnapshot(
+        for event: AgentTraceEvent
+    ) -> LiveAgentTextSnapshot? {
+        guard let snapshot = liveAssistantTextSnapshot else { return nil }
+        switch event {
+        case let .assistantTextCompleted(itemID, _):
+            return itemID == snapshot.itemID ? snapshot : nil
+        case .completed, .failed:
+            return snapshot
+        case .assistantTextDelta, .span:
+            return nil
         }
     }
 }

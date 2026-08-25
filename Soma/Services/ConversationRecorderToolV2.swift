@@ -253,7 +253,7 @@ extension ConversationRecorder {
         )
     }
 
-    private static func cursorOffset(_ cursor: String?) -> Int {
+    static func cursorOffset(_ cursor: String?) -> Int {
         guard let cursor,
               let data = Data(base64Encoded: cursor),
               let text = String(data: data, encoding: .utf8),

@@ -104,7 +104,7 @@ struct AIModelRoute: Equatable {
     var reason: String
 }
 
-struct AgentVideoInput: Equatable {
+struct AgentVideoInput: Equatable, Sendable {
     var data: Data
     var mimeType: String
 }

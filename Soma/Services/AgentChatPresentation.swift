@@ -35,6 +35,29 @@ enum AgentTurnVisibleItems {
     }
 }
 
+enum AgentTurnLiveProjection {
+    /// 持久化 Item 在文本段完成时才更新；流式期间只追加一张瞬态文字卡。
+    /// 如果同一轮刷新已经收到完成态，以持久化版本为准，避免重复显示。
+    static func make(
+        persisted: [AgentTurnItem],
+        liveText: LiveAgentTextSnapshot?
+    ) -> [AgentTurnItem] {
+        guard let liveText,
+              !liveText.text.isEmpty,
+              !persisted.contains(where: { $0.id == liveText.itemID })
+        else {
+            return persisted
+        }
+        return persisted + [AgentTurnItem(
+            id: liveText.itemID,
+            sequence: persisted.count + 1,
+            kind: .text,
+            status: .running,
+            text: liveText.text
+        )]
+    }
+}
+
 /// PRD 020：连续 Skill/Tool 收成一条可展开过程；文字和失败卡仍按原顺序打断该组。
 /// PRD 033：写入产生的原位卡跟在产生它的那一步后面，让文字与卡片按对话节奏交替出现。
 enum AgentTurnTranscriptSegment: Equatable, Identifiable {

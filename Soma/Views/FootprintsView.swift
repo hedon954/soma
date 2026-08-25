@@ -5,24 +5,16 @@ struct FootprintsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationSessionController.self) private var conversationSessions
-    @Query(sort: \CoachMessage.date, order: .reverse)
-    private var messages: [CoachMessage]
-    @Query(sort: \ConversationSession.startedAt, order: .reverse)
-    private var sessions: [ConversationSession]
+    @State private var messages: [CoachMessage] = []
+    @State private var snapshot = FootprintsSnapshot(messages: [])
+    @State private var hasMore = true
+    @State private var isLoading = false
 
-    private var footprints: [CoachMessage] {
-        let successful = ConversationTurnProjection.successfulTurnIDs(
-            in: messages
-        )
-        return messages.filter {
-            !$0.isFromCoach
-                && $0.turnID.map(successful.contains) == true
-        }
-    }
+    private static let pageSize = 40
 
     var body: some View {
         Group {
-            if footprints.isEmpty {
+            if snapshot.footprints.isEmpty, !isLoading {
                 ContentUnavailableView(
                     "还没有足迹",
                     systemImage: "shoeprints.fill",
@@ -31,8 +23,18 @@ struct FootprintsView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(footprints) { message in
-                            footprintDestination(for: message)
+                        ForEach(snapshot.footprints) { message in
+                            footprintDestination(
+                                for: message,
+                                resultLabel: message.turnID.flatMap {
+                                    snapshot.resultLabels[$0]
+                                }
+                            )
+                        }
+                        if hasMore {
+                            ProgressView()
+                                .padding(.vertical, 16)
+                                .onAppear(perform: loadMore)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -44,28 +46,26 @@ struct FootprintsView: View {
         .appPageBackground()
         .navigationTitle("足迹")
         .navigationBarTitleDisplayMode(.large)
+        .task {
+            if messages.isEmpty {
+                await Task.yield()
+                loadMore()
+            }
+        }
     }
 
     @ViewBuilder
     private func footprintDestination(
-        for message: CoachMessage
+        for message: CoachMessage,
+        resultLabel: String?
     ) -> some View {
-        if let session = message.sessionID.flatMap({ id in
-            sessions.first { $0.id == id }
-        }) {
+        if message.sessionID != nil {
             Button {
-                conversationSessions.select(
-                    session,
-                    dataSpace: dataSpace.activeSpace
-                )
-                NotificationCenter.default.post(
-                    name: .openCoachConversation,
-                    object: nil
-                )
+                openConversation(for: message)
             } label: {
                 FootprintRow(
                     message: message,
-                    resultLabel: resultLabel(for: message)
+                    resultLabel: resultLabel
                 )
             }
             .buttonStyle(.plain)
@@ -75,7 +75,7 @@ struct FootprintsView: View {
         } else {
             FootprintRow(
                 message: message,
-                resultLabel: resultLabel(for: message)
+                resultLabel: resultLabel
             )
             .contextMenu {
                 removeLocationButton(for: message)
@@ -95,17 +95,55 @@ struct FootprintsView: View {
         }
     }
 
-    private func resultLabel(for message: CoachMessage) -> String? {
-        guard let turnID = message.turnID else { return nil }
-        return messages
-            .filter {
-                $0.isFromCoach
-                    && $0.turnID == turnID
-                    && $0.agentStatus == .succeeded
-            }
-            .max(by: { $0.attemptNumber < $1.attemptNumber })?
-            .recordType?
-            .recordedLabel
+    private func openConversation(for message: CoachMessage) {
+        guard let sessionID = message.sessionID else { return }
+        var descriptor = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        descriptor.fetchLimit = 1
+        guard let session = try? modelContext.fetch(descriptor).first else { return }
+        conversationSessions.select(session, dataSpace: dataSpace.activeSpace)
+        NotificationCenter.default.post(name: .openCoachConversation, object: nil)
+    }
+
+    private func loadMore() {
+        guard hasMore, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        var descriptor = FetchDescriptor<CoachMessage>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchOffset = messages.count
+        descriptor.fetchLimit = Self.pageSize
+        do {
+            let page = try modelContext.fetch(descriptor)
+            messages.append(contentsOf: page)
+            snapshot = FootprintsSnapshot(messages: messages)
+            hasMore = page.count == Self.pageSize
+        } catch {
+            hasMore = false
+        }
+    }
+}
+
+private struct FootprintsSnapshot {
+    let footprints: [CoachMessage]
+    let resultLabels: [UUID: String]
+
+    init(messages: [CoachMessage]) {
+        let successful = ConversationTurnProjection.successfulTurnIDs(in: messages)
+        footprints = messages.filter {
+            !$0.isFromCoach && $0.turnID.map(successful.contains) == true
+        }
+        resultLabels = messages.reduce(into: [:]) { labels, message in
+            guard message.isFromCoach,
+                  message.agentStatus == .succeeded,
+                  let turnID = message.turnID,
+                  let label = message.recordType?.recordedLabel,
+                  labels[turnID] == nil
+            else { return }
+            labels[turnID] = label
+        }
     }
 }
 

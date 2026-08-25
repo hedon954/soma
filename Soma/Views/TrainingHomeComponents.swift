@@ -3,23 +3,16 @@ import SwiftUI
 struct TrainingResumeCard: View {
     let session: WorkoutSession
 
-    private var orderedPerformances: [ExercisePerformance] {
-        session.performances.sorted { $0.order < $1.order }
-    }
-
-    private var currentPerformance: ExercisePerformance? {
-        guard let id = session.currentPerformanceID else {
-            return orderedPerformances.first { $0.status == .pending || $0.status == .active }
-        }
-        return orderedPerformances.first { $0.id == id }
-    }
-
-    private var completedCount: Int {
-        orderedPerformances.count { $0.status == .completed }
-    }
-
     var body: some View {
-        AppCard {
+        let orderedPerformances = session.performances.sorted { $0.order < $1.order }
+        let currentPerformance: ExercisePerformance? = if let id = session.currentPerformanceID {
+            orderedPerformances.first { $0.id == id }
+        } else {
+            orderedPerformances.first { $0.status == .pending || $0.status == .active }
+        }
+        let completedCount = orderedPerformances.count { $0.status == .completed }
+
+        return AppCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text("继续训练")
@@ -127,11 +120,11 @@ struct TrainingProgramHomeCard: View {
 
 struct TrainingSessionHomeRow: View {
     let session: WorkoutSession
-    let programs: [TrainingProgram]
+    let fallbackProgramName: String?
 
     private var title: String {
         session.programNameSnapshot
-            ?? programs.first { $0.id == session.programID }?.name
+            ?? fallbackProgramName
             ?? "自由训练"
     }
 

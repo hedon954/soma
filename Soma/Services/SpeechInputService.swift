@@ -25,8 +25,8 @@ enum SpeechInputError: LocalizedError {
 @MainActor
 @Observable
 final class SpeechInputService {
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
-    private let audioEngine = AVAudioEngine()
+    private var recognizer: SFSpeechRecognizer?
+    private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var hasInstalledTap = false
@@ -50,6 +50,10 @@ final class SpeechInputService {
     }
 
     func stop() {
+        guard let audioEngine else {
+            isListening = false
+            return
+        }
         if audioEngine.isRunning {
             audioEngine.stop()
         }
@@ -86,8 +90,26 @@ final class SpeechInputService {
     }
 
     private func beginRecognition() throws {
-        guard let recognizer, recognizer.isAvailable else {
+        let recognizer: SFSpeechRecognizer
+        if let existingRecognizer = self.recognizer {
+            recognizer = existingRecognizer
+        } else if let newRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")) {
+            self.recognizer = newRecognizer
+            recognizer = newRecognizer
+        } else {
             throw SpeechInputError.recognizerUnavailable
+        }
+        guard recognizer.isAvailable else {
+            throw SpeechInputError.recognizerUnavailable
+        }
+
+        let audioEngine: AVAudioEngine
+        if let existingAudioEngine = self.audioEngine {
+            audioEngine = existingAudioEngine
+        } else {
+            let newAudioEngine = AVAudioEngine()
+            self.audioEngine = newAudioEngine
+            audioEngine = newAudioEngine
         }
 
         recognitionTask?.cancel()

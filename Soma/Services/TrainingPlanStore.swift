@@ -158,9 +158,19 @@ enum TrainingPlanStore {
     ) throws {
         try validate(prescriptions, in: context)
         let existing = templateExercises(for: program, in: context)
-        let existingIDs = Set(existing.map(\.id))
-        let sets = try context.fetch(FetchDescriptor<TemplateSetPrescription>())
-            .filter { existingIDs.contains($0.templateExerciseID) }
+        let sets = existing.flatMap { exercise in
+            guard exercise.setPrescriptions.isEmpty else {
+                return exercise.setPrescriptions
+            }
+            let exerciseID = exercise.id
+            return (try? context.fetch(
+                FetchDescriptor<TemplateSetPrescription>(
+                    predicate: #Predicate {
+                        $0.templateExerciseID == exerciseID
+                    }
+                )
+            )) ?? []
+        }
         sets.forEach { context.delete($0) }
         existing.forEach { context.delete($0) }
         program.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -179,26 +189,37 @@ enum TrainingPlanStore {
     ) -> [TemplateExercisePrescription] {
         let exercises = templateExercises(for: program, in: context)
             .sorted { $0.order < $1.order }
-        let definitions = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        let names = Dictionary(uniqueKeysWithValues: definitions.map {
-            ($0.id, $0.canonicalName)
-        })
-        let setModels = (
-            try? context.fetch(FetchDescriptor<TemplateSetPrescription>())
-        ) ?? []
         return exercises.map { exercise in
             let relatedSets = exercise.setPrescriptions
-            let plannedSets = (relatedSets.isEmpty
-                ? setModels.filter { $0.templateExerciseID == exercise.id }
-                : relatedSets)
+            let exerciseID = exercise.id
+            let fallbackSets = relatedSets.isEmpty
+                ? ((try? context.fetch(
+                    FetchDescriptor<TemplateSetPrescription>(
+                        predicate: #Predicate {
+                            $0.templateExerciseID == exerciseID
+                        }
+                    )
+                )) ?? [])
+                : []
+            let plannedSets = (relatedSets.isEmpty ? fallbackSets : relatedSets)
                 .sorted { $0.order < $1.order }
                 .map(\.value)
+            let definitionName: String? = if let related = exercise.exerciseDefinition {
+                related.canonicalName
+            } else {
+                {
+                    let targetID = exercise.exerciseID
+                    var descriptor = FetchDescriptor<ExerciseDefinition>(
+                        predicate: #Predicate { $0.id == targetID }
+                    )
+                    descriptor.fetchLimit = 1
+                    return (try? context.fetch(descriptor))?.first?.canonicalName
+                }()
+            }
             return TemplateExercisePrescription(
                 id: exercise.id,
                 exerciseID: exercise.exerciseID,
-                exerciseName: names[exercise.exerciseID] ?? "已删除动作",
+                exerciseName: definitionName ?? "已删除动作",
                 order: exercise.order,
                 targetSets: exercise.targetSets,
                 targetReps: exercise.targetReps,
@@ -214,6 +235,38 @@ enum TrainingPlanStore {
         }
     }
 
+    /// Current schema writes the complete program graph with relationships.
+    /// Views use this graph-only projection so a body update never falls back
+    /// to database queries for each exercise and planned set.
+    static func currentPrescriptions(
+        for program: TrainingProgram
+    ) -> [TemplateExercisePrescription] {
+        program.templateExercises
+            .sorted { $0.order < $1.order }
+            .map { exercise in
+                let plannedSets = exercise.setPrescriptions
+                    .sorted { $0.order < $1.order }
+                    .map(\.value)
+                return TemplateExercisePrescription(
+                    id: exercise.id,
+                    exerciseID: exercise.exerciseID,
+                    exerciseName: exercise.exerciseDefinition?.canonicalName
+                        ?? "已删除动作",
+                    order: exercise.order,
+                    targetSets: exercise.targetSets,
+                    targetReps: exercise.targetReps,
+                    targetWeightKG: exercise.targetWeightKG,
+                    targetRestSeconds: exercise.targetRestSeconds,
+                    restBetweenSidesSeconds: exercise.restBetweenSidesSeconds,
+                    firstSetIsWarmup: exercise.firstSetIsWarmup,
+                    equipmentKind: exercise.equipmentKind,
+                    notes: exercise.notes,
+                    laterality: exercise.laterality,
+                    plannedSets: plannedSets.isEmpty ? nil : plannedSets
+                )
+            }
+    }
+
     private static func templateExercises(
         for program: TrainingProgram,
         in context: ModelContext
@@ -221,8 +274,30 @@ enum TrainingPlanStore {
         let related = program.templateExercises
         guard related.isEmpty else { return related }
         guard let groupID = program.prescriptionGroupID else { return [] }
-        return (try? context.fetch(FetchDescriptor<TemplateExercise>()))?
-            .filter { $0.prescriptionGroupID == groupID } ?? []
+        return (
+            try? context.fetch(
+                FetchDescriptor<TemplateExercise>(
+                    predicate: #Predicate {
+                        $0.prescriptionGroupID == groupID
+                    }
+                )
+            )
+        ) ?? []
+    }
+
+    private static func definitions(
+        for exerciseIDs: Set<UUID>,
+        in context: ModelContext
+    ) -> [UUID: ExerciseDefinition] {
+        exerciseIDs.reduce(into: [:]) { result, exerciseID in
+            var descriptor = FetchDescriptor<ExerciseDefinition>(
+                predicate: #Predicate { $0.id == exerciseID }
+            )
+            descriptor.fetchLimit = 1
+            if let definition = try? context.fetch(descriptor).first {
+                result[definition.id] = definition
+            }
+        }
     }
 
     static func readiness(
@@ -268,10 +343,11 @@ enum TrainingPlanStore {
                 "训练模板至少需要一个动作。"
             ))
         }
-        let definitions = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
-        let activeIDs = Set(definitions.filter { !$0.isArchived }.map(\.id))
+        let definitions = definitions(
+            for: Set(prescriptions.map(\.exerciseID)),
+            in: context
+        )
+        let activeIDs = Set(definitions.values.filter { !$0.isArchived }.map(\.id))
         for prescription in prescriptions {
             if !activeIDs.contains(prescription.exerciseID) {
                 issues.append(issue(
@@ -345,7 +421,10 @@ enum TrainingPlanStore {
             autoRecordingPolicy: autoRecordingPolicy
         )
         context.insert(session)
-        let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
+        let definitions = definitions(
+            for: Set(values.map(\.exerciseID)),
+            in: context
+        )
         var firstPerformance: ExercisePerformance?
         var firstSet: WorkoutSet?
         var firstEffort: WorkoutEffort?
@@ -363,9 +442,7 @@ enum TrainingPlanStore {
             if firstPerformance == nil {
                 firstPerformance = performance
             }
-            performance.exerciseDefinition = definitions.first(where: {
-                $0.id == prescription.exerciseID
-            })
+            performance.exerciseDefinition = definitions[prescription.exerciseID]
             if let definition = performance.exerciseDefinition {
                 ExerciseLoggingProfile.adoptIfUnset(
                     definition,
@@ -456,119 +533,43 @@ enum TrainingPlanStore {
         for sessionID: UUID,
         in context: ModelContext
     ) -> TrainingSessionSummary {
-        let session = (
-            try? context.fetch(FetchDescriptor<WorkoutSession>())
-        )?.first { $0.id == sessionID }
-        let relatedPerformances = session?.performances ?? []
-        let performances = relatedPerformances.isEmpty
-            ? ((try? context.fetch(FetchDescriptor<ExercisePerformance>()))?
-                .filter { $0.sessionID == sessionID } ?? [])
-            : relatedPerformances
-        let performanceIDs = Set(performances.map(\.id))
-        let sets = (
-            try? context.fetch(FetchDescriptor<WorkoutSet>())
-        )?.filter { performanceIDs.contains($0.performanceID) } ?? []
-        let setIDs = Set(sets.map(\.id))
-        let efforts = (
-            try? context.fetch(FetchDescriptor<WorkoutEffort>())
-        )?.filter { setIDs.contains($0.workoutSetID) } ?? []
-        let allProjectedWorkouts = (
-            try? context.fetch(FetchDescriptor<WorkoutEntry>())
-        ) ?? []
-        let workoutsByProjectionKey = Dictionary(grouping: allProjectedWorkouts) {
-            $0.projectionKey
-        }.reduce(into: [String: WorkoutEntry]()) { result, element in
-            let (key, candidates) = element
-            guard let key, candidates.count == 1,
-                  let candidate = candidates.first
-            else { return }
-            result[key] = candidate
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        sessionDescriptor.fetchLimit = 1
+        let session = (try? context.fetch(sessionDescriptor))?.first
+        guard let session else {
+            return TrainingSessionSummaryCalculator.make(
+                session: nil,
+                performances: [],
+                sets: [],
+                efforts: [],
+                workoutsByPerformanceID: [:]
+            )
         }
+        return summary(for: session)
+    }
+
+    /// marker 6 和当前恢复流程已修复 Session → Performance → Set → Effort
+    /// 及投影关系；最新版运行时只读关系图，不再为旧缺失关系逐项补查。
+    static func summary(for session: WorkoutSession) -> TrainingSessionSummary {
+        let performances = session.performances
+        let sets = performances.flatMap(\.workoutSets)
+        let efforts = sets.flatMap(\.efforts)
         let workoutsByPerformanceID = performances.reduce(
             into: [UUID: WorkoutEntry]()
         ) { result, performance in
-            guard !performance.workoutProjectionSuppressed else { return }
-            let key = SomaDataMigration.projectionKey(for: performance.id)
-            if let related = performance.projectedWorkout,
-               related.projectionKey == key
-            {
-                result[performance.id] = related
-            } else if let keyed = workoutsByProjectionKey[key] {
-                result[performance.id] = keyed
-            }
+            guard !performance.workoutProjectionSuppressed,
+                  let projectedWorkout = performance.projectedWorkout
+            else { return }
+            result[performance.id] = projectedWorkout
         }
-        let projectedWorkouts = Array(workoutsByPerformanceID.values)
-        let summaryEnd = session?.endedAt
-            ?? sets.compactMap(\.completedAt).max()
-            ?? session?.startedAt
-            ?? .now
-        let mediaPaths = Set(
-            sets.compactMap(\.recordedVideoPath)
-                + efforts.compactMap(\.recordedVideoPath)
-                + performances.compactMap(\.activeVideoPath)
-                + projectedWorkouts.flatMap(\.mediaAttachments).map(\.path)
-        )
-        let exerciseSummaries = performances
-            .sorted { $0.order < $1.order }
-            .map { performance in
-                let performanceSets = sets.filter {
-                    $0.performanceID == performance.id
-                }
-                let projectedWorkout = workoutsByPerformanceID[performance.id]
-                let performanceSetIDs = Set(performanceSets.map(\.id))
-                let performanceEfforts = efforts.filter {
-                    performanceSetIDs.contains($0.workoutSetID)
-                }
-                return TrainingExerciseSummary(
-                    id: performance.id,
-                    name: performance.exerciseName,
-                    completedSets: performanceSets.count {
-                        $0.status == .completed
-                    },
-                    partialSets: performanceSets.count {
-                        $0.status == .partial
-                    },
-                    skippedSets: performanceSets.count {
-                        $0.status == .skipped
-                    },
-                    failedSets: performanceSets.count {
-                        $0.status == .failed
-                    },
-                    completedVolume: performance.workoutProjectionSuppressed
-                        ? 0
-                        : projectedWorkout?.estimatedVolume
-                        ?? completedVolume(
-                            sets: performanceSets,
-                            efforts: performanceEfforts
-                        )
-                )
-            }
-        let caloriePerformanceIDs = Set(exerciseSummaries.filter {
-            $0.completedSets > 0 || $0.partialSets > 0
-        }.map(\.id))
-        let calorieValues = caloriePerformanceIDs.compactMap {
-            workoutsByPerformanceID[$0]?.estimatedCalories
-        }
-        let sessionCalories = !caloriePerformanceIDs.isEmpty
-            && calorieValues.count == caloriePerformanceIDs.count
-            ? calorieValues.reduce(0, +)
-            : nil
-        return TrainingSessionSummary(
-            completedSets: exerciseSummaries.reduce(0) { $0 + $1.completedSets },
-            partialSets: exerciseSummaries.reduce(0) { $0 + $1.partialSets },
-            skippedSets: sets.count { $0.status == .skipped },
-            failedSets: sets.count { $0.status == .failed },
-            completedVolume: exerciseSummaries.reduce(0) { $0 + $1.completedVolume },
-            exerciseCount: exerciseSummaries.count {
-                $0.completedSets > 0 || $0.partialSets > 0
-            },
-            durationSeconds: max(
-                Int(summaryEnd.timeIntervalSince(session?.startedAt ?? summaryEnd)),
-                0
-            ),
-            recordedVideoCount: mediaPaths.count,
-            estimatedCalories: sessionCalories,
-            exercises: exerciseSummaries
+        return TrainingSessionSummaryCalculator.make(
+            session: session,
+            performances: performances,
+            sets: sets,
+            efforts: efforts,
+            workoutsByPerformanceID: workoutsByPerformanceID
         )
     }
 
@@ -576,19 +577,37 @@ enum TrainingPlanStore {
         _ session: WorkoutSession,
         in context: ModelContext
     ) throws {
-        let performances = try context.fetch(
-            FetchDescriptor<ExercisePerformance>()
-        ).filter { $0.sessionID == session.id }
-        let performanceIDs = Set(performances.map(\.id))
-        let sets = try context.fetch(FetchDescriptor<WorkoutSet>())
-            .filter { performanceIDs.contains($0.performanceID) }
-        let setIDs = Set(sets.map(\.id))
-        let efforts = try context.fetch(FetchDescriptor<WorkoutEffort>())
-            .filter { setIDs.contains($0.workoutSetID) }
-        let analyses = try context.fetch(FetchDescriptor<PerformanceAnalysis>())
-            .filter { performanceIDs.contains($0.performanceID) }
-        let projectedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
-            .filter { $0.sourceWorkoutSessionID == session.id }
+        let sessionID = session.id
+        let performances = session.performances.isEmpty
+            ? try context.fetch(FetchDescriptor<ExercisePerformance>(
+                predicate: #Predicate { $0.sessionID == sessionID }
+            ))
+            : session.performances
+        let sets = performances.flatMap { performance in
+            guard performance.workoutSets.isEmpty else {
+                return performance.workoutSets
+            }
+            let performanceID = performance.id
+            return (try? context.fetch(FetchDescriptor<WorkoutSet>(
+                predicate: #Predicate { $0.performanceID == performanceID }
+            ))) ?? []
+        }
+        let efforts = sets.flatMap { set in
+            guard set.efforts.isEmpty else { return set.efforts }
+            let setID = set.id
+            return (try? context.fetch(FetchDescriptor<WorkoutEffort>(
+                predicate: #Predicate { $0.workoutSetID == setID }
+            ))) ?? []
+        }
+        let analyses = performances.flatMap { performance in
+            let performanceID = performance.id
+            return (try? context.fetch(FetchDescriptor<PerformanceAnalysis>(
+                predicate: #Predicate { $0.performanceID == performanceID }
+            ))) ?? []
+        }
+        let projectedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.sourceWorkoutSessionID == sessionID }
+        ))
         let mediaPaths = Set(
             sets.compactMap(\.recordedVideoPath)
                 + efforts.compactMap(\.recordedVideoPath)
@@ -627,8 +646,10 @@ enum TrainingPlanStore {
         _ program: TrainingProgram,
         in context: ModelContext
     ) throws {
-        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-            .filter { $0.programID == program.id }
+        let programID = program.id
+        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.programID == programID }
+        ))
         for session in sessions {
             let snapshot = session.programNameSnapshot?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -637,33 +658,23 @@ enum TrainingPlanStore {
             }
         }
         let exercises = templateExercises(for: program, in: context)
-        let exerciseIDs = Set(exercises.map(\.id))
-        let setPrescriptions = try context.fetch(
-            FetchDescriptor<TemplateSetPrescription>()
-        ).filter { exerciseIDs.contains($0.templateExerciseID) }
+        let setPrescriptions = exercises.flatMap { exercise in
+            guard exercise.setPrescriptions.isEmpty else {
+                return exercise.setPrescriptions
+            }
+            let exerciseID = exercise.id
+            return (try? context.fetch(
+                FetchDescriptor<TemplateSetPrescription>(
+                    predicate: #Predicate {
+                        $0.templateExerciseID == exerciseID
+                    }
+                )
+            )) ?? []
+        }
         setPrescriptions.forEach { context.delete($0) }
         exercises.forEach { context.delete($0) }
         context.delete(program)
         try context.save()
-    }
-
-    /// Persists plan id/name onto sessions that can be matched by their frozen prescription.
-    @discardableResult
-    static func backfillProgramSources(in context: ModelContext) -> Int {
-        let sessions = (try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? []
-        let programs = (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? []
-        var changed = 0
-        for session in sessions where backfillProgramSource(
-            for: session,
-            programs: programs,
-            in: context
-        ) {
-            changed += 1
-        }
-        if changed > 0 {
-            try? context.save()
-        }
-        return changed
     }
 
     @discardableResult
@@ -727,11 +738,20 @@ enum TrainingPlanStore {
             )
         }
 
-        let resolvedPrograms: [TrainingProgram] = if let context {
-            (try? context.fetch(FetchDescriptor<TrainingProgram>()))
-                ?? programs
+        let resolvedPrograms: [TrainingProgram]
+        if let context, let programID = session.programID {
+            var descriptor = FetchDescriptor<TrainingProgram>(
+                predicate: #Predicate { $0.id == programID }
+            )
+            descriptor.fetchLimit = 1
+            resolvedPrograms = (try? context.fetch(descriptor)) ?? programs
+        } else if let context {
+            // Current sessions always carry id/name snapshots. This whole-catalog
+            // fallback only remains for a pre-baseline row missing both fields.
+            resolvedPrograms =
+                (try? context.fetch(FetchDescriptor<TrainingProgram>())) ?? programs
         } else {
-            programs
+            resolvedPrograms = programs
         }
 
         if let programID = session.programID,
@@ -838,13 +858,12 @@ enum TrainingPlanStore {
         program: TrainingProgram,
         in context: ModelContext
     ) {
-        let definitions = (
-            try? context.fetch(FetchDescriptor<ExerciseDefinition>())
-        ) ?? []
+        let definitions = definitions(
+            for: Set(prescriptions.map(\.exerciseID)),
+            in: context
+        )
         for prescription in prescriptions {
-            let definition = definitions.first(where: {
-                $0.id == prescription.exerciseID
-            })
+            let definition = definitions[prescription.exerciseID]
             if let definition {
                 ExerciseLoggingProfile.adoptIfUnset(
                     definition,
@@ -888,8 +907,11 @@ private extension TrainingPlanStore {
         in context: ModelContext
     ) throws {
         guard !values.isEmpty else { throw TrainingPlanError.emptyTemplate }
-        let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
-        let activeIDs = Set(definitions.filter { !$0.isArchived }.map(\.id))
+        let definitions = definitions(
+            for: Set(values.map(\.exerciseID)),
+            in: context
+        )
+        let activeIDs = Set(definitions.values.filter { !$0.isArchived }.map(\.id))
         var orders = Set<Int>()
         for value in values {
             try validatePrescription(
@@ -994,17 +1016,6 @@ private extension TrainingPlanStore {
         if hasInvalidSideWeight {
             throw TrainingPlanError.invalidValue("逐侧重量")
         }
-    }
-
-    private static func completedVolume(
-        sets: [WorkoutSet],
-        efforts: [WorkoutEffort]
-    ) -> Double {
-        let effortVolume = efforts.compactMap(\.completedVolume).reduce(0, +)
-        let hasCompletedEffort = efforts.contains { $0.status == .completed }
-        return hasCompletedEffort
-            ? effortVolume
-            : sets.compactMap(\.completedVolume).reduce(0, +)
     }
 
     private static func issue(

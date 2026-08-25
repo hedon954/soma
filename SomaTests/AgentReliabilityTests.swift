@@ -26,6 +26,42 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertEqual(ReActAgentPreference.maxSteps(defaults: defaults), 42)
     }
 
+    func testRuntimeTimeoutPreferenceDefaultsToAdaptiveAndClampsCustomMinutes() throws {
+        let suiteName = "AgentReliabilityTests.runtimeTimeout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let base = AgentStreamDeadlinePolicy()
+
+        XCTAssertNil(ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults))
+        XCTAssertEqual(ReActAgentPreference.deadlinePolicy(base, defaults: defaults), base)
+
+        ReActAgentPreference.setRuntimeTimeoutMinutes(1, defaults: defaults)
+        XCTAssertEqual(
+            ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults),
+            ReActAgentPreference.minimumRuntimeTimeoutMinutes
+        )
+        var configured = ReActAgentPreference.deadlinePolicy(base, defaults: defaults)
+        XCTAssertEqual(configured.textLoopTotal, 180)
+        XCTAssertEqual(configured.imageLoopTotal, 180)
+        XCTAssertEqual(configured.videoLoopTotal, 180)
+
+        ReActAgentPreference.setRuntimeTimeoutMinutes(999, defaults: defaults)
+        XCTAssertEqual(
+            ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults),
+            ReActAgentPreference.maximumRuntimeTimeoutMinutes
+        )
+
+        ReActAgentPreference.setRuntimeTimeoutMinutes(17, defaults: defaults)
+        configured = ReActAgentPreference.deadlinePolicy(base, defaults: defaults)
+        XCTAssertEqual(configured.textLoopTotal, 1020)
+        XCTAssertEqual(configured.imageLoopTotal, 1020)
+        XCTAssertEqual(configured.videoLoopTotal, 1020)
+
+        ReActAgentPreference.setRuntimeTimeoutMinutes(nil, defaults: defaults)
+        XCTAssertNil(ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults))
+        XCTAssertEqual(ReActAgentPreference.deadlinePolicy(base, defaults: defaults), base)
+    }
+
     @MainActor
     func testJobBusinessTimestampFreezesAtFirstLoopStart() {
         let sentAt = Date(timeIntervalSince1970: 1_786_000_000)
@@ -543,6 +579,51 @@ final class AgentReliabilityTests: XCTestCase {
             return value
         }
         XCTAssertEqual(Set(values), Set([3, 4]))
+    }
+
+    @MainActor
+    func testAggregateMuscleGroupUsesWorkoutExerciseRelationship() throws {
+        let context = try makeContext()
+        let day = Date(timeIntervalSince1970: 1_785_386_220)
+        let exercise = ExerciseDefinition(
+            canonicalName: "虚构深蹲",
+            primaryMuscles: ["股四头肌"]
+        )
+        let workout = WorkoutEntry(
+            date: day,
+            exercise: exercise.canonicalName,
+            exerciseID: exercise.id,
+            sets: 3,
+            reps: 8,
+            weight: 60
+        )
+        workout.exerciseDefinition = exercise
+        context.insert(exercise)
+        context.insert(workout)
+        try context.save()
+
+        let result = AgentUserDataAggregator.aggregate(
+            arguments: AgentToolArguments(
+                scope: "aggregate",
+                dateFrom: "2026-07-01",
+                dateTo: "2026-08-01",
+                groupBy: "muscle_group",
+                metric: "sets"
+            ),
+            in: context
+        )
+
+        XCTAssertTrue(result.ok)
+        guard case let .object(data)? = result.data,
+              case let .array(items)? = data["items"],
+              case let .object(fields)? = items.first,
+              case let .string(group)? = fields["group"],
+              case let .number(value)? = fields["value"]
+        else {
+            return XCTFail("肌群聚合应返回关系中动作定义对应的分组。")
+        }
+        XCTAssertNotEqual(group, "未映射")
+        XCTAssertEqual(value, 3)
     }
 
     @MainActor

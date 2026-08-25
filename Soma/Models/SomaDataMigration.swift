@@ -82,6 +82,16 @@ enum SomaDataMigration {
         timeZone: TimeZone = .current
     ) throws {
         let context = container.mainContext
+        let minimumVersion = currentVersion
+        var completedDescriptor = FetchDescriptor<DataMigrationMarker>(
+            predicate: #Predicate { marker in
+                marker.schemaVersion >= minimumVersion
+            }
+        )
+        completedDescriptor.fetchLimit = 1
+        if try !context.fetch(completedDescriptor).isEmpty {
+            return
+        }
         do {
             try assignUniqueProjectionKeys(in: context)
             if context.hasChanges {

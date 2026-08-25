@@ -21,8 +21,10 @@ final class UIKitBackgroundExecutionLease: BackgroundExecutionLease {
             withName: "Soma.AgentJob"
         ) { [weak self] in
             Task { @MainActor in
-                expiration()
+                // 系统已经要求收口时，先归还 lease，再做持久化和取消。
+                // 不能让 SwiftData save 或繁忙的 MainActor 延长系统等待窗口。
                 self?.end()
+                expiration()
             }
         }
     }
