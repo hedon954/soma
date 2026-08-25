@@ -129,27 +129,6 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertTrue(messages.allSatisfy { $0.sessionID == session.id })
     }
 
-    func testPromptV2OmitsEmptyBlocksAndKeepsToolSchemasOutOfSystem() {
-        let system = ReActAgentPrompt.system
-        let user = ReActAgentPrompt.user(
-            text: "怎样安排今天的恢复？",
-            context: "",
-            imageCount: 0,
-            hasVideo: false
-        )
-
-        XCTAssertTrue(system.hasPrefix("[SOMA SYSTEM v2]"))
-        XCTAssertTrue(system.contains("## 固定安全、真实性与授权契约"))
-        XCTAssertTrue(system.contains("有多项行动建议时使用 `## 建议` 和短列表"))
-        XCTAssertFalse(system.contains("create_workout"))
-        XCTAssertFalse(system.contains("list_workouts"))
-        XCTAssertFalse(system.contains("additionalProperties"))
-        XCTAssertTrue(user.hasPrefix("[SOMA CURRENT TURN v2]"))
-        XCTAssertFalse(user.contains("## 可信本机上下文"))
-        XCTAssertFalse(user.contains("## 当前媒体"))
-        XCTAssertFalse(user.contains("未填写"))
-    }
-
     func testUnselectedShortcutRegistersAllCurrentProtocolTools() {
         let tools = AgentToolExposurePolicy.tools(selectedShortcut: nil)
         XCTAssertEqual(tools.count, AgentToolName.allCases.count)

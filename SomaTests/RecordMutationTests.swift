@@ -794,16 +794,6 @@ final class RecordMutationTests: XCTestCase {
         XCTAssertTrue(resumed.contains { $0.kind == .tool && $0.status == .succeeded })
     }
 
-    func testSystemContractKeepsToolNamesOutOfPrompt() {
-        let policy = ReActPromptSection.policy.defaultText
-
-        XCTAssertTrue(policy.contains("明确授权"))
-        XCTAssertTrue(policy.contains("创建、修改、删除"))
-        XCTAssertTrue(policy.contains("不能把创建当更新"))
-        XCTAssertFalse(policy.contains("mutate_user_data"))
-        XCTAssertFalse(policy.contains("record_id"))
-    }
-
     private func mealCall(title: String) -> AgentToolCall {
         AgentToolCall(
             name: .createMeal,

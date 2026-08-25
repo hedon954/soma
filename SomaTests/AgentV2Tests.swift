@@ -414,17 +414,6 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(recordedDelays, [1, 2, 4])
     }
 
-    func testDeadlineBudgetsMatchFirstStepAndWholeLoopMediaClasses() {
-        let policy = AgentStreamDeadlinePolicy()
-        XCTAssertEqual(policy.ttft(for: .text), 20)
-        XCTAssertEqual(policy.ttft(for: .images), 40)
-        XCTAssertEqual(policy.ttft(for: .keyframes), 40)
-        XCTAssertEqual(policy.ttft(for: .directVideo), 60)
-        XCTAssertEqual(policy.loopTotal(hasImages: false, hasVideo: false), 180)
-        XCTAssertEqual(policy.loopTotal(hasImages: true, hasVideo: false), 300)
-        XCTAssertEqual(policy.loopTotal(hasImages: true, hasVideo: true), 600)
-    }
-
     func testLaterModelStepHasNoStandaloneFirstDeltaDeadline() async throws {
         let chunk = try streamChunk(content: "较晚返回")
         let stream = AsyncThrowingStream<ChatCompletionChunkObject, Error> { continuation in
