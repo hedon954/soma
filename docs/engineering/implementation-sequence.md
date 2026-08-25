@@ -3,8 +3,8 @@
 - 状态：已执行；保留为依赖与回归顺序
 - 日期：2026-07-31
 - 关联：
-  - [PRD 010](../prd/010-exercise-library-plans-guided-training.md)
-  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
+  - [PRD 010](../archive/0.0.1/prd/010-exercise-library-plans-guided-training.md)
+  - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
   - [训练领域模型与运行时协议](training-domain-model.md)
   - [Agent Job 与远程执行协议](agent-job-protocol.md)
   - [全量 Todo](implementation-todo.md)

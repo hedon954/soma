@@ -4,8 +4,8 @@
 - 日期：2026-08-23
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0035](0035-silent-bundled-exercise-content-and-on-demand-images.md) 的 generated/user 图共同阻止后续内置图关联规则
-  - [ADR 0066](0066-bundled-action-illustration-coverage.md) 的至少一百个专属动作图门槛
+  - [ADR 0035](../archive/0.0.1/adr/0035-silent-bundled-exercise-content-and-on-demand-images.md) 的 generated/user 图共同阻止后续内置图关联规则
+  - [ADR 0066](../archive/0.0.5/adr/0066-bundled-action-illustration-coverage.md) 的至少一百个专属动作图门槛
 - 上游依据：[PRD 042](../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
 
 ## 背景

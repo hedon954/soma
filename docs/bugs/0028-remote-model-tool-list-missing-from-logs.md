@@ -4,8 +4,8 @@
 - 发现日期：2026-08-21
 - 影响范围：后台持续处理、远程 Agent Event、执行日志与本机诊断日志
 - 上游依据：
-  - [PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
-  - [ADR 0083](../adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
+  - [PRD 033](../archive/0.0.7/prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
+  - [ADR 0083](../archive/0.0.7/adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
 
 ## 症状
 

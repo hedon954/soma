@@ -30,8 +30,8 @@ App Store Connect 凭据或完整用户 Trace。请使用虚构媒体和替代 t
 
 ## Remote execution security gates
 
-[PRD 011](docs/prd/011-durable-agent-jobs-remote-continuity.md) 的远程执行尚未实现。进入生产前
-至少满足：
+远程 Agent Job 的安全边界见 `docs/engineering/agent-job-protocol.md` 与 `CLAUDE.md`。
+进入生产前至少满足：
 
 - 每次安装使用独立匿名设备签名密钥；服务端 challenge、短期 token、nonce 和 body digest
   防止重放；

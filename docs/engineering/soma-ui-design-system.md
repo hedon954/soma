@@ -1,8 +1,8 @@
 # Soma UI 设计系统与优化工程报告
 
 - 日期：2026-08-22
-- 产品依据：[PRD 039](../prd/039-frequency-first-dual-theme-ui.md)
-- 上游依据：[ADR 0089](../adr/0089-semantic-dual-theme-and-lossless-workout-editor.md)
+- 产品依据：[PRD 039](../archive/0.0.9/prd/039-frequency-first-dual-theme-ui.md)
+- 上游依据：[ADR 0089](../archive/0.0.9/adr/0089-semantic-dual-theme-and-lossless-workout-editor.md)
 - 开发规则：`.claude/skills/soma-ui-development/`
 - 验证记录：`design-qa.md`
 

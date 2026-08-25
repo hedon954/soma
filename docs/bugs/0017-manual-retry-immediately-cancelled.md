@@ -5,8 +5,8 @@
 - 影响范围：ReAct step 恢复、欠费人工屏障、聊天错误投影和 FIFO 队列
 - 上游依据：无
 - 下游落地：
-  - [PRD 028](../prd/028-retry-active-runtime-budget.md)
-  - [ADR 0067](../adr/0067-separate-business-time-and-active-loop-budget.md)
+  - [PRD 028](../archive/0.0.5/prd/028-retry-active-runtime-budget.md)
+  - [ADR 0067](../archive/0.0.5/adr/0067-separate-business-time-and-active-loop-budget.md)
 
 ## 症状
 

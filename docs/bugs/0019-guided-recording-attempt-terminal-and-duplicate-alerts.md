@@ -6,8 +6,8 @@
 - 修订自：[BUG 0013](0013-guided-recording-startup-silent-stall.md) 的启动截止与独立失败事件修复
 - 后续修订：[BUG 0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) 把 attempt 起点前移到相机准备之前，并区分系统提前终止后保留的部分文件与完整成功
 - 下游落地：
-  - [PRD 031](../prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
-  - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
+  - [PRD 031](../archive/0.0.7/prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
+  - [ADR 0073](../archive/0.0.7/adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
 
 ## 症状
 

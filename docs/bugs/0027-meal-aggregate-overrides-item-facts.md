@@ -4,8 +4,8 @@
 - 发现日期：2026-08-21
 - 影响范围：`create_meal`、`update_meal`、菜品编辑、饮食派生汇总
 - 下游落地：
-  - [PRD 036](../prd/036-meal-sugar-and-glycemic-speed-estimate.md)
-  - [ADR 0087](../adr/0087-reviewable-total-sugar-and-glycemic-speed.md)
+  - [PRD 036](../archive/0.0.9/prd/036-meal-sugar-and-glycemic-speed-estimate.md)
+  - [ADR 0087](../archive/0.0.9/adr/0087-reviewable-total-sugar-and-glycemic-speed.md)
 
 ## 症状
 

@@ -10,7 +10,7 @@ the current PRD defines scope, and Accepted ADRs define durable boundaries.
 
 ## 1. Establish the change contract
 
-1. Read `docs/prd/004-soma-current-product.md` and the relevant acceptance rows.
+1. Read `docs/prd/README.md` (living 3-version window) and the relevant acceptance rows.
 2. Read `docs/adr/README.md` and every ADR touched by the change.
 3. Search `docs/bugs/README.md` for known failure mechanisms in the touched area.
 4. Lifecycle links apply only to documents already in Git. If an uncommitted implementation or

@@ -87,9 +87,9 @@
 
 ## 已实现：训练智能
 
-以下是 [PRD 010](prd/010-exercise-library-plans-guided-training.md)、
-[PRD 012](prd/012-gui-training-program-authoring.md) 与
-[PRD 013](prd/013-guided-workout-experience-and-capture.md) 的当前实现证据。
+以下是 [PRD 010](archive/0.0.1/prd/010-exercise-library-plans-guided-training.md)、
+[PRD 012](archive/0.0.1/prd/012-gui-training-program-authoring.md) 与
+[PRD 013](archive/0.0.1/prd/013-guided-workout-experience-and-capture.md) 的当前实现证据。
 
 | 要求 | 目标验收 |
 | --- | --- |
@@ -110,7 +110,7 @@
 
 ## 已实现：可靠 Agent 与远程持续执行
 
-以下是 [PRD 011](prd/011-durable-agent-jobs-remote-continuity.md) 和
+以下是 [PRD 011](archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md) 和
 [BUG 0004](bugs/0004-agent-background-stream-interruption.md)、
 [BUG 0005](bugs/0005-remote-agent-streaming-latency-regression.md) 的当前实现证据。远端持续
 运行以部署 `Server/` 及配置 Provider、对象存储、App Attest 和 APNs 为前提。
@@ -133,7 +133,7 @@
 
 ## 已实现：GUI 精简与渐进披露
 
-以下是 [PRD 020](prd/020-gui-simplification-and-progressive-disclosure.md) 的当前实现证据
+以下是 [PRD 020](archive/0.0.3/prd/020-gui-simplification-and-progressive-disclosure.md) 的当前实现证据
 （v0.0.3，不新增功能）。
 
 | 要求 | 当前证据 |
@@ -148,8 +148,8 @@
 
 ## 主体已实现：频率优先双主题与无损训练记录编辑
 
-以下是 [PRD 039](prd/039-frequency-first-dual-theme-ui.md) 与
-[ADR 0089](adr/0089-semantic-dual-theme-and-lossless-workout-editor.md) 的当前实现证据；真实相机、
+以下是 [PRD 039](archive/0.0.9/prd/039-frequency-first-dual-theme-ui.md) 与
+[ADR 0089](archive/0.0.9/adr/0089-semantic-dual-theme-and-lossless-workout-editor.md) 的当前实现证据；真实相机、
 HealthKit 与真机 VoiceOver 继续单列。
 
 | 要求 | 当前证据 |
@@ -169,9 +169,9 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 ## 已实现：LLM 暂存补偿与显式配置
 
-以下是 [PRD 021](prd/021-llm-staging-explicit-configuration-and-input-suggestions.md)、
-[ADR 0045](adr/0045-llm-outage-staging-and-compensating-drain.md) 与
-[ADR 0046](adr/0046-explicit-llm-configuration-and-input-history-suggestions.md) 的当前实现证据
+以下是 [PRD 021](archive/0.0.3/prd/021-llm-staging-explicit-configuration-and-input-suggestions.md)、
+[ADR 0045](archive/0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md) 与
+[ADR 0046](archive/0.0.3/adr/0046-explicit-llm-configuration-and-input-history-suggestions.md) 的当前实现证据
 （v0.0.4）。
 
 | 要求 | 当前证据 |
@@ -189,8 +189,8 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 ## ReAct 可靠性与上下文感知
 
-[PRD 022](prd/022-react-reliability-and-context-awareness.md) 与
-[ADR 0047](adr/0047-deterministic-context-pack-and-cross-turn-facts.md)–[0050](adr/0050-per-turn-tool-group-exposure-and-parallel-calls.md)
+[PRD 022](archive/0.0.3/prd/022-react-reliability-and-context-awareness.md) 与
+[ADR 0047](archive/0.0.3/adr/0047-deterministic-context-pack-and-cross-turn-facts.md)–[0050](archive/0.0.3/adr/0050-per-turn-tool-group-exposure-and-parallel-calls.md)
 的当前实现证据。
 
 | 要求 | 当前证据 |
@@ -207,8 +207,8 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 ## 可靠高效 ReAct 与原位审查
 
-[PRD 027](prd/027-reliable-efficient-react-and-in-context-review.md) 与
-[ADR 0062](adr/0062-user-resumed-llm-interruption-barrier.md)–[0066](adr/0066-bundled-action-illustration-coverage.md)
+[PRD 027](archive/0.0.5/prd/027-reliable-efficient-react-and-in-context-review.md) 与
+[ADR 0062](archive/0.0.5/adr/0062-user-resumed-llm-interruption-barrier.md)–[0066](archive/0.0.5/adr/0066-bundled-action-illustration-coverage.md)
 的当前实现证据。
 
 | 要求 | 当前证据 |
@@ -229,8 +229,8 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 ## 消息元信息、快捷按钮 CRUD、可观测性与饮食双卡片
 
-[PRD 033](prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)、
-[ADR 0082](adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)–[0085](adr/0085-record-cards-follow-the-producing-step.md)、
+[PRD 033](archive/0.0.7/prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)、
+[ADR 0082](archive/0.0.7/adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)–[0085](archive/0.0.7/adr/0085-record-cards-follow-the-producing-step.md)、
 [BUG 0024](bugs/0024-streaming-cross-actor-swiftdata-crash.md) 与
 [BUG 0025](bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md) 的当前实现证据。
 
@@ -254,9 +254,9 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 ## 已实现：历史、媒体、Tab 与带练取景打磨
 
-[PRD 034](prd/034-history-media-tabs-and-guided-capture-polish.md)、
-[PRD 035](prd/035-guided-preview-then-record-and-immediate-share.md)、
-[ADR 0086](adr/0086-preview-and-history-thumbs-use-aspect-fill.md) 与
+[PRD 034](archive/0.0.8/prd/034-history-media-tabs-and-guided-capture-polish.md)、
+[PRD 035](archive/0.0.9/prd/035-guided-preview-then-record-and-immediate-share.md)、
+[ADR 0086](archive/0.0.8/adr/0086-preview-and-history-thumbs-use-aspect-fill.md) 与
 [BUG 0025](bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)、
 [BUG 0026](bugs/0026-guided-auto-recording-still-stops-without-reason.md) 的当前实现证据。
 
@@ -273,8 +273,8 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 ## 会话标题与输入上下文单行布局
 
-[PRD 037](prd/037-generated-editable-session-titles-and-single-row-composer-context.md) 与
-[ADR 0088](adr/0088-async-generated-session-title-with-manual-precedence.md) 的当前实现证据。
+[PRD 037](archive/0.0.9/prd/037-generated-editable-session-titles-and-single-row-composer-context.md) 与
+[ADR 0088](archive/0.0.9/adr/0088-async-generated-session-title-with-manual-precedence.md) 的当前实现证据。
 
 | 要求 | 当前证据 |
 | --- | --- |

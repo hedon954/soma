@@ -6,8 +6,8 @@
 - 上游依据：
   - [训练计划编排、沉浸式带练与真实取景调研](../research/2026-08-03-guided-workout-flow-and-capture.md)
 - 下游落地：
-  - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
-  - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
+  - [PRD 013](../archive/0.0.1/prd/013-guided-workout-experience-and-capture.md)
+  - [ADR 0038](../archive/0.0.1/adr/0038-focused-guided-workout-and-capture-geometry.md)
 - 后续修订：[BUG 0007](0007-guided-workout-countdown-capture-orientation-regression.md) 修复倒计时、手动放大和方向协调器初始化时机
 
 ## 症状
@@ -27,7 +27,7 @@
 
 ## 修复
 
-- 按 [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md) 建立 Capture Geometry。
+- 按 [ADR 0038](../archive/0.0.1/adr/0038-focused-guided-workout-and-capture-geometry.md) 建立 Capture Geometry。
 - 预览改为 `.resizeAspect`，明确接受留白并展示完整输出画幅。
 - 预览与文件显式同步镜像和旋转角；开始录像时锁定本段几何。
 - 带练期间开放 portrait/landscape 左右方向，其他页面继续竖屏。

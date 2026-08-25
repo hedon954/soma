@@ -4,7 +4,7 @@
 - 日期：2026-08-24
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0075](0075-current-swiftdata-schema-without-historical-versions.md) 中每次启动继续执行业务整表回填的边界；当前 marker 命中后必须立即返回
+  - [ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md) 中每次启动继续执行业务整表回填的边界；当前 marker 命中后必须立即返回
 - 上游依据：当前唯一用户已安装 Soma `0.0.11 (15)` 的无损要求
 - 下游落地：
   - [全 App 性能审计报告](../engineering/performance-audit-2026-08-24.md)

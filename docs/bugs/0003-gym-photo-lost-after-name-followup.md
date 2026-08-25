@@ -23,7 +23,7 @@ Tool Card 显示健身房和器械已更新，但健身房详情没有照片。A
   选择该来源后，App 再从 Session 上下文投影解析媒体位置，不暴露本机路径。
 - Tool 明确引用上一轮但找不到图片时失败，不再静默创建无图档案。
 - Tool 结果包含实际保存照片数量。
-- 关联边界由 [ADR 0026](../adr/0026-bounded-gym-media-attribution.md) 固化。
+- 关联边界由 [ADR 0026](../archive/0.0.1/adr/0026-bounded-gym-media-attribution.md) 固化。
 
 ## 回归门禁
 

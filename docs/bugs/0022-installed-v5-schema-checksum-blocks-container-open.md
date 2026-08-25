@@ -3,8 +3,8 @@
 - 状态：已修复，待真机复验
 - 发现日期：2026-08-17
 - 影响范围：启动数据迁移、已安装 V5 个人/演示库、带练 Session 录像暂停字段
-- 上游依据：[ADR 0074](../adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
-- 下游落地：[ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)
+- 上游依据：[ADR 0074](../archive/0.0.7/adr/0074-bounded-guided-camera-activation-and-partial-evidence.md)
+- 下游落地：[ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)
 - 修订自：[BUG 0021](0021-unique-optional-projection-key-blocks-launch-migration.md) 修复后仍无法进入教练页的后续故障
 
 ## 症状
@@ -25,7 +25,7 @@
 
 - 打开磁盘库只用当前 `SomaDataSchema`，不带 `migrationPlan`，让系统按字段差补上缺少的可选列。
 - 不再维护 `SomaDataSchemaV3/V4/V5/V6` 或 `SomaSchemaMigrationPlan`。长期打开路径见
-  [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)。
+  [ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)。
 - 应用层 `DataMigrationMarker` 仍为 5：没有需要回填的新业务事实。
 
 ## 回归门禁

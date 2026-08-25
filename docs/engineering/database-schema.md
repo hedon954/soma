@@ -7,14 +7,14 @@
 - 最近同步：2026-08-24
 - SwiftData 注册来源：[`Soma/App/SomaApp.swift`](../../Soma/App/SomaApp.swift)
 - SwiftData 版本与启动迁移来源：[`Soma/Models/SomaDataMigration.swift`](../../Soma/Models/SomaDataMigration.swift)
-- SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models/)
-- PostgreSQL 来源：[`Server/migrations/`](../../Server/migrations/)
+- SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models)
+- PostgreSQL 来源：[`Server/migrations/`](../../Server/migrations)
 - 迁移入口：`make db-migrate-create`、`make db-migrate-status`、`make db-migrate`
 - 上游依据：
-  - [ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
-  - [ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)
-  - [ADR 0076](../adr/0076-exercise-owned-laterality-and-target-kind.md)
-  - [ADR 0090](../adr/0090-current-state-business-models-and-session-facts.md)
+  - [ADR 0073](../archive/0.0.7/adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
+  - [ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)
+  - [ADR 0076](../archive/0.0.7/adr/0076-exercise-owned-laterality-and-target-kind.md)
+  - [ADR 0090](../archive/0.0.9/adr/0090-current-state-business-models-and-session-facts.md)
   - [ADR 0091](../adr/0091-action-level-planned-rest.md)
   - [ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
 - 相关决策：ADR 0001、0031、0032，以及
@@ -44,7 +44,7 @@
 磁盘库由 `SomaStoreOpening` 以 `Schema(SomaDataSchema.models)` 打开，不传入
 `migrationPlan`。缺少的可选列由系统轻量推断补齐。打开后启动门禁再展开旧聚合处方、建立
 Effort、修复关系/投影键、收敛当前计划、分配业务 ID 并写入 schema version 6 marker。打开路径见
-[ADR 0075](../adr/0075-current-swiftdata-schema-without-historical-versions.md)；任一数据空间
+[ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)；任一数据空间
 失败时不开放业务 Root。
 
 schema version 6 marker 是当前唯一安装基线。启动先用 `key + schemaVersion` 谓词和

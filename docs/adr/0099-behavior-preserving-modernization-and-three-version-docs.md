@@ -1,0 +1,76 @@
+# ADR 0099：行为保持现代化与三版本活文档窗口
+
+- 状态：已采纳
+- 日期：2026-08-25
+- 维护者：Soma maintainers
+- 部分替代：无
+- 后续替代：暂无
+- 上游依据：[PRD 044](../prd/044-behavior-preserving-modernization.md)
+
+## 背景
+
+0.0.12 的产品边界已经稳定，但实现与文档的物理布局仍按历史增量堆在超长文件和完整活目录中。
+Agent 默认会把全部 PRD/ADR 读进上下文，既增加噪声，也让真正有效的最近版本决策被淹没。
+同时，对话写入、带练相机和测试夹具的文件边界已经超过 500 行软上限，继续在原文件修改会
+提高行为回归风险。需要一次不改变对外契约的布局决策。
+
+## 决策
+
+1. **行为保持**：本轮只允许删除确认未引用的代码、按领域拆分文件、收敛测试假存储契约、
+   删除无逻辑价值的单元测试。禁止改 Tool Schema、Job/Event、SwiftData 字段、LLM 契约、
+   HTTP API 或热路径性能特征。
+2. **对话写入**：`ConversationProcessingService` 是编排器；`ConversationTurnPersistence`
+   是 Job/Event/消息持久化门面。按本地域拆文件，不改变幂等、FIFO 暂存与 Tool 语义。
+3. **带练与相机**：状态机与 `AVCapture` 生命周期分文件；预览宿主所有权、朝向与 activation
+   期限仍遵守既有 bug 文档。
+4. **组合根**：`SomaApp` 只装配依赖；教练气泡、输入与队列 UI 从 `CoachView` 抽出，不改服务调用。
+5. **Server**：生产只使用 Postgres store；内存实现只服务测试，并共享同一 `SomaStore` 契约。
+6. **活文档窗口按营销版本，不按文件日期**：`docs/prd/` 与 `docs/adr/` 只保留最近 3 个
+   `MARKETING_VERSION`（当前 0.0.12 / 0.0.11 / 0.0.10）引入的文档。0.0.9 及更早原文移动到
+   `docs/archive/<version>/`，并附该版本要求与决策摘要。
+7. **发布时压缩滑出窗口**：每次新 App 发布，把不再属于 3 版本窗口的那个版本压缩进归档，
+   并更新活目录 README。归档不 gitignore。
+8. **Agent 忽略归档，终端不忽略**：
+   - Cursor：根 `.cursorignore` 写入 `docs/archive/`（gitignore 语法）。官方 ignore 文件会
+     阻止 Agent / Tab / `@`，**不会**阻止终端或 MCP。
+   - Claude Code：`.claude/settings.json` 的 `permissions.deny` 包含 `Read(./docs/archive/**)`；
+     Read deny 同时阻止对该路径的 Edit/Write。不依赖非官方 `.claudeignore`。
+   - Codex：不新增 `.codexignore`（`openai/codex#24993` 仍开放）。`CLAUDE.md` / `AGENTS.md`
+     明确：默认不要读取 `docs/archive/`，除非维护者要求历史。
+9. **生命周期门禁继续扫描归档原文**，以便活文档与归档之间的双向链接保持可验证；不要为通过
+   门禁而改写归档决策正文。
+
+## 未选择的方案
+
+- 不按文件日期归档：0.0.9 / 0.0.10 / 0.0.11 曾在同一公历日发布，日期排序会把活窗口切错。
+- 不把归档加入 gitignore：历史必须留在仓库，供人类与明确要求历史的维护者查阅。
+- 不把本次当作 schema 或 Swift 6 迁移：那会改变启动、数据或工具链契约。
+- 不引入新的全局 `AppServices` 工厂：组合根已经是 `SomaApp`。
+- 不为 Codex 发明 `.codexignore`：上游忽略文件能力尚未稳定。
+
+## 结果
+
+### 正向影响
+
+- Agent 默认只看到最近三个营销版本的产品与架构决策。
+- 超长写入路径、带练相机、组合根和测试夹具按领域拆分，后续改动的审查面更小。
+- 生产 Store 与测试假存储共用契约，HTTP 面保持不变。
+
+### 成本与限制
+
+- 查阅 0.0.9 及更早决策需要显式打开归档。
+- Linux/cloud 环境不能运行 Simulator，完整 `make check` / `make verify` 仍依赖 Mac。
+- `private(set)` 等模块内可见性可能为跨文件 extension 放宽为 internal，但不构成公开 API。
+
+## 验证
+
+- `make server-check`、`make server-test`、`make perf-check`（在可安装 Ruby/Node 的环境）。
+- `scripts/check-document-lifecycle-links.rb` 与 `scripts/validate-repository.sh`。
+- Mac 上补跑 `make check` 与 `make verify`，并做教练发送、带练预览/录像的点选回归。
+
+## 参考
+
+- [PRD 044](../prd/044-behavior-preserving-modernization.md)
+- [Cursor ignore 文件](https://cursor.com/docs/reference/ignore-file)
+- [Claude Code permissions](https://code.claude.com/docs/en/permissions)
+- [Codex ignore issue](https://github.com/openai/codex/issues/24993)

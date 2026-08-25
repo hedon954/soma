@@ -4,7 +4,7 @@
 - 发现日期：2026-08-13
 - 影响范围：ReAct 成本、延迟、幂等副作用、Trace 与聊天失败样式
 - 上游依据：无
-- 下游落地：[PRD 027](../prd/027-reliable-efficient-react-and-in-context-review.md)
+- 下游落地：[PRD 027](../archive/0.0.5/prd/027-reliable-efficient-react-and-in-context-review.md)
 
 ## 症状
 

@@ -5,9 +5,9 @@
 - 影响范围：连续发送饮食图片、补图或使用“不是/上一条”等纠错表达时的记录归属
 - 上游依据：无
 - 下游落地：
-  - [ADR 0056](../adr/0056-trusted-selective-multimodal-context.md)
-  - [ADR 0059](../adr/0059-precise-tools-and-reviewable-meal-items.md)
-  - [PRD 025](../prd/025-trusted-context-direct-video-and-reviewable-meals.md)
+  - [ADR 0056](../archive/0.0.4/adr/0056-trusted-selective-multimodal-context.md)
+  - [ADR 0059](../archive/0.0.4/adr/0059-precise-tools-and-reviewable-meal-items.md)
+  - [PRD 025](../archive/0.0.4/prd/025-trusted-context-direct-video-and-reviewable-meals.md)
 
 ## 症状
 

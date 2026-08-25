@@ -4,13 +4,13 @@
 - 发现日期：2026-08-18
 - 影响范围：聊天写入训练/饮食记录、原位审查卡、教练 Event Cards
 - 上游依据：
-  - [ADR 0014](../adr/0014-agent-turn-ordered-event-cards.md)
-  - [ADR 0018](../adr/0018-provenance-aware-record-merge.md)
-  - [ADR 0064](../adr/0064-deterministic-quick-write-and-latest-inline-review.md)
+  - [ADR 0014](../archive/0.0.1/adr/0014-agent-turn-ordered-event-cards.md)
+  - [ADR 0018](../archive/0.0.1/adr/0018-provenance-aware-record-merge.md)
+  - [ADR 0064](../archive/0.0.5/adr/0064-deterministic-quick-write-and-latest-inline-review.md)
 - 下游落地：
-  - [ADR 0077](../adr/0077-same-turn-identity-merge-and-additive-inline-review.md)
-  - [ADR 0078](../adr/0078-batch-create-exercise-and-workout.md)
-  - [ADR 0079](../adr/0079-create-inserts-update-by-id.md)
+  - [ADR 0077](../archive/0.0.7/adr/0077-same-turn-identity-merge-and-additive-inline-review.md)
+  - [ADR 0078](../archive/0.0.7/adr/0078-batch-create-exercise-and-workout.md)
+  - [ADR 0079](../archive/0.0.7/adr/0079-create-inserts-update-by-id.md)
 
 ## 症状
 

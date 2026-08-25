@@ -4,7 +4,7 @@
 - 发现日期：2026-07-30
 - 影响：用户附加视频后，Agent 可能表现得像已分析视频，实际请求没有任何视频画面
 - 后续修订：[BUG 0012](0012-direct-video-and-first-delta-timeout.md) 修复直传仍重复抽帧与缺少首增量门禁
-- 下游落地：[ADR 0057](../adr/0057-direct-video-capability-and-observable-fallback.md)
+- 下游落地：[ADR 0057](../archive/0.0.4/adr/0057-direct-video-capability-and-observable-fallback.md)
 
 ## 症状
 
@@ -54,6 +54,6 @@
 
 ## 关联
 
-- [PRD 008](../prd/008-coach-continuity-and-adaptive-models.md)
-- [ADR 0012](../adr/0012-ordered-mixed-media-collections.md)
-- [ADR 0024](../adr/0024-session-context-projection-and-compaction.md)
+- [PRD 008](../archive/0.0.1/prd/008-coach-continuity-and-adaptive-models.md)
+- [ADR 0012](../archive/0.0.1/adr/0012-ordered-mixed-media-collections.md)
+- [ADR 0024](../archive/0.0.1/adr/0024-session-context-projection-and-compaction.md)

@@ -5,8 +5,8 @@
 - 影响范围：训练记录、计划执行聚合、容量趋势、导出备份与删除
 - 上游依据：无
 - 下游落地：
-  - [PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
-  - [ADR 0060](../adr/0060-guided-performance-workout-entry-projection.md)
+  - [PRD 026](../archive/0.0.5/prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
+  - [ADR 0060](../archive/0.0.5/adr/0060-guided-performance-workout-entry-projection.md)
 
 ## 症状
 

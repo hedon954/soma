@@ -8,8 +8,8 @@
   隐私安全日志与系统警告框
 - 上游依据：[带练录像策略、语音节奏、完成反馈与历史管理调研](../research/2026-08-04-guided-workout-recording-cues-and-review.md)
 - 下游落地：
-  - [PRD 014](../prd/014-guided-workout-recording-cues-and-review.md)
-  - [ADR 0039](../adr/0039-event-driven-guided-recording-cues-and-review.md)
+  - [PRD 014](../archive/0.0.1/prd/014-guided-workout-recording-cues-and-review.md)
+  - [ADR 0039](../archive/0.0.1/adr/0039-event-driven-guided-recording-cues-and-review.md)
 
 ## 症状
 

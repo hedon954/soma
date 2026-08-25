@@ -3,7 +3,7 @@
 - 日期：2026-08-05
 - 状态：已转化为正式 PRD
 - 下游落地：
-  - [PRD 020](../prd/020-gui-simplification-and-progressive-disclosure.md)
+  - [PRD 020](../archive/0.0.3/prd/020-gui-simplification-and-progressive-disclosure.md)
 
 ## 结论
 
@@ -139,4 +139,4 @@
 按界面域分 6 个批次落地（教练 → 训练 → 进展 → 设置 → 动作库 → 设计系统横切），
 每批一个逻辑提交并通过 `make check`；全部完成后 `make verify` 并更新
 `CHANGELOG.md` 与 `docs/acceptance.md`。正式范围与验收边界见
-[PRD 020](../prd/020-gui-simplification-and-progressive-disclosure.md)。
+[PRD 020](../archive/0.0.3/prd/020-gui-simplification-and-progressive-disclosure.md)。

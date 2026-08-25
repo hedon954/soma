@@ -5,8 +5,8 @@
 - 修订自：[动作库、训练计划、程序化带练与训练视频复盘调研](2026-07-31-exercise-library-plans-guided-training.md) 的计划执行体验与录像部分
 - 后续修订：[带练录像策略、语音节奏、完成反馈与历史管理调研](2026-08-04-guided-workout-recording-cues-and-review.md)
 - 下游落地：
-  - [PRD 013](../prd/013-guided-workout-experience-and-capture.md)
-  - [ADR 0038](../adr/0038-focused-guided-workout-and-capture-geometry.md)
+  - [PRD 013](../archive/0.0.1/prd/013-guided-workout-experience-and-capture.md)
+  - [ADR 0038](../archive/0.0.1/adr/0038-focused-guided-workout-and-capture-geometry.md)
   - [BUG 0006](../bugs/0006-workout-camera-preview-recording-mismatch.md)
 
 ## 结论

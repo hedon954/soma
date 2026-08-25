@@ -3,7 +3,7 @@
 - 状态：已修复，待真机复验
 - 发现日期：2026-08-16
 - 影响范围：启动数据迁移、个人空间训练记录、空 projectionKey 唯一冲突
-- 上游依据：[ADR 0073](../adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
+- 上游依据：[ADR 0073](../archive/0.0.7/adr/0073-independent-set-prescriptions-efforts-and-guided-finalization.md)
 - 后续修订：[BUG 0022](0022-installed-v5-schema-checksum-blocks-container-open.md)
 - 下游落地：暂无
 

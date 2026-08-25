@@ -28,9 +28,13 @@ required_files=(
   SECURITY.md
   project.yml
   docs/acceptance.md
-  docs/prd/004-soma-current-product.md
-  docs/prd/010-exercise-library-plans-guided-training.md
-  docs/prd/011-durable-agent-jobs-remote-continuity.md
+  docs/prd/README.md
+  docs/prd/041-action-level-rest-and-compact-progress.md
+  docs/prd/042-user-controlled-recovery-message-feedback-and-action-art.md
+  docs/prd/043-configurable-react-runtime-timeout.md
+  docs/prd/044-behavior-preserving-modernization.md
+  docs/adr/0099-behavior-preserving-modernization-and-three-version-docs.md
+  docs/archive/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md

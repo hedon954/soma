@@ -7,7 +7,7 @@
 - 后续修订：
   - [BUG 0019](0019-guided-recording-attempt-terminal-and-duplicate-alerts.md) 记录启动成功后系统提前终结、成功 key 误判、陈旧活动状态与多 Alert 源造成的重复提示
   - [BUG 0020](0020-guided-camera-activation-deadline-and-partial-evidence.md) 记录旧“启动截止时间”只覆盖写文件回调、没有覆盖权限后配置与 `startRunning()`，以及不可见预览、静默暂停和极短文件误报完整成功
-- 下游落地：[PRD 026](../prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
+- 下游落地：[PRD 026](../archive/0.0.5/prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
 
 ## 症状
 

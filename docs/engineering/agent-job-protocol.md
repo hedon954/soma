@@ -4,17 +4,17 @@
 - 协议版本：1
 - 日期：2026-07-31
 - 上游依据：
-  - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
-  - [ADR 0032](../adr/0032-optional-remote-agent-execution.md)
-  - [ADR 0033](../adr/0033-live-activity-agent-job-projection.md)
-  - [ADR 0037](../adr/0037-backend-transparent-streaming-and-notification-wake.md)
-  - [ADR 0045](../adr/0045-llm-outage-staging-and-compensating-drain.md)
-  - [ADR 0062](../adr/0062-user-resumed-llm-interruption-barrier.md)
-  - [ADR 0068](../adr/0068-versioned-unified-agent-model-input.md)
+  - [ADR 0031](../archive/0.0.1/adr/0031-durable-agent-jobs-event-log-and-projections.md)
+  - [ADR 0032](../archive/0.0.1/adr/0032-optional-remote-agent-execution.md)
+  - [ADR 0033](../archive/0.0.1/adr/0033-live-activity-agent-job-projection.md)
+  - [ADR 0037](../archive/0.0.1/adr/0037-backend-transparent-streaming-and-notification-wake.md)
+  - [ADR 0045](../archive/0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md)
+  - [ADR 0062](../archive/0.0.5/adr/0062-user-resumed-llm-interruption-barrier.md)
+  - [ADR 0068](../archive/0.0.6/adr/0068-versioned-unified-agent-model-input.md)
   - [ADR 0092](../adr/0092-react-internal-retry-and-user-controlled-recovery.md)
 - 关联：
-  - [PRD 011](../prd/011-durable-agent-jobs-remote-continuity.md)
-  - [PRD 029](../prd/029-unified-local-remote-agent-model-input.md)
+  - [PRD 011](../archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md)
+  - [PRD 029](../archive/0.0.6/prd/029-unified-local-remote-agent-model-input.md)
 
 本文固定 iOS 本地 Outbox、服务器 Job/Event、匿名设备鉴权、本地 Tool handoff、APNs 与
 Live Activity 的协议。实现可以替换部署平台，但不能改变幂等、游标、隐私和真值边界。

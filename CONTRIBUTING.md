@@ -3,7 +3,7 @@
 感谢帮助 Soma 变得更可靠。开始前请阅读：
 
 1. [工程契约](CLAUDE.md)
-2. [当前 PRD](docs/prd/004-soma-current-product.md)
+2. [当前活 PRD](docs/prd/README.md)
 3. [Accepted ADR](docs/adr/README.md)
 4. [验收清单](docs/acceptance.md)
 

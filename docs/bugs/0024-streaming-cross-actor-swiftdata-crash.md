@@ -4,11 +4,11 @@
 - 发现日期：2026-08-20
 - 影响范围：教练聊天流式回复、Agent Event 投影、Turn Item 卡片渲染
 - 上游依据：
-  - [ADR 0031](../adr/0031-durable-agent-jobs-event-log-and-projections.md)
-  - [ADR 0014](../adr/0014-agent-turn-ordered-event-cards.md)
+  - [ADR 0031](../archive/0.0.1/adr/0031-durable-agent-jobs-event-log-and-projections.md)
+  - [ADR 0014](../archive/0.0.1/adr/0014-agent-turn-ordered-event-cards.md)
 - 下游落地：
-  - [PRD 033](../prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
-  - [ADR 0083](../adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
+  - [PRD 033](../archive/0.0.7/prd/033-message-metadata-shortcut-crud-and-reviewable-meal-cards.md)
+  - [ADR 0083](../archive/0.0.7/adr/0083-local-diagnostics-log-and-silent-crash-reporting.md)
 
 ## 症状
 
