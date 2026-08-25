@@ -134,7 +134,21 @@ struct CoachBubble: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .accessibilityLabel(content.accessibilityLabel)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(
+                    maxWidth: .infinity,
+                    alignment: metaLineAlignment
+                )
+        }
+    }
+
+    private var metaLineAlignment: Alignment {
+        switch ChatMessageMetaLine.horizontalAlignment(
+            isFromCoach: message.isFromCoach
+        ) {
+        case .leading:
+            .leading
+        case .trailing:
+            .trailing
         }
     }
 }

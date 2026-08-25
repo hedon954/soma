@@ -3,6 +3,21 @@ import Foundation
 import XCTest
 
 final class ChatMessageMetaLineTests: XCTestCase {
+    func testAssistantMetaLineIsLeadingAlignedRegardlessOfStreamingLifecycle() {
+        XCTAssertEqual(
+            ChatMessageMetaLine.horizontalAlignment(isFromCoach: true),
+            .leading,
+            "AI 回复开始、流式中和完成后都必须固定在左下角"
+        )
+    }
+
+    func testUserMetaLineRemainsTrailingAligned() {
+        XCTAssertEqual(
+            ChatMessageMetaLine.horizontalAlignment(isFromCoach: false),
+            .trailing
+        )
+    }
+
     func testSameDayStillIncludesDateAndTime() throws {
         let calendar = fixedCalendar
         let now = try XCTUnwrap(calendar.date(from: DateComponents(
