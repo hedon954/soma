@@ -45,7 +45,10 @@ enum ModelContextSaveImpact {
         _ notification: Notification,
         in modelContext: ModelContext
     ) -> Bool {
-        affects(notification, entities: insightsEntities)
+        guard belongsToSameContainer(notification, as: modelContext) else {
+            return false
+        }
+        return affects(notification, entities: insightsEntities)
     }
 
     static func affectsExerciseHistory(
@@ -94,6 +97,18 @@ enum ModelContextSaveImpact {
         return changedIdentifiers(in: userInfo).contains {
             entities.contains($0.entityName)
         }
+    }
+
+    private static func belongsToSameContainer(
+        _ notification: Notification,
+        as modelContext: ModelContext
+    ) -> Bool {
+        guard let sourceContext = notification.object as? ModelContext else {
+            // 测试或维护路径可能手工发送不带 object 的 invalidated-all 通知；
+            // 无法判定来源时保守失效，不能让页面永久显示旧数据。
+            return true
+        }
+        return sourceContext.container === modelContext.container
     }
 
     private static func affects(

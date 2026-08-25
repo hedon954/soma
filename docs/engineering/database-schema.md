@@ -4,7 +4,7 @@
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
 - 状态：当前 schema 快照；实现收口后仍需以数据库结构门禁复核
-- 最近同步：2026-08-24
+- 最近同步：2026-08-25
 - SwiftData 注册来源：[`Soma/App/SomaApp.swift`](../../Soma/App/SomaApp.swift)
 - SwiftData 版本与启动迁移来源：[`Soma/Models/SomaDataMigration.swift`](../../Soma/Models/SomaDataMigration.swift)
 - SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models)
@@ -15,8 +15,9 @@
   - [ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)
   - [ADR 0076](../archive/0.0.7/adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0090](../archive/0.0.9/adr/0090-current-state-business-models-and-session-facts.md)
-  - [ADR 0000](../adr/0000-origin-through-0.0.10.md) 的动作级计划间歇收口
+  - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 的动作级计划间歇收口
   - [ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+  - [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 - 相关决策：ADR 0001、0031、0032，以及
   [`训练领域模型与运行时协议`](training-domain-model.md)
 
@@ -206,9 +207,14 @@ Server 只保存远程执行所需的 Job、Event、设备认证与短期上传�
 | --- | --- | --- |
 | `agent_jobs_worker_idx` | `agent_jobs(state, lease_expires_at, created_at)` | Worker 领取可执行 Job。 |
 | `agent_jobs_retention_idx` | `agent_jobs(created_at, terminal_at, content_deleted_at)` | 内容保留与清理扫描。 |
-| `agent_events_cursor_idx` | `agent_events(job_id, sequence)` | 按 Job cursor 拉取事件。 |
+| `agent_events_job_id_sequence_key` | unique `agent_events(job_id, sequence)` | 唯一约束自带的 btree 同时服务按 Job cursor 的等值加范围查询；`002` 删除了重复普通索引。 |
 | `temporary_uploads_retention_idx` | `temporary_uploads(created_at, deleted_at)` | 临时上传清理。 |
 | `transactional_outbox_pending_idx` | `transactional_outbox(next_attempt_at, created_at) WHERE published_at IS NULL` | 发布未完成的 outbox 事件。 |
+| `request_nonces_expiry_idx` | `request_nonces(expires_at)` | 清理过期请求 nonce。 |
+| `device_registration_challenges_expiry_idx` | `device_registration_challenges(expires_at)` | 清理过期注册 challenge。 |
+| `devices_revoked_idx` | `devices(revoked_at) WHERE revoked_at IS NOT NULL` | 清理达到保留期限的已撤销设备。 |
+| `activity_tokens_device_idx` | `activity_tokens(device_id)` | 按设备撤销 Live Activity token。 |
+| `transactional_outbox_aggregate_idx` | `transactional_outbox(aggregate_id)` | 按 Job 聚合清理 outbox。 |
 
 ### PostgreSQL ER 图
 

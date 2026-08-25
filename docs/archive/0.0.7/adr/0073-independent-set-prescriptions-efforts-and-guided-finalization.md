@@ -12,7 +12,7 @@
   - [ADR 0071](../../0.0.6/adr/0071-integer-business-identities-and-explicit-relations.md)
   - [BUG 0019](../../../bugs/0019-guided-recording-attempt-terminal-and-duplicate-alerts.md)
 - 后续替代：
-  - [ADR 0000 当前收口](../../../adr/0000-origin-through-0.0.10.md) 将计划换侧间歇与组间歇提升为动作级配置；逐组实际休息证据继续有效
+  - [ADR 0000 当前收口](../../../adr/0000-origin-through-0.0.11.md) 将计划换侧间歇与组间歇提升为动作级配置；逐组实际休息证据继续有效
   - [ADR 0090](../../0.0.9/adr/0090-current-state-business-models-and-session-facts.md) 删除版本化模板关系与热量算法版本字段，保留独立组、Session 快照和状态机 transition revision
   - [ADR 0074](0074-bounded-guided-camera-activation-and-partial-evidence.md) 细化录像 attempt 的起点、准备阶段 deadline、camera-ready preflight、部分文件语义和系统中断恢复；本 ADR 的 Effort 归属与单终态原则继续有效
   - [ADR 0075](0075-current-swiftdata-schema-without-historical-versions.md) 取消冻结 V3/V4/V5 与跨级磁盘夹具；独立组、Effort、projection key 与启动数据回填继续有效

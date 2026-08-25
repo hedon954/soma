@@ -8,6 +8,7 @@
 - 完整审计：[全 App 性能审计报告](performance-audit-2026-08-24.md)
 - 关键故障：[BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md)、
   [BUG 0035](../bugs/0035-long-stream-text-relayout-thermal-jank.md)
+- 下游落地：[真机性能录制：一次安装，多次复用](device-performance-profiling.md)
 
 ## 1. 收尾结论
 

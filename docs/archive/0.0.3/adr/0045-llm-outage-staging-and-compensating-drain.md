@@ -6,7 +6,7 @@
 - 部分替代：[ADR 0027](../../0.0.1/adr/0027-required-ai-configuration-and-send-gate.md) 的“无 Key 时不落盘并跳转设置”发送前门禁
 - 后续替代：
   - [ADR 0062](../../0.0.5/adr/0062-user-resumed-llm-interruption-barrier.md) 将明确欠费从自动补偿中分离为人工恢复 FIFO 屏障
-  - [ADR 0092](../../../adr/0092-react-internal-retry-and-user-controlled-recovery.md) 将所有已越过 ReAct Loop 的失败改为人工恢复，删除网络、供应商、配置与计时器自动补偿
+  - [ADR 0092](../../0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md) 将所有已越过 ReAct Loop 的失败改为人工恢复，删除网络、供应商、配置与计时器自动补偿
 - 下游落地：[Agent Job 与远程执行协议](../../../engineering/agent-job-protocol.md)
 - 关联：
   - [PRD 021](../prd/021-llm-staging-explicit-configuration-and-input-suggestions.md)

@@ -3,7 +3,7 @@
 - 状态：已实施，部分修订；真机交互与 Gmail 自动化验收待维护者确认
 - 日期：2026-08-13
 - 后续修订：
-  - [PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 将所有可见失败统一为人工恢复、重试收进失败卡、增加逐回复反馈并把专属动作图提升到至少 239
+  - [PRD 042](../../0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 将所有可见失败统一为人工恢复、重试收进失败卡、增加逐回复反馈并把专属动作图提升到至少 239
   - [PRD 028](028-retry-active-runtime-budget.md) 将整轮墙钟预算拆为可暂停的实际执行预算，并允许用户显式重试开启新窗口
   - [PRD 029](../../0.0.6/prd/029-unified-local-remote-agent-model-input.md) 将稳定 Prompt、按意图 Tool 和并行语义统一到本地/远程 Backend
   - [PRD 030](../../0.0.6/prd/030-agent-prompt-skill-context-and-tool-v3.md) 以条件上下文、Skill 直载和强类型 Tool 进一步缩短执行路径

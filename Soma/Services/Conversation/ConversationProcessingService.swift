@@ -24,6 +24,9 @@ final class ConversationProcessingService {
 
     var liveEventRevision = 0
 
+    /// 仅供显式性能夹具把跨层完成阶段暴露给 UI 自动化；普通运行始终为 nil。
+    var performanceFixturePhase: String?
+
     @ObservationIgnored
     var remoteTextCoalescer = AgentTextDeltaCoalescer()
 

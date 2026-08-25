@@ -1,9 +1,10 @@
 # BUG 0035：长流式回复重复排版导致持续卡顿与发热
 
-- 状态：已修复，待真实长对话手感复验
+- 状态：首次修复不足，后续见 [BUG 0036](0036-long-stream-continuous-text-and-completion-cliff.md)
 - 日期：2026-08-25
 - 影响：教练页长时间流式后持续占用主线程，滚动、Session 与 Tab 交互逐渐变卡，设备可能发热
 - 上游依据：用户真机反馈与 iPhone 17 Pro Max Release Time Profiler
+- 后续修订：[BUG 0036](0036-long-stream-continuous-text-and-completion-cliff.md)
 
 ## 症状
 

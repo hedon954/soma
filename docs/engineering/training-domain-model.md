@@ -15,12 +15,12 @@
   - [ADR 0076](../archive/0.0.7/adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0086](../archive/0.0.8/adr/0086-preview-and-history-thumbs-use-aspect-fill.md)
   - [ADR 0090](../archive/0.0.9/adr/0090-current-state-business-models-and-session-facts.md)
-  - [ADR 0000](../adr/0000-origin-through-0.0.10.md) 的动作级计划间歇收口
+  - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 的动作级计划间歇收口
   - [PRD 013](../archive/0.0.1/prd/013-guided-workout-experience-and-capture.md)
   - [PRD 026](../archive/0.0.5/prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md)
   - [PRD 031](../archive/0.0.7/prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md)
   - [PRD 035](../archive/0.0.9/prd/035-guided-preview-then-record-and-immediate-share.md)
-  - [PRD 000](../prd/000-origin-through-0.0.10.md) 的动作级计划间歇收口
+  - [PRD 000](../prd/000-origin-through-0.0.11.md) 的动作级计划间歇收口
 - 关联：[PRD 010](../archive/0.0.1/prd/010-exercise-library-plans-guided-training.md)
 
 本文固定动作身份、计划、训练事实、带练和录像的实现合同。字段名可以在 Swift 中按语言习惯

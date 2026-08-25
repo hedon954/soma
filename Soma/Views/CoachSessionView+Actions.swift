@@ -229,25 +229,41 @@ extension CoachSessionView {
     }
 
     /// 与文字投影一致约 5Hz 非动画跟随；结束后再做一次动画归位。
-    func scheduleLiveScroll(_ proxy: ScrollViewProxy) {
-        guard isProcessingHere, followsLiveMessage else { return }
-        let interval: TimeInterval = 0.2
-        let elapsed = Date().timeIntervalSince(lastLiveScrollAt)
-        if elapsed >= interval {
-            lastLiveScrollAt = Date()
-            scrollToBottom(proxy, animated: false)
-            return
+    func scheduleLiveScroll(
+        _ proxy: ScrollViewProxy,
+        targetMessageID: UUID? = nil
+    ) {
+        guard isProcessingHere else { return }
+        followsLiveMessage = true
+        let performanceInterval = AppPerformance.begin(
+            .agentProjection,
+            detail: "phase=stream-scroll"
+        )
+        defer {
+            AppPerformance.end(performanceInterval, detail: "phase=stream-scroll")
         }
         guard liveScrollTask == nil else { return }
-        let delay = interval - elapsed
+        let interval: TimeInterval = 0.2
+        let elapsed = Date().timeIntervalSince(lastLiveScrollAt)
+        let delay = max(interval - elapsed, 0)
         liveScrollTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            liveScrollTask = nil
-            guard !Task.isCancelled, isProcessingHere, followsLiveMessage else {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            // revision 的 onChange 可能先于 UIViewRepresentable 的新高度提交。
+            // 先让本轮 TextKit/SwiftUI 布局完成，再滚到稳定的底部锚点。
+            await Task.yield()
+            guard !Task.isCancelled, isProcessingHere else {
+                liveScrollTask = nil
                 return
             }
             lastLiveScrollAt = Date()
-            scrollToBottom(proxy, animated: false)
+            if let targetMessageID {
+                proxy.scrollTo(targetMessageID, anchor: .bottom)
+            } else {
+                scrollToBottom(proxy, animated: false)
+            }
+            liveScrollTask = nil
         }
     }
 
@@ -303,10 +319,18 @@ extension CoachSessionView {
 
     func beginMessageHistoryInteraction() {
         hasUserInteractedWithMessageList = true
+        guard !isProcessingHere else {
+            followsLiveMessage = true
+            return
+        }
         stopFollowingLiveMessage()
     }
 
     func stopFollowingLiveMessage() {
+        guard !isProcessingHere else {
+            followsLiveMessage = true
+            return
+        }
         followsLiveMessage = false
         liveScrollTask?.cancel()
         liveScrollTask = nil

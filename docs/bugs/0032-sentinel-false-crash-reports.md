@@ -3,7 +3,7 @@
 - 状态：已修复，待真实 MetricKit 崩溃验收
 - 发现日期：2026-08-23
 - 影响范围：自动崩溃诊断、Gmail 噪声、历史待发送报告
-- 下游落地：[ADR 0095](../adr/0095-metrickit-confirmed-crash-reports.md)
+- 下游落地：[ADR 0095](../archive/0.0.11/adr/0095-metrickit-confirmed-crash-reports.md)
 
 ## 症状
 

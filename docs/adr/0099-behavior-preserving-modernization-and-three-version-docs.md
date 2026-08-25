@@ -26,8 +26,8 @@ Agent 默认会把全部 PRD/ADR 读进上下文，既增加噪声，也让真�
 4. **组合根**：`SomaApp` 只装配依赖；教练气泡、输入与队列 UI 从 `CoachView` 抽出，不改服务调用。
 5. **Server**：生产只使用 Postgres store；内存实现只服务测试，并共享同一 `SomaStore` 契约。
 6. **活文档链按营销版本，不按文件日期**：阅读顺序是压缩起点 → 最近 3 个
-   `MARKETING_VERSION`（当前 0.0.13 / 0.0.12 / 0.0.11）。压缩起点
-   （`docs/prd/000-origin-through-0.0.10.md`、`docs/adr/0000-origin-through-0.0.10.md`）
+   `MARKETING_VERSION`（采纳时为 0.0.13 / 0.0.12 / 0.0.11；当前窗口见 README）。压缩起点
+   （`docs/prd/000-origin-through-0.0.11.md`、`docs/adr/0000-origin-through-0.0.11.md`）
    是滑出窗口内容的滚动收口：只保留仍有效的最终要求与决策，不是旧 PRD/ADR 清单或过渡史。
    窗口最旧活文档的修订自 / 部分替代指向压缩起点；起点没有更早的活前驱。
 7. **发布时合并压缩起点，不要只搬家**：每次新 App 发布，把滑出版本原文 `git mv` 到
@@ -75,7 +75,7 @@ Agent 默认会把全部 PRD/ADR 读进上下文，既增加噪声，也让真�
 
 ### 成本与限制
 
-- 查阅 0.0.9 及更早决策需要显式打开归档。
+- 查阅滑出最近三版窗口的原始决策需要显式打开归档。
 - Linux/cloud 环境不能运行 Simulator，完整 `make check` / `make verify` 仍依赖 Mac。
 - `private(set)` 等模块内可见性可能为跨文件 extension 放宽为 internal，但不构成公开 API。
 

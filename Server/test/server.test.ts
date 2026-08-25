@@ -1252,6 +1252,21 @@ test("migration defines database uniqueness and transactional outbox", async () 
   assert.doesNotMatch(migration, /user_api_key|authorization_header/i);
 });
 
+test("performance migration indexes cleanup and erasure paths without duplicate cursor index", async () => {
+  const migration = await readFile(
+    new URL("../migrations/002_performance_indexes.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(migration, /request_nonces \(expires_at\)/);
+  assert.match(migration, /device_registration_challenges \(expires_at\)/);
+  assert.match(migration, /devices \(revoked_at\)[\s\S]*WHERE revoked_at IS NOT NULL/);
+  assert.match(migration, /activity_tokens \(device_id\)/);
+  assert.match(migration, /transactional_outbox \(aggregate_id\)/);
+  assert.match(migration, /DROP INDEX IF EXISTS agent_events_cursor_idx/);
+  assert.doesNotMatch(migration, /agent_tool_requests \(expires_at\)/);
+});
+
 function makeJobInput(
   overrides: Partial<AgentJobInput> = {},
 ): AgentJobInput {

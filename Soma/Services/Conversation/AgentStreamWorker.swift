@@ -14,12 +14,8 @@ enum AgentStreamWorker {
     ) async throws -> AgentStreamOutcome {
         var outcome = AgentStreamOutcome()
         var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
-        var coalescer = AgentTextDeltaCoalescer()
-
-        func projectBatch(_ text: String) async {
-            let startedAt = Date()
-            await project(.assistantTextDelta(itemID: textItemID, delta: text))
-            outcome.projectionSeconds += Date().timeIntervalSince(startedAt)
+        let projectionPump = AgentTextProjectionPump { text in
+            project(.assistantTextDelta(itemID: textItemID, delta: text))
         }
 
         do {
@@ -43,17 +39,10 @@ enum AgentStreamWorker {
                     }
                     if let content = delta.content, !content.isEmpty {
                         outcome.passage += content
-                        if let batched = coalescer.append(content, now: Date()) {
-                            await projectBatch(batched)
-                        }
+                        await projectionPump.append(content)
                     }
                     if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
                         outcome.ignoredReasoning = true
-                    }
-                    if delta.toolCalls?.isEmpty == false,
-                       let tail = coalescer.flush()
-                    {
-                        await projectBatch(tail)
                     }
                     for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
                         let index = toolDelta.index ?? position
@@ -66,18 +55,14 @@ enum AgentStreamWorker {
                 return meaningful
             }
         } catch {
-            if let tail = coalescer.flush() {
-                await projectBatch(tail)
-            }
+            outcome.projectionSeconds = await projectionPump.finish()
             throw StreamingFailure.interrupted(
                 error,
                 passage: outcome.passage,
                 receivedMeaningfulDelta: outcome.firstDeltaAt != nil
             )
         }
-        if let tail = coalescer.flush() {
-            await projectBatch(tail)
-        }
+        outcome.projectionSeconds = await projectionPump.finish()
         outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap {
             toolCallDeltas[$0]
         }

@@ -3,7 +3,7 @@
 - 状态：已修复，待真实供应商目录验收
 - 发现日期：2026-08-23
 - 影响范围：LLM 配置、媒体发送门禁、本地与远程直传视频
-- 下游落地：[ADR 0096](../adr/0096-source-backed-model-multimodal-capabilities.md)
+- 下游落地：[ADR 0096](../archive/0.0.11/adr/0096-source-backed-model-multimodal-capabilities.md)
 
 ## 症状
 

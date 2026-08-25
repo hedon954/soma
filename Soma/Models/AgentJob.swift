@@ -576,17 +576,23 @@ enum AgentJobStore {
         leaseDuration: TimeInterval = 25,
         in context: ModelContext
     ) throws -> AgentJob? {
-        let jobs = (
-            try? context.fetch(
-                FetchDescriptor<AgentJob>(
-                    sortBy: [SortDescriptor(\.createdAt)]
-                )
-            )
-        ) ?? []
-        guard let job = jobs.first(where: {
-            $0.dataSpace == dataSpace && !$0.state.isTerminal
-        }), job.state.isRunnable,
-        job.nextRetryAt == nil || job.nextRetryAt! <= now
+        let dataSpaceRaw = dataSpace.rawValue
+        let completed = AgentJobState.succeeded.rawValue
+        let failed = AgentJobState.failed.rawValue
+        let cancelled = AgentJobState.cancelled.rawValue
+        var descriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw
+                    && $0.stateRaw != completed
+                    && $0.stateRaw != failed
+                    && $0.stateRaw != cancelled
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        descriptor.fetchLimit = 1
+        let jobs = (try? context.fetch(descriptor)) ?? []
+        guard let job = jobs.first, job.state.isRunnable,
+              job.nextRetryAt == nil || job.nextRetryAt! <= now
         else {
             return nil
         }

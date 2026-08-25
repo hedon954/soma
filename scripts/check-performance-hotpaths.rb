@@ -128,13 +128,49 @@ chat_record_source = File.read(File.join(ROOT, "Soma/Views/ChatRecordEditorCards
 coach_response_source = File.read(File.join(ROOT, "Soma/Components/CoachResponseView.swift"))
 selectable_chat_source = File.read(File.join(ROOT, "Soma/Components/SelectableChatText.swift"))
 agent_transcript_source = File.read(File.join(ROOT, "Soma/Views/AgentTurnTranscript.swift"))
+incremental_chat_text_source = File.read(File.join(ROOT, "Soma/Components/IncrementalChatTextView.swift"))
+device_tab_profile_source = File.read(File.join(ROOT, "scripts/profile-device-tab-loop.sh"))
+device_profile_source = File.read(File.join(ROOT, "scripts/profile-device-harness.sh"))
+device_profile_core_source = File.read(File.join(ROOT, "scripts/profile-device-performance.sh"))
+device_install_source = File.read(File.join(ROOT, "scripts/install-device.sh"))
+device_install_stamp_source = File.read(File.join(ROOT, "scripts/record-device-install-stamp.sh"))
 processing_models_source = File.read(File.join(ROOT, service_file("ConversationProcessingModels.swift")))
+unless device_tab_profile_source.include?('exec "$root_dir/scripts/profile-device-harness.sh"')
+  fail_check("legacy physical-device profiler no longer forwards to the canonical harness")
+end
+if device_profile_source.include?("xcodebuild") ||
+   device_profile_source.include?("make install-device") &&
+     !device_profile_source.include?("Run once:")
+  fail_check("canonical physical-device profiling can again build or install implicitly")
+end
+unless device_profile_source.include?("device-app-fingerprint.sh") &&
+       device_profile_source.include?("Formal recording attempt") &&
+       device_profile_source.include?("reset_instruments_helper") &&
+       device_profile_source.include?('SOMA_PROFILE_ATTACH="$app_pid"') &&
+       device_profile_source.include?("SOMA_DEVICE_PERFORMANCE_WAIT_FOR_FIXTURE_COMPLETION") &&
+       device_profile_core_source.include?("SOMA_PROFILE_START_TIMEOUT_SECONDS") &&
+       device_profile_core_source.include?('status="start_timed_out"') &&
+       device_profile_core_source.include?('status="record_failed_after_start"') &&
+       device_install_source.include?("record-device-install-stamp.sh") &&
+       device_install_stamp_source.include?('$2 == "deviceIdentifier:" && !found { print $3')
+  fail_check("reusable physical-device profiling lost its install stamp, exact PID, or fast-fail gate")
+end
+device_fingerprint_source = File.read(File.join(ROOT, "scripts/device-app-fingerprint.sh"))
+unless device_fingerprint_source.include?("git ls-files --cached --others --exclude-standard") &&
+       !device_fingerprint_source.include?("rg --files Soma SomaWidget")
+  fail_check("device build fingerprint can again include ignored local credentials nondeterministically")
+end
 if coach_response_source.include?("MarkdownText(") ||
    selectable_chat_source.include?("struct SelectableChatText: UIViewRepresentable") ||
    selectable_chat_source.match?(/func makeUIView.*?UITextView/m)
   fail_check("chat text restored per-block TextKit views on the Tab transition path")
 end
-unless coach_response_source.include?("CoachTextRenderCache.document(for: markdown)") &&
+unless coach_response_source.include?("CoachTextRenderCache.completedText(for: markdown)") &&
+       coach_response_source.include?("Task.detached(priority: .userInitiated)") &&
+       coach_response_source.include?("CompletedChatTextView(render: completedText)") &&
+       !coach_response_source.include?("ForEach(document.blocks.indices") &&
+       incremental_chat_text_source.include?("render.measuredHeight(") &&
+       incremental_chat_text_source.include?("render.storeMeasuredHeight(") &&
        selectable_chat_source.include?("CoachTextRenderCache.attributedText(for: content)") &&
        coach_response_source.include?("totalCostLimit") &&
        root_source.include?("CoachTextRenderCache.removeAll()")
@@ -185,10 +221,19 @@ end
 unless coach_source.scan(/processor\.liveEventRevision/).empty?
   fail_check("Coach screen root again observes the high-frequency live stream revision")
 end
-unless agent_transcript_source.match?(/struct StreamingAgentTextView.*?LazyVStack/m) &&
-       agent_transcript_source.match?(/struct StreamingAgentTextChunkView.*?\.fixedSize\(horizontal: false, vertical: true\)/m) &&
-       processing_models_source.include?("static let defaultTargetCharacterCount = 256")
+unless agent_transcript_source.match?(/struct StreamingAgentTextView.*?IncrementalChatTextView/m) &&
+       incremental_chat_text_source.include?("view.textStorage.append") &&
+       incremental_chat_text_source.include?("func sizeThatFits(") &&
+       processing_models_source.include?("static let defaultTargetCharacterCount = 256") &&
+       processing_models_source.include?("targetCharacterCount - chunks[chunks.count - 1].text.count")
   fail_check("long-stream text can again remeasure a large eager stack or unbounded mutable tail")
+end
+unless coach_support_source.include?("struct CoachLiveAutoScrollDriver: View") &&
+       coach_support_source.include?("processor.liveEventRevision") &&
+       coach_actions_source.include?("targetMessageID: UUID? = nil") &&
+       coach_actions_source.include?("proxy.scrollTo(targetMessageID, anchor: .bottom)") &&
+       coach_source.include?("targetMessageID: message.id")
+  fail_check("live coach output no longer follows the stable message bottom independently of lazy rows")
 end
 if coach_source.include?("@State private var isCoachVisible") ||
    coach_source.match?(/\.onAppear\s*\{[^}]*refreshInputShortcuts/m)
@@ -245,6 +290,31 @@ end
 if insights_source.include?("points.map(\\.volume).max()") ||
    !insights_source.include?("private var periodSummary:")
   fail_check("scrolling a training chart again allocates or scans the series repeatedly per body")
+end
+
+deduper_source = File.read(File.join(ROOT, service_file("AgentBusinessKeyDeduper.swift")))
+unless deduper_source.match?(/FetchDescriptor<WorkoutEntry>.*?exerciseID.*?date >= day.*?date < nextDay/m) &&
+       deduper_source.match?(/FetchDescriptor<MealEntry>.*?date >= day.*?date < nextDay.*?calories/m) &&
+       deduper_source.match?(/FetchDescriptor<BodyEntry>.*?externalSource == nil.*?date >= day.*?date < nextDay/m)
+  fail_check("business-key deduplication again materializes complete record tables")
+end
+
+agent_job_source = File.read(File.join(ROOT, "Soma/Models/AgentJob.swift"))
+claim_next_source = agent_job_source[/static func claimNext\((.*?)\n    static func claim\(/m, 1].to_s
+unless claim_next_source.include?("$0.dataSpaceRaw == dataSpaceRaw") &&
+       claim_next_source.include?("$0.stateRaw != completed") &&
+       claim_next_source.include?("descriptor.fetchLimit = 1")
+  fail_check("local job claiming again fetches the full AgentJob table before choosing one row")
+end
+
+health_import_source = File.read(File.join(ROOT, service_file("HealthKitImporter.swift")))
+if health_import_source.include?("existingWorkouts") ||
+   health_import_source.include?("existingBodyEntries")
+  fail_check("HealthKit import again loads every prior record from one source")
+end
+unless health_import_source.match?(/FetchDescriptor<WorkoutEntry>.*?externalSource == source.*?externalID == externalID/m) &&
+       health_import_source.match?(/FetchDescriptor<BodyEntry>.*?externalSource == source.*?externalID == externalID/m)
+  fail_check("HealthKit import no longer performs exact external-source identity lookups")
 end
 
 settings_source = File.read(File.join(ROOT, "Soma/Views/SettingsView.swift"))
@@ -314,10 +384,15 @@ if stream_deadline_source.match?(/@MainActor\s+static func consume/) ||
 end
 
 streaming_source = File.read(File.join(ROOT, service_file("AgentStreamWorker.swift")))
+pump_source = File.read(File.join(ROOT, service_file("AgentTextProjectionPump.swift")))
 unless streaming_source.include?("enum AgentStreamWorker") &&
        streaming_source.include?("project: @escaping @MainActor (AgentTraceEvent) -> Void") &&
-       streaming_source.include?("var coalescer = AgentTextDeltaCoalescer()")
-  fail_check("local stream parsing no longer uses a non-main coalescing worker")
+       streaming_source.include?("let projectionPump = AgentTextProjectionPump") &&
+       streaming_source.include?("await projectionPump.append(content)") &&
+       streaming_source.include?("await projectionPump.finish()") &&
+       pump_source.include?("minimumInterval: Duration = .milliseconds(200)") &&
+       pump_source.include?("private var drainTask: Task<Void, Never>?")
+  fail_check("local stream parsing no longer uses a non-main single-flight projection pump")
 end
 
 coalescer_source = File.read(File.join(ROOT, service_file("AgentTextDeltaCoalescer.swift")))

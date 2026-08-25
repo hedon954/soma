@@ -385,6 +385,17 @@ struct CoachSessionView: View {
             messageList(scrollProxy: proxy, projection: projection)
                 .scrollDismissesKeyboard(.interactively)
                 .appPageBackground()
+                .background {
+                    CoachLiveAutoScrollDriver(
+                        isActive: isProcessingHere,
+                        onRevision: {
+                            scheduleLiveScroll(
+                                proxy,
+                                targetMessageID: projection.messages.last?.id
+                            )
+                        }
+                    )
+                }
                 .safeAreaInset(edge: .bottom) {
                     composer(pendingCount: projection.pendingJobCount)
                 }
@@ -398,7 +409,7 @@ struct CoachSessionView: View {
                     guard visibility.autoScrollGate.shouldScroll(to: messageID) else {
                         return
                     }
-                    guard followsLiveMessage else { return }
+                    guard isProcessingHere || followsLiveMessage else { return }
                     scrollToBottomAfterLayout(proxy)
                 }
                 .onChange(of: projection.messages.first?.id) {
@@ -409,7 +420,14 @@ struct CoachSessionView: View {
                 }
                 .onChange(of: processor.isProcessing) { _, isProcessing in
                     if isProcessing {
-                        scheduleLiveScroll(proxy)
+                        // 只要当前会话进入流式回复，就重新取得底部跟随权。
+                        // 用户不需要先手动滚到底，内容增长也不能让 geometry
+                        // 的瞬时“离底部”反过来关闭自动跟随。
+                        followsLiveMessage = true
+                        scheduleLiveScroll(
+                            proxy,
+                            targetMessageID: projection.messages.last?.id
+                        )
                     } else {
                         liveScrollTask?.cancel()
                         liveScrollTask = nil
@@ -474,7 +492,10 @@ struct CoachSessionView: View {
         .modifier(CoachMessageTopPagingModifier())
         .modifier(CoachMessageScrollTrackingModifier { position in
             messageListPosition = position
-            if didFinishInitialScroll, !position.isNearBottom {
+            if didFinishInitialScroll,
+               !position.isNearBottom,
+               !isProcessingHere
+            {
                 stopFollowingLiveMessage()
             }
             guard hasUserInteractedWithMessageList, position.isAtTop else {
@@ -490,7 +511,7 @@ struct CoachSessionView: View {
         .accessibilityIdentifier("coach-message-list")
         .accessibilityValue(
             Text(verbatim: AppTestRuntime.isRunning
-                ? "count=\(projection.messages.count)"
+                ? "count=\(projection.messages.count),nearBottom=\(messageListPosition.isNearBottom),following=\(followsLiveMessage),streaming=\(processingHere)"
                 : "")
         )
     }
@@ -562,12 +583,28 @@ struct CoachSessionView: View {
                         using: proxy
                     )
                 },
-                onLiveRevision: { scheduleLiveScroll(proxy) }
+                onLiveRevision: {
+                    scheduleLiveScroll(
+                        proxy,
+                        targetMessageID: message.id
+                    )
+                }
             )
             .id(message.id)
         }
 
-        Color.clear.frame(height: 1).id("bottom")
+        Group {
+            if AppTestRuntime.isRunning {
+                Text("消息底部")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .accessibilityIdentifier("coach-message-bottom")
+            } else {
+                Color.clear
+            }
+        }
+        .frame(height: 8)
+        .id("bottom")
     }
 
     private func composer(pendingCount: Int) -> some View {

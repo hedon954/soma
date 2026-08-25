@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-08-23
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.10.md) 中把计划换侧间歇与组后间歇作为每条 `TemplateSetPrescription` 新写入事实的决策；独立组、Effort、侧别归动作定义与实际休息证据继续有效
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 中把计划换侧间歇与组后间歇作为每条 `TemplateSetPrescription` 新写入事实的决策；独立组、Effort、侧别归动作定义与实际休息证据继续有效
 - 上游依据：[PRD 041](../prd/041-action-level-rest-and-compact-progress.md)
 - 下游落地：
   - [训练领域模型与运行时协议](../../../engineering/training-domain-model.md)

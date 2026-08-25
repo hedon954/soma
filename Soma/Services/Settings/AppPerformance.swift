@@ -13,6 +13,8 @@ enum AppPerformanceEvent: String, CaseIterable {
     case imageLoad = "image_load"
     case agentFirstDelta = "agent_first_delta"
     case agentProjection = "agent_projection"
+    case agentMarkdownParse = "agent_markdown_parse"
+    case agentCompletedRender = "agent_completed_render"
 
     fileprivate var signpostName: StaticString {
         switch self {
@@ -27,6 +29,8 @@ enum AppPerformanceEvent: String, CaseIterable {
         case .imageLoad: "Soma Image Load"
         case .agentFirstDelta: "Soma Agent First Delta"
         case .agentProjection: "Soma Agent Projection"
+        case .agentMarkdownParse: "Soma Agent Markdown Parse"
+        case .agentCompletedRender: "Soma Agent Completed Render"
         }
     }
 }

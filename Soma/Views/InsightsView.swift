@@ -6,30 +6,56 @@ struct InsightsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var recordCounts = InsightsRecordCounts()
     @State private var snapshot = InsightsScreenSnapshot.empty
-    @State private var cacheState = InsightsSnapshotCacheState()
+    @State private var cacheState = InsightsSnapshotRevisionState()
     @State private var requestedCacheKey: InsightsSnapshotCacheKey?
+    @State private var loadPhase = InsightsSnapshotLoadPhase.idle
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
-                Text(snapshot.dateRangeText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-
-                ForEach(
-                    ProgressHomeSection.visible(
-                        hasRecentActivities: !snapshot.recentActivities.isEmpty,
-                        hasWeightTrend: snapshot.weightedBodyEntries.count >= 2
-                    )
-                ) { section in
-                    progressHomeSection(section, snapshot: snapshot)
+        Group {
+            if loadPhase == .failed, cacheState.loadedKey == nil {
+                ContentUnavailableView {
+                    Label("进展暂时无法加载", systemImage: "arrow.clockwise.circle")
+                } description: {
+                    Text("读取本机记录时遇到问题。你的数据没有丢失，可以立即重试。")
+                } actions: {
+                    Button("重新加载") {
+                        requestSnapshot(force: true)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("重新读取本机的进展数据")
                 }
+            } else if loadPhase == .idle || (loadPhase == .loading && cacheState.loadedKey == nil) {
+                ProgressView("正在加载进展…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("insights-loading")
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: AppTheme.sectionSpacing) {
+                        if loadPhase == .failed {
+                            insightsRefreshFailure
+                        }
+
+                        Text(snapshot.dateRangeText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+
+                        ForEach(
+                            ProgressHomeSection.visible(
+                                hasRecentActivities: !snapshot.recentActivities.isEmpty,
+                                hasWeightTrend: snapshot.weightedBodyEntries.count >= 2
+                            )
+                        ) { section in
+                            progressHomeSection(section, snapshot: snapshot)
+                        }
+                    }
+                    .padding(AppTheme.pagePadding)
+                    .padding(.bottom, 72)
+                    .frame(maxWidth: AppTheme.readableContentMaxWidth)
+                    .frame(maxWidth: .infinity)
+                }
+                .accessibilityIdentifier("insights-content")
             }
-            .padding(AppTheme.pagePadding)
-            .padding(.bottom, 72)
-            .frame(maxWidth: AppTheme.readableContentMaxWidth)
-            .frame(maxWidth: .infinity)
         }
         .appPageBackground()
         .navigationTitle("进展")
@@ -41,8 +67,7 @@ struct InsightsView: View {
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: ModelContext.didSave,
-                object: modelContext
+                for: ModelContext.didSave
             )
         ) { notification in
             guard ModelContextSaveImpact.affectsInsights(
@@ -51,9 +76,8 @@ struct InsightsView: View {
             ) else {
                 return
             }
-            // 只标记失效，不在保存通知中启动重查询。这样 Agent 流式保存不会
-            // 让隐藏的进展 Tab 反复重建；下次进入时合并为一次刷新。
             cacheState.markDataChanged()
+            requestSnapshot()
         }
         .task(id: requestedCacheKey) {
             guard let requestedCacheKey else { return }
@@ -63,6 +87,25 @@ struct InsightsView: View {
             let cacheKey = cacheState.currentKey()
             await refreshSnapshot(for: cacheKey)
         }
+    }
+
+    private var insightsRefreshFailure: some View {
+        AppCard {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    .foregroundStyle(AppTheme.warning)
+                    .accessibilityHidden(true)
+                Text("最新数据暂时没有刷新，当前内容仍可查看。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button("重试") {
+                    requestSnapshot(force: true)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -227,15 +270,20 @@ struct InsightsView: View {
 
     @MainActor
     private func requestSnapshotIfNeeded() {
-        let cacheKey = cacheState.currentKey()
-        guard cacheState.loadedKey != cacheKey,
-              requestedCacheKey != cacheKey
-        else {
-            return
-        }
+        requestSnapshot()
+    }
+
+    @MainActor
+    private func requestSnapshot(force: Bool = false) {
+        guard let cacheKey = cacheState.requestKey(
+            excluding: requestedCacheKey,
+            force: force
+        ) else { return }
+        loadPhase = .loading
         requestedCacheKey = cacheKey
     }
 
+    @MainActor
     private func refreshSnapshot(for cacheKey: InsightsSnapshotCacheKey) async {
         let interval = AppPerformance.begin(
             .derivedSnapshot,
@@ -246,57 +294,59 @@ struct InsightsView: View {
             let loader = InsightsSnapshotLoader(modelContainer: container)
             return try await loader.load()
         }
-        let payload = try? await withTaskCancellationHandler {
-            try await worker.value
-        } onCancel: {
-            worker.cancel()
-        }
-        guard let payload, !Task.isCancelled else {
+        do {
+            let payload = try await withTaskCancellationHandler {
+                try await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled else { throw CancellationError() }
+            guard cacheState.acceptsCompletion(for: cacheKey) else {
+                if requestedCacheKey == cacheKey {
+                    requestedCacheKey = nil
+                }
+                requestSnapshot()
+                AppPerformance.end(
+                    interval,
+                    detail: "screen=insights,kind=refresh,stale=true"
+                )
+                return
+            }
+            snapshot = payload.snapshot
+            recordCounts = payload.counts
+            loadPhase = .loaded
             if requestedCacheKey == cacheKey {
                 requestedCacheKey = nil
             }
-            AppPerformance.end(interval, detail: "screen=insights,kind=refresh,cancelled=true")
-            return
+            AppPerformance.end(interval, detail: "screen=insights,kind=refresh")
+        } catch is CancellationError {
+            AppPerformance.end(
+                interval,
+                detail: "screen=insights,kind=refresh,cancelled=true"
+            )
+        } catch {
+            guard !Task.isCancelled else {
+                AppPerformance.end(
+                    interval,
+                    detail: "screen=insights,kind=refresh,cancelled=true"
+                )
+                return
+            }
+            if requestedCacheKey == cacheKey {
+                requestedCacheKey = nil
+            }
+            if cacheState.currentKey() == cacheKey {
+                loadPhase = .failed
+            }
+            AppPerformance.end(
+                interval,
+                detail: "screen=insights,kind=refresh,failed=true"
+            )
         }
-        snapshot = payload.snapshot
-        recordCounts = payload.counts
-        cacheState.loadedKey = cacheKey
-        AppPerformance.end(interval, detail: "screen=insights,kind=refresh")
     }
 
     private func recentActivityDestination(_ activity: ProgressRecentActivity) -> some View {
         ProgressRecentActivityDestination(activity: activity)
-    }
-}
-
-private struct InsightsSnapshotCacheKey: Hashable, Sendable {
-    let day: Date
-    let timeZoneIdentifier: String
-    let dataRevision: Int
-}
-
-/// 这是失效元数据，不是 SwiftUI 可观察状态。保存通知只更新一个整数，
-/// 不会让隐藏的 Tab body 失效；真正进入页面时才把最新 key 提交给 SwiftUI task。
-@MainActor
-private final class InsightsSnapshotCacheState {
-    private var dataRevision = 0
-    var loadedKey: InsightsSnapshotCacheKey?
-
-    func markDataChanged() {
-        dataRevision &+= 1
-    }
-
-    func currentKey(
-        now: Date = .now,
-        calendar sourceCalendar: Calendar = .current
-    ) -> InsightsSnapshotCacheKey {
-        var calendar = sourceCalendar
-        calendar.timeZone = .current
-        return InsightsSnapshotCacheKey(
-            day: calendar.startOfDay(for: now),
-            timeZoneIdentifier: calendar.timeZone.identifier,
-            dataRevision: dataRevision
-        )
     }
 }
 
@@ -320,10 +370,9 @@ private actor InsightsSnapshotLoader {
         workoutDescriptor.fetchLimit = 1000
 
         var mealDescriptor = FetchDescriptor<MealEntry>(
-            predicate: #Predicate { $0.date >= trendStart },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        mealDescriptor.fetchLimit = 500
+        mealDescriptor.fetchLimit = 30
 
         var bodyDescriptor = FetchDescriptor<BodyEntry>(
             predicate: #Predicate { $0.date >= trendStart },
@@ -331,21 +380,15 @@ private actor InsightsSnapshotLoader {
         )
         bodyDescriptor.fetchLimit = 500
 
-        let succeeded = AgentTraceStatus.succeeded.rawValue
-        var messageDescriptor = FetchDescriptor<CoachMessage>(
-            predicate: #Predicate {
-                $0.isFromCoach
-                    && $0.agentStatusRaw == succeeded
-                    && $0.turnID != nil
-            },
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        messageDescriptor.fetchLimit = 1000
-
-        var gymDescriptor = FetchDescriptor<GymProfile>(
+        var currentGymDescriptor = FetchDescriptor<GymProfile>(
+            predicate: #Predicate { $0.isCurrent },
             sortBy: [SortDescriptor(\.createdAt)]
         )
-        gymDescriptor.fetchLimit = 100
+        currentGymDescriptor.fetchLimit = 1
+        var fallbackGymDescriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        fallbackGymDescriptor.fetchLimit = 1
 
         var sessionDescriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.startedAt >= trendStart },
@@ -357,8 +400,9 @@ private actor InsightsSnapshotLoader {
         let meals = try modelContext.fetch(mealDescriptor)
         let bodyEntries = try modelContext.fetch(bodyDescriptor)
         try Task.checkCancellation()
-        let gyms = try modelContext.fetch(gymDescriptor)
-        let currentGymID = (gyms.first(where: \.isCurrent) ?? gyms.first)?.id
+        let currentGym = try modelContext.fetch(currentGymDescriptor).first
+            ?? modelContext.fetch(fallbackGymDescriptor).first
+        let currentGymID = currentGym?.id
         let currentEquipmentCount: Int = if let currentGymID {
             try modelContext.fetchCount(
                 FetchDescriptor<GymEquipment>(
@@ -368,8 +412,8 @@ private actor InsightsSnapshotLoader {
         } else {
             0
         }
-        let messages = try modelContext.fetch(messageDescriptor)
-        try Task.checkCancellation()
+        let successfulFootprintCount = try InsightsCountQueries
+            .successfulFootprintCount(in: modelContext)
         let activeExerciseCount = try modelContext.fetchCount(
             FetchDescriptor<ExerciseDefinition>(
                 predicate: #Predicate { $0.archivedAt == nil }
@@ -390,8 +434,8 @@ private actor InsightsSnapshotLoader {
             workouts: workouts,
             meals: meals,
             bodyEntries: bodyEntries,
-            gyms: gyms,
-            messages: messages,
+            gyms: currentGym.map { [$0] } ?? [],
+            successfulFootprintCount: successfulFootprintCount,
             currentEquipmentCount: currentEquipmentCount,
             activeExerciseCount: activeExerciseCount,
             workoutSessions: workoutSessions,
@@ -404,11 +448,7 @@ private actor InsightsSnapshotLoader {
                 calendar: calendar,
                 now: now
             ),
-            counts: InsightsRecordCounts(
-                workouts: modelContext.fetchCount(FetchDescriptor<WorkoutEntry>()),
-                meals: modelContext.fetchCount(FetchDescriptor<MealEntry>()),
-                bodyEntries: modelContext.fetchCount(FetchDescriptor<BodyEntry>())
-            )
+            counts: InsightsCountQueries.recordCounts(in: modelContext)
         )
     }
 }
@@ -488,7 +528,7 @@ private struct ProgressBodyDestination: View {
     }
 }
 
-private struct InsightsRecordCounts: Equatable, Sendable {
+struct InsightsRecordCounts: Equatable, Sendable {
     var workouts = 0
     var meals = 0
     var bodyEntries = 0
@@ -668,7 +708,7 @@ private struct InsightsSnapshotInput: Sendable {
         meals: [MealEntry],
         bodyEntries: [BodyEntry],
         gyms: [GymProfile],
-        messages: [CoachMessage],
+        successfulFootprintCount: Int,
         currentEquipmentCount: Int,
         activeExerciseCount: Int,
         workoutSessions: [WorkoutSession],
@@ -709,7 +749,7 @@ private struct InsightsSnapshotInput: Sendable {
                 isCurrent: $0.isCurrent
             )
         }
-        successfulFootprintCount = Set(messages.compactMap(\.turnID)).count
+        self.successfulFootprintCount = successfulFootprintCount
         self.currentEquipmentCount = currentEquipmentCount
         self.activeExerciseCount = activeExerciseCount
         self.workoutSessions = workoutSessions.map {

@@ -1,5 +1,11 @@
 @testable import Soma
+import UIKit
 import XCTest
+
+@MainActor
+private final class ProjectionBatchRecorder {
+    var batches: [String] = []
+}
 
 /// BUG 0024：流式期间的投影安全。合批不能丢字，过程卡形态切换不能复用同一个 SwiftUI 身份。
 final class AgentStreamProjectionSafetyTests: XCTestCase {
@@ -85,6 +91,31 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
         )
     }
 
+    func testProjectionPumpKeepsCollectingWhileMainActorProjectionIsSlow() async {
+        let recorder = await MainActor.run { ProjectionBatchRecorder() }
+        let pump = AgentTextProjectionPump(minimumInterval: .milliseconds(50)) { batch in
+            recorder.batches.append(batch)
+            Thread.sleep(forTimeInterval: 0.08)
+        }
+        let expected = (0 ..< 40).map { "\($0)," }.joined()
+
+        await Task.detached {
+            for index in 0 ..< 40 {
+                await pump.append("\(index),")
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }.value
+        _ = await pump.finish()
+
+        let batches = await MainActor.run { recorder.batches }
+        XCTAssertEqual(batches.joined(), expected)
+        XCTAssertLessThanOrEqual(
+            batches.count,
+            6,
+            "慢 UI 不能把单飞投影重新退化成逐 delta 刷新"
+        )
+    }
+
     func testLiveTextBufferPreservesAllCharactersAcrossStableChunks() {
         var buffer = LiveAgentTextBuffer()
         let deltas = (0 ..< 200).map { index in
@@ -108,7 +139,7 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
         }
 
         XCTAssertGreaterThan(buffer.chunks.count, 10)
-        XCTAssertLessThan(
+        XCTAssertLessThanOrEqual(
             buffer.chunks.last?.text.count ?? .max,
             LiveAgentTextBuffer.defaultTargetCharacterCount,
             "带换行的长流式必须及时冻结前文，不能让可变尾块持续放大 CoreText 重排"
@@ -125,6 +156,20 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
         XCTAssertTrue(PerformanceTestFixture.requestsLongStream(in: [
             AppTestRuntime.uiTestEnvironmentKey: "1",
             PerformanceTestFixture.environmentKey: PerformanceTestFixture.longStream
+        ]))
+        XCTAssertTrue(PerformanceTestFixture.requestsLongStream(in: [
+            AppTestRuntime.uiTestEnvironmentKey: "1",
+            PerformanceTestFixture.environmentKey: PerformanceTestFixture.longStreamNoNewline
+        ]))
+    }
+
+    func testDeviceHarnessOnlyWaitsForExplicitFixtureCompletionSignal() {
+        XCTAssertFalse(DevicePerformanceHarness.waitsForFixtureCompletion(in: [:]))
+        XCTAssertFalse(DevicePerformanceHarness.waitsForFixtureCompletion(in: [
+            DevicePerformanceHarness.waitForFixtureCompletionEnvironmentKey: "0"
+        ]))
+        XCTAssertTrue(DevicePerformanceHarness.waitsForFixtureCompletion(in: [
+            DevicePerformanceHarness.waitForFixtureCompletionEnvironmentKey: "1"
         ]))
     }
 
@@ -147,14 +192,37 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
         )
     }
 
-    func testLongSingleParagraphIsNotSplitWithVisibleLineBreaks() {
+    func testLongSingleParagraphUsesBoundedStorageChunksWithoutChangingText() {
         var buffer = LiveAgentTextBuffer(targetCharacterCount: 32)
         let paragraph = String(repeating: "连续文字", count: 100)
 
         buffer.append(paragraph)
 
-        XCTAssertEqual(buffer.chunks.count, 1)
-        XCTAssertEqual(buffer.chunks[0].text, paragraph)
+        XCTAssertGreaterThan(buffer.chunks.count, 1)
+        XCTAssertTrue(buffer.chunks.allSatisfy { $0.text.count <= 32 })
+        XCTAssertEqual(buffer.chunks.map(\.text).joined(), paragraph)
+        XCTAssertFalse(buffer.chunks.map(\.text).joined().contains("\n"))
+    }
+
+    @MainActor
+    func testIncrementalTextKitProjectionAppendsEveryChunkExactlyOnce() {
+        var buffer = LiveAgentTextBuffer(targetCharacterCount: 32)
+        let view = UITextView()
+        let coordinator = IncrementalChatTextView.Coordinator()
+
+        buffer.append(String(repeating: "甲", count: 20))
+        coordinator.replaceText(in: view, with: buffer.chunks)
+        buffer.append(String(repeating: "乙", count: 30))
+        coordinator.update(view, with: buffer.chunks)
+        buffer.append("结尾")
+        coordinator.update(view, with: buffer.chunks)
+
+        XCTAssertEqual(
+            view.text,
+            String(repeating: "甲", count: 20)
+                + String(repeating: "乙", count: 30)
+                + "结尾"
+        )
     }
 
     func testLiveTextProjectionAddsOnlyOneTransientItem() {

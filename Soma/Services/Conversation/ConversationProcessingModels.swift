@@ -102,8 +102,8 @@ struct LiveAgentTextChunk: Equatable, Identifiable, Sendable {
     var text: String
 }
 
-/// 长回复不能在每个 UI 节拍重新布局从开头到末尾的整段 `Text`。这个缓冲区只在
-/// 换行边界冻结已经完成的块；没有换行的单段文字保持原样，避免人为插入可见断行。
+/// 长回复不能在每个 UI 节拍重新布局从开头到末尾的整段正文。块边界只是 TextKit
+/// 增量存储边界，不会插入字符或可见换行；因此无换行长段也必须保持硬上限。
 struct LiveAgentTextBuffer: Equatable, Sendable {
     /// 可变尾块越长，5 Hz 流式更新时 CoreText 需要重复断行的正文越多。
     /// 约 256 个中文字符能覆盖多行连续内容，同时把每次重排限制在一个小尾块内。
@@ -124,45 +124,28 @@ struct LiveAgentTextBuffer: Equatable, Sendable {
     mutating func append(_ delta: String) {
         guard !delta.isEmpty else { return }
         if chunks.isEmpty {
-            chunks.append(.init(id: 0, text: delta))
-        } else {
-            chunks[chunks.count - 1].text += delta
+            chunks.append(.init(id: 0, text: ""))
         }
-        guard delta.contains("\n") else { return }
-        freezeCompletedLinesIfNeeded()
+        var remainder = delta[...]
+        while !remainder.isEmpty {
+            let available = targetCharacterCount - chunks[chunks.count - 1].text.count
+            if available == 0 {
+                let nextID = (chunks.last?.id ?? -1) + 1
+                chunks.append(.init(id: nextID, text: ""))
+                continue
+            }
+            let end = remainder.index(
+                remainder.startIndex,
+                offsetBy: available,
+                limitedBy: remainder.endIndex
+            ) ?? remainder.endIndex
+            chunks[chunks.count - 1].text += remainder[..<end]
+            remainder = remainder[end...]
+        }
     }
 
     mutating func reset() {
         chunks = []
-    }
-
-    private mutating func freezeCompletedLinesIfNeeded() {
-        while let tail = chunks.last,
-              tail.text.count >= targetCharacterCount,
-              let lineEnd = completedLineEnd(in: tail.text)
-        {
-            let remainderStart = tail.text.index(after: lineEnd)
-            let frozenText = String(tail.text[..<remainderStart])
-            let remainder = String(tail.text[remainderStart...])
-            chunks[chunks.count - 1].text = frozenText
-            guard !remainder.isEmpty else {
-                chunks.append(.init(id: tail.id + 1, text: ""))
-                break
-            }
-            chunks.append(.init(id: tail.id + 1, text: remainder))
-        }
-    }
-
-    private func completedLineEnd(in tail: String) -> String.Index? {
-        let target = tail.index(
-            tail.startIndex,
-            offsetBy: targetCharacterCount,
-            limitedBy: tail.endIndex
-        ) ?? tail.endIndex
-        if let lineEnd = tail[..<target].lastIndex(of: "\n") {
-            return lineEnd
-        }
-        return tail[target...].firstIndex(of: "\n")
     }
 }
 

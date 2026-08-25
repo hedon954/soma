@@ -31,7 +31,7 @@
   活文档互链。
 - **活文档窗口**：`docs/prd/` 与 `docs/adr/` 的阅读顺序是「压缩起点 → 最近 3 个营销版本」
   （以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md` 版本标题为准，不按文件日期）。
-  压缩起点（`docs/prd/000-origin-through-0.0.10.md`、`docs/adr/0000-origin-through-0.0.10.md`）
+  压缩起点（`docs/prd/000-origin-through-0.0.11.md`、`docs/adr/0000-origin-through-0.0.11.md`）
   是滑出窗口内容的滚动收口：只保留仍有效的最终要求与决策，不是旧文件清单。窗口最旧活文档的
   修订自 / 部分替代指向压缩起点；起点没有更早的活前驱。
 - **发布时合并，不要只搬家**：每次新 App 发布，把滑出窗口的原文 `git mv` 进

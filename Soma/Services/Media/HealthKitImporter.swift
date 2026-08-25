@@ -127,29 +127,23 @@ enum HealthKitImporter {
         bodyCursor: ExternalSyncCursor?,
         into context: ModelContext
     ) throws -> HealthKitImportResult {
-        let source = sourceName
-        let existingWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate { $0.externalSource == source }
-        ))
-        let existingBodyEntries = try context.fetch(FetchDescriptor<BodyEntry>(
-            predicate: #Predicate { $0.externalSource == source }
-        ))
-        var existingWorkoutIDs = Set(
-            existingWorkouts.compactMap(\.externalID)
-        )
-        var existingBodyIDs = Set(
-            existingBodyEntries.compactMap(\.externalID)
-        )
         let deletedWorkoutIDs = Set(workoutChanges.deleted.map(\.uuid.uuidString))
         let deletedBodyIDs = Set(bodyChanges.deleted.map(\.uuid.uuidString))
+        var insertedWorkoutIDs: Set<String> = []
+        var insertedBodyIDs: Set<String> = []
         var workoutCount = 0
         var bodyCount = 0
 
         for workout in workoutChanges.added.compactMap({ $0 as? HKWorkout }) {
             let externalID = workout.uuid.uuidString
             guard
-                !existingWorkoutIDs.contains(externalID),
-                !deletedWorkoutIDs.contains(externalID)
+                !deletedWorkoutIDs.contains(externalID),
+                insertedWorkoutIDs.insert(externalID).inserted,
+                !containsWorkout(
+                    externalID: externalID,
+                    source: sourceName,
+                    in: context
+                )
             else { continue }
             let energy = workout
                 .statistics(for: activeEnergyType)?
@@ -166,15 +160,19 @@ enum HealthKitImporter {
                 externalSource: sourceName,
                 externalID: externalID
             ))
-            existingWorkoutIDs.insert(externalID)
             workoutCount += 1
         }
 
         for sample in bodyChanges.added.compactMap({ $0 as? HKQuantitySample }) {
             let externalID = sample.uuid.uuidString
             guard
-                !existingBodyIDs.contains(externalID),
-                !deletedBodyIDs.contains(externalID)
+                !deletedBodyIDs.contains(externalID),
+                insertedBodyIDs.insert(externalID).inserted,
+                !containsBodyEntry(
+                    externalID: externalID,
+                    source: sourceName,
+                    in: context
+                )
             else { continue }
             let weight = sample.quantity.doubleValue(for: .gramUnit(with: .kilo))
             guard weight > 0 else { continue }
@@ -186,25 +184,30 @@ enum HealthKitImporter {
                 externalSource: sourceName,
                 externalID: externalID
             ))
-            existingBodyIDs.insert(externalID)
             bodyCount += 1
         }
 
         var deletedCount = 0
 
-        for workout in existingWorkouts where
-            workout.externalSource == sourceName
-            && workout.externalID.map(deletedWorkoutIDs.contains) == true
-        {
-            context.delete(workout)
-            deletedCount += 1
+        for externalID in deletedWorkoutIDs {
+            for workout in workouts(
+                externalID: externalID,
+                source: sourceName,
+                in: context
+            ) {
+                context.delete(workout)
+                deletedCount += 1
+            }
         }
-        for bodyEntry in existingBodyEntries where
-            bodyEntry.externalSource == sourceName
-            && bodyEntry.externalID.map(deletedBodyIDs.contains) == true
-        {
-            context.delete(bodyEntry)
-            deletedCount += 1
+        for externalID in deletedBodyIDs {
+            for bodyEntry in bodyEntries(
+                externalID: externalID,
+                source: sourceName,
+                in: context
+            ) {
+                context.delete(bodyEntry)
+                deletedCount += 1
+            }
         }
 
         try updateCursor(
@@ -225,6 +228,58 @@ enum HealthKitImporter {
             bodyCount: bodyCount,
             deletedCount: deletedCount
         )
+    }
+
+    private static func containsWorkout(
+        externalID: String,
+        source: String,
+        in context: ModelContext
+    ) -> Bool {
+        var descriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate {
+                $0.externalSource == source && $0.externalID == externalID
+            }
+        )
+        descriptor.fetchLimit = 1
+        return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+    }
+
+    private static func containsBodyEntry(
+        externalID: String,
+        source: String,
+        in context: ModelContext
+    ) -> Bool {
+        var descriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate {
+                $0.externalSource == source && $0.externalID == externalID
+            }
+        )
+        descriptor.fetchLimit = 1
+        return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+    }
+
+    private static func workouts(
+        externalID: String,
+        source: String,
+        in context: ModelContext
+    ) -> [WorkoutEntry] {
+        (try? context.fetch(FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate {
+                $0.externalSource == source && $0.externalID == externalID
+            }
+        ))) ?? []
+    }
+
+    private static func bodyEntries(
+        externalID: String,
+        source: String,
+        in context: ModelContext
+    ) -> [BodyEntry] {
+        (try? context.fetch(FetchDescriptor<BodyEntry>(
+            predicate: #Predicate {
+                $0.externalSource == source && $0.externalID == externalID
+            }
+        ))) ?? []
     }
 
     private static func syncCursor(

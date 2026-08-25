@@ -23,6 +23,8 @@ enum DevicePerformanceHarness {
     static let modeEnvironmentKey = "SOMA_DEVICE_PERFORMANCE_MODE"
     static let roundsEnvironmentKey = "SOMA_DEVICE_PERFORMANCE_ROUNDS"
     static let delayEnvironmentKey = "SOMA_DEVICE_PERFORMANCE_DELAY_SECONDS"
+    static let waitForFixtureCompletionEnvironmentKey =
+        "SOMA_DEVICE_PERFORMANCE_WAIT_FOR_FIXTURE_COMPLETION"
 
     enum Mode: String {
         case tabs
@@ -44,6 +46,14 @@ enum DevicePerformanceHarness {
         return .milliseconds(Int((Double(rawValue) ?? 8) * 1000))
     }
 
+    static var waitsForFixtureCompletion: Bool {
+        waitsForFixtureCompletion(in: ProcessInfo.processInfo.environment)
+    }
+
+    static func waitsForFixtureCompletion(in environment: [String: String]) -> Bool {
+        environment[waitForFixtureCompletionEnvironmentKey] == "1"
+    }
+
     static func isRequested(in environment: [String: String]) -> Bool {
         Mode(rawValue: environment[modeEnvironmentKey] ?? "") != nil
     }
@@ -62,7 +72,38 @@ extension Notification.Name {
 /// App 进程必须同时处于 XCTest 环境并显式请求 fixture，普通安装永远不会进入。
 enum PerformanceTestFixture {
     static let environmentKey = "SOMA_UI_PERFORMANCE_FIXTURE"
+    static let fastStreamEnvironmentKey = "SOMA_UI_PERFORMANCE_FAST_STREAM"
     static let longStream = "long-stream"
+    static let longStreamNoNewline = "long-stream-no-newline"
+    static let longStreamMarkdownCompletion = "long-stream-markdown-completion"
+
+    enum StreamScenario: String, Sendable {
+        case paragraphs = "long-stream"
+        case noNewline = "long-stream-no-newline"
+        case markdownCompletion = "long-stream-markdown-completion"
+
+        var completes: Bool {
+            self != .paragraphs
+        }
+    }
+
+    struct LongStreamSeed {
+        let session: ConversationSession
+        let responseMessageID: UUID
+    }
+
+    static var requestedStreamScenario: StreamScenario? {
+        guard AppTestRuntime.isRunning else { return nil }
+        return StreamScenario(
+            rawValue: ProcessInfo.processInfo.environment[environmentKey] ?? ""
+        )
+    }
+
+    static var streamInterval: Duration {
+        ProcessInfo.processInfo.environment[fastStreamEnvironmentKey] == "1"
+            ? .milliseconds(10)
+            : .milliseconds(200)
+    }
 
     static var requestedLongStream: Bool {
         requestsLongStream(in: ProcessInfo.processInfo.environment)
@@ -70,22 +111,34 @@ enum PerformanceTestFixture {
 
     static func requestsLongStream(in environment: [String: String]) -> Bool {
         AppTestRuntime.isRunning(in: environment)
-            && environment[environmentKey] == longStream
+            && StreamScenario(rawValue: environment[environmentKey] ?? "") != nil
     }
 
     @MainActor
     static func seedLongStreamIfRequested(
         in context: ModelContext
-    ) -> ConversationSession? {
-        guard requestedLongStream else { return nil }
+    ) -> LongStreamSeed? {
+        guard requestedLongStream, let scenario = requestedStreamScenario else { return nil }
 
-        let title = "性能测试：虚构长对话"
+        let title = "性能测试：虚构长对话（\(scenario.rawValue)）"
         var existing = FetchDescriptor<ConversationSession>(
             predicate: #Predicate { $0.title == title }
         )
         existing.fetchLimit = 1
         if let session = try? context.fetch(existing).first {
-            return session
+            let fixtureSessionID: UUID? = session.id
+            let runningStatus: String? = AgentTraceStatus.running.rawValue
+            var response = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate {
+                    $0.sessionID == fixtureSessionID
+                        && $0.isFromCoach
+                        && $0.agentStatusRaw == runningStatus
+                },
+                sortBy: [SortDescriptor(\.date, order: .reverse)]
+            )
+            response.fetchLimit = 1
+            guard let message = try? context.fetch(response).first else { return nil }
+            return LongStreamSeed(session: session, responseMessageID: message.id)
         }
 
         let startedAt = Date.now.addingTimeInterval(-3600)
@@ -164,7 +217,11 @@ enum PerformanceTestFixture {
             ))
         }
 
-        for index in 0 ..< 39 {
+        // Markdown 完成态场景专门压单条 18k 正文，保持消息页在 eager 边界内，
+        // 避免把外层历史分页的惰性实例化混入后台解析断言。其余场景继续保留
+        // 39 轮大会话，覆盖消息级 LazyVStack 与分页。
+        let historicalTurnCount = scenario == .markdownCompletion ? 3 : 39
+        for index in 0 ..< historicalTurnCount {
             let turnID = UUID()
             let userDate = startedAt.addingTimeInterval(Double(index * 80))
             context.insert(CoachMessage(
@@ -211,19 +268,63 @@ enum PerformanceTestFixture {
             text: "继续生成一份完全虚构的长篇训练总结，用于性能测试。",
             turnID: liveTurnID
         ))
-        context.insert(CoachMessage(
+        let responseMessage = CoachMessage(
             date: .now,
             sessionID: session.id,
             isFromCoach: true,
             text: "",
             agentStatus: .running,
             turnID: liveTurnID
-        ))
+        )
+        context.insert(responseMessage)
         try? context.save()
-        return session
+        return LongStreamSeed(
+            session: session,
+            responseMessageID: responseMessage.id
+        )
     }
 
     static func streamParagraph(_ index: Int) -> String {
         "第 \(index + 1) 段虚构总结：保持动作节奏、训练容量与恢复安排的可审查记录；这段文字不包含真实用户数据。\n"
+    }
+
+    static func streamDelta(_ index: Int, scenario: StreamScenario) -> String {
+        switch scenario {
+        case .paragraphs:
+            streamParagraph(index)
+        case .noNewline:
+            "第\(index + 1)段连续虚构训练建议只用于验证无换行正文的增量排版成本不随全文长度增长且不会插入额外字符"
+        case .markdownCompletion:
+            """
+            ## 第 \(index + 1) 段虚构复盘
+
+            这段内容只用于验证完成态 Markdown 的后台解析和渐进布局。
+
+            - 训练容量：保持可审查
+            - 恢复安排：依据用户事实
+
+            """
+        }
+    }
+
+    /// 在非 MainActor 侧生成碎片，并复用真实 SSE 的单飞投影 Pump。这样性能夹具
+    /// 能施加持续输入压力，却不会因为 UI 一次变慢就退化成逐碎片主线程刷新。
+    static func projectStreamDeltas(
+        from startIndex: Int,
+        to endIndex: Int,
+        scenario: StreamScenario,
+        project: @escaping @MainActor (String) -> Void
+    ) async {
+        let pump = AgentTextProjectionPump(project: project)
+        for index in startIndex ..< endIndex {
+            do {
+                try await Task.sleep(for: streamInterval)
+            } catch {
+                break
+            }
+            guard !Task.isCancelled else { break }
+            await pump.append(streamDelta(index, scenario: scenario))
+        }
+        _ = await pump.finish()
     }
 }

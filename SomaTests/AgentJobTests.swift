@@ -131,6 +131,41 @@ final class AgentJobTests: XCTestCase {
     }
 
     @MainActor
+    func testClaimNextSkipsLargeTerminalHistoryWithoutChangingFIFO() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let base = Date(timeIntervalSince1970: 100)
+
+        for offset in 0 ..< 1200 {
+            let completed = makeJob(
+                createdAt: base.addingTimeInterval(TimeInterval(offset))
+            )
+            try completed.transition(to: .running)
+            try completed.transition(to: .succeeded)
+            context.insert(completed)
+        }
+        let firstQueued = makeJob(
+            createdAt: base.addingTimeInterval(1201)
+        )
+        let secondQueued = makeJob(
+            createdAt: base.addingTimeInterval(1202)
+        )
+        context.insert(firstQueued)
+        context.insert(secondQueued)
+        try context.save()
+
+        let claimed = try XCTUnwrap(AgentJobStore.claimNext(
+            dataSpace: .personal,
+            owner: "pressure-test",
+            now: base.addingTimeInterval(1203),
+            in: context
+        ))
+
+        XCTAssertEqual(claimed.id, firstQueued.id)
+        XCTAssertEqual(secondQueued.state, .queued)
+    }
+
+    @MainActor
     func testLoopStartTimeIsFrozenAcrossManualRetry() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
