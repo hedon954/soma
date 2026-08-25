@@ -3,7 +3,7 @@
 - 状态：已采纳，待真机界面验收
 - 日期：2026-08-25
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0067](../archive/0.0.5/adr/0067-separate-business-time-and-active-loop-budget.md) 中活动执行预算固定为文字/图片/视频 3/5/10 分钟的边界
+- 部分替代：[ADR 0000](0000-origin-through-0.0.9.md) 中活动执行预算固定为文字/图片/视频 3/5/10 分钟的边界
 - 后续替代：暂无
 - 上游依据：[PRD 043](../prd/043-configurable-react-runtime-timeout.md)
 
@@ -56,5 +56,5 @@
 ## 参考
 
 - [PRD 043](../prd/043-configurable-react-runtime-timeout.md)
-- [ADR 0067](../archive/0.0.5/adr/0067-separate-business-time-and-active-loop-budget.md)
+- [ADR 0000](0000-origin-through-0.0.9.md) 的活动计时与固定预算收口
 - [Agent 运行时设置](../../Soma/Views/ReActLoopSettingsSection.swift)

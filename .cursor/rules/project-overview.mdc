@@ -6,7 +6,7 @@ alwaysApply: true
 # Soma
 
 - Read `CLAUDE.md` before implementation.
-- Current product source: `docs/prd/README.md` (living 3-version window).
+- Current product source: `docs/prd/README.md` (compacted origin + living 3-version window).
 - Architecture source: `docs/adr/README.md`.
 - Acceptance source: `docs/acceptance.md`.
 - Build source: `Makefile`; Xcode source: `project.yml`.

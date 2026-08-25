@@ -2,10 +2,7 @@
 
 - 状态：已实现
 - 日期：2026-08-23
-- 修订自：
-  - [PRD 004](../archive/0.0.1/prd/004-soma-current-product.md) 的计划参数编辑与进展入口
-  - [PRD 031](../archive/0.0.7/prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md) 的逐组间歇配置
-  - [PRD 039](../archive/0.0.9/prd/039-frequency-first-dual-theme-ui.md) 的进展区块与设置开关
+- 修订自：[PRD 000](000-origin-through-0.0.9.md) 的计划参数编辑、逐组间歇配置与进展区块收口
 - 后续修订：[PRD 042](042-user-controlled-recovery-message-feedback-and-action-art.md) 进一步压缩聊天内训练逻辑组，但保留详情页标准密度
 - 下游落地：
   - [ADR 0091](../adr/0091-action-level-planned-rest.md)
