@@ -176,7 +176,7 @@ HealthKit 与真机 VoiceOver 继续单列。
 
 | 要求 | 当前证据 |
 | --- | --- |
-| 发送不被 LLM 状态阻塞 | 缺 Key 时连续发送三条：三条 Turn、媒体引用与 Job 全部落盘且为 `staged`，没有 Trace、没有业务记录（`SomaTests.testConversationProcessingStagesTurnWhenAPIKeyMissing`、`LLMOutageStagingTests.testMissingAPIKeyStagesMessageInsteadOfRejectingSend`）。 |
+| 发送不被 LLM 状态阻塞 | 缺 Key 时连续发送三条：三条 Turn、媒体引用与 Job 全部落盘且为 `staged`，没有 Trace、没有业务记录（`ConversationStagingFromSomaTests.testConversationProcessingStagesTurnWhenAPIKeyMissing`、`LLMOutageStagingTests.testMissingAPIKeyStagesMessageInsteadOfRejectingSend`）。 |
 | 有任务在途仍可发送 | 发送键不再因 `isProcessing` 失效；后续消息按 `createdAt` 排队，前一条被后台租约挂起也不丢失（`AgentJobTests.testBackgroundLeaseExpirationKeepsJobRecoverable`）。 |
 | 失败三分类 | `LLMOutageClassifier` 把传输错误映射为 `retryNetwork`，缺配置/地址无效/401/403/408/409/425/429/5xx 映射为 `stage`，400/404/413/422 与明确不支持多模态映射为 `fail`（`LLMOutageStagingTests`）。 |
 | 暂存退避有界 | 供应商侧故障按 `2^n` 秒退避、上限 5 分钟；等待用户改配置的场景不设退避，靠配置变更信号唤醒（`testStagingRetryDelayGrowsAndCapsAtFiveMinutes`、`testStagingWithDelaySetsBoundedRetryWindow`）。 |

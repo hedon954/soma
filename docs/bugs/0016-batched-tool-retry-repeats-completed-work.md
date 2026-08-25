@@ -26,7 +26,7 @@
 
 ## 回归门禁
 
-- `SomaTests.testAgentRetryContinuesAtFailedToolWithoutRepeatingCompletedSteps` 使用两个并行 Tool，证明
+- `AgentReActLoopTests.testAgentRetryContinuesAtFailedToolWithoutRepeatingCompletedSteps` 使用两个并行 Tool，证明
   第二个失败后重试只执行第二个，首个模型请求和第一个 Tool 均不重复。
 - 固定 Loop 时间测试证明业务记录复用第一次执行时间，重试和跨午夜不刷新自然日。
 
