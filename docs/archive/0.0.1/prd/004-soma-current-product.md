@@ -8,7 +8,7 @@
 - 后续修订：
   - [PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
   - [PRD 043](../../../prd/043-configurable-react-runtime-timeout.md)
-  - [PRD 041](../../../prd/041-action-level-rest-and-compact-progress.md)
+  - [PRD 000 当前收口](../../../prd/000-origin-through-0.0.10.md) 的动作级间歇与紧凑进展结论
   - [PRD 040](../../0.0.9/prd/040-current-state-business-data-with-session-facts.md)
   - [PRD 005](005-conversation-sessions-and-send-feedback.md)
   - [PRD 006](006-footprints-location-and-retry.md)

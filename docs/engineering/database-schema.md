@@ -15,7 +15,7 @@
   - [ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)
   - [ADR 0076](../archive/0.0.7/adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0090](../archive/0.0.9/adr/0090-current-state-business-models-and-session-facts.md)
-  - [ADR 0091](../adr/0091-action-level-planned-rest.md)
+  - [ADR 0000](../adr/0000-origin-through-0.0.10.md) 的动作级计划间歇收口
   - [ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
 - 相关决策：ADR 0001、0031、0032，以及
   [`训练领域模型与运行时协议`](training-domain-model.md)

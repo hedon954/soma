@@ -41,14 +41,14 @@ required_files=(
   project.yml
   docs/acceptance.md
   docs/prd/README.md
-  docs/prd/000-origin-through-0.0.9.md
-  docs/prd/041-action-level-rest-and-compact-progress.md
+  docs/prd/000-origin-through-0.0.10.md
   docs/prd/042-user-controlled-recovery-message-feedback-and-action-art.md
   docs/prd/043-configurable-react-runtime-timeout.md
   docs/prd/044-behavior-preserving-modernization.md
-  docs/adr/0000-origin-through-0.0.9.md
+  docs/adr/0000-origin-through-0.0.10.md
   docs/adr/0099-behavior-preserving-modernization-and-three-version-docs.md
   docs/archive/README.md
+  docs/archive/0.0.10/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md

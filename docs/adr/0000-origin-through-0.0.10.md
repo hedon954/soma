@@ -1,24 +1,26 @@
-# ADR 0000：0.0.9 及更早收口（压缩起点）
+# ADR 0000：0.0.10 及更早收口（压缩起点）
 
-- 状态：压缩起点；0.0.9 及更早滑出窗口后仍有效的架构收口
+- 状态：压缩起点；0.0.10 及更早滑出窗口后仍有效的架构收口
 - 日期：2026-08-25
 - 维护者：Soma maintainers
-- 覆盖版本：0.0.1–0.0.9
+- 覆盖版本：0.0.1–0.0.10
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
-  - [ADR 0091](0091-action-level-planned-rest.md)（窗口内最旧活 ADR，0.0.10）
-  - [ADR 0092](0092-react-internal-retry-and-user-controlled-recovery.md)
+  - [ADR 0092](0092-react-internal-retry-and-user-controlled-recovery.md)（窗口内最旧活 ADR，0.0.11）
   - [ADR 0093](0093-bounded-per-reply-multimodal-feedback-context.md)
   - [ADR 0094](0094-user-first-versioned-bundled-action-art.md)
   - [ADR 0095](0095-metrickit-confirmed-crash-reports.md)
   - [ADR 0096](0096-source-backed-model-multimodal-capabilities.md)
   - [ADR 0097](0097-current-baseline-performance-budget-and-cache-invalidation.md)
   - [ADR 0098](0098-user-configurable-react-active-runtime-timeout.md)
-- 上游依据：[PRD 000](../prd/000-origin-through-0.0.9.md)
+- 上游依据：[PRD 000](../prd/000-origin-through-0.0.10.md)
+- 下游落地：
+  - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
+  - [数据库结构与 ER 图](../engineering/database-schema.md)
 
-本文是活 ADR 链的起点。只记录 0.0.9 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
-0.0.10 起的修订见后续活 ADR。
+本文是活 ADR 链的起点。只记录 0.0.10 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
+0.0.11 起的修订见后续活 ADR。
 
 ## 背景
 
@@ -46,9 +48,9 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 7. 业务身份为本机分配的 Int64；训练关系显式绑定动作库。Session 业务日与记录 `occurred_at`
    分离。
 8. 计划、动作内容与热量结果只保留当前状态；已开始训练由 Session 处方快照保护。
-9. 侧别与按次数/按时长归 `ExerciseDefinition`。独立逻辑组保存类型、目标、重量与备注；
-   **计划组间歇与换侧间歇在本收口仍写入每条 `TemplateSetPrescription`**（0.0.10 起改到动作，
-   见 ADR 0091）。实际休息证据仍逐组保存。
+9. 侧别与按次数/按时长归 `ExerciseDefinition`。独立逻辑组保存类型、目标、重量与备注；计划组间歇
+   与左右换侧间歇归 `TemplateExercise`，开始 Session 时才编译到 `WorkoutSet`，最后一组不生成
+   组间歇。实际休息证据仍逐组保存。
 10. 总糖可空；升糖速度与依据成对保存，编辑菜品后失效。
 
 ### Agent 运行时
@@ -73,7 +75,9 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
     拆掉正在录像的 session。紧凑/放大预览与历史缩略 aspect fill。
 20. 有序混合媒体为一等数据。原位审查卡不得替换 Event Cards；卡跟在产生它的步骤之后。
     饮食为菜品清单加派生汇总。
-21. 语义双主题；无损有序训练证据编辑。训练是一级 Tab。免费签名 Widget 保持静态快速记录。
+21. 语义双主题；无损有序训练证据编辑。训练是一级 Tab。进展的近 7 天、连续性和容量使用单张
+    分段卡，最近活动有界显示并提供历史入口；全产品 Switch 使用系统外形与统一开启状态色。
+    免费签名 Widget 保持静态快速记录。
 22. 应用内反馈经认证边界投递；个人阶段 QQ SMTP → 固定 Gmail，只发送用户填写内容与所选附件。
     本机诊断日志可静默上报；启动哨兵异常结束在本收口仍可作为崩溃证据
     （0.0.11 改为仅 MetricKit 崩溃，见 ADR 0095）。
@@ -102,5 +106,5 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 
 ## 验证
 
-- 活 PRD/ADR README 以本文件为链起点，0.0.10 文档的修订自/部分替代指向本文件。
+- 活 PRD/ADR README 以本文件为链起点，0.0.11 文档的修订自/部分替代指向本文件。
 - `scripts/check-document-lifecycle-links.rb` 验证活文档互链；归档原文不要求与活文档互链。

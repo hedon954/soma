@@ -8,7 +8,7 @@
   - [PRD 031](../../0.0.7/prd/031-guided-workout-v5-independent-sets-and-automatic-completion.md) 的独立逻辑组与左右执行
   - [PRD 034](../../0.0.8/prd/034-history-media-tabs-and-guided-capture-polish.md) 的 Tab、历史和媒体基线
 - 后续修订：
-  - [PRD 041](../../../prd/041-action-level-rest-and-compact-progress.md) 将进展三项训练视图合并为分段卡、增加最近活动快捷入口并统一开关状态样式
+  - [PRD 000 当前收口](../../../prd/000-origin-through-0.0.10.md) 将进展三项训练视图合并为分段卡、增加最近活动快捷入口并统一开关状态样式
   - [PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 统一实心按钮反色、压缩聊天训练卡并重做失败与逐回复反馈操作
 - 上游依据：维护者确认的 Soma 最终 UI 设计稿
 - 下游落地：[ADR 0089](../adr/0089-semantic-dual-theme-and-lossless-workout-editor.md)

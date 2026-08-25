@@ -5,6 +5,37 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-08-25
+
+本版本保持 0.0.12 的用户行为与数据协议不变，完成一次面向后续性能治理的工程现代化：把对话、
+ReAct、带练相机、SwiftData 实体与 Server Store 按真实能力边界拆分，并让本地完整门禁覆盖拆分后的
+构建与测试目标。
+
+### Changed
+
+- ReAct 循环、流式 Tool Call、对话持久化与本地/远程执行各自拥有明确文件边界，删除无调用的旧
+  Conversation Recorder 入口，不改变 Tool Schema、重试次数、FIFO 暂存或 Job/Event 协议。
+- SwiftData 实体从单一模型文件拆开；训练、媒体、设置与对话服务按能力目录组织，不增加平行 DTO、
+  Repository 或 Use Case 层。
+- 带练状态机、录像生命周期与预览宿主拆分；教练输入、会话动作和标题组件从超长 View 中分离。
+- Server 的 `SomaStore` 契约与仅测试使用的内存实现分离，生产继续只装配 PostgreSQL Store。
+
+### Privacy
+
+- 不新增账户、远程发送内容、日志字段或媒体处理路径；本版本只调整代码与文档布局。
+
+### Data and migration
+
+- 不新增或改变 SwiftData 持久字段、唯一约束与 PostgreSQL migration；旧数据无需迁移或重建。
+- 最低系统版本仍为 iOS 17。
+
+### Known limitations
+
+- 本版本不宣称解决 0.0.12 已知的长回复尾段、完成态渲染、进展快照失效或本地查询索引问题；这些
+  项目进入 0.0.14 性能治理。
+- GitHub CI 受账户 Billing/Spending limit 阻断，合并前使用 macOS 本地 `make verify` 验证；本次
+  版本基线不包含 TestFlight 安装包。
+
 ## [0.0.12] - 2026-08-25
 
 本次更新集中治理全 App 的启动、查询、图片与主线程工作，并重写教练页的消息窗口、流式正文和

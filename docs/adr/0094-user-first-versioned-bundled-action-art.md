@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-08-23
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.9.md) 的至少一百个专属动作图门槛，以及 generated/user 图共同阻止后续内置图关联的规则
+- 部分替代：[ADR 0000](0000-origin-through-0.0.10.md) 的至少一百个专属动作图门槛，以及 generated/user 图共同阻止后续内置图关联的规则
 - 上游依据：[PRD 042](../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
 
 ## 背景

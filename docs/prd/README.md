@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.12`、`0.0.11`、`0.0.10`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.13`、`0.0.12`、`0.0.11`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.9 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.10 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.10 → 0.0.11 → 0.0.12
+[PRD 000 压缩起点] → 0.0.11 → 0.0.12 → 0.0.13
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,11 +30,10 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.9 及更早收口](000-origin-through-0.0.9.md) | ≤0.0.9 | 压缩起点 |
-| [041：动作级间歇与紧凑进展总览](041-action-level-rest-and-compact-progress.md) | 0.0.10 | 窗口最旧活增量 |
-| [042：用户控制的失败恢复、逐回复反馈与动作图扩容](042-user-controlled-recovery-message-feedback-and-action-art.md) | 0.0.11 | 活增量 |
+| [000：0.0.10 及更早收口](000-origin-through-0.0.10.md) | ≤0.0.10 | 压缩起点 |
+| [042：用户控制的失败恢复、逐回复反馈与动作图扩容](042-user-controlled-recovery-message-feedback-and-action-art.md) | 0.0.11 | 窗口最旧活增量 |
 | [043：可配置 ReAct 运行超时](043-configurable-react-runtime-timeout.md) | 0.0.12 | 活增量 |
-| [044：行为保持的工程现代化](044-behavior-preserving-modernization.md) | 0.0.12（Unreleased） | 活增量 |
+| [044：行为保持的工程现代化](044-behavior-preserving-modernization.md) | 0.0.13 | 活增量 |
 
 ## 阅读约定
 

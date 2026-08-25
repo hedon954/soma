@@ -2,11 +2,11 @@
 
 - 状态：已实现
 - 日期：2026-08-23
-- 修订自：[PRD 000](000-origin-through-0.0.9.md) 的计划参数编辑、逐组间歇配置与进展区块收口
-- 后续修订：[PRD 042](042-user-controlled-recovery-message-feedback-and-action-art.md) 进一步压缩聊天内训练逻辑组，但保留详情页标准密度
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.10.md) 的计划参数编辑、逐组间歇配置与进展区块收口
+- 后续修订：[PRD 042](../../../prd/042-user-controlled-recovery-message-feedback-and-action-art.md) 进一步压缩聊天内训练逻辑组，但保留详情页标准密度
 - 下游落地：
   - [ADR 0091](../adr/0091-action-level-planned-rest.md)
-  - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
+  - [训练领域模型与运行时协议](../../../engineering/training-domain-model.md)
 
 ## 用户结果
 
@@ -17,8 +17,8 @@
 5. 最近活动默认显示最多 6 条；更多记录在卡片内部纵向滚动，不需要跳转页面。
 6. 设置中的带练语音及其他 Switch 使用一致的开启强调色，浅深主题都能看清当前状态。
 
-![进展页浅色设计稿](../assets/ui/2026-08-23/progress-overview-light.png)
-![进展页深色设计稿](../assets/ui/2026-08-23/progress-overview-dark.png)
+![进展页浅色设计稿](../../../assets/ui/2026-08-23/progress-overview-light.png)
+![进展页深色设计稿](../../../assets/ui/2026-08-23/progress-overview-dark.png)
 
 ## 产品规则
 

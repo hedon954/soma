@@ -3,7 +3,7 @@
 - 状态：已采纳，个人使用阶段
 - 日期：2026-08-23
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.9.md) 中把启动哨兵异常结束作为独立崩溃证据的决定
+- 部分替代：[ADR 0000](0000-origin-through-0.0.10.md) 中把启动哨兵异常结束作为独立崩溃证据的决定
 - 上游依据：[BUG 0032](../bugs/0032-sentinel-false-crash-reports.md)
 
 ## 背景

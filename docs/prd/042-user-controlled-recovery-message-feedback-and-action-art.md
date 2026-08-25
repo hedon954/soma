@@ -3,8 +3,7 @@
 - 状态：已实现，待真机交互验收
 - 日期：2026-08-23
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.9.md) 的教练失败、反馈、动作图、暂存补偿、原位审查与主操作收口
-  - [PRD 041](041-action-level-rest-and-compact-progress.md) 的紧凑训练信息层级
+  - [PRD 000](000-origin-through-0.0.10.md) 的教练失败、反馈、动作图、暂存补偿、原位审查、主操作与紧凑训练信息层级收口
 - 上游依据：
   - [BUG 0029](../bugs/0029-visible-failure-keeps-retrying-and-stale-error.md)
   - [BUG 0030](../bugs/0030-prominent-button-loses-dark-mode-label.md)

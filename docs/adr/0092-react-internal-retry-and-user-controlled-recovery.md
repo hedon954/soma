@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-08-23
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.9.md) 的网络/供应商/配置自动补偿、每步最多一次重试，以及只把明确欠费设为人工屏障的范围
+- 部分替代：[ADR 0000](0000-origin-through-0.0.10.md) 的网络/供应商/配置自动补偿、每步最多一次重试，以及只把明确欠费设为人工屏障的范围
 - 上游依据：[PRD 042](../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)、[BUG 0029](../bugs/0029-visible-failure-keeps-retrying-and-stale-error.md)
 - 下游落地：[Agent Job 与远程执行协议](../engineering/agent-job-protocol.md)
 

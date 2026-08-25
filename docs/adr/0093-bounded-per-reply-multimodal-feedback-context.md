@@ -3,7 +3,7 @@
 - 状态：已采纳，个人使用阶段
 - 日期：2026-08-23
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.9.md) 中用户反馈邮件只承载表单文字与附件、不带聊天或 Trace 摘要的边界
+- 部分替代：[ADR 0000](0000-origin-through-0.0.10.md) 中用户反馈邮件只承载表单文字与附件、不带聊天或 Trace 摘要的边界
 - 上游依据：
   - [PRD 042](../prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
   - [BUG 0031](../bugs/0031-feedback-sheet-transition-jank.md)

@@ -9,7 +9,7 @@
   - [PRD 020](../../0.0.3/prd/020-gui-simplification-and-progressive-disclosure.md) 的计划详情顺序、隐藏录像入口与准备页渐进披露规则
   - [PRD 026](../../0.0.5/prd/026-guided-workout-record-projection-camera-failures-and-session-entry.md) 的录像警告、动作记录投影与用户确认结束边界
 - 后续修订：
-  - [PRD 041](../../../prd/041-action-level-rest-and-compact-progress.md) 将两类计划间歇提升为动作级配置，逐组处方继续保存真正的组目标差异
+  - [PRD 000 当前收口](../../../prd/000-origin-through-0.0.10.md) 将两类计划间歇提升为动作级配置，逐组处方继续保存真正的组目标差异
   - [PRD 034](../../0.0.8/prd/034-history-media-tabs-and-guided-capture-polish.md) 将倒计时结束改为先完成 `startRecording` 再进入 `.setInProgress`，预览与历史缩略改为 fill
   - [PRD 035](../../0.0.9/prd/035-guided-preview-then-record-and-immediate-share.md) 将自动录像改回开组后再写文件，完成后立即分享并回到训练主页
   - [PRD 039](../../0.0.9/prd/039-frequency-first-dual-theme-ui.md) 以无可见组号的分段进度与共享逻辑组编辑器统一带练和记录呈现

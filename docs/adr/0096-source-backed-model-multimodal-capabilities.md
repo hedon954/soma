@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-08-23
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.9.md) 中按平台和模型名称保守标注能力的决定
+- 部分替代：[ADR 0000](0000-origin-through-0.0.10.md) 中按平台和模型名称保守标注能力的决定
 - 上游依据：[BUG 0033](../bugs/0033-model-name-multimodal-misclassification.md)
 
 ## 背景
