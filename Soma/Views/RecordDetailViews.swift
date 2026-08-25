@@ -952,22 +952,3 @@ private enum EditorValue {
     }
 }
 
-private struct DetailTextCard: View {
-    let title: String
-    let icon: String
-    let text: String
-
-    var body: some View {
-        AppCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(title, systemImage: icon)
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.tint)
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
-            }
-        }
-    }
-}

@@ -1215,60 +1215,6 @@ final class AgentTrace {
     }
 }
 
-struct EquipmentSuggestion: Codable, Identifiable {
-    var id = UUID()
-    var name: String
-    var category: String
-    var capabilities: String
-    var confidence: Double
-
-    private enum CodingKeys: String, CodingKey {
-        case name, category, capabilities, confidence
-    }
-}
-
-struct GymAnalysis: Codable {
-    var summary: String
-    var equipment: [EquipmentSuggestion]
-}
-
-struct MealAnalysis: Codable {
-    var title: String
-    var calories: Int
-    var protein: Double
-    var carbs: Double
-    var fat: Double
-    var confidence: Double
-    var note: String
-}
-
-struct BodyAnalysis: Codable {
-    var estimatedWeight: Double?
-    var estimatedBodyFat: Double?
-    var postureNote: String
-    var safetyNote: String
-
-    init(
-        estimatedWeight: Double? = nil,
-        estimatedBodyFat: Double? = nil,
-        postureNote: String,
-        safetyNote: String
-    ) {
-        self.estimatedWeight = estimatedWeight
-        self.estimatedBodyFat = estimatedBodyFat
-        self.postureNote = postureNote
-        self.safetyNote = safetyNote
-    }
-}
-
-struct WorkoutAnalysis: Codable {
-    var exercise: String
-    var formScore: Int
-    var intensity: String
-    var feedback: String
-    var safetyNote: String
-}
-
 enum ConversationIntent: String, Codable {
     case gym
     case meal
@@ -1287,27 +1233,4 @@ enum ConversationIntent: String, Codable {
         case .coach: nil
         }
     }
-}
-
-struct ConversationWorkout: Codable {
-    var exercise: String
-    var setEntries: [WorkoutSetEvidence]?
-    var sets: Int?
-    var reps: Int?
-    var weight: Double?
-    var restSeconds: Int?
-    var durationMinutes: Int?
-    var formScore: Int?
-    var intensity: String?
-    var feedback: String?
-}
-
-struct ConversationResult: Codable {
-    var intent: ConversationIntent
-    var reply: String
-    var gymName: String? = nil
-    var gym: GymAnalysis? = nil
-    var meal: MealAnalysis? = nil
-    var body: BodyAnalysis? = nil
-    var workout: ConversationWorkout? = nil
 }
