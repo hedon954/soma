@@ -8,11 +8,11 @@ extension CoachSessionView {
     func submitCurrentDraft(
         quickRecordOverride: ExerciseInputSuggestion? = nil
     ) {
-        guard !isPersistingSubmission else { return }
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !attachments.isEmpty else { return }
-        speechInput?.stop()
-        let pending = attachments
+        guard !composer.isPersistingSubmission else { return }
+        let text = composer.trimmedDraft
+        guard !text.isEmpty || !composer.attachments.isEmpty else { return }
+        composer.stopVoice()
+        let pending = composer.attachments
         let session = conversationSessions.ensureActiveSession(
             dataSpace: dataSpace.activeSpace,
             in: modelContext
@@ -25,7 +25,7 @@ extension CoachSessionView {
         ) else {
             return
         }
-        let quickRecord = quickRecordOverride ?? selectedExerciseSuggestion
+        let quickRecord = quickRecordOverride ?? composer.selectedExerciseSuggestion
         let exactQuickDraft = pending.isEmpty
             && quickRecord?.draftText == text
             ? quickRecord?.recordDraft
@@ -33,7 +33,9 @@ extension CoachSessionView {
         // 精确的结构化快捷记录不经过 LLM，即使尚未配置 API Key 也不应打断发送。
         // 其他路径仍要在落盘前判断：提交后暂存计数会从 0 变成 1。
         let needsConfigurationGuidance = exactQuickDraft == nil
-            && needsConfigurationGuidance(forceLocal: useLocalForNextMessage)
+            && needsConfigurationGuidance(
+                forceLocal: composer.useLocalForNextMessage
+            )
         if let exactQuickDraft {
             let accepted = processor.submitQuickWorkout(
                 text: text,
@@ -48,7 +50,7 @@ extension CoachSessionView {
             }
             return
         }
-        isPersistingSubmission = true
+        composer.isPersistingSubmission = true
         Task { @MainActor in
             let accepted = await processor.submitAsync(
                 text: text,
@@ -56,10 +58,10 @@ extension CoachSessionView {
                 context: processingContext,
                 includeLocation: locationPreference == .enabled,
                 locationService: locationContext,
-                selectedShortcutID: selectedShortcutID,
-                forceLocal: useLocalForNextMessage
+                selectedShortcutID: composer.selectedShortcutID,
+                forceLocal: composer.useLocalForNextMessage
             )
-            isPersistingSubmission = false
+            composer.isPersistingSubmission = false
             if accepted {
                 finishAcceptedSubmission(
                     needsConfigurationGuidance: needsConfigurationGuidance
@@ -71,12 +73,7 @@ extension CoachSessionView {
     func finishAcceptedSubmission(
         needsConfigurationGuidance: Bool
     ) {
-        draft = ""
-        attachments = []
-        useLocalForNextMessage = false
-        selectedExerciseSuggestion = nil
-        selectedShortcutID = nil
-        composerDismissRequest = UUID()
+        composer.clearAfterSubmission()
         scrollRequest = UUID()
         if needsConfigurationGuidance {
             openLLMConfiguration()
@@ -123,7 +120,7 @@ extension CoachSessionView {
             context: processingContext,
             locationService: locationContext
         ) {
-            composerDismissRequest = UUID()
+            composer.dismissKeyboard()
             scrollRequest = UUID()
             if needsConfigurationGuidance {
                 openLLMConfiguration()
@@ -180,7 +177,7 @@ extension CoachSessionView {
     }
 
     func openLLMConfiguration() {
-        speechInput?.stop()
+        composer.stopVoice()
         NotificationCenter.default.post(
             name: .coachRequiresAIConfiguration,
             object: nil
@@ -193,29 +190,6 @@ extension CoachSessionView {
             await Task.yield()
             openLLMConfiguration()
         }
-    }
-
-    func toggleVoice() {
-        if speechInput?.isListening == true {
-            speechInput?.stop()
-            return
-        }
-
-        draftBeforeSpeech = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let service = speechInput ?? SpeechInputService()
-        speechInput = service
-        Task {
-            await service.start()
-        }
-    }
-
-    func updateDraftFromSpeech() {
-        guard let speechInput else { return }
-        let transcript = speechInput.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !transcript.isEmpty else { return }
-        draft = [draftBeforeSpeech, transcript]
-            .filter { !$0.isEmpty }
-            .joined(separator: draftBeforeSpeech.isEmpty ? "" : " ")
     }
 
     func scrollToBottom(

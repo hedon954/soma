@@ -1,31 +1,49 @@
 import SwiftData
 import SwiftUI
 
+/// 输入区是 `CoachComposerState` 的唯一渲染消费者：草稿、附件、语音与
+/// 建议选择的每次变化只重渲染这一棵子树，不再让会话页整体失效。
 struct CoachComposer: View {
-    @Binding var draft: String
-    @Binding var attachments: [PendingAttachment]
+    @Bindable var state: CoachComposerState
     let gyms: [GymProfile]
     let currentGym: GymProfile?
-    let exerciseSuggestions: [ExerciseInputSuggestion]
+    let suggestionSnapshot: CoachSuggestionSnapshot
     let pendingCount: Int
     let showsExecutionChoice: Bool
-    @Binding var useLocalForNextMessage: Bool
-    @Binding var selectedShortcutID: String?
     let shortcuts: [AgentInputShortcut]
-    let isSending: Bool
-    let isListening: Bool
-    let speechMessage: String?
-    let focusRequest: UUID
-    let dismissRequest: UUID
+    let processorIsSending: Bool
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
-    let onApplySuggestion: (ExerciseInputSuggestion) -> Void
     let onManagePending: () -> Void
-    let onToggleVoice: () -> Void
     let onSend: () -> Void
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @FocusState var focused: Bool
+
+    var isSending: Bool {
+        processorIsSending || state.isPersistingSubmission
+    }
+
+    var isListening: Bool {
+        state.speechInput?.isListening == true
+    }
+
+    /// ADR 0046：一行同时给出动作名与最近一次训练容量，点一次即得到完整草稿。
+    /// 建议按当前草稿在输入区内计算，键入不触达会话页。
+    var exerciseSuggestions: [ExerciseInputSuggestion] {
+        let query = state.trimmedDraft
+        guard !query.isEmpty else { return [] }
+        let suggestions = ExerciseInputSuggestionBuilder.suggestions(
+            query: query,
+            exercises: suggestionSnapshot.exercises,
+            recentCapacities: suggestionSnapshot.recentCapacities
+        )
+        // 草稿已经等于唯一建议时不再重复提示。
+        if suggestions.count == 1, suggestions[0].draftText == query {
+            return []
+        }
+        return suggestions
+    }
 
     /// PRD 020：输入区同一时间最多一层内容上下文条，附件预览优先于动作建议。
     /// PRD 037：场馆切换与快捷按钮同属发送前控制，固定在同一个横向滚动行。
@@ -34,7 +52,7 @@ struct CoachComposer: View {
     }
 
     var contextStrip: ContextStrip? {
-        if !attachments.isEmpty {
+        if !state.attachments.isEmpty {
             return .attachments
         }
         if !exerciseSuggestions.isEmpty {
@@ -58,9 +76,9 @@ struct CoachComposer: View {
             switch contextStrip {
             case .attachments:
                 AttachmentPreview(
-                    attachments: attachments,
+                    attachments: state.attachments,
                     onRemove: { id in
-                        attachments.removeAll { $0.id == id }
+                        state.attachments.removeAll { $0.id == id }
                     }
                 )
             case .suggestions:
@@ -73,7 +91,7 @@ struct CoachComposer: View {
                     }) else {
                         return
                     }
-                    onApplySuggestion(suggestion)
+                    applySuggestion(suggestion)
                 }
             case nil:
                 EmptyView()
@@ -85,7 +103,7 @@ struct CoachComposer: View {
                     .foregroundStyle(AppTheme.tint)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
-            } else if let speechMessage {
+            } else if let speechMessage = state.speechInput?.errorMessage {
                 Text(speechMessage)
                     .font(.caption)
                     .foregroundStyle(AppTheme.warning)
@@ -120,10 +138,10 @@ struct CoachComposer: View {
                 .fill(AppTheme.separator)
                 .frame(height: 0.5)
         }
-        .onChange(of: focusRequest) {
+        .onChange(of: state.focusRequest) {
             focused = true
         }
-        .onChange(of: dismissRequest) {
+        .onChange(of: state.dismissRequest) {
             focused = false
         }
         .onChange(of: isSending) {
@@ -131,6 +149,18 @@ struct CoachComposer: View {
                 focused = false
             }
         }
+        .onChange(of: state.draft) {
+            state.reconcileSelectedSuggestion()
+        }
+        .onChange(of: state.speechInput?.transcript) {
+            state.syncDraftFromSpeech()
+        }
+    }
+
+    private func applySuggestion(_ suggestion: ExerciseInputSuggestion) {
+        state.draft = suggestion.draftText
+        state.selectedExerciseSuggestion = suggestion
+        state.requestFocus()
     }
 
     /// PRD 033 / 037：可见快捷按钮与多场馆切换在一个水平行内，窄屏只滚动不换行。
@@ -138,9 +168,9 @@ struct CoachComposer: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(shortcuts) { shortcut in
-                    let isSelected = selectedShortcutID == shortcut.id
+                    let isSelected = state.selectedShortcutID == shortcut.id
                     Button {
-                        selectedShortcutID = isSelected ? nil : shortcut.id
+                        state.selectedShortcutID = isSelected ? nil : shortcut.id
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: shortcut.iconSystemName)
@@ -232,12 +262,12 @@ struct CoachComposer: View {
                     height: AppTheme.minimumTapTarget
                 )
         }
-        .disabled(attachments.count >= MediaPicker.maximumSelectionCount)
+        .disabled(state.attachments.count >= MediaPicker.maximumSelectionCount)
         .accessibilityLabel("添加照片或视频，可多选")
     }
 
     var composerTextField: some View {
-        TextField("说点什么，或添加照片与视频…", text: $draft, axis: .vertical)
+        TextField("说点什么，或添加照片与视频…", text: $state.draft, axis: .vertical)
             .lineLimit(1 ... 5)
             .focused($focused)
             .padding(.horizontal, 13)
@@ -250,7 +280,7 @@ struct CoachComposer: View {
     }
 
     var voiceButton: some View {
-        Button(action: onToggleVoice) {
+        Button(action: state.toggleVoice) {
             Image(systemName: isListening ? "waveform" : "mic.fill")
                 .font(.body.weight(.semibold))
                 .frame(width: 36, height: 36)
@@ -283,24 +313,25 @@ struct CoachComposer: View {
 
     /// ADR 0045：任务在途时仍可继续发送，队列按 FIFO 消费。
     var sendDisabled: Bool {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && attachments.isEmpty
+        state.trimmedDraft.isEmpty
+            && state.attachments.isEmpty
     }
 
     var sendLabel: some View {
-        let foreground = useLocalForNextMessage ? Color.white : AppTheme.onAccent
+        let useLocal = state.useLocalForNextMessage
+        let foreground = useLocal ? Color.white : AppTheme.onAccent
         return Group {
             if isSending {
                 ProgressView().tint(foreground)
             } else {
-                Image(systemName: useLocalForNextMessage ? "iphone" : "arrow.up")
+                Image(systemName: useLocal ? "iphone" : "arrow.up")
                     .fontWeight(.bold)
             }
         }
         .frame(width: 40, height: 40)
         .foregroundStyle(foreground)
         .background(
-            useLocalForNextMessage ? AppTheme.warningEmphasis : AppTheme.accentEmphasis,
+            useLocal ? AppTheme.warningEmphasis : AppTheme.accentEmphasis,
             in: Circle()
         )
         .frame(
@@ -327,7 +358,7 @@ struct CoachComposer: View {
     var sendControl: some View {
         if showsExecutionChoice {
             Menu {
-                Toggle(isOn: $useLocalForNextMessage) {
+                Toggle(isOn: $state.useLocalForNextMessage) {
                     Label("本次仅本机", systemImage: "iphone")
                 }
                 .appToggleStyle()
@@ -338,7 +369,7 @@ struct CoachComposer: View {
             }
             .disabled(sendDisabled)
             .accessibilityLabel(
-                useLocalForNextMessage ? "发送，本次仅本机" : "发送"
+                state.useLocalForNextMessage ? "发送，本次仅本机" : "发送"
             )
             .accessibilityHint("长按选择这条消息是仅在本机执行还是可后台继续")
         } else {

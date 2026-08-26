@@ -257,9 +257,18 @@ if coach_source.match?(/@State[^\n]*AgentInputShortcutStore\.visibleShortcuts/) 
    !coach_source.include?("@State private var inputShortcuts: [AgentInputShortcut] = []")
   fail_check("Coach View construction again synchronously decodes shortcut JSON")
 end
-unless coach_source.match?(/@State[^\n]*var speechInput: SpeechInputService\?/) &&
-       coach_actions_source.include?("speechInput ?? SpeechInputService()")
+unless coach_view_support_source.include?("speechInput ?? SpeechInputService()") &&
+       !coach_screen_source.include?("SpeechInputService()")
   fail_check("Coach again constructs speech services before the first voice action")
+end
+if coach_source.match?(/@State[^\n]*\b(draft|attachments|speechInput|useLocalForNextMessage)\b/)
+  fail_check("composer state returned to the session page and every keystroke can again rebuild the chat tree")
+end
+composer_views_source = File.read(File.join(ROOT, "Soma/Views/CoachComposerViews.swift"))
+unless coach_view_support_source.include?("final class CoachComposerState") &&
+       composer_views_source.include?("@Bindable var state: CoachComposerState") &&
+       coach_source.include?("state: composer,")
+  fail_check("the composer no longer isolates draft, attachments, and dictation behind one observable state object")
 end
 if coach_source.include?("GeometryReader") ||
    coach_source.include?("sessionDrawerGesture(drawerWidth:")

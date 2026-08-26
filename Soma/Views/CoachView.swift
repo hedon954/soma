@@ -60,27 +60,18 @@ struct CoachSessionView: View {
     @Query private var gyms: [GymProfile]
     @Query private var agentJobs: [AgentJob]
 
-    @State var draft = ""
-    @State var attachments: [PendingAttachment] = []
+    /// 输入区状态只在事件回调里读写；body 不读取任何字段，
+    /// 打字与听写因此只重渲染 `CoachComposer` 子树。
+    @State var composer = CoachComposerState()
     @State var sheet: CoachSheet?
-    /// 语音服务只在用户第一次点麦克风时创建。即使 SwiftUI 丢弃新构造的
-    /// View struct，Tab 切换也不会再额外分配一个未使用的服务实例。
-    @State var speechInput: SpeechInputService?
-    @State var draftBeforeSpeech = ""
     @State private var showsGyms = false
-    @State private var composerFocusRequest = UUID()
-    @State var composerDismissRequest = UUID()
     @State var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
     @State private var showsSessionDeleteBlockedAlert = false
     @State private var showsLocationPrompt = false
-    @State var useLocalForNextMessage = false
-    @State var selectedExerciseSuggestion: ExerciseInputSuggestion?
-    @State var selectedShortcutID: String?
     /// 标准配置由 Store 缓存；设置保存时通过通知精确刷新，不再在每次 Tab
     /// 重新挂载时重复解码 UserDefaults JSON。
     @State private var inputShortcuts: [AgentInputShortcut] = []
-    @State var isPersistingSubmission = false
     @State private var suggestionSnapshot = CoachSuggestionSnapshot.empty
     @State private var suggestionDataRevision = 0
     @State private var loadedSuggestionRevision = -1
@@ -249,17 +240,11 @@ struct CoachSessionView: View {
                 MediaSourceDialog(
                     allowsVideo: true,
                     selectionLimit: max(
-                        MediaPicker.maximumSelectionCount - attachments.count,
+                        MediaPicker.maximumSelectionCount - composer.attachments.count,
                         1
                     )
                 ) { media in
-                    let available = max(
-                        MediaPicker.maximumSelectionCount - attachments.count,
-                        0
-                    )
-                    attachments.append(
-                        contentsOf: media.prefix(available).map(PendingAttachment.init)
-                    )
+                    composer.appendPickedMedia(media)
                 }
             case .pendingQueue:
                 PendingAgentQueueView(
@@ -292,8 +277,8 @@ struct CoachSessionView: View {
             NotificationCenter.default.publisher(for: .prefillCoachDraft)
         ) { notification in
             guard let text = notification.object as? String else { return }
-            draft = text
-            composerFocusRequest = UUID()
+            composer.draft = text
+            composer.requestFocus()
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .coachTabReselected)
@@ -346,17 +331,13 @@ struct CoachSessionView: View {
         ) { _ in
             refreshInputShortcuts()
         }
-        .onChange(of: draft) {
-            guard let selectedExerciseSuggestion else { return }
-            if draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                != selectedExerciseSuggestion.draftText
-            {
-                self.selectedExerciseSuggestion = nil
-            }
-        }
         .onDisappear {
             visibility.isVisible = false
-            guard let speechInput, speechInput.isListening else { return }
+            guard let speechInput = composer.speechInput,
+                  speechInput.isListening
+            else {
+                return
+            }
             Task { @MainActor in
                 // AVAudioSession 停用可能同步等待系统音频服务；先让 Tab 切换提交。
                 await Task.yield()
@@ -439,9 +420,6 @@ struct CoachSessionView: View {
                         followsLiveMessage = true
                     }
                     scrollToBottomAfterLayout(proxy)
-                }
-                .onChange(of: speechInput?.transcript) {
-                    updateDraftFromSpeech()
                 }
                 .modifier(
                     CoachPerformanceScrollModifier(
@@ -611,28 +589,19 @@ struct CoachSessionView: View {
 
     private func composer(pendingCount: Int) -> some View {
         CoachComposer(
-            draft: $draft,
-            attachments: $attachments,
+            state: composer,
             gyms: gyms,
             currentGym: currentGym,
-            exerciseSuggestions: exerciseSuggestions,
+            suggestionSnapshot: suggestionSnapshot,
             pendingCount: pendingCount,
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
-            useLocalForNextMessage: $useLocalForNextMessage,
-            selectedShortcutID: $selectedShortcutID,
             shortcuts: inputShortcuts,
-            isSending: processor.isProcessing || isPersistingSubmission,
-            isListening: speechInput?.isListening == true,
-            speechMessage: speechInput?.errorMessage,
-            focusRequest: composerFocusRequest,
-            dismissRequest: composerDismissRequest,
+            processorIsSending: processor.isProcessing,
             onAddMedia: showMedia,
             onSelectGym: selectGym,
             onManageGyms: { showsGyms = true },
-            onApplySuggestion: applySuggestion,
             onManagePending: { sheet = .pendingQueue },
-            onToggleVoice: toggleVoice,
             onSend: send
         )
         .frame(maxWidth: AppTheme.readableContentMaxWidth)
@@ -649,10 +618,10 @@ struct CoachSessionView: View {
         if inputShortcuts != currentShortcuts {
             inputShortcuts = currentShortcuts
         }
-        if let selectedShortcutID,
+        if let selectedShortcutID = composer.selectedShortcutID,
            !inputShortcuts.contains(where: { $0.id == selectedShortcutID })
         {
-            self.selectedShortcutID = nil
+            composer.selectedShortcutID = nil
         }
     }
 
@@ -709,7 +678,7 @@ struct CoachSessionView: View {
     }
 
     private func openSessionDrawer() {
-        speechInput?.stop()
+        composer.stopVoice()
         withAnimation(.snappy(duration: 0.24)) {
             sessionDrawerPresented = true
         }
@@ -828,22 +797,8 @@ struct CoachSessionView: View {
     }
 
     private func prepareComposerForSessionChange() {
-        draft = ""
-        attachments = []
-        useLocalForNextMessage = false
-        speechInput?.stop()
-        composerDismissRequest = UUID()
+        composer.prepareForSessionChange()
         scrollRequest = UUID()
-    }
-
-    private func appendPickedMedia(_ media: [PickedMedia]) {
-        let available = max(
-            MediaPicker.maximumSelectionCount - attachments.count,
-            0
-        )
-        attachments.append(
-            contentsOf: media.prefix(available).map(PendingAttachment.init)
-        )
     }
 
     private func handleCaptureRequest() {
@@ -852,7 +807,7 @@ struct CoachSessionView: View {
             "Routing capture request in coach: \(request.mode.rawValue, privacy: .public)"
         )
         if request.mode == .text {
-            composerFocusRequest = UUID()
+            composer.requestFocus()
             captureRouter.clear(request.id)
         } else {
             Task { @MainActor in
@@ -876,7 +831,7 @@ struct CoachSessionView: View {
 
     private func handleMediaDelivery() {
         guard let delivery = captureRouter.mediaDelivery else { return }
-        appendPickedMedia(delivery.media)
+        composer.appendPickedMedia(delivery.media)
         captureRouter.clearDelivery(delivery.id)
     }
 
@@ -886,7 +841,7 @@ struct CoachSessionView: View {
     }
 
     private func sendPrompt(_ prompt: String) {
-        draft = prompt
+        composer.draft = prompt
         send()
     }
 
@@ -895,10 +850,10 @@ struct CoachSessionView: View {
             sendPrompt(suggestion.prompt)
             return
         }
-        draft = quickRecord.draftText
-        selectedExerciseSuggestion = quickRecord
+        composer.draft = quickRecord.draftText
+        composer.selectedExerciseSuggestion = quickRecord
         guard locationPreference != .unasked else {
-            speechInput?.stop()
+            composer.stopVoice()
             showsLocationPrompt = true
             return
         }
@@ -944,33 +899,12 @@ struct CoachSessionView: View {
         return Array(values.prefix(3))
     }
 
-    /// ADR 0046：一行同时给出动作名与最近一次训练容量，点一次即得到完整草稿。
-    private var exerciseSuggestions: [ExerciseInputSuggestion] {
-        let query = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return [] }
-        let suggestions = ExerciseInputSuggestionBuilder.suggestions(
-            query: query,
-            exercises: suggestionSnapshot.exercises,
-            recentCapacities: suggestionSnapshot.recentCapacities
-        )
-        // 草稿已经等于唯一建议时不再重复提示。
-        if suggestions.count == 1, suggestions[0].draftText == query {
-            return []
-        }
-        return suggestions
-    }
-
-    private func applySuggestion(_ suggestion: ExerciseInputSuggestion) {
-        draft = suggestion.draftText
-        selectedExerciseSuggestion = suggestion
-        composerFocusRequest = UUID()
-    }
-
     private func send() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !attachments.isEmpty else { return }
+        guard !composer.trimmedDraft.isEmpty || !composer.attachments.isEmpty else {
+            return
+        }
         guard locationPreference != .unasked else {
-            speechInput?.stop()
+            composer.stopVoice()
             showsLocationPrompt = true
             return
         }
