@@ -51,6 +51,7 @@ enum GymSelection {
 
     static func activate(_ target: GymProfile, among gyms: [GymProfile]) {
         gyms.forEach { $0.isCurrent = $0.id == target.id }
+        target.isCurrent = true
     }
 
     static func ensureCurrent(in gyms: [GymProfile]) {
@@ -61,26 +62,43 @@ enum GymSelection {
 
 @MainActor
 enum StructuredDataStore {
-    static func deleteGym(
+    static func activateGym(
         _ gym: GymProfile,
-        gyms: [GymProfile],
-        equipment: [GymEquipment],
-        media: [GymMedia],
         in context: ModelContext
     ) {
-        equipment
-            .filter { $0.gymID == gym.id }
-            .forEach(context.delete)
-        media
-            .filter { $0.gymID == gym.id }
-            .forEach(context.delete)
+        let gyms = allGymsForMutation(in: context)
+        GymSelection.activate(gym, among: gyms)
+        try? context.save()
+    }
 
+    static func deleteGym(
+        _ gym: GymProfile,
+        in context: ModelContext
+    ) {
+        let gymID = gym.id
+        let equipment = (try? context.fetch(FetchDescriptor<GymEquipment>(
+            predicate: #Predicate { $0.gymID == gymID }
+        ))) ?? []
+        let media = (try? context.fetch(FetchDescriptor<GymMedia>(
+            predicate: #Predicate { $0.gymID == gymID }
+        ))) ?? []
+        equipment.forEach(context.delete)
+        media.forEach(context.delete)
+
+        let gyms = allGymsForMutation(in: context)
         let remainingGyms = gyms.filter { $0.id != gym.id }
         context.delete(gym)
-        if gym.isCurrent, let nextGym = remainingGyms.first {
+        if let nextGym = GymSelection.current(in: remainingGyms) {
             GymSelection.activate(nextGym, among: remainingGyms)
         }
         try? context.save()
+    }
+
+    private static func allGymsForMutation(in context: ModelContext) -> [GymProfile] {
+        let descriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 }
 

@@ -47,9 +47,6 @@ final class GymStructuredDataTests: XCTestCase {
 
         StructuredDataStore.deleteGym(
             home,
-            gyms: [home, office],
-            equipment: [rack],
-            media: [photo],
             in: context
         )
 
@@ -57,5 +54,34 @@ final class GymStructuredDataTests: XCTestCase {
         XCTAssertTrue(office.isCurrent)
         XCTAssertTrue(try context.fetch(FetchDescriptor<GymEquipment>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<GymMedia>()).isEmpty)
+    }
+
+    @MainActor
+    func testActivatingGymClearsCurrentFlagPastDisplayLimit() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: GymProfile.self,
+            GymEquipment.self,
+            GymMedia.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        var gyms: [GymProfile] = []
+        for index in 0 ... 100 {
+            let gym = GymProfile(
+                name: "虚构健身房 \(index)",
+                isCurrent: index == 100
+            )
+            gym.createdAt = baseDate.addingTimeInterval(Double(index))
+            context.insert(gym)
+            gyms.append(gym)
+        }
+        try context.save()
+
+        StructuredDataStore.activateGym(gyms[0], in: context)
+
+        let stored = try context.fetch(FetchDescriptor<GymProfile>())
+        XCTAssertEqual(stored.filter(\.isCurrent).map(\.id), [gyms[0].id])
     }
 }

@@ -5,7 +5,6 @@ struct GymLibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
     @Query(sort: \GymEquipment.createdAt) private var equipment: [GymEquipment]
-    @Query(sort: \GymMedia.createdAt) private var media: [GymMedia]
 
     init() {
         var gymDescriptor = FetchDescriptor<GymProfile>(
@@ -19,12 +18,6 @@ struct GymLibraryView: View {
         )
         equipmentDescriptor.fetchLimit = 1000
         _equipment = Query(equipmentDescriptor)
-
-        var mediaDescriptor = FetchDescriptor<GymMedia>(
-            sortBy: [SortDescriptor(\.createdAt)]
-        )
-        mediaDescriptor.fetchLimit = 1000
-        _media = Query(mediaDescriptor)
     }
 
     var body: some View {
@@ -53,8 +46,7 @@ struct GymLibraryView: View {
                             }
 
                             Button {
-                                GymSelection.activate(gym, among: gyms)
-                                try? modelContext.save()
+                                StructuredDataStore.activateGym(gym, in: modelContext)
                             } label: {
                                 Image(systemName: gym.isCurrent ? "checkmark.circle.fill" : "circle")
                                     .font(.title3)
@@ -67,9 +59,6 @@ struct GymLibraryView: View {
                             Button(role: .destructive) {
                                 StructuredDataStore.deleteGym(
                                     gym,
-                                    gyms: gyms,
-                                    equipment: equipment,
-                                    media: media,
                                     in: modelContext
                                 )
                             } label: {
@@ -137,7 +126,6 @@ private struct GymLibraryRow: View {
 struct GymDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \GymProfile.createdAt) private var gyms: [GymProfile]
     @Query private var equipment: [GymEquipment]
     @Query private var media: [GymMedia]
     let gym: GymProfile
@@ -151,12 +139,6 @@ struct GymDetailView: View {
     init(gym: GymProfile) {
         self.gym = gym
         let gymID = gym.id
-        // 与健身房列表页保持同一上限；切换当前馆与删除仍取全部馆列表。
-        var gymDescriptor = FetchDescriptor<GymProfile>(
-            sortBy: [SortDescriptor(\.createdAt)]
-        )
-        gymDescriptor.fetchLimit = 100
-        _gyms = Query(gymDescriptor)
         _equipment = Query(FetchDescriptor<GymEquipment>(
             predicate: #Predicate { $0.gymID == gymID },
             sortBy: [SortDescriptor(\.createdAt)]
@@ -254,8 +236,7 @@ struct GymDetailView: View {
                 Menu {
                     if !gym.isCurrent {
                         Button("设为当前健身房", systemImage: "checkmark.circle") {
-                            GymSelection.activate(gym, among: gyms)
-                            try? modelContext.save()
+                            StructuredDataStore.activateGym(gym, in: modelContext)
                         }
                     }
                     Button("编辑健身房", systemImage: "pencil") {
@@ -296,9 +277,6 @@ struct GymDetailView: View {
             Button("删除", role: .destructive) {
                 StructuredDataStore.deleteGym(
                     gym,
-                    gyms: gyms,
-                    equipment: equipment,
-                    media: media,
                     in: modelContext
                 )
                 dismiss()

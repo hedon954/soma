@@ -21,7 +21,7 @@ extension ConversationRecorder {
             return .failure("没有找到紧邻上一轮的健身房照片，请重新附加照片后再试。")
         }
 
-        let gyms = fetchGyms(in: context)
+        let gyms = fetchGymsForMutation(in: context)
         let requestedName = arguments.gymName?.trimmed.nilIfEmpty
         let target: GymProfile
         if let requestedName,
@@ -63,7 +63,7 @@ extension ConversationRecorder {
             }
         }
 
-        let existingEquipment = fetchEquipment(in: context)
+        let existingEquipment = fetchEquipment(gymID: target.id, in: context)
         for input in arguments.equipment ?? [] {
             let name = input.name.trimmed
             guard !name.isEmpty else { continue }
@@ -108,7 +108,7 @@ extension ConversationRecorder {
         guard let name = arguments.gymName?.trimmed.nilIfEmpty else {
             return .failure("switch_gym 缺少 gym_name。")
         }
-        let gyms = fetchGyms(in: context)
+        let gyms = fetchGymsForMutation(in: context)
         guard let target = gyms.first(where: {
             $0.name.localizedCaseInsensitiveContains(name)
                 || name.localizedCaseInsensitiveContains($0.name)

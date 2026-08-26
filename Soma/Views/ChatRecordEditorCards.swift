@@ -475,8 +475,7 @@ private struct InlineGymCard: View {
         gym.name = normalized
         gym.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         if isCurrent {
-            let allGyms = (try? modelContext.fetch(FetchDescriptor<GymProfile>())) ?? []
-            GymSelection.activate(gym, among: allGyms)
+            StructuredDataStore.activateGym(gym, in: modelContext)
         }
         sourceMessage?.recordManualCorrection(
             "健身房记录 \(gym.id.uuidString) 已改为 \(normalized)，当前状态 \(gym.isCurrent ? "已选择" : "未选择")"
@@ -487,18 +486,6 @@ private struct InlineGymCard: View {
 
     private func deleteRecord() {
         sourceMessage?.recordManualCorrection("健身房记录 \(gym.id.uuidString) 已由用户删除")
-        let allGyms = (try? modelContext.fetch(FetchDescriptor<GymProfile>())) ?? []
-        let gymID = gym.id
-        StructuredDataStore.deleteGym(
-            gym,
-            gyms: allGyms,
-            equipment: (try? modelContext.fetch(FetchDescriptor<GymEquipment>(
-                predicate: #Predicate { $0.gymID == gymID }
-            ))) ?? [],
-            media: (try? modelContext.fetch(FetchDescriptor<GymMedia>(
-                predicate: #Predicate { $0.gymID == gymID }
-            ))) ?? [],
-            in: modelContext
-        )
+        StructuredDataStore.deleteGym(gym, in: modelContext)
     }
 }

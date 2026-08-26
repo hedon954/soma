@@ -12,6 +12,7 @@
 - 下游落地：
   - [数据库结构与 ER 图](../engineering/database-schema.md)
   - [验收矩阵](../acceptance.md)
+  - [BUG 0041](../bugs/0041-bounded-gym-display-query-used-for-mutation.md)（有界展示查询不得复用为写入身份边界）
 
 ## 背景
 

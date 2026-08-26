@@ -23,16 +23,16 @@ extension ConversationRecorder {
             )
 
         case "overview":
-            let gyms = fetchGyms(in: context)
-            let equipment = fetchEquipment(in: context)
             let workouts = fetchWorkouts(in: context, limit: 1)
             let meals = fetchMeals(in: context, limit: 1)
             let body = fetchBodyEntries(in: context, limit: 1)
-            let gym = preferredGymID
-                .flatMap { id in gyms.first(where: { $0.id == id }) }
-                ?? GymSelection.current(in: gyms)
-            let equipmentNames = gym.map { target in
-                equipment.filter { $0.gymID == target.id }.map(\.name).joined(separator: "、")
+            let selectedGym = preferredGymID
+                .flatMap { fetchGym(id: $0, in: context) }
+                ?? currentGym(in: context)
+            let equipmentNames = selectedGym.map { gym in
+                fetchEquipment(gymID: gym.id, limit: 100, in: context)
+                    .map(\.name)
+                    .joined(separator: "、")
             }.flatMap(\.nilIfEmpty) ?? "无"
             let workout = workouts.first.map {
                 "[id:\($0.businessID ?? 0)] \(workoutSummary($0))"
@@ -61,7 +61,7 @@ extension ConversationRecorder {
                 "[id:\($0.businessID ?? 0)] \($0.mealType.rawValue) \($0.title)"
             } ?? "暂无"
             return .success(
-                "个人信息：\(profile)；当前健身房：\(gym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)；最近体重：\(weight)。"
+                "个人信息：\(profile)；当前健身房：\(selectedGym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)；最近体重：\(weight)。"
             )
 
         case "workouts":
@@ -256,7 +256,7 @@ extension ConversationRecorder {
     }
 
     static func fetchGyms(in context: ModelContext) -> [GymProfile] {
-        // 与健身房页面同一上限，Tool 查询不做无界物化。
+        // 仅供 Tool 列表序列化；身份匹配和写入必须使用 mutation 查询。
         var descriptor = FetchDescriptor<GymProfile>(
             sortBy: [SortDescriptor(\.createdAt)]
         )
@@ -265,11 +265,57 @@ extension ConversationRecorder {
     }
 
     static func fetchEquipment(in context: ModelContext) -> [GymEquipment] {
+        // 仅供有界 Tool 列表序列化。
         var descriptor = FetchDescriptor<GymEquipment>(
             sortBy: [SortDescriptor(\.createdAt)]
         )
         descriptor.fetchLimit = 1000
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func fetchGymsForMutation(in context: ModelContext) -> [GymProfile] {
+        let descriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func fetchEquipment(
+        gymID: UUID,
+        limit: Int? = nil,
+        in context: ModelContext
+    ) -> [GymEquipment] {
+        var descriptor = FetchDescriptor<GymEquipment>(
+            predicate: #Predicate { $0.gymID == gymID },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        descriptor.fetchLimit = limit
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func fetchGym(id: UUID, in context: ModelContext) -> GymProfile? {
+        var descriptor = FetchDescriptor<GymProfile>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    static func currentGym(in context: ModelContext) -> GymProfile? {
+        var currentDescriptor = FetchDescriptor<GymProfile>(
+            predicate: #Predicate { $0.isCurrent },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        currentDescriptor.fetchLimit = 1
+        if let current = try? context.fetch(currentDescriptor).first {
+            return current
+        }
+
+        var fallbackDescriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        fallbackDescriptor.fetchLimit = 1
+        return try? context.fetch(fallbackDescriptor).first
     }
 
     static func fetchWorkouts(
