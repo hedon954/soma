@@ -8,6 +8,7 @@
 - [数据库结构与 ER 图](database-schema.md)
 - [全 App 性能审计报告（2026-08-24）](performance-audit-2026-08-24.md)
 - [本轮性能优化收尾与踩坑报告（2026-08-25）](performance-optimization-retrospective-2026-08-25.md)
+- [性能优化经验教训：有界数据、渲染隔离与首帧诚实（2026-08-26）](performance-optimization-lessons-2026-08-26.md)
 - [真机性能录制：一次安装，多次复用](device-performance-profiling.md)
 - [Agent Job 与远程执行协议](agent-job-protocol.md)
 - [Agent Tool 目录](agent-tool-catalog.md)

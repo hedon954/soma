@@ -1,10 +1,11 @@
 # Soma 全 App 性能审计报告（2026-08-24）
 
-- 状态：本轮已收尾；Release 真机长流与 Tab 预算通过，Session p95 354.505 ms 未通过，其余动态门禁延期
+- 状态：本轮已收尾；Release 真机长流、Tab 与当前真实 Session 回归通过
 - 目标设备：iPhone 17 Pro Max，120 Hz 严格档
 - 数据基线：已安装 Soma `0.0.11 (15)`，SwiftData marker `schemaVersion = 6`
 - 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的真机预算与有界数据访问规则
 - 收尾复盘：[本轮性能优化收尾与踩坑报告](performance-optimization-retrospective-2026-08-25.md)
+- 后续修订：[性能优化经验教训（2026-08-26）](performance-optimization-lessons-2026-08-26.md)
 - 下游落地：[BUG 0040 教练子树随任意 Tab 交互整体重算](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
   收口本报告遗留的“返回 Coach 布局长尾”，并把 Tab 再选收口为根感知实现
 

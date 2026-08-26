@@ -1,6 +1,8 @@
 # 真机性能录制：一次安装，多次复用
 
-- 上游依据：[2026-08-25 性能优化收尾与踩坑报告](performance-optimization-retrospective-2026-08-25.md)
+- 上游依据：
+  - [2026-08-25 性能优化收尾与踩坑报告](performance-optimization-retrospective-2026-08-25.md)
+  - [性能优化经验教训（2026-08-26）](performance-optimization-lessons-2026-08-26.md)
 
 本协议是 Soma 真机性能录制的唯一入口。目标是把“构建/安装”和“录制/分析”彻底分开，避免
 XCUITest Runner、进程发现竞态、锁屏和空 Trace 反复浪费时间。

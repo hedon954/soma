@@ -11,6 +11,7 @@
   - [BUG 0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)
 - 下游落地：
   - [数据库结构与 ER 图](../engineering/database-schema.md)
+  - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
   - [验收矩阵](../acceptance.md)
   - [BUG 0041](../bugs/0041-bounded-gym-display-query-used-for-mutation.md)（有界展示查询不得复用为写入身份边界）
 

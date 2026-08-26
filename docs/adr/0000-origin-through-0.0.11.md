@@ -19,6 +19,7 @@
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
   - [数据库结构与 ER 图](../engineering/database-schema.md)
   - [全 App 性能审计报告](../engineering/performance-audit-2026-08-24.md)
+  - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
   - [验收矩阵](../acceptance.md)
 
 本文是活 ADR 链的起点。只记录 0.0.12 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。

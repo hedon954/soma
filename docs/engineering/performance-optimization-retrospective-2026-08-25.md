@@ -1,6 +1,6 @@
 # Soma 本轮性能优化收尾与踩坑报告（2026-08-25）
 
-- 状态：本轮按维护者要求收尾；核心代码整改已落地，真机 Tab 预算通过，Session 预算未通过
+- 状态：8-25 收尾时真机 Tab 通过、Session 未通过；8-26 当前真实 Session 回归已通过
 - 审查范围：当前工作区相对 `HEAD` 的 `git diff`、自动化门禁、Simulator/真机 Trace 与失败产物
 - 目标设备：iPhone 17 Pro Max，iOS 26.3.1，Release，120 Hz 严格档
 - 数据边界：性能夹具只使用显式环境变量、内存数据库和虚构内容，不读取或写入个人数据
@@ -8,6 +8,7 @@
 - 完整审计：[全 App 性能审计报告](performance-audit-2026-08-24.md)
 - 关键故障：[BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md)、
   [BUG 0035](../bugs/0035-long-stream-text-relayout-thermal-jank.md)
+- 后续修订：[性能优化经验教训（2026-08-26）](performance-optimization-lessons-2026-08-26.md)
 - 下游落地：[真机性能录制：一次安装，多次复用](device-performance-profiling.md)
 
 ## 1. 收尾结论
@@ -25,6 +26,9 @@
   `98.877 ms`，满足当前 `<100 ms` 门禁。
 - Session 的最终真机 30 轮/60 次切换完整采到，但 p95 `354.505 ms`，超过 `<200 ms`
   门禁。因此不能宣称聊天页或全 App 已全面达到 120 Hz 严格档。
+- 8-26 合并渲染隔离后，用户最近两个真实 Session 的 6/6 次切换 p95/最大值为
+  `160.873 ms`，跨两个 Session 的 12 次长内容滚动为 0 actual hitch、0 个 `>=33 ms`
+  潜在延迟；该证据满足当前回归验收。
 - 当前代码仍以 `.id(activeSessionID)` 重建 Session 页面，已查看 Session 没有保留独立的页面/布局
   生命周期；这与 Session 长尾一致，但尚缺按切换方向拆分的 Trace，属于 code-backed 高概率原因，
   不是已完成修复。
