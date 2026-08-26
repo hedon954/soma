@@ -9,7 +9,7 @@
   - [本轮性能优化收尾与踩坑报告（2026-08-25）](performance-optimization-retrospective-2026-08-25.md)
 - 上游依据：
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的真机预算与有界数据访问规则
-  - [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
   - [BUG 0040](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
 - 下游落地：[真机性能录制：一次安装，多次复用](device-performance-profiling.md)
 
@@ -49,7 +49,7 @@ flowchart LR
 | 批次 | 用户可见问题 | 当时的第一判断 | 被证据修正后的机制 | 产出 |
 | --- | --- | --- | --- | --- |
 | 8-24 审计 | 切 Tab / 进 Session 卡 | 切换时重新打开或全表读取 SwiftData | 切换不重开库；成本在查询宽度、`body` 派生、同步解码、文本测量 | [审计报告](performance-audit-2026-08-24.md) |
-| 8-25 收口 | 长流发热、饮食卡卡死、进展空白 | 「消息太多」或「Markdown 太重」 | 即时 `VStack` 重复断行；单卡预创建几十个 `TextField`；快照 revision 错乱 | [BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md)–[0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)、[ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) |
+| 8-25 收口 | 长流发热、饮食卡卡死、进展空白 | 「消息太多」或「Markdown 太重」 | 即时 `VStack` 重复断行；单卡预创建几十个 `TextField`；快照 revision 错乱 | [BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md)–[0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)、[ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) |
 | 8-26 渲染隔离 | 教练内容稍多，*所有* Tab 动画掉帧 | 教练页自己卡，或仍是查询问题 | 隐藏教练根带着 Binding/闭包，Root 任意 state 变化都会整树求值 | [BUG 0040](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)、PR [#13](https://github.com/hedon954/soma/pull/13) |
 | 8-26 首帧 | 点击图标到第一帧偏慢 | 迁移回填太重（8-25 已部分处理） | 构造期同步打开演示+个人两个 `ModelContainer` | PR [#14](https://github.com/hedon954/soma/pull/14) |
 
@@ -150,7 +150,7 @@ flowchart TB
 
 ## 6. 第一波：把数据访问和文本测量变成有界工作
 
-这一波的产品决策已经写入 [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)：快照必须带 revision，流式正文必须是连续文本面，数据库访问必须查询优先，而不是先全表再过滤。
+这一波的产品决策已经写入 [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)：快照必须带 revision，流式正文必须是连续文本面，数据库访问必须查询优先，而不是先全表再过滤。
 
 ### 6.1 查询形状，而不是查询条数
 
@@ -412,7 +412,7 @@ flowchart LR
 | P5 | 懒栈只布局可见区；增长文本不要放进即时 `VStack` | 长流 `LazyVStack` + 固定理想高度 | WWDC26 session 321<sup>[2](#ref-wwdc-lazy)</sup> |
 | P6 | 程序化滚动用系统锚点 role，不要在 `onAppear` 里与用户手势抢同一个 proxy | 短内容顶部对齐、长内容贴底；激活时 `scrollRequest` | Use Your Loaf / Nil Coalescing / Apple `defaultScrollAnchor(_:for:)`<sup>[6](#ref-scroll-anchor)</sup> |
 | P7 | 高频输入状态不得被列表父视图读取 | `CoachComposerState` 观察岛 | Airbnb 拆分 `body`<sup>[1](#ref-airbnb)</sup>；Observation 按访问失效 |
-| P8 | `@Query` 的谓词就是订阅范围。排除与 UI 无关的终态 | 教练 Job 排除 `succeeded` | [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) 查询优先 |
+| P8 | `@Query` 的谓词就是订阅范围。排除与 UI 无关的终态 | 教练 Job 排除 `succeeded` | [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) 查询优先 |
 | P9 | 计数走 `fetchCount`，明细走有界窗口，快照走后台 actor + revision | 进展页、训练历史 10+1 哨兵 | 同上；[BUG 0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md) |
 | P10 | 控件按需创建。默认态禁止为「以后可能编辑」预热 TextKit | 饮食卡单字段编辑器 | [BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md) |
 | P11 | 首帧之前禁止业务存储 I/O | #14 异步 `ensureContainers()` | Apple, *Reducing your app's launch time*<sup>[7](#ref-launch)</sup> |
@@ -503,5 +503,5 @@ Soma 这三周的性能工作，不是把 App「优化快了」，而是反复�
 - [本轮性能优化收尾与踩坑报告（2026-08-25）](performance-optimization-retrospective-2026-08-25.md)
 - [真机性能录制：一次安装，多次复用](device-performance-profiling.md)
 - [BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md) · [0035](../bugs/0035-long-stream-text-relayout-thermal-jank.md) · [0036](../bugs/0036-long-stream-continuous-text-and-completion-cliff.md) · [0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md) · [0040](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
-- [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+- [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 - PR [#13](https://github.com/hedon954/soma/pull/13) 教练渲染隔离 · PR [#14](https://github.com/hedon954/soma/pull/14) 首帧延后开库

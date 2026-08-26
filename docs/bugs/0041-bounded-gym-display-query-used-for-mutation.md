@@ -3,7 +3,7 @@
 - 状态：已修复
 - 发现日期：2026-08-26
 - 影响范围：健身房 Tool 更新/切换、教练快捷切馆、健身房列表与详情的设为当前和删除
-- 上游依据：PR #13 / #14 本地集成审查；[ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+- 上游依据：PR #13 / #14 本地集成审查；[ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 
 ## 症状
 

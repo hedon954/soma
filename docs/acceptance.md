@@ -2,7 +2,7 @@
 
 - 上游依据：
   - [ADR 0000：压缩起点](adr/0000-origin-through-0.0.11.md) 收口的安装基线、性能预算与缓存失效规则
-  - [ADR 0100：有界快照、连续流式文本与查询优先的数据访问](adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [ADR 0100：有界快照、连续流式文本与查询优先的数据访问](archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
   - [ADR 0101：记录真值与 Agent 身体资料上下文](adr/0101-record-truth-and-agent-profile-context.md)
   - [ADR 0102：原始训练生成计划时物化已完成执行](adr/0102-source-workout-plan-execution-materialization.md)
   - [ADR 0103：目标导向的能量与增肌进展快照](adr/0103-goal-directed-progress-energy-and-hypertrophy.md)

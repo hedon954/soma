@@ -9,7 +9,7 @@
   - [全 App 性能审计报告](../../../engineering/performance-audit-2026-08-24.md)
   - [数据库结构与 ER 图](../../../engineering/database-schema.md)
   - [验收矩阵](../../../acceptance.md)
-- 后续修订：[ADR 0100](../../../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+- 后续修订：[ADR 0100](../../0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 
 ## 背景
 

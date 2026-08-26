@@ -2,12 +2,12 @@
 
 - 状态：已采纳，已实施于 0.0.14；Release 真机量化验收中
 - 日期：2026-08-25
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 收口的 0.0.13 行为保持基线
-- 后续修订：[PRD 046](046-coach-records-and-goal-directed-progress.md) 在既有有界查询上修订会话初始定位、记录编辑和目标导向进展
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 收口的 0.0.13 行为保持基线
+- 后续修订：[PRD 046](../../../prd/046-coach-records-and-goal-directed-progress.md) 在既有有界查询上修订会话初始定位、记录编辑和目标导向进展
 - 上游依据：
   - 用户对长流后段/完成后卡顿、进展永久空白和数据库索引的明确反馈
-  - [BUG 0036](../bugs/0036-long-stream-continuous-text-and-completion-cliff.md)
-  - [BUG 0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)
+  - [BUG 0036](../../../bugs/0036-long-stream-continuous-text-and-completion-cliff.md)
+  - [BUG 0037](../../../bugs/0037-insights-snapshot-stale-and-overfetch.md)
 - 下游落地：[ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 
 ## 背景

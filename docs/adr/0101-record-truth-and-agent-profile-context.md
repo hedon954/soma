@@ -4,8 +4,7 @@
 - 日期：2026-08-26
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 的总糖字段、参考体重回退和记录展示收口
-  - [ADR 0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) 的会话初始定位细则
+  - [ADR 0000](0000-origin-through-0.0.11.md) 收口的总糖字段、参考体重回退、记录展示与会话初始定位细则
 - 后续替代：
   - [ADR 0102](0102-source-workout-plan-execution-materialization.md)
   - [ADR 0106](0106-reviewable-derived-records-and-manual-interruption.md)

@@ -3,7 +3,7 @@
 - 状态：已采纳，已实施于 0.0.13；不改变用户可见行为
 - 日期：2026-08-25
 - 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的 0.0.12 压缩收口
-- 后续修订：[PRD 045](../../../prd/045-performance-reliability-and-bounded-data-access.md)
+- 后续修订：[PRD 045](../../0.0.14/prd/045-performance-reliability-and-bounded-data-access.md)
 - 上游依据：维护者批准的行为保持现代化计划
 - 下游落地：[ADR 0099](../adr/0099-behavior-preserving-modernization-and-three-version-docs.md)
 - 关联决策：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md)

@@ -3,17 +3,17 @@
 - 状态：已采纳，Release 真机量化验收中
 - 日期：2026-08-25
 - 维护者：Soma maintainers
-- 修订自：[ADR 0000](0000-origin-through-0.0.11.md) 收口的长流分块展示、快照失效与数据库访问细则
-- 后续替代：[ADR 0101](0101-record-truth-and-agent-profile-context.md) 延续有界读取并修订记录真值和 Agent 身体上下文
+- 修订自：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 收口的长流分块展示、快照失效与数据库访问细则
+- 后续替代：[ADR 0101](../../../adr/0101-record-truth-and-agent-profile-context.md) 延续有界读取并修订记录真值和 Agent 身体上下文
 - 上游依据：
   - [PRD 045](../prd/045-performance-reliability-and-bounded-data-access.md)
-  - [BUG 0036](../bugs/0036-long-stream-continuous-text-and-completion-cliff.md)
-  - [BUG 0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)
+  - [BUG 0036](../../../bugs/0036-long-stream-continuous-text-and-completion-cliff.md)
+  - [BUG 0037](../../../bugs/0037-insights-snapshot-stale-and-overfetch.md)
 - 下游落地：
-  - [数据库结构与 ER 图](../engineering/database-schema.md)
-  - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
-  - [验收矩阵](../acceptance.md)
-  - [BUG 0041](../bugs/0041-bounded-gym-display-query-used-for-mutation.md)（有界展示查询不得复用为写入身份边界）
+  - [数据库结构与 ER 图](../../../engineering/database-schema.md)
+  - [性能优化经验教训（2026-08-26）](../../../engineering/performance-optimization-lessons-2026-08-26.md)
+  - [验收矩阵](../../../acceptance.md)
+  - [BUG 0041](../../../bugs/0041-bounded-gym-display-query-used-for-mutation.md)（有界展示查询不得复用为写入身份边界）
 
 ## 背景
 

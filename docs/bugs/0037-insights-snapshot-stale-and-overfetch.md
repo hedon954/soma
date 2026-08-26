@@ -5,8 +5,8 @@
 - 影响：进入进展页偶发永久空白，切走再回来才出现；纯数量指标还会物化不需要的完整模型
 - 上游依据：用户真机反馈
 - 下游落地：
-  - [PRD 045](../prd/045-performance-reliability-and-bounded-data-access.md)
-  - [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [PRD 045](../archive/0.0.14/prd/045-performance-reliability-and-bounded-data-access.md)
+  - [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 
 ## 症状
 

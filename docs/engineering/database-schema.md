@@ -17,7 +17,7 @@
   - [ADR 0090](../archive/0.0.9/adr/0090-current-state-business-models-and-session-facts.md)
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 的动作级计划间歇收口
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的安装基线与缓存失效规则
-  - [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 - 相关决策：ADR 0001、0031、0032，以及
   [`训练领域模型与运行时协议`](training-domain-model.md)
 
