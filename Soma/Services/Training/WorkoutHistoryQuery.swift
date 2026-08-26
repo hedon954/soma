@@ -50,6 +50,15 @@ enum WorkoutHistoryDateFilter: Equatable, Sendable {
 }
 
 struct WorkoutHistoryDayGroup: Identifiable {
+    /// `DateFormatter` 构造是毫秒级开销；日期头在列表每次 body 重算时读取，
+    /// 必须复用同一个实例。格式固定为中文，不随系统 locale 变化。
+    private static let dayTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 EEEE"
+        return formatter
+    }()
+
     let day: Date
     let workouts: [WorkoutEntry]
 
@@ -58,10 +67,7 @@ struct WorkoutHistoryDayGroup: Identifiable {
     }
 
     var title: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 EEEE"
-        return formatter.string(from: day)
+        Self.dayTitleFormatter.string(from: day)
     }
 
     var actionCountText: String {

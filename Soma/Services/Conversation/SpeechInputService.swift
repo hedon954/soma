@@ -143,7 +143,12 @@ final class SpeechInputService {
             Task { @MainActor in
                 guard let self else { return }
                 if let result {
-                    self.transcript = result.bestTranscription.formattedString
+                    let latest = result.bestTranscription.formattedString
+                    // 系统会重复投递相同 partial；等值不写，避免无内容变化的
+                    // Observation 失效传导到输入区。
+                    if self.transcript != latest {
+                        self.transcript = latest
+                    }
                 }
                 if error != nil || result?.isFinal == true {
                     self.stop()

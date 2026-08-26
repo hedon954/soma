@@ -4,6 +4,37 @@ import Foundation
 /// Minimal SVG path (`d` attribute) parser for muscle-map assets.
 /// Handles concatenated decimals and elliptical-arc flags (`01-.5`).
 enum SVGPath {
+    /// 受力图路径全部来自固定资产字符串。解析一次后按原文缓存不可变
+    /// `CGPath`，Canvas 每次重绘只做字典查找，不再逐帧重新解析长路径。
+    /// 输入集固定，缓存大小以资产数量为上限。
+    private final class PathCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var paths: [String: CGPath] = [:]
+
+        func path(
+            for data: String,
+            make: (String) -> CGPath?
+        ) -> CGPath? {
+            lock.lock()
+            if let cached = paths[data] {
+                lock.unlock()
+                return cached
+            }
+            lock.unlock()
+            guard let path = make(data) else { return nil }
+            lock.lock()
+            paths[data] = path
+            lock.unlock()
+            return path
+        }
+    }
+
+    private static let cache = PathCache()
+
+    static func cachedCGPath(from data: String) -> CGPath? {
+        cache.path(for: data, make: makeCGPath(from:))
+    }
+
     static func makeCGPath(from data: String) -> CGPath? {
         var scanner = Scanner(data)
         let path = CGMutablePath()

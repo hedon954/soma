@@ -53,8 +53,10 @@ struct ExerciseLibraryView: View {
         .appPageBackground()
         .navigationTitle("动作库")
         .searchable(text: $searchText, prompt: "搜索标准动作名称")
+        // 键值只用数量 + revision：目录增删改和训练保存都会经其中之一触发，
+        // 不再在每次 body 求值（含每个搜索按键）时构建并哈希整表 UUID 数组。
         .task(id: ExerciseLibraryRecentWorkoutLoadRequest(
-            exerciseIDs: definitions.map(\.id),
+            definitionCount: definitions.count,
             revision: recentWorkoutRevision
         )) {
             await loadRecentWorkouts()
@@ -175,7 +177,7 @@ private struct ExerciseLibraryRow: View {
 }
 
 private struct ExerciseLibraryRecentWorkoutLoadRequest: Hashable {
-    let exerciseIDs: [UUID]
+    let definitionCount: Int
     let revision: Int
 }
 
