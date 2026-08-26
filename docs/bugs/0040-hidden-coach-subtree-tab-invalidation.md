@@ -6,7 +6,7 @@
   重新查询；切回教练不显示最新消息；长流式期间整页仍按 5 Hz 失效
 - 上游依据：用户真机反馈；[性能审计 2026-08-24](../engineering/performance-audit-2026-08-24.md)
   已定位“返回 Coach 长尾在 AttributeGraph/布局/文本测量”但未收口
-- 下游落地：暂无
+- 下游落地：[性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
 
 ## 症状
 
