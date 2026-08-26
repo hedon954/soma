@@ -1,15 +1,10 @@
 import SwiftData
 import SwiftUI
 
-/// PRD 020：动作内容编辑子页，承接名称、肌群、AI 说明与合并/归档管理。
+/// PRD 020：动作内容编辑子页，只承接名称、肌群和 AI 说明；管理操作保持按需。
 struct ExerciseContentEditorView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @Environment(AIService.self) private var ai
-    @Query(sort: \ExerciseDefinition.canonicalName)
-    private var definitions: [ExerciseDefinition]
-    @Query(sort: \ExerciseMergeRecord.createdAt, order: .reverse)
-    private var mergeRecords: [ExerciseMergeRecord]
 
     let exercise: ExerciseDefinition
 
@@ -20,28 +15,11 @@ struct ExerciseContentEditorView: View {
     @State private var movementPatterns: String
     @State private var laterality: ExerciseLaterality
     @State private var targetKind: WorkoutTargetKind
-    @State private var mergeTargetID: UUID?
     @State private var errorMessage: String?
     @State private var isGeneratingContent = false
 
     init(exercise: ExerciseDefinition) {
         self.exercise = exercise
-        let exerciseID = exercise.id
-        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
-            predicate: #Predicate { $0.archivedAt == nil },
-            sortBy: [SortDescriptor(\.canonicalName)]
-        )
-        // 与动作库、计划选择器一致的目录上限，避免无界物化。
-        definitionDescriptor.fetchLimit = 2000
-        _definitions = Query(definitionDescriptor)
-        var mergeDescriptor = FetchDescriptor<ExerciseMergeRecord>(
-            predicate: #Predicate {
-                $0.sourceExerciseID == exerciseID && $0.undoneAt == nil
-            },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        mergeDescriptor.fetchLimit = 1
-        _mergeRecords = Query(mergeDescriptor)
         _name = State(initialValue: exercise.canonicalName)
         _coachingNotes = State(initialValue: exercise.coachingNotes)
         _primaryMuscles = State(initialValue: exercise.primaryMuscles.joined(
@@ -55,14 +33,6 @@ struct ExerciseContentEditorView: View {
         ))
         _laterality = State(initialValue: exercise.laterality)
         _targetKind = State(initialValue: exercise.targetKind)
-    }
-
-    private var mergeTargets: [ExerciseDefinition] {
-        definitions.filter { $0.id != exercise.id }
-    }
-
-    private var latestMerge: ExerciseMergeRecord? {
-        mergeRecords.first
     }
 
     var body: some View {
@@ -102,51 +72,6 @@ struct ExerciseContentEditorView: View {
                     }
                 }
                 .disabled(isGeneratingContent || exercise.isArchived)
-            }
-
-            Section("动作管理") {
-                if exercise.isArchived {
-                    if let latestMerge {
-                        Button("撤销最近一次合并") {
-                            do {
-                                try ExerciseLibraryStore.undo(
-                                    latestMerge,
-                                    in: modelContext
-                                )
-                            } catch {
-                                errorMessage = error.localizedDescription
-                            }
-                        }
-                    } else {
-                        Text("该动作已归档，历史记录仍然保留。")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    if !mergeTargets.isEmpty {
-                        Picker("合并到", selection: $mergeTargetID) {
-                            Text("选择目标动作").tag(nil as UUID?)
-                            ForEach(mergeTargets) { target in
-                                Text(target.canonicalName)
-                                    .tag(target.id as UUID?)
-                            }
-                        }
-                        Button("合并并归档当前动作") {
-                            merge()
-                        }
-                        .disabled(mergeTargetID == nil)
-                    }
-                    Button("归档动作", role: .destructive) {
-                        do {
-                            try ExerciseLibraryStore.archive(
-                                exercise,
-                                in: modelContext
-                            )
-                            dismiss()
-                        } catch {
-                            errorMessage = error.localizedDescription
-                        }
-                    }
-                }
             }
         }
         .navigationTitle("编辑动作")
@@ -195,24 +120,6 @@ struct ExerciseContentEditorView: View {
         }
     }
 
-    private func merge() {
-        guard let mergeTargetID,
-              let target = mergeTargets.first(where: { $0.id == mergeTargetID })
-        else {
-            return
-        }
-        do {
-            _ = try ExerciseLibraryStore.merge(
-                source: exercise,
-                into: target,
-                in: modelContext
-            )
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     private func split(_ value: String) -> [String] {
         value
             .components(separatedBy: CharacterSet(charactersIn: "、,，\n"))
@@ -242,6 +149,128 @@ struct ExerciseContentEditorView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+}
+
+/// 低频归档与合并独立于内容编辑；只有用户主动进入时才读取候选和合并记录。
+struct ExerciseManagementView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \ExerciseDefinition.canonicalName)
+    private var definitions: [ExerciseDefinition]
+    @Query(sort: \ExerciseMergeRecord.createdAt, order: .reverse)
+    private var mergeRecords: [ExerciseMergeRecord]
+
+    let exercise: ExerciseDefinition
+
+    @State private var mergeTargetID: UUID?
+    @State private var errorMessage: String?
+
+    init(exercise: ExerciseDefinition) {
+        self.exercise = exercise
+        let exerciseID = exercise.id
+        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.canonicalName)]
+        )
+        definitionDescriptor.fetchLimit = 2000
+        _definitions = Query(definitionDescriptor)
+        var mergeDescriptor = FetchDescriptor<ExerciseMergeRecord>(
+            predicate: #Predicate {
+                $0.sourceExerciseID == exerciseID && $0.undoneAt == nil
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        mergeDescriptor.fetchLimit = 1
+        _mergeRecords = Query(mergeDescriptor)
+    }
+
+    private var mergeTargets: [ExerciseDefinition] {
+        definitions.filter { $0.id != exercise.id }
+    }
+
+    var body: some View {
+        Form {
+            Section("动作管理") {
+                if exercise.isArchived {
+                    if let latestMerge = mergeRecords.first {
+                        Button("撤销最近一次合并") {
+                            do {
+                                try ExerciseLibraryStore.undo(
+                                    latestMerge,
+                                    in: modelContext
+                                )
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    } else {
+                        Text("该动作已归档，历史记录仍然保留。")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    if !mergeTargets.isEmpty {
+                        Picker("合并到", selection: $mergeTargetID) {
+                            Text("选择目标动作").tag(nil as UUID?)
+                            ForEach(mergeTargets) { target in
+                                Text(target.canonicalName)
+                                    .tag(target.id as UUID?)
+                            }
+                        }
+                        Button("合并并归档当前动作") {
+                            merge()
+                        }
+                        .disabled(mergeTargetID == nil)
+                    }
+                    Button("归档动作", role: .destructive) {
+                        do {
+                            try ExerciseLibraryStore.archive(
+                                exercise,
+                                in: modelContext
+                            )
+                            dismiss()
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("管理动作")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "无法完成操作",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: {
+                    if !$0 {
+                        errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func merge() {
+        guard let mergeTargetID,
+              let target = mergeTargets.first(where: { $0.id == mergeTargetID })
+        else {
+            return
+        }
+        do {
+            _ = try ExerciseLibraryStore.merge(
+                source: exercise,
+                into: target,
+                in: modelContext
+            )
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

@@ -252,6 +252,7 @@ struct InsightsView: View {
                                 : "随训练自然形成"
                         )
                     }
+                    .accessibilityIdentifier("exercise-library-link")
                 }
             }
             .buttonStyle(.plain)

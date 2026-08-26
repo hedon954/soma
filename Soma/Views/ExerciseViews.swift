@@ -88,6 +88,7 @@ struct ExerciseLibraryView: View {
                 latest: latestWorkouts[definition.id]
             )
         }
+        .accessibilityIdentifier("exercise-link-\(definition.canonicalName)")
     }
 
     private func loadRecentWorkouts() async {
@@ -197,6 +198,7 @@ struct ExerciseDetailView: View {
     @State private var olderHistoryExpanded = false
     @State private var showsContentEditor = false
     @State private var showsMediaEditor = false
+    @State private var showsManagement = false
     @State private var showsDemoVideoPicker = false
     @Namespace private var mediaZoomNamespace
     @State private var presentedDemoVideo: MediaAttachmentReference?
@@ -440,6 +442,11 @@ struct ExerciseDetailView: View {
                     } label: {
                         Label("编辑媒体", systemImage: "photo.on.rectangle.angled")
                     }
+                    Button {
+                        showsManagement = true
+                    } label: {
+                        Label("管理动作", systemImage: "archivebox")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .accessibilityLabel("编辑与管理")
@@ -451,6 +458,9 @@ struct ExerciseDetailView: View {
         }
         .navigationDestination(isPresented: $showsMediaEditor) {
             ExerciseMediaEditorView(exercise: exercise)
+        }
+        .navigationDestination(isPresented: $showsManagement) {
+            ExerciseManagementView(exercise: exercise)
         }
         .sheet(isPresented: $showsDemoVideoPicker) {
             MediaSourceDialog(

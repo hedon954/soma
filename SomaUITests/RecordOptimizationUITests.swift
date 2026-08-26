@@ -47,12 +47,56 @@ final class RecordOptimizationUITests: XCTestCase {
         keepScreenScreenshot(named: "body-info-keyboard-safe-area")
     }
 
-    private func launchRecordFixture(appearance: String) -> XCUIApplication {
+    func testExerciseContentEditorOpensWithoutBlocking() {
+        let app = launchRecordFixture(
+            appearance: "light",
+            exerciseStressCount: 500
+        )
+        app.tabBars.buttons["进展"].tap()
+
+        XCTAssertTrue(
+            app.scrollViews["insights-content"].waitForExistence(timeout: 20)
+        )
+        let exerciseLibrary = app.descendants(matching: .any)
+            .matching(identifier: "exercise-library-link")
+            .firstMatch
+        for _ in 0 ..< 5 where !exerciseLibrary.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(exerciseLibrary.waitForExistence(timeout: 5))
+        exerciseLibrary.tap()
+
+        XCTAssertTrue(app.navigationBars["动作库"].waitForExistence(timeout: 5))
+        let exercise = app.descendants(matching: .any)
+            .matching(identifier: "exercise-link-0000 编辑回归动作")
+            .firstMatch
+        XCTAssertTrue(exercise.waitForExistence(timeout: 5))
+        exercise.tap()
+        XCTAssertTrue(app.navigationBars["0000 编辑回归动作"].waitForExistence(timeout: 5))
+
+        app.buttons["编辑与管理"].tap()
+        app.buttons["编辑动作"].tap()
+
+        XCTAssertTrue(
+            app.navigationBars["编辑动作"].waitForExistence(timeout: 2),
+            "动作编辑页不应因同步加载合并候选而阻塞"
+        )
+        XCTAssertTrue(app.textFields["动作名称"].isHittable)
+    }
+
+    private func launchRecordFixture(
+        appearance: String,
+        exerciseStressCount: Int? = nil
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "record-optimizations"
         app.launchEnvironment["SOMA_UI_PERFORMANCE_FAST_STREAM"] = "1"
         app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] = appearance
+        if let exerciseStressCount {
+            app.launchEnvironment["SOMA_UI_EXERCISE_STRESS_COUNT"] =
+                String(exerciseStressCount)
+        }
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
         return app

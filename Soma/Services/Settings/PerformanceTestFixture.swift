@@ -349,6 +349,16 @@ enum PerformanceTestFixture {
         definition.laterality = .none
         context.insert(definition)
 
+        let requestedStressCount = Int(
+            ProcessInfo.processInfo.environment["SOMA_UI_EXERCISE_STRESS_COUNT"]
+                ?? "0"
+        ) ?? 0
+        for index in 0 ..< min(max(requestedStressCount, 0), 2000) {
+            context.insert(ExerciseDefinition(
+                canonicalName: String(format: "%04d 编辑回归动作", index)
+            ))
+        }
+
         let workout = WorkoutEntry(
             date: startedAt.addingTimeInterval(2),
             exercise: definition.canonicalName,
