@@ -69,13 +69,16 @@ final class DataSpaceController {
         demoContainer = nil
         personalContainer = nil
 
+        // 磁盘容器不在 App 结构体构造期打开：SQLite 预检与双库打开是文件 I/O，
+        // 放在首帧之前会拉长「点击图标 → 首帧」。首帧先呈现迁移门，
+        // `runLaunchMigration()` 在首帧后经 `ensureContainers()` 异步打开。
+        // 测试的内存容器保持同步打开：夹具依赖构造完成即可用。
+        guard isStoredInMemoryOnly else { return }
         do {
-            let containers = try Self.makeContainers(
-                isStoredInMemoryOnly: isStoredInMemoryOnly
-            )
+            let containers = try Self.makeContainers(isStoredInMemoryOnly: true)
             demoContainer = containers.demo
             personalContainer = containers.personal
-            migrationState = isStoredInMemoryOnly ? .ready : .pending
+            migrationState = .ready
         } catch {
             recoveryMode = .clearAllStores
             migrationFailureDetail = SomaMigrationDiagnostics.report(
@@ -130,7 +133,25 @@ final class DataSpaceController {
         migrationFailureDetail = nil
         await Task.yield()
         do {
-            try ensureContainers()
+            try await ensureContainers()
+        } catch {
+            // 打开失败保持原有恢复语义：允许清空全部库后重试。
+            performanceOutcome = "failure"
+            recoveryMode = .clearAllStores
+            migrationFailureDetail = SomaMigrationDiagnostics.report(
+                error: error,
+                context: "无法打开本地数据",
+                origin: "DataSpaceController.runLaunchMigration",
+                isStoredInMemoryOnly: isStoredInMemoryOnly,
+                demoContainerPresent: demoContainer != nil,
+                personalContainerPresent: personalContainer != nil
+            )
+            migrationState = .failed(
+                "无法打开本地数据：\(error.localizedDescription)"
+            )
+            return
+        }
+        do {
             try SomaDataMigration.migrateIfNeeded(
                 container: personalContainer,
                 dataSpace: .personal
@@ -182,11 +203,7 @@ final class DataSpaceController {
             )
             demoContainer = nil
             personalContainer = nil
-            let containers = try Self.makeContainers(
-                isStoredInMemoryOnly: isStoredInMemoryOnly
-            )
-            demoContainer = containers.demo
-            personalContainer = containers.personal
+            try await ensureContainers()
             try SomaDataMigration.migrateIfNeeded(
                 container: personalContainer,
                 dataSpace: .personal
@@ -211,17 +228,23 @@ final class DataSpaceController {
         }
     }
 
-    private func ensureContainers() throws {
-        if demoContainer == nil || personalContainer == nil {
-            let containers = try Self.makeContainers(
+    /// SQLite 预检与双库打开在后台任务执行，迁移门的首帧与主线程
+    /// 不被存储 I/O 阻塞；`ModelContainer` 是 `Sendable`，打开后回到
+    /// MainActor 赋值。
+    private func ensureContainers() async throws {
+        guard demoContainer == nil || personalContainer == nil else { return }
+        let isStoredInMemoryOnly = isStoredInMemoryOnly
+        let worker = Task.detached(priority: .userInitiated) {
+            try Self.makeContainers(
                 isStoredInMemoryOnly: isStoredInMemoryOnly
             )
-            demoContainer = containers.demo
-            personalContainer = containers.personal
         }
+        let containers = try await worker.value
+        demoContainer = containers.demo
+        personalContainer = containers.personal
     }
 
-    private static func applicationSupportDirectory() throws -> URL {
+    private nonisolated static func applicationSupportDirectory() throws -> URL {
         try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -268,7 +291,7 @@ final class DataSpaceController {
         return formatter
     }()
 
-    private static func makeContainers(
+    private nonisolated static func makeContainers(
         isStoredInMemoryOnly: Bool
     ) throws -> (demo: ModelContainer, personal: ModelContainer) {
         if !isStoredInMemoryOnly {
