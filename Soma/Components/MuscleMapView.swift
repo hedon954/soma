@@ -144,7 +144,7 @@ struct MuscleMapView: View {
                     y: -layout.contentOrigin.y
                 )
 
-            if let outline = SVGPath.makeCGPath(
+            if let outline = SVGPath.cachedCGPath(
                 from: MuscleMapPathData.outline(for: side)
             ) {
                 var outlinePath = Path(outline)
@@ -161,7 +161,7 @@ struct MuscleMapView: View {
                     : intensity(forPathKey: part.muscleRaw, side: side)
                 let fill = fillColor(intensity: intensity, structural: part.isStructural)
                 for data in part.pathData {
-                    guard let cgPath = SVGPath.makeCGPath(from: data) else { continue }
+                    guard let cgPath = SVGPath.cachedCGPath(from: data) else { continue }
                     let path = Path(cgPath).applying(transform)
                     context.fill(path, with: .color(fill))
                 }

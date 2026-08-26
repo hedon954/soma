@@ -17,10 +17,144 @@ enum CoachSheet: Identifiable {
     }
 }
 
+/// 教练 Tab 是否为当前选中项。由 RootView 写入一次布尔环境值，只有实时转写
+/// 观察者和激活滚底驱动这两枚叶子读取；教练子树的其余部分不因 Tab 切换重算，
+/// `@Query` 也不会随选中态变化重建。
+private struct CoachTabIsActiveKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var coachTabIsActive: Bool {
+        get { self[CoachTabIsActiveKey.self] }
+        set { self[CoachTabIsActiveKey.self] = newValue }
+    }
+}
+
+extension Notification.Name {
+    /// 再次点按已选中的「教练」Tab：不重建对话树，收起抽屉与健身房页并滚到最新消息。
+    static let coachTabReselected = Notification.Name(
+        "Soma.coachTabReselected"
+    )
+    /// 发送链路发现缺少必需 API Key 时，请求 RootView 打开 LLM 配置 sheet。
+    /// 用通知替代逐层闭包，避免教练子树携带每次渲染都变化的入参。
+    static let coachRequiresAIConfiguration = Notification.Name(
+        "Soma.coachRequiresAIConfiguration"
+    )
+}
+
+/// 流式滚动节流的可变状态。5 Hz 的滚动 tick 只改写这个引用类型的字段，
+/// 不触发 SwiftUI 失效；真正的界面更新仍由实时回复叶子承担。
+@MainActor
+final class CoachLiveScrollThrottle {
+    var lastScrollAt = Date.distantPast
+    var task: Task<Void, Never>?
+}
+
+/// 输入区的全部可变状态。会话页只持有引用、在事件回调里读写，
+/// 绝不在 body 里读取任何字段；`CoachComposer` 经 `@Bindable` 成为
+/// 唯一的渲染消费者。打字与听写因此只重渲染输入区，不再让消息列表、
+/// 投影和 toolbar 随每个字符失效。
+@MainActor
+@Observable
+final class CoachComposerState {
+    var draft = ""
+    var attachments: [PendingAttachment] = []
+    var useLocalForNextMessage = false
+    var selectedShortcutID: String?
+    var selectedExerciseSuggestion: ExerciseInputSuggestion?
+    var isPersistingSubmission = false
+    var focusRequest = UUID()
+    var dismissRequest = UUID()
+    /// 语音服务只在用户第一次点麦克风时创建。
+    var speechInput: SpeechInputService?
+    /// 听写基线不影响渲染，只在合成草稿时读取。
+    @ObservationIgnored var draftBeforeSpeech = ""
+
+    var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func requestFocus() {
+        focusRequest = UUID()
+    }
+
+    func dismissKeyboard() {
+        dismissRequest = UUID()
+    }
+
+    /// 发送被接受后的收口：清空草稿与选择，收起键盘。
+    func clearAfterSubmission() {
+        draft = ""
+        attachments = []
+        useLocalForNextMessage = false
+        selectedExerciseSuggestion = nil
+        selectedShortcutID = nil
+        dismissKeyboard()
+    }
+
+    /// 切换 Session 前的收口：不保留上一个会话的草稿、附件和语音。
+    func prepareForSessionChange() {
+        draft = ""
+        attachments = []
+        useLocalForNextMessage = false
+        stopVoice()
+        dismissKeyboard()
+    }
+
+    func appendPickedMedia(_ media: [PickedMedia]) {
+        let available = max(
+            MediaPicker.maximumSelectionCount - attachments.count,
+            0
+        )
+        attachments.append(
+            contentsOf: media.prefix(available).map(PendingAttachment.init)
+        )
+    }
+
+    func toggleVoice() {
+        if let speechInput, speechInput.isListening {
+            speechInput.stop()
+            return
+        }
+        draftBeforeSpeech = trimmedDraft
+        let service = speechInput ?? SpeechInputService()
+        speechInput = service
+        Task {
+            await service.start()
+        }
+    }
+
+    func stopVoice() {
+        speechInput?.stop()
+    }
+
+    /// 听写增量合入草稿：保留听写开始前的文字，后接最新转写。
+    func syncDraftFromSpeech() {
+        guard let speechInput else { return }
+        let transcript = speechInput.transcript
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !transcript.isEmpty else { return }
+        draft = [draftBeforeSpeech, transcript]
+            .filter { !$0.isEmpty }
+            .joined(separator: draftBeforeSpeech.isEmpty ? "" : " ")
+    }
+
+    /// 草稿一旦偏离所选建议文本，精确快捷记录立即失效，
+    /// 发送时不会把旧结构化草稿误配到新文字上。
+    func reconcileSelectedSuggestion() {
+        guard let selectedExerciseSuggestion else { return }
+        if trimmedDraft != selectedExerciseSuggestion.draftText {
+            self.selectedExerciseSuggestion = nil
+        }
+    }
+}
+
 /// Tab 显隐只决定是否允许刷新后台建议，不属于界面状态。
 /// 使用非 Observation 引用，避免每次回到 Coach 都先触发一次无内容变化的 body。
 @MainActor
 final class CoachVisibilityState {
     var isVisible = false
     var autoScrollGate = CoachMessageAutoScrollGate()
+    let liveScroll = CoachLiveScrollThrottle()
 }

@@ -97,8 +97,21 @@ unless %w[CoachRootTab TrainingRootTab InsightsRootTab SettingsRootTab].all? do 
   fail_check("Root restored one composite view tree instead of four persistent Tab roots")
 end
 unless root_source.match?(/case let \.switchTo\(tab\):.*?selectedTab = tab/m) &&
-       root_source.match?(/case let \.resetStack\(tab\):.*?tabStackIDs\[tab\] = UUID\(\)/m)
-  fail_check("Tab selection or reselect no longer has one bounded state mutation")
+       root_source.match?(/case let \.resetStack\(tab\):.*?tabStackIDs\[tab\] = UUID\(\)/m) &&
+       root_source.match?(/case \.restoreCoachRoot:.*?\.coachTabReselected/m)
+  fail_check("Tab selection, non-coach reselect, or coach reselect lost its single bounded effect")
+end
+if root_source.include?("tabStackIDs[.coach]") || root_source.include?(".coach: UUID()")
+  fail_check("coach reselect can again rebuild the whole conversation tree via a stack identity reset")
+end
+if root_source.match?(/CoachRootTab\([^)]*(sheet|isActive)/m)
+  fail_check("CoachRootTab again receives per-render inputs that invalidate the hidden coach subtree")
+end
+unless root_source.include?(".environment(\\.coachTabIsActive, selectedTab == .coach)")
+  fail_check("coach tab activity no longer flows through the leaf-only environment key")
+end
+unless root_source.include?("for: .coachRequiresAIConfiguration")
+  fail_check("the AI-configuration sheet lost its stable notification path from the coach subtree")
 end
 tab_performance_source = File.read(File.join(ROOT, service_file("AppPerformance.swift")))
 unless tab_performance_source.include?("final class AppTabTransitionCoordinator")
@@ -123,6 +136,7 @@ coach_source = File.read(File.join(ROOT, "Soma/Views/CoachView.swift"))
 coach_actions_source = File.read(File.join(ROOT, "Soma/Views/CoachSessionView+Actions.swift"))
 coach_screen_source = "#{coach_source}\n#{coach_actions_source}"
 coach_support_source = File.read(File.join(ROOT, "Soma/Views/CoachMessagePerformanceSupport.swift"))
+coach_view_support_source = File.read(File.join(ROOT, "Soma/Views/CoachViewSupport.swift"))
 coach_bubble_source = File.read(File.join(ROOT, "Soma/Views/CoachBubble.swift"))
 chat_record_source = File.read(File.join(ROOT, "Soma/Views/ChatRecordEditorCards.swift"))
 coach_response_source = File.read(File.join(ROOT, "Soma/Components/CoachResponseView.swift"))
@@ -243,9 +257,18 @@ if coach_source.match?(/@State[^\n]*AgentInputShortcutStore\.visibleShortcuts/) 
    !coach_source.include?("@State private var inputShortcuts: [AgentInputShortcut] = []")
   fail_check("Coach View construction again synchronously decodes shortcut JSON")
 end
-unless coach_source.match?(/@State[^\n]*var speechInput: SpeechInputService\?/) &&
-       coach_actions_source.include?("speechInput ?? SpeechInputService()")
+unless coach_view_support_source.include?("speechInput ?? SpeechInputService()") &&
+       !coach_screen_source.include?("SpeechInputService()")
   fail_check("Coach again constructs speech services before the first voice action")
+end
+if coach_source.match?(/@State[^\n]*\b(draft|attachments|speechInput|useLocalForNextMessage)\b/)
+  fail_check("composer state returned to the session page and every keystroke can again rebuild the chat tree")
+end
+composer_views_source = File.read(File.join(ROOT, "Soma/Views/CoachComposerViews.swift"))
+unless coach_view_support_source.include?("final class CoachComposerState") &&
+       composer_views_source.include?("@Bindable var state: CoachComposerState") &&
+       coach_source.include?("state: composer,")
+  fail_check("the composer no longer isolates draft, attachments, and dictation behind one observable state object")
 end
 if coach_source.include?("GeometryReader") ||
    coach_source.include?("sessionDrawerGesture(drawerWidth:")
@@ -258,6 +281,33 @@ unless coach_source.include?("CoachVisibilityState") &&
 end
 unless coach_source.match?(/AVAudioSession 停用.*?await Task\.yield\(\).*?speechInput\.stop\(\)/m)
   fail_check("Coach disappearance can again synchronously deactivate audio in the Tab commit frame")
+end
+if coach_source.include?("isTabActive")
+  fail_check("Coach screen again plumbs tab activity through view parameters instead of the leaf environment key")
+end
+unless coach_source.match?(/\.equatable\(\)\s*\n\s*\.id\(message\.id\)/m) &&
+       coach_bubble_source.include?("struct CoachBubble: View, Equatable") &&
+       coach_bubble_source.include?("static func == (lhs: CoachBubble, rhs: CoachBubble)")
+  fail_check("message rows no longer skip parent-driven diffing through Equatable bubbles")
+end
+if coach_screen_source.match?(/@State[^\n]*(lastLiveScrollAt|liveScrollTask)/)
+  fail_check("live scroll throttling again writes observable @State on every streaming tick")
+end
+unless coach_view_support_source.include?("final class CoachLiveScrollThrottle") &&
+       coach_actions_source.include?("visibility.liveScroll")
+  fail_check("live scroll throttling no longer lives on the non-observed holder")
+end
+unless coach_support_source.include?("struct CoachTabActivationDriver") &&
+       coach_support_source.scan(/@Environment\(\\\.coachTabIsActive\)/).length == 2 &&
+       coach_source.include?("CoachTabActivationDriver {")
+  fail_check("switching to the coach tab no longer returns to the latest message through one leaf driver")
+end
+unless agent_transcript_source.include?('@Environment(\.coachTabIsActive) private var observesLiveText')
+  fail_check("the live transcript observer no longer gates streaming observation by tab activity")
+end
+unless coach_source.match?(/for: \.coachTabReselected/) &&
+       coach_source.match?(/coachTabReselected.*?closeSessionDrawer\(\).*?scrollRequest = UUID\(\)/m)
+  fail_check("coach reselect no longer restores root and latest message without rebuilding")
 end
 
 coach_snapshot_source = File.read(File.join(ROOT, service_file("CoachSuggestionSnapshot.swift")))

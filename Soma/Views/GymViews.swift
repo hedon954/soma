@@ -151,6 +151,12 @@ struct GymDetailView: View {
     init(gym: GymProfile) {
         self.gym = gym
         let gymID = gym.id
+        // 与健身房列表页保持同一上限；切换当前馆与删除仍取全部馆列表。
+        var gymDescriptor = FetchDescriptor<GymProfile>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        gymDescriptor.fetchLimit = 100
+        _gyms = Query(gymDescriptor)
         _equipment = Query(FetchDescriptor<GymEquipment>(
             predicate: #Predicate { $0.gymID == gymID },
             sortBy: [SortDescriptor(\.createdAt)]

@@ -138,12 +138,12 @@ extension ConversationRecorder {
                 sortBy: [SortDescriptor(\.order)]
             ))) ?? []
         }
+        // 先按动作分桶，避免动作数 × 组数的重复线性扫描。
+        let setsByPerformanceID = Dictionary(grouping: sets, by: \.performanceID)
         return performances
             .map { performance in
-                let completed = sets.filter {
-                    $0.performanceID == performance.id
-                        && $0.status == .completed
-                }
+                let completed = setsByPerformanceID[performance.id, default: []]
+                    .filter { $0.status == .completed }
                 let setText = completed.map { set in
                     [
                         set.actualWeightKG.map {

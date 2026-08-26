@@ -15,4 +15,18 @@ final class AppTabReselectTests: XCTestCase {
             .resetStack(.insights)
         )
     }
+
+    func testReselectingCoachRestoresRootWithoutRebuilding() {
+        XCTAssertEqual(
+            AppTabReselect.effect(selected: .coach, incoming: .coach),
+            .restoreCoachRoot
+        )
+    }
+
+    func testSwitchingBackToCoachIsAPlainSelectionChange() {
+        XCTAssertEqual(
+            AppTabReselect.effect(selected: .settings, incoming: .coach),
+            .switchTo(.coach)
+        )
+    }
 }

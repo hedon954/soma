@@ -289,15 +289,15 @@ enum TrainingPlanStore {
         for exerciseIDs: Set<UUID>,
         in context: ModelContext
     ) -> [UUID: ExerciseDefinition] {
-        exerciseIDs.reduce(into: [:]) { result, exerciseID in
-            var descriptor = FetchDescriptor<ExerciseDefinition>(
-                predicate: #Predicate { $0.id == exerciseID }
-            )
-            descriptor.fetchLimit = 1
-            if let definition = try? context.fetch(descriptor).first {
+        guard !exerciseIDs.isEmpty else { return [:] }
+        // 一次 IN 查询代替逐 ID 往返，避免计划越大数据库调用越多。
+        let descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { exerciseIDs.contains($0.id) }
+        )
+        return ((try? context.fetch(descriptor)) ?? [])
+            .reduce(into: [:]) { result, definition in
                 result[definition.id] = definition
             }
-        }
     }
 
     static func readiness(

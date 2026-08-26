@@ -4,29 +4,18 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+/// Tab 激活态不作为入参逐层下发：那会让每次 Tab 切换都重算整棵教练子树。
+/// 需要激活态的叶子自行读取 `\.coachTabIsActive` 环境值。
 struct CoachView: View {
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationSessionController.self) private var conversationSessions
     @State private var sessionTransition = CoachSessionTransitionCoordinator()
 
-    let isTabActive: Bool
-    let onRequireAIConfiguration: () -> Void
-
-    init(
-        isTabActive: Bool = true,
-        onRequireAIConfiguration: @escaping () -> Void = {}
-    ) {
-        self.isTabActive = isTabActive
-        self.onRequireAIConfiguration = onRequireAIConfiguration
-    }
-
     var body: some View {
         CoachSessionPage(
             sessionID: conversationSessions.activeSessionID,
             dataSpace: dataSpace.activeSpace,
-            isTabActive: isTabActive,
-            sessionTransition: sessionTransition,
-            onRequireAIConfiguration: onRequireAIConfiguration
+            sessionTransition: sessionTransition
         )
         // Session 身份变化时在查询创建前同步回到 10 条，不能先拿上一条
         // Session 的分页上限构造一次重视图，再在 onChange 里补救。
@@ -37,9 +26,7 @@ struct CoachView: View {
 struct CoachSessionPage: View {
     let sessionID: UUID?
     let dataSpace: DataSpace
-    let isTabActive: Bool
     let sessionTransition: CoachSessionTransitionCoordinator
-    let onRequireAIConfiguration: () -> Void
 
     @State private var messageLimit = CoachMessagePagePolicy.pageSize
 
@@ -48,12 +35,10 @@ struct CoachSessionPage: View {
             sessionID: sessionID,
             dataSpace: dataSpace,
             messageLimit: messageLimit,
-            isTabActive: isTabActive,
             sessionTransition: sessionTransition,
             onLoadEarlier: {
                 messageLimit = CoachMessagePagePolicy.nextLimit(after: messageLimit)
-            },
-            onRequireAIConfiguration: onRequireAIConfiguration
+            }
         )
     }
 }
@@ -75,35 +60,25 @@ struct CoachSessionView: View {
     @Query private var gyms: [GymProfile]
     @Query private var agentJobs: [AgentJob]
 
-    @State var draft = ""
-    @State var attachments: [PendingAttachment] = []
+    /// 输入区状态只在事件回调里读写；body 不读取任何字段，
+    /// 打字与听写因此只重渲染 `CoachComposer` 子树。
+    @State var composer = CoachComposerState()
     @State var sheet: CoachSheet?
-    /// 语音服务只在用户第一次点麦克风时创建。即使 SwiftUI 丢弃新构造的
-    /// View struct，Tab 切换也不会再额外分配一个未使用的服务实例。
-    @State var speechInput: SpeechInputService?
-    @State var draftBeforeSpeech = ""
     @State private var showsGyms = false
-    @State private var composerFocusRequest = UUID()
-    @State var composerDismissRequest = UUID()
     @State var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
     @State private var showsSessionDeleteBlockedAlert = false
     @State private var showsLocationPrompt = false
-    @State var useLocalForNextMessage = false
-    @State var selectedExerciseSuggestion: ExerciseInputSuggestion?
-    @State var selectedShortcutID: String?
     /// 标准配置由 Store 缓存；设置保存时通过通知精确刷新，不再在每次 Tab
     /// 重新挂载时重复解码 UserDefaults JSON。
     @State private var inputShortcuts: [AgentInputShortcut] = []
-    /// 流式期间合并滚动，避免每批文字都同步触发布局和滚动。
-    @State var lastLiveScrollAt = Date.distantPast
-    @State var liveScrollTask: Task<Void, Never>?
-    @State var isPersistingSubmission = false
     @State private var suggestionSnapshot = CoachSuggestionSnapshot.empty
     @State private var suggestionDataRevision = 0
     @State private var loadedSuggestionRevision = -1
     @State private var requestedSuggestionRevision: Int?
-    @State private var visibility = CoachVisibilityState()
+    /// 显隐、滚底去重与流式滚动节流都在这个非 Observation 引用里：
+    /// 5 Hz 的滚动 tick 只改写引用字段，不再让整页 body 失效。
+    @State var visibility = CoachVisibilityState()
     @State var didFinishInitialScroll = false
     @State var isLoadingEarlier = false
     @State var paginationAnchorMessageID: UUID?
@@ -117,19 +92,15 @@ struct CoachSessionView: View {
     )
 
     let messageLimit: Int
-    let isTabActive: Bool
     let sessionTransition: CoachSessionTransitionCoordinator
     let onLoadEarlier: () -> Void
-    let onRequireAIConfiguration: () -> Void
 
     init(
         sessionID: UUID?,
         dataSpace: DataSpace,
         messageLimit: Int,
-        isTabActive: Bool,
         sessionTransition: CoachSessionTransitionCoordinator,
-        onLoadEarlier: @escaping () -> Void,
-        onRequireAIConfiguration: @escaping () -> Void
+        onLoadEarlier: @escaping () -> Void
     ) {
         let targetSessionID = sessionID ?? UUID()
         var messageDescriptor = FetchDescriptor<CoachMessage>(
@@ -146,18 +117,23 @@ struct CoachSessionView: View {
         _gyms = Query(gymDescriptor)
 
         let dataSpaceRaw = dataSpace.rawValue
+        // 排除成功终态：暂存计数、暂存标记与可重试判断只依赖未成功的 Job。
+        // 成功 Job 随历史无限增长，若参与查询，流式期间每次 Job 保存都会
+        // 重新物化 100 行陈旧历史。cancelled/failed 必须保留：可重试集合要
+        // 通过它们区分“系统仍会续跑”与“交给用户手动重试”。
+        let succeededRaw = AgentJobState.succeeded.rawValue
         var jobDescriptor = FetchDescriptor<AgentJob>(
-            predicate: #Predicate { $0.dataSpaceRaw == dataSpaceRaw },
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw != succeededRaw
+            },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         jobDescriptor.fetchLimit = 100
         _agentJobs = Query(jobDescriptor)
 
         self.messageLimit = messageLimit
-        self.isTabActive = isTabActive
         self.sessionTransition = sessionTransition
         self.onLoadEarlier = onLoadEarlier
-        self.onRequireAIConfiguration = onRequireAIConfiguration
     }
 
     var messages: [CoachMessage] {
@@ -271,17 +247,11 @@ struct CoachSessionView: View {
                 MediaSourceDialog(
                     allowsVideo: true,
                     selectionLimit: max(
-                        MediaPicker.maximumSelectionCount - attachments.count,
+                        MediaPicker.maximumSelectionCount - composer.attachments.count,
                         1
                     )
                 ) { media in
-                    let available = max(
-                        MediaPicker.maximumSelectionCount - attachments.count,
-                        0
-                    )
-                    attachments.append(
-                        contentsOf: media.prefix(available).map(PendingAttachment.init)
-                    )
+                    composer.appendPickedMedia(media)
                 }
             case .pendingQueue:
                 PendingAgentQueueView(
@@ -314,8 +284,19 @@ struct CoachSessionView: View {
             NotificationCenter.default.publisher(for: .prefillCoachDraft)
         ) { notification in
             guard let text = notification.object as? String else { return }
-            draft = text
-            composerFocusRequest = UUID()
+            composer.draft = text
+            composer.requestFocus()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .coachTabReselected)
+        ) { _ in
+            // 再点「教练」回根：收起抽屉与健身房页并滚到最新消息，
+            // 不重建对话树、不重新查询。
+            closeSessionDrawer()
+            if showsGyms {
+                showsGyms = false
+            }
+            scrollRequest = UUID()
         }
         .modifier(CoachPerformanceSessionSelectionModifier(onSelect: selectSession))
         .task(id: captureRouter.mediaDelivery?.id) {
@@ -357,17 +338,13 @@ struct CoachSessionView: View {
         ) { _ in
             refreshInputShortcuts()
         }
-        .onChange(of: draft) {
-            guard let selectedExerciseSuggestion else { return }
-            if draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                != selectedExerciseSuggestion.draftText
-            {
-                self.selectedExerciseSuggestion = nil
-            }
-        }
         .onDisappear {
             visibility.isVisible = false
-            guard let speechInput, speechInput.isListening else { return }
+            guard let speechInput = composer.speechInput,
+                  speechInput.isListening
+            else {
+                return
+            }
             Task { @MainActor in
                 // AVAudioSession 停用可能同步等待系统音频服务；先让 Tab 切换提交。
                 await Task.yield()
@@ -396,6 +373,14 @@ struct CoachSessionView: View {
                             )
                         }
                     )
+                }
+                .background {
+                    // 切换到「教练」Tab 时自动回到最新消息；只有这枚叶子
+                    // 因激活态变化重新求值。
+                    CoachTabActivationDriver {
+                        guard didFinishInitialScroll else { return }
+                        scrollRequest = UUID()
+                    }
                 }
                 .safeAreaInset(edge: .bottom) {
                     composer(pendingCount: projection.pendingJobCount)
@@ -430,19 +415,18 @@ struct CoachSessionView: View {
                             targetMessageID: projection.messages.last?.id
                         )
                     } else {
-                        liveScrollTask?.cancel()
-                        liveScrollTask = nil
+                        visibility.liveScroll.task?.cancel()
+                        visibility.liveScroll.task = nil
                         if followsLiveMessage {
                             scrollToBottom(proxy)
                         }
                     }
                 }
                 .onChange(of: scrollRequest) {
-                    followsLiveMessage = true
+                    if !followsLiveMessage {
+                        followsLiveMessage = true
+                    }
                     scrollToBottomAfterLayout(proxy)
-                }
-                .onChange(of: speechInput?.transcript) {
-                    updateDraftFromSpeech()
                 }
                 .modifier(
                     CoachPerformanceScrollModifier(
@@ -560,13 +544,14 @@ struct CoachSessionView: View {
         }
 
         ForEach(projection.messages) { message in
+            // `.equatable()` 让父层 state 变化（输入草稿、处理标志、滚动位置）
+            // 不再重排历史气泡；消息内容变化仍由 SwiftData Observation 精确失效。
             CoachBubble(
                 message: message,
                 isLatestAssistantMessage: message.id
                     == projection.latestAssistantMessageID,
                 isLive: processingHere
                     && message.agentStatus == .running,
-                observesLiveText: isTabActive,
                 isStaged: message.turnID.map(
                     projection.stagedTurnIDs.contains
                 ) ?? false,
@@ -591,6 +576,7 @@ struct CoachSessionView: View {
                     )
                 }
             )
+            .equatable()
             .id(message.id)
         }
 
@@ -610,28 +596,19 @@ struct CoachSessionView: View {
 
     private func composer(pendingCount: Int) -> some View {
         CoachComposer(
-            draft: $draft,
-            attachments: $attachments,
+            state: composer,
             gyms: gyms,
             currentGym: currentGym,
-            exerciseSuggestions: exerciseSuggestions,
+            suggestionSnapshot: suggestionSnapshot,
             pendingCount: pendingCount,
             showsExecutionChoice: remoteExecutionEnabled
                 && RemoteAgentPreference.baseURL() != nil,
-            useLocalForNextMessage: $useLocalForNextMessage,
-            selectedShortcutID: $selectedShortcutID,
             shortcuts: inputShortcuts,
-            isSending: processor.isProcessing || isPersistingSubmission,
-            isListening: speechInput?.isListening == true,
-            speechMessage: speechInput?.errorMessage,
-            focusRequest: composerFocusRequest,
-            dismissRequest: composerDismissRequest,
+            processorIsSending: processor.isProcessing,
             onAddMedia: showMedia,
             onSelectGym: selectGym,
             onManageGyms: { showsGyms = true },
-            onApplySuggestion: applySuggestion,
             onManagePending: { sheet = .pendingQueue },
-            onToggleVoice: toggleVoice,
             onSend: send
         )
         .frame(maxWidth: AppTheme.readableContentMaxWidth)
@@ -648,10 +625,10 @@ struct CoachSessionView: View {
         if inputShortcuts != currentShortcuts {
             inputShortcuts = currentShortcuts
         }
-        if let selectedShortcutID,
+        if let selectedShortcutID = composer.selectedShortcutID,
            !inputShortcuts.contains(where: { $0.id == selectedShortcutID })
         {
-            self.selectedShortcutID = nil
+            composer.selectedShortcutID = nil
         }
     }
 
@@ -708,7 +685,7 @@ struct CoachSessionView: View {
     }
 
     private func openSessionDrawer() {
-        speechInput?.stop()
+        composer.stopVoice()
         withAnimation(.snappy(duration: 0.24)) {
             sessionDrawerPresented = true
         }
@@ -827,22 +804,8 @@ struct CoachSessionView: View {
     }
 
     private func prepareComposerForSessionChange() {
-        draft = ""
-        attachments = []
-        useLocalForNextMessage = false
-        speechInput?.stop()
-        composerDismissRequest = UUID()
+        composer.prepareForSessionChange()
         scrollRequest = UUID()
-    }
-
-    private func appendPickedMedia(_ media: [PickedMedia]) {
-        let available = max(
-            MediaPicker.maximumSelectionCount - attachments.count,
-            0
-        )
-        attachments.append(
-            contentsOf: media.prefix(available).map(PendingAttachment.init)
-        )
     }
 
     private func handleCaptureRequest() {
@@ -851,7 +814,7 @@ struct CoachSessionView: View {
             "Routing capture request in coach: \(request.mode.rawValue, privacy: .public)"
         )
         if request.mode == .text {
-            composerFocusRequest = UUID()
+            composer.requestFocus()
             captureRouter.clear(request.id)
         } else {
             Task { @MainActor in
@@ -875,7 +838,7 @@ struct CoachSessionView: View {
 
     private func handleMediaDelivery() {
         guard let delivery = captureRouter.mediaDelivery else { return }
-        appendPickedMedia(delivery.media)
+        composer.appendPickedMedia(delivery.media)
         captureRouter.clearDelivery(delivery.id)
     }
 
@@ -885,7 +848,7 @@ struct CoachSessionView: View {
     }
 
     private func sendPrompt(_ prompt: String) {
-        draft = prompt
+        composer.draft = prompt
         send()
     }
 
@@ -894,10 +857,10 @@ struct CoachSessionView: View {
             sendPrompt(suggestion.prompt)
             return
         }
-        draft = quickRecord.draftText
-        selectedExerciseSuggestion = quickRecord
+        composer.draft = quickRecord.draftText
+        composer.selectedExerciseSuggestion = quickRecord
         guard locationPreference != .unasked else {
-            speechInput?.stop()
+            composer.stopVoice()
             showsLocationPrompt = true
             return
         }
@@ -943,33 +906,12 @@ struct CoachSessionView: View {
         return Array(values.prefix(3))
     }
 
-    /// ADR 0046：一行同时给出动作名与最近一次训练容量，点一次即得到完整草稿。
-    private var exerciseSuggestions: [ExerciseInputSuggestion] {
-        let query = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return [] }
-        let suggestions = ExerciseInputSuggestionBuilder.suggestions(
-            query: query,
-            exercises: suggestionSnapshot.exercises,
-            recentCapacities: suggestionSnapshot.recentCapacities
-        )
-        // 草稿已经等于唯一建议时不再重复提示。
-        if suggestions.count == 1, suggestions[0].draftText == query {
-            return []
-        }
-        return suggestions
-    }
-
-    private func applySuggestion(_ suggestion: ExerciseInputSuggestion) {
-        draft = suggestion.draftText
-        selectedExerciseSuggestion = suggestion
-        composerFocusRequest = UUID()
-    }
-
     private func send() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !attachments.isEmpty else { return }
+        guard !composer.trimmedDraft.isEmpty || !composer.attachments.isEmpty else {
+            return
+        }
         guard locationPreference != .unasked else {
-            speechInput?.stop()
+            composer.stopVoice()
             showsLocationPrompt = true
             return
         }

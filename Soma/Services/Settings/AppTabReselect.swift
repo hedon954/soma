@@ -2,14 +2,17 @@ enum AppTabReselect {
     enum Effect: Equatable {
         case switchTo(AppTab)
         case resetStack(AppTab)
+        case restoreCoachRoot
     }
 
-    /// 普通切换只提交一次 selected Tab；只有再点当前 Tab 才允许写栈身份。
-    /// 这样不会为了写回同一个 UUID 额外触发 Root 失效。
+    /// 普通切换只提交一次 selected Tab。再点当前 Tab 时，教练页发一次
+    /// 「回根」通知（收起抽屉/健身房页并滚到最新消息），不重建对话树；
+    /// 其余 Tab 保持既有的栈身份重建回根语义。
     static func effect(
         selected: AppTab,
         incoming: AppTab
     ) -> Effect {
-        selected == incoming ? .resetStack(incoming) : .switchTo(incoming)
+        guard selected == incoming else { return .switchTo(incoming) }
+        return incoming == .coach ? .restoreCoachRoot : .resetStack(incoming)
     }
 }

@@ -47,19 +47,17 @@ private struct RootTabVisibilityReporter: View {
 
 /// 四个根 Tab 是四个独立的 SwiftUI 子树。Root 只交付选中值，不再在每次点击时
 /// 重新组装 NavigationStack、查询根页和内容可见性 modifier。
+///
+/// 教练根只持有稳定引用入参：没有 Binding、闭包或随选中态变化的布尔。SwiftUI 的
+/// 逐字段比较因此能直接短路，RootView 任意 state 变化（切 Tab、开 sheet）都不会
+/// 重新求值隐藏的教练子树，也不会重建其中的消息查询。Tab 激活态经
+/// `\.coachTabIsActive` 环境值只送达需要它的叶子。
 private struct CoachRootTab: View {
-    @Binding var sheet: RootSheet?
-    let isActive: Bool
     let transition: AppTabTransitionCoordinator
 
     var body: some View {
         NavigationStack {
-            CoachView(isTabActive: isActive) {
-                sheet = .settings(
-                    initialRoute: .llm,
-                    showsAIConfigurationReminder: true
-                )
-            }
+            CoachView()
         }
         .background {
             RootTabVisibilityReporter(tab: .coach, transition: transition)
@@ -117,8 +115,8 @@ struct RootView: View {
     @AppStorage(AppAppearancePreference.defaultsKey)
     private var appearanceRaw = AppAppearancePreference.system.rawValue
     @State private var selectedTab: AppTab = .coach
+    /// 教练 Tab 不参与栈身份重建：双击教练用通知回根，不销毁对话树。
     @State private var tabStackIDs: [AppTab: UUID] = [
-        .coach: UUID(),
         .training: UUID(),
         .insights: UUID(),
         .settings: UUID()
@@ -190,6 +188,16 @@ struct RootView: View {
                 NotificationCenter.default.publisher(for: .prefillCoachDraft)
             ) { _ in
                 selectCoachTabIfNeeded()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .coachRequiresAIConfiguration
+                )
+            ) { _ in
+                sheet = .settings(
+                    initialRoute: .llm,
+                    showsAIConfigurationReminder: true
+                )
             }
             .onReceive(
                 NotificationCenter.default.publisher(
@@ -370,12 +378,8 @@ struct RootView: View {
     }
 
     private var coachTab: some View {
-        CoachRootTab(
-            sheet: $sheet,
-            isActive: selectedTab == .coach,
-            transition: tabTransition
-        )
-        .id(tabStackIDs[.coach])
+        CoachRootTab(transition: tabTransition)
+            .environment(\.coachTabIsActive, selectedTab == .coach)
     }
 
     private var trainingTab: some View {
@@ -460,6 +464,11 @@ struct RootView: View {
                     selectedTab = tab
                 case let .resetStack(tab):
                     tabStackIDs[tab] = UUID()
+                case .restoreCoachRoot:
+                    NotificationCenter.default.post(
+                        name: .coachTabReselected,
+                        object: nil
+                    )
                 }
             }
         )

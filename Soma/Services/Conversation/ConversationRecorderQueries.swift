@@ -256,15 +256,20 @@ extension ConversationRecorder {
     }
 
     static func fetchGyms(in context: ModelContext) -> [GymProfile] {
-        (try? context.fetch(FetchDescriptor<GymProfile>(
+        // 与健身房页面同一上限，Tool 查询不做无界物化。
+        var descriptor = FetchDescriptor<GymProfile>(
             sortBy: [SortDescriptor(\.createdAt)]
-        ))) ?? []
+        )
+        descriptor.fetchLimit = 100
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     static func fetchEquipment(in context: ModelContext) -> [GymEquipment] {
-        (try? context.fetch(FetchDescriptor<GymEquipment>(
+        var descriptor = FetchDescriptor<GymEquipment>(
             sortBy: [SortDescriptor(\.createdAt)]
-        ))) ?? []
+        )
+        descriptor.fetchLimit = 1000
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     static func fetchWorkouts(

@@ -38,19 +38,41 @@ struct CoachPerformanceScrollModifier: ViewModifier {
 
 /// 独立叶子负责观察高频 revision。即使用户把 LazyVStack 的最后一条消息滚出
 /// 挂载区，驱动仍在，流式底部跟随不会因为 live row 被回收而永久停止。
+/// Tab 隐藏时（`\.coachTabIsActive == false`）完全停止订阅，不为不可见的
+/// 画面安排布局或滚动；再次进入时 revision 从 0 跳回当前值，正好补一次滚底。
 struct CoachLiveAutoScrollDriver: View {
     @Environment(ConversationProcessingService.self) private var processor
+    @Environment(\.coachTabIsActive) private var isTabActive
 
     let isActive: Bool
     let onRevision: () -> Void
 
     var body: some View {
-        let revision = isActive ? processor.liveEventRevision : 0
+        let revision = isActive && isTabActive
+            ? processor.liveEventRevision
+            : 0
         Color.clear
             .frame(width: 0, height: 0)
-            .onChange(of: revision) {
-                guard isActive else { return }
+            .onChange(of: revision) { _, newValue in
+                guard newValue != 0 else { return }
                 onRevision()
+            }
+    }
+}
+
+/// 教练 Tab 激活滚底驱动：整棵教练子树里只有这枚叶子和实时转写观察者读取
+/// `\.coachTabIsActive`。切换到教练时回到最新消息，切走时什么都不做。
+struct CoachTabActivationDriver: View {
+    @Environment(\.coachTabIsActive) private var isTabActive
+
+    let onActivate: () -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: isTabActive) { _, isActive in
+                guard isActive else { return }
+                onActivate()
             }
     }
 }

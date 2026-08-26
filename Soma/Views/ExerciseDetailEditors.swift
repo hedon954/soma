@@ -27,10 +27,13 @@ struct ExerciseContentEditorView: View {
     init(exercise: ExerciseDefinition) {
         self.exercise = exercise
         let exerciseID = exercise.id
-        _definitions = Query(FetchDescriptor<ExerciseDefinition>(
+        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
             predicate: #Predicate { $0.archivedAt == nil },
             sortBy: [SortDescriptor(\.canonicalName)]
-        ))
+        )
+        // 与动作库、计划选择器一致的目录上限，避免无界物化。
+        definitionDescriptor.fetchLimit = 2000
+        _definitions = Query(definitionDescriptor)
         var mergeDescriptor = FetchDescriptor<ExerciseMergeRecord>(
             predicate: #Predicate {
                 $0.sourceExerciseID == exerciseID && $0.undoneAt == nil

@@ -104,7 +104,6 @@ struct LiveAgentTurnTranscriptContent: View {
 /// 都不会因为正文每批增量而重新求值；Tab 隐藏时连这一层也停止观察。
 struct CoachLiveAgentTurnTranscript: View {
     let persistedItems: [AgentTurnItem]
-    let observesLiveText: Bool
     let sourceMessage: CoachMessage
     let isEditable: Bool
     let canRetry: Bool
@@ -112,10 +111,7 @@ struct CoachLiveAgentTurnTranscript: View {
     let onLiveRevision: () -> Void
 
     var body: some View {
-        CoachLiveScrollObserver(
-            observesLiveText: observesLiveText,
-            onLiveRevision: onLiveRevision
-        ) { liveText in
+        CoachLiveScrollObserver(onLiveRevision: onLiveRevision) { liveText in
             LiveAgentTurnTranscriptContent(
                 persistedItems: persistedItems,
                 liveText: liveText,
@@ -128,12 +124,13 @@ struct CoachLiveAgentTurnTranscript: View {
     }
 }
 
-/// 把 Observation 依赖和滚动副作用一起限制在实时回复叶子。隐藏 Tab 不读取
-/// revision；再次进入时直接取得内存中的最新 snapshot，只补一次当前画面。
+/// 把 Observation 依赖和滚动副作用一起限制在实时回复叶子。Tab 激活态直接读
+/// `\.coachTabIsActive` 环境值，不经父链入参传递；隐藏 Tab 不读取 revision，
+/// 再次进入时直接取得内存中的最新 snapshot，只补一次当前画面。
 private struct CoachLiveScrollObserver<Content: View>: View {
     @Environment(ConversationProcessingService.self) private var processor
+    @Environment(\.coachTabIsActive) private var observesLiveText
 
-    let observesLiveText: Bool
     let onLiveRevision: () -> Void
     @ViewBuilder let content: (LiveAgentTextRenderSnapshot?) -> Content
 
