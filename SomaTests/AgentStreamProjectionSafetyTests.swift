@@ -161,6 +161,10 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
             AppTestRuntime.uiTestEnvironmentKey: "1",
             PerformanceTestFixture.environmentKey: PerformanceTestFixture.longStreamNoNewline
         ]))
+        XCTAssertTrue(PerformanceTestFixture.requestsLongStream(in: [
+            AppTestRuntime.uiTestEnvironmentKey: "1",
+            PerformanceTestFixture.environmentKey: PerformanceTestFixture.coachTabBehavior
+        ]))
     }
 
     func testDeviceHarnessOnlyWaitsForExplicitFixtureCompletionSignal() {

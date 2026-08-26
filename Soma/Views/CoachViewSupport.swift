@@ -32,10 +32,6 @@ extension EnvironmentValues {
 }
 
 extension Notification.Name {
-    /// 再次点按已选中的「教练」Tab：不重建对话树，收起抽屉与健身房页并滚到最新消息。
-    static let coachTabReselected = Notification.Name(
-        "Soma.coachTabReselected"
-    )
     /// 发送链路发现缺少必需 API Key 时，请求 RootView 打开 LLM 配置 sheet。
     /// 用通知替代逐层闭包，避免教练子树携带每次渲染都变化的入参。
     static let coachRequiresAIConfiguration = Notification.Name(

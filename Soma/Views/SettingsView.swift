@@ -13,15 +13,18 @@ struct SettingsView: View {
     @State private var path: [SettingsRoute]
     private let showsAIConfigurationReminder: Bool
     private let isEmbeddedInTab: Bool
+    private let tabNavigationState: AppTabNavigationState?
 
     init(
         initialRoute: SettingsRoute? = nil,
         showsAIConfigurationReminder: Bool = false,
-        isEmbeddedInTab: Bool = false
+        isEmbeddedInTab: Bool = false,
+        tabNavigationState: AppTabNavigationState? = nil
     ) {
         _path = State(initialValue: initialRoute.map { [$0] } ?? [])
         self.showsAIConfigurationReminder = showsAIConfigurationReminder
         self.isEmbeddedInTab = isEmbeddedInTab
+        self.tabNavigationState = tabNavigationState
     }
 
     private var locationEnabledBinding: Binding<Bool> {
@@ -70,6 +73,9 @@ struct SettingsView: View {
                     )
                 }
             }
+        }
+        .onChange(of: path, initial: true) {
+            tabNavigationState?.setAtRoot(path.isEmpty, for: .settings)
         }
     }
 
@@ -120,6 +126,7 @@ struct SettingsView: View {
                     detail: "\(ai.provider.displayName) · \(ai.model(for: ai.provider))"
                 )
             }
+            .accessibilityIdentifier("settings-llm-configuration")
 
             NavigationLink {
                 HealthDataIntegrationsView()

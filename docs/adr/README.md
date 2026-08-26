@@ -32,6 +32,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0102](0102-source-workout-plan-execution-materialization.md) | 0.0.15 | 已采纳 | 当日原始训练生成计划时组装已完成 Session，原始记录不复制不丢失 |
 | [0103](0103-goal-directed-progress-energy-and-hypertrophy.md) | 0.0.15 | 已采纳 | 减脂看能量收支，增肌看训练量与主要肌群工作组覆盖 |
 | [0104](0104-independent-react-timeouts-by-media.md) | 0.0.15 | 已采纳 | 文字、图片、视频 ReAct 总超时分别配置 |
+| [0105](0105-root-aware-tab-reselection.md) | 0.0.15 | 已采纳 | 教练再选 no-op；其他 Tab 仅在非根页再选回根 |
 
 新决策使用 [ADR 模板](template.md)。
 

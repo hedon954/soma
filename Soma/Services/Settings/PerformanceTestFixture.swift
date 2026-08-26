@@ -76,14 +76,27 @@ enum PerformanceTestFixture {
     static let longStream = "long-stream"
     static let longStreamNoNewline = "long-stream-no-newline"
     static let longStreamMarkdownCompletion = "long-stream-markdown-completion"
+    static let coachTabBehavior = "coach-tab-behavior"
 
     enum StreamScenario: String, Sendable {
         case paragraphs = "long-stream"
         case noNewline = "long-stream-no-newline"
         case markdownCompletion = "long-stream-markdown-completion"
+        case coachTabBehavior = "coach-tab-behavior"
 
         var completes: Bool {
             self != .paragraphs
+        }
+
+        var streamRange: Range<Int> {
+            switch self {
+            case .paragraphs:
+                160 ..< 1060
+            case .noNewline, .markdownCompletion:
+                1 ..< 240
+            case .coachTabBehavior:
+                1 ..< 4
+            }
         }
     }
 
@@ -289,7 +302,7 @@ enum PerformanceTestFixture {
 
     static func streamDelta(_ index: Int, scenario: StreamScenario) -> String {
         switch scenario {
-        case .paragraphs:
+        case .paragraphs, .coachTabBehavior:
             streamParagraph(index)
         case .noNewline:
             "第\(index + 1)段连续虚构训练建议只用于验证无换行正文的增量排版成本不随全文长度增长且不会插入额外字符"

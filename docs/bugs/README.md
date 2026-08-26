@@ -50,7 +50,8 @@
 | [0037](0037-insights-snapshot-stale-and-overfetch.md) | 已修复，待 Release 真机交互复验 | 进展快照遗漏后台保存、失败永久空白且纯计数物化完整模型 | revision 状态机、同容器失效、fetchCount 压力测试与失败重试 |
 | [0038](0038-source-workouts-missing-plan-execution.md) | 已修复 | 当日训练生成计划后没有形成一次计划执行历史 | 来源 ID、完成 Session 物化与原始记录保留测试 |
 | [0039](0039-meal-occurrence-and-duration-target-truth.md) | 已修复 | 模型参数把 18 点饮食改成午餐，时长动作退化为次数 | 本地时钟餐次、用户显式覆盖与 duration seconds 测试 |
-| [0040](0040-hidden-coach-subtree-tab-invalidation.md) | 已修复，待真机手感复验 | 隐藏教练子树随任意 Tab 交互整体重算，双击教练整页重建且切回不显示最新消息 | 稳定教练根入参、环境键激活态、无重建回根、Equatable 气泡与 `perf-check` 静态门禁 |
+| [0040](0040-hidden-coach-subtree-tab-invalidation.md) | 已修复，待真机手感复验 | 隐藏教练子树随任意 Tab 交互整体重算，双击教练整页重建且切回不显示最新消息 | 稳定教练根入参、环境键激活态、根感知再选、Equatable 气泡与 `perf-check` 静态门禁 |
+| [0041](0041-bounded-gym-display-query-used-for-mutation.md) | 已修复 | 健身房展示上限被写路径复用，导致隐藏馆无法切换、重复建馆或留下多个当前馆 | 写路径全量身份集合、馆内器械谓词、共享激活/删除 Store 与越界压力测试 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

@@ -53,9 +53,8 @@ extension ConversationProcessingService {
         self.sessionID = sessionID
         let itemID = UUID()
 
-        let preloadCount = scenario == .paragraphs ? 160 : 1
-        let totalCount = scenario == .paragraphs ? 1060 : 240
-        for index in 0 ..< preloadCount {
+        let streamRange = scenario.streamRange
+        for index in 0 ..< streamRange.lowerBound {
             applyLiveAgentEvent(.assistantTextDelta(
                 itemID: itemID,
                 delta: PerformanceTestFixture.streamDelta(index, scenario: scenario)
@@ -65,8 +64,8 @@ extension ConversationProcessingService {
         performanceFixtureTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await PerformanceTestFixture.projectStreamDeltas(
-                from: preloadCount,
-                to: totalCount,
+                from: streamRange.lowerBound,
+                to: streamRange.upperBound,
                 scenario: scenario
             ) { [weak self] batch in
                 self?.applyLiveAgentEvent(.assistantTextDelta(

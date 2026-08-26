@@ -96,10 +96,12 @@ unless %w[CoachRootTab TrainingRootTab InsightsRootTab SettingsRootTab].all? do 
        end
   fail_check("Root restored one composite view tree instead of four persistent Tab roots")
 end
-unless root_source.match?(/case let \.switchTo\(tab\):.*?selectedTab = tab/m) &&
+unless root_source.match?(/case \.noAction:.*?break/m) &&
+       root_source.match?(/case let \.switchTo\(tab\):.*?selectedTab = tab/m) &&
        root_source.match?(/case let \.resetStack\(tab\):.*?tabStackIDs\[tab\] = UUID\(\)/m) &&
-       root_source.match?(/case \.restoreCoachRoot:.*?\.coachTabReselected/m)
-  fail_check("Tab selection, non-coach reselect, or coach reselect lost its single bounded effect")
+       root_source.include?("RootTabReselectObserver(onReselect: handleTabReselect)") &&
+       root_source.include?("tabNavigation.isAtRoot(selectedTab)")
+  fail_check("Tab selection or root-aware reselect lost its single bounded effect")
 end
 if root_source.include?("tabStackIDs[.coach]") || root_source.include?(".coach: UUID()")
   fail_check("coach reselect can again rebuild the whole conversation tree via a stack identity reset")
@@ -305,9 +307,10 @@ end
 unless agent_transcript_source.include?('@Environment(\.coachTabIsActive) private var observesLiveText')
   fail_check("the live transcript observer no longer gates streaming observation by tab activity")
 end
-unless coach_source.match?(/for: \.coachTabReselected/) &&
-       coach_source.match?(/coachTabReselected.*?closeSessionDrawer\(\).*?scrollRequest = UUID\(\)/m)
-  fail_check("coach reselect no longer restores root and latest message without rebuilding")
+if coach_source.include?("coachTabReselected") ||
+   coach_support_source.include?("coachTabReselected") ||
+   root_source.include?("restoreCoachRoot")
+  fail_check("coach reselect restored a notification or navigation side effect")
 end
 
 coach_snapshot_source = File.read(File.join(ROOT, service_file("CoachSuggestionSnapshot.swift")))

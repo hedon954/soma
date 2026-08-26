@@ -287,17 +287,6 @@ struct CoachSessionView: View {
             composer.draft = text
             composer.requestFocus()
         }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .coachTabReselected)
-        ) { _ in
-            // 再点「教练」回根：收起抽屉与健身房页并滚到最新消息，
-            // 不重建对话树、不重新查询。
-            closeSessionDrawer()
-            if showsGyms {
-                showsGyms = false
-            }
-            scrollRequest = UUID()
-        }
         .modifier(CoachPerformanceSessionSelectionModifier(onSelect: selectSession))
         .task(id: captureRouter.mediaDelivery?.id) {
             handleMediaDelivery()
@@ -843,8 +832,7 @@ struct CoachSessionView: View {
     }
 
     private func selectGym(_ gym: GymProfile) {
-        GymSelection.activate(gym, among: gyms)
-        try? modelContext.save()
+        StructuredDataStore.activateGym(gym, in: modelContext)
     }
 
     private func sendPrompt(_ prompt: String) {

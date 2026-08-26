@@ -34,6 +34,7 @@
 | [044：行为保持的工程现代化](044-behavior-preserving-modernization.md) | 0.0.13 | 窗口最旧活增量 |
 | [045：长流与进展可靠性及有界数据访问](045-performance-reliability-and-bounded-data-access.md) | 0.0.14 | 活增量 |
 | [046：教练记录可信度、会话交互与目标导向进展](046-coach-records-and-goal-directed-progress.md) | 0.0.15 | 活增量 |
+| [047：根感知的 Tab 再选](047-root-aware-tab-reselection.md) | 0.0.15 | 活增量 |
 
 ## 阅读约定
 

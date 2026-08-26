@@ -6,7 +6,7 @@
 - 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的真机预算与有界数据访问规则
 - 收尾复盘：[本轮性能优化收尾与踩坑报告](performance-optimization-retrospective-2026-08-25.md)
 - 下游落地：[BUG 0040 教练子树随任意 Tab 交互整体重算](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
-  收口本报告遗留的“返回 Coach 布局长尾”，并替换双击回根的栈身份重建实现
+  收口本报告遗留的“返回 Coach 布局长尾”，并把 Tab 再选收口为根感知实现
 
 ## 2026-08-25 最终收尾补充
 
@@ -121,7 +121,7 @@ OS signpost 和 ETTrace 交叉验证。
 
 | 优先级 | 原问题 | 根因 | 整改与当前边界 | 证据 |
 | --- | --- | --- | --- | --- |
-| P0 | warm Tab 仍有明显“按下后才反应” | 一次选择同时更新选中 Tab、pending signpost、手工填充图标与导航栈辅助状态，Root 被连续失效 | 普通切换只写一次 `selectedTab`；重复点当前 Tab 才写对应栈 ID；signpost 移入不参与观察的稳定 tracker；选中外观交给系统 TabView | `AppTabReselectTests` 验证 switch/reselect 各自只产生一个 effect；`perf-check` 禁止恢复 pending Root 状态和手工选中图标 |
+| P0 | warm Tab 仍有明显“按下后才反应” | 一次选择同时更新选中 Tab、pending signpost、手工填充图标与导航栈辅助状态，Root 被连续失效 | 普通切换只写一次 `selectedTab`；教练与根页再选不写状态，三个非教练 Tab 仅在详情页写对应栈 ID；signpost 移入不参与观察的稳定 tracker；选中外观交给系统 TabView | `AppTabReselectTests` 验证 switch/root/non-root 各自只有一个 effect；`perf-check` 禁止恢复 pending Root 状态和手工选中图标 |
 | P0 | iOS 26 warm Tab 动画与内容反馈延迟 | 全局 UIKit 动画抑制会影响系统 Tab 反馈，且不能降低 Coach 实际布局工作 | 完整删除全局动画开关；保留原生 Tab 动画，点击只写 selection；以叶子失效、文本分块和布局减法降低真实工作量 | 静态门禁禁止 `setAnimationsEnabled`；四 Tab UI 合同回归通过；最终真机 p95 待补 |
 | P0 | 长流式后整 App 变卡发热 | 每个 tick 广泛失效 Coach；稳定分块后内层即时栈仍反复测量、断行全部冻结正文 | revision 限定到实时回复叶子；隐藏 Tab 停止观察；正文块懒布局、尾块最多 256 字符；完成时才合并全文 | Release 真机同场景主线程 CPU `6.004 → 0.950 s`（`-84.2%`）；35 秒 Animation Hitches 0，热状态 Nominal |
 | P0 | 进入含多项饮食卡的历史 Session 后卡死退出 | 最新可编辑饮食卡为每个值立即创建原生 `TextField`，候选布局进一步放大 TextKit/AttributeGraph 成本；消息读取本身很小 | 默认渲染轻量文本按钮，点按后只创建当前一个输入控件；失焦释放，完整记录与编辑语义不变 | 真机只读数据定位；十项虚构饮食卡定向 UI 回归通过；新包直接打开原故障 Session 后进程稳定，最终触摸确认待补 |
@@ -195,7 +195,7 @@ OS signpost 和 ETTrace 交叉验证。
 | 冷启动/当前 marker | marker 先行，已完成安装不再进入整表迁移；Root 可见后才跑孤儿/去重维护 |
 | 前后台 | 只恢复前台等待/过期租约 Job；状态谓词进入数据库；媒体和相机资源仍成对释放 |
 | 数据空间切换 | Root 按空间重建；图片缓存清空；媒体维护按双空间引用并集 |
-| 四个 Tab | 稳定导航栈；普通切换只写一次选中状态；重复点当前 Tab 才回根；iOS 26.5 Simulator 实际点击、跨 Tab 保栈和再选回根通过；内容由约 298–388 ms 跨帧淡化收敛为单帧替换，Release 真机 p95 待补 |
+| 四个 Tab | 稳定导航栈；普通切换只写一次选中状态；教练与任一根页再选 no-op，训练、进展、设置仅在详情页再选回根；Simulator 需复验根感知行为，Release 真机 p95 待补 |
 | 教练 | 当前 Session 分页、发送附件异步持久化、流式约 100 ms 合批、记录卡按 ID 查一项；建议快照后台化，语音资源按首次使用创建 |
 | 训练/带练 | 根查询有界；状态机定向查询；相机/视频保存异步；倒计时只更新必要叶子状态 |
 | 进展 | 后台窗口快照；最近活动最多 30；完整历史分页；Charts 只接收有界 DTO |
@@ -307,3 +307,12 @@ make perf-profile-device
 `SOMA_PROFILE_RUNS` 仅表示独立 trace 数，不能再当成交互次数。每份 trace 必须在默认 300 秒收尾
 上限内完成并能导出有效 TOC，否则 manifest 标为失败。以上项目在真实设备未连接或未完成相同交互
 采样时必须保持“待真机”，不能以 Simulator 或成功安装代替。
+
+2026-08-26 的请求内单轮复验复用同一 Release 真机 harness：10 轮共 40/40 个 Tab 样本，p50
+`64.213 ms`、p95 `76.677 ms`、最大值 `92.220 ms`，通过 `100 ms` 预算且无中断或未配对
+signpost。该结果满足本次回归验收，不再追加重复采样。
+
+同日又对用户最近两个真实 Session 做只读复验：往返 3 轮共 6/6 次切换，p50 `142.172 ms`、
+p95/最大值 `160.873 ms`，通过 `200 ms` Session 预算；35 秒 Animation Hitches 内完成 12 次
+长内容滚动，actual hitch 为 0，`>=33 ms` 潜在交互延迟为 0。录制只写匿名区间，不含 Session
+ID、标题、正文或截图。当前修复在高信息量真实数据上未观测到卡顿，本次回归结论为通过。

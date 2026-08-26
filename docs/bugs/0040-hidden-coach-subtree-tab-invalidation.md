@@ -1,12 +1,12 @@
 # BUG 0040：教练子树随任意 Tab 交互整体重算，双击教练整页重建
 
-- 状态：已修复，待真机手感复验
+- 状态：已修复，模拟器与真机回归通过
 - 发现日期：2026-08-26
 - 影响范围：教练页内容稍多时，所有 Tab 切换动画掉帧；双击「教练」Tab 出现整页重渲染并
   重新查询；切回教练不显示最新消息；长流式期间整页仍按 5 Hz 失效
 - 上游依据：用户真机反馈；[性能审计 2026-08-24](../engineering/performance-audit-2026-08-24.md)
   已定位“返回 Coach 长尾在 AttributeGraph/布局/文本测量”但未收口
-- 下游落地：暂无
+- 下游落地：[PRD 047](../prd/047-root-aware-tab-reselection.md)；[ADR 0105](../adr/0105-root-aware-tab-reselection.md)
 
 ## 症状
 
@@ -39,9 +39,8 @@
   整棵教练子树中只有实时转写观察者与新的 `CoachTabActivationDriver` 两枚叶子读取。
   “需要 AI 配置”从闭包链改为 `.coachRequiresAIConfiguration` 通知，由 RootView 打开
   设置 sheet。Tab 切换自此不再重算教练子树、不再重建查询。
-- `AppTabReselect.Effect` 新增 `.restoreCoachRoot`：再选教练不改栈身份，发
-  `.coachTabReselected` 通知；教练页收到后关闭会话抽屉、收起健身房页并经既有
-  `scrollRequest` 路径滚到最新消息。其余三个 Tab 保留原有回根语义。
+- [PRD 047](../prd/047-root-aware-tab-reselection.md) 后续把再选规则收口为根感知行为：教练
+  再选始终 no-op，不再发通知、收起页面或滚动；训练、进展、设置只在非根详情时回根。
 - 切换到教练 Tab 时，`CoachTabActivationDriver` 触发一次无动画滚底，列表回到最新消息。
 - 滚动节流状态迁入非 Observation 的 `CoachVisibilityState.liveScroll` 引用；
   `CoachLiveAutoScrollDriver` 增加激活态门控，隐藏 Tab 完全停止订阅流式 revision，
@@ -57,19 +56,30 @@
 ## 回归门禁
 
 - `make perf-check`：教练根不得携带 per-render 入参；`tabStackIDs[.coach]` 不得恢复；
-  `\.coachTabIsActive` 环境键、再选通知路径、Equatable 气泡与非 Observation 节流
+  `\.coachTabIsActive` 环境键、根感知再选路径、Equatable 气泡与非 Observation 节流
   持有者必须存在；`CoachView` 不得重新出现 `isTabActive` 参数或 `@State` 节流字段。
-- `AppTabReselectTests`：普通切换、非教练再选、教练再选与切回教练四种效果各自唯一。
+- `AppTabReselectTests`：普通切换、四个根页 no-op、教练非根 no-op 与三个非教练 Tab 非根回根。
 - `CoachBubbleEquatableTests`：闭包不参与等价；消息身份与渲染 flags 参与失效。
 - `CoachComposerStateTests`：听写合成、建议失配、发送收口与附件上限。
 - `CoachTabBehaviorUITests`（`SomaPerformance` scheme，与既有教练分页/长流 UI 回归同套）：
-  切回教练自动回到最新消息、再点教练回到底部，且两种路径都不得重置分页
-  （`count=20` 保持），以此证明会话页未被销毁重建。
-- 手工验收（见 `docs/acceptance.md` 教练段落）：切走再切回教练自动显示最新消息；双击
-  「教练」收起健身房页/抽屉并回到底部且无整页重建闪烁；长流式期间四 Tab 切换保持流畅。
+  切回教练自动回到最新消息；再点教练保持阅读位置和分页，设置详情再点设置才回根
+  （等待首轮分页稳定后保持实际消息数），以此证明会话页未被销毁重建；Tab 通过无障碍元素点按，
+  不依赖设备尺寸坐标。
+- 手工验收（见 `docs/acceptance.md` 教练段落）：切走再切回教练自动显示最新消息；再点
+  「教练」保持当前页面与滚动；训练、进展、设置只在详情页再点回根；长流式期间切换保持流畅。
 
 ## 验证
 
-- Linux CI 环境无 Xcode：`ruby scripts/check-performance-hotpaths.rb`、文档与仓库校验
-  脚本通过；`make verify`（构建 + 模拟器测试）需在 macOS 上执行后回填。
-- 待真机：四 Tab 连续切换 Animation Hitches、长流式期间切换手感与双击教练回根手感。
+- `make check` 与 `make verify` 通过：622 项 XCTest、7 项 Swift Testing 及 31 项 Server 测试
+  通过，1 项依赖数据库 URL 的 Server 测试按预期跳过。
+- `CoachTabBehaviorUITests` 的三个当前行为分别通过：切回教练显示最新消息；教练再选保持阅读
+  位置与已加载分页；设置详情再选设置回到根页。
+- Release 0.0.15 (19) 真机 Time Profiler 单轮复验通过：10 轮共 40/40 个 Tab 切换样本，
+  p50 `64.213 ms`、p95 `76.677 ms`、最大值 `92.220 ms`，低于 `100 ms` 预算；无中断或
+  未配对 signpost。证据位于 `build/performance/device-harness-tabs/run-20260826-225714-97808/`
+  （本地产物，不进入 Git）。
+- 用户最近两个真实 Session 的只读真机复验完成：往返 3 轮共 6/6 次切换，p50
+  `142.172 ms`、p95/最大值 `160.873 ms`，低于 `200 ms` 预算；35 秒 Animation Hitches
+  内完成跨两个 Session 的 12 次长内容滚动，actual hitch 为 0，`>=33 ms` 潜在交互延迟为 0。
+  录制只包含匿名区间，不包含 Session ID、标题、正文或截图。
+- 上述真实数据与虚构夹具证据满足本次验收，不再追加重复采样。

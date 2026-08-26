@@ -45,6 +45,26 @@ private struct RootTabVisibilityReporter: View {
     }
 }
 
+/// 放在训练/进展的根内容上；切换 Tab 导致的隐藏由 `AppTabNavigationState`
+/// 依据当前 selected Tab 排除，只有推入详情才把对应 Tab 标记为非根。
+@MainActor
+private struct RootTabNavigationReporter: View {
+    let tab: AppTab
+    let navigation: AppTabNavigationState
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+            .onAppear {
+                navigation.rootDidAppear(tab)
+            }
+            .onDisappear {
+                navigation.rootDidDisappear(tab)
+            }
+    }
+}
+
 /// 四个根 Tab 是四个独立的 SwiftUI 子树。Root 只交付选中值，不再在每次点击时
 /// 重新组装 NavigationStack、查询根页和内容可见性 modifier。
 ///
@@ -67,10 +87,14 @@ private struct CoachRootTab: View {
 
 private struct TrainingRootTab: View {
     let transition: AppTabTransitionCoordinator
+    let navigation: AppTabNavigationState
 
     var body: some View {
         NavigationStack {
             TrainingProgramLibraryView()
+                .background {
+                    RootTabNavigationReporter(tab: .training, navigation: navigation)
+                }
         }
         .background {
             RootTabVisibilityReporter(tab: .training, transition: transition)
@@ -80,10 +104,14 @@ private struct TrainingRootTab: View {
 
 private struct InsightsRootTab: View {
     let transition: AppTabTransitionCoordinator
+    let navigation: AppTabNavigationState
 
     var body: some View {
         NavigationStack {
             InsightsView()
+                .background {
+                    RootTabNavigationReporter(tab: .insights, navigation: navigation)
+                }
         }
         .background {
             RootTabVisibilityReporter(tab: .insights, transition: transition)
@@ -93,12 +121,16 @@ private struct InsightsRootTab: View {
 
 private struct SettingsRootTab: View {
     let transition: AppTabTransitionCoordinator
+    let navigation: AppTabNavigationState
 
     var body: some View {
-        SettingsView(isEmbeddedInTab: true)
-            .background {
-                RootTabVisibilityReporter(tab: .settings, transition: transition)
-            }
+        SettingsView(
+            isEmbeddedInTab: true,
+            tabNavigationState: navigation
+        )
+        .background {
+            RootTabVisibilityReporter(tab: .settings, transition: transition)
+        }
     }
 }
 
@@ -115,7 +147,7 @@ struct RootView: View {
     @AppStorage(AppAppearancePreference.defaultsKey)
     private var appearanceRaw = AppAppearancePreference.system.rawValue
     @State private var selectedTab: AppTab = .coach
-    /// 教练 Tab 不参与栈身份重建：双击教练用通知回根，不销毁对话树。
+    /// 教练 Tab 不参与栈身份重建；其他 Tab 只有明确非根时才更新对应身份。
     @State private var tabStackIDs: [AppTab: UUID] = [
         .training: UUID(),
         .insights: UUID(),
@@ -124,10 +156,14 @@ struct RootView: View {
     @State private var sheet: RootSheet?
     @State private var routedWorkoutSession: WorkoutSession?
     @State private var tabTransition = AppTabTransitionCoordinator()
+    @State private var tabNavigation = AppTabNavigationState()
     @State private var didFinishInitialMaintenance = false
 
     var body: some View {
         rootTabs
+            .background {
+                RootTabReselectObserver(onReselect: handleTabReselect)
+            }
             .tint(AppTheme.tint)
             .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
@@ -314,7 +350,7 @@ struct RootView: View {
 
     /// iOS 18 起直接使用 TabContentBuilder。当前 SDK 已把旧的
     /// `.tabItem + .tag` 路径标记为迁移方向；iOS 17 只保留兼容分支。
-    /// 两条路径复用完全相同的内容，导航栈身份和再选回根语义不变。
+    /// 两条路径复用完全相同的内容与根感知再选语义。
     @ViewBuilder
     private var rootTabs: some View {
         if #available(iOS 18.0, *) {
@@ -383,18 +419,18 @@ struct RootView: View {
     }
 
     private var trainingTab: some View {
-        TrainingRootTab(transition: tabTransition)
+        TrainingRootTab(transition: tabTransition, navigation: tabNavigation)
             .id(tabStackIDs[.training])
     }
 
     private var insightsTab: some View {
-        InsightsRootTab(transition: tabTransition)
+        InsightsRootTab(transition: tabTransition, navigation: tabNavigation)
             .id(tabStackIDs[.insights])
     }
 
     private var settingsTab: some View {
         // PRD 020 修订：设置从各页右上角 gear 收敛为底部第 4 个 Tab。
-        SettingsRootTab(transition: tabTransition)
+        SettingsRootTab(transition: tabTransition, navigation: tabNavigation)
             .id(tabStackIDs[.settings])
     }
 
@@ -455,28 +491,46 @@ struct RootView: View {
         Binding(
             get: { selectedTab },
             set: { incoming in
-                switch AppTabReselect.effect(
-                    selected: selectedTab,
-                    incoming: incoming
-                ) {
-                case let .switchTo(tab):
-                    tabTransition.begin(from: selectedTab, to: tab)
-                    selectedTab = tab
-                case let .resetStack(tab):
-                    tabStackIDs[tab] = UUID()
-                case .restoreCoachRoot:
-                    NotificationCenter.default.post(
-                        name: .coachTabReselected,
-                        object: nil
+                guard selectedTab != incoming else { return }
+                applyTabEffect(
+                    AppTabReselect.effect(
+                        selected: selectedTab,
+                        incoming: incoming,
+                        isSelectedTabAtRoot: tabNavigation.isAtRoot(selectedTab)
                     )
-                }
+                )
             }
         )
+    }
+
+    private func handleTabReselect(_ tab: AppTab) {
+        applyTabEffect(
+            AppTabReselect.effect(
+                selected: selectedTab,
+                incoming: tab,
+                isSelectedTabAtRoot: tabNavigation.isAtRoot(selectedTab)
+            )
+        )
+    }
+
+    private func applyTabEffect(_ effect: AppTabReselect.Effect) {
+        switch effect {
+        case .noAction:
+            break
+        case let .switchTo(tab):
+            tabTransition.begin(from: selectedTab, to: tab)
+            tabNavigation.selectionWillChange(to: tab)
+            selectedTab = tab
+        case let .resetStack(tab):
+            tabNavigation.rootDidAppear(tab)
+            tabStackIDs[tab] = UUID()
+        }
     }
 
     private func selectCoachTabIfNeeded() {
         guard selectedTab != .coach else { return }
         tabTransition.begin(from: selectedTab, to: .coach)
+        tabNavigation.selectionWillChange(to: .coach)
         selectedTab = .coach
     }
 

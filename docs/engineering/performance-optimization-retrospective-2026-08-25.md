@@ -45,7 +45,7 @@
 ### 2.2 四 Tab 与 Root 生命周期
 
 - 保留“教练、训练、进展、设置”四个原生 Tab 和四套稳定导航栈；普通切换只写一次
-  `selectedTab`，重复点当前 Tab 才重建对应栈 ID 并回根。
+  `selectedTab`；教练与根页重复点无操作，训练、进展、设置仅在详情页重建对应栈 ID 回根。
 - signpost 的 pending interval 移到不参与 Observation 的稳定引用，避免埋点本身触发第二轮 Root
   失效。
 - iOS 18+ 使用原生 `Tab` 内容构建器，iOS 17 只保留共享内容的兼容分支；选中图标交给系统，
@@ -222,8 +222,11 @@ TabView 可以保留导航栈和状态，但重新可见仍会触发 SwiftUI dif
 ### 5.7 Session 页面身份仍然过重
 
 `.id(activeSessionID)` 能保证分页状态在 Session 切换时重置，但代价是整个聊天页面身份失效。
-当前纯值缓存只能复用解析结果，不能复用已访问 Session 的 ScrollView/View 生命周期。60 次真机
-样本 p95 `354.505 ms` 说明这一边界仍需重新设计；本轮按要求停止，没有继续修复。
+当时的纯值缓存只能复用解析结果，不能复用已访问 Session 的 ScrollView/View 生命周期；60 次
+真机样本 p95 `354.505 ms`，因此本轮按要求停止，没有继续修复。2026-08-26 合并教练子树隔离并
+修正回归后，对用户最近两个高信息量真实 Session 往返 3 轮：6/6 次切换 p95/最大值
+`160.873 ms`，且跨两个 Session 的 12 次滚动在 35 秒 Animation Hitches 中为 0 actual hitch、
+0 个 `>=33 ms` 潜在延迟。该证据满足本次回归验收，Session 切换问题关闭，不再追加重复采样。
 
 ## 6. 自动化测试踩坑
 
@@ -313,7 +316,7 @@ manifest 逻辑。
 
 | 优先级 | 未完成项 | 当前证据 | 下轮第一步 |
 | --- | --- | --- | --- |
-| P0 | Session 切换 p95 超预算 | 60/60，p95 `354.505 ms` | 先按匿名方向拆分 signpost；审计 `.id(activeSessionID)` 与已访问 Session 生命周期 |
+| 已完成 | Session 切换回归 | 旧批次 p95 `354.505 ms`；当前真实 Session 6/6、p95 `160.873 ms`，12 次滚动 0 hitch | 本次验收通过，不追加重复采样 |
 | P1 | SwiftUI `body` 热点未做最终真机门禁 | Simulator 不足以定论 | Release 真机 SwiftUI Instrument，同一路径 30 轮 |
 | P1 | 全路径滚动 hitch | 只完成长流场景 0 hitch | 教练/训练/进展/设置分别录 Animation Hitches |
 | P1 | 内存增长与泄漏 | Simulator RSS 无单调增长但不等价 | 真机 Allocations + 10 轮跨 Tab/Session/媒体 |

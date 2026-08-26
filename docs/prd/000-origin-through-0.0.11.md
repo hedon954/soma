@@ -7,6 +7,7 @@
 - 后续修订：
   - [PRD 044](044-behavior-preserving-modernization.md)（窗口内最旧活文档，0.0.13）
   - [PRD 046](046-coach-records-and-goal-directed-progress.md)（移除低可信总糖与参考体重，并修订记录、会话和进展体验）
+  - [PRD 047](047-root-aware-tab-reselection.md)（再选当前 Tab 改为根感知行为）
 - 下游落地：
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md)
   - [ADR 0104](../adr/0104-independent-react-timeouts-by-media.md)
@@ -88,7 +89,8 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能。路�
 ### 界面与系统入口
 
 - 频率优先的黑白双主题；彩色只用于语义图标与数据。实心主按钮在浅深主题使用明确反色前景；
-  失败卡为珊瑚色并把人工重试收在右侧图标。再点已选 Tab 回到该 Tab 根页面。
+  失败卡为珊瑚色并把人工重试收在右侧图标。Tab 再选遵循 [PRD 047](047-root-aware-tab-reselection.md)：
+  教练和任一根页 no-op，训练、进展、设置仅在详情页回根。
 - 进展把近 7 天、连续性和容量收在一张分段卡；最近活动默认最多 6 条并提供训练、饮食历史入口。
 - 全产品 Switch 使用系统外形和统一开启状态色，浅深主题均能辨认，且不能只靠颜色表达状态。
 - 免费签名阶段 Widget 只提供静态快速记录与锁屏入口，不使用 App Groups。
