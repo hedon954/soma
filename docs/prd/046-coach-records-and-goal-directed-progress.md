@@ -3,8 +3,7 @@
 - 状态：已采纳，已实施；核心路径已通过模拟器检查，待真机交互验收
 - 日期：2026-08-26
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的记录真值、身体信息、聊天元信息和进展首屏
-  - [PRD 043](043-configurable-react-runtime-timeout.md) 的统一自定义超时
+  - [PRD 000](000-origin-through-0.0.11.md) 的记录真值、身体信息、聊天元信息、进展首屏和 ReAct 运行预算
   - [PRD 045](045-performance-reliability-and-bounded-data-access.md) 的会话分页与有界进展快照
 - 上游依据：
   - 维护者提出的十二项功能优化

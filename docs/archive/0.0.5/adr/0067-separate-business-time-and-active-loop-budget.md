@@ -5,7 +5,7 @@
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0063](0063-step-resume-fixed-loop-time-and-deadline-hierarchy.md) 中从 `loopStartedAt` 连续计算墙钟预算且手动重试不重置的边界
 - 后续替代：[ADR 0072](../../0.0.6/adr/0072-session-business-date-and-record-occurrence-time.md) 将记录发生时间从固定 Loop 时间拆分为稳定的原始 Turn 时间
-- 后续修订：[ADR 0098](../../../adr/0098-user-configurable-react-active-runtime-timeout.md) 保留活动计时语义，并把固定 3/5/10 分钟改为可选自定义预算
+- 后续修订：[ADR 0098](../../0.0.12/adr/0098-user-configurable-react-active-runtime-timeout.md) 保留活动计时语义，并把固定 3/5/10 分钟改为可选自定义预算
 - 上游依据：
   - [PRD 028](../prd/028-retry-active-runtime-budget.md)
   - [BUG 0017](../../../bugs/0017-manual-retry-immediately-cancelled.md)

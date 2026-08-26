@@ -3,7 +3,7 @@
 - 状态：本轮已收尾；Release 真机长流与 Tab 预算通过，Session p95 354.505 ms 未通过，其余动态门禁延期
 - 目标设备：iPhone 17 Pro Max，120 Hz 严格档
 - 数据基线：已安装 Soma `0.0.11 (15)`，SwiftData marker `schemaVersion = 6`
-- 上游依据：[ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+- 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的真机预算与有界数据访问规则
 - 收尾复盘：[本轮性能优化收尾与踩坑报告](performance-optimization-retrospective-2026-08-25.md)
 
 ## 2026-08-25 最终收尾补充

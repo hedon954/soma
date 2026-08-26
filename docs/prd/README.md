@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.14`、`0.0.13`、`0.0.12`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.15`、`0.0.14`、`0.0.13`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.11 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.12 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.12 → 0.0.13 → 0.0.14
+[PRD 000 压缩起点] → 0.0.13 → 0.0.14 → 0.0.15
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,11 +30,10 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.11 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.11 | 压缩起点 |
-| [043：可配置 ReAct 运行超时](043-configurable-react-runtime-timeout.md) | 0.0.12 | 窗口最旧活增量 |
-| [044：行为保持的工程现代化](044-behavior-preserving-modernization.md) | 0.0.13 | 活增量 |
+| [000：0.0.12 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.12 | 压缩起点 |
+| [044：行为保持的工程现代化](044-behavior-preserving-modernization.md) | 0.0.13 | 窗口最旧活增量 |
 | [045：长流与进展可靠性及有界数据访问](045-performance-reliability-and-bounded-data-access.md) | 0.0.14 | 活增量 |
-| [046：教练记录可信度、会话交互与目标导向进展](046-coach-records-and-goal-directed-progress.md) | 0.0.14 | 活增量 |
+| [046：教练记录可信度、会话交互与目标导向进展](046-coach-records-and-goal-directed-progress.md) | 0.0.15 | 活增量 |
 
 ## 阅读约定
 

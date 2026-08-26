@@ -4,9 +4,9 @@
 - 日期：2026-08-26
 - 维护者：Soma maintainers
 - 修订自：[ADR 0103](0103-goal-directed-progress-energy-and-hypertrophy.md)
-- 替代：[ADR 0098](0098-user-configurable-react-active-runtime-timeout.md) 的统一自定义超时值
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 收口的统一自定义超时值
 - 上游依据：
-  - [PRD 043](../prd/043-configurable-react-runtime-timeout.md)
+  - [PRD 000](../prd/000-origin-through-0.0.11.md)
   - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
 - 下游落地：[验收矩阵](../acceptance.md)
 
@@ -46,4 +46,4 @@
 ## 参考
 
 - [Agent 运行时设置](../../Soma/Views/ReActLoopSettingsSection.swift)
-- [ADR 0098](0098-user-configurable-react-active-runtime-timeout.md)
+- [ADR 0000](0000-origin-through-0.0.11.md)

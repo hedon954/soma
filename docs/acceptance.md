@@ -1,7 +1,7 @@
 # Soma 验收清单
 
 - 上游依据：
-  - [ADR 0097：当前安装基线、性能预算与缓存失效](adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+  - [ADR 0000：压缩起点](adr/0000-origin-through-0.0.11.md) 收口的安装基线、性能预算与缓存失效规则
   - [ADR 0100：有界快照、连续流式文本与查询优先的数据访问](adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
   - [ADR 0101：记录真值与 Agent 身体资料上下文](adr/0101-record-truth-and-agent-profile-context.md)
   - [ADR 0102：原始训练生成计划时物化已完成执行](adr/0102-source-workout-plan-execution-materialization.md)
@@ -48,7 +48,7 @@
 ## 性能预算与回归
 
 性能结论与证据分级见[全 App 性能审计报告](engineering/performance-audit-2026-08-24.md)，长期边界见
-[ADR 0097](adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)。Debug Simulator
+[ADR 0000](adr/0000-origin-through-0.0.11.md)。Debug Simulator
 只用于功能回归与发现热点，不作为 120 Hz 达标证明。
 
 | 要求 | 当前证据与验收边界 |

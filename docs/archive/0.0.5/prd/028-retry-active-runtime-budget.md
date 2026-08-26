@@ -6,7 +6,7 @@
   - [PRD 004](../../0.0.1/prd/004-soma-current-product.md) 的 Agent 重试与超时基线
   - [PRD 027](027-reliable-efficient-react-and-in-context-review.md) 的整轮预算起算与手动重试边界
 - 下游落地：[ADR 0067](../adr/0067-separate-business-time-and-active-loop-budget.md)
-- 后续修订：[PRD 043](../../../prd/043-configurable-react-runtime-timeout.md) 将固定 3/5/10 分钟改为保留自动默认、允许 3–60 分钟自定义
+- 后续修订：[PRD 043](../../0.0.12/prd/043-configurable-react-runtime-timeout.md) 将固定 3/5/10 分钟改为保留自动默认、允许 3–60 分钟自定义
 - 上游依据：[BUG 0017](../../../bugs/0017-manual-retry-immediately-cancelled.md)
 
 ## 背景

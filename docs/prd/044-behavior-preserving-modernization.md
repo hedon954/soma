@@ -2,11 +2,11 @@
 
 - 状态：已采纳，已实施于 0.0.13；不改变用户可见行为
 - 日期：2026-08-25
-- 修订自：[PRD 043](043-configurable-react-runtime-timeout.md) 作为 0.0.12 活产品窗口头部
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的 0.0.12 压缩收口
 - 后续修订：[PRD 045](045-performance-reliability-and-bounded-data-access.md)
 - 上游依据：维护者批准的行为保持现代化计划
 - 下游落地：[ADR 0099](../adr/0099-behavior-preserving-modernization-and-three-version-docs.md)
-- 关联决策：[ADR 0098](../adr/0098-user-configurable-react-active-runtime-timeout.md)
+- 关联决策：[ADR 0000](../adr/0000-origin-through-0.0.11.md)
 
 ## 背景
 
@@ -62,10 +62,10 @@ Soma 在 0.0.12 已经具备完整产品闭环，但代码与文档按多年增�
 
 ## 验收
 
-- 活 `docs/prd/` 与 `docs/adr/` 含压缩起点（000 / 0000）以及 0.0.11–0.0.13 窗口文档。
-- 压缩起点只写仍有效的最终要求与决策，不是旧文件清单；0.0.11 文档的修订自 / 部分替代指向起点。
+- 活 `docs/prd/` 与 `docs/adr/` 含压缩起点（000 / 0000）以及最近三个营销版本的窗口文档。
+- 压缩起点只写仍有效的最终要求与决策，不是旧文件清单；窗口最旧文档的修订自 / 部分替代指向起点。
 - 窗口规则是「滑出时合并进起点」，不是只把文件搬进 archive。
-- `docs/archive/<version>/` 含 0.0.10 及更早未压缩原文；根 `.cursorignore` 忽略该目录；
+- `docs/archive/<version>/` 含滑出窗口的未压缩原文；根 `.cursorignore` 忽略该目录；
   `.claude/settings.json` deny `Read(./docs/archive/**)`；`CLAUDE.md` 要求 Codex 默认不读归档。
 - 公开工具列表与 Server HTTP API 与现代化前一致。
 - `Soma/Services/ReActAgent.swift` 与 `Soma/Models/Models.swift` 不再作为上帝文件存在。

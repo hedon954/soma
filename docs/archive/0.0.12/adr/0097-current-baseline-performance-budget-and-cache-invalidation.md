@@ -3,13 +3,13 @@
 - 状态：已采纳，Release 真机量化验收中
 - 日期：2026-08-24
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 中每次启动继续执行业务整表回填的边界；当前 marker 命中后必须立即返回
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 中每次启动继续执行业务整表回填的边界；当前 marker 命中后必须立即返回
 - 上游依据：当前唯一用户已安装 Soma `0.0.11 (15)` 的无损要求
 - 下游落地：
-  - [全 App 性能审计报告](../engineering/performance-audit-2026-08-24.md)
-  - [数据库结构与 ER 图](../engineering/database-schema.md)
-  - [验收矩阵](../acceptance.md)
-- 后续修订：[ADR 0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [全 App 性能审计报告](../../../engineering/performance-audit-2026-08-24.md)
+  - [数据库结构与 ER 图](../../../engineering/database-schema.md)
+  - [验收矩阵](../../../acceptance.md)
+- 后续修订：[ADR 0100](../../../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 
 ## 背景
 

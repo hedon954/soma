@@ -16,7 +16,7 @@
   - [ADR 0076](../archive/0.0.7/adr/0076-exercise-owned-laterality-and-target-kind.md)
   - [ADR 0090](../archive/0.0.9/adr/0090-current-state-business-models-and-session-facts.md)
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 的动作级计划间歇收口
-  - [ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+  - [ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的安装基线与缓存失效规则
   - [ADR 0100](../adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
 - 相关决策：ADR 0001、0031、0032，以及
   [`训练领域模型与运行时协议`](training-domain-model.md)
@@ -51,7 +51,7 @@ Effort、修复关系/投影键、收敛当前计划、分配业务 ID 并写入
 schema version 6 marker 是当前唯一安装基线。启动先用 `key + schemaVersion` 谓词和
 `fetchLimit = 1` 检查 marker；命中后立即返回，不再扫描业务表。marker 尚未完成时才执行当前
 收口步骤并在完整校验通过后写入。缓存与性能边界见
-[ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)。
+[ADR 0000](../adr/0000-origin-through-0.0.11.md)。
 
 ### 用户、场馆与外部同步
 

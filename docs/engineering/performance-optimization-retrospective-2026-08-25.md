@@ -4,7 +4,7 @@
 - 审查范围：当前工作区相对 `HEAD` 的 `git diff`、自动化门禁、Simulator/真机 Trace 与失败产物
 - 目标设备：iPhone 17 Pro Max，iOS 26.3.1，Release，120 Hz 严格档
 - 数据边界：性能夹具只使用显式环境变量、内存数据库和虚构内容，不读取或写入个人数据
-- 长期边界：[ADR 0097](../adr/0097-current-baseline-performance-budget-and-cache-invalidation.md)
+- 长期边界：[ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的真机预算与有界数据访问规则
 - 完整审计：[全 App 性能审计报告](performance-audit-2026-08-24.md)
 - 关键故障：[BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md)、
   [BUG 0035](../bugs/0035-long-stream-text-relayout-thermal-jank.md)
