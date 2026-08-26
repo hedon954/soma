@@ -61,6 +61,10 @@
   持有者必须存在；`CoachView` 不得重新出现 `isTabActive` 参数或 `@State` 节流字段。
 - `AppTabReselectTests`：普通切换、非教练再选、教练再选与切回教练四种效果各自唯一。
 - `CoachBubbleEquatableTests`：闭包不参与等价；消息身份与渲染 flags 参与失效。
+- `CoachComposerStateTests`：听写合成、建议失配、发送收口与附件上限。
+- `CoachTabBehaviorUITests`（`SomaPerformance` scheme，与既有教练分页/长流 UI 回归同套）：
+  切回教练自动回到最新消息、再点教练回到底部，且两种路径都不得重置分页
+  （`count=20` 保持），以此证明会话页未被销毁重建。
 - 手工验收（见 `docs/acceptance.md` 教练段落）：切走再切回教练自动显示最新消息；双击
   「教练」收起健身房页/抽屉并回到底部且无整页重建闪烁；长流式期间四 Tab 切换保持流畅。
 
