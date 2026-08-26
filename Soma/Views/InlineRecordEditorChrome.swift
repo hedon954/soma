@@ -7,6 +7,10 @@ enum InlineRecordSaveState: Equatable {
     case failed
 }
 
+enum InlineRecordReadOnlyStatus {
+    case saved
+}
+
 struct InlineRecordShell<Content: View, Accessory: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
@@ -18,6 +22,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
     var saveState: Binding<InlineRecordSaveState> = .constant(.idle)
     var onSave: (() -> Bool)?
     var onDelete: (() -> Void)?
+    var readOnlyStatus: InlineRecordReadOnlyStatus?
     /// 派生卡片本来就没有编辑入口，不该显示锁标记，否则会被读成“暂时不能改”。
     var showsLockWhenReadOnly = true
     var contentPadding: CGFloat = 14
@@ -63,6 +68,16 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("删除")
                     }
+                } else if readOnlyStatus == .saved {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(AppTheme.accent)
+                        .frame(
+                            width: AppTheme.minimumTapTarget,
+                            height: AppTheme.minimumTapTarget
+                        )
+                        .accessibilityLabel("已保存")
+                        .accessibilityIdentifier("workout-record-saved")
                 } else if showsLockWhenReadOnly {
                     Image(systemName: "lock.fill")
                         .font(.caption2)
@@ -99,6 +114,7 @@ extension InlineRecordShell where Accessory == EmptyView {
         saveState: Binding<InlineRecordSaveState> = .constant(.idle),
         onSave: (() -> Bool)? = nil,
         onDelete: (() -> Void)? = nil,
+        readOnlyStatus: InlineRecordReadOnlyStatus? = nil,
         showsLockWhenReadOnly: Bool = true,
         contentPadding: CGFloat = 14,
         @ViewBuilder content: () -> Content
@@ -113,6 +129,7 @@ extension InlineRecordShell where Accessory == EmptyView {
             saveState: saveState,
             onSave: onSave,
             onDelete: onDelete,
+            readOnlyStatus: readOnlyStatus,
             showsLockWhenReadOnly: showsLockWhenReadOnly,
             contentPadding: contentPadding,
             accessory: { EmptyView() },

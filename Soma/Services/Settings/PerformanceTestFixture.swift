@@ -346,7 +346,11 @@ enum PerformanceTestFixture {
         let turnID = UUID()
         let definition = ExerciseDefinition(canonicalName: "单杠悬吊")
         definition.targetKind = .duration
-        definition.laterality = .none
+        definition.laterality = ExerciseLaterality(
+            rawValue: ProcessInfo.processInfo.environment[
+                "SOMA_UI_WORKOUT_LATERALITY"
+            ] ?? ""
+        ) ?? .none
         context.insert(definition)
 
         let requestedStressCount = Int(

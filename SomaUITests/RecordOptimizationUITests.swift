@@ -18,6 +18,23 @@ final class RecordOptimizationUITests: XCTestCase {
         keepScreenshot(of: app, named: "record-optimizations-dark")
     }
 
+    func testSingleSideLabelAppearsOnlyOnceInWorkoutHeader() {
+        for (laterality, headerLabel, innerLabel) in [
+            ("left", "仅左", "左"),
+            ("right", "仅右", "右")
+        ] {
+            let app = launchRecordFixture(
+                appearance: "light",
+                workoutLaterality: laterality
+            )
+            let title = app.staticTexts["单杠悬吊"]
+            XCTAssertTrue(title.waitForExistence(timeout: 15))
+            XCTAssertEqual(app.staticTexts.matching(identifier: headerLabel).count, 1)
+            XCTAssertFalse(app.staticTexts[innerLabel].exists)
+            app.terminate()
+        }
+    }
+
     func testSettingsAreFlattenedAndBirthDateHasNoToggle() {
         let app = launchEmptyApp(appearance: "light")
         let settings = app.tabBars.buttons["设置"]
@@ -86,7 +103,8 @@ final class RecordOptimizationUITests: XCTestCase {
 
     private func launchRecordFixture(
         appearance: String,
-        exerciseStressCount: Int? = nil
+        exerciseStressCount: Int? = nil,
+        workoutLaterality: String? = nil
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
@@ -96,6 +114,9 @@ final class RecordOptimizationUITests: XCTestCase {
         if let exerciseStressCount {
             app.launchEnvironment["SOMA_UI_EXERCISE_STRESS_COUNT"] =
                 String(exerciseStressCount)
+        }
+        if let workoutLaterality {
+            app.launchEnvironment["SOMA_UI_WORKOUT_LATERALITY"] = workoutLaterality
         }
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
@@ -120,9 +141,17 @@ final class RecordOptimizationUITests: XCTestCase {
         }
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["时长"].exists)
-        XCTAssertTrue(app.staticTexts["全身"].exists)
+        XCTAssertEqual(app.staticTexts.matching(identifier: "双侧同时").count, 1)
         XCTAssertTrue(app.staticTexts["20 秒"].exists)
         XCTAssertTrue(app.staticTexts["自重"].exists)
+        XCTAssertTrue(app.staticTexts["间歇 30 秒"].exists)
+        XCTAssertTrue(app.staticTexts["workout-run-count-3"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["workout-compact-inline-run"].exists
+        )
+        XCTAssertTrue(app.images["workout-record-saved"].exists)
+        XCTAssertFalse(app.images["已锁定"].exists)
+        XCTAssertFalse(app.staticTexts["A. 单杠悬吊"].exists)
         XCTAssertTrue(
             app.buttons["查看这条回复的执行日志"].waitForExistence(timeout: 5)
         )

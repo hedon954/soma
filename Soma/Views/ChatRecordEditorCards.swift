@@ -266,13 +266,20 @@ private struct InlineWorkoutCard: View {
             title: exercise.isEmpty ? "训练记录" : exercise,
             titleText: isEditable ? $exercise : nil,
             icon: "dumbbell.fill",
-            iconTint: AppTheme.trainingAccent,
-            iconSoftTint: AppTheme.trainingSoftTint,
+            iconTint: .white,
+            iconSoftTint: AppTheme.trainingAccent,
             isEditable: isEditable,
             saveState: $saveState,
             onSave: save,
             onDelete: { showsDelete = true },
-            contentPadding: 10
+            readOnlyStatus: .saved,
+            contentPadding: 10,
+            accessory: {
+                WorkoutRecordHeaderChips(
+                    targetKind: workoutDraft.headerTargetKindLabel,
+                    side: workoutDraft.headerSideLabel
+                )
+            }
         ) {
             WorkoutLogicalGroupsEditor(
                 draft: $workoutDraft,

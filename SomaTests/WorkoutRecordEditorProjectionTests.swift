@@ -99,6 +99,51 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
         XCTAssertEqual(right.groups[0].sideMode, .rightOnly)
     }
 
+    func testWorkoutHeaderUsesCompactTargetAndLateralityLabels() {
+        let repetitions = WorkoutSetEvidence(
+            logicalSetIndex: 1,
+            side: WorkoutEffortSide.none,
+            targetKind: .repetitions,
+            reps: 10
+        )
+
+        let expectations: [(ExerciseLaterality, String)] = [
+            (.none, "双侧同时"),
+            (.both, "左右各做"),
+            (.left, "仅左"),
+            (.right, "仅右")
+        ]
+
+        for (laterality, label) in expectations {
+            let draft = WorkoutRecordDraft(
+                evidence: [repetitions],
+                loggingProfile: ExerciseLoggingProfileSnapshot(
+                    laterality: laterality,
+                    targetKind: .repetitions
+                )
+            )
+
+            XCTAssertEqual(draft.headerTargetKindLabel, "次数")
+            XCTAssertEqual(draft.headerSideLabel, label)
+        }
+
+        let durationDraft = WorkoutRecordDraft(
+            evidence: [repetitions],
+            loggingProfile: ExerciseLoggingProfileSnapshot(
+                laterality: .none,
+                targetKind: .duration
+            )
+        )
+        XCTAssertEqual(durationDraft.headerTargetKindLabel, "时长")
+    }
+
+    func testOnlyAlternatingGroupsShowSideLabelsInsideDataRows() {
+        XCTAssertFalse(WorkoutRecordSideMode.simultaneous.showsEffortSideLabel)
+        XCTAssertTrue(WorkoutRecordSideMode.alternating.showsEffortSideLabel)
+        XCTAssertFalse(WorkoutRecordSideMode.leftOnly.showsEffortSideLabel)
+        XCTAssertFalse(WorkoutRecordSideMode.rightOnly.showsEffortSideLabel)
+    }
+
     func testOnlyConsecutiveDisplayIdenticalGroupsCollapse() {
         let evidence = [
             WorkoutSetEvidence(
@@ -306,7 +351,7 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
         XCTAssertEqual(draft.groups[0].efforts[0].targetKind, .duration)
         XCTAssertNil(draft.groups[0].efforts[0].reps)
         XCTAssertEqual(draft.groups[0].efforts[0].durationSeconds, 20)
-        XCTAssertEqual(draft.sideLabel(for: draft.groups[0]), "全身")
+        XCTAssertEqual(draft.sideLabel(for: draft.groups[0]), "双侧同时")
         XCTAssertEqual(draft.evidence[0].targetKind, .duration)
         XCTAssertEqual(draft.evidence[0].durationSeconds, 20)
     }

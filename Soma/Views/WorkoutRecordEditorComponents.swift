@@ -59,96 +59,91 @@ struct WorkoutLogicalGroupsEditor: View {
             alignment: .leading,
             spacing: density == .chatCompact ? 6 : 10
         ) {
-            HStack(spacing: 8) {
-                workoutChip(group.targetKindLabel)
-                workoutChip(draft.sideLabel(for: group))
-                Spacer(minLength: 6)
-                if run.count > 1 {
-                    Text("× \(run.count)")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                if isEditable {
-                    Menu {
-                        Button {
-                            draft.appendGroup(copying: group.id)
-                        } label: {
-                            Label("复制这一组", systemImage: "plus.square.on.square")
-                        }
-                        Button(role: .destructive) {
-                            for id in groupIDs {
-                                draft.removeGroup(id: id)
-                            }
-                        } label: {
-                            Label(
-                                run.count > 1 ? "删除这批组" : "删除这一组",
-                                systemImage: "trash"
-                            )
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .frame(
-                                width: AppTheme.minimumTapTarget,
-                                height: AppTheme.minimumTapTarget
-                            )
-                    }
-                    .accessibilityLabel("逻辑组操作")
-                }
-            }
-
-            VStack(spacing: 0) {
-                ForEach(group.efforts.indices, id: \.self) { effortIndex in
-                    let restGroupIDs = run.restTargetGroupIDs(
-                        effortIndex: effortIndex,
-                        effortCount: effortCount,
-                        finalGroupID: draft.finalGroupID
-                    )
-                    let evidenceRest = storedRest(
-                        in: run,
-                        groupIDs: restGroupIDs,
-                        effortIndex: effortIndex
-                    )
-                    let displayRest = evidenceRest
-                        ?? (effortIndex == effortCount - 1 ? fallbackRestSeconds : nil)
-                    effortRow(
-                        group.efforts[effortIndex],
-                        groupIDs: groupIDs,
-                        effortIndex: effortIndex,
-                        sideMode: group.sideMode
-                    )
-
-                    let restLabel = restLabel(
-                        at: effortIndex,
-                        effortCount: effortCount,
-                        sideMode: group.sideMode
-                    )
-                    if shouldShowRest(
-                        evidenceRest,
-                        effortIndex: effortIndex,
-                        effortCount: effortCount,
-                        hasTargets: !restGroupIDs.isEmpty
-                    ) {
-                        restRow(
-                            restLabel,
-                            groupIDs: restGroupIDs,
-                            effortIndex: effortIndex,
-                            value: displayRest,
-                            fallbackValue: displayRest
+            if density == .standard {
+                HStack(spacing: 8) {
+                    workoutChip(group.targetKindLabel)
+                    workoutChip(draft.sideLabel(for: group))
+                    Spacer(minLength: 6)
+                    WorkoutRunCountLabel(count: run.count)
+                    if isEditable {
+                        groupMenu(
+                            representativeGroupID: group.id,
+                            groupIDs: groupIDs,
+                            runCount: run.count
                         )
-                    } else if effortIndex < effortCount - 1 {
-                        Divider()
-                            .overlay(AppTheme.separator)
                     }
                 }
             }
-            .padding(.horizontal, density == .chatCompact ? 9 : 14)
-            .background(
-                AppTheme.insetBackground,
-                in: RoundedRectangle(
-                    cornerRadius: AppTheme.controlRadius,
-                    style: .continuous
+
+            if density == .chatCompact,
+               !isEditable,
+               let effort = group.efforts.first,
+               effortCount == 1
+            {
+                compactRecordRun(
+                    run,
+                    effort: effort,
+                    finalGroupID: draft.finalGroupID
                 )
-            )
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(group.efforts.indices, id: \.self) { effortIndex in
+                        let restGroupIDs = run.restTargetGroupIDs(
+                            effortIndex: effortIndex,
+                            effortCount: effortCount,
+                            finalGroupID: draft.finalGroupID
+                        )
+                        let evidenceRest = storedRest(
+                            in: run,
+                            groupIDs: restGroupIDs,
+                            effortIndex: effortIndex
+                        )
+                        let displayRest = evidenceRest
+                            ?? (effortIndex == effortCount - 1
+                                ? fallbackRestSeconds
+                                : nil)
+                        effortRow(
+                            group.efforts[effortIndex],
+                            groupIDs: groupIDs,
+                            effortIndex: effortIndex,
+                            sideMode: group.sideMode,
+                            compactRunCount: effortIndex == 0 ? run.count : nil,
+                            representativeGroupID: group.id
+                        )
+
+                        let restLabel = restLabel(
+                            at: effortIndex,
+                            effortCount: effortCount,
+                            sideMode: group.sideMode
+                        )
+                        if shouldShowRest(
+                            evidenceRest,
+                            effortIndex: effortIndex,
+                            effortCount: effortCount,
+                            hasTargets: !restGroupIDs.isEmpty
+                        ) {
+                            restRow(
+                                restLabel,
+                                groupIDs: restGroupIDs,
+                                effortIndex: effortIndex,
+                                value: displayRest,
+                                fallbackValue: displayRest
+                            )
+                        } else if effortIndex < effortCount - 1 {
+                            Divider()
+                                .overlay(AppTheme.separator)
+                        }
+                    }
+                }
+                .padding(.horizontal, density == .chatCompact ? 9 : 14)
+                .background(
+                    AppTheme.insetBackground,
+                    in: RoundedRectangle(
+                        cornerRadius: AppTheme.controlRadius,
+                        style: .continuous
+                    )
+                )
+            }
         }
         .padding(density == .chatCompact ? 0 : 14)
         .background(
@@ -175,14 +170,17 @@ struct WorkoutLogicalGroupsEditor: View {
         _ effort: WorkoutEffortDraft,
         groupIDs: Set<UUID>,
         effortIndex: Int,
-        sideMode: WorkoutRecordSideMode
+        sideMode: WorkoutRecordSideMode,
+        compactRunCount: Int?,
+        representativeGroupID: UUID
     ) -> some View {
         HStack(spacing: 10) {
-            Text(sideLabel(effort.side, mode: sideMode))
-                .font(.subheadline.weight(.medium))
-                .frame(width: sideMode == .simultaneous ? 0 : 34, alignment: .leading)
-                .opacity(sideMode == .simultaneous ? 0 : 1)
-                .accessibilityHidden(sideMode == .simultaneous)
+            if sideMode.showsEffortSideLabel {
+                Text(sideLabel(effort.side, mode: sideMode))
+                    .font(.subheadline.weight(.medium))
+                    .frame(width: 34, alignment: .leading)
+                    .accessibilityHidden(true)
+            }
 
             if isEditable {
                 WorkoutNumericField(
@@ -229,8 +227,50 @@ struct WorkoutLogicalGroupsEditor: View {
                     .font(.body.monospacedDigit())
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            if density == .chatCompact, let compactRunCount {
+                WorkoutRunCountLabel(count: compactRunCount)
+                if isEditable {
+                    groupMenu(
+                        representativeGroupID: representativeGroupID,
+                        groupIDs: groupIDs,
+                        runCount: compactRunCount
+                    )
+                }
+            }
         }
         .frame(minHeight: density == .chatCompact ? AppTheme.minimumTapTarget : 48)
+    }
+
+    private func groupMenu(
+        representativeGroupID: UUID,
+        groupIDs: Set<UUID>,
+        runCount: Int
+    ) -> some View {
+        Menu {
+            Button {
+                draft.appendGroup(copying: representativeGroupID)
+            } label: {
+                Label("复制这一组", systemImage: "plus.square.on.square")
+            }
+            Button(role: .destructive) {
+                for id in groupIDs {
+                    draft.removeGroup(id: id)
+                }
+            } label: {
+                Label(
+                    runCount > 1 ? "删除这批组" : "删除这一组",
+                    systemImage: "trash"
+                )
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
+                )
+        }
+        .accessibilityLabel("逻辑组操作")
     }
 
     private func restRow(
@@ -309,6 +349,37 @@ struct WorkoutLogicalGroupsEditor: View {
                 return group.efforts[effortIndex].restSeconds
             }
             .first
+    }
+
+    private func compactRecordRun(
+        _ run: WorkoutLogicalGroupRun,
+        effort: WorkoutEffortDraft,
+        finalGroupID: UUID?
+    ) -> some View {
+        let restGroupIDs = run.restTargetGroupIDs(
+            effortIndex: 0,
+            effortCount: 1,
+            finalGroupID: finalGroupID
+        )
+        let evidenceRest = storedRest(
+            in: run,
+            groupIDs: restGroupIDs,
+            effortIndex: 0
+        )
+        let displayRest = evidenceRest ?? fallbackRestSeconds
+        let showsRest = shouldShowRest(
+            evidenceRest,
+            effortIndex: 0,
+            effortCount: 1,
+            hasTargets: !restGroupIDs.isEmpty
+        )
+
+        return WorkoutCompactRecordRunView(
+            target: targetText(effort),
+            weight: weightText(effort.externalWeightKG),
+            rest: showsRest ? displayRest.map { "间歇 \($0) 秒" } : nil,
+            runCount: run.count
+        )
     }
 
     private func restLabel(
@@ -409,88 +480,5 @@ struct WorkoutLogicalGroupsEditor: View {
                 )
             }
         )
-    }
-}
-
-private struct WorkoutNumericField: View {
-    @Binding var text: String
-    let accessibilityLabel: String
-    let unit: String
-    let decimal: Bool
-    var emptyPrompt = "—"
-    var compact = false
-    var flat = false
-    let validRange: ClosedRange<Double>
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
-                TextField(
-                    accessibilityLabel,
-                    text: $text,
-                    prompt: Text(emptyPrompt)
-                )
-                .keyboardType(decimal ? .decimalPad : .numberPad)
-                .font(.subheadline.monospacedDigit())
-                .multilineTextAlignment(.center)
-                .focused($focused)
-                .frame(minWidth: compact ? 32 : 50)
-                .accessibilityLabel(accessibilityLabel)
-                .accessibilityValue(accessibilityValue)
-                .accessibilityHint(
-                    isInvalid ? "请修改为\(rangeDescription)" : ""
-                )
-                Text(unit)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, compact ? 6 : 9)
-            .frame(minHeight: AppTheme.minimumTapTarget)
-            .background(
-                flat ? Color.clear : AppTheme.insetBackground,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
-                        isInvalid
-                            ? AppTheme.destructive
-                            : focused
-                            ? AppTheme.tint
-                            : flat
-                            ? Color.clear
-                            : AppTheme.separator,
-                        lineWidth: focused || isInvalid ? 1.5 : 0.5
-                    )
-            }
-            if isInvalid {
-                Text("请输入\(rangeDescription)")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.destructive)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var isInvalid: Bool {
-        guard !text.isEmpty else { return false }
-        guard let value = decimal ? Double(text) : Int(text).map(Double.init) else {
-            return true
-        }
-        return !validRange.contains(value)
-    }
-
-    private var rangeDescription: String {
-        let lower = validRange.lowerBound.formatted(.number.precision(.fractionLength(0)))
-        let upper = validRange.upperBound.formatted(.number.precision(.fractionLength(0)))
-        return "\(lower)–\(upper) \(unit)"
-    }
-
-    private var accessibilityValue: String {
-        if isInvalid {
-            return "输入无效，\(rangeDescription)"
-        }
-        return text.isEmpty ? "未记录" : "\(text) \(unit)"
     }
 }

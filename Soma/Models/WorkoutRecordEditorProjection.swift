@@ -18,6 +18,31 @@ enum WorkoutRecordSideMode: String, CaseIterable, Identifiable, Sendable {
         case .rightOnly: "仅右"
         }
     }
+
+    /// 只有左右各做需要在数据块里区分两条 effort；单侧信息已由标题标签表达。
+    var showsEffortSideLabel: Bool {
+        self == .alternating
+    }
+}
+
+private extension ExerciseLaterality {
+    var workoutRecordLabel: String {
+        switch self {
+        case .none: "双侧同时"
+        case .both: "左右各做"
+        case .left: "仅左"
+        case .right: "仅右"
+        }
+    }
+}
+
+private extension WorkoutTargetKind {
+    var workoutRecordLabel: String {
+        switch self {
+        case .repetitions: "次数"
+        case .duration: "时长"
+        }
+    }
 }
 
 /// 次数/时长和左右方式属于动作定义。记录只保存当次完成证据；旧记录若带错单位，
@@ -307,8 +332,30 @@ struct WorkoutRecordDraft: Equatable, Sendable {
         groups.max { $0.sourceOrder < $1.sourceOrder }?.id
     }
 
+    var headerTargetKindLabel: String? {
+        if let loggingProfile {
+            return loggingProfile.targetKind.workoutRecordLabel
+        }
+        let kinds = Set(groups.flatMap(\.efforts).map(\.targetKind))
+        if kinds.count == 1 {
+            return kinds.first?.workoutRecordLabel
+        }
+        return kinds.isEmpty ? nil : "混合"
+    }
+
+    var headerSideLabel: String? {
+        if let loggingProfile {
+            return loggingProfile.laterality.workoutRecordLabel
+        }
+        let modes = Set(groups.map(\.sideMode))
+        if modes.count == 1 {
+            return modes.first?.displayName
+        }
+        return modes.isEmpty ? nil : "混合侧别"
+    }
+
     func sideLabel(for group: LogicalWorkoutGroupDraft) -> String {
-        loggingProfile?.laterality.displayName ?? group.sideMode.displayName
+        loggingProfile?.laterality.workoutRecordLabel ?? group.sideMode.displayName
     }
 
     mutating func applyLoggingProfile(_ profile: ExerciseLoggingProfileSnapshot) {
