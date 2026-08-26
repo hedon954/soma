@@ -1,16 +1,28 @@
 import SwiftUI
 
-struct CoachBubble: View {
+/// 气泡以 `.equatable()` 挂载：父层每次 body 重算都会带来新的回调闭包，
+/// 默认逐字段比较必然失败并重排整条历史。这里只比较决定渲染结果的输入——
+/// 消息对象身份与状态 flags；消息内容本身的变化由 SwiftData Observation
+/// 在气泡自己的 body 依赖上精确失效，不依赖父层 diff。
+struct CoachBubble: View, Equatable {
     let message: CoachMessage
     var isLatestAssistantMessage = false
     var isLive = false
-    var observesLiveText = true
     var isStaged = false
     var canRetry = false
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
     var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
     var onLiveRevision: () -> Void = {}
+
+    static func == (lhs: CoachBubble, rhs: CoachBubble) -> Bool {
+        lhs.message === rhs.message
+            && lhs.isLatestAssistantMessage == rhs.isLatestAssistantMessage
+            && lhs.isLive == rhs.isLive
+            && lhs.isStaged == rhs.isStaged
+            && lhs.canRetry == rhs.canRetry
+            && (lhs.onDiscardPending == nil) == (rhs.onDiscardPending == nil)
+    }
 
     var body: some View {
         let payload = CoachMessageRenderPayloadCache.payload(for: message)
@@ -37,7 +49,6 @@ struct CoachBubble: View {
                     if isLive {
                         CoachLiveAgentTurnTranscript(
                             persistedItems: payload.turnItems,
-                            observesLiveText: observesLiveText,
                             sourceMessage: message,
                             isEditable: isLatestAssistantMessage,
                             canRetry: canRetry,

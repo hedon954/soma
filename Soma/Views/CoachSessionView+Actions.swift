@@ -181,7 +181,10 @@ extension CoachSessionView {
 
     func openLLMConfiguration() {
         speechInput?.stop()
-        onRequireAIConfiguration()
+        NotificationCenter.default.post(
+            name: .coachRequiresAIConfiguration,
+            object: nil
+        )
     }
 
     func openLLMConfigurationFromPendingQueue() {
@@ -229,12 +232,15 @@ extension CoachSessionView {
     }
 
     /// 与文字投影一致约 5Hz 非动画跟随；结束后再做一次动画归位。
+    /// 节流状态放在非 Observation 引用里：每个滚动 tick 不触发整页失效。
     func scheduleLiveScroll(
         _ proxy: ScrollViewProxy,
         targetMessageID: UUID? = nil
     ) {
         guard isProcessingHere else { return }
-        followsLiveMessage = true
+        if !followsLiveMessage {
+            followsLiveMessage = true
+        }
         let performanceInterval = AppPerformance.begin(
             .agentProjection,
             detail: "phase=stream-scroll"
@@ -242,11 +248,12 @@ extension CoachSessionView {
         defer {
             AppPerformance.end(performanceInterval, detail: "phase=stream-scroll")
         }
-        guard liveScrollTask == nil else { return }
+        let throttle = visibility.liveScroll
+        guard throttle.task == nil else { return }
         let interval: TimeInterval = 0.2
-        let elapsed = Date().timeIntervalSince(lastLiveScrollAt)
+        let elapsed = Date().timeIntervalSince(throttle.lastScrollAt)
         let delay = max(interval - elapsed, 0)
-        liveScrollTask = Task { @MainActor in
+        throttle.task = Task { @MainActor in
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
@@ -254,16 +261,16 @@ extension CoachSessionView {
             // 先让本轮 TextKit/SwiftUI 布局完成，再滚到稳定的底部锚点。
             await Task.yield()
             guard !Task.isCancelled, isProcessingHere else {
-                liveScrollTask = nil
+                throttle.task = nil
                 return
             }
-            lastLiveScrollAt = Date()
+            throttle.lastScrollAt = Date()
             if let targetMessageID {
                 proxy.scrollTo(targetMessageID, anchor: .bottom)
             } else {
                 scrollToBottom(proxy, animated: false)
             }
-            liveScrollTask = nil
+            throttle.task = nil
         }
     }
 
@@ -321,10 +328,16 @@ extension CoachSessionView {
         onLoadEarlier()
     }
 
+    /// iOS 17 的手势回退路径会按拖动帧频调用这里；所有 `@State` 写入都必须
+    /// 先做等值判断，避免把一次滚动手势放大成逐帧整页失效。
     func beginMessageHistoryInteraction() {
-        hasUserInteractedWithMessageList = true
+        if !hasUserInteractedWithMessageList {
+            hasUserInteractedWithMessageList = true
+        }
         guard !isProcessingHere else {
-            followsLiveMessage = true
+            if !followsLiveMessage {
+                followsLiveMessage = true
+            }
             return
         }
         stopFollowingLiveMessage()
@@ -332,12 +345,16 @@ extension CoachSessionView {
 
     func stopFollowingLiveMessage() {
         guard !isProcessingHere else {
-            followsLiveMessage = true
+            if !followsLiveMessage {
+                followsLiveMessage = true
+            }
             return
         }
-        followsLiveMessage = false
-        liveScrollTask?.cancel()
-        liveScrollTask = nil
+        if followsLiveMessage {
+            followsLiveMessage = false
+        }
+        visibility.liveScroll.task?.cancel()
+        visibility.liveScroll.task = nil
     }
 
     func restorePositionAfterLoadingEarlier(

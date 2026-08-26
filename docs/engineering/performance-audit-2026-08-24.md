@@ -5,6 +5,8 @@
 - 数据基线：已安装 Soma `0.0.11 (15)`，SwiftData marker `schemaVersion = 6`
 - 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md) 收口的真机预算与有界数据访问规则
 - 收尾复盘：[本轮性能优化收尾与踩坑报告](performance-optimization-retrospective-2026-08-25.md)
+- 下游落地：[BUG 0040 教练子树随任意 Tab 交互整体重算](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
+  收口本报告遗留的“返回 Coach 布局长尾”，并替换双击回根的栈身份重建实现
 
 ## 2026-08-25 最终收尾补充
 
