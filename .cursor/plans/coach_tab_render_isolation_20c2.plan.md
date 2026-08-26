@@ -53,3 +53,35 @@
   `make verify`（构建 + 模拟器测试）由 macOS CI / 维护者本机执行。
 - 单测：`AppTabReselectTests` 更新 + 教练再选新 case。
 - 手工验收步骤写入 acceptance 教练段落。
+
+## 第二轮：全 App 排查结果与取舍（2026-08-26）
+
+三路并行审计（Views 渲染反模式 / Observable 失效粒度 / SwiftData 查询与保存）后逐项核实。
+
+已修复：
+
+1. 教练输入链路隔离（`CoachComposerState`）：打字与听写只重渲染输入区。
+2. 历史日期头静态 DateFormatter；受力图 `SVGPath.cachedCGPath` 按固定资产缓存。
+3. 动作库最近训练 task 键改为数量 + revision，不再逐键哈希整表 UUID。
+4. 语音识别重复 partial 等值守卫。
+5. 教练 `AgentJob` 查询排除成功终态（cancelled/failed 必须保留：可重试语义依赖）。
+6. 训练计划详情参考体重查询谓词化 + limit 1；健身房详情/动作合并选择器补上限。
+7. 带练渲染路径无取数变体（`shouldCaptureEffort`/`remainingEffortSeconds(for:currentEffort:)`），
+   判定逻辑与取数版共享。
+8. Tool 侧：`listTrainingPrograms` 双读处方合一；`definitions(for:)` 逐 ID 改 IN；
+   健身房/器械 Tool 查询补上限；会话详情按动作分桶。
+
+已评估、保持现状（避免正确性/雷区风险或收益不成比例）：
+
+- 本地/远程 Agent 事件的逐事件 save：至少一次崩溃恢复检查点的既定语义（CLAUDE Agent
+  runtime 契约），remote 路径事件与 cursor 本就同一事务。
+- `beginCurrentSet` 两次连续 save：录像时序雷区（BUG 0019/0020/0025/0026），收益一次
+  save。
+- 相机旋转几何等值跳过：旋转低频，跳过需正确处理连接替换与首次应用，方向 bug 雷区。
+- `liveEventRevision` 收窄为纯文本事件：span 卡片出现也需要滚底跟随，span 本身低频。
+- 历史列表分组快照、动作详情投影快照、Span 行解码缓存：成本为交互频度级且有界，
+  快照会引入「详情编辑日期后过期」类正确性风险。
+- 训练计划详情的 workouts 查询保持实时：从本页开始训练返回后指纹必须刷新。
+- `PersonalBodyInfoView` onAppear 的 limit-1 读取：改 .task 会引入表单首帧空白闪烁。
+
+独立 PR（维护者指定）：启动路径双容器同步打开 → 迁移门后异步打开。

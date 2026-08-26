@@ -49,6 +49,10 @@
 - `CoachBubble` 实现 `Equatable`（消息对象身份 + 渲染 flags，闭包不参与）并以
   `.equatable()` 挂载，父层 state 变化（输入草稿、处理标志）不再重排历史气泡；消息内容
   变化仍由 SwiftData Observation 在气泡自身依赖上精确失效。
+- 第二轮收口输入与查询侧的同类放大：草稿、附件、语音、快捷与建议选择迁入
+  `CoachComposerState`（`@Observable` 引用），会话页 body 不读任何输入区字段，打字与
+  听写 partial 只重渲染输入区；语音识别对重复 partial 做等值守卫；教练页 `AgentJob`
+  查询排除成功终态，流式期间每次 Job 保存不再物化整页陈旧历史。
 
 ## 回归门禁
 
