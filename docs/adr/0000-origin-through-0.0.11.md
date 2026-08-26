@@ -1,14 +1,13 @@
-# ADR 0000：0.0.12 及更早收口（压缩起点）
+# ADR 0000：0.0.13 及更早收口（压缩起点）
 
-- 状态：压缩起点；0.0.12 及更早滑出窗口后仍有效的架构收口
+- 状态：压缩起点；0.0.13 及更早滑出窗口后仍有效的架构收口
 - 日期：2026-08-26
 - 维护者：Soma maintainers
-- 覆盖版本：0.0.1–0.0.12
+- 覆盖版本：0.0.1–0.0.13
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
-  - [ADR 0099](0099-behavior-preserving-modernization-and-three-version-docs.md)（窗口内最旧活 ADR，0.0.13）
-  - [ADR 0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [ADR 0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)（窗口内最旧活 ADR，0.0.14）
   - [ADR 0101](0101-record-truth-and-agent-profile-context.md)
   - [ADR 0102](0102-source-workout-plan-execution-materialization.md)
   - [ADR 0103](0103-goal-directed-progress-energy-and-hypertrophy.md)
@@ -22,8 +21,8 @@
   - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
   - [验收矩阵](../acceptance.md)
 
-本文是活 ADR 链的起点。只记录 0.0.12 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
-0.0.13 起的修订见后续活 ADR。
+本文是活 ADR 链的起点。只记录 0.0.13 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
+0.0.14 起的修订见后续活 ADR。
 
 ## 背景
 
@@ -39,11 +38,14 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 2. 聊天是非结构化事实默认创建路径；训练计划 GUI 与带练确认是已授权的结构化例外，必须共用
    同一数据与验证边界。
 3. `CLAUDE.md` 是工程契约；`project.yml` 是 Xcode 工程事实来源；`make check` 快速静态，
-   `make verify` 含模拟器。文档修订使用双向生命周期索引。
+   `make verify` 含模拟器。文档修订使用双向生命周期索引；活文档固定为压缩起点加最近三个营销
+   版本，发布时归档滑出原文并把仍有效状态合并进起点。
 4. 当前只打开 `SomaDataSchema`，不维护历史 VersionedSchema 链；不兼容变更必须新 ADR 并明确
    回填或重建。PostgreSQL 只允许向前 migration。
    `DataMigrationMarker.schemaVersion = 6` 命中后必须立即返回；根页面可交互前只做打开容器、当前
    marker 与中断一致性门禁，演示填充、媒体去重和孤儿回收在首帧后幂等执行。
+   服务按 Conversation/Training/Media/Settings 现有能力拆分，不引入 DDD application/use-case/
+   repository/entity 层、平行 DTO 或新的 `AppServices` 上帝对象。
 
 ### 数据真值
 
@@ -119,5 +121,5 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 
 ## 验证
 
-- 活 PRD/ADR README 以本文件为链起点，0.0.13 文档的修订自/部分替代指向本文件。
+- 活 PRD/ADR README 以本文件为链起点，0.0.14 文档的修订自/部分替代指向本文件。
 - `scripts/check-document-lifecycle-links.rb` 验证活文档互链；归档原文不要求与活文档互链。

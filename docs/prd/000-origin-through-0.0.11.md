@@ -1,11 +1,11 @@
-# PRD 000：0.0.12 及更早收口（压缩起点）
+# PRD 000：0.0.13 及更早收口（压缩起点）
 
-- 状态：压缩起点；0.0.12 及更早滑出窗口后仍有效的产品收口
+- 状态：压缩起点；0.0.13 及更早滑出窗口后仍有效的产品收口
 - 日期：2026-08-26
-- 覆盖版本：0.0.1–0.0.12
+- 覆盖版本：0.0.1–0.0.13
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续修订：
-  - [PRD 044](044-behavior-preserving-modernization.md)（窗口内最旧活文档，0.0.13）
+  - [PRD 045](045-performance-reliability-and-bounded-data-access.md)（窗口内最旧活文档，0.0.14）
   - [PRD 046](046-coach-records-and-goal-directed-progress.md)（移除低可信总糖与参考体重，并修订记录、会话和进展体验）
   - [PRD 047](047-root-aware-tab-reselection.md)（再选当前 Tab 改为根感知行为）
 - 下游落地：
@@ -13,8 +13,8 @@
   - [ADR 0104](../adr/0104-independent-react-timeouts-by-media.md)
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
 
-本文是活 PRD 链的起点，对应对话压缩后的滚动摘要：只保留 0.0.12 收口时仍然成立的要求，
-不含 0.0.1 到 0.0.12 沿途被替代的过渡方案。0.0.13 起的增量见后续活 PRD。
+本文是活 PRD 链的起点，对应对话压缩后的滚动摘要：只保留 0.0.13 收口时仍然成立的要求，
+不含 0.0.1 到 0.0.13 沿途被替代的过渡方案。0.0.14 起的增量见后续活 PRD。
 
 ## 产品是什么
 
@@ -111,6 +111,14 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能。路�
 - 账户系统、云同步身体库、任意代码工具、展示模型 thinking。
 - 情境化动态主屏组件（暂缓，待 App Groups Team）。
 - 把 Keep/COROS 做成独立直连（无稳定授权时只走 Apple 健康）。
+
+## 工程行为边界
+
+- 行为保持拆分不得改变 Tool Schema、Job/Event、SwiftData 字段、LLM 契约或 Server HTTP API。
+- 对话、训练、媒体和设置实现按现有能力目录维护；不引入平行 DTO、DDD application/use-case/
+  repository 层或新的 `AppServices` 上帝对象。
+- 活 PRD/ADR 固定为压缩起点加最近三个营销版本；发布时把滑出版本原文归档，并把仍有效状态合并
+  进压缩起点。归档保留在 Git，Agent 默认不读取。
 
 ## 验收
 

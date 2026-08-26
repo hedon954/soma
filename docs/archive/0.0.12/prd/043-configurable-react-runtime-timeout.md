@@ -4,7 +4,7 @@
 - 日期：2026-08-25
 - 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的 Agent 分层超时与固定 3/5/10 分钟活动执行预算
 - 后续修订：
-  - [PRD 044](../../../prd/044-behavior-preserving-modernization.md) 行为保持的工程现代化
+  - [PRD 044](../../0.0.13/prd/044-behavior-preserving-modernization.md) 行为保持的工程现代化
   - [PRD 046](../../../prd/046-coach-records-and-goal-directed-progress.md) 把统一自定义上限改为文字、图片、视频分别配置
 - 上游依据：维护者明确要求把运行超时与 ReAct 步骤上限放在一起配置
 - 下游落地：

@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-08-25
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的仓库布局与活文档窗口规则
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的仓库布局与活文档窗口规则
 - 后续替代：暂无
 - 上游依据：[PRD 044](../prd/044-behavior-preserving-modernization.md)
 

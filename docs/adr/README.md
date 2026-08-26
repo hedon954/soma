@@ -1,7 +1,7 @@
 # Soma 架构决策记录
 
 活 ADR 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.15`、`0.0.14`、`0.0.13`。0.0.12 及更早的**原文**在 [文档归档](../archive/README.md)，
+`0.0.16`、`0.0.15`、`0.0.14`。0.0.13 及更早的**原文**在 [文档归档](../archive/README.md)，
 仅供人类考古；Agent 默认不要读取归档。
 
 ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答一个问题：当时有哪些选择、最终选了什么、为什么，以及这一选择带来的约束。
@@ -11,7 +11,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 阅读顺序：
 
 ```text
-[ADR 0000 压缩起点] → 0.0.13 → 0.0.14 → 0.0.15
+[ADR 0000 压缩起点] → 0.0.14 → 0.0.15 → 0.0.16
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后仍然成立的最终决策。窗口内最旧活 ADR 的
@@ -25,14 +25,13 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | ADR | 版本 | 状态 | 决策 |
 | --- | --- | --- | --- |
-| [0000](0000-origin-through-0.0.11.md) | ≤0.0.12 | 压缩起点 | 0.0.12 收口后仍约束实现的架构决策 |
-| [0099](0099-behavior-preserving-modernization-and-three-version-docs.md) | 0.0.13 | 已采纳 | 行为保持拆分；活文档为压缩起点加最近 3 个营销版本，滑出时合并进起点 |
+| [0000](0000-origin-through-0.0.11.md) | ≤0.0.13 | 压缩起点 | 0.0.13 收口后仍约束实现的架构决策 |
 | [0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) | 0.0.14 | 已采纳，Release 真机量化验收中 | 单一连续流式文本面、可恢复进展快照、count/谓词下推与服务端索引 |
 | [0101](0101-record-truth-and-agent-profile-context.md) | 0.0.15 | 已采纳 | 移除低可信总糖与参考体重，餐次/时长动作/身体上下文成为确定性事实 |
 | [0102](0102-source-workout-plan-execution-materialization.md) | 0.0.15 | 已采纳 | 当日原始训练生成计划时组装已完成 Session，原始记录不复制不丢失 |
 | [0103](0103-goal-directed-progress-energy-and-hypertrophy.md) | 0.0.15 | 已采纳 | 减脂看能量收支，增肌看训练量与主要肌群工作组覆盖 |
 | [0104](0104-independent-react-timeouts-by-media.md) | 0.0.15 | 已采纳 | 文字、图片、视频 ReAct 总超时分别配置 |
-| [0105](0105-root-aware-tab-reselection.md) | 0.0.15 | 已采纳 | 教练再选 no-op；其他 Tab 仅在非根页再选回根 |
+| [0105](0105-root-aware-tab-reselection.md) | 0.0.16 | 已采纳 | 教练再选 no-op；其他 Tab 仅在非根页再选回根 |
 
 新决策使用 [ADR 模板](template.md)。
 
