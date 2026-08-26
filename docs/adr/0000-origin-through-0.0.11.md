@@ -13,6 +13,7 @@
   - [ADR 0103](0103-goal-directed-progress-energy-and-hypertrophy.md)
   - [ADR 0104](0104-independent-react-timeouts-by-media.md)
   - [ADR 0105](0105-root-aware-tab-reselection.md)（部分替代 Tab 再选决策）
+  - [ADR 0106](0106-reviewable-derived-records-and-manual-interruption.md)（部分替代派生记录、人工恢复和界面元信息细则）
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
 - 下游落地：
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)

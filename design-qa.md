@@ -65,3 +65,18 @@
 - `make check`：通过；格式、Lint、Markdown 链接、文档生命周期、仓库契约与 Server 类型检查均通过。
 - `make verify`：通过；Server 30 项中 29 项通过、1 项因未配置测试数据库而跳过；iOS XCTest
   544 项与 Swift Testing 6 项通过，0 项失败。
+
+## 2026-08-27 记录真值与中断交互复验
+
+- 设备：iPhone 17 Pro Simulator，iOS 26.3；只使用 `record-optimizations` 内存虚构夹具。
+- `RecordOptimizationUITests` 浅色、深色训练卡片均通过：动作库把历史 `20` 解释为 `20 秒`，
+  卡片显示“时长 / 全身 / 自重”，并保留 Trace 与单条回复反馈入口。
+- 截图复核确认训练记录从重复嵌套表面收敛为“记录卡 + 逻辑组编辑区”，消息时间、Trace 与反馈按钮
+  共用一条左对齐元数据行，两个图标使用相同 44 pt 触达槽位。
+- 设置首页不再显示“更多”分区；身体信息页把称呼和出生日期直接放入基本信息，未填写出生日期保持
+  空值且不再出现开关。自动化同时验证了姓名输入框可唤起系统键盘，且输入框下沿保持在键盘上沿之上。
+- 结果包：`build/Soma-record-optimization-ui-v2.xcresult`（浅色、深色、设置 3/3 通过）与
+  `build/Soma-record-optimization-ui-v5.xcresult`（键盘遮挡补充场景 1/1 通过）。结果包属于
+  本地忽略构建产物，不进入 Git。
+- 最终 `make format`、`make check`、`make verify` 均通过：Server 32 项中 31 项通过、1 项因未配置
+  测试数据库而跳过；iOS XCTest 627 项与 Swift Testing 7 项通过，0 项失败。

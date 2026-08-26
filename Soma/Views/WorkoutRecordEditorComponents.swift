@@ -61,7 +61,7 @@ struct WorkoutLogicalGroupsEditor: View {
         ) {
             HStack(spacing: 8) {
                 workoutChip(group.targetKindLabel)
-                workoutChip(group.sideMode.displayName)
+                workoutChip(draft.sideLabel(for: group))
                 Spacer(minLength: 6)
                 if run.count > 1 {
                     Text("× \(run.count)")
@@ -150,9 +150,9 @@ struct WorkoutLogicalGroupsEditor: View {
                 )
             )
         }
-        .padding(density == .chatCompact ? 9 : 14)
+        .padding(density == .chatCompact ? 0 : 14)
         .background(
-            AppTheme.cardBackground,
+            density == .chatCompact ? Color.clear : AppTheme.cardBackground,
             in: RoundedRectangle(
                 cornerRadius: AppTheme.cardRadius,
                 style: .continuous
@@ -160,11 +160,14 @@ struct WorkoutLogicalGroupsEditor: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
-                .stroke(AppTheme.separator, lineWidth: 0.5)
+                .stroke(
+                    density == .chatCompact ? Color.clear : AppTheme.separator,
+                    lineWidth: 0.5
+                )
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
-            "第 \(position + 1) 个逻辑组，\(group.targetKindLabel)，\(group.sideMode.displayName)"
+            "第 \(position + 1) 个逻辑组，\(group.targetKindLabel)，\(draft.sideLabel(for: group))"
         )
     }
 
@@ -197,6 +200,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     ),
                     unit: effort.targetKind == .duration ? "秒" : "次",
                     decimal: false,
+                    flat: density == .chatCompact,
                     validRange: effort.targetKind == .duration
                         ? 1 ... 86400
                         : 1 ... 1000
@@ -214,6 +218,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     unit: "kg",
                     decimal: true,
                     emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
+                    flat: density == .chatCompact,
                     validRange: 0 ... 1000
                 )
             } else {
@@ -225,7 +230,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(minHeight: 48)
+        .frame(minHeight: density == .chatCompact ? AppTheme.minimumTapTarget : 48)
     }
 
     private func restRow(
@@ -414,6 +419,7 @@ private struct WorkoutNumericField: View {
     let decimal: Bool
     var emptyPrompt = "—"
     var compact = false
+    var flat = false
     let validRange: ClosedRange<Double>
     @FocusState private var focused: Bool
 
@@ -442,13 +448,19 @@ private struct WorkoutNumericField: View {
             .padding(.horizontal, compact ? 6 : 9)
             .frame(minHeight: AppTheme.minimumTapTarget)
             .background(
-                AppTheme.insetBackground,
+                flat ? Color.clear : AppTheme.insetBackground,
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(
-                        isInvalid ? AppTheme.destructive : focused ? AppTheme.tint : AppTheme.separator,
+                        isInvalid
+                            ? AppTheme.destructive
+                            : focused
+                            ? AppTheme.tint
+                            : flat
+                            ? Color.clear
+                            : AppTheme.separator,
                         lineWidth: focused || isInvalid ? 1.5 : 0.5
                     )
             }

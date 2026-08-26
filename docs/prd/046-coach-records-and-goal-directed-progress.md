@@ -5,6 +5,7 @@
 - 修订自：
   - [PRD 000](000-origin-through-0.0.11.md) 的记录真值、身体信息、聊天元信息、进展首屏和 ReAct 运行预算
   - [PRD 045](045-performance-reliability-and-bounded-data-access.md) 的会话分页与有界进展快照
+- 后续修订：[PRD 048](048-reviewable-record-derivation-and-user-controlled-interruption.md)
 - 上游依据：
   - 维护者提出的十二项功能优化
   - [目标导向进展指标调研](../research/2026-08-26-goal-directed-progress-metrics.md)

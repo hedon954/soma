@@ -9,13 +9,13 @@ final class SomaUILayoutContractTests: XCTestCase {
         )
     }
 
-    func testSettingsKeepsAppearancePenultimateAndFeedbackLast() {
+    func testSettingsFlattensUtilitiesAndKeepsFeedbackLast() {
         XCTAssertEqual(SettingsHomeSection.allCases, [
             .profileAndTraining,
             .service,
-            .more,
-            .about,
+            .utilities,
             .display,
+            .about,
             .feedback
         ])
     }

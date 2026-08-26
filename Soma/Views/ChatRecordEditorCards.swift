@@ -72,6 +72,7 @@ private struct WorkoutRecordCardLookup: View {
     let isEditable: Bool
     private let recordID: Int64
     @State private var record: WorkoutEntry?
+    @State private var loggingProfile: ExerciseLoggingProfileSnapshot?
 
     init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.recordID = recordID
@@ -83,6 +84,7 @@ private struct WorkoutRecordCardLookup: View {
         if let record {
             InlineWorkoutCard(
                 workout: record,
+                loggingProfile: loggingProfile,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
@@ -101,6 +103,13 @@ private struct WorkoutRecordCardLookup: View {
         guard !Task.isCancelled,
               let loaded = try? modelContext.fetch(descriptor).first
         else { return }
+        let definition = try? ExerciseLibraryStore.linkedExercise(
+            for: loaded,
+            in: modelContext,
+            persist: false,
+            allowCreate: false
+        )
+        loggingProfile = definition.map(ExerciseLoggingProfileSnapshot.init)
         record = loaded
     }
 }
@@ -225,6 +234,7 @@ private struct GymRecordCardLookup: View {
 private struct InlineWorkoutCard: View {
     @Environment(\.modelContext) private var modelContext
     let workout: WorkoutEntry
+    let loggingProfile: ExerciseLoggingProfileSnapshot?
     let sourceMessage: CoachMessage?
     let isEditable: Bool
     @State private var exercise: String
@@ -232,13 +242,22 @@ private struct InlineWorkoutCard: View {
     @State private var showsDelete = false
     @State private var saveState: InlineRecordSaveState = .idle
 
-    init(workout: WorkoutEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
+    init(
+        workout: WorkoutEntry,
+        loggingProfile: ExerciseLoggingProfileSnapshot?,
+        sourceMessage: CoachMessage?,
+        isEditable: Bool
+    ) {
         self.workout = workout
+        self.loggingProfile = loggingProfile
         self.sourceMessage = sourceMessage
         self.isEditable = isEditable
         _exercise = State(initialValue: workout.exercise)
         _workoutDraft = State(
-            initialValue: WorkoutRecordDraft(evidence: workout.setEntries)
+            initialValue: WorkoutRecordDraft(
+                evidence: workout.setEntries,
+                loggingProfile: loggingProfile
+            )
         )
     }
 
@@ -296,6 +315,11 @@ private struct InlineWorkoutCard: View {
             allowCreate: true
         )
         exercise = definition?.canonicalName ?? normalized
+        if let definition {
+            workoutDraft.applyLoggingProfile(
+                ExerciseLoggingProfileSnapshot(definition)
+            )
+        }
         workout.setEntries = workoutDraft.evidence
         let estimate = WorkoutCalorieCalculator.estimate(
             exercise: workout.exercise,

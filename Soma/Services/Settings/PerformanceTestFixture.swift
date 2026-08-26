@@ -77,12 +77,14 @@ enum PerformanceTestFixture {
     static let longStreamNoNewline = "long-stream-no-newline"
     static let longStreamMarkdownCompletion = "long-stream-markdown-completion"
     static let coachTabBehavior = "coach-tab-behavior"
+    static let recordOptimizations = "record-optimizations"
 
     enum StreamScenario: String, Sendable {
         case paragraphs = "long-stream"
         case noNewline = "long-stream-no-newline"
         case markdownCompletion = "long-stream-markdown-completion"
         case coachTabBehavior = "coach-tab-behavior"
+        case recordOptimizations = "record-optimizations"
 
         var completes: Bool {
             self != .paragraphs
@@ -96,6 +98,8 @@ enum PerformanceTestFixture {
                 1 ..< 240
             case .coachTabBehavior:
                 1 ..< 4
+            case .recordOptimizations:
+                1 ..< 2
             }
         }
     }
@@ -229,10 +233,22 @@ enum PerformanceTestFixture {
             ))
         }
 
+        if scenario == .recordOptimizations {
+            seedRecordOptimizationTurn(
+                in: session,
+                startedAt: startedAt,
+                context: context
+            )
+        }
+
         // Markdown 完成态场景专门压单条 18k 正文，保持消息页在 eager 边界内，
         // 避免把外层历史分页的惰性实例化混入后台解析断言。其余场景继续保留
         // 39 轮大会话，覆盖消息级 LazyVStack 与分页。
-        let historicalTurnCount = scenario == .markdownCompletion ? 3 : 39
+        let historicalTurnCount = switch scenario {
+        case .markdownCompletion: 3
+        case .recordOptimizations: 0
+        default: 39
+        }
         for index in 0 ..< historicalTurnCount {
             let turnID = UUID()
             let userDate = startedAt.addingTimeInterval(Double(index * 80))
@@ -302,7 +318,7 @@ enum PerformanceTestFixture {
 
     static func streamDelta(_ index: Int, scenario: StreamScenario) -> String {
         switch scenario {
-        case .paragraphs, .coachTabBehavior:
+        case .paragraphs, .coachTabBehavior, .recordOptimizations:
             streamParagraph(index)
         case .noNewline:
             "第\(index + 1)段连续虚构训练建议只用于验证无换行正文的增量排版成本不随全文长度增长且不会插入额外字符"
@@ -316,6 +332,97 @@ enum PerformanceTestFixture {
             - 恢复安排：依据用户事实
 
             """
+        }
+    }
+
+    /// 只用于 UI 回归：记录故意保留旧的“次数”槽位，动作定义明确为按时长/全身，
+    /// 从而验证聊天卡由动作定义纠正展示，而不是继续信任记录级配置。
+    @MainActor
+    private static func seedRecordOptimizationTurn(
+        in session: ConversationSession,
+        startedAt: Date,
+        context: ModelContext
+    ) {
+        let turnID = UUID()
+        let definition = ExerciseDefinition(canonicalName: "单杠悬吊")
+        definition.targetKind = .duration
+        definition.laterality = .none
+        context.insert(definition)
+
+        let workout = WorkoutEntry(
+            date: startedAt.addingTimeInterval(2),
+            exercise: definition.canonicalName,
+            exerciseID: definition.id,
+            setEntries: (1 ... 3).map { index in
+                WorkoutSetEvidence(
+                    logicalSetIndex: index,
+                    side: WorkoutEffortSide.none,
+                    targetKind: .repetitions,
+                    reps: 20,
+                    externalWeightKG: 0,
+                    restSeconds: index < 3 ? 30 : nil
+                )
+            },
+            restSeconds: 30,
+            sourceTurnID: turnID,
+            sourceSessionID: session.id
+        )
+        workout.exerciseDefinition = definition
+        context.insert(workout)
+        try? BusinessIDAllocator.assign(workout, namespace: "workout", in: context)
+
+        let trace = AgentTrace(
+            startedAt: startedAt.addingTimeInterval(1),
+            provider: "UI Test",
+            model: "fixture",
+            endpoint: "local://fixture",
+            dataSpaceRaw: DataSpace.personal.rawValue,
+            userInput: "单杠悬吊 20 秒 × 3 组，间歇 30 秒",
+            contextSnapshot: "只包含虚构 UI 测试数据。",
+            mediaKind: .none,
+            imageCount: 0
+        )
+        trace.apply(.completed(
+            answer: "已记录虚构训练。",
+            at: startedAt.addingTimeInterval(3)
+        ))
+        context.insert(trace)
+
+        context.insert(CoachMessage(
+            date: startedAt,
+            sessionID: session.id,
+            isFromCoach: false,
+            text: "单杠悬吊 20 秒 × 3 组，间歇 30 秒",
+            turnID: turnID
+        ))
+        if let businessID = workout.businessID {
+            context.insert(CoachMessage(
+                date: startedAt.addingTimeInterval(3),
+                sessionID: session.id,
+                isFromCoach: true,
+                text: "已记录虚构训练。",
+                agentTraceID: trace.id,
+                agentStatus: .succeeded,
+                agentTurnItems: [
+                    AgentTurnItem(
+                        sequence: 1,
+                        kind: .tool,
+                        status: .succeeded,
+                        title: "创建训练记录",
+                        startedAt: startedAt.addingTimeInterval(1),
+                        endedAt: startedAt.addingTimeInterval(2),
+                        output: AgentTraceText.json(AgentToolResult.success(
+                            "虚构训练记录已保存。",
+                            recordRefs: [AgentRecordReference(
+                                recordType: ConversationIntent.workout.rawValue,
+                                recordID: businessID,
+                                title: definition.canonicalName
+                            )]
+                        ))
+                    )
+                ],
+                turnID: turnID
+            ))
         }
     }
 

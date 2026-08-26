@@ -84,9 +84,9 @@ struct SettingsView: View {
             switch section {
             case .profileAndTraining: profileAndTrainingSection
             case .service: serviceSection
-            case .more: privacyAndAdvancedSection
-            case .about: aboutSection
+            case .utilities: utilitiesSection
             case .display: displaySection
+            case .about: aboutSection
             case .feedback: feedbackSection
             }
         }
@@ -142,15 +142,9 @@ struct SettingsView: View {
         }
     }
 
-    /// PRD 020：任务进度与后台处理是低频配置，下沉到「更多」。
-    private var privacyAndAdvancedSection: some View {
+    /// 低频能力直接平铺在设置根页，不再增加没有独立信息含义的「更多」分组。
+    private var utilitiesSection: some View {
         Section {
-            NavigationLink {
-                DataManagementView()
-            } label: {
-                SettingsHomeRowLabel(item: .dataBackup, title: "数据与备份")
-            }
-
             NavigationLink {
                 AgentSystemSettingsView()
             } label: {
@@ -161,6 +155,12 @@ struct SettingsView: View {
                 RemoteAgentSettingsView()
             } label: {
                 SettingsHomeRowLabel(item: .backgroundProcessing, title: "后台持续处理")
+            }
+
+            NavigationLink {
+                DataManagementView()
+            } label: {
+                SettingsHomeRowLabel(item: .dataBackup, title: "数据与备份")
             }
 
             NavigationLink {
@@ -179,8 +179,6 @@ struct SettingsView: View {
             } label: {
                 SettingsHomeRowLabel(item: .advanced, title: "高级设置")
             }
-        } header: {
-            settingsHomeSectionHeader("更多")
         }
     }
 
@@ -497,7 +495,7 @@ struct PersonalBodyInfoView: View {
     @State private var fitnessGoal: FitnessGoal?
     @State private var healthNotes = ""
     @State private var loadedProfileID: UUID?
-    @State private var moreBasicsExpanded = false
+    @State private var showsBirthDateEditor = false
     @State private var contextExpanded = false
     @State private var latestWeightValue: Double?
     @State private var latestWeightDate: Date?
@@ -557,17 +555,43 @@ struct PersonalBodyInfoView: View {
                     }
                 }
 
-                DisclosureGroup("更多（可选）", isExpanded: $moreBasicsExpanded) {
-                    ProfileFieldRow(title: "称呼", placeholder: "可选", text: $displayName)
-                    Toggle("填写出生日期", isOn: $hasBirthDate)
-                        .appToggleStyle()
-                    if hasBirthDate {
+                ProfileFieldRow(title: "称呼", placeholder: "可选", text: $displayName)
+                if showsBirthDateEditor {
+                    HStack(spacing: 8) {
                         DatePicker(
                             "出生日期",
-                            selection: $birthDate,
+                            selection: Binding(
+                                get: { birthDate },
+                                set: { newValue in
+                                    birthDate = newValue
+                                    hasBirthDate = true
+                                }
+                            ),
                             in: earliestBirthDate ... Date.now,
                             displayedComponents: .date
                         )
+                        if hasBirthDate {
+                            Button(role: .destructive) {
+                                hasBirthDate = false
+                                showsBirthDateEditor = false
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .frame(
+                                        width: AppTheme.minimumTapTarget,
+                                        height: AppTheme.minimumTapTarget
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("清除出生日期")
+                        }
+                    }
+                } else {
+                    LabeledContent("出生日期") {
+                        Button("未填写") {
+                            showsBirthDateEditor = true
+                        }
+                        .foregroundStyle(.secondary)
+                        .accessibilityHint("展开日期选择器；选择日期后才会保存")
                     }
                 }
             } header: {
@@ -697,13 +721,14 @@ struct PersonalBodyInfoView: View {
         if let storedBirthDate = profile.birthDate {
             birthDate = storedBirthDate
             hasBirthDate = true
+            showsBirthDateEditor = true
         } else {
             hasBirthDate = false
+            showsBirthDateEditor = false
         }
         height = profile.height.map(formatted) ?? ""
         fitnessGoal = FitnessGoal(rawValue: profile.fitnessGoal)
         healthNotes = profile.healthNotes
-        moreBasicsExpanded = !profile.displayName.isEmpty || hasBirthDate
         contextExpanded = !profile.fitnessGoal.isEmpty || !profile.healthNotes.isEmpty
     }
 

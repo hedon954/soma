@@ -94,6 +94,23 @@ extension CoachSessionView {
         )
     }
 
+    func interruptCurrentProcessing() {
+        guard let sessionID = processor.sessionID,
+              let processingContext = ConversationProcessingContextFactory.make(
+                  sessionID: sessionID,
+                  dataSpace: dataSpace.activeSpace,
+                  ai: ai,
+                  in: modelContext
+              )
+        else {
+            return
+        }
+        if processor.interruptActiveProcessing(context: processingContext) {
+            composer.dismissKeyboard()
+            scrollRequest = UUID()
+        }
+    }
+
     func retry(turnID: UUID) {
         let needsConfigurationGuidance = needsConfigurationGuidance(forceLocal: false)
         guard let userMessage = ConversationTurnProjection.userMessage(

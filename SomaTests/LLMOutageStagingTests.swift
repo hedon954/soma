@@ -150,6 +150,76 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
+    func testUserInterruptionUsesTheSameManualRetryBarrier() throws {
+        let suiteName = "ConversationInterruptionTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
+        let modelContext = ModelContext(spaces.personalContainer)
+        let session = ConversationSession()
+        let userMessage = CoachMessage(
+            sessionID: session.id,
+            isFromCoach: false,
+            text: "分析这次虚构训练",
+            turnID: UUID()
+        )
+        let job = try AgentJob(
+            turnID: XCTUnwrap(userMessage.turnID),
+            sessionID: session.id,
+            userMessageID: userMessage.id,
+            dataSpace: .personal,
+            userText: userMessage.text,
+            mediaAttachments: [],
+            contextSnapshot: AgentJobContextSnapshot(
+                structuredContext: "虚构上下文",
+                includeLocation: false
+            )
+        )
+        modelContext.insert(session)
+        modelContext.insert(userMessage)
+        modelContext.insert(job)
+        try modelContext.save()
+        try AgentJobStore.claim(job, owner: "test-runner", in: modelContext)
+        let ai = AIService(defaults: defaults, apiKeyOverride: "test-key")
+        let context = ConversationProcessingContext(
+            structuredContext: "",
+            session: session,
+            dataSpace: .personal,
+            gyms: [],
+            equipment: [],
+            ai: ai,
+            modelContext: modelContext
+        )
+        let processor = ConversationProcessingService(
+            backgroundLease: StagingTestBackgroundLease()
+        )
+        processor.isProcessing = true
+        processor.dataSpace = .personal
+        processor.sessionID = session.id
+        processor.activeJobID = job.id
+
+        XCTAssertTrue(processor.interruptActiveProcessing(context: context))
+
+        let response = try XCTUnwrap(
+            try modelContext.fetch(FetchDescriptor<CoachMessage>())
+                .first(where: \.isFromCoach)
+        )
+        XCTAssertEqual(job.state, .waitingForUser)
+        XCTAssertEqual(response.agentStatus, .cancelled)
+        XCTAssertTrue(response.agentTurnItems.contains { $0.kind == .error })
+        XCTAssertTrue(ConversationTurnProjection.canRetry(
+            response,
+            in: [userMessage, response],
+            job: job
+        ))
+        XCTAssertNil(try AgentJobStore.claimNext(
+            dataSpace: .personal,
+            owner: "another-runner",
+            in: modelContext
+        ))
+    }
+
+    @MainActor
     func testRetryAllPendingReleasesEveryItemInFIFOOrder() throws {
         let container = try makeContainer()
         let context = ModelContext(container)

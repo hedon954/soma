@@ -20,12 +20,13 @@ struct AssistantFeedbackButton: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Text(timestamp)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .padding(.trailing, 16)
                     .accessibilityLabel(timestampAccessibilityLabel)
 
                 if let traceID {
@@ -44,7 +45,7 @@ struct AssistantFeedbackButton: View {
                         .frame(
                             width: AppTheme.minimumTapTarget,
                             height: AppTheme.minimumTapTarget,
-                            alignment: .leading
+                            alignment: .center
                         )
                 }
                 .buttonStyle(.plain)
@@ -115,7 +116,7 @@ private struct AssistantTraceLink: View {
             .frame(
                 width: AppTheme.minimumTapTarget,
                 height: AppTheme.minimumTapTarget,
-                alignment: .leading
+                alignment: .center
             )
             .accessibilityLabel("查看这条回复的执行日志")
     }

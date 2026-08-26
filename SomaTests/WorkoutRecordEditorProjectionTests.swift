@@ -286,6 +286,31 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
         XCTAssertEqual(evidence.durationSeconds, 60)
     }
 
+    func testExerciseDefinitionOverridesLegacyRecordUnitAndLateralityLabel() {
+        let draft = WorkoutRecordDraft(
+            evidence: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    side: WorkoutEffortSide.none,
+                    targetKind: .repetitions,
+                    reps: 20,
+                    externalWeightKG: 0
+                )
+            ],
+            loggingProfile: ExerciseLoggingProfileSnapshot(
+                laterality: .none,
+                targetKind: .duration
+            )
+        )
+
+        XCTAssertEqual(draft.groups[0].efforts[0].targetKind, .duration)
+        XCTAssertNil(draft.groups[0].efforts[0].reps)
+        XCTAssertEqual(draft.groups[0].efforts[0].durationSeconds, 20)
+        XCTAssertEqual(draft.sideLabel(for: draft.groups[0]), "全身")
+        XCTAssertEqual(draft.evidence[0].targetKind, .duration)
+        XCTAssertEqual(draft.evidence[0].durationSeconds, 20)
+    }
+
     func testLegacyMissingTargetKindRemainsMissingAfterRoundTrip() {
         let evidence = [WorkoutSetEvidence(reps: 8, externalWeightKG: 40)]
 

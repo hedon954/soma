@@ -33,6 +33,12 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0104](0104-independent-react-timeouts-by-media.md) | 0.0.15 | 已采纳 | 文字、图片、视频 ReAct 总超时分别配置 |
 | [0105](0105-root-aware-tab-reselection.md) | 0.0.16 | 已采纳 | 教练再选 no-op；其他 Tab 仅在非根页再选回根 |
 
+## 未发布增量
+
+| ADR | 状态 | 决策 |
+| --- | --- | --- |
+| [0106](0106-reviewable-derived-records-and-manual-interruption.md) | 已采纳 | 已知营养小计、动作定义投影与用户主动中断共用可审查人工恢复边界 |
+
 新决策使用 [ADR 模板](template.md)。
 
 状态定义：

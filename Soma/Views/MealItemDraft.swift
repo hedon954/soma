@@ -38,6 +38,24 @@ struct MealItemDraft: Identifiable, Equatable {
         fat = item.fat.map { $0.formatted() } ?? ""
     }
 
+    /// 只有份量开头的正数发生变化、且单位/描述完全相同时才联动营养值。
+    /// 用户直接修改热量或宏量时不会反向改份量，也不会改动其他字段。
+    mutating func updatePortion(_ newValue: String) {
+        defer { portion = newValue }
+        guard let oldPortion = ParsedMealPortion(portion),
+              let newPortion = ParsedMealPortion(newValue),
+              oldPortion.unit == newPortion.unit,
+              oldPortion.quantity != newPortion.quantity
+        else {
+            return
+        }
+        let factor = newPortion.quantity / oldPortion.quantity
+        calories = scaledInteger(calories, by: factor)
+        protein = scaledDecimal(protein, by: factor)
+        carbs = scaledDecimal(carbs, by: factor)
+        fat = scaledDecimal(fat, by: factor)
+    }
+
     /// 名称为空的行视为未填写，不写入记录。
     var item: MealItem? {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -84,5 +102,51 @@ struct MealItemDraft: Identifiable, Equatable {
                 return "\(item.name) \(calories)"
             }
             .joined(separator: "；")
+    }
+
+    private func scaledInteger(_ value: String, by factor: Double) -> String {
+        guard let number = Double(normalizedNumber(value)) else { return value }
+        return String(Int((number * factor).rounded()))
+    }
+
+    private func scaledDecimal(_ value: String, by factor: Double) -> String {
+        guard let number = Double(normalizedNumber(value)) else { return value }
+        return (number * factor).formatted(
+            .number.precision(.fractionLength(0 ... 3))
+        )
+    }
+
+    private func normalizedNumber(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+    }
+}
+
+private struct ParsedMealPortion {
+    let quantity: Double
+    let unit: String
+
+    init?(_ rawValue: String) {
+        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("约") {
+            value.removeFirst()
+            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let numberText = String(value.prefix { character in
+            character.isNumber || character == "." || character == ","
+        })
+        guard !numberText.isEmpty,
+              let quantity = Double(numberText.replacingOccurrences(of: ",", with: ".")),
+              quantity > 0
+        else {
+            return nil
+        }
+        let suffix = value.dropFirst(numberText.count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !suffix.isEmpty, !suffix.contains(where: \.isNumber) else {
+            return nil
+        }
+        self.quantity = quantity
+        unit = suffix.replacingOccurrences(of: " ", with: "")
     }
 }

@@ -242,6 +242,13 @@ extension ConversationProcessingService {
                 titleGenerator.request(context: context)
             }
         } catch {
+            if job.state == .waitingForUser,
+               responseMessage.agentStatus == .cancelled
+            {
+                context.session.touch(at: .now)
+                try? context.modelContext.save()
+                return
+            }
             let reason = error.localizedDescription
             let message = LLMOutageClassifier.disposition(for: error).message(
                 fallback: "这次后台任务没有处理成功：\(reason)"

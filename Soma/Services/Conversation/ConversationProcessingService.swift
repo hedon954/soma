@@ -46,6 +46,9 @@ final class ConversationProcessingService {
     var processingTask: Task<Void, Never>?
 
     @ObservationIgnored
+    var activeJobID: UUID?
+
+    @ObservationIgnored
     var performanceFixtureTask: Task<Void, Never>?
 
     @ObservationIgnored let titleGenerator = SessionTitleGenerator()
@@ -336,6 +339,7 @@ final class ConversationProcessingService {
             finishProcessing()
             return
         }
+        activeJobID = job.id
         if job.backend == .remote {
             startRemoteProcessing(
                 job: job,
@@ -445,6 +449,7 @@ final class ConversationProcessingService {
         )
         dataSpace = nil
         sessionID = nil
+        activeJobID = nil
         processingTask = nil
     }
 

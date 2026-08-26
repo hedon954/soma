@@ -6,6 +6,8 @@
 - 下游落地：
   - [PRD 036](../archive/0.0.9/prd/036-meal-sugar-and-glycemic-speed-estimate.md)
   - [ADR 0087](../archive/0.0.9/adr/0087-reviewable-total-sugar-and-glycemic-speed.md)
+  - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
+  - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
 
 ## 症状
 

@@ -1,7 +1,7 @@
 @testable import Soma
 import XCTest
 
-/// ADR 0084：汇总卡是菜品拆解的纯派生，缺项保持为空。
+/// 菜品拆解是事实来源；完整总值和可解释的已知小计必须同时保留。
 final class MealNutritionTotalsTests: XCTestCase {
     func testCompleteItemsSumEveryMacro() {
         let totals = MealNutritionTotals.derive(from: [
@@ -27,7 +27,7 @@ final class MealNutritionTotalsTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(totals.fat), 4, accuracy: 0.001)
     }
 
-    func testMissingFieldOnAnyItemKeepsThatTotalEmpty() {
+    func testMissingFieldKeepsExactTotalEmptyButStillProvidesKnownSubtotal() {
         let totals = MealNutritionTotals.derive(from: [
             MealItem(name: "鸡胸", calories: 165, protein: 31, carbs: 0, fat: 3.6),
             MealItem(name: "沙拉", calories: 90, carbs: 8, fat: 5)
@@ -35,7 +35,11 @@ final class MealNutritionTotalsTests: XCTestCase {
 
         XCTAssertEqual(totals.calories, 255)
         XCTAssertNil(totals.protein)
+        XCTAssertEqual(try XCTUnwrap(totals.knownProtein), 31, accuracy: 0.001)
+        XCTAssertFalse(totals.proteinIsComplete)
         XCTAssertEqual(try XCTUnwrap(totals.carbs), 8, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(totals.knownCarbs), 8, accuracy: 0.001)
+        XCTAssertTrue(totals.carbsIsComplete)
     }
 
     func testEmptyItemsProduceEmptyTotalsInsteadOfZero() {
@@ -82,6 +86,64 @@ final class MealNutritionTotalsTests: XCTestCase {
         XCTAssertNil(item?.protein)
         XCTAssertEqual(item?.carbs, 0)
         XCTAssertNil(unnamed.item)
+    }
+
+    func testChangingOnlyPortionCountScalesExistingNutritionFields() {
+        var draft = MealItemDraft(
+            name: "黑布林",
+            portion: "1 颗",
+            calories: "20",
+            protein: "0.4",
+            carbs: "5",
+            fat: "0.1"
+        )
+
+        draft.updatePortion("2 颗")
+
+        XCTAssertEqual(draft.portion, "2 颗")
+        XCTAssertEqual(draft.calories, "40")
+        XCTAssertEqual(draft.protein, "0.8")
+        XCTAssertEqual(draft.carbs, "10")
+        XCTAssertEqual(draft.fat, "0.2")
+    }
+
+    func testPortionScalingPreservesMissingFactsAndRejectsAmbiguousChanges() {
+        var draft = MealItemDraft(
+            name: "虚构水果",
+            portion: "1 颗",
+            calories: "20",
+            protein: "",
+            carbs: "5",
+            fat: ""
+        )
+
+        draft.updatePortion("2 碗")
+        XCTAssertEqual(draft.calories, "20")
+        XCTAssertEqual(draft.carbs, "5")
+
+        draft.updatePortion("3 碗")
+        XCTAssertEqual(draft.calories, "30")
+        XCTAssertEqual(draft.carbs, "7.5")
+        XCTAssertEqual(draft.protein, "")
+        XCTAssertEqual(draft.fat, "")
+    }
+
+    func testEditingNutritionDirectlyDoesNotChangePortionOrSiblingFields() {
+        var draft = MealItemDraft(
+            name: "虚构水果",
+            portion: "2 颗",
+            calories: "40",
+            protein: "0.8",
+            carbs: "10",
+            fat: "0.2"
+        )
+
+        draft.carbs = "12"
+
+        XCTAssertEqual(draft.portion, "2 颗")
+        XCTAssertEqual(draft.calories, "40")
+        XCTAssertEqual(draft.protein, "0.8")
+        XCTAssertEqual(draft.fat, "0.2")
     }
 
     @MainActor

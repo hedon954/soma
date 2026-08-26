@@ -12,9 +12,9 @@ enum TrainingProgramDetailAction: String, CaseIterable, Identifiable, Sendable {
 enum SettingsHomeSection: String, CaseIterable, Identifiable, Sendable {
     case profileAndTraining
     case service
-    case more
-    case about
+    case utilities
     case display
+    case about
     case feedback
 
     var id: String {

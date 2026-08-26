@@ -547,6 +547,9 @@ struct CoachSessionView: View {
                 canRetry: !processorIsProcessing
                     && projection.retryableMessageIDs.contains(message.id),
                 onRetry: { retry(message) },
+                canInterrupt: processingHere
+                    && message.agentStatus == .running,
+                onInterrupt: interruptCurrentProcessing,
                 onDiscardPending: message.turnID.map(
                     projection.stagedTurnIDs.contains
                 ) == true

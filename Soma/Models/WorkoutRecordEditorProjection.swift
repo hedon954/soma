@@ -20,6 +20,23 @@ enum WorkoutRecordSideMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// 次数/时长和左右方式属于动作定义。记录只保存当次完成证据；旧记录若带错单位，
+/// 编辑投影按动作定义解释同一个数值，不继续让记录形成第二套配置源。
+struct ExerciseLoggingProfileSnapshot: Equatable, Sendable {
+    var laterality: ExerciseLaterality
+    var targetKind: WorkoutTargetKind
+
+    init(laterality: ExerciseLaterality, targetKind: WorkoutTargetKind) {
+        self.laterality = laterality
+        self.targetKind = targetKind
+    }
+
+    init(_ exercise: ExerciseDefinition) {
+        laterality = exercise.laterality
+        targetKind = exercise.targetKind
+    }
+}
+
 struct WorkoutEffortDraft: Identifiable, Equatable, Sendable {
     var id: UUID
     var sourceOrder: Int
@@ -213,8 +230,12 @@ struct WorkoutLogicalGroupRun: Identifiable, Equatable, Sendable {
 
 struct WorkoutRecordDraft: Equatable, Sendable {
     var groups: [LogicalWorkoutGroupDraft]
+    var loggingProfile: ExerciseLoggingProfileSnapshot?
 
-    init(evidence: [WorkoutSetEvidence]) {
+    init(
+        evidence: [WorkoutSetEvidence],
+        loggingProfile: ExerciseLoggingProfileSnapshot? = nil
+    ) {
         enum GroupKey: Hashable {
             case logical(Int)
             case legacy(Int)
@@ -244,10 +265,18 @@ struct WorkoutRecordDraft: Equatable, Sendable {
                 efforts: grouped[key] ?? []
             )
         }
+        self.loggingProfile = nil
+        if let loggingProfile {
+            applyLoggingProfile(loggingProfile)
+        }
     }
 
-    init(groups: [LogicalWorkoutGroupDraft]) {
+    init(
+        groups: [LogicalWorkoutGroupDraft],
+        loggingProfile: ExerciseLoggingProfileSnapshot? = nil
+    ) {
         self.groups = groups
+        self.loggingProfile = loggingProfile
     }
 
     var evidence: [WorkoutSetEvidence] {
@@ -276,6 +305,45 @@ struct WorkoutRecordDraft: Equatable, Sendable {
 
     var finalGroupID: UUID? {
         groups.max { $0.sourceOrder < $1.sourceOrder }?.id
+    }
+
+    func sideLabel(for group: LogicalWorkoutGroupDraft) -> String {
+        loggingProfile?.laterality.displayName ?? group.sideMode.displayName
+    }
+
+    mutating func applyLoggingProfile(_ profile: ExerciseLoggingProfileSnapshot) {
+        loggingProfile = profile
+        for groupIndex in groups.indices {
+            for effortIndex in groups[groupIndex].efforts.indices {
+                var effort = groups[groupIndex].efforts[effortIndex]
+                if profile.targetKind == .duration {
+                    if effort.durationSeconds == nil {
+                        effort.durationSeconds = effort.reps
+                    }
+                    effort.reps = nil
+                } else {
+                    if effort.reps == nil {
+                        effort.reps = effort.durationSeconds
+                    }
+                    effort.durationSeconds = nil
+                }
+                effort.targetKind = profile.targetKind
+                effort.persistsTargetKind = true
+                if groups[groupIndex].efforts.count == 1 {
+                    switch profile.laterality {
+                    case .none:
+                        effort.side = WorkoutEffortSide.none
+                    case .left:
+                        effort.side = .left
+                    case .right:
+                        effort.side = .right
+                    case .both:
+                        break
+                    }
+                }
+                groups[groupIndex].efforts[effortIndex] = effort
+            }
+        }
     }
 
     var isValid: Bool {
@@ -335,7 +403,7 @@ struct WorkoutRecordDraft: Equatable, Sendable {
                 )
             }
         } else {
-            [WorkoutEffortDraft(sourceOrder: nextEffortOrder)]
+            defaultEfforts(startingAt: nextEffortOrder)
         }
 
         groups.append(LogicalWorkoutGroupDraft(
@@ -343,6 +411,25 @@ struct WorkoutRecordDraft: Equatable, Sendable {
             sourceOrder: nextOrder,
             efforts: efforts
         ))
+    }
+
+    private func defaultEfforts(startingAt sourceOrder: Int) -> [WorkoutEffortDraft] {
+        guard let loggingProfile else {
+            return [WorkoutEffortDraft(sourceOrder: sourceOrder)]
+        }
+        let sides: [WorkoutEffortSide] = switch loggingProfile.laterality {
+        case .none: [.none]
+        case .both: [.left, .right]
+        case .left: [.left]
+        case .right: [.right]
+        }
+        return sides.enumerated().map { offset, side in
+            WorkoutEffortDraft(
+                sourceOrder: sourceOrder + offset,
+                side: side,
+                targetKind: loggingProfile.targetKind
+            )
+        }
     }
 
     mutating func removeGroup(id: UUID) {
@@ -353,8 +440,14 @@ struct WorkoutRecordDraft: Equatable, Sendable {
 struct WorkoutRecordEditorProjection: Equatable, Sendable {
     var draft: WorkoutRecordDraft
 
-    init(evidence: [WorkoutSetEvidence]) {
-        draft = WorkoutRecordDraft(evidence: evidence)
+    init(
+        evidence: [WorkoutSetEvidence],
+        loggingProfile: ExerciseLoggingProfileSnapshot? = nil
+    ) {
+        draft = WorkoutRecordDraft(
+            evidence: evidence,
+            loggingProfile: loggingProfile
+        )
     }
 
     var displayRuns: [WorkoutLogicalGroupRun] {

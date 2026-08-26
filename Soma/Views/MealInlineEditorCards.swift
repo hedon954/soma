@@ -261,7 +261,13 @@ struct MealItemDraftRow: View {
             text: $draft.portion,
             font: .caption2,
             tint: .secondary,
-            accessibilityTitle: "份量"
+            accessibilityTitle: "份量",
+            onCommit: { oldValue, newValue in
+                // TextField 会逐字符写 Binding；离开编辑态后再以完整的新旧份量缩放，
+                // 避免 `1 颗 → "" → 2 → 2 颗` 丢失原始比例基线。
+                draft.portion = oldValue
+                draft.updatePortion(newValue)
+            }
         )
     }
 
@@ -355,8 +361,10 @@ struct InlineTextValue: View {
     var keyboard: UIKeyboardType = .default
     var suffix: String?
     let accessibilityTitle: String
+    var onCommit: (String, String) -> Void = { _, _ in }
 
     @State private var isEditing = false
+    @State private var valueAtEditingStart = ""
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -370,7 +378,7 @@ struct InlineTextValue: View {
                         .onSubmit(endEditing)
                         .onChange(of: isFocused) { _, focused in
                             if !focused {
-                                isEditing = false
+                                finishEditing()
                             }
                         }
                         .accessibilityIdentifier("meal-inline-value-editor")
@@ -406,6 +414,7 @@ struct InlineTextValue: View {
     }
 
     private func beginEditing() {
+        valueAtEditingStart = text
         isEditing = true
         Task { @MainActor in
             await Task.yield()
@@ -416,11 +425,21 @@ struct InlineTextValue: View {
 
     private func endEditing() {
         isFocused = false
+        finishEditing()
+    }
+
+    private func finishEditing() {
+        guard isEditing else { return }
         isEditing = false
+        let initialValue = valueAtEditingStart
+        valueAtEditingStart = text
+        guard initialValue != text else { return }
+        onCommit(initialValue, text)
     }
 }
 
-/// 只读派生汇总：随第一张卡的草稿实时重算，缺项显示未估算而不是 0。
+/// 只读派生汇总：随第一张卡的草稿实时重算。完整字段显示精确总值；
+/// 部分字段显示已知小计并加“≥”，不把未知项猜成 0。
 private struct MealTotalsCard: View {
     let meal: MealEntry
     let mealType: MealType
@@ -444,18 +463,37 @@ private struct MealTotalsCard: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(totals.calories.map(String.init) ?? "—")
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                            .monospacedDigit()
-                        Text(totals.calories == nil ? "千卡未估算" : "千卡")
+                        Text(displayValue(
+                            exact: totals.calories,
+                            known: totals.knownCalories,
+                            isComplete: totals.caloriesIsComplete
+                        ))
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .monospacedDigit()
+                        Text("千卡")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 HStack(alignment: .top, spacing: 10) {
-                    macro("碳水", totals.carbs)
-                    macro("蛋白质", totals.protein)
-                    macro("脂肪", totals.fat)
+                    macro(
+                        "碳水",
+                        exact: totals.carbs,
+                        known: totals.knownCarbs,
+                        isComplete: totals.carbsIsComplete
+                    )
+                    macro(
+                        "蛋白质",
+                        exact: totals.protein,
+                        known: totals.knownProtein,
+                        isComplete: totals.proteinIsComplete
+                    )
+                    macro(
+                        "脂肪",
+                        exact: totals.fat,
+                        known: totals.knownFat,
+                        isComplete: totals.fatIsComplete
+                    )
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("升糖速度估算")
@@ -496,18 +534,42 @@ private struct MealTotalsCard: View {
         return "\(mealType.rawValue) · \(time) · \(itemCount) 项菜品"
     }
 
-    private func macro(_ title: String, _ value: Double?) -> some View {
+    private func macro(
+        _ title: String,
+        exact: Double?,
+        known: Double?,
+        isComplete: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text(value.map {
-                "\($0.formatted(.number.precision(.fractionLength(0 ... 1)))) 克"
-            } ?? "未估算")
+            Text("\(displayValue(exact: exact, known: known, isComplete: isComplete)) 克")
                 .font(.caption.weight(.semibold).monospacedDigit())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+
+    private func displayValue<T: BinaryInteger>(
+        exact: T?,
+        known: T?,
+        isComplete: Bool
+    ) -> String {
+        guard let value = exact ?? known else { return "—" }
+        return "\(isComplete ? "" : "≥")\(value)"
+    }
+
+    private func displayValue(
+        exact: Double?,
+        known: Double?,
+        isComplete: Bool
+    ) -> String {
+        guard let value = exact ?? known else { return "—" }
+        let formatted = value.formatted(
+            .number.precision(.fractionLength(0 ... 1))
+        )
+        return "\(isComplete ? "" : "≥")\(formatted)"
     }
 }
 

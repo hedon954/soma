@@ -8,6 +8,7 @@
   - [PRD 045](045-performance-reliability-and-bounded-data-access.md)（窗口内最旧活文档，0.0.14）
   - [PRD 046](046-coach-records-and-goal-directed-progress.md)（移除低可信总糖与参考体重，并修订记录、会话和进展体验）
   - [PRD 047](047-root-aware-tab-reselection.md)（再选当前 Tab 改为根感知行为）
+  - [PRD 048](048-reviewable-record-derivation-and-user-controlled-interruption.md)（修订派生汇总、人工中断与设置/消息元信息）
 - 下游落地：
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md)
   - [ADR 0104](../adr/0104-independent-react-timeouts-by-media.md)

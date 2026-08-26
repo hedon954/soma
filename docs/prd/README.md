@@ -35,6 +35,12 @@
 | [046：教练记录可信度、会话交互与目标导向进展](046-coach-records-and-goal-directed-progress.md) | 0.0.15 | 活增量 |
 | [047：根感知的 Tab 再选](047-root-aware-tab-reselection.md) | 0.0.16 | 活增量 |
 
+## 未发布增量
+
+| 文档 | 状态 | 主题 |
+| --- | --- | --- |
+| [048：可审查记录派生与用户主动中断](048-reviewable-record-derivation-and-user-controlled-interruption.md) | 已采纳，未发布 | 已知营养小计、份数缩放、动作定义投影、人工中断和界面降噪 |
+
 ## 阅读约定
 
 - 「修订自」是活链前驱，「后续修订」是活链后继。

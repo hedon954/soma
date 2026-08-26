@@ -179,7 +179,12 @@ private struct WorkoutRecordEditor: View {
         _date = State(initialValue: workout.date)
         _exercise = State(initialValue: workout.exercise)
         _workoutDraft = State(
-            initialValue: WorkoutRecordDraft(evidence: workout.setEntries)
+            initialValue: WorkoutRecordDraft(
+                evidence: workout.setEntries,
+                loggingProfile: workout.exerciseDefinition.map(
+                    ExerciseLoggingProfileSnapshot.init
+                )
+            )
         )
         _restSeconds = State(initialValue: EditorValue.string(workout.restSeconds))
         _durationMinutes = State(initialValue: EditorValue.string(workout.durationMinutes))
@@ -456,6 +461,11 @@ private struct WorkoutRecordEditor: View {
             allowCreate: true
         )
         exercise = definition?.canonicalName ?? normalizedExercise
+        if let definition {
+            workoutDraft.applyLoggingProfile(
+                ExerciseLoggingProfileSnapshot(definition)
+            )
+        }
         notes = normalizedNotes
         workout.date = date
         workout.setEntries = workoutDraft.evidence

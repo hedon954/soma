@@ -496,12 +496,8 @@ private struct AgentTurnWaitingCard: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 8)
-        .background(
-            Color(uiColor: .secondarySystemGroupedBackground),
-            in: Capsule()
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: AppTheme.minimumTapTarget)
         .accessibilityLabel("Agent 正在继续处理")
     }
 }

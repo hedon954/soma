@@ -303,6 +303,15 @@ extension ConversationProcessingService {
         media: PreparedConversationMedia,
         context: ConversationProcessingContext
     ) {
+        // 主动中断已经同步投影到同一气泡并进入人工屏障；Task cancellation
+        // 只负责停止底层执行，不能再覆盖成另一条通用错误。
+        if job.state == .waitingForUser,
+           responseMessage.agentStatus == .cancelled
+        {
+            context.session.touch(at: .now)
+            try? context.modelContext.save()
+            return
+        }
         let reason = error.localizedDescription
         if backgroundLeaseExpired {
             let pausedText = job.hasResumableCheckpoint
