@@ -2,6 +2,41 @@
 import XCTest
 
 final class WorkoutCalorieCalculatorTests: XCTestCase {
+    func testMifflinStJeorRestingEnergyRequiresCompleteSupportedProfile() throws {
+        XCTAssertEqual(
+            try XCTUnwrap(RestingEnergyCalculator.dailyKilocalories(
+                weightKG: 70,
+                heightCM: 175,
+                age: 30,
+                biologicalSex: .male
+            )),
+            1648.75,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(RestingEnergyCalculator.dailyKilocalories(
+                weightKG: 60,
+                heightCM: 165,
+                age: 30,
+                biologicalSex: .female
+            )),
+            1320.25,
+            accuracy: 0.001
+        )
+        XCTAssertNil(RestingEnergyCalculator.dailyKilocalories(
+            weightKG: nil,
+            heightCM: 175,
+            age: 30,
+            biologicalSex: .male
+        ))
+        XCTAssertNil(RestingEnergyCalculator.dailyKilocalories(
+            weightKG: 70,
+            heightCM: 175,
+            age: 30,
+            biologicalSex: .unspecified
+        ))
+    }
+
     func testIgnoresMistakenSetsRepsRestDuration() throws {
         // Agent mistake: 4 × 8 × 90 / 60 = 48
         XCTAssertTrue(WorkoutCalorieCalculator.isMistakenSetsRepsRestDuration(

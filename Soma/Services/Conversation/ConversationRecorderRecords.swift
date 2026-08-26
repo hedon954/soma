@@ -26,7 +26,7 @@ extension ConversationRecorder {
             return .failure(error.localizedDescription)
         }
         let exercise = definition.canonicalName
-        let setEntries = workoutSetEntries(from: arguments)
+        let setEntries = workoutSetEntries(from: arguments, exercise: definition)
         if let error = workoutSetValidationError(setEntries) {
             return .failure(error)
         }
@@ -55,7 +55,7 @@ extension ConversationRecorder {
             sets: sets,
             reps: reps,
             restSeconds: arguments.restSeconds,
-            weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
+            weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: context)
         )
         let resolvedMedia = resolvedMediaAttachments(
             mediaAttachments,
@@ -144,7 +144,7 @@ extension ConversationRecorder {
                         && arguments.restSeconds != nil
                 )
             guard hasUsableDurationInput else { return "" }
-            return "；未估算热量（需要最近体重或个人信息中的参考体重）"
+            return "；未估算热量（需要一条有效的体重记录）"
         }()
         return .success(
             "已记录训练：\(summary.joined(separator: "，"))\(calorieSummary)。",
@@ -175,9 +175,6 @@ extension ConversationRecorder {
         guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
         }
-        if let totalSugar = arguments.totalSugar, !(0 ... 1000).contains(totalSugar) {
-            return .failure("total_sugar 必须在 0 到 1000g 之间。")
-        }
         let glycemic = validatedGlycemicAssessment(arguments)
         if case let .failure(message) = glycemic {
             return .failure(message)
@@ -189,11 +186,10 @@ extension ConversationRecorder {
                 && [item.protein, item.carbs, item.fat]
                 .compactMap { $0 }
                 .allSatisfy { (0 ... 1000).contains($0) }
-                && (item.totalSugar.map { (0 ... 1000).contains($0) } ?? true)
         }) else {
             return .failure("items 包含空名称或超出范围的营养值。")
         }
-        let mealType = MealType(rawValue: arguments.mealType ?? "")
+        let mealType = explicitMealType(in: sourceText)
             ?? inferredMealType(at: sourceDate)
         let resolvedMedia = resolvedMediaAttachments(
             mediaAttachments,
@@ -208,7 +204,6 @@ extension ConversationRecorder {
             protein: arguments.protein,
             carbs: arguments.carbs,
             fat: arguments.fat,
-            totalSugar: arguments.totalSugar,
             items: items,
             nutritionSource: .aiEstimate,
             notes: recordedText(
@@ -338,10 +333,6 @@ extension ConversationRecorder {
         if let occurredAt {
             entry.date = occurredAt
         }
-        let setEntries = workoutSetEntries(from: arguments)
-        if let error = workoutSetValidationError(setEntries) {
-            return .failure(error)
-        }
         if let rest = arguments.restSeconds, !(0 ... 3600).contains(rest) {
             return .failure("rest_seconds 必须在 0 到 3600 之间。")
         }
@@ -366,6 +357,10 @@ extension ConversationRecorder {
                 return .failure(error.localizedDescription)
             }
         }
+        let setEntries = workoutSetEntries(from: arguments, exercise: entry.exerciseDefinition)
+        if let error = workoutSetValidationError(setEntries) {
+            return .failure(error)
+        }
         if let setEntries {
             entry.setEntries = setEntries
         }
@@ -380,7 +375,7 @@ extension ConversationRecorder {
         } else {
             WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
                 entry,
-                weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
+                weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: context)
             )
         }
         entry.formScore = arguments.formScore ?? entry.formScore
@@ -402,7 +397,7 @@ extension ConversationRecorder {
             sets: entry.setCount,
             reps: entry.representativeReps,
             restSeconds: entry.restSeconds,
-            weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: context)
+            weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: context)
         )
         entry.estimatedCalories = estimate?.calories
         entry.calorieMET = estimate?.met
@@ -441,9 +436,6 @@ extension ConversationRecorder {
         guard macros.allSatisfy({ (0 ... 1000).contains($0) }) else {
             return .failure("蛋白质、碳水和脂肪必须在 0 到 1000g 之间。")
         }
-        if let totalSugar = arguments.totalSugar, !(0 ... 1000).contains(totalSugar) {
-            return .failure("total_sugar 必须在 0 到 1000g 之间。")
-        }
         let glycemic = validatedGlycemicAssessment(arguments)
         if case let .failure(message) = glycemic {
             return .failure(message)
@@ -456,17 +448,20 @@ extension ConversationRecorder {
                     && [item.protein, item.carbs, item.fat]
                     .compactMap { $0 }
                     .allSatisfy { (0 ... 1000).contains($0) }
-                    && (item.totalSugar.map { (0 ... 1000).contains($0) } ?? true)
             }) else {
                 return .failure("items 包含空名称或超出范围的营养值。")
             }
             entry.replaceItemsAndDeriveTotals(items)
         }
-        if let rawType = arguments.mealType {
-            guard let type = MealType(rawValue: rawType) else {
-                return .failure("meal_type 必须是早餐、午餐、晚餐或加餐。")
-            }
-            entry.mealType = type
+        if let rawType = arguments.mealType,
+           MealType(rawValue: rawType) == nil
+        {
+            return .failure("meal_type 必须是早餐、午餐、下午点心、晚餐或加餐。")
+        }
+        if let explicitType = explicitMealType(in: sourceText) {
+            entry.mealType = explicitType
+        } else if occurredAt != nil {
+            entry.mealType = inferredMealType(at: entry.date)
         }
         entry.title = arguments.title?.trimmed.nilIfEmpty ?? entry.title
         if arguments.items == nil {
@@ -474,12 +469,10 @@ extension ConversationRecorder {
             entry.protein = arguments.protein ?? entry.protein
             entry.carbs = arguments.carbs ?? entry.carbs
             entry.fat = arguments.fat ?? entry.fat
-            entry.totalSugar = arguments.totalSugar ?? entry.totalSugar
             if arguments.calories != nil
                 || arguments.protein != nil
                 || arguments.carbs != nil
                 || arguments.fat != nil
-                || arguments.totalSugar != nil
             {
                 entry.nutritionSource = .aiEstimate
             }

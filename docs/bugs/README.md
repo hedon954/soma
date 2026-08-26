@@ -48,6 +48,8 @@
 | [0035](0035-long-stream-text-relayout-thermal-jank.md) | 首次修复不足，后续见 0036 | 长流式更新重复断行和测量全部历史正文，持续占用主线程并发热 | 256 字符可变尾块、懒布局、静态门禁与 Release 真机前后 Trace |
 | [0036](0036-long-stream-continuous-text-and-completion-cliff.md) | 已修复，待 Release 真机量化复验 | 无换行正文尾块失控，完成态同步 Markdown 解析导致性能悬崖 | 单一 TextKit 增量文本面、后台 Markdown、真实完成夹具与真机 Trace |
 | [0037](0037-insights-snapshot-stale-and-overfetch.md) | 已修复，待 Release 真机交互复验 | 进展快照遗漏后台保存、失败永久空白且纯计数物化完整模型 | revision 状态机、同容器失效、fetchCount 压力测试与失败重试 |
+| [0038](0038-source-workouts-missing-plan-execution.md) | 已修复 | 当日训练生成计划后没有形成一次计划执行历史 | 来源 ID、完成 Session 物化与原始记录保留测试 |
+| [0039](0039-meal-occurrence-and-duration-target-truth.md) | 已修复 | 模型参数把 18 点饮食改成午餐，时长动作退化为次数 | 本地时钟餐次、用户显式覆盖与 duration seconds 测试 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

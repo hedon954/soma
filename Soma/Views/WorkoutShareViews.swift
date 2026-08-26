@@ -27,7 +27,7 @@ struct WorkoutSharePosterModel: Equatable, Identifiable {
     var partialSets: Int = 0
     var failedSets: Int = 0
     var estimatedCalories: Int?
-    var referenceWeightMissing = false
+    var recordedWeightMissing = false
     var intensities: [MuscleGroup: Double]
     var exercises: [ExerciseLine]
 
@@ -120,7 +120,7 @@ enum WorkoutSharePosterBuilder {
             // The summary applies the same canonical performance projection
             // and requires calorie evidence for every evidenced performance.
             estimatedCalories: summary.estimatedCalories,
-            referenceWeightMissing: WorkoutCalorieCalculator.referenceWeight(
+            recordedWeightMissing: WorkoutCalorieCalculator.latestRecordedWeight(
                 at: session.startedAt,
                 in: context
             ) == nil,
@@ -510,7 +510,7 @@ struct WorkoutShareSheet: View {
                         .disabled(isSaving)
                     }
 
-                    if model.referenceWeightMissing {
+                    if model.recordedWeightMissing {
                         NavigationLink {
                             PersonalBodyInfoView()
                         } label: {

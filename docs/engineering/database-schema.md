@@ -59,17 +59,17 @@ schema version 6 marker 是当前唯一安装基线。启动先用 `key + schema
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
 | `ExternalSyncCursor` | `id: UUID`、`source: String`、`stream: String`、`cursorData: Data?`、`updatedAt: Date` | 每个来源与数据流维护独立游标。 |
-| <!-- schema-model: UserProfile | id,businessID,updatedAt,displayName,biologicalSexRaw,birthDate,age,height,referenceWeight,fitnessGoal,healthNotes --> `UserProfile` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体资料字段 | `age` 只用于旧数据兼容；可由生日推导时不应成为新事实来源。 |
+| <!-- schema-model: UserProfile | id,businessID,updatedAt,displayName,biologicalSexRaw,birthDate,age,height,fitnessGoal,healthNotes --> `UserProfile` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体资料字段 | `age` 只用于旧数据兼容；可由生日推导时不应成为新事实来源。体重只来自 `BodyEntry`。 |
 | <!-- schema-model: GymProfile | id,businessID,name,createdAt,notes,coverImagePath,isCurrent,latitude,longitude,locationLabel,locationAccuracy,locationUpdatedAt,matchRadiusMeters --> `GymProfile` | `businessID: Int64?`、`id: UUID`（迁移锚点）及场馆字段 | 每个数据空间只能有一个当前健身房，由共享规则维护。 |
 | <!-- schema-model: GymEquipment | id,businessID,gymID,name,category,capabilities,confidence,imagePath,createdAt --> `GymEquipment` | `businessID: Int64?`、`id: UUID`（迁移锚点）、`gymID: UUID` 及设备字段 | `gymID → GymProfile.id`；后续关系迁移前保留旧锚点。 |
 | <!-- schema-model: GymMedia | id,gymID,path,createdAt --> `GymMedia` | `id: UUID`、`gymID: UUID`、`path: String`、`createdAt: Date` | `gymID → GymProfile.id`；`path` 是独立逻辑媒体引用。相同内容允许由不同路径通过硬链接复用物理文件，单条记录删除不会破坏其他引用。 |
 
 ### 用户记录
 
-<!-- schema-model: MealEntry | id,businessID,date,mealTypeRaw,title,calories,protein,carbs,fat,totalSugar,glycemicSpeedRaw,glycemicAssessment,itemsData,nutritionSourceRaw,notes,imagePath,mediaAttachmentsData,confidence,sourceTurnID,sourceSessionID -->
+<!-- schema-model: MealEntry | id,businessID,date,mealTypeRaw,title,calories,protein,carbs,fat,glycemicSpeedRaw,glycemicAssessment,itemsData,nutritionSourceRaw,notes,imagePath,mediaAttachmentsData,confidence,sourceTurnID,sourceSessionID -->
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
-| `MealEntry` | `id: UUID`、`date: Date`、`mealTypeRaw: String`、`title: String`、`calories: Int?`、`protein: Double?`、`carbs: Double?`、`fat: Double?`、`totalSugar: Double?`、`glycemicSpeedRaw: String?`、`glycemicAssessment: String`、`itemsData: Data`、`nutritionSourceRaw: String`、`notes: String`、`imagePath: String?`、`mediaAttachmentsData: Data`、`confidence: Double`、`sourceTurnID: UUID?`、`sourceSessionID: UUID?` | 未确认营养值保持为空；总糖包含天然糖与添加糖；升糖速度只表示成对保存的餐食组成定性估算，修改菜品时清空旧评估。来源字段连接创建它的聊天 turn/session。 |
+| `MealEntry` | `id: UUID`、`date: Date`、`mealTypeRaw: String`、`title: String`、`calories: Int?`、`protein: Double?`、`carbs: Double?`、`fat: Double?`、`glycemicSpeedRaw: String?`、`glycemicAssessment: String`、`itemsData: Data`、`nutritionSourceRaw: String`、`notes: String`、`imagePath: String?`、`mediaAttachmentsData: Data`、`confidence: Double`、`sourceTurnID: UUID?`、`sourceSessionID: UUID?` | 未确认营养值保持为空；不保存图片无法稳定识别的总糖。升糖速度只表示成对保存的餐食组成定性估算，修改菜品时清空旧评估。来源字段连接创建它的聊天 turn/session。 |
 | <!-- schema-model: BodyEntry | id,businessID,date,weight,bodyFat,waist,notes,imagePath,mediaAttachmentsData,analysis,externalSource,externalID,sourceTurnID,sourceSessionID --> `BodyEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体记录字段 | `externalSource + externalID` 用于外部导入去重，由 Store 维护。 |
 | <!-- schema-model: WorkoutEntry | id,businessID,date,exercise,exerciseID,exerciseDefinition,sets,reps,weight,setEntriesData,restSeconds,durationMinutes,notes,mediaKindRaw,mediaPath,mediaAttachmentsData,formScore,intensity,feedback,estimatedCalories,calorieMET,calorieDurationMinutes,calorieDurationEstimated,externalSource,externalID,sourceTurnID,sourceSessionID,sourceWorkoutSessionID,sourcePerformanceID,projectionKey,sourcePerformance --> `WorkoutEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）、训练字段、动作关系、来源关系及唯一 `projectionKey` | 带练投影使用 `guided-performance:<uuid>`；其余记录使用 `entry:<uuid>`。unique 索引保留，启动迁移必须先补齐空 key，不能把多个 `nil` 留给 SwiftData 校验。热量投影保留 MET、计算时长、估算标记和结果，不维护算法版本；UUID 来源继续用于旧备份映射与审计。 |
 
@@ -110,7 +110,7 @@ schema version 6 marker 是当前唯一安装基线。启动先用 `key + schema
 | 字段 | Codable 载荷 |
 | --- | --- |
 | `ExternalSyncCursor.cursorData` | 外部 provider 自有 cursor 数据 |
-| `MealEntry.itemsData` | `[MealItem]`，每项包含稳定 ID、名称、可选份量、热量、三大宏量与 `totalSugar: Double?` |
+| `MealEntry.itemsData` | `[MealItem]`，每项包含稳定 ID、名称、可选份量、热量与三大宏量 |
 | 各记录与消息的 `mediaAttachmentsData` | `[MediaAttachmentReference]` |
 | `WorkoutEntry.setEntriesData` | `[WorkoutSetEvidence]`；V5 可含 logical set index、side、kind、target kind、reps/duration、重量、休息与录像 |
 | `ExerciseDefinition.primaryMusclesData`、`secondaryMusclesData`、`movementPatternsData` | `[String]` |

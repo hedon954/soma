@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 struct AssistantFeedbackScrollTarget: Hashable {
@@ -7,6 +8,7 @@ struct AssistantFeedbackScrollTarget: Hashable {
 /// BUG 0031：逐回复反馈在消息叶子节点原位展开，不做页面切换，也不改变 CoachView 根状态。
 struct AssistantFeedbackButton: View {
     let messageID: UUID
+    let traceID: UUID?
     let timestamp: String
     let timestampAccessibilityLabel: String
     var onExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
@@ -25,6 +27,10 @@ struct AssistantFeedbackButton: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .accessibilityLabel(timestampAccessibilityLabel)
+
+                if let traceID {
+                    AssistantTraceLink(traceID: traceID)
+                }
 
                 Button {
                     isExpanded.toggle()
@@ -71,5 +77,46 @@ struct AssistantFeedbackButton: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct AssistantTraceLink: View {
+    @Query private var traces: [AgentTrace]
+
+    init(traceID: UUID) {
+        var descriptor = FetchDescriptor<AgentTrace>(
+            predicate: #Predicate { $0.id == traceID }
+        )
+        descriptor.fetchLimit = 1
+        _traces = Query(descriptor)
+    }
+
+    var body: some View {
+        Group {
+            if let trace = traces.first {
+                NavigationLink {
+                    AgentTraceDetailView(trace: trace)
+                } label: {
+                    icon
+                }
+            } else {
+                icon
+                    .foregroundStyle(.tertiary)
+                    .accessibilityLabel("执行日志不可用")
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var icon: some View {
+        Image(systemName: "point.3.connected.trianglepath.dotted")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppTheme.tint)
+            .frame(
+                width: AppTheme.minimumTapTarget,
+                height: AppTheme.minimumTapTarget,
+                alignment: .leading
+            )
+            .accessibilityLabel("查看这条回复的执行日志")
     }
 }

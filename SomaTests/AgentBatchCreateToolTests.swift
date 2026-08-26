@@ -28,6 +28,16 @@ final class AgentBatchCreateToolTests: XCTestCase {
             for: .createWorkout,
             schemaVersion: 3
         )
+        try AgentToolSchemaValidator.validate(
+            json([
+                "workouts": [[
+                    "exercise_id": 8,
+                    "set_entries": [["duration_seconds": 45, "external_weight_kg": 0]]
+                ]]
+            ]),
+            for: .createWorkout,
+            schemaVersion: 3
+        )
         XCTAssertThrowsError(try AgentToolSchemaValidator.validate(
             json(["exercise_name": "虚构俯身飞鸟"]),
             for: .createExercise,
@@ -48,6 +58,19 @@ final class AgentBatchCreateToolTests: XCTestCase {
                 "workouts": [[
                     "exercise_id": 7,
                     "record_id": 99
+                ]]
+            ]),
+            for: .createWorkout,
+            schemaVersion: 3
+        ))
+    }
+
+    func testWorkoutSetRejectsMixedRepetitionsAndDuration() {
+        XCTAssertThrowsError(try AgentToolSchemaValidator.validate(
+            json([
+                "workouts": [[
+                    "exercise_id": 7,
+                    "set_entries": [["reps": 5, "duration_seconds": 45]]
                 ]]
             ]),
             for: .createWorkout,

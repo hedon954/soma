@@ -1,5 +1,12 @@
 import SwiftUI
 
+enum InlineRecordSaveState: Equatable {
+    case idle
+    case saving
+    case saved
+    case failed
+}
+
 struct InlineRecordShell<Content: View, Accessory: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
@@ -8,6 +15,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
     var iconTint: Color = AppTheme.tint
     var iconSoftTint: Color = AppTheme.softTint
     let isEditable: Bool
+    var saveState: Binding<InlineRecordSaveState> = .constant(.idle)
     var onSave: (() -> Bool)?
     var onDelete: (() -> Void)?
     /// 派生卡片本来就没有编辑入口，不该显示锁标记，否则会被读成“暂时不能改”。
@@ -41,7 +49,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
                 Spacer(minLength: 8)
                 if isEditable {
                     if let onSave {
-                        InlineRecordActions(save: onSave)
+                        InlineRecordActions(state: saveState, save: onSave)
                     }
                     if let onDelete {
                         Button(role: .destructive, action: onDelete) {
@@ -88,6 +96,7 @@ extension InlineRecordShell where Accessory == EmptyView {
         iconTint: Color = AppTheme.tint,
         iconSoftTint: Color = AppTheme.softTint,
         isEditable: Bool,
+        saveState: Binding<InlineRecordSaveState> = .constant(.idle),
         onSave: (() -> Bool)? = nil,
         onDelete: (() -> Void)? = nil,
         showsLockWhenReadOnly: Bool = true,
@@ -101,6 +110,7 @@ extension InlineRecordShell where Accessory == EmptyView {
             iconTint: iconTint,
             iconSoftTint: iconSoftTint,
             isEditable: isEditable,
+            saveState: saveState,
             onSave: onSave,
             onDelete: onDelete,
             showsLockWhenReadOnly: showsLockWhenReadOnly,
@@ -139,41 +149,122 @@ func compactMetric(
 }
 
 struct InlineRecordActions: View {
+    @Binding var state: InlineRecordSaveState
     let save: () -> Bool
-    @State private var didSave = false
-    @State private var savePulse = 0
-    @State private var resetTask: Task<Void, Never>?
 
     var body: some View {
         Button(action: confirmSave) {
-            Image(systemName: didSave ? "checkmark.circle.fill" : "checkmark.circle")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(didSave ? AppTheme.tint : .secondary)
-                .frame(
-                    width: AppTheme.minimumTapTarget,
-                    height: AppTheme.minimumTapTarget
-                )
+            Group {
+                if state == .saving {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: iconName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(iconColor)
+                }
+            }
+            .frame(
+                width: AppTheme.minimumTapTarget,
+                height: AppTheme.minimumTapTarget
+            )
         }
         .buttonStyle(.plain)
-        .disabled(didSave)
-        .sensoryFeedback(.success, trigger: savePulse)
-        .accessibilityLabel(didSave ? "已保存" : "保存")
-        .accessibilityHint(didSave ? "记录已写入本机" : "保存当前修改")
-        .animation(.easeInOut(duration: 0.18), value: didSave)
-        .onDisappear {
-            resetTask?.cancel()
-        }
+        .disabled(state == .saving || state == .saved)
+        .sensoryFeedback(.success, trigger: state == .saved)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(state == .failed ? "再次尝试保存" : "修改后会自动保存")
+        .animation(.easeInOut(duration: 0.2), value: state)
     }
 
     private func confirmSave() {
-        guard save() else { return }
-        resetTask?.cancel()
-        didSave = true
-        savePulse += 1
-        resetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            guard !Task.isCancelled else { return }
-            didSave = false
+        state = .saving
+        Task { @MainActor in
+            await Task.yield()
+            state = save() ? .saved : .failed
+            guard state == .saved else { return }
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard state == .saved else { return }
+            state = .idle
         }
+    }
+
+    private var iconName: String {
+        switch state {
+        case .saved: "checkmark.circle.fill"
+        case .failed: "exclamationmark.circle.fill"
+        case .idle, .saving: "checkmark.circle"
+        }
+    }
+
+    private var iconColor: Color {
+        switch state {
+        case .saved: AppTheme.success
+        case .failed: AppTheme.warning
+        case .idle, .saving: .secondary
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch state {
+        case .idle: "自动保存已就绪"
+        case .saving: "正在自动保存"
+        case .saved: "自动保存成功"
+        case .failed: "自动保存失败"
+        }
+    }
+}
+
+private struct InlineRecordAutosaveModifier<Value: Equatable>: ViewModifier {
+    let value: Value
+    let isEnabled: Bool
+    @Binding var state: InlineRecordSaveState
+    let save: @MainActor () -> Bool
+
+    @State private var pendingTask: Task<Void, Never>?
+    @State private var hasPendingChanges = false
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: value) { _, _ in
+                guard isEnabled else { return }
+                pendingTask?.cancel()
+                hasPendingChanges = true
+                state = .saving
+                pendingTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(550))
+                    guard !Task.isCancelled else { return }
+                    state = save() ? .saved : .failed
+                    hasPendingChanges = state == .failed
+                    guard state == .saved else { return }
+                    try? await Task.sleep(for: .milliseconds(1200))
+                    guard !Task.isCancelled else { return }
+                    state = .idle
+                }
+            }
+            .onDisappear {
+                pendingTask?.cancel()
+                guard isEnabled, hasPendingChanges else { return }
+                state = save() ? .saved : .failed
+                hasPendingChanges = state == .failed
+            }
+    }
+}
+
+extension View {
+    func inlineRecordAutosave(
+        value: some Equatable,
+        isEnabled: Bool,
+        state: Binding<InlineRecordSaveState>,
+        save: @escaping @MainActor () -> Bool
+    ) -> some View {
+        modifier(
+            InlineRecordAutosaveModifier(
+                value: value,
+                isEnabled: isEnabled,
+                state: state,
+                save: save
+            )
+        )
     }
 }

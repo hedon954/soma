@@ -26,7 +26,7 @@ final class AgentV2Tests: XCTestCase {
     }
 
     @MainActor
-    func testCreateMealPersistsReviewableSugarAndQualitativeGlycemicEstimate() throws {
+    func testCreateMealPersistsReviewableQualitativeGlycemicEstimate() throws {
         let context = try makeContext()
         let result = ConversationRecorder.executeAgentTool(
             AgentToolCall(
@@ -34,7 +34,6 @@ final class AgentV2Tests: XCTestCase {
                 arguments: AgentToolArguments(
                     mealType: MealType.snack.rawValue,
                     title: "虚构加餐",
-                    totalSugar: 99,
                     glycemicSpeed: MealGlycemicSpeed.fast.rawValue,
                     glycemicAssessment: "精制碳水占比较高；实际反应因人而异。",
                     items: [
@@ -44,8 +43,7 @@ final class AgentV2Tests: XCTestCase {
                             calories: 120,
                             protein: 6,
                             carbs: 18,
-                            fat: 3,
-                            totalSugar: 8
+                            fat: 3
                         ),
                         AgentMealItemInput(
                             name: "虚构莓果",
@@ -53,8 +51,7 @@ final class AgentV2Tests: XCTestCase {
                             calories: 45,
                             protein: 1,
                             carbs: 10,
-                            fat: 0.5,
-                            totalSugar: 3
+                            fat: 0.5
                         )
                     ]
                 )
@@ -72,7 +69,6 @@ final class AgentV2Tests: XCTestCase {
             try context.fetch(FetchDescriptor<MealEntry>()).first
         )
         XCTAssertTrue(result.ok)
-        XCTAssertEqual(meal.totalSugar, 11)
         XCTAssertEqual(meal.glycemicSpeed, .fast)
         XCTAssertEqual(
             meal.glycemicAssessment,
@@ -81,7 +77,6 @@ final class AgentV2Tests: XCTestCase {
         guard case let .object(payload)? = result.data else {
             return XCTFail("饮食 Tool 应返回结构化记录")
         }
-        XCTAssertEqual(payload["total_sugar"], .number(11))
         XCTAssertEqual(payload["glycemic_speed"], .string("fast"))
     }
 
@@ -91,7 +86,6 @@ final class AgentV2Tests: XCTestCase {
         let meal = MealEntry(
             mealType: .snack,
             title: "旧虚构加餐",
-            totalSugar: 20,
             glycemicSpeed: .slow,
             glycemicAssessment: "旧判断"
         )
@@ -104,12 +98,11 @@ final class AgentV2Tests: XCTestCase {
                 name: .updateMeal,
                 arguments: AgentToolArguments(
                     title: "新虚构加餐",
-                    totalSugar: 99,
                     glycemicSpeed: MealGlycemicSpeed.moderate.rawValue,
                     glycemicAssessment: "混合餐，仅作定性估算。",
                     items: [
-                        AgentMealItemInput(name: "虚构食物甲", totalSugar: 2),
-                        AgentMealItemInput(name: "虚构食物乙", totalSugar: 3)
+                        AgentMealItemInput(name: "虚构食物甲", protein: 2),
+                        AgentMealItemInput(name: "虚构食物乙", protein: 3)
                     ],
                     recordID: recordID
                 )
@@ -121,7 +114,6 @@ final class AgentV2Tests: XCTestCase {
         )
 
         XCTAssertTrue(result.ok)
-        XCTAssertEqual(meal.totalSugar, 5)
         XCTAssertEqual(meal.nutritionSource, .derivedFromItems)
         XCTAssertEqual(meal.glycemicSpeed, .moderate)
         XCTAssertEqual(meal.glycemicAssessment, "混合餐，仅作定性估算。")

@@ -286,11 +286,15 @@ extension CoachSessionView {
             await Task.yield()
             await Task.yield()
             guard !Task.isCancelled else { return }
-            if !messageListPosition.isNearBottom {
+            if messageListPosition.contentFitsViewport == false,
+               !messageListPosition.isNearBottom
+            {
                 followsLiveMessage = true
                 scrollToBottom(proxy, animated: false)
                 await Task.yield()
                 guard !Task.isCancelled else { return }
+            } else if messageListPosition.contentFitsViewport == true {
+                followsLiveMessage = false
             }
             didFinishInitialScroll = true
             paginationTriggerID = UUID()

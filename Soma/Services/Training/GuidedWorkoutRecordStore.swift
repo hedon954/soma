@@ -364,7 +364,7 @@ enum GuidedWorkoutRecordStore {
         let calorieEstimate = WorkoutCalorieCalculator.estimateGuidedWorkout(
             exercise: performance.exerciseName,
             evidence: evidence,
-            weightKG: WorkoutCalorieCalculator.referenceWeight(
+            weightKG: WorkoutCalorieCalculator.latestRecordedWeight(
                 at: session.startedAt,
                 in: context
             )

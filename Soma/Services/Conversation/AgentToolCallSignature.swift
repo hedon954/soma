@@ -43,6 +43,7 @@ private struct AgentToolSignatureArguments {
         appendWorkouts(arguments.workouts)
         appendEquipment(arguments.equipment)
         appendTemplateExercises(arguments.templateExercises)
+        appendSourceWorkoutRecordIDs(arguments.sourceWorkoutRecordIDs)
     }
 
     private mutating func appendScalarArguments(
@@ -86,7 +87,6 @@ private struct AgentToolSignatureArguments {
         put("protein", arguments.protein)
         put("carbs", arguments.carbs)
         put("fat", arguments.fat)
-        put("total_sugar", arguments.totalSugar)
         put("glycemic_speed", arguments.glycemicSpeed)
         put("glycemic_assessment", arguments.glycemicAssessment)
         put("note", arguments.note)
@@ -164,6 +164,11 @@ private struct AgentToolSignatureArguments {
             .map(Self.canonicalTemplateExercise)
     }
 
+    private mutating func appendSourceWorkoutRecordIDs(_ ids: [Int64]?) {
+        guard let ids, !ids.isEmpty else { return }
+        values["source_workout_record_ids"] = ids
+    }
+
     private mutating func put(_ key: String, _ value: String?) {
         guard let value = Self.nonempty(value) else { return }
         values[key] = value
@@ -190,6 +195,9 @@ private struct AgentToolSignatureArguments {
         var item: [String: Any] = [:]
         if let reps = entry.reps {
             item["reps"] = reps
+        }
+        if let duration = entry.durationSeconds {
+            item["duration_seconds"] = duration
         }
         if let weight = entry.externalWeightKG {
             item["external_weight_kg"] = rounded(weight)

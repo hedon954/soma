@@ -32,8 +32,7 @@ enum DataArchiveTestSupport {
             displayName: "测试用户",
             biologicalSex: .unspecified,
             height: 170,
-            referenceWeight: 65,
-            fitnessGoal: "保持活力"
+            fitnessGoal: FitnessGoal.recomposition.rawValue
         ))
         let gym = GymProfile(
             name: "测试健身房",
@@ -95,7 +94,6 @@ enum DataArchiveTestSupport {
             protein: 32,
             carbs: 58,
             fat: 16,
-            totalSugar: 7,
             glycemicSpeed: .moderate,
             glycemicAssessment: "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。",
             notes: "荞麦面和蔬菜",

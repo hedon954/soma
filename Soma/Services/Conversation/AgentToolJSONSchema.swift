@@ -52,7 +52,7 @@ extension AgentToolName {
         case .getProgram:
             "按 Int64 program_id 读取计划概览和独立逐组处方。"
         case .createProgram:
-            "创建训练计划；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。"
+            "创建训练计划；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。若计划由当日已有训练总结而来，必须传入这些记录的 source_workout_record_ids，让本机同时保存一次已完成的计划执行。"
         case .updateProgram:
             "用完整独立逐组处方直接更新已有计划；已开始的 Session 继续使用自己的处方快照。"
         case .archiveProgram:
@@ -148,13 +148,12 @@ extension AgentToolName {
         case .createMeal:
             object([
                 "occurred_at": string("可选 ISO-8601 发生时间；省略时使用当前 Job 冻结的默认记录时间"),
-                "meal_type": string("早餐、午餐、晚餐或加餐"),
+                "meal_type": string("仅在用户明确说出餐次时填写：早餐、午餐、下午点心、晚餐或加餐"),
                 "title": string("食物或餐食名称"),
                 "calories": integer("估算千卡"),
                 "protein": number("蛋白质克数"),
                 "carbs": number("碳水克数"),
                 "fat": number("脂肪克数"),
-                "total_sugar": number("总糖克数，包含天然糖与添加糖；证据不足时省略"),
                 "glycemic_speed": string(
                     "基于食物组成的定性消化吸收速度，不是个体血糖预测",
                     values: MealGlycemicSpeed.allCases.map(\.rawValue)
@@ -190,13 +189,12 @@ extension AgentToolName {
             object([
                 "record_id": integer("饮食记录 Int64 ID"),
                 "occurred_at": string("仅在用户明确纠正时间时提供的 ISO-8601 发生时间"),
-                "meal_type": string("早餐、午餐、晚餐或加餐"),
+                "meal_type": string("早餐、午餐、下午点心、晚餐或加餐"),
                 "title": string("修正后的食物或餐食名称"),
                 "calories": integer("修正后的估算千卡"),
                 "protein": number("修正后的蛋白质克数"),
                 "carbs": number("修正后的碳水克数"),
                 "fat": number("修正后的脂肪克数"),
-                "total_sugar": number("修正后的总糖克数；证据不足时省略"),
                 "glycemic_speed": string(
                     "修正后的定性消化吸收速度，不是个体血糖预测",
                     values: MealGlycemicSpeed.allCases.map(\.rawValue)
@@ -240,6 +238,10 @@ extension AgentToolName {
                 "program_name": string("训练计划名称"),
                 "overview": string("用户明确提供、可编辑的计划概览"),
                 "schedule_hint": string("用户明确提供的安排提示"),
+                "source_workout_record_ids": array(
+                    integer("当日已有训练的 record_id"),
+                    description: "仅在基于当日已有训练总结计划时提供；按原训练顺序，至少一条"
+                ),
                 "template_exercises": templateExerciseArrayV3()
             ], required: ["program_name", "template_exercises"])
         case .updateProgram:
@@ -305,8 +307,7 @@ extension AgentToolName {
                 "calories": integer("分项千卡"),
                 "protein": number("分项蛋白质克数"),
                 "carbs": number("分项碳水克数"),
-                "fat": number("分项脂肪克数"),
-                "total_sugar": number("分项总糖克数；无法区分添加糖时不要猜测添加糖")
+                "fat": number("分项脂肪克数")
             ], required: ["name"]),
             description: "有序食物项；未知营养字段省略"
         )
@@ -332,6 +333,7 @@ extension AgentToolName {
         array(
             object([
                 "reps": integer("该组明确完成的次数"),
+                "duration_seconds": integer("按时长动作该组明确完成的秒数；与 reps 二选一"),
                 "external_weight_kg": number("该组外部负重 kg；明确自重时填 0")
             ]),
             description: description

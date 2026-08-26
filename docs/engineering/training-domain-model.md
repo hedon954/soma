@@ -365,8 +365,9 @@ plannedSets.first(where: kind == working)
 
 最后一个 Effort 结束后不等待“保存并结束”：先物化最后一条动作 `WorkoutEntry`，再验证全部
 Performance 终态、完成 Session、结束系统投影并进入本地分享预览。任一步失败保留已保存事实并
-可重试，不提前展示成功页。删除 Session 时显式删除 Performance、Set、Effort、分析、来源投影
-记录和对应私有录像。
+可重试，不提前展示成功页。删除带练 Session 时显式删除 Performance、Set、Effort、分析、
+`guided-performance:` 投影记录和对应私有录像；从当日原始训练组装的完成 Session 只解除
+`entry:` 原始记录的执行关系，不能删除用户原始记录。
 
 ## 动作记录与热量收口
 
@@ -375,7 +376,7 @@ Performance 终态、完成 Session、结束系统投影并进入本地分享预
 - 投影在同一事务分配 business ID、绑定动作关系、设置 projection key 和一对一关系；删除 suppression
   与统计择一规则继续有效。
 - 动作热量优先使用 Effort 实际时长；次数训练无实际时长时才使用明确标为估算的回退。
-- 参考体重取 Session 开始时间之前最近的有效 BodyEntry，再回退 UserProfile 参考体重。
+- 体重只取 Session 开始时间之前最近的有效 BodyEntry，不从 UserProfile 回退。
 - Session 热量求和来源动作记录，不能再按 elapsed time 重算；缺体重返回 missing requirement，
   热量保持 `nil`，训练继续。
 

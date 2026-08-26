@@ -194,7 +194,6 @@ enum DataExportService {
             protein: meal.protein,
             carbs: meal.carbs,
             fat: meal.fat,
-            totalSugar: meal.totalSugar,
             glycemicSpeed: meal.glycemicSpeedRaw,
             glycemicAssessment: meal.glycemicAssessment?.nilIfBlank,
             items: meal.items,

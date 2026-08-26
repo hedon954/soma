@@ -318,7 +318,6 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
     var birthDate: Date?
     var age: Int?
     var height: Double?
-    var referenceWeight: Double?
     var fitnessGoal: String
     var healthNotes: String
 
@@ -331,7 +330,6 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
         birthDate = model.birthDate
         age = model.age
         height = model.height
-        referenceWeight = model.referenceWeight
         fitnessGoal = model.fitnessGoal
         healthNotes = model.healthNotes
     }
@@ -344,7 +342,6 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
             birthDate: birthDate,
             age: age,
             height: height,
-            referenceWeight: referenceWeight,
             fitnessGoal: fitnessGoal,
             healthNotes: healthNotes
         )
@@ -479,7 +476,6 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
-    var totalSugar: Double?
     var glycemicSpeedRaw: String?
     var glycemicAssessment: String?
     var items: [MealItem]?
@@ -500,7 +496,6 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
         protein = model.protein
         carbs = model.carbs
         fat = model.fat
-        totalSugar = model.totalSugar
         glycemicSpeedRaw = model.glycemicSpeedRaw
         glycemicAssessment = model.glycemicAssessment.isEmpty
             ? nil
@@ -524,7 +519,6 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
             protein: protein,
             carbs: carbs,
             fat: fat,
-            totalSugar: totalSugar,
             glycemicSpeed: glycemicSpeedRaw.flatMap(MealGlycemicSpeed.init(rawValue:)),
             glycemicAssessment: glycemicAssessment ?? "",
             items: items ?? [],

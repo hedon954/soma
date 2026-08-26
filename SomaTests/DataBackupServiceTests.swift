@@ -183,7 +183,6 @@ final class DataBackupServiceTests: XCTestCase {
             businessIDsByNamespace(in: snapshot)
         )
         XCTAssertEqual(restored.meals.map(\.id), snapshot.meals.map(\.id))
-        XCTAssertEqual(restored.meals.first?.totalSugar, 7)
         XCTAssertEqual(restored.meals.first?.glycemicSpeedRaw, "moderate")
         XCTAssertEqual(
             restored.meals.first?.glycemicAssessment,

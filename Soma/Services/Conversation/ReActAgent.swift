@@ -9,13 +9,18 @@ import Foundation
 /// - 会话滚动压缩：`ConversationCompactionMiddleware`
 enum ReActAgentPreference {
     static let maxStepsKey = "agent.react.maxSteps"
-    static let runtimeTimeoutMinutesKey = "agent.react.runtimeTimeoutMinutes"
+    static let textRuntimeTimeoutMinutesKey = "agent.react.textRuntimeTimeoutMinutes"
+    static let imageRuntimeTimeoutMinutesKey = "agent.react.imageRuntimeTimeoutMinutes"
+    static let videoRuntimeTimeoutMinutesKey = "agent.react.videoRuntimeTimeoutMinutes"
+    private static let legacyRuntimeTimeoutMinutesKey = "agent.react.runtimeTimeoutMinutes"
     static let defaultMaxSteps = 100
     static let minimumMaxSteps = 1
     static let maximumMaxSteps = 500
-    static let automaticRuntimeTimeoutMinutes = 0
     static let minimumRuntimeTimeoutMinutes = 3
     static let maximumRuntimeTimeoutMinutes = 60
+    static let defaultTextRuntimeTimeoutMinutes = 3
+    static let defaultImageRuntimeTimeoutMinutes = 5
+    static let defaultVideoRuntimeTimeoutMinutes = 10
 
     static func maxSteps(defaults: UserDefaults = .standard) -> Int {
         let stored = defaults.object(forKey: maxStepsKey) as? Int
@@ -30,49 +35,90 @@ enum ReActAgentPreference {
         )
     }
 
-    /// `nil` 表示沿用文字/图片/视频 3/5/10 分钟的媒体自适应预算。
-    static func runtimeTimeoutMinutes(defaults: UserDefaults = .standard) -> Int? {
-        guard let stored = defaults.object(forKey: runtimeTimeoutMinutesKey) as? Int,
-              stored != automaticRuntimeTimeoutMinutes
-        else {
-            return nil
-        }
-        return min(
-            maximumRuntimeTimeoutMinutes,
-            max(minimumRuntimeTimeoutMinutes, stored)
+    static func textRuntimeTimeoutMinutes(defaults: UserDefaults = .standard) -> Int {
+        timeoutMinutes(
+            key: textRuntimeTimeoutMinutesKey,
+            defaultValue: defaultTextRuntimeTimeoutMinutes,
+            defaults: defaults
+        )
+    }
+
+    static func imageRuntimeTimeoutMinutes(defaults: UserDefaults = .standard) -> Int {
+        timeoutMinutes(
+            key: imageRuntimeTimeoutMinutesKey,
+            defaultValue: defaultImageRuntimeTimeoutMinutes,
+            defaults: defaults
+        )
+    }
+
+    static func videoRuntimeTimeoutMinutes(defaults: UserDefaults = .standard) -> Int {
+        timeoutMinutes(
+            key: videoRuntimeTimeoutMinutesKey,
+            defaultValue: defaultVideoRuntimeTimeoutMinutes,
+            defaults: defaults
         )
     }
 
     static func setRuntimeTimeoutMinutes(
-        _ value: Int?,
+        text: Int,
+        image: Int,
+        video: Int,
         defaults: UserDefaults = .standard
     ) {
-        guard let value else {
-            defaults.removeObject(forKey: runtimeTimeoutMinutesKey)
-            return
+        defaults.set(clampedTimeout(text), forKey: textRuntimeTimeoutMinutesKey)
+        defaults.set(clampedTimeout(image), forKey: imageRuntimeTimeoutMinutesKey)
+        defaults.set(clampedTimeout(video), forKey: videoRuntimeTimeoutMinutesKey)
+        defaults.removeObject(forKey: legacyRuntimeTimeoutMinutesKey)
+    }
+
+    static func migrateLegacyRuntimeTimeoutIfNeeded(
+        defaults: UserDefaults = .standard
+    ) {
+        guard let legacy = defaults.object(forKey: legacyRuntimeTimeoutMinutesKey) as? Int,
+              legacy > 0
+        else { return }
+        let migrated = clampedTimeout(legacy)
+        if defaults.object(forKey: textRuntimeTimeoutMinutesKey) == nil {
+            defaults.set(migrated, forKey: textRuntimeTimeoutMinutesKey)
         }
-        defaults.set(
-            min(
-                maximumRuntimeTimeoutMinutes,
-                max(minimumRuntimeTimeoutMinutes, value)
-            ),
-            forKey: runtimeTimeoutMinutesKey
-        )
+        if defaults.object(forKey: imageRuntimeTimeoutMinutesKey) == nil {
+            defaults.set(migrated, forKey: imageRuntimeTimeoutMinutesKey)
+        }
+        if defaults.object(forKey: videoRuntimeTimeoutMinutesKey) == nil {
+            defaults.set(migrated, forKey: videoRuntimeTimeoutMinutesKey)
+        }
+        defaults.removeObject(forKey: legacyRuntimeTimeoutMinutesKey)
     }
 
     static func deadlinePolicy(
         _ policy: AgentStreamDeadlinePolicy,
         defaults: UserDefaults = .standard
     ) -> AgentStreamDeadlinePolicy {
-        guard let minutes = runtimeTimeoutMinutes(defaults: defaults) else {
-            return policy
-        }
         var result = policy
-        let seconds = TimeInterval(minutes * 60)
-        result.textLoopTotal = seconds
-        result.imageLoopTotal = seconds
-        result.videoLoopTotal = seconds
+        result.textLoopTotal = TimeInterval(textRuntimeTimeoutMinutes(defaults: defaults) * 60)
+        result.imageLoopTotal = TimeInterval(imageRuntimeTimeoutMinutes(defaults: defaults) * 60)
+        result.videoLoopTotal = TimeInterval(videoRuntimeTimeoutMinutes(defaults: defaults) * 60)
         return result
+    }
+
+    private static func timeoutMinutes(
+        key: String,
+        defaultValue: Int,
+        defaults: UserDefaults
+    ) -> Int {
+        if let stored = defaults.object(forKey: key) as? Int {
+            return clampedTimeout(stored)
+        }
+        if let legacy = defaults.object(forKey: legacyRuntimeTimeoutMinutesKey) as? Int,
+           legacy > 0
+        {
+            return clampedTimeout(legacy)
+        }
+        return defaultValue
+    }
+
+    private static func clampedTimeout(_ value: Int) -> Int {
+        min(maximumRuntimeTimeoutMinutes, max(minimumRuntimeTimeoutMinutes, value))
     }
 }
 

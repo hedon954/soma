@@ -8,10 +8,23 @@ extension ConversationRecorder {
     static func inferredMealType(at date: Date) -> MealType {
         switch Calendar.current.component(.hour, from: date) {
         case 5 ..< 11: .breakfast
-        case 11 ..< 16: .lunch
-        case 16 ..< 22: .dinner
+        case 11 ..< 14: .lunch
+        case 14 ..< 17: .afternoonSnack
+        case 17 ..< 22: .dinner
         default: .snack
         }
+    }
+
+    /// 餐次只有在用户原话明确出现时才覆盖确定性的时间判断。Tool 参数是模型输出，
+    /// 不能把模型的惯性猜测当成用户事实。多次纠正时采用最后一次出现的餐次。
+    static func explicitMealType(in sourceText: String) -> MealType? {
+        MealType.allCases.compactMap { type in
+            sourceText.range(of: type.rawValue, options: .backwards).map {
+                (type, $0.lowerBound)
+            }
+        }.max { lhs, rhs in
+            lhs.1 < rhs.1
+        }?.0
     }
 
     static func recordID(
@@ -60,12 +73,20 @@ extension ConversationRecorder {
     }
 
     static func workoutSetEntries(
-        from arguments: AgentToolArguments
+        from arguments: AgentToolArguments,
+        exercise: ExerciseDefinition? = nil
     ) -> [WorkoutSetEvidence]? {
         if let entries = arguments.setEntries {
             return entries.map {
-                WorkoutSetEvidence(
+                let targetKind = ExerciseLoggingProfile.resolvedTargetKind(
+                    exercise: exercise,
                     reps: $0.reps,
+                    durationSeconds: $0.durationSeconds
+                )
+                return WorkoutSetEvidence(
+                    targetKind: targetKind,
+                    reps: targetKind == .repetitions ? $0.reps : nil,
+                    durationSeconds: targetKind == .duration ? $0.durationSeconds : nil,
                     externalWeightKG: $0.externalWeightKG
                 )
             }
@@ -99,6 +120,12 @@ extension ConversationRecorder {
             if let reps = entry.reps, !(1 ... 1000).contains(reps) {
                 return "第 \(index + 1) 组 reps 必须在 1 到 1000 之间。"
             }
+            if let seconds = entry.durationSeconds, !(1 ... 86400).contains(seconds) {
+                return "第 \(index + 1) 组 duration_seconds 必须在 1 到 86400 之间。"
+            }
+            if entry.reps != nil, entry.durationSeconds != nil {
+                return "第 \(index + 1) 组 reps 与 duration_seconds 只能提供一个。"
+            }
             if let weight = entry.externalWeightKG, !(0 ... 1000).contains(weight) {
                 return "第 \(index + 1) 组 external_weight_kg 必须在 0 到 1000kg 之间。"
             }
@@ -121,14 +148,18 @@ extension ConversationRecorder {
         _ entries: [WorkoutSetEvidence]
     ) -> String {
         entries.enumerated().map { index, entry in
-            switch (entry.externalWeightKG, entry.reps) {
-            case let (.some(weight), .some(reps)):
+            switch (entry.externalWeightKG, entry.reps, entry.durationSeconds) {
+            case let (.some(weight), .some(reps), _):
                 "\(formatWeight(weight) ?? "\(weight)kg") × \(reps)次"
-            case let (.some(weight), .none):
+            case let (.some(weight), _, .some(seconds)):
+                "\(formatWeight(weight) ?? "\(weight)kg") × \(seconds)秒"
+            case let (.some(weight), .none, .none):
                 "第\(index + 1)组 \(formatWeight(weight) ?? "\(weight)kg")"
-            case let (.none, .some(reps)):
+            case let (.none, .some(reps), _):
                 "第\(index + 1)组 \(reps)次"
-            case (.none, .none):
+            case let (.none, _, .some(seconds)):
+                "第\(index + 1)组 \(seconds)秒"
+            case (.none, .none, .none):
                 "第\(index + 1)组"
             }
         }.joined(separator: "，")
@@ -174,8 +205,8 @@ extension ConversationRecorder {
         if let height = profile.height {
             parts.append("\(height.formatted(.number.precision(.fractionLength(0 ... 1))))cm")
         }
-        if let weight = profile.referenceWeight {
-            parts.append("参考体重 \(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg")
+        if profile.biologicalSex != .unspecified {
+            parts.append("生理性别 \(profile.biologicalSex.rawValue)")
         }
         if !profile.fitnessGoal.isEmpty {
             parts.append("目标：\(profile.fitnessGoal)")

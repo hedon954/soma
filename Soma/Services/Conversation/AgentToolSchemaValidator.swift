@@ -194,29 +194,10 @@ enum AgentToolSchemaValidator {
             if raw["form_score"] != nil {
                 try requireInteger(raw["form_score"], in: 0 ... 100, path: "\(name.rawValue).form_score")
             }
-            if let entries = raw["set_entries"] {
-                guard let rows = entries as? [[String: Any]] else {
-                    throw invalid("\(name.rawValue).set_entries", "类型必须是 array")
-                }
-                let allowedEntry: Set = ["reps", "external_weight_kg"]
-                for (index, row) in rows.enumerated() {
-                    let path = "\(name.rawValue).set_entries[\(index)]"
-                    let unknownEntry = Set(row.keys).subtracting(allowedEntry)
-                    guard unknownEntry.isEmpty else {
-                        throw invalid(path, "包含未声明参数：\(unknownEntry.sorted().joined(separator: "、"))")
-                    }
-                    if row["reps"] != nil {
-                        try requireInteger(row["reps"], in: 1 ... 1000, path: "\(path).reps")
-                    }
-                    if row["external_weight_kg"] != nil {
-                        try requireNumber(
-                            row["external_weight_kg"],
-                            in: 0 ... 1000,
-                            path: "\(path).external_weight_kg"
-                        )
-                    }
-                }
-            }
+            try validateWorkoutSetEntries(
+                raw["set_entries"],
+                path: "\(name.rawValue).set_entries"
+            )
         default:
             return
         }
@@ -306,7 +287,7 @@ enum AgentToolSchemaValidator {
                 )
             }
         case .createWorkout:
-            guard let workouts = raw["workouts"] as? [Any],
+            guard let workouts = raw["workouts"] as? [[String: Any]],
                   (1 ... AgentBatchWriteLimit.maxItems).contains(workouts.count)
             else {
                 throw invalid(
@@ -314,8 +295,55 @@ enum AgentToolSchemaValidator {
                     "必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 条训练记录"
                 )
             }
+            for (index, workout) in workouts.enumerated() {
+                try validateWorkoutSetEntries(
+                    workout["set_entries"],
+                    path: "\(name.rawValue).workouts[\(index)].set_entries"
+                )
+            }
         default:
             return
+        }
+    }
+
+    private static func validateWorkoutSetEntries(
+        _ value: Any?,
+        path: String
+    ) throws {
+        guard let value else { return }
+        guard let rows = value as? [[String: Any]] else {
+            throw invalid(path, "类型必须是 array")
+        }
+        let allowedEntry: Set = ["reps", "duration_seconds", "external_weight_kg"]
+        for (index, row) in rows.enumerated() {
+            let rowPath = "\(path)[\(index)]"
+            let unknownEntry = Set(row.keys).subtracting(allowedEntry)
+            guard unknownEntry.isEmpty else {
+                throw invalid(
+                    rowPath,
+                    "包含未声明参数：\(unknownEntry.sorted().joined(separator: "、"))"
+                )
+            }
+            if row["reps"] != nil {
+                try requireInteger(row["reps"], in: 1 ... 1000, path: "\(rowPath).reps")
+            }
+            if row["duration_seconds"] != nil {
+                try requireInteger(
+                    row["duration_seconds"],
+                    in: 1 ... 86400,
+                    path: "\(rowPath).duration_seconds"
+                )
+            }
+            guard row["reps"] == nil || row["duration_seconds"] == nil else {
+                throw invalid(rowPath, "reps 与 duration_seconds 只能提供一个")
+            }
+            if row["external_weight_kg"] != nil {
+                try requireNumber(
+                    row["external_weight_kg"],
+                    in: 0 ... 1000,
+                    path: "\(rowPath).external_weight_kg"
+                )
+            }
         }
     }
 

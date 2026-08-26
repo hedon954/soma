@@ -27,9 +27,13 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | --- | --- | --- | --- |
 | [0000](0000-origin-through-0.0.11.md) | ≤0.0.11 | 压缩起点 | 0.0.11 收口后仍约束实现的架构决策 |
 | [0097](0097-current-baseline-performance-budget-and-cache-invalidation.md) | 0.0.12 | 已采纳，Release 真机量化验收中 | 固定当前安装基线、120 Hz 性能预算、分页/后台聚合与图片媒体缓存失效规则 |
-| [0098](0098-user-configurable-react-active-runtime-timeout.md) | 0.0.12 | 已采纳，待真机界面验收 | ReAct 自动 3/5/10 分钟或自定义 3–60 分钟活动执行预算，与步骤上限同区配置 |
+| [0098](0098-user-configurable-react-active-runtime-timeout.md) | 0.0.12 | 部分已替代 | ReAct 活动执行预算可配置；统一值由 0104 改为三类独立值 |
 | [0099](0099-behavior-preserving-modernization-and-three-version-docs.md) | 0.0.13 | 已采纳 | 行为保持拆分；活文档为压缩起点加最近 3 个营销版本，滑出时合并进起点 |
 | [0100](0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md) | 0.0.14 | 已采纳，Release 真机量化验收中 | 单一连续流式文本面、可恢复进展快照、count/谓词下推与服务端索引 |
+| [0101](0101-record-truth-and-agent-profile-context.md) | 0.0.14 | 已采纳 | 移除低可信总糖与参考体重，餐次/时长动作/身体上下文成为确定性事实 |
+| [0102](0102-source-workout-plan-execution-materialization.md) | 0.0.14 | 已采纳 | 当日原始训练生成计划时组装已完成 Session，原始记录不复制不丢失 |
+| [0103](0103-goal-directed-progress-energy-and-hypertrophy.md) | 0.0.14 | 已采纳 | 减脂看能量收支，增肌看训练量与主要肌群工作组覆盖 |
+| [0104](0104-independent-react-timeouts-by-media.md) | 0.0.14 | 已采纳 | 文字、图片、视频 ReAct 总超时分别配置 |
 
 新决策使用 [ADR 模板](template.md)。
 

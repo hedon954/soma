@@ -48,7 +48,8 @@ enum HealthKitImporter {
         }
         guard
             let bodyMass = HKObjectType.quantityType(forIdentifier: .bodyMass),
-            let activeEnergy = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)
+            let activeEnergy = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
+            let basalEnergy = HKObjectType.quantityType(forIdentifier: .basalEnergyBurned)
         else {
             throw HealthKitImportError.typesUnavailable
         }
@@ -56,7 +57,8 @@ enum HealthKitImporter {
         let readTypes: Set<HKObjectType> = [
             HKObjectType.workoutType(),
             bodyMass,
-            activeEnergy
+            activeEnergy,
+            basalEnergy
         ]
         try await store.requestAuthorization(toShare: [], read: readTypes)
 

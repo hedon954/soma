@@ -487,12 +487,13 @@ struct PersonalBodyInfoView: View {
     ) ?? .now
     @State private var hasBirthDate = false
     @State private var height = ""
-    @State private var referenceWeight = ""
-    @State private var fitnessGoal = ""
+    @State private var fitnessGoal: FitnessGoal?
     @State private var healthNotes = ""
     @State private var loadedProfileID: UUID?
     @State private var moreBasicsExpanded = false
     @State private var contextExpanded = false
+    @State private var latestWeightValue: Double?
+    @State private var latestWeightDate: Date?
 
     init() {
         var descriptor = FetchDescriptor<UserProfile>(
@@ -519,7 +520,6 @@ struct PersonalBodyInfoView: View {
 
     var body: some View {
         Form {
-            // PRD 020：默认只展示性别/身高/参考体重三个核心字段，其余折叠。
             Section {
                 Picker("生理性别", selection: $biologicalSex) {
                     ForEach(BiologicalSex.allCases) { value in
@@ -533,13 +533,22 @@ struct PersonalBodyInfoView: View {
                     text: $height,
                     keyboard: .decimalPad
                 )
-                ProfileFieldRow(
-                    title: "参考体重",
-                    placeholder: "未填写",
-                    unit: "kg",
-                    text: $referenceWeight,
-                    keyboard: .decimalPad
-                )
+                LabeledContent("当前体重") {
+                    if let weight = latestWeightValue,
+                       let date = latestWeightDate,
+                       weight > 0
+                    {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(formatted(weight)) kg")
+                            Text(date.formatted(date: .abbreviated, time: .omitted))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("暂无体重记录")
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 DisclosureGroup("更多（可选）", isExpanded: $moreBasicsExpanded) {
                     ProfileFieldRow(title: "称呼", placeholder: "可选", text: $displayName)
@@ -557,17 +566,17 @@ struct PersonalBodyInfoView: View {
             } header: {
                 Text("基本信息")
             } footer: {
-                Text("参考体重用于本地热量估算（MET × 体重 × 时长），优先使用最近一次体重记录。所有字段均可留空。")
+                Text("当前体重始终读取最新一条体重记录；请在教练中记录或修正体重。")
             }
 
             Section {
+                Picker("健身目标", selection: $fitnessGoal) {
+                    Text("未选择").tag(nil as FitnessGoal?)
+                    ForEach(FitnessGoal.allCases) { goal in
+                        Text(goal.rawValue).tag(Optional(goal))
+                    }
+                }
                 DisclosureGroup("训练上下文", isExpanded: $contextExpanded) {
-                    ProfileFieldRow(
-                        title: "健身目标",
-                        placeholder: "例如：提升力量、减脂或保持健康",
-                        text: $fitnessGoal,
-                        isMultiline: true
-                    )
                     ProfileFieldRow(
                         title: "身体限制与注意事项",
                         placeholder: "例如：膝盖不适、医生给出的运动限制",
@@ -645,29 +654,31 @@ struct PersonalBodyInfoView: View {
                 }
             }
         }
-        .onAppear(perform: load)
+        .onAppear {
+            load()
+            loadLatestWeight()
+        }
     }
 
     private var isValid: Bool {
         (!hasBirthDate || birthDate <= .now)
             && validDouble(height, range: 80 ... 250)
-            && validDouble(referenceWeight, range: 20 ... 400)
     }
 
     private var isDirty: Bool {
         guard let profile else {
-            return [
-                displayName, height, referenceWeight, fitnessGoal, healthNotes
-            ].contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            return [displayName, height, healthNotes]
+                .contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
                 || biologicalSex != .unspecified
                 || hasBirthDate
+                || fitnessGoal != nil
         }
         return normalized(displayName) != profile.displayName
             || biologicalSex != profile.biologicalSex
             || birthDateChanged(from: profile.birthDate)
             || parsedDouble(height) != profile.height
-            || parsedDouble(referenceWeight) != profile.referenceWeight
-            || normalized(fitnessGoal) != profile.fitnessGoal
+            || fitnessGoal?.rawValue
+            != (profile.fitnessGoal.isEmpty ? nil : profile.fitnessGoal)
             || normalized(healthNotes) != profile.healthNotes
     }
 
@@ -683,11 +694,21 @@ struct PersonalBodyInfoView: View {
             hasBirthDate = false
         }
         height = profile.height.map(formatted) ?? ""
-        referenceWeight = profile.referenceWeight.map(formatted) ?? ""
-        fitnessGoal = profile.fitnessGoal
+        fitnessGoal = FitnessGoal(rawValue: profile.fitnessGoal)
         healthNotes = profile.healthNotes
         moreBasicsExpanded = !profile.displayName.isEmpty || hasBirthDate
         contextExpanded = !profile.fitnessGoal.isEmpty || !profile.healthNotes.isEmpty
+    }
+
+    private func loadLatestWeight() {
+        var descriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.weight != nil },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        let entry = try? modelContext.fetch(descriptor).first
+        latestWeightValue = entry?.weight
+        latestWeightDate = entry?.date
     }
 
     private func save() {
@@ -705,8 +726,7 @@ struct PersonalBodyInfoView: View {
         target.birthDate = optionalBirthDate
         target.age = nil
         target.height = parsedDouble(height)
-        target.referenceWeight = parsedDouble(referenceWeight)
-        target.fitnessGoal = normalized(fitnessGoal)
+        target.fitnessGoal = fitnessGoal?.rawValue ?? ""
         target.healthNotes = normalized(healthNotes)
         try? modelContext.save()
     }
@@ -1303,7 +1323,7 @@ private struct AgentTraceRow: View {
     }
 }
 
-private struct AgentTraceDetailView: View {
+struct AgentTraceDetailView: View {
     let trace: AgentTrace
 
     private var timelineEntries: [AgentTraceTimelineEntry] {

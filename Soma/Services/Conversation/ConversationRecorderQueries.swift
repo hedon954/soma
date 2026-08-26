@@ -124,8 +124,6 @@ extension ConversationRecorder {
                     value["protein"] = entry.protein.map(AgentJSONValue.number) ?? .null
                     value["carbs"] = entry.carbs.map(AgentJSONValue.number) ?? .null
                     value["fat"] = entry.fat.map(AgentJSONValue.number) ?? .null
-                    value["total_sugar"] = entry.totalSugar
-                        .map(AgentJSONValue.number) ?? .null
                     value["glycemic_speed"] = entry.glycemicSpeedRaw
                         .map(AgentJSONValue.string) ?? .null
                     value["glycemic_assessment"] = entry.glycemicAssessment.nilIfEmpty
@@ -142,9 +140,7 @@ extension ConversationRecorder {
                                 .map { .number(Double($0)) } ?? .null,
                             "protein": item.protein.map(AgentJSONValue.number) ?? .null,
                             "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
-                            "fat": item.fat.map(AgentJSONValue.number) ?? .null,
-                            "total_sugar": item.totalSugar
-                                .map(AgentJSONValue.number) ?? .null
+                            "fat": item.fat.map(AgentJSONValue.number) ?? .null
                         ])
                     }
                     value["items"] = .array(encodedItems)

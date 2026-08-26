@@ -34,7 +34,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .gymAnalysis: "识别环境与器械，区分可见证据和推断，并更新电子健身房。"
         case .trainingPlan: "结合目标、历史、身体状态和当前器械制定可执行训练计划。"
         case .movementAnalysis: "基于图片或视频关键帧评估动作、负荷与安全边界。"
-        case .nutritionAnalysis: "识别食物与份量，给出带不确定性的营养、总糖与餐食组成升糖速度估算。"
+        case .nutritionAnalysis: "识别食物与份量，给出带不确定性的营养与餐食组成升糖速度估算。"
         case .postureAnalysis: "以中性、非诊断方式记录体态与标准化照片的可比变化。"
         case .trendAnalysis: "分析训练、体重和饮食的周期趋势，区分信号、噪声和缺失数据。"
         case .trainingVolumeAnalysis: "按可验证记录计算训练容量，并支持不同时间粒度的可比分析。"
@@ -110,13 +110,13 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             """
             # 饮食分析
 
-            目标：从文字和食物照片中提取可记录的餐食信息，并提供诚实的营养、总糖与餐食组成升糖速度估算。
+            目标：从文字和食物照片中提取可记录的餐食信息，并提供诚实的营养与餐食组成升糖速度估算。
 
             执行规则：
             1. 识别可见食物、烹饪方式和可判断的份量；餐具尺寸未知、食物被遮挡或混合时说明不确定性。
-            2. 热量、蛋白质、碳水、脂肪和总糖优先给合理区间；写入单值时使用区间中位估计，并在 note 中保留估算依据和误差来源。total_sugar 指天然糖与添加糖合计；没有营养标签或配料证据时不得把它写成“添加糖”。
+            2. 热量、蛋白质、碳水和脂肪优先给合理区间；写入单值时使用区间中位估计，并在 note 中保留估算依据和误差来源。
             3. 不把照片外不可见的油、酱料或配料当作确定事实，可作为可能的偏差来源提示。
-            4. 总糖不等于个体血糖反应。只有餐食组成证据足够时，才同时写 glycemic_speed 与 glycemic_assessment：速度只能是 slow、moderate 或 fast，依据需说明精制碳水、纤维、蛋白质、脂肪、烹饪或形态等可见因素及不确定性。不得预测个体血糖峰值、曲线或作诊断；证据不足时两项都省略。
+            4. 只有餐食组成证据足够时，才同时写 glycemic_speed 与 glycemic_assessment：速度只能是 slow、moderate 或 fast，依据需说明精制碳水、纤维、蛋白质、脂肪、烹饪或形态等可见因素及不确定性。不得预测个体血糖峰值、曲线或作诊断；证据不足时两项都省略。
             5. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。纠正、补图或改已有餐必须先 list/get 再用 update_meal。无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
                不要猜测用餐时间：用户没有明确说时间就省略 occurred_at，由 App 使用发送时刻（含钟点）；只有用户明确给出时间时才写带时区的完整 ISO-8601 时间，不要写只有日期的值。
             6. 调用 create_meal 或 update_meal 之前，先用一句话说明你识别到了什么（例如“我帮你识别到了以下食物信息。”）。这句话不列菜名、份量和数字，结果卡会显示它们。
@@ -168,7 +168,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             目标：在训练记录信息足够时生成可解释、可复现的热量估算，数值计算由 App 内置规则完成，不由模型自由心算。
 
             执行规则：
-            1. 记录训练时先 search_exercises，必要时一次 create_exercise，再用有效 exercise_id 一次 create_workout 写入全部动作。新建训练记录编号由本机分配。App 以用户最近身体记录的体重为优先，其次使用身体信息中的参考体重；不得从照片、身高或外观推测体重。
+            1. 记录训练时先 search_exercises，必要时一次 create_exercise，再用有效 exercise_id 一次 create_workout 写入全部动作。新建训练记录编号由本机分配。App 只使用最近身体记录中的体重；不得从照片、身高、外观或其他资料推测体重。
             2. 用户明确提供训练时长时原样传入 duration_minutes，不得改写。
                禁止用「组数 × 次数 × 间歇秒数 / 60」估算时长（例如 4×8×90/60=48 是错误的）。
                如果没有时长，但明确提供组数、次数和间歇，不要自行填写 duration_minutes；

@@ -10,16 +10,14 @@ final class MealNutritionTotalsTests: XCTestCase {
                 calories: 165,
                 protein: 31,
                 carbs: 0,
-                fat: 3.6,
-                totalSugar: 0
+                fat: 3.6
             ),
             MealItem(
                 name: "虚构米饭",
                 calories: 210,
                 protein: 4.5,
                 carbs: 46,
-                fat: 0.4,
-                totalSugar: 0.2
+                fat: 0.4
             )
         ])
 
@@ -27,7 +25,6 @@ final class MealNutritionTotalsTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(totals.protein), 35.5, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(totals.carbs), 46, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(totals.fat), 4, accuracy: 0.001)
-        XCTAssertEqual(try XCTUnwrap(totals.totalSugar), 0.2, accuracy: 0.001)
     }
 
     func testMissingFieldOnAnyItemKeepsThatTotalEmpty() {
@@ -39,7 +36,6 @@ final class MealNutritionTotalsTests: XCTestCase {
         XCTAssertEqual(totals.calories, 255)
         XCTAssertNil(totals.protein)
         XCTAssertEqual(try XCTUnwrap(totals.carbs), 8, accuracy: 0.001)
-        XCTAssertNil(totals.totalSugar)
     }
 
     func testEmptyItemsProduceEmptyTotalsInsteadOfZero() {
@@ -75,8 +71,7 @@ final class MealNutritionTotalsTests: XCTestCase {
             calories: "165",
             protein: "",
             carbs: "0",
-            fat: "3.6",
-            totalSugar: "1.5"
+            fat: "3.6"
         )
         let unnamed = MealItemDraft(name: "  ", calories: "120")
 
@@ -86,7 +81,6 @@ final class MealNutritionTotalsTests: XCTestCase {
         XCTAssertEqual(item?.calories, 165)
         XCTAssertNil(item?.protein)
         XCTAssertEqual(item?.carbs, 0)
-        XCTAssertEqual(item?.totalSugar, 1.5)
         XCTAssertNil(unnamed.item)
     }
 

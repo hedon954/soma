@@ -353,7 +353,6 @@ private struct TrainingProgramDetailView: View {
 
     private var hasCalorieReferenceWeight: Bool {
         bodyEntries.contains { ($0.weight ?? 0) > 0 }
-            || userProfiles.contains { ($0.referenceWeight ?? 0) > 0 }
     }
 
     private var recentVolumePoints: [(id: UUID, date: Date, volume: Double)] {

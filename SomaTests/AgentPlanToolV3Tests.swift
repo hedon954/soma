@@ -220,6 +220,79 @@ final class AgentPlanToolV3Tests: XCTestCase {
         XCTAssertTrue(detailJSON.contains("left_weight_kg"))
     }
 
+    @MainActor
+    func testCreateProgramMaterializesSourceWorkoutsAsCompletedSession() throws {
+        let fixture = try makeContext()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "虚构硬拉",
+            in: fixture.context
+        )
+        let exerciseID = try XCTUnwrap(exercise.businessID)
+        let sourceWorkout = WorkoutEntry(
+            date: Date(timeIntervalSince1970: 1_787_200_000),
+            exercise: exercise.canonicalName,
+            exerciseID: exercise.id,
+            setEntries: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    targetKind: .repetitions,
+                    reps: 5,
+                    externalWeightKG: 80
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 2,
+                    targetKind: .repetitions,
+                    reps: 5,
+                    externalWeightKG: 85
+                )
+            ]
+        )
+        sourceWorkout.exerciseDefinition = exercise
+        fixture.context.insert(sourceWorkout)
+        try BusinessIDAllocator.assignMissingIDs(in: fixture.context)
+        let sourceRecordID = try XCTUnwrap(sourceWorkout.businessID)
+
+        let result = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createProgram,
+                arguments: AgentToolArguments(
+                    programName: "由当日记录生成的计划",
+                    templateExercises: [AgentTemplateExerciseInput(
+                        exerciseID: exerciseID,
+                        order: 1,
+                        targetSets: 2,
+                        targetReps: 5,
+                        targetWeightKG: 85,
+                        targetRestSeconds: 90
+                    )],
+                    sourceWorkoutRecordIDs: [sourceRecordID]
+                )
+            ),
+            sourceText: "把今天的硬拉总结成计划",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: fixture.context
+        )
+
+        XCTAssertTrue(result.ok, result.message)
+        let session = try XCTUnwrap(
+            fixture.context.fetch(FetchDescriptor<WorkoutSession>()).first
+        )
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.performances.count, 1)
+        XCTAssertEqual(session.performances.first?.workoutSets.count, 2)
+        XCTAssertEqual(session.performances.first?.workoutSets.map(\.actualReps), [5, 5])
+        XCTAssertEqual(sourceWorkout.sourceWorkoutSessionID, session.id)
+        XCTAssertTrue(sourceWorkout.projectionKey?.hasPrefix("entry:") == true)
+
+        try TrainingPlanStore.deleteSession(session, in: fixture.context)
+        let remaining = try fixture.context.fetch(FetchDescriptor<WorkoutEntry>())
+        XCTAssertEqual(remaining.map(\.businessID), [sourceRecordID])
+        XCTAssertNil(remaining.first?.sourceWorkoutSessionID)
+        XCTAssertNil(remaining.first?.sourcePerformanceID)
+    }
+
     private func resolve(
         _ arguments: [String: Any]
     ) throws -> (native: ToolCall, local: AgentToolCall) {

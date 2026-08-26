@@ -123,6 +123,7 @@ struct CoachBubble: View {
         if message.isFromCoach, !isLive {
             AssistantFeedbackButton(
                 messageID: message.id,
+                traceID: message.agentTraceID,
                 timestamp: content.text,
                 timestampAccessibilityLabel: content.accessibilityLabel,
                 onExpanded: onFeedbackExpanded

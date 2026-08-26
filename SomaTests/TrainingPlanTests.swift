@@ -328,7 +328,8 @@ final class TrainingPlanTests: XCTestCase {
                 WorkoutSetEvidence(reps: 5, externalWeightKG: 0)
             ],
             sourceWorkoutSessionID: session.id,
-            sourcePerformanceID: performance.id
+            sourcePerformanceID: performance.id,
+            projectionKey: SomaDataMigration.projectionKey(for: performance.id)
         )
         performance.session = session
         performance.exerciseDefinition = exercise

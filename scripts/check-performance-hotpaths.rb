@@ -288,7 +288,8 @@ unless insights_source.match?(/currentEquipmentCount.*?modelContext\.fetchCount/
   fail_check("Insights snapshot no longer uses count-only queries for count-only metrics")
 end
 if insights_source.include?("points.map(\\.volume).max()") ||
-   !insights_source.include?("private var periodSummary:")
+   (insights_source.include?("TrainingVolumeTrendCard") &&
+    !insights_source.include?("private var periodSummary:"))
   fail_check("scrolling a training chart again allocates or scans the series repeatedly per body")
 end
 
@@ -468,8 +469,8 @@ end
 
 calorie_source = File.read(File.join(ROOT, service_file("WorkoutCalorieCalculator.swift")))
 unless calorie_source.include?("bodyDescriptor.fetchLimit = 50") &&
-       calorie_source.include?("profileDescriptor.fetchLimit = 20")
-  fail_check("reference-weight lookup is no longer date-filtered and bounded")
+       !calorie_source.include?("profileDescriptor")
+  fail_check("latest recorded weight lookup is no longer date-filtered and bounded")
 end
 
 crash_source = File.read(File.join(ROOT, service_file("CrashDiagnosticsCoordinator.swift")))

@@ -605,9 +605,15 @@ enum TrainingPlanStore {
                 predicate: #Predicate { $0.performanceID == performanceID }
             ))) ?? []
         }
-        let projectedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
+        let linkedWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
             predicate: #Predicate { $0.sourceWorkoutSessionID == sessionID }
         ))
+        let projectedWorkouts = linkedWorkouts.filter {
+            $0.projectionKey?.hasPrefix("guided-performance:") == true
+        }
+        let sourceWorkouts = linkedWorkouts.filter {
+            $0.projectionKey?.hasPrefix("guided-performance:") != true
+        }
         let mediaPaths = Set(
             sets.compactMap(\.recordedVideoPath)
                 + efforts.compactMap(\.recordedVideoPath)
@@ -618,6 +624,11 @@ enum TrainingPlanStore {
 
         analyses.forEach(context.delete)
         projectedWorkouts.forEach(context.delete)
+        for workout in sourceWorkouts {
+            workout.sourceWorkoutSessionID = nil
+            workout.sourcePerformanceID = nil
+            workout.sourcePerformance = nil
+        }
         efforts.forEach(context.delete)
         sets.forEach(context.delete)
         performances.forEach(context.delete)

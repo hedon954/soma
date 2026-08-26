@@ -3,6 +3,7 @@
 - 状态：已采纳，已实施于 0.0.14；Release 真机量化验收中
 - 日期：2026-08-25
 - 修订自：[PRD 044](044-behavior-preserving-modernization.md) 的 0.0.13 行为保持基线
+- 后续修订：[PRD 046](046-coach-records-and-goal-directed-progress.md) 在既有有界查询上修订会话初始定位、记录编辑和目标导向进展
 - 上游依据：
   - 用户对长流后段/完成后卡顿、进展永久空白和数据库索引的明确反馈
   - [BUG 0036](../bugs/0036-long-stream-continuous-text-and-completion-cliff.md)

@@ -1,118 +1,108 @@
 import SwiftUI
 
-/// 高级设置中的 ReAct 步数与活动执行时间上限。
+/// 高级设置中的 ReAct 步数与按媒体类型独立配置的活动执行时间上限。
 struct ReActLoopSettingsSection: View {
     @AppStorage(ReActAgentPreference.maxStepsKey)
     private var maxSteps = ReActAgentPreference.defaultMaxSteps
-    @AppStorage(ReActAgentPreference.runtimeTimeoutMinutesKey)
-    private var runtimeTimeoutMinutes = ReActAgentPreference.automaticRuntimeTimeoutMinutes
+    @AppStorage(ReActAgentPreference.textRuntimeTimeoutMinutesKey)
+    private var textTimeout = ReActAgentPreference.defaultTextRuntimeTimeoutMinutes
+    @AppStorage(ReActAgentPreference.imageRuntimeTimeoutMinutesKey)
+    private var imageTimeout = ReActAgentPreference.defaultImageRuntimeTimeoutMinutes
+    @AppStorage(ReActAgentPreference.videoRuntimeTimeoutMinutesKey)
+    private var videoTimeout = ReActAgentPreference.defaultVideoRuntimeTimeoutMinutes
 
     var body: some View {
         Section {
             Stepper(
-                value: maxStepsBinding,
-                in: ReActAgentPreference.minimumMaxSteps ... ReActAgentPreference.maximumMaxSteps,
-                step: 1
+                value: clampedBinding(
+                    $maxSteps,
+                    range: ReActAgentPreference.minimumMaxSteps
+                        ... ReActAgentPreference.maximumMaxSteps
+                )
             ) {
                 LabeledContent("ReAct 步骤上限", value: "\(clampedMaxSteps)")
             }
-            .accessibilityLabel("ReAct 步骤上限")
-            .accessibilityValue("\(clampedMaxSteps)")
-            Stepper(
-                value: runtimeTimeoutOptionBinding,
-                in: 0 ... runtimeTimeoutOptionCount,
-                step: 1
-            ) {
-                LabeledContent("运行超时上限", value: runtimeTimeoutValueText)
-            }
-            .accessibilityLabel("运行超时上限")
-            .accessibilityValue(runtimeTimeoutValueText)
-            Button("恢复默认 ReAct 设置") {
-                maxSteps = ReActAgentPreference.defaultMaxSteps
-                runtimeTimeoutMinutes = ReActAgentPreference.automaticRuntimeTimeoutMinutes
-            }
-            .disabled(isUsingDefaults)
+            timeoutStepper("文字超时上限", value: $textTimeout)
+            timeoutStepper("图片超时上限", value: $imageTimeout)
+            timeoutStepper("视频超时上限", value: $videoTimeout)
+            Button("恢复默认 ReAct 设置", action: restoreDefaults)
+                .disabled(isUsingDefaults)
         } header: {
             Text("ReAct 循环")
         } footer: {
             Text(footerText)
         }
-        .onAppear {
-            maxSteps = clampedMaxSteps
-            runtimeTimeoutMinutes = clampedRuntimeTimeoutMinutes
+        .onAppear(perform: normalizeValues)
+    }
+
+    private func timeoutStepper(
+        _ title: String,
+        value: Binding<Int>
+    ) -> some View {
+        Stepper(
+            value: clampedBinding(value, range: timeoutRange)
+        ) {
+            LabeledContent(
+                title,
+                value: "\(clamped(value.wrappedValue, in: timeoutRange)) 分钟"
+            )
         }
+        .accessibilityLabel(title)
+        .accessibilityValue("\(clamped(value.wrappedValue, in: timeoutRange)) 分钟")
+    }
+
+    private var timeoutRange: ClosedRange<Int> {
+        ReActAgentPreference.minimumRuntimeTimeoutMinutes
+            ... ReActAgentPreference.maximumRuntimeTimeoutMinutes
     }
 
     private var clampedMaxSteps: Int {
-        min(
-            ReActAgentPreference.maximumMaxSteps,
-            max(ReActAgentPreference.minimumMaxSteps, maxSteps)
+        clamped(
+            maxSteps,
+            in: ReActAgentPreference.minimumMaxSteps
+                ... ReActAgentPreference.maximumMaxSteps
         )
     }
 
-    private var maxStepsBinding: Binding<Int> {
+    private func clampedBinding(
+        _ value: Binding<Int>,
+        range: ClosedRange<Int>
+    ) -> Binding<Int> {
         Binding(
-            get: { clampedMaxSteps },
-            set: { maxSteps = $0 }
+            get: { clamped(value.wrappedValue, in: range) },
+            set: { value.wrappedValue = clamped($0, in: range) }
         )
     }
 
-    private var clampedRuntimeTimeoutMinutes: Int {
-        guard runtimeTimeoutMinutes != ReActAgentPreference.automaticRuntimeTimeoutMinutes else {
-            return ReActAgentPreference.automaticRuntimeTimeoutMinutes
-        }
-        return min(
-            ReActAgentPreference.maximumRuntimeTimeoutMinutes,
-            max(ReActAgentPreference.minimumRuntimeTimeoutMinutes, runtimeTimeoutMinutes)
-        )
-    }
-
-    private var runtimeTimeoutOptionCount: Int {
-        ReActAgentPreference.maximumRuntimeTimeoutMinutes
-            - ReActAgentPreference.minimumRuntimeTimeoutMinutes + 1
-    }
-
-    private var runtimeTimeoutOption: Int {
-        guard clampedRuntimeTimeoutMinutes != ReActAgentPreference.automaticRuntimeTimeoutMinutes
-        else {
-            return 0
-        }
-        return clampedRuntimeTimeoutMinutes
-            - ReActAgentPreference.minimumRuntimeTimeoutMinutes + 1
-    }
-
-    private var runtimeTimeoutOptionBinding: Binding<Int> {
-        Binding(
-            get: { runtimeTimeoutOption },
-            set: { option in
-                runtimeTimeoutMinutes = option == 0
-                    ? ReActAgentPreference.automaticRuntimeTimeoutMinutes
-                    : ReActAgentPreference.minimumRuntimeTimeoutMinutes + option - 1
-            }
-        )
-    }
-
-    private var runtimeTimeoutValueText: String {
-        guard clampedRuntimeTimeoutMinutes != ReActAgentPreference.automaticRuntimeTimeoutMinutes
-        else {
-            return "自动（3/5/10 分钟）"
-        }
-        return "\(clampedRuntimeTimeoutMinutes) 分钟"
+    private func clamped(_ value: Int, in range: ClosedRange<Int>) -> Int {
+        min(range.upperBound, max(range.lowerBound, value))
     }
 
     private var isUsingDefaults: Bool {
         clampedMaxSteps == ReActAgentPreference.defaultMaxSteps
-            && clampedRuntimeTimeoutMinutes
-            == ReActAgentPreference.automaticRuntimeTimeoutMinutes
+            && textTimeout == ReActAgentPreference.defaultTextRuntimeTimeoutMinutes
+            && imageTimeout == ReActAgentPreference.defaultImageRuntimeTimeoutMinutes
+            && videoTimeout == ReActAgentPreference.defaultVideoRuntimeTimeoutMinutes
+    }
+
+    private func normalizeValues() {
+        ReActAgentPreference.migrateLegacyRuntimeTimeoutIfNeeded()
+        maxSteps = clampedMaxSteps
+        textTimeout = ReActAgentPreference.textRuntimeTimeoutMinutes()
+        imageTimeout = ReActAgentPreference.imageRuntimeTimeoutMinutes()
+        videoTimeout = ReActAgentPreference.videoRuntimeTimeoutMinutes()
+    }
+
+    private func restoreDefaults() {
+        maxSteps = ReActAgentPreference.defaultMaxSteps
+        textTimeout = ReActAgentPreference.defaultTextRuntimeTimeoutMinutes
+        imageTimeout = ReActAgentPreference.defaultImageRuntimeTimeoutMinutes
+        videoTimeout = ReActAgentPreference.defaultVideoRuntimeTimeoutMinutes
     }
 
     private var footerText: String {
-        let lower = ReActAgentPreference.minimumMaxSteps
-        let upper = ReActAgentPreference.maximumMaxSteps
-        let defaultSteps = ReActAgentPreference.defaultMaxSteps
-        return "单次发送内模型与本地工具最多往返的步数。默认 \(defaultSteps)；"
-            + "可设为 \(lower)–\(upper)。运行超时只累计实际执行时间；自动模式按文字、图片、"
-            + "视频使用 3/5/10 分钟，自定义可设为 3–60 分钟。等待用户、网络或前台不计时。"
-            + "更高上限会增加耗时与费用。"
+        "单次发送内模型与本地工具最多往返 \(ReActAgentPreference.defaultMaxSteps) 步。"
+            + "文字、图片、视频分别计算实际执行时间，默认 3、5、10 分钟，均可独立设为 3–60 分钟。"
+            + "等待用户、网络或前台不计时；更高上限会增加耗时与费用。"
     }
 }

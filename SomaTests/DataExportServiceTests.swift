@@ -84,7 +84,6 @@ final class DataExportServiceTests: XCTestCase {
             from: Data(contentsOf: mealDirectory.appending(path: "分析结果.json"))
         )
         XCTAssertEqual(analysis.title, "测试午餐")
-        XCTAssertEqual(analysis.totalSugar, 7)
         XCTAssertEqual(analysis.glycemicSpeed, "moderate")
         XCTAssertEqual(
             analysis.glycemicAssessment,

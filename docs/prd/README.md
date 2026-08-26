@@ -34,6 +34,7 @@
 | [043：可配置 ReAct 运行超时](043-configurable-react-runtime-timeout.md) | 0.0.12 | 窗口最旧活增量 |
 | [044：行为保持的工程现代化](044-behavior-preserving-modernization.md) | 0.0.13 | 活增量 |
 | [045：长流与进展可靠性及有界数据访问](045-performance-reliability-and-bounded-data-access.md) | 0.0.14 | 活增量 |
+| [046：教练记录可信度、会话交互与目标导向进展](046-coach-records-and-goal-directed-progress.md) | 0.0.14 | 活增量 |
 
 ## 阅读约定
 

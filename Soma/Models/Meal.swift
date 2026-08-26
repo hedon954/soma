@@ -4,6 +4,7 @@ import SwiftData
 enum MealType: String, Codable, CaseIterable, Identifiable {
     case breakfast = "早餐"
     case lunch = "午餐"
+    case afternoonSnack = "下午点心"
     case dinner = "晚餐"
     case snack = "加餐"
     var id: String {
@@ -14,6 +15,7 @@ enum MealType: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .breakfast: "sunrise.fill"
         case .lunch: "sun.max.fill"
+        case .afternoonSnack: "sun.haze.fill"
         case .dinner: "moon.stars.fill"
         case .snack: "cup.and.saucer.fill"
         }
@@ -54,8 +56,6 @@ struct MealItem: Codable, Equatable, Identifiable, Sendable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
-    /// 总糖，包含天然存在与添加的糖；没有标签或可靠识别时保持 nil。
-    var totalSugar: Double?
 
     init(
         id: UUID = UUID(),
@@ -64,8 +64,7 @@ struct MealItem: Codable, Equatable, Identifiable, Sendable {
         calories: Int? = nil,
         protein: Double? = nil,
         carbs: Double? = nil,
-        fat: Double? = nil,
-        totalSugar: Double? = nil
+        fat: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -74,7 +73,6 @@ struct MealItem: Codable, Equatable, Identifiable, Sendable {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
-        self.totalSugar = totalSugar
     }
 }
 
@@ -100,7 +98,6 @@ final class MealEntry: BusinessIdentifiedModel {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
-    var totalSugar: Double?
     var glycemicSpeedRaw: String?
     var glycemicAssessment: String = ""
     var itemsData: Data = Data()
@@ -125,7 +122,6 @@ final class MealEntry: BusinessIdentifiedModel {
         protein: Double? = nil,
         carbs: Double? = nil,
         fat: Double? = nil,
-        totalSugar: Double? = nil,
         glycemicSpeed: MealGlycemicSpeed? = nil,
         glycemicAssessment: String = "",
         items: [MealItem] = [],
@@ -145,7 +141,6 @@ final class MealEntry: BusinessIdentifiedModel {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
-        self.totalSugar = totalSugar
         glycemicSpeedRaw = glycemicSpeed?.rawValue
         self.glycemicAssessment = glycemicAssessment
         itemsData = MealItemStorage.encode(items)
@@ -195,7 +190,6 @@ final class MealEntry: BusinessIdentifiedModel {
         protein = totals.protein
         carbs = totals.carbs
         fat = totals.fat
-        totalSugar = totals.totalSugar
         // 菜品或份量变化后，旧的定性判断不再可靠；Agent 或用户可显式重新填写。
         glycemicSpeed = nil
         glycemicAssessment = ""

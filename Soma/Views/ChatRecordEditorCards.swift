@@ -1,6 +1,24 @@
 import SwiftData
 import SwiftUI
 
+private struct WorkoutAutosaveValue: Equatable {
+    var exercise: String
+    var draft: WorkoutRecordDraft
+}
+
+private struct BodyAutosaveValue: Equatable {
+    var weight: String
+    var bodyFat: String
+    var waist: String
+    var notes: String
+}
+
+private struct GymAutosaveValue: Equatable {
+    var name: String
+    var notes: String
+    var isCurrent: Bool
+}
+
 enum ChatRecordEditPolicy {
     static func latestEditableAssistantMessageID(
         in messages: [CoachMessage]
@@ -212,6 +230,7 @@ private struct InlineWorkoutCard: View {
     @State private var exercise: String
     @State private var workoutDraft: WorkoutRecordDraft
     @State private var showsDelete = false
+    @State private var saveState: InlineRecordSaveState = .idle
 
     init(workout: WorkoutEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.workout = workout
@@ -231,6 +250,7 @@ private struct InlineWorkoutCard: View {
             iconTint: AppTheme.trainingAccent,
             iconSoftTint: AppTheme.trainingSoftTint,
             isEditable: isEditable,
+            saveState: $saveState,
             onSave: save,
             onDelete: { showsDelete = true },
             contentPadding: 10
@@ -245,6 +265,12 @@ private struct InlineWorkoutCard: View {
         .confirmationDialog("删除这条训练记录？", isPresented: $showsDelete) {
             Button("删除记录", role: .destructive, action: deleteRecord)
         }
+        .inlineRecordAutosave(
+            value: WorkoutAutosaveValue(exercise: exercise, draft: workoutDraft),
+            isEnabled: isEditable,
+            state: $saveState,
+            save: save
+        )
     }
 
     private func save() -> Bool {
@@ -278,7 +304,7 @@ private struct InlineWorkoutCard: View {
             sets: workout.setCount,
             reps: workout.representativeReps,
             restSeconds: workout.restSeconds,
-            weightKG: WorkoutCalorieCalculator.currentReferenceWeight(in: modelContext)
+            weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: modelContext)
         )
         workout.estimatedCalories = estimate?.calories
         workout.calorieMET = estimate?.met
@@ -308,6 +334,7 @@ private struct InlineBodyCard: View {
     @State private var waist: String
     @State private var notes: String
     @State private var showsDelete = false
+    @State private var saveState: InlineRecordSaveState = .idle
 
     init(entry: BodyEntry, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.entry = entry
@@ -326,6 +353,7 @@ private struct InlineBodyCard: View {
             iconTint: AppTheme.bodyAccent,
             iconSoftTint: AppTheme.bodySoftTint,
             isEditable: isEditable,
+            saveState: $saveState,
             onSave: save,
             onDelete: { showsDelete = true }
         ) {
@@ -353,6 +381,17 @@ private struct InlineBodyCard: View {
         .confirmationDialog("删除这条身体记录？", isPresented: $showsDelete) {
             Button("删除记录", role: .destructive, action: deleteRecord)
         }
+        .inlineRecordAutosave(
+            value: BodyAutosaveValue(
+                weight: weight,
+                bodyFat: bodyFat,
+                waist: waist,
+                notes: notes
+            ),
+            isEnabled: isEditable,
+            state: $saveState,
+            save: save
+        )
     }
 
     private func save() -> Bool {
@@ -383,6 +422,7 @@ private struct InlineGymCard: View {
     @State private var notes: String
     @State private var isCurrent: Bool
     @State private var showsDelete = false
+    @State private var saveState: InlineRecordSaveState = .idle
 
     init(gym: GymProfile, sourceMessage: CoachMessage?, isEditable: Bool) {
         self.gym = gym
@@ -399,6 +439,7 @@ private struct InlineGymCard: View {
             titleText: isEditable ? $name : nil,
             icon: "building.2",
             isEditable: isEditable,
+            saveState: $saveState,
             onSave: save,
             onDelete: { showsDelete = true }
         ) {
@@ -420,6 +461,12 @@ private struct InlineGymCard: View {
         .confirmationDialog("删除这个健身房？", isPresented: $showsDelete) {
             Button("删除健身房", role: .destructive, action: deleteRecord)
         }
+        .inlineRecordAutosave(
+            value: GymAutosaveValue(name: name, notes: notes, isCurrent: isCurrent),
+            isEnabled: isEditable,
+            state: $saveState,
+            save: save
+        )
     }
 
     private func save() -> Bool {

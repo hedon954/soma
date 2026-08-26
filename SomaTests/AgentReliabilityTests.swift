@@ -26,40 +26,51 @@ final class AgentReliabilityTests: XCTestCase {
         XCTAssertEqual(ReActAgentPreference.maxSteps(defaults: defaults), 42)
     }
 
-    func testRuntimeTimeoutPreferenceDefaultsToAdaptiveAndClampsCustomMinutes() throws {
+    func testRuntimeTimeoutPreferencesDefaultPerMediaAndClampIndependently() throws {
         let suiteName = "AgentReliabilityTests.runtimeTimeout.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let base = AgentStreamDeadlinePolicy()
 
-        XCTAssertNil(ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults))
-        XCTAssertEqual(ReActAgentPreference.deadlinePolicy(base, defaults: defaults), base)
+        XCTAssertEqual(ReActAgentPreference.textRuntimeTimeoutMinutes(defaults: defaults), 3)
+        XCTAssertEqual(ReActAgentPreference.imageRuntimeTimeoutMinutes(defaults: defaults), 5)
+        XCTAssertEqual(ReActAgentPreference.videoRuntimeTimeoutMinutes(defaults: defaults), 10)
 
-        ReActAgentPreference.setRuntimeTimeoutMinutes(1, defaults: defaults)
-        XCTAssertEqual(
-            ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults),
-            ReActAgentPreference.minimumRuntimeTimeoutMinutes
+        ReActAgentPreference.setRuntimeTimeoutMinutes(
+            text: 1,
+            image: 17,
+            video: 999,
+            defaults: defaults
         )
-        var configured = ReActAgentPreference.deadlinePolicy(base, defaults: defaults)
+        XCTAssertEqual(ReActAgentPreference.textRuntimeTimeoutMinutes(defaults: defaults), 3)
+        XCTAssertEqual(ReActAgentPreference.imageRuntimeTimeoutMinutes(defaults: defaults), 17)
+        XCTAssertEqual(ReActAgentPreference.videoRuntimeTimeoutMinutes(defaults: defaults), 60)
+        let configured = ReActAgentPreference.deadlinePolicy(base, defaults: defaults)
         XCTAssertEqual(configured.textLoopTotal, 180)
-        XCTAssertEqual(configured.imageLoopTotal, 180)
-        XCTAssertEqual(configured.videoLoopTotal, 180)
-
-        ReActAgentPreference.setRuntimeTimeoutMinutes(999, defaults: defaults)
-        XCTAssertEqual(
-            ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults),
-            ReActAgentPreference.maximumRuntimeTimeoutMinutes
-        )
-
-        ReActAgentPreference.setRuntimeTimeoutMinutes(17, defaults: defaults)
-        configured = ReActAgentPreference.deadlinePolicy(base, defaults: defaults)
-        XCTAssertEqual(configured.textLoopTotal, 1020)
         XCTAssertEqual(configured.imageLoopTotal, 1020)
-        XCTAssertEqual(configured.videoLoopTotal, 1020)
+        XCTAssertEqual(configured.videoLoopTotal, 3600)
 
-        ReActAgentPreference.setRuntimeTimeoutMinutes(nil, defaults: defaults)
-        XCTAssertNil(ReActAgentPreference.runtimeTimeoutMinutes(defaults: defaults))
-        XCTAssertEqual(ReActAgentPreference.deadlinePolicy(base, defaults: defaults), base)
+        defaults.removeObject(forKey: ReActAgentPreference.textRuntimeTimeoutMinutesKey)
+        defaults.removeObject(forKey: ReActAgentPreference.imageRuntimeTimeoutMinutesKey)
+        defaults.removeObject(forKey: ReActAgentPreference.videoRuntimeTimeoutMinutesKey)
+        defaults.set(12, forKey: "agent.react.runtimeTimeoutMinutes")
+        XCTAssertEqual(ReActAgentPreference.textRuntimeTimeoutMinutes(defaults: defaults), 12)
+        XCTAssertEqual(ReActAgentPreference.imageRuntimeTimeoutMinutes(defaults: defaults), 12)
+        XCTAssertEqual(ReActAgentPreference.videoRuntimeTimeoutMinutes(defaults: defaults), 12)
+        ReActAgentPreference.migrateLegacyRuntimeTimeoutIfNeeded(defaults: defaults)
+        XCTAssertEqual(
+            defaults.object(forKey: ReActAgentPreference.textRuntimeTimeoutMinutesKey) as? Int,
+            12
+        )
+        XCTAssertEqual(
+            defaults.object(forKey: ReActAgentPreference.imageRuntimeTimeoutMinutesKey) as? Int,
+            12
+        )
+        XCTAssertEqual(
+            defaults.object(forKey: ReActAgentPreference.videoRuntimeTimeoutMinutesKey) as? Int,
+            12
+        )
+        XCTAssertNil(defaults.object(forKey: "agent.react.runtimeTimeoutMinutes"))
     }
 
     @MainActor

@@ -9,6 +9,9 @@
 - 后续替代：
   - [ADR 0097](0097-current-baseline-performance-budget-and-cache-invalidation.md)（窗口内最旧活 ADR，0.0.12）
   - [ADR 0098](0098-user-configurable-react-active-runtime-timeout.md)
+  - [ADR 0101](0101-record-truth-and-agent-profile-context.md)
+  - [ADR 0102](0102-source-workout-plan-execution-materialization.md)
+  - [ADR 0103](0103-goal-directed-progress-energy-and-hypertrophy.md)
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
 - 下游落地：
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
@@ -46,7 +49,7 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 9. 侧别与按次数/按时长归 `ExerciseDefinition`。独立逻辑组保存类型、目标、重量与备注；计划组间歇
    与左右换侧间歇归 `TemplateExercise`，开始 Session 时才编译到 `WorkoutSet`，最后一组不生成
    组间歇。实际休息证据仍逐组保存。
-10. 总糖可空；升糖速度与依据成对保存，编辑菜品后失效。
+10. 不保存图片无法稳定识别的总糖；升糖速度与依据成对保存，编辑菜品后失效。
 
 ### Agent 运行时
 

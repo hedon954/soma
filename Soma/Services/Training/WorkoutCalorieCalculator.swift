@@ -236,15 +236,13 @@ enum WorkoutCalorieCalculator {
     }
 
     @MainActor
-    static func currentReferenceWeight(in context: ModelContext) -> Double? {
-        referenceWeight(at: .now, in: context)
+    static func currentRecordedWeight(in context: ModelContext) -> Double? {
+        latestRecordedWeight(at: .now, in: context)
     }
 
-    /// Uses only body measurements known at or before the session start. A
-    /// profile reference weight is the explicit fallback when no dated body
-    /// measurement exists.
+    /// 只使用 Session 开始时间之前已记录的体重事实；身体资料不再维护第二份体重。
     @MainActor
-    static func referenceWeight(
+    static func latestRecordedWeight(
         at date: Date,
         in context: ModelContext
     ) -> Double? {
@@ -262,13 +260,7 @@ enum WorkoutCalorieCalculator {
         })?.weight {
             return weight
         }
-        var profileDescriptor = FetchDescriptor<UserProfile>(
-            predicate: #Predicate { $0.referenceWeight != nil },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        profileDescriptor.fetchLimit = 20
-        let profiles = (try? context.fetch(profileDescriptor)) ?? []
-        return profiles.compactMap(\.referenceWeight).first(where: { $0 > 0 })
+        return nil
     }
 
     private static func activity(

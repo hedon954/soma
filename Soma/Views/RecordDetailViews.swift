@@ -318,7 +318,7 @@ private struct WorkoutRecordEditor: View {
                 }
             } footer: {
                 if caloriesExpanded {
-                    Text("MET × 参考体重 × 计算时长。推算时长只用于热量估算，不会填入上方的实际训练时长。")
+                    Text("MET × 最近体重记录 × 计算时长。推算时长只用于热量估算，不会填入上方的实际训练时长。")
                 }
             }
 
@@ -370,7 +370,7 @@ private struct WorkoutRecordEditor: View {
             hasCalorieReferenceWeight = nil
             await Task.yield()
             guard !Task.isCancelled else { return }
-            let available = WorkoutCalorieCalculator.referenceWeight(
+            let available = WorkoutCalorieCalculator.latestRecordedWeight(
                 at: date,
                 in: modelContext
             ) != nil
@@ -422,7 +422,7 @@ private struct WorkoutRecordEditor: View {
     }
 
     private func sanitizeMistakenDurationIfNeeded() {
-        let weight = WorkoutCalorieCalculator.currentReferenceWeight(in: modelContext)
+        let weight = WorkoutCalorieCalculator.currentRecordedWeight(in: modelContext)
         guard WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
             workout,
             weightKG: weight
@@ -492,7 +492,6 @@ private struct MealRecordEditor: View {
     @State private var protein: String
     @State private var carbs: String
     @State private var fat: String
-    @State private var totalSugar: String
     @State private var glycemicSpeed: MealGlycemicSpeed?
     @State private var glycemicAssessment: String
     @State private var drafts: [MealItemDraft]
@@ -508,7 +507,6 @@ private struct MealRecordEditor: View {
         _protein = State(initialValue: EditorValue.string(meal.protein))
         _carbs = State(initialValue: EditorValue.string(meal.carbs))
         _fat = State(initialValue: EditorValue.string(meal.fat))
-        _totalSugar = State(initialValue: EditorValue.string(meal.totalSugar))
         _glycemicSpeed = State(initialValue: meal.glycemicSpeed)
         _glycemicAssessment = State(initialValue: meal.glycemicAssessment)
         _drafts = State(initialValue: MealItemDraft.drafts(for: meal))
@@ -547,14 +545,11 @@ private struct MealRecordEditor: View {
                     Text("尚未拆分食物项")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(Array($drafts.enumerated()), id: \.element.id) { index, $draft in
-                    if index > 0 {
-                        Divider()
-                    }
+                ForEach($drafts) { $draft in
                     MealItemDraftRow(draft: $draft) {
                         drafts.removeAll { $0.id == draft.id }
                     }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
 
                 Button {
@@ -593,13 +588,6 @@ private struct MealRecordEditor: View {
                         placeholder: "未估算",
                         unit: "g",
                         text: $fat,
-                        keyboard: .decimalPad
-                    )
-                    RecordFieldRow(
-                        title: "总糖",
-                        placeholder: "未估算",
-                        unit: "g",
-                        text: $totalSugar,
                         keyboard: .decimalPad
                     )
                 }
@@ -658,7 +646,6 @@ private struct MealRecordEditor: View {
             && EditorValue.validDouble(protein, range: 0 ... 2000)
             && EditorValue.validDouble(carbs, range: 0 ... 2000)
             && EditorValue.validDouble(fat, range: 0 ... 2000)
-            && EditorValue.validDouble(totalSugar, range: 0 ... 2000)
             && ((glycemicSpeed == nil && glycemicAssessment.trimmingCharacters(
                 in: .whitespacesAndNewlines
             ).isEmpty) || (glycemicSpeed != nil && !glycemicAssessment.trimmingCharacters(
@@ -674,7 +661,6 @@ private struct MealRecordEditor: View {
             || EditorValue.double(protein) != meal.protein
             || EditorValue.double(carbs) != meal.carbs
             || EditorValue.double(fat) != meal.fat
-            || EditorValue.double(totalSugar) != meal.totalSugar
             || glycemicSpeed != meal.glycemicSpeed
             || glycemicAssessment.trimmingCharacters(in: .whitespacesAndNewlines)
             != meal.glycemicAssessment
@@ -701,7 +687,6 @@ private struct MealRecordEditor: View {
             || EditorValue.double(protein) != meal.protein
             || EditorValue.double(carbs) != meal.carbs
             || EditorValue.double(fat) != meal.fat
-            || EditorValue.double(totalSugar) != meal.totalSugar
         let editedGlycemic = glycemicSpeed != meal.glycemicSpeed
             || normalizedGlycemicAssessment != meal.glycemicAssessment
         if itemsChanged {
@@ -712,7 +697,6 @@ private struct MealRecordEditor: View {
                 protein = EditorValue.string(meal.protein)
                 carbs = EditorValue.string(meal.carbs)
                 fat = EditorValue.string(meal.fat)
-                totalSugar = EditorValue.string(meal.totalSugar)
             }
         }
         if editedTotals {
@@ -720,7 +704,6 @@ private struct MealRecordEditor: View {
             meal.protein = EditorValue.double(protein)
             meal.carbs = EditorValue.double(carbs)
             meal.fat = EditorValue.double(fat)
-            meal.totalSugar = EditorValue.double(totalSugar)
             meal.nutritionSource = .userEdited
         }
         if editedGlycemic {

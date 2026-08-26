@@ -7,7 +7,6 @@ struct MealNutritionTotals: Equatable, Sendable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
-    var totalSugar: Double?
 
     static let empty = MealNutritionTotals()
 
@@ -18,8 +17,7 @@ struct MealNutritionTotals: Equatable, Sendable {
             calories: sumIfComplete(items.map(\.calories)),
             protein: sumIfComplete(items.map(\.protein)),
             carbs: sumIfComplete(items.map(\.carbs)),
-            fat: sumIfComplete(items.map(\.fat)),
-            totalSugar: sumIfComplete(items.map(\.totalSugar))
+            fat: sumIfComplete(items.map(\.fat))
         )
     }
 

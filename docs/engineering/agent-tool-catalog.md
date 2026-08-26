@@ -49,14 +49,18 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 - `create_workout` 必须接收已经存在的 `exercise_id` 数组项。动作不存在时先
   `search_exercises`，确认无语义等价项后一次 `create_exercise(exercise_names)`，再一次
   `create_workout(workouts)`。新建训练记录不要传 `record_id`。
-- 计划的每个动作也必须绑定动作库 `exercise_id`。
+- 计划的每个动作也必须绑定动作库 `exercise_id`。用户要求把当日原始训练总结为计划时，
+  `create_program` 同时传唯一、同日的 `source_workout_record_ids`；设备组装一次完成 Session，原始
+  `WorkoutEntry` 仍是事实本体。
 - 训练、饮食、身体 create/update 都支持可选 `occurred_at`。它是带时区 ISO-8601 时间；
-- 饮食 create/update 支持可选 `total_sugar` 与菜品分项总糖；`glycemic_speed` 只接受
-  `slow|moderate|fast`，并必须与非空 `glycemic_assessment` 成对出现。该评估描述餐食组成，
-  不代表个体血糖峰值或诊断；修改菜品会清除旧评估。
+- 饮食 create/update 不接受总糖；`glycemic_speed` 只接受 `slow|moderate|fast`，并必须与非空
+  `glycemic_assessment` 成对出现。该评估描述餐食组成，不代表个体血糖峰值或诊断；修改菜品会
+  清除旧评估。餐次只有用户原文明确说出时才覆盖，否则设备按 `occurred_at` 本地时钟推断。
   省略时使用 Job 从原始用户 Turn 冻结的 `defaultOccurredAt`，重试、排队和跨午夜不会漂移。
   `defaultOccurredAt` 保留发送时刻的钟点，不是业务日零点；用户没有明确说时间就应省略。
 - list/get/create/update/delete 彼此独立；get/update/delete 必须传对应领域的精确 Int64 ID。
+- `create_workout.set_entries` 每组以 `reps` 或 `duration_seconds` 二选一；设备结合动作定义的
+  `targetKind` 归一化，按时长动作不得写成次数。
 - create 每次都新增独立记录，同一轮可多次调用；纠正、补图或改已有记录必须先 list/get 再 update。
 - 每个对象 Schema 都设置 `additionalProperties: false`；兼容 Provider 时发送 `strict: true`，
   设备仍执行本地未知字段、类型、ID、关系和授权校验。

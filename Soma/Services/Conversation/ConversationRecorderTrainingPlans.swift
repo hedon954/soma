@@ -65,6 +65,11 @@ extension ConversationRecorder {
         }
         do {
             let prescriptions = try planPrescriptions(arguments, in: context)
+            let sourceWorkouts = try sourceWorkouts(
+                recordIDs: arguments.sourceWorkoutRecordIDs,
+                prescriptions: prescriptions,
+                in: context
+            )
             let contentKey = TrainingPlanStore.contentFingerprint(prescriptions)
             let active = TrainingProgramStatus.active.rawValue
             var descriptor = FetchDescriptor<TrainingProgram>(
@@ -78,6 +83,18 @@ extension ConversationRecorder {
             }) {
                 let current = TrainingPlanStore.prescriptions(for: existing, in: context)
                 if TrainingPlanStore.contentFingerprint(current) == contentKey {
+                    if !sourceWorkouts.isEmpty {
+                        let session = try CompletedTrainingSessionMaterializer.materialize(
+                            program: existing,
+                            sourceWorkouts: sourceWorkouts,
+                            in: context
+                        )
+                        return .success(
+                            "已有内容相同的训练计划 [id:\(existing.businessID ?? 0)]："
+                                + "\(existing.name)；并已把当日训练保存为一次完成记录 "
+                                + "[session_id:\(session.businessID ?? 0)]。"
+                        )
+                    }
                     return .success(
                         "已有内容相同的训练计划 [id:\(existing.businessID ?? 0)]：\(existing.name)。"
                     )
@@ -90,12 +107,62 @@ extension ConversationRecorder {
                 prescriptions: prescriptions,
                 in: context
             )
+            if !sourceWorkouts.isEmpty {
+                let session = try CompletedTrainingSessionMaterializer.materialize(
+                    program: program,
+                    sourceWorkouts: sourceWorkouts,
+                    in: context
+                )
+                return .success(
+                    "已创建训练计划 [id:\(program.businessID ?? 0)]：\(program.name)；"
+                        + "并已把当日原始训练保存为一次完成记录 "
+                        + "[session_id:\(session.businessID ?? 0)]。"
+                )
+            }
             return .success(
                 "已创建训练计划 [id:\(program.businessID ?? 0)]：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
         }
+    }
+
+    private static func sourceWorkouts(
+        recordIDs: [Int64]?,
+        prescriptions: [TemplateExercisePrescription],
+        in context: ModelContext
+    ) throws -> [WorkoutEntry] {
+        guard let recordIDs, !recordIDs.isEmpty else { return [] }
+        guard recordIDs.count <= AgentBatchWriteLimit.maxItems,
+              Set(recordIDs).count == recordIDs.count,
+              recordIDs.allSatisfy({ $0 > 0 })
+        else {
+            throw TrainingPlanError.invalidValue("source_workout_record_ids")
+        }
+        let allowedExerciseIDs = Set(prescriptions.map(\.exerciseID))
+        let workouts = try recordIDs.map { recordID -> WorkoutEntry in
+            var descriptor = FetchDescriptor<WorkoutEntry>(
+                predicate: #Predicate { $0.businessID == recordID }
+            )
+            descriptor.fetchLimit = 1
+            guard let workout = try context.fetch(descriptor).first else {
+                throw TrainingPlanError.invalidValue("找不到训练记录 \(recordID)")
+            }
+            guard let exerciseID = workout.exerciseID,
+                  allowedExerciseIDs.contains(exerciseID)
+            else {
+                throw TrainingPlanError.invalidValue("训练记录 \(recordID) 的动作不在计划中")
+            }
+            return workout
+        }
+        let day = Calendar.current.startOfDay(for: workouts[0].date)
+        guard workouts.allSatisfy({
+            Calendar.current.startOfDay(for: $0.date) == day
+                && $0.sourceWorkoutSessionID == nil
+        }) else {
+            throw TrainingPlanError.invalidValue("原始训练必须来自同一天且尚未归入其他 Session")
+        }
+        return workouts
     }
 
     static func updateTrainingProgram(

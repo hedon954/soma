@@ -12,6 +12,16 @@ enum BiologicalSex: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum FitnessGoal: String, Codable, CaseIterable, Identifiable, Sendable {
+    case muscleGain = "增肌"
+    case fatLoss = "减脂"
+    case recomposition = "增肌减脂"
+
+    var id: String {
+        rawValue
+    }
+}
+
 @Model
 final class UserProfile: BusinessIdentifiedModel {
     var id: UUID
@@ -23,7 +33,6 @@ final class UserProfile: BusinessIdentifiedModel {
     // 仅用于兼容早期本地数据；界面与 Agent 均使用 birthDate 动态计算年龄。
     var age: Int?
     var height: Double?
-    var referenceWeight: Double?
     var fitnessGoal: String
     var healthNotes: String
 
@@ -44,7 +53,6 @@ final class UserProfile: BusinessIdentifiedModel {
         birthDate: Date? = nil,
         age: Int? = nil,
         height: Double? = nil,
-        referenceWeight: Double? = nil,
         fitnessGoal: String = "",
         healthNotes: String = ""
     ) {
@@ -55,7 +63,6 @@ final class UserProfile: BusinessIdentifiedModel {
         self.birthDate = birthDate
         self.age = age
         self.height = height
-        self.referenceWeight = referenceWeight
         self.fitnessGoal = fitnessGoal
         self.healthNotes = healthNotes
     }

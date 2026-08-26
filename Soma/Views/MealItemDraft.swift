@@ -9,7 +9,6 @@ struct MealItemDraft: Identifiable, Equatable {
     var protein: String
     var carbs: String
     var fat: String
-    var totalSugar: String
 
     init(
         id: UUID = UUID(),
@@ -18,8 +17,7 @@ struct MealItemDraft: Identifiable, Equatable {
         calories: String = "",
         protein: String = "",
         carbs: String = "",
-        fat: String = "",
-        totalSugar: String = ""
+        fat: String = ""
     ) {
         self.id = id
         self.name = name
@@ -28,7 +26,6 @@ struct MealItemDraft: Identifiable, Equatable {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
-        self.totalSugar = totalSugar
     }
 
     init(item: MealItem) {
@@ -39,7 +36,6 @@ struct MealItemDraft: Identifiable, Equatable {
         protein = item.protein.map { $0.formatted() } ?? ""
         carbs = item.carbs.map { $0.formatted() } ?? ""
         fat = item.fat.map { $0.formatted() } ?? ""
-        totalSugar = item.totalSugar.map { $0.formatted() } ?? ""
     }
 
     /// 名称为空的行视为未填写，不写入记录。
@@ -55,8 +51,7 @@ struct MealItemDraft: Identifiable, Equatable {
             calories: Int(calories),
             protein: Double(protein),
             carbs: Double(carbs),
-            fat: Double(fat),
-            totalSugar: Double(totalSugar)
+            fat: Double(fat)
         )
     }
 
@@ -68,8 +63,7 @@ struct MealItemDraft: Identifiable, Equatable {
                 calories: meal.calories.map(String.init) ?? "",
                 protein: meal.protein.map { $0.formatted() } ?? "",
                 carbs: meal.carbs.map { $0.formatted() } ?? "",
-                fat: meal.fat.map { $0.formatted() } ?? "",
-                totalSugar: meal.totalSugar.map { $0.formatted() } ?? ""
+                fat: meal.fat.map { $0.formatted() } ?? ""
             )]
         }
         return meal.items.map(MealItemDraft.init(item:))

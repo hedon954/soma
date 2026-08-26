@@ -1,4 +1,5 @@
 @testable import Soma
+import SwiftData
 import XCTest
 
 /// PRD 033：饮食记录的时间是钟点，不是当天零点；餐次按记录发生时刻推断。
@@ -77,6 +78,10 @@ final class MealOccurrenceTimeTests: XCTestCase {
             .lunch
         )
         XCTAssertEqual(
+            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 15, 30)),
+            .afternoonSnack
+        )
+        XCTAssertEqual(
             try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 19, 15)),
             .dinner
         )
@@ -84,5 +89,44 @@ final class MealOccurrenceTimeTests: XCTestCase {
             try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 23, 40)),
             .snack
         )
+    }
+
+    @MainActor
+    func testLocalClockInferenceWinsUnlessUserExplicitlyNamesMealType() throws {
+        let suiteName = "MealOccurrenceTimeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
+        let context = spaces.personalContainer.mainContext
+
+        let inferredDinner = try ConversationRecorder.recordMeal(
+            AgentToolArguments(
+                mealType: MealType.lunch.rawValue,
+                title: "虚构傍晚餐"
+            ),
+            sourceText: "记录刚吃的这份餐",
+            sourceDate: date(2026, 8, 20, 18, 0),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+        let explicitLunch = try ConversationRecorder.recordMeal(
+            AgentToolArguments(
+                mealType: MealType.dinner.rawValue,
+                title: "虚构补记午餐"
+            ),
+            sourceText: "补记今天的午餐",
+            sourceDate: date(2026, 8, 20, 18, 5),
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        XCTAssertTrue(inferredDinner.ok)
+        XCTAssertTrue(explicitLunch.ok)
+        let meals = try context.fetch(FetchDescriptor<MealEntry>(
+            sortBy: [SortDescriptor(\.date)]
+        ))
+        XCTAssertEqual(meals.map(\.mealType), [.dinner, .lunch])
     }
 }

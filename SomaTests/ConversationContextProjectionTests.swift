@@ -5,6 +5,41 @@ import UIKit
 import XCTest
 
 final class ConversationContextProjectionTests: XCTestCase {
+    @MainActor
+    func testAgentContextIncludesProfileAndLatestRecordedWeight() throws {
+        let suiteName = "ConversationContextProjectionTests.profile.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
+        let context = spaces.personalContainer.mainContext
+        context.insert(UserProfile(
+            displayName: "虚构用户",
+            biologicalSex: .female,
+            birthDate: Calendar.current.date(byAdding: .year, value: -30, to: .now),
+            height: 168,
+            fitnessGoal: FitnessGoal.muscleGain.rawValue,
+            healthNotes: "虚构限制：避免跳跃"
+        ))
+        context.insert(BodyEntry(
+            date: Date(timeIntervalSince1970: 1_787_200_000),
+            weight: 62.4
+        ))
+
+        let contextText = AgentContextPackBuilder.build(
+            gyms: [],
+            equipment: [],
+            in: context,
+            businessDate: Date(timeIntervalSince1970: 1_787_200_000)
+        )
+
+        XCTAssertTrue(contextText.contains("虚构用户"))
+        XCTAssertTrue(contextText.contains("生理性别 女性"))
+        XCTAssertTrue(contextText.contains("身高 168cm"))
+        XCTAssertTrue(contextText.contains("最新体重 62.4kg"))
+        XCTAssertTrue(contextText.contains("目标 增肌"))
+        XCTAssertTrue(contextText.contains("限制 虚构限制：避免跳跃"))
+    }
+
     func testHistoricalMediaRequiresExplicitReferenceAndCapsComparisonAtTwo() {
         let exchanges = (0 ..< 3).map { index in
             ConversationContextProjection.Exchange(

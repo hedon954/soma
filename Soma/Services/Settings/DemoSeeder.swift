@@ -85,7 +85,7 @@ enum DemoSeeder {
             let date = calendar.date(byAdding: .day, value: -offset, to: .now) ?? .now
             context.insert(MealEntry(
                 date: date,
-                mealType: .lunch,
+                mealType: .dinner,
                 title: offset % 2 == 0 ? "鸡胸肉杂粮饭" : "牛肉蔬菜面",
                 calories: offset % 2 == 0 ? 568 : 625,
                 protein: offset % 2 == 0 ? 46 : 38,
@@ -125,7 +125,6 @@ enum DemoSeeder {
                     from: DateComponents(year: 1998, month: 5, day: 18)
                 ),
                 height: 178,
-                referenceWeight: 74,
                 fitnessGoal: "稳定提升力量与体能",
                 healthNotes: ""
             ))

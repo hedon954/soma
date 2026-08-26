@@ -38,6 +38,7 @@ enum AgentContextPackBuilder {
             limit: 14,
             in: context
         )
+        let latestWeightBody = latestRecordedWeight(in: context)
         let profiles = fetchRecent(
             UserProfile.self,
             sort: \UserProfile.updatedAt,
@@ -62,7 +63,7 @@ enum AgentContextPackBuilder {
         )
 
         var sections: [String] = []
-        sections.append(profileLine(profiles.first))
+        sections.append(profileLine(profiles.first, latestBody: latestWeightBody))
         sections.append(gymLine(gyms: gyms, equipment: equipment))
         sections.append(dayWorkoutLine(
             workouts: workouts,
@@ -134,7 +135,19 @@ enum AgentContextPackBuilder {
         }.values)
     }
 
-    private static func profileLine(_ profile: UserProfile?) -> String {
+    private static func latestRecordedWeight(in context: ModelContext) -> BodyEntry? {
+        var descriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { $0.weight != nil },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private static func profileLine(
+        _ profile: UserProfile?,
+        latestBody: BodyEntry?
+    ) -> String {
         guard let profile else { return "" }
         var parts: [String] = []
         if !profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -142,6 +155,18 @@ enum AgentContextPackBuilder {
         }
         if let height = profile.height {
             parts.append(String(format: "身高 %.0fcm", height))
+        }
+        if profile.biologicalSex != .unspecified {
+            parts.append("生理性别 \(profile.biologicalSex.rawValue)")
+        }
+        if let age = profile.currentAge {
+            parts.append("年龄 \(age)岁")
+        }
+        if let latestBody, let weight = latestBody.weight, weight > 0 {
+            parts.append(
+                "最新体重 \(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
+                    + "（\(latestBody.date.formatted(date: .numeric, time: .omitted))）"
+            )
         }
         if !profile.fitnessGoal.isEmpty {
             parts.append("目标 \(profile.fitnessGoal)")
@@ -197,7 +222,8 @@ enum AgentContextPackBuilder {
             let exerciseID = workout.exerciseID
                 .flatMap { exerciseBusinessIDs[$0] }
                 .map(String.init) ?? "待确认"
-            return "\(workout.exercise)（\(detail)，exercise_id: \(exerciseID)）"
+            let recordID = workout.businessID.map(String.init) ?? "待确认"
+            return "\(workout.exercise)（\(detail)，record_id: \(recordID)，exercise_id: \(exerciseID)）"
         }
         return "Session 业务日训练：\(rows.joined(separator: "；"))"
     }

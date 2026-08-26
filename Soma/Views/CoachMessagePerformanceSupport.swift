@@ -71,6 +71,7 @@ struct CoachMessageTopPagingModifier: ViewModifier {
 struct CoachMessageScrollPosition: Equatable {
     let isAtTop: Bool
     let isNearBottom: Bool
+    let contentFitsViewport: Bool?
 }
 
 struct CoachMessageScrollTrackingModifier: ViewModifier {
@@ -84,7 +85,9 @@ struct CoachMessageScrollTrackingModifier: ViewModifier {
                     CoachMessageScrollPosition(
                         isAtTop: geometry.visibleRect.minY <= 24,
                         isNearBottom: geometry.contentSize.height
-                            - geometry.visibleRect.maxY <= 80
+                            - geometry.visibleRect.maxY <= 80,
+                        contentFitsViewport: geometry.contentSize.height
+                            <= geometry.containerSize.height + 1
                     )
                 } action: { _, position in
                     onPositionChange(position)

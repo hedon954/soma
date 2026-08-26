@@ -10,7 +10,6 @@ enum PortableExportText {
             "记录类型：饮食 · \(meal.mealTypeRaw)",
             "记录时间：\(displayDate(meal.date))",
             "标题：\(meal.title)",
-            meal.totalSugar.map { "总糖估算：\($0.formatted())g" },
             meal.glycemicSpeedRaw.flatMap(MealGlycemicSpeed.init(rawValue:)).map {
                 "食物组成升糖速度估算：\($0.displayName)（不是个体血糖预测）"
             },

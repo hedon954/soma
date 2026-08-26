@@ -4,6 +4,7 @@
 - 日期：2026-08-25
 - 维护者：Soma maintainers
 - 修订自：[ADR 0097](0097-current-baseline-performance-budget-and-cache-invalidation.md) 的长流分块展示、快照失效与数据库访问细则
+- 后续替代：[ADR 0101](0101-record-truth-and-agent-profile-context.md) 延续有界读取并修订记录真值和 Agent 身体上下文
 - 上游依据：
   - [PRD 045](../prd/045-performance-reliability-and-bounded-data-access.md)
   - [BUG 0036](../bugs/0036-long-stream-continuous-text-and-completion-cliff.md)

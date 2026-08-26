@@ -9,10 +9,12 @@ struct AgentEquipmentInput: Codable, Equatable {
 
 struct AgentWorkoutSetInput: Codable, Equatable {
     var reps: Int?
+    var durationSeconds: Int?
     var externalWeightKG: Double?
 
     enum CodingKeys: String, CodingKey {
         case reps
+        case durationSeconds = "duration_seconds"
         case externalWeightKG = "external_weight_kg"
     }
 }
@@ -79,12 +81,10 @@ struct AgentMealItemInput: Codable, Equatable {
     var protein: Double? = nil
     var carbs: Double? = nil
     var fat: Double? = nil
-    var totalSugar: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, calories, protein, carbs, fat
         case portionDescription = "portion_description"
-        case totalSugar = "total_sugar"
     }
 
     var model: MealItem {
@@ -95,8 +95,7 @@ struct AgentMealItemInput: Codable, Equatable {
             calories: calories,
             protein: protein,
             carbs: carbs,
-            fat: fat,
-            totalSugar: totalSugar
+            fat: fat
         )
     }
 }
@@ -116,7 +115,6 @@ struct AgentMutationPayload: Codable, Equatable {
     var protein: Double? = nil
     var carbs: Double? = nil
     var fat: Double? = nil
-    var totalSugar: Double? = nil
     var glycemicSpeed: String? = nil
     var glycemicAssessment: String? = nil
     var items: [AgentMealItemInput]? = nil
@@ -136,7 +134,6 @@ struct AgentMutationPayload: Codable, Equatable {
         case durationMinutes = "duration_minutes"
         case formScore = "form_score"
         case mealType = "meal_type"
-        case totalSugar = "total_sugar"
         case glycemicSpeed = "glycemic_speed"
         case glycemicAssessment = "glycemic_assessment"
         case bodyFat = "body_fat"
@@ -163,7 +160,6 @@ extension AgentMutationPayload {
             protein: protein,
             carbs: carbs,
             fat: fat,
-            totalSugar: totalSugar,
             glycemicSpeed: glycemicSpeed,
             glycemicAssessment: glycemicAssessment,
             note: note,
@@ -271,7 +267,6 @@ struct AgentToolArguments: Codable, Equatable {
     var protein: Double?
     var carbs: Double?
     var fat: Double?
-    var totalSugar: Double?
     var glycemicSpeed: String?
     var glycemicAssessment: String?
     var note: String?
@@ -294,6 +289,7 @@ struct AgentToolArguments: Codable, Equatable {
     var overview: String?
     var scheduleHint: String?
     var templateExercises: [AgentTemplateExerciseInput]?
+    var sourceWorkoutRecordIDs: [Int64]?
     var autoRecordingPolicy: String?
     var exerciseNames: [String]?
     var workouts: [AgentWorkoutCreateInput]?
@@ -317,7 +313,6 @@ struct AgentToolArguments: Codable, Equatable {
         case durationMinutes = "duration_minutes"
         case formScore = "form_score"
         case mealType = "meal_type"
-        case totalSugar = "total_sugar"
         case glycemicSpeed = "glycemic_speed"
         case glycemicAssessment = "glycemic_assessment"
         case bodyFat = "body_fat"
@@ -334,6 +329,7 @@ struct AgentToolArguments: Codable, Equatable {
         case goal, overview
         case scheduleHint = "schedule_hint"
         case templateExercises = "template_exercises"
+        case sourceWorkoutRecordIDs = "source_workout_record_ids"
         case autoRecordingPolicy = "auto_recording_policy"
         case exerciseNames = "exercise_names"
         case workouts
@@ -378,7 +374,6 @@ struct AgentToolArguments: Codable, Equatable {
         protein: Double? = nil,
         carbs: Double? = nil,
         fat: Double? = nil,
-        totalSugar: Double? = nil,
         glycemicSpeed: String? = nil,
         glycemicAssessment: String? = nil,
         note: String? = nil,
@@ -400,6 +395,7 @@ struct AgentToolArguments: Codable, Equatable {
         overview: String? = nil,
         scheduleHint: String? = nil,
         templateExercises: [AgentTemplateExerciseInput]? = nil,
+        sourceWorkoutRecordIDs: [Int64]? = nil,
         autoRecordingPolicy: String? = nil,
         exerciseNames: [String]? = nil,
         workouts: [AgentWorkoutCreateInput]? = nil
@@ -442,7 +438,6 @@ struct AgentToolArguments: Codable, Equatable {
         self.protein = protein
         self.carbs = carbs
         self.fat = fat
-        self.totalSugar = totalSugar
         self.glycemicSpeed = glycemicSpeed
         self.glycemicAssessment = glycemicAssessment
         self.note = note
@@ -464,6 +459,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.overview = overview
         self.scheduleHint = scheduleHint
         self.templateExercises = templateExercises
+        self.sourceWorkoutRecordIDs = sourceWorkoutRecordIDs
         self.autoRecordingPolicy = autoRecordingPolicy
         self.exerciseNames = exerciseNames
         self.workouts = workouts

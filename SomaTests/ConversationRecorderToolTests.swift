@@ -19,7 +19,7 @@ final class ConversationRecorderToolTests: XCTestCase {
             configurations: configuration
         )
         let context = ModelContext(container)
-        context.insert(UserProfile(referenceWeight: 70))
+        context.insert(BodyEntry(weight: 70))
         let result = ConversationRecorder.recordWorkout(
             AgentToolArguments(
                 exercise: "杠铃深蹲",
@@ -94,6 +94,48 @@ final class ConversationRecorderToolTests: XCTestCase {
     }
 
     @MainActor
+    func testDurationExerciseStoresSecondsInsteadOfRepetitions() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: ExternalSyncCursor.self,
+            UserProfile.self,
+            GymProfile.self,
+            GymEquipment.self,
+            GymMedia.self,
+            MealEntry.self,
+            BodyEntry.self,
+            WorkoutEntry.self,
+            ExerciseDefinition.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let exercise = ExerciseDefinition(canonicalName: "虚构平板支撑")
+        exercise.targetKind = .duration
+        context.insert(exercise)
+        try BusinessIDAllocator.assignMissingIDs(in: context)
+
+        let result = try ConversationRecorder.recordWorkout(
+            AgentToolArguments(
+                exerciseID: XCTUnwrap(exercise.businessID),
+                setEntries: [
+                    AgentWorkoutSetInput(durationSeconds: 30),
+                    AgentWorkoutSetInput(durationSeconds: 45)
+                ]
+            ),
+            sourceText: "平板支撑 30 秒、45 秒",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: context
+        )
+
+        XCTAssertTrue(result.ok, result.message)
+        let workout = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutEntry>()).first)
+        XCTAssertEqual(workout.setEntries.map(\.targetKind), [.duration, .duration])
+        XCTAssertEqual(workout.setEntries.map(\.durationSeconds), [30, 45])
+        XCTAssertTrue(workout.setEntries.allSatisfy { $0.reps == nil })
+    }
+
+    @MainActor
     func testAgentWorkoutToolEstimatesOnlyCalorieDurationFromCompleteResistanceData() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
@@ -109,7 +151,7 @@ final class ConversationRecorderToolTests: XCTestCase {
             configurations: configuration
         )
         let context = ModelContext(container)
-        context.insert(UserProfile(referenceWeight: 70))
+        context.insert(BodyEntry(weight: 70))
         let result = ConversationRecorder.recordWorkout(
             AgentToolArguments(
                 exercise: "杠铃卧推",

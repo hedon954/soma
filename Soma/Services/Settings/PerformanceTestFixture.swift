@@ -174,8 +174,7 @@ enum PerformanceTestFixture {
                 calories: 50 + index,
                 protein: Double(index),
                 carbs: Double(index * 2),
-                fat: Double(index) / 2,
-                totalSugar: Double(index) / 3
+                fat: Double(index) / 2
             )
         }
         let meal = MealEntry(

@@ -112,7 +112,8 @@ struct CoachSessionView: View {
     @State var hasUserInteractedWithMessageList = false
     @State var messageListPosition = CoachMessageScrollPosition(
         isAtTop: false,
-        isNearBottom: false
+        isNearBottom: false,
+        contentFitsViewport: nil
     )
 
     let messageLimit: Int
@@ -485,7 +486,7 @@ struct CoachSessionView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.top, 10)
             .frame(maxWidth: AppTheme.readableContentMaxWidth)
             .frame(maxWidth: .infinity)
         }
@@ -603,7 +604,7 @@ struct CoachSessionView: View {
                 Color.clear
             }
         }
-        .frame(height: 8)
+        .frame(height: 0)
         .id("bottom")
     }
 
