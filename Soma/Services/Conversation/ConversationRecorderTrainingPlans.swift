@@ -9,13 +9,15 @@ extension ConversationRecorder {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         descriptor.fetchLimit = 100
-        let programs = ((try? context.fetch(descriptor)) ?? []).filter {
-            !TrainingPlanStore.prescriptions(for: $0, in: context).isEmpty
-        }
-        let values = programs.map { program in
-            "[id:\(program.businessID ?? 0)] \(program.name)"
+        // 每个计划只解析一次处方集合，不在过滤和描述里重复读同一关系。
+        let values = ((try? context.fetch(descriptor)) ?? []).compactMap { program -> String? in
+            let exerciseCount = TrainingPlanStore
+                .prescriptions(for: program, in: context)
+                .count
+            guard exerciseCount > 0 else { return nil }
+            return "[id:\(program.businessID ?? 0)] \(program.name)"
                 + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
-                + "；动作：\(TrainingPlanStore.prescriptions(for: program, in: context).count) 个"
+                + "；动作：\(exerciseCount) 个"
         }
         return .success(values.isEmpty ? "暂无可执行训练计划。" : values.joined(separator: "\n"))
     }

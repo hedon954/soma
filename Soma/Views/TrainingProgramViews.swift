@@ -285,10 +285,13 @@ private struct TrainingProgramDetailView: View {
         workoutDescriptor.fetchLimit = 100
         _workouts = Query(workoutDescriptor)
 
+        // 只回答“是否存在可用参考体重”；谓词过滤加单行上限，
+        // 体重记录变化时不再物化十行完整模型。
         var bodyDescriptor = FetchDescriptor<BodyEntry>(
+            predicate: #Predicate { ($0.weight ?? 0) > 0 },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        bodyDescriptor.fetchLimit = 10
+        bodyDescriptor.fetchLimit = 1
         _bodyEntries = Query(bodyDescriptor)
 
         var profileDescriptor = FetchDescriptor<UserProfile>(
@@ -352,7 +355,7 @@ private struct TrainingProgramDetailView: View {
     }
 
     private var hasCalorieReferenceWeight: Bool {
-        bodyEntries.contains { ($0.weight ?? 0) > 0 }
+        !bodyEntries.isEmpty
     }
 
     private var recentVolumePoints: [(id: UUID, date: Date, volume: Double)] {
@@ -1058,7 +1061,10 @@ private struct WorkoutSessionHistoryRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // 计划来源解析在旧数据行上可能回查数据库；一次 body 只解析一次，
+        // 正文与无障碍标签共用同一结果。
+        let planLabel = planLabel
+        return VStack(alignment: .leading, spacing: 4) {
             Text(planLabel)
                 .font(.headline)
             Text(session.startedAt.formatted(

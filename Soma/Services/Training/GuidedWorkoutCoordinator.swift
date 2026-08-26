@@ -275,13 +275,34 @@ final class GuidedWorkoutCoordinator {
 
     func shouldCaptureCurrentEffort(in context: ModelContext) -> Bool {
         guard let session = try? activeSession(in: context) else { return false }
+        return shouldCaptureEffort(
+            session: session,
+            performance: currentPerformance(for: session, in: context),
+            set: currentSet(for: session, in: context),
+            effort: currentEffort(for: session, in: context),
+            in: context
+        )
+    }
+
+    /// 渲染路径变体：带练页的 `@Query` 已经持有当前动作、组和 Effort，
+    /// 直接传入即可判定，不再让每次 body 重算都回查数据库。
+    /// 判定逻辑与 `shouldCaptureCurrentEffort(in:)` 共享，只有对象来源不同。
+    func shouldCaptureEffort(
+        session: WorkoutSession,
+        performance: ExercisePerformance?,
+        set: WorkoutSet?,
+        effort: WorkoutEffort?,
+        in context: ModelContext
+    ) -> Bool {
+        guard activeSessionID == session.id,
+              session.status == .active || session.status == .paused
+        else {
+            return false
+        }
         if recordingSetID != nil || isStartingRecording || manualRecordingQueued {
             return true
         }
-        if let performance = currentPerformance(for: session, in: context),
-           let set = currentSet(for: session, in: context),
-           let effort = currentEffort(for: session, in: context)
-        {
+        if let performance, let set, let effort {
             return shouldRecord(
                 set: set,
                 effort: effort,
@@ -669,8 +690,20 @@ final class GuidedWorkoutCoordinator {
         for session: WorkoutSession,
         in context: ModelContext
     ) -> Int? {
+        remainingEffortSeconds(
+            for: session,
+            currentEffort: currentEffort(for: session, in: context)
+        )
+    }
+
+    /// 渲染路径变体：当前 Effort 由调用方（带练页 `@Query`）提供，
+    /// 剩余秒数计算不回查数据库。
+    func remainingEffortSeconds(
+        for session: WorkoutSession,
+        currentEffort: WorkoutEffort?
+    ) -> Int? {
         guard session.guidedPhase == .setInProgress,
-              currentEffort(for: session, in: context)?.targetKind == .duration,
+              currentEffort?.targetKind == .duration,
               let deadline = session.phaseDeadlineAt
         else { return nil }
         return max(Int(ceil(deadline.timeIntervalSince(now()))), 0)

@@ -614,9 +614,10 @@ struct GuidedWorkoutView: View {
     }
 
     private var remainingDurationSeconds: Int? {
+        // 渲染路径使用无取数变体：当前 Effort 已由本视图的 @Query 持有。
         coordinator.remainingEffortSeconds(
             for: session,
-            in: modelContext
+            currentEffort: currentEffort
         )
     }
 
@@ -648,12 +649,18 @@ struct GuidedWorkoutView: View {
     }
 
     private var cameraSurfacePlacement: GuidedCameraSurfacePlacement {
+        // 渲染路径使用无取数变体：当前动作/组/Effort 已由本视图的 @Query 持有，
+        // 相机与录像状态变化触发的 body 重算不再回查数据库。
         GuidedCameraSurfacePlacement.resolve(
             phase: session.guidedPhase,
             cameraState: camera.state,
             isStarting: coordinator.isStartingRecording,
             sessionIsActive: session.status == .active,
-            isCaptureTarget: coordinator.shouldCaptureCurrentEffort(
+            isCaptureTarget: coordinator.shouldCaptureEffort(
+                session: session,
+                performance: currentPerformance,
+                set: currentSet,
+                effort: currentEffort,
                 in: modelContext
             )
         )

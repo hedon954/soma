@@ -117,8 +117,15 @@ struct CoachSessionView: View {
         _gyms = Query(gymDescriptor)
 
         let dataSpaceRaw = dataSpace.rawValue
+        // 排除成功终态：暂存计数、暂存标记与可重试判断只依赖未成功的 Job。
+        // 成功 Job 随历史无限增长，若参与查询，流式期间每次 Job 保存都会
+        // 重新物化 100 行陈旧历史。cancelled/failed 必须保留：可重试集合要
+        // 通过它们区分“系统仍会续跑”与“交给用户手动重试”。
+        let succeededRaw = AgentJobState.succeeded.rawValue
         var jobDescriptor = FetchDescriptor<AgentJob>(
-            predicate: #Predicate { $0.dataSpaceRaw == dataSpaceRaw },
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw != succeededRaw
+            },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         jobDescriptor.fetchLimit = 100
