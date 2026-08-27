@@ -53,7 +53,10 @@ final class MealNutritionTotalsTests: XCTestCase {
             mealType: .lunch,
             title: "午餐",
             calories: 999,
-            protein: 9
+            protein: 9,
+            glycemicSpeed: .moderate,
+            glycemicAssessment: "旧判断",
+            recommendedEatingOrder: "旧顺序"
         )
         let items = [
             MealItem(name: "鸡胸", calories: 165, protein: 31),
@@ -66,6 +69,9 @@ final class MealNutritionTotalsTests: XCTestCase {
         XCTAssertEqual(meal.calories, totals.calories)
         XCTAssertNil(meal.protein)
         XCTAssertEqual(meal.nutritionSource, MealNutritionSource.derivedFromItems)
+        XCTAssertNil(meal.glycemicSpeed)
+        XCTAssertTrue(meal.glycemicAssessment.isEmpty)
+        XCTAssertTrue(meal.recommendedEatingOrder.isEmpty)
     }
 
     func testDraftsKeepBlankFieldsNilAndDropUnnamedRows() {

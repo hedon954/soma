@@ -38,6 +38,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | ADR | 状态 | 决策 |
 | --- | --- | --- |
 | [0107](0107-foreground-recovery-and-progress-evidence-projection.md) | 已采纳，实施中 | 前台恢复不切 Session；进展使用有界月度投影、分项来源与确定性全天消耗公式 |
+| [0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) | 已采纳，已实施 | 指标区域原位展开跟随浮层；暂停复用发送键；建议食用顺序进入可审查记录 |
 
 新决策使用 [ADR 模板](template.md)。
 

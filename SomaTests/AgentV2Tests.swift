@@ -36,6 +36,7 @@ final class AgentV2Tests: XCTestCase {
                     title: "虚构加餐",
                     glycemicSpeed: MealGlycemicSpeed.fast.rawValue,
                     glycemicAssessment: "精制碳水占比较高；实际反应因人而异。",
+                    recommendedEatingOrder: "虚构莓果 → 虚构酸奶",
                     items: [
                         AgentMealItemInput(
                             name: "虚构酸奶",
@@ -74,10 +75,15 @@ final class AgentV2Tests: XCTestCase {
             meal.glycemicAssessment,
             "精制碳水占比较高；实际反应因人而异。"
         )
+        XCTAssertEqual(meal.recommendedEatingOrder, "虚构莓果 → 虚构酸奶")
         guard case let .object(payload)? = result.data else {
             return XCTFail("饮食 Tool 应返回结构化记录")
         }
         XCTAssertEqual(payload["glycemic_speed"], .string("fast"))
+        XCTAssertEqual(
+            payload["recommended_eating_order"],
+            .string("虚构莓果 → 虚构酸奶")
+        )
     }
 
     @MainActor
@@ -87,7 +93,8 @@ final class AgentV2Tests: XCTestCase {
             mealType: .snack,
             title: "旧虚构加餐",
             glycemicSpeed: .slow,
-            glycemicAssessment: "旧判断"
+            glycemicAssessment: "旧判断",
+            recommendedEatingOrder: "旧顺序"
         )
         context.insert(meal)
         try BusinessIDAllocator.assignMissingIDs(in: context)
@@ -100,6 +107,7 @@ final class AgentV2Tests: XCTestCase {
                     title: "新虚构加餐",
                     glycemicSpeed: MealGlycemicSpeed.moderate.rawValue,
                     glycemicAssessment: "混合餐，仅作定性估算。",
+                    recommendedEatingOrder: "虚构食物乙 → 虚构食物甲",
                     items: [
                         AgentMealItemInput(name: "虚构食物甲", protein: 2),
                         AgentMealItemInput(name: "虚构食物乙", protein: 3)
@@ -117,6 +125,7 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(meal.nutritionSource, .derivedFromItems)
         XCTAssertEqual(meal.glycemicSpeed, .moderate)
         XCTAssertEqual(meal.glycemicAssessment, "混合餐，仅作定性估算。")
+        XCTAssertEqual(meal.recommendedEatingOrder, "虚构食物乙 → 虚构食物甲")
     }
 
     @MainActor

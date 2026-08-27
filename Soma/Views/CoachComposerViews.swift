@@ -12,11 +12,13 @@ struct CoachComposer: View {
     let showsExecutionChoice: Bool
     let shortcuts: [AgentInputShortcut]
     let processorIsSending: Bool
+    let canInterrupt: Bool
     let onAddMedia: () -> Void
     let onSelectGym: (GymProfile) -> Void
     let onManageGyms: () -> Void
     let onManagePending: () -> Void
     let onSend: () -> Void
+    let onInterrupt: () -> Void
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @FocusState var focused: Bool
 
@@ -319,9 +321,14 @@ struct CoachComposer: View {
 
     var sendLabel: some View {
         let useLocal = state.useLocalForNextMessage
-        let foreground = useLocal ? Color.white : AppTheme.onAccent
+        let foreground = canInterrupt
+            ? Color.white
+            : (useLocal ? Color.white : AppTheme.onAccent)
         return Group {
-            if isSending {
+            if canInterrupt {
+                Image(systemName: "pause.fill")
+                    .font(.body.weight(.bold))
+            } else if state.isPersistingSubmission {
                 ProgressView().tint(foreground)
             } else {
                 Image(systemName: useLocal ? "iphone" : "arrow.up")
@@ -331,7 +338,9 @@ struct CoachComposer: View {
         .frame(width: 40, height: 40)
         .foregroundStyle(foreground)
         .background(
-            useLocal ? AppTheme.warningEmphasis : AppTheme.accentEmphasis,
+            canInterrupt
+                ? AppTheme.vitalAccent
+                : (useLocal ? AppTheme.warningEmphasis : AppTheme.accentEmphasis),
             in: Circle()
         )
         .frame(
@@ -356,7 +365,13 @@ struct CoachComposer: View {
     /// PRD 020：远程执行方式不再常驻输入区，改为发送按钮长按菜单按条覆盖。
     @ViewBuilder
     var sendControl: some View {
-        if showsExecutionChoice {
+        if canInterrupt {
+            Button(action: onInterrupt) {
+                sendLabel
+            }
+            .accessibilityLabel("暂停当前处理")
+            .accessibilityHint("保留已经完成的步骤，之后可手动重试继续")
+        } else if showsExecutionChoice {
             Menu {
                 Toggle(isOn: $state.useLocalForNextMessage) {
                     Label("本次仅本机", systemImage: "iphone")

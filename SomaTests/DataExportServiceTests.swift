@@ -89,6 +89,11 @@ final class DataExportServiceTests: XCTestCase {
             analysis.glycemicAssessment,
             "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。"
         )
+        XCTAssertEqual(
+            analysis.recommendedEatingOrder,
+            "虚构蔬菜 → 虚构蛋白质 → 虚构荞麦面"
+        )
+        XCTAssertTrue(mealText.contains("建议食用顺序"))
         XCTAssertEqual(analysis.media.map(\.kind), ["image"])
         XCTAssertEqual(analysis.sourceText, "午餐吃了荞麦面，之后做了深蹲")
     }

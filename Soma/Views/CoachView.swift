@@ -547,9 +547,6 @@ struct CoachSessionView: View {
                 canRetry: !processorIsProcessing
                     && projection.retryableMessageIDs.contains(message.id),
                 onRetry: { retry(message) },
-                canInterrupt: processingHere
-                    && message.agentStatus == .running,
-                onInterrupt: interruptCurrentProcessing,
                 onDiscardPending: message.turnID.map(
                     projection.stagedTurnIDs.contains
                 ) == true
@@ -597,11 +594,13 @@ struct CoachSessionView: View {
                 && RemoteAgentPreference.baseURL() != nil,
             shortcuts: inputShortcuts,
             processorIsSending: processor.isProcessing,
+            canInterrupt: isProcessingHere,
             onAddMedia: showMedia,
             onSelectGym: selectGym,
             onManageGyms: { showsGyms = true },
             onManagePending: { sheet = .pendingQueue },
-            onSend: send
+            onSend: send,
+            onInterrupt: interruptCurrentProcessing
         )
         .frame(maxWidth: AppTheme.readableContentMaxWidth)
         .frame(maxWidth: .infinity)

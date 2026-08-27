@@ -37,5 +37,5 @@ Soma 在教练页进入后台后重新打开，页面已经可见，但触摸、
 ## 验证
 
 - `make verify` 已通过：XCTest 637 项与 Swift Testing 7 项均为 0 失败；Simulator 构建已通过。
-- iPhone 尺寸 Simulator 已检查进展页浅色、深色、单行能量摘要、30 天曲线与分项来源 Sheet。
+- iPhone 尺寸 Simulator 已检查进展页浅色、深色、大字号、单行能量摘要、30 天曲线与跟随式分项浮层。
 - Release 真机后台→前台手感与 Hangs/Time Profiler 仍待量化，不能由 Simulator 代替。

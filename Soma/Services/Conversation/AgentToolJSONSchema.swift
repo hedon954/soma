@@ -159,6 +159,7 @@ extension AgentToolName {
                     values: MealGlycemicSpeed.allCases.map(\.rawValue)
                 ),
                 "glycemic_assessment": string("简要说明判断依据与不确定性，不给出血糖峰值或诊断"),
+                "recommended_eating_order": string("基于实际可见菜品给出简短食用顺序，用箭头连接；证据不足时省略"),
                 "items": mealItemArray(),
                 "note": string("估算依据、不确定性或用户原始补充")
             ], required: ["title"])
@@ -200,6 +201,7 @@ extension AgentToolName {
                     values: MealGlycemicSpeed.allCases.map(\.rawValue)
                 ),
                 "glycemic_assessment": string("修正后的判断依据与不确定性"),
+                "recommended_eating_order": string("修正后的简短食用顺序；证据不足时省略"),
                 "items": mealItemArray(),
                 "note": string("修正依据、不确定性或用户原始补充")
             ], required: ["record_id"])

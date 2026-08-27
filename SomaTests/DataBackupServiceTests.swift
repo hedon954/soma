@@ -189,6 +189,10 @@ final class DataBackupServiceTests: XCTestCase {
             "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。"
         )
         XCTAssertEqual(
+            restored.meals.first?.recommendedEatingOrder,
+            "虚构蔬菜 → 虚构蛋白质 → 虚构荞麦面"
+        )
+        XCTAssertEqual(
             restored.meals.first?.mediaAttachments.first?.path,
             "PrivateMedia/restored.jpg"
         )

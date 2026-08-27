@@ -117,6 +117,7 @@ struct AgentMutationPayload: Codable, Equatable {
     var fat: Double? = nil
     var glycemicSpeed: String? = nil
     var glycemicAssessment: String? = nil
+    var recommendedEatingOrder: String? = nil
     var items: [AgentMealItemInput]? = nil
     var note: String? = nil
     var weight: Double? = nil
@@ -136,6 +137,7 @@ struct AgentMutationPayload: Codable, Equatable {
         case mealType = "meal_type"
         case glycemicSpeed = "glycemic_speed"
         case glycemicAssessment = "glycemic_assessment"
+        case recommendedEatingOrder = "recommended_eating_order"
         case bodyFat = "body_fat"
         case postureNote = "posture_note"
         case safetyNote = "safety_note"
@@ -162,6 +164,7 @@ extension AgentMutationPayload {
             fat: fat,
             glycemicSpeed: glycemicSpeed,
             glycemicAssessment: glycemicAssessment,
+            recommendedEatingOrder: recommendedEatingOrder,
             note: note,
             items: items,
             bodyFat: bodyFat,
@@ -269,6 +272,7 @@ struct AgentToolArguments: Codable, Equatable {
     var fat: Double?
     var glycemicSpeed: String?
     var glycemicAssessment: String?
+    var recommendedEatingOrder: String?
     var note: String?
     var items: [AgentMealItemInput]?
 
@@ -315,6 +319,7 @@ struct AgentToolArguments: Codable, Equatable {
         case mealType = "meal_type"
         case glycemicSpeed = "glycemic_speed"
         case glycemicAssessment = "glycemic_assessment"
+        case recommendedEatingOrder = "recommended_eating_order"
         case bodyFat = "body_fat"
         case postureNote = "posture_note"
         case safetyNote = "safety_note"
@@ -376,6 +381,7 @@ struct AgentToolArguments: Codable, Equatable {
         fat: Double? = nil,
         glycemicSpeed: String? = nil,
         glycemicAssessment: String? = nil,
+        recommendedEatingOrder: String? = nil,
         note: String? = nil,
         items: [AgentMealItemInput]? = nil,
         bodyFat: Double? = nil,
@@ -440,6 +446,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.fat = fat
         self.glycemicSpeed = glycemicSpeed
         self.glycemicAssessment = glycemicAssessment
+        self.recommendedEatingOrder = recommendedEatingOrder
         self.note = note
         self.items = items
         self.bodyFat = bodyFat

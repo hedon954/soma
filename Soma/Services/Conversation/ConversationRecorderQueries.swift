@@ -128,6 +128,8 @@ extension ConversationRecorder {
                         .map(AgentJSONValue.string) ?? .null
                     value["glycemic_assessment"] = entry.glycemicAssessment.nilIfEmpty
                         .map(AgentJSONValue.string) ?? .null
+                    value["recommended_eating_order"] = entry.recommendedEatingOrder.nilIfEmpty
+                        .map(AgentJSONValue.string) ?? .null
                     value["note"] = entry.notes.nilIfEmpty
                         .map(AgentJSONValue.string) ?? .null
                     let encodedItems: [AgentJSONValue] = entry.items.map { item in

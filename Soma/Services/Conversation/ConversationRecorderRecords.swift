@@ -222,6 +222,8 @@ extension ConversationRecorder {
             created.glycemicSpeed = assessment.speed
             created.glycemicAssessment = assessment.text
         }
+        created.recommendedEatingOrder = arguments.recommendedEatingOrder?
+            .trimmed.prefix(500).description ?? ""
         context.insert(created)
         try? BusinessIDAllocator.assign(
             created,
@@ -480,6 +482,9 @@ extension ConversationRecorder {
         if case let .success(assessment) = glycemic, let assessment {
             entry.glycemicSpeed = assessment.speed
             entry.glycemicAssessment = assessment.text
+        }
+        if let eatingOrder = arguments.recommendedEatingOrder {
+            entry.recommendedEatingOrder = eatingOrder.trimmed.prefix(500).description
         }
         let note = recordedText(
             sourceText,

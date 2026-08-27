@@ -117,6 +117,7 @@ struct InsightsView: View {
         case .trainingOverview:
             ProgressGoalOverviewCard(
                 goal: snapshot.fitnessGoal,
+                onSelectGoal: selectGoal,
                 intakeCalories: snapshot.todayIntakeCalories,
                 intakeIsPartial: snapshot.todayIntakeIsPartial,
                 intakeBreakdown: snapshot.todayIntakeBreakdown,
@@ -263,6 +264,29 @@ struct InsightsView: View {
                 }
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func selectGoal(_ goal: FitnessGoal?) {
+        var descriptor = FetchDescriptor<UserProfile>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        let profile: UserProfile
+        if let existing = try? modelContext.fetch(descriptor).first {
+            profile = existing
+        } else {
+            profile = UserProfile()
+            modelContext.insert(profile)
+        }
+        profile.fitnessGoal = goal?.rawValue ?? ""
+        profile.updatedAt = .now
+        do {
+            try modelContext.save()
+            snapshot.fitnessGoal = goal
+        } catch {
+            modelContext.rollback()
+            requestSnapshot(force: true)
         }
     }
 
@@ -909,7 +933,7 @@ private struct InsightsScreenSnapshot: Sendable {
     let currentEquipmentCount: Int
     let successfulFootprintCount: Int
     let activeExerciseCount: Int
-    let fitnessGoal: FitnessGoal?
+    var fitnessGoal: FitnessGoal?
     let todayIntakeCalories: Int?
     let todayIntakeIsPartial: Bool
     let todayIntakeBreakdown: [ProgressMetricBreakdownItem]

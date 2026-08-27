@@ -40,6 +40,7 @@
 | 文档 | 状态 | 增量 |
 | --- | --- | --- |
 | [049：前台恢复响应与可读的月度进展](049-foreground-responsiveness-and-readable-monthly-progress.md) | 已采纳，实施中 | 保持教练上下文、30 天可点选曲线、分项来源与全天消耗预估 |
+| [050：轻量进展披露与教练内联控制](050-lightweight-progress-disclosure-and-coach-controls.md) | 已采纳，已实施 | 目标直选、无标题跟随浮层、输入区暂停、紧凑元信息与建议食用顺序 |
 
 ## 阅读约定
 

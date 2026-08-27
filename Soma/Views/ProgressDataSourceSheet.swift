@@ -177,81 +177,58 @@ enum ProgressMetricSource: Identifiable, Equatable {
     }
 }
 
-struct ProgressSourceButton: View {
+struct ProgressSourceDisclosure<Label: View>: View {
     let source: ProgressMetricSource
-    @State private var presentedSource: ProgressMetricSource?
+    @ViewBuilder let label: () -> Label
+    @State private var isPresented = false
 
     var body: some View {
         Button {
-            presentedSource = source
+            isPresented.toggle()
         } label: {
-            Image(systemName: "exclamationmark.circle")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(
-                    width: AppTheme.minimumTapTarget,
-                    height: AppTheme.minimumTapTarget
-                )
+            label()
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("查看\(source.title)")
-        .sheet(item: $presentedSource) { source in
-            ProgressDataSourceSheet(source: source)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.hidden)
+        .accessibilityHint("在当前位置展开组成明细")
+        .popover(
+            isPresented: $isPresented,
+            attachmentAnchor: .rect(.bounds),
+            arrowEdge: .top
+        ) {
+            ProgressDataSourcePopover(source: source)
+                .presentationCompactAdaptation(.popover)
         }
     }
 }
 
-private struct ProgressDataSourceSheet: View {
-    @Environment(\.dismiss) private var dismiss
+private struct ProgressDataSourcePopover: View {
     let source: ProgressMetricSource
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text(source.title)
-                        .font(.title3.weight(.medium))
-                    Spacer()
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(
-                                width: AppTheme.minimumTapTarget,
-                                height: AppTheme.minimumTapTarget
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("关闭")
-                }
-
-                Capsule()
-                    .fill(source.accent)
-                    .frame(height: 5)
-
+            VStack(alignment: .leading, spacing: 12) {
                 VStack(spacing: 0) {
                     ForEach(Array(source.rows.enumerated()), id: \.offset) { index, row in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             RoundedRectangle(cornerRadius: 3)
-                                .fill(source.accent)
-                                .frame(width: 12, height: 12)
+                                .fill(rowAccent(index))
+                                .frame(width: 10, height: 10)
                             Text(row.label)
                                 .font(.subheadline)
                                 .lineLimit(2)
                             Spacer(minLength: 12)
                             Text(row.value)
                                 .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(rowAccent(index))
                                 .multilineTextAlignment(.trailing)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 10)
                         if index < source.rows.count - 1 {
                             Divider()
-                                .padding(.leading, 24)
+                                .padding(.leading, 22)
                         }
                     }
                 }
@@ -273,9 +250,30 @@ private struct ProgressDataSourceSheet: View {
                     )
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .appPageBackground()
+        .scrollIndicators(.hidden)
+        .frame(width: 300, height: preferredHeight)
+        .background(AppTheme.cardBackground)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var preferredHeight: CGFloat {
+        let rowsHeight = CGFloat(max(source.rows.count, 1)) * 45
+        let formulaHeight: CGFloat = source.formulaLines.isEmpty ? 0 : 92
+        return min(rowsHeight + formulaHeight + 24, 380)
+    }
+
+    private func rowAccent(_ index: Int) -> Color {
+        let palette = [
+            source.accent,
+            AppMetricRole.consistency.accent,
+            AppMetricRole.performance.accent,
+            AppMetricRole.body.accent,
+            AppMetricRole.vital.accent
+        ]
+        return palette[index % palette.count]
     }
 }
 

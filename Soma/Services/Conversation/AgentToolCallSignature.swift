@@ -89,6 +89,7 @@ private struct AgentToolSignatureArguments {
         put("fat", arguments.fat)
         put("glycemic_speed", arguments.glycemicSpeed)
         put("glycemic_assessment", arguments.glycemicAssessment)
+        put("recommended_eating_order", arguments.recommendedEatingOrder)
         put("note", arguments.note)
         put("body_fat", arguments.bodyFat)
         put("waist", arguments.waist)

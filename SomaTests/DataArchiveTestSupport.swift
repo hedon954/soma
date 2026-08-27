@@ -96,6 +96,7 @@ enum DataArchiveTestSupport {
             fat: 16,
             glycemicSpeed: .moderate,
             glycemicAssessment: "虚构餐食含完整谷物与蔬菜，组成升糖速度估计为中等。",
+            recommendedEatingOrder: "虚构蔬菜 → 虚构蛋白质 → 虚构荞麦面",
             notes: "荞麦面和蔬菜",
             mediaAttachments: [
                 MediaAttachmentReference(kind: .image, path: mealMediaPath)

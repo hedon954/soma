@@ -5,6 +5,16 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Changed
+
+- 进展页可直接选择目标；点击指标区域会在原位展开无标题的组成浮层，分项用语义色区分，不再显示感叹号、重复合计或大尺寸 Sheet。
+- Agent 处理中由输入框发送键切换为暂停按钮；执行日志与逐回复反馈图标在保留 44 pt 触达区的前提下收紧可见间距。
+- 饮食分析新增可编辑、可备份和可导出的建议食用顺序；菜品变化后自动清空旧建议。
+
+### Data and migration
+
+- `MealEntry` 新增带空默认值的 `recommendedEatingOrder` 字段；旧记录保持为空，无需 PostgreSQL migration。
+
 ## [0.0.17] - 2026-08-27
 
 本版本让聊天中的训练与饮食记录更容易审查，并把长时处理的停止权交给用户；同时修复

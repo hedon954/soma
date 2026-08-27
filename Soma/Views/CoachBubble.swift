@@ -11,8 +11,6 @@ struct CoachBubble: View, Equatable {
     var isStaged = false
     var canRetry = false
     var onRetry: () -> Void = {}
-    var canInterrupt = false
-    var onInterrupt: () -> Void = {}
     var onDiscardPending: (() -> Void)?
     var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
     var onLiveRevision: () -> Void = {}
@@ -23,7 +21,6 @@ struct CoachBubble: View, Equatable {
             && lhs.isLive == rhs.isLive
             && lhs.isStaged == rhs.isStaged
             && lhs.canRetry == rhs.canRetry
-            && lhs.canInterrupt == rhs.canInterrupt
             && (lhs.onDiscardPending == nil) == (rhs.onDiscardPending == nil)
     }
 
@@ -137,9 +134,7 @@ struct CoachBubble: View, Equatable {
         if message.isFromCoach, isLive {
             AssistantLiveMetadataLine(
                 timestamp: content.text,
-                timestampAccessibilityLabel: content.accessibilityLabel,
-                canInterrupt: canInterrupt,
-                onInterrupt: onInterrupt
+                timestampAccessibilityLabel: content.accessibilityLabel
             )
         } else if message.isFromCoach {
             AssistantFeedbackButton(
@@ -178,34 +173,14 @@ struct CoachBubble: View, Equatable {
 private struct AssistantLiveMetadataLine: View {
     let timestamp: String
     let timestampAccessibilityLabel: String
-    let canInterrupt: Bool
-    let onInterrupt: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(timestamp)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .accessibilityLabel(timestampAccessibilityLabel)
-
-            if canInterrupt {
-                Button(action: onInterrupt) {
-                    Image(systemName: "stop.circle")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.vitalAccent)
-                        .frame(
-                            width: AppTheme.minimumTapTarget,
-                            height: AppTheme.minimumTapTarget,
-                            alignment: .center
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("中断这次处理")
-                .accessibilityHint("保留已经完成的步骤，并在同一回复中提供重试")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Text(timestamp)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .accessibilityLabel(timestampAccessibilityLabel)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

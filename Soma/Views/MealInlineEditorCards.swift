@@ -45,7 +45,9 @@ struct InlineMealCards: View {
                 totals: totals,
                 itemCount: drafts.compactMap(\.item).count,
                 glycemicSpeed: assessmentIsCurrent ? meal.glycemicSpeed : nil,
-                glycemicAssessment: assessmentIsCurrent ? meal.glycemicAssessment : ""
+                glycemicAssessment: assessmentIsCurrent ? meal.glycemicAssessment : "",
+                recommendedEatingOrder: assessmentIsCurrent
+                    ? meal.recommendedEatingOrder : ""
             )
         }
         .confirmationDialog("删除这条饮食记录？", isPresented: $showsDelete) {
@@ -447,6 +449,7 @@ private struct MealTotalsCard: View {
     let itemCount: Int
     let glycemicSpeed: MealGlycemicSpeed?
     let glycemicAssessment: String
+    let recommendedEatingOrder: String
 
     var body: some View {
         InlineRecordShell(
@@ -505,6 +508,17 @@ private struct MealTotalsCard: View {
                 .accessibilityElement(children: .combine)
                 if !glycemicAssessment.isEmpty {
                     ExpandableMealAssessment(text: glycemicAssessment)
+                }
+                if !recommendedEatingOrder.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label("建议食用顺序", systemImage: "arrow.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(recommendedEatingOrder)
+                            .font(.caption.weight(.medium))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
                 }
                 Text("基于食物组成的定性估算，不代表你的实际血糖反应。")
                     .font(.caption2)

@@ -63,6 +63,7 @@ enum RecordMergePolicy {
             entry.fat = input.fat
             entry.glycemicSpeed = input.glycemicSpeed
             entry.glycemicAssessment = input.glycemicAssessment
+            entry.recommendedEatingOrder = input.recommendedEatingOrder
             if !input.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 entry.notes = input.sourceText
             }
@@ -83,6 +84,7 @@ enum RecordMergePolicy {
                 entry.fat = input.fat
                 entry.glycemicSpeed = input.glycemicSpeed
                 entry.glycemicAssessment = input.glycemicAssessment
+                entry.recommendedEatingOrder = input.recommendedEatingOrder
                 entry.confidence = confidence
             }
         }
@@ -325,6 +327,7 @@ struct MealMergeInput {
     var fat: Double?
     var glycemicSpeed: MealGlycemicSpeed?
     var glycemicAssessment: String
+    var recommendedEatingOrder: String
     var sourceText: String
     var media: [MediaAttachmentReference]
     var isCorrection: Bool

@@ -14,6 +14,7 @@ enum PortableExportText {
                 "食物组成升糖速度估算：\($0.displayName)（不是个体血糖预测）"
             },
             meal.glycemicAssessment?.nilIfBlank.map { "估算依据：\n\($0)" },
+            meal.recommendedEatingOrder?.nilIfBlank.map { "建议食用顺序：\n\($0)" },
             sourceText.map { "原始文字：\n\($0)" },
             meal.notes.nilIfBlank.map { "记录备注：\n\($0)" },
             agentAnswer.map { "Agent 分析：\n\($0)" }

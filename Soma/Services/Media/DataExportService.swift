@@ -33,7 +33,7 @@ struct PortableExportResult: Equatable, Sendable {
 }
 
 enum DataExportService {
-    static let formatVersion = 3
+    static let formatVersion = 4
 
     static func export(
         _ payload: PortableExportPayload,
@@ -196,6 +196,7 @@ enum DataExportService {
             fat: meal.fat,
             glycemicSpeed: meal.glycemicSpeedRaw,
             glycemicAssessment: meal.glycemicAssessment?.nilIfBlank,
+            recommendedEatingOrder: meal.recommendedEatingOrder?.nilIfBlank,
             items: meal.items,
             nutritionSource: meal.nutritionSourceRaw,
             notes: meal.notes.nilIfBlank,

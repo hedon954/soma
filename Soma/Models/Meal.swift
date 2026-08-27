@@ -100,6 +100,7 @@ final class MealEntry: BusinessIdentifiedModel {
     var fat: Double?
     var glycemicSpeedRaw: String?
     var glycemicAssessment: String = ""
+    var recommendedEatingOrder: String = ""
     var itemsData: Data = Data()
     var nutritionSourceRaw: String = MealNutritionSource.aiEstimate.rawValue
     var notes: String
@@ -124,6 +125,7 @@ final class MealEntry: BusinessIdentifiedModel {
         fat: Double? = nil,
         glycemicSpeed: MealGlycemicSpeed? = nil,
         glycemicAssessment: String = "",
+        recommendedEatingOrder: String = "",
         items: [MealItem] = [],
         nutritionSource: MealNutritionSource = .aiEstimate,
         notes: String = "",
@@ -143,6 +145,7 @@ final class MealEntry: BusinessIdentifiedModel {
         self.fat = fat
         glycemicSpeedRaw = glycemicSpeed?.rawValue
         self.glycemicAssessment = glycemicAssessment
+        self.recommendedEatingOrder = recommendedEatingOrder
         itemsData = MealItemStorage.encode(items)
         nutritionSourceRaw = nutritionSource.rawValue
         self.notes = notes
@@ -193,5 +196,6 @@ final class MealEntry: BusinessIdentifiedModel {
         // 菜品或份量变化后，旧的定性判断不再可靠；Agent 或用户可显式重新填写。
         glycemicSpeed = nil
         glycemicAssessment = ""
+        recommendedEatingOrder = ""
     }
 }

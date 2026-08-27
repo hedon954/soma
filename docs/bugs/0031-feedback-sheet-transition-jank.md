@@ -8,6 +8,8 @@
   - [ADR 0093](../archive/0.0.11/adr/0093-bounded-per-reply-multimodal-feedback-context.md)
   - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
   - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
+  - [PRD 050](../prd/050-lightweight-progress-disclosure-and-coach-controls.md)
+  - [ADR 0108](../adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md)
 
 ## 症状
 
@@ -22,10 +24,15 @@ Job、Trace、解码 Span 并构造完整反馈上下文，然后才改变 Sheet
 Sheet 仍然需要创建新页面、建立导航容器并执行系统转场；根聊天树和复杂消息布局也参与状态更新。
 对于本质上只是一段短表单的交互，这些成本没有用户价值。
 
+第一次紧凑化仍把 Trace 与反馈图标居中放在相邻的 44 pt 槽内。触达区虽然合规，两个小图标的可见
+中心仍相距 44 pt，因此看起来依旧松散；触达尺寸与可见图形间距需要分别控制。
+
 ## 修复
 
 - 元信息行移除弹性占位，反馈图标与时间保留 8 pt 可见间距，并以 44 pt 触达区域承载
   `text.bubble` 线框图标。
+- Trace 图标在自己的 44 pt 槽内靠右，反馈图标在相邻槽内靠左；两个槽不重叠，图形间距缩短，
+  VoiceOver 与触达面积保持不变。
 - 每条回复的叶子 `AssistantFeedbackButton` 自己持有原位展开状态，只携带稳定的 AI 消息 ID；
   点按后在当前消息下方直接展开紧凑 `FeedbackView`，不创建 Sheet、导航栈或页面转场。
 - `CoachView` 不再订阅全部 `AgentTrace`；上下文只在用户点按发送时按消息 ID 定向读取。

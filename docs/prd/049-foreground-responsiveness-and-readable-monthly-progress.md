@@ -3,7 +3,7 @@
 - 状态：已实施；待 Release 真机验收
 - 日期：2026-08-27
 - 修订自：[PRD 046](046-coach-records-and-goal-directed-progress.md) 的进展时间窗、指标来源与当日能量展示
-- 后续修订：暂无
+- 后续修订：[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的目标直选与跟随式分项浮层
 - 上游依据：
   - 维护者提出的四项前台响应、月度曲线、分项来源和全天消耗优化
   - [BUG 0043](../bugs/0043-coach-foreground-recovery-main-thread-stall.md)

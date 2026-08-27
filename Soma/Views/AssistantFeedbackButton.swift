@@ -26,7 +26,7 @@ struct AssistantFeedbackButton: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .padding(.trailing, 16)
+                    .padding(.trailing, 8)
                     .accessibilityLabel(timestampAccessibilityLabel)
 
                 if let traceID {
@@ -45,8 +45,9 @@ struct AssistantFeedbackButton: View {
                         .frame(
                             width: AppTheme.minimumTapTarget,
                             height: AppTheme.minimumTapTarget,
-                            alignment: .center
+                            alignment: .leading
                         )
+                        .padding(.leading, 5)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isExpanded ? "收起反馈" : "反馈这条 AI 回复")
@@ -116,8 +117,9 @@ private struct AssistantTraceLink: View {
             .frame(
                 width: AppTheme.minimumTapTarget,
                 height: AppTheme.minimumTapTarget,
-                alignment: .center
+                alignment: .trailing
             )
+            .padding(.trailing, 5)
             .accessibilityLabel("查看这条回复的执行日志")
     }
 }

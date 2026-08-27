@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProgressGoalOverviewCard: View {
     let goal: FitnessGoal?
+    let onSelectGoal: (FitnessGoal?) -> Void
     let intakeCalories: Int?
     let intakeIsPartial: Bool
     let intakeBreakdown: [ProgressMetricBreakdownItem]
@@ -22,8 +23,41 @@ struct ProgressGoalOverviewCard: View {
         AppCard {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(goal.map { "目标 · \($0.rawValue)" } ?? "目标尚未选择")
-                        .font(.headline)
+                    Menu {
+                        Button {
+                            onSelectGoal(nil)
+                        } label: {
+                            if goal == nil {
+                                Label("暂不选择", systemImage: "checkmark")
+                            } else {
+                                Text("暂不选择")
+                            }
+                        }
+                        ForEach(FitnessGoal.allCases) { option in
+                            Button {
+                                onSelectGoal(option)
+                            } label: {
+                                if option == goal {
+                                    Label(option.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(option.rawValue)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(goal.map { "目标 · \($0.rawValue)" } ?? "目标尚未选择")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(minHeight: AppTheme.minimumTapTarget)
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("当前目标：\(goal?.rawValue ?? "未选择")")
+                    .accessibilityHint("直接选择进展页关注的目标")
                     Text(goalDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -34,11 +68,6 @@ struct ProgressGoalOverviewCard: View {
                 }
                 if goal != .fatLoss {
                     muscleSummary
-                }
-                if goal == nil {
-                    Text("在身体信息里选择目标后，这里会保留相关指标。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -92,40 +121,41 @@ struct ProgressGoalOverviewCard: View {
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
 
-            HStack(spacing: 8) {
-                Text("预计能量差")
-                    .font(.caption)
-                Text(signedEnergyBalance)
-                    .font(.caption.weight(.medium).monospacedDigit())
-                Spacer()
-                ProgressSourceButton(
-                    source: .energyBalance(
-                        intake: intakeCalories,
-                        expenditure: dailyProjection?.dailyTotalKilocalories
-                    )
+            ProgressSourceDisclosure(
+                source: .energyBalance(
+                    intake: intakeCalories,
+                    expenditure: dailyProjection?.dailyTotalKilocalories
                 )
+            ) {
+                HStack(spacing: 8) {
+                    Text("预计能量差")
+                        .font(.caption)
+                    Text(signedEnergyBalance)
+                        .font(.caption.weight(.medium).monospacedDigit())
+                    Spacer()
+                }
+                .padding(.leading, 4)
+                .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget)
+                .foregroundStyle(.secondary)
             }
-            .padding(.leading, 4)
-            .frame(minHeight: AppTheme.minimumTapTarget)
-            .foregroundStyle(.secondary)
         }
     }
 
     private var muscleSummary: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 0) {
-                MetricHeading(title: "最近 7 天增肌训练", role: .trainingLoad)
-                Spacer()
-                ProgressSourceButton(
-                    source: .muscleCoverage(
-                        muscleSets.map {
-                            ProgressMetricBreakdownItem(
-                                label: $0.name,
-                                value: "\($0.sets) 组"
-                            )
-                        }
-                    )
+            ProgressSourceDisclosure(
+                source: .muscleCoverage(
+                    muscleSets.map {
+                        ProgressMetricBreakdownItem(
+                            label: $0.name,
+                            value: "\($0.sets) 组"
+                        )
+                    }
                 )
+            ) {
+                MetricHeading(title: "最近 7 天增肌训练", role: .trainingLoad)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minHeight: AppTheme.minimumTapTarget)
             }
 
             HStack(spacing: 14) {
@@ -171,10 +201,11 @@ struct ProgressGoalOverviewCard: View {
         icon: String,
         source: ProgressMetricSource
     ) -> some View {
-        HStack(spacing: 2) {
+        ProgressSourceDisclosure(source: source) {
             Label(text, systemImage: icon)
                 .font(.caption.weight(.medium))
-            ProgressSourceButton(source: source)
+                .frame(minHeight: AppTheme.minimumTapTarget)
+                .contentShape(Rectangle())
         }
         .foregroundStyle(.secondary)
     }
@@ -207,25 +238,25 @@ private struct EnergyMetricTile: View {
     let source: ProgressMetricSource
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
+        ProgressSourceDisclosure(source: source) {
+            VStack(spacing: 1) {
                 Text(title)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                ProgressSourceButton(source: source)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text(value.map { "\(valuePrefix)\($0)" } ?? "—")
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(value == nil ? "kcal" : "kcal\(valueSuffix)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            Text(value.map { "\(valuePrefix)\($0)" } ?? "—")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(value == nil ? "kcal" : "kcal\(valueSuffix)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 68)
         }
-        .padding(.bottom, 7)
-        .frame(maxWidth: .infinity, minHeight: 68)
-        .accessibilityElement(children: .contain)
+        .frame(maxWidth: .infinity)
     }
 }

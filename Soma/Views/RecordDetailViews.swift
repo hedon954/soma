@@ -504,6 +504,7 @@ private struct MealRecordEditor: View {
     @State private var fat: String
     @State private var glycemicSpeed: MealGlycemicSpeed?
     @State private var glycemicAssessment: String
+    @State private var recommendedEatingOrder: String
     @State private var drafts: [MealItemDraft]
     @State private var notes: String
     @State private var macrosExpanded = false
@@ -519,6 +520,7 @@ private struct MealRecordEditor: View {
         _fat = State(initialValue: EditorValue.string(meal.fat))
         _glycemicSpeed = State(initialValue: meal.glycemicSpeed)
         _glycemicAssessment = State(initialValue: meal.glycemicAssessment)
+        _recommendedEatingOrder = State(initialValue: meal.recommendedEatingOrder)
         _drafts = State(initialValue: MealItemDraft.drafts(for: meal))
         _notes = State(initialValue: meal.notes)
     }
@@ -621,6 +623,18 @@ private struct MealRecordEditor: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("建议食用顺序") {
+                RecordFieldRow(
+                    title: "顺序",
+                    placeholder: "例如：蔬菜 → 蛋白质 → 主食",
+                    text: $recommendedEatingOrder,
+                    isMultiline: true
+                )
+                Text("只按这餐实际包含的食物排列；不是必须严格遵循的医疗建议。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 DisclosureGroup("记录与估算", isExpanded: $notesExpanded) {
                     RecordFieldRow(
@@ -674,6 +688,8 @@ private struct MealRecordEditor: View {
             || glycemicSpeed != meal.glycemicSpeed
             || glycemicAssessment.trimmingCharacters(in: .whitespacesAndNewlines)
             != meal.glycemicAssessment
+            || recommendedEatingOrder.trimmingCharacters(in: .whitespacesAndNewlines)
+            != meal.recommendedEatingOrder
             || editedItems != meal.items
             || notes.trimmingCharacters(in: .whitespacesAndNewlines) != meal.notes
     }
@@ -684,6 +700,9 @@ private struct MealRecordEditor: View {
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedGlycemicAssessment = glycemicAssessment.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let normalizedEatingOrder = recommendedEatingOrder.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         title = normalizedTitle
@@ -699,6 +718,7 @@ private struct MealRecordEditor: View {
             || EditorValue.double(fat) != meal.fat
         let editedGlycemic = glycemicSpeed != meal.glycemicSpeed
             || normalizedGlycemicAssessment != meal.glycemicAssessment
+        let editedEatingOrder = normalizedEatingOrder != meal.recommendedEatingOrder
         if itemsChanged {
             meal.replaceItemsAndDeriveTotals(normalizedItems)
             drafts = MealItemDraft.drafts(for: meal)
@@ -722,6 +742,11 @@ private struct MealRecordEditor: View {
         } else if itemsChanged {
             glycemicSpeed = nil
             glycemicAssessment = ""
+        }
+        if editedEatingOrder {
+            meal.recommendedEatingOrder = normalizedEatingOrder
+        } else if itemsChanged {
+            recommendedEatingOrder = ""
         }
         meal.notes = normalizedNotes
         try? modelContext.save()

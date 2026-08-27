@@ -18,16 +18,18 @@ struct MonthlyProgressTrendCard: View {
                     }
                     .pickerStyle(.segmented)
 
-                    HStack(spacing: 0) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(selectedMetric.title)
-                                .font(.subheadline.weight(.medium))
-                            Text("最近 30 天")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    ProgressSourceDisclosure(source: .trend(selectedSeries)) {
+                        HStack(spacing: 0) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(selectedMetric.title)
+                                    .font(.subheadline.weight(.medium))
+                                Text("最近 30 天")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
                         }
-                        Spacer()
-                        ProgressSourceButton(source: .trend(selectedSeries))
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget)
                     }
 
                     if selectedSeries.points.isEmpty {

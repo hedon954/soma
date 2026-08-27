@@ -161,7 +161,7 @@ extension ConversationRecorder {
         case "meals": [
                 "record_id", "date", "meal_type", "title", "calories",
                 "protein", "carbs", "fat", "glycemic_speed",
-                "glycemic_assessment", "items", "note"
+                "glycemic_assessment", "recommended_eating_order", "items", "note"
             ]
         case "body": [
                 "record_id", "date", "weight", "body_fat", "waist",
@@ -319,6 +319,8 @@ extension ConversationRecorder {
                 .map(AgentJSONValue.string) ?? .null,
             "glycemic_assessment": entry.glycemicAssessment.isEmpty
                 ? .null : .string(entry.glycemicAssessment),
+            "recommended_eating_order": entry.recommendedEatingOrder.isEmpty
+                ? .null : .string(entry.recommendedEatingOrder),
             "items": .array(entry.items.map { item in
                 .object([
                     "id": .string(item.id.uuidString),
@@ -341,7 +343,8 @@ private extension AgentMutationPayload {
             ]
         case "meal": [
                 "meal_type", "title", "calories", "protein", "carbs", "fat",
-                "glycemic_speed", "glycemic_assessment", "items", "note"
+                "glycemic_speed", "glycemic_assessment",
+                "recommended_eating_order", "items", "note"
             ]
         case "body": [
                 "weight", "body_fat", "waist", "posture_note", "safety_note"
@@ -404,6 +407,9 @@ private extension AgentMutationPayload {
         }
         if glycemicAssessment != nil {
             fields.insert("glycemic_assessment")
+        }
+        if recommendedEatingOrder != nil {
+            fields.insert("recommended_eating_order")
         }
         if items != nil {
             fields.insert("items")
