@@ -43,8 +43,7 @@ struct InsightsView: View {
 
                         ForEach(
                             ProgressHomeSection.visible(
-                                hasRecentActivities: !snapshot.recentActivities.isEmpty,
-                                hasWeightTrend: snapshot.weightedBodyEntries.count >= 2
+                                hasRecentActivities: !snapshot.recentActivities.isEmpty
                             )
                         ) { section in
                             progressHomeSection(section, snapshot: snapshot)
@@ -120,16 +119,26 @@ struct InsightsView: View {
                 goal: snapshot.fitnessGoal,
                 intakeCalories: snapshot.todayIntakeCalories,
                 intakeIsPartial: snapshot.todayIntakeIsPartial,
+                intakeBreakdown: snapshot.todayIntakeBreakdown,
                 restingCalories: healthEnergy.restingKilocalories
                     ?? snapshot.estimatedRestingCalories,
                 restingUsesHealth: healthEnergy.restingKilocalories != nil,
+                restingBreakdown: healthEnergy.restingComponents.map(\.progressBreakdown),
+                dailyRestingEstimate: snapshot.dailyRestingEstimate,
+                restingFormulaInput: snapshot.restingFormulaInput,
                 activeCalories: healthEnergy.activeKilocalories
                     ?? snapshot.localActiveCalories,
-                activeUsesHealth: healthEnergy.activeKilocalories != nil,
+                activeBreakdown: healthEnergy.activeKilocalories != nil
+                    ? healthEnergy.activeComponents.map(\.progressBreakdown)
+                    : snapshot.localActiveBreakdown,
                 muscleSets: snapshot.weeklyPrimaryMuscleSets,
                 trainingDays: snapshot.weekTrainingDays.count,
-                volume: snapshot.weekVolume
+                trainingDayBreakdown: snapshot.weekTrainingDayBreakdown,
+                volume: snapshot.weekVolume,
+                volumeBreakdown: snapshot.weekVolumeBreakdown
             )
+        case .monthlyTrend:
+            MonthlyProgressTrendCard(series: snapshot.monthlyTrendSeries)
         case .conclusion:
             ProgressConclusionCard(
                 title: snapshot.conclusionTitle,
@@ -195,8 +204,6 @@ struct InsightsView: View {
                 )
                 .scrollBounceBehavior(.basedOnSize)
             }
-        case .weightTrend:
-            WeightTrendCard(entries: snapshot.weightedBodyEntries)
         case .allData:
             SectionHeading(title: "数据与全部记录")
             RecentRecordsCard(
@@ -365,6 +372,15 @@ private struct InsightsSnapshotPayload: Sendable {
     let counts: InsightsRecordCounts
 }
 
+private extension HealthEnergyComponent {
+    var progressBreakdown: ProgressMetricBreakdownItem {
+        ProgressMetricBreakdownItem(
+            label: sourceName,
+            value: "\(kilocalories) kcal"
+        )
+    }
+}
+
 @ModelActor
 private actor InsightsSnapshotLoader {
     func load(now: Date = .now) throws -> InsightsSnapshotPayload {
@@ -372,6 +388,11 @@ private actor InsightsSnapshotLoader {
         let calendar = Calendar.current
         let trendStart = calendar.date(byAdding: .day, value: -95, to: now)
             ?? .distantPast
+        let mealTrendStart = calendar.date(
+            byAdding: .day,
+            value: -30,
+            to: calendar.startOfDay(for: now)
+        ) ?? .distantPast
 
         var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
             predicate: #Predicate { $0.date >= trendStart },
@@ -380,9 +401,10 @@ private actor InsightsSnapshotLoader {
         workoutDescriptor.fetchLimit = 1000
 
         var mealDescriptor = FetchDescriptor<MealEntry>(
+            predicate: #Predicate { $0.date >= mealTrendStart },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        mealDescriptor.fetchLimit = 30
+        mealDescriptor.fetchLimit = 1000
 
         var bodyDescriptor = FetchDescriptor<BodyEntry>(
             predicate: #Predicate { $0.date >= trendStart },
@@ -563,7 +585,7 @@ private struct WeightTrendPoint: Identifiable, Sendable {
     let weight: Double
 }
 
-private struct ProgressMuscleSetSummary: Identifiable, Sendable {
+struct ProgressMuscleSetSummary: Identifiable, Sendable {
     let name: String
     let sets: Int
     var id: String {
@@ -890,9 +912,16 @@ private struct InsightsScreenSnapshot: Sendable {
     let fitnessGoal: FitnessGoal?
     let todayIntakeCalories: Int?
     let todayIntakeIsPartial: Bool
+    let todayIntakeBreakdown: [ProgressMetricBreakdownItem]
     let localActiveCalories: Int?
+    let localActiveBreakdown: [ProgressMetricBreakdownItem]
     let estimatedRestingCalories: Int?
+    let dailyRestingEstimate: Double?
+    let restingFormulaInput: RestingEnergyFormulaInput?
+    let monthlyTrendSeries: [ProgressTrendSeries]
     let weeklyPrimaryMuscleSets: [ProgressMuscleSetSummary]
+    let weekTrainingDayBreakdown: [ProgressMetricBreakdownItem]
+    let weekVolumeBreakdown: [ProgressMetricBreakdownItem]
 
     var conclusionTitle: String {
         switch weekTrainingCount {
@@ -928,27 +957,49 @@ private struct InsightsScreenSnapshot: Sendable {
         let weekStart = calendar.date(byAdding: .day, value: -6, to: now)
             ?? .distantPast
         let todayStart = calendar.startOfDay(for: now)
+        let monthStart = calendar.date(byAdding: .day, value: -29, to: todayStart)
+            ?? .distantPast
         let todayMeals = input.meals.filter { $0.date >= todayStart && $0.date <= now }
         let knownMealCalories = todayMeals.compactMap(\.calories)
         todayIntakeCalories = knownMealCalories.isEmpty
             ? nil
             : knownMealCalories.reduce(0, +)
         todayIntakeIsPartial = todayMeals.contains { $0.calories == nil }
-        let activeValues = workouts.filter { $0.date >= todayStart && $0.date <= now }
-            .compactMap(\.activeCalories)
+        todayIntakeBreakdown = todayMeals.sorted { $0.date < $1.date }.map {
+            ProgressMetricBreakdownItem(
+                label: "\($0.mealType) · \($0.title)",
+                value: $0.calories.map { "\($0) kcal" } ?? "未记录"
+            )
+        }
+        let todayWorkouts = workouts.filter { $0.date >= todayStart && $0.date <= now }
+        let activeValues = todayWorkouts.compactMap(\.activeCalories)
         localActiveCalories = activeValues.isEmpty ? nil : activeValues.reduce(0, +)
+        localActiveBreakdown = todayWorkouts.sorted { $0.date < $1.date }.map {
+            ProgressMetricBreakdownItem(
+                label: $0.exercise,
+                value: $0.activeCalories.map { "\($0) kcal" } ?? "未计算"
+            )
+        }
         let completedSessions = input.workoutSessions.filter {
             $0.status == .completed || $0.status == .abandoned
         }
         let trainingDates = workouts
             .filter { $0.sourceWorkoutSessionID == nil }
             .map(\.date) + completedSessions.map(\.startedAt)
-        trainingDayCounts = trainingDates.reduce(into: [Date: Int]()) { counts, date in
+        let dayCounts = trainingDates.reduce(into: [Date: Int]()) { counts, date in
             counts[calendar.startOfDay(for: date), default: 0] += 1
         }
-        weekTrainingDays = Set(
-            trainingDayCounts.keys.filter { $0 >= calendar.startOfDay(for: weekStart) }
+        trainingDayCounts = dayCounts
+        let recentTrainingDays = Set(
+            dayCounts.keys.filter { $0 >= calendar.startOfDay(for: weekStart) }
         )
+        weekTrainingDays = recentTrainingDays
+        weekTrainingDayBreakdown = recentTrainingDays.sorted(by: >).map { date in
+            ProgressMetricBreakdownItem(
+                label: date.formatted(.dateTime.month().day()),
+                value: "\(dayCounts[date] ?? 0) 条训练"
+            )
+        }
 
         let standaloneCount = workouts.count {
             $0.sourceWorkoutSessionID == nil && $0.date >= weekStart
@@ -988,13 +1039,23 @@ private struct InsightsScreenSnapshot: Sendable {
                 default: 0
             ] += volume
         }
-        volumePoints = dailyVolumes.map {
+        let resolvedVolumePoints = dailyVolumes.map {
             TrainingVolumePoint(date: $0.key, volume: $0.value)
         }.sorted { $0.date < $1.date }
-        let recentVolume = volumePoints
+        volumePoints = resolvedVolumePoints
+        let recentVolume = resolvedVolumePoints
             .filter { $0.date >= weekStart }
             .reduce(0) { $0 + $1.volume }
         weekVolume = recentVolume > 0 ? recentVolume : nil
+        weekVolumeBreakdown = resolvedVolumePoints
+            .filter { $0.date >= calendar.startOfDay(for: weekStart) }
+            .sorted { $0.date > $1.date }
+            .map {
+                ProgressMetricBreakdownItem(
+                    label: $0.date.formatted(.dateTime.month().day()),
+                    value: "\($0.volume.formatted(.number.precision(.fractionLength(0)))) kg"
+                )
+            }
 
         weightedBodyEntries = input.bodyEntries
             .compactMap { entry in
@@ -1019,6 +1080,56 @@ private struct InsightsScreenSnapshot: Sendable {
             now: now,
             calendar: calendar
         )
+        dailyRestingEstimate = dailyResting
+        if let latestKnownWeight,
+           let height = input.profile?.height,
+           let age,
+           let profile = input.profile,
+           let dailyResting
+        {
+            restingFormulaInput = RestingEnergyFormulaInput(
+                weightKG: latestKnownWeight,
+                heightCM: height,
+                age: age,
+                biologicalSex: profile.biologicalSex,
+                dailyKilocalories: dailyResting
+            )
+        } else {
+            restingFormulaInput = nil
+        }
+
+        monthlyTrendSeries = [
+            ProgressTrendProjection.dailySum(
+                metric: .trainingVolume,
+                samples: dailyVolumes.map {
+                    ProgressTrendSample(date: $0.key, value: $0.value)
+                },
+                start: monthStart,
+                end: now,
+                calendar: calendar
+            ),
+            ProgressTrendProjection.dailySum(
+                metric: .calorieIntake,
+                samples: input.meals.map {
+                    ProgressTrendSample(
+                        date: $0.date,
+                        value: $0.calories.map(Double.init)
+                    )
+                },
+                start: monthStart,
+                end: now,
+                calendar: calendar
+            ),
+            ProgressTrendProjection.dailyLatest(
+                metric: .weight,
+                samples: input.bodyEntries.map {
+                    ProgressTrendSample(date: $0.date, value: $0.weight)
+                },
+                start: monthStart,
+                end: now,
+                calendar: calendar
+            )
+        ]
 
         var muscleSets: [String: Int] = [:]
         for workout in workouts where workout.date >= weekStart && workout.setCount > 0 {
@@ -1088,217 +1199,7 @@ private struct InsightsScreenSnapshot: Sendable {
         activeExerciseCount = input.activeExerciseCount
 
         let format = Date.FormatStyle(date: .abbreviated, time: .omitted)
-        dateRangeText = "\(weekStart.formatted(format))—\(now.formatted(format))"
-    }
-}
-
-private struct ProgressGoalOverviewCard: View {
-    let goal: FitnessGoal?
-    let intakeCalories: Int?
-    let intakeIsPartial: Bool
-    let restingCalories: Int?
-    let restingUsesHealth: Bool
-    let activeCalories: Int?
-    let activeUsesHealth: Bool
-    let muscleSets: [ProgressMuscleSetSummary]
-    let trainingDays: Int
-    let volume: Double?
-    @State private var showsExplanation = false
-
-    var body: some View {
-        AppCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(goal.map { "目标 · \($0.rawValue)" } ?? "目标尚未选择")
-                            .font(.headline)
-                        Text(goalDescription)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                    Button {
-                        showsExplanation = true
-                    } label: {
-                        Image(systemName: "exclamationmark.circle")
-                            .frame(
-                                width: AppTheme.minimumTapTarget,
-                                height: AppTheme.minimumTapTarget
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("查看指标来源与计算方法")
-                }
-
-                if goal != .muscleGain {
-                    energySummary
-                }
-                if goal != .fatLoss {
-                    muscleSummary
-                }
-                if goal == nil {
-                    Text("在“设置 → 身体信息”选择目标后，这里会只保留与你当前目标相关的指标。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .sheet(isPresented: $showsExplanation) {
-            NavigationStack {
-                ProgressMetricExplanationView()
-            }
-        }
-    }
-
-    private var goalDescription: String {
-        switch goal {
-        case .fatLoss: "关注今天的能量摄入与消耗"
-        case .muscleGain: "关注每周训练覆盖、有效组数与训练节奏"
-        case .recomposition: "同时观察能量平衡与肌群训练覆盖"
-        case nil: "先明确目标，再判断哪些趋势真正有用"
-        }
-    }
-
-    private var energySummary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MetricHeading(title: "今日能量 · 截至目前", role: .trainingLoad)
-            HStack(spacing: 8) {
-                energyMetric(
-                    title: intakeIsPartial ? "摄入（部分）" : "摄入",
-                    value: intakeCalories,
-                    source: "饮食记录"
-                )
-                energyMetric(
-                    title: "总消耗",
-                    value: totalExpenditure,
-                    source: expenditureSource
-                )
-                energyMetric(
-                    title: "能量差",
-                    value: energyBalance,
-                    source: "摄入 − 消耗",
-                    signed: true
-                )
-            }
-            HStack(spacing: 4) {
-                Text("静息 \(restingCalories.map(String.init) ?? "—") kcal")
-                Text("+")
-                Text("活动 \(activeCalories.map(String.init) ?? "—") kcal")
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
-        }
-    }
-
-    private var muscleSummary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MetricHeading(title: "最近 7 天增肌训练", role: .trainingLoad)
-            HStack(spacing: 16) {
-                Label("\(trainingDays) 个训练日", systemImage: "calendar.badge.checkmark")
-                if let volume {
-                    Label(
-                        "\(volume.formatted(.number.precision(.fractionLength(0)))) kg 容量",
-                        systemImage: "scalemass"
-                    )
-                }
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
-
-            if muscleSets.isEmpty {
-                Text("动作缺少主要肌群或有效工作组，暂时无法计算覆盖。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(muscleSets.prefix(6)) { item in
-                    HStack(spacing: 10) {
-                        Text(item.name)
-                            .font(.caption)
-                            .frame(width: 72, alignment: .leading)
-                        ProgressView(value: min(Double(item.sets) / 10, 1))
-                            .tint(AppMetricRole.trainingLoad.accent)
-                        Text("\(item.sets) 组")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 38, alignment: .trailing)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-        }
-    }
-
-    private func energyMetric(
-        title: String,
-        value: Int?,
-        source: String,
-        signed: Bool = false
-    ) -> some View {
-        VStack(spacing: 3) {
-            Text(value.map {
-                signed && $0 > 0 ? "+\($0)" : String($0)
-            } ?? "—")
-                .font(.title3.weight(.semibold).monospacedDigit())
-            Text(title)
-                .font(.caption2)
-            Text(source)
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var totalExpenditure: Int? {
-        guard restingCalories != nil || activeCalories != nil else { return nil }
-        return (restingCalories ?? 0) + (activeCalories ?? 0)
-    }
-
-    private var energyBalance: Int? {
-        guard let intakeCalories, let totalExpenditure else { return nil }
-        return intakeCalories - totalExpenditure
-    }
-
-    private var expenditureSource: String {
-        if restingUsesHealth || activeUsesHealth {
-            return "Apple 健康优先"
-        }
-        return "本地估算"
-    }
-}
-
-private struct ProgressMetricExplanationView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        List {
-            Section("能量摄入") {
-                Text("把今天饮食记录中已填写的 kcal 相加。任一餐缺少热量时会标记为“部分”，不会把未知值补成 0。")
-            }
-            Section("静息消耗") {
-                Text("优先读取 Apple 健康的静息能量。截至当前没有可读数据时，使用 Mifflin–St Jeor 公式：男性 10×体重kg + 6.25×身高cm − 5×年龄 + 5；女性末项为 −161，再按今天已过去的时间折算。缺少体重、身高、生日或二元生理性别时保持为空。")
-                Text("参考：Mifflin 等，1990，American Journal of Clinical Nutrition。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section("活动消耗") {
-                Text("优先读取 Apple 健康的活动能量；否则把 Soma 训练记录的 MET 总消耗换算为净活动消耗：(MET − 1) ÷ MET × 已估算训练热量。健康数据未授权或缺失时不会伪造读数。")
-            }
-            Section("增肌指标") {
-                Text("按最近 7 天动作库定义的“主要肌群”统计工作组；热身组不计入，辅助肌群不会被提升为主要肌群。10 组刻度仅作为阅读参照，不是成功或失败阈值。")
-                Text("参考：ACSM 2026 阻力训练立场文件；个体恢复、动作质量和渐进负荷仍需一起判断。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("指标如何计算")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("完成") { dismiss() }
-            }
-        }
+        dateRangeText = "\(monthStart.formatted(format))—\(now.formatted(format))"
     }
 }
 

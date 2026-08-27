@@ -3,6 +3,7 @@ import OSLog
 
 enum AppPerformanceEvent: String, CaseIterable {
     case launchMigration = "launch_migration"
+    case foregroundRecovery = "foreground_recovery"
     case rootMaintenance = "root_maintenance"
     case rootVisible = "root_visible"
     case tabTransition = "tab_transition"
@@ -19,6 +20,7 @@ enum AppPerformanceEvent: String, CaseIterable {
     fileprivate var signpostName: StaticString {
         switch self {
         case .launchMigration: "Soma Launch Migration"
+        case .foregroundRecovery: "Soma Foreground Recovery"
         case .rootMaintenance: "Soma Root Maintenance"
         case .rootVisible: "Soma Root Visible"
         case .tabTransition: "Soma Tab Transition"

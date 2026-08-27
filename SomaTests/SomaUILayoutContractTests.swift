@@ -41,27 +41,22 @@ final class SomaUILayoutContractTests: XCTestCase {
 
     func testProgressKeepsSummaryConclusionRecentBeforeTrendsAndData() {
         XCTAssertEqual(
-            ProgressHomeSection.visible(
-                hasRecentActivities: true,
-                hasWeightTrend: true
-            ),
+            ProgressHomeSection.visible(hasRecentActivities: true),
             [
                 .trainingOverview,
+                .monthlyTrend,
                 .conclusion,
                 .recentActivities,
-                .weightTrend,
                 .allData,
                 .currentGym,
                 .personalResources
             ]
         )
         XCTAssertEqual(
-            ProgressHomeSection.visible(
-                hasRecentActivities: false,
-                hasWeightTrend: false
-            ),
+            ProgressHomeSection.visible(hasRecentActivities: false),
             [
                 .trainingOverview,
+                .monthlyTrend,
                 .conclusion,
                 .allData,
                 .currentGym,

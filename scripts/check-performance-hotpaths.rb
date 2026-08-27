@@ -133,6 +133,13 @@ fail_check("RootView restored selection-dependent tab symbols") if root_source.i
 unless root_source.include?("guard didFinishInitialMaintenance else { return }")
   fail_check("RootView can again duplicate foreground recovery during initial maintenance")
 end
+foreground_block = root_source[/\.onChange\(of: scenePhase\).*?else if scenePhase == \.background/m]
+if foreground_block&.include?("conversationSessions.resolveForEntry")
+  fail_check("foreground entry can again switch and rebuild the visible coach Session")
+end
+unless root_source.include?(".foregroundRecovery")
+  fail_check("foreground recovery lost its dedicated performance interval")
+end
 
 coach_source = File.read(File.join(ROOT, "Soma/Views/CoachView.swift"))
 coach_actions_source = File.read(File.join(ROOT, "Soma/Views/CoachSessionView+Actions.swift"))
@@ -426,6 +433,13 @@ end
 queue_actions_source = File.read(File.join(ROOT, service_file("ConversationProcessingQueueActions.swift")))
 if queue_actions_source.include?("AgentJobStore.promoteFailedResponsesToManualRetry")
   fail_check("foreground queue recovery restored a duplicate failed-response scan")
+end
+
+agent_job_source = File.read(File.join(ROOT, "Soma/Models/AgentJob.swift"))
+unless agent_job_source.match?(/recoverExpiredLeases.*?fetchLimit = 1/m) &&
+       agent_job_source.match?(/resumeForegroundJobs.*?fetchLimit = 1/m) &&
+       agent_job_source.match?(/promoteFailedResponsesToManualRetry.*?fetchLimit = 1/m)
+  fail_check("foreground Agent recovery is no longer bounded to the FIFO head")
 end
 
 stream_deadline_source = File.read(File.join(ROOT, service_file("AgentStreamDeadline.swift")))

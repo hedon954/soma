@@ -317,18 +317,23 @@ struct RootView: View {
                     // 收口完成后才允许执行真正的前台恢复，避免启动时重复查询。
                     guard didFinishInitialMaintenance else { return }
                     Task {
-                        await RemoteAgentRevocationService.retryIfNeeded()
                         await Task.yield()
                         guard scenePhase == .active else { return }
-                        conversationSessions.resolveForEntry(
-                            dataSpace: dataSpace.activeSpace,
-                            in: modelContext
+                        await RemoteAgentRevocationService.retryIfNeeded()
+                        guard scenePhase == .active else { return }
+                        let performanceInterval = AppPerformance.begin(
+                            .foregroundRecovery,
+                            detail: "space=\(dataSpace.activeSpace.rawValue)"
                         )
                         processor.resumePendingJobs(
                             dataSpace: dataSpace.activeSpace,
                             ai: ai,
                             modelContext: modelContext,
                             locationService: locationContext
+                        )
+                        AppPerformance.end(
+                            performanceInterval,
+                            detail: "space=\(dataSpace.activeSpace.rawValue)"
                         )
                     }
                 } else if scenePhase == .background {

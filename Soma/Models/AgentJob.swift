@@ -649,11 +649,14 @@ enum AgentJobStore {
     ) throws -> [UUID] {
         let dataSpaceRaw = dataSpace.rawValue
         let runningRaw = AgentJobState.running.rawValue
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>(
+        var descriptor = FetchDescriptor<AgentJob>(
             predicate: #Predicate {
                 $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw == runningRaw
-            }
-        ))) ?? []
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        descriptor.fetchLimit = 1
+        let jobs = (try? context.fetch(descriptor)) ?? []
         var recovered: [UUID] = []
         for job in jobs where (job.leaseExpiresAt ?? .distantPast) <= now {
             // App 被系统结束后，离线等待不能被算作 ReAct 实际执行时间。
@@ -680,11 +683,14 @@ enum AgentJobStore {
     ) throws -> [UUID] {
         let dataSpaceRaw = dataSpace.rawValue
         let waitingRaw = AgentJobState.waitingForForeground.rawValue
-        let jobs = (try? context.fetch(FetchDescriptor<AgentJob>(
+        var descriptor = FetchDescriptor<AgentJob>(
             predicate: #Predicate {
                 $0.dataSpaceRaw == dataSpaceRaw && $0.stateRaw == waitingRaw
-            }
-        ))) ?? []
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        descriptor.fetchLimit = 1
+        let jobs = (try? context.fetch(descriptor)) ?? []
         var resumed: [UUID] = []
         var changed = false
         for job in jobs {
@@ -732,19 +738,18 @@ enum AgentJobStore {
         let succeeded = AgentJobState.succeeded.rawValue
         let failed = AgentJobState.failed.rawValue
         let cancelled = AgentJobState.cancelled.rawValue
-        let jobs = (
-            try? context.fetch(
-                FetchDescriptor<AgentJob>(
-                    predicate: #Predicate {
-                        $0.dataSpaceRaw == dataSpaceRaw
-                            && $0.stateRaw != succeeded
-                            && $0.stateRaw != failed
-                            && $0.stateRaw != cancelled
-                    },
-                    sortBy: [SortDescriptor(\.createdAt)]
-                )
-            )
-        ) ?? []
+        var descriptor = FetchDescriptor<AgentJob>(
+            predicate: #Predicate {
+                $0.dataSpaceRaw == dataSpaceRaw
+                    && $0.stateRaw != succeeded
+                    && $0.stateRaw != failed
+                    && $0.stateRaw != cancelled
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        // FIFO 只允许队首运行；后续失败 Job 等到成为队首时再提升即可。
+        descriptor.fetchLimit = 1
+        let jobs = (try? context.fetch(descriptor)) ?? []
         var promoted: [UUID] = []
         for job in jobs {
             guard let responseID = job.responseMessageID else { continue }

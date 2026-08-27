@@ -35,7 +35,9 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 ## 未发布增量
 
-当前没有已采纳但未发布的 ADR 增量。
+| ADR | 状态 | 决策 |
+| --- | --- | --- |
+| [0107](0107-foreground-recovery-and-progress-evidence-projection.md) | 已采纳，实施中 | 前台恢复不切 Session；进展使用有界月度投影、分项来源与确定性全天消耗公式 |
 
 新决策使用 [ADR 模板](template.md)。
 

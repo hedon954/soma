@@ -50,9 +50,9 @@ enum TrainingHomeSection: String, CaseIterable, Identifiable, Sendable {
 
 enum ProgressHomeSection: String, CaseIterable, Identifiable, Sendable {
     case trainingOverview
+    case monthlyTrend
     case conclusion
     case recentActivities
-    case weightTrend
     case allData
     case currentGym
     case personalResources
@@ -61,14 +61,10 @@ enum ProgressHomeSection: String, CaseIterable, Identifiable, Sendable {
         rawValue
     }
 
-    static func visible(
-        hasRecentActivities: Bool,
-        hasWeightTrend: Bool
-    ) -> [ProgressHomeSection] {
+    static func visible(hasRecentActivities: Bool) -> [ProgressHomeSection] {
         allCases.filter { section in
             switch section {
             case .recentActivities: hasRecentActivities
-            case .weightTrend: hasWeightTrend
             default: true
             }
         }

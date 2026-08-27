@@ -53,6 +53,7 @@
 | [0040](0040-hidden-coach-subtree-tab-invalidation.md) | 已修复，待真机手感复验 | 隐藏教练子树随任意 Tab 交互整体重算，双击教练整页重建且切回不显示最新消息 | 稳定教练根入参、环境键激活态、根感知再选、Equatable 气泡与 `perf-check` 静态门禁 |
 | [0041](0041-bounded-gym-display-query-used-for-mutation.md) | 已修复 | 健身房展示上限被写路径复用，导致隐藏馆无法切换、重复建馆或留下多个当前馆 | 写路径全量身份集合、馆内器械谓词、共享激活/删除 Store 与越界压力测试 |
 | [0042](0042-exercise-editor-eager-merge-query-hang.md) | 已修复并通过真机交互验收 | 动作编辑页提前查询并物化全部合并候选，动作库较大时直接卡死 | 500 条虚构动作 UI 回归、保存时查重与真机交互复验 |
+| [0043](0043-coach-foreground-recovery-main-thread-stall.md) | 已修复，待 Release 真机量化复验 | 教练页回前台时同步解析 Session 与恢复 Agent 队列，造成触摸短时冻结 | 保持当前 Session、FIFO 队首恢复、前台 signpost 与 `perf-check` |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 
