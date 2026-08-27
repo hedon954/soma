@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.17`、`0.0.16`、`0.0.15`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.18`、`0.0.17`、`0.0.16`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.14 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.15 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.15 → 0.0.16 → 0.0.17
+[PRD 000 压缩起点] → 0.0.16 → 0.0.17 → 0.0.18
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,17 +30,11 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.14 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.14 | 压缩起点 |
-| [046：教练记录可信度、会话交互与目标导向进展](046-coach-records-and-goal-directed-progress.md) | 0.0.15 | 窗口最旧活增量 |
-| [047：根感知的 Tab 再选](047-root-aware-tab-reselection.md) | 0.0.16 | 活增量 |
+| [000：0.0.15 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.15 | 压缩起点 |
+| [047：根感知的 Tab 再选](047-root-aware-tab-reselection.md) | 0.0.16 | 窗口最旧活增量 |
 | [048：可审查记录派生与用户主动中断](048-reviewable-record-derivation-and-user-controlled-interruption.md) | 0.0.17 | 活增量 |
-
-## 未发布增量
-
-| 文档 | 状态 | 增量 |
-| --- | --- | --- |
-| [049：前台恢复响应与可读的月度进展](049-foreground-responsiveness-and-readable-monthly-progress.md) | 已采纳，实施中 | 保持教练上下文、30 天可点选曲线、分项来源与全天消耗预估 |
-| [050：轻量进展披露与教练内联控制](050-lightweight-progress-disclosure-and-coach-controls.md) | 已采纳，已实施 | 目标直选、无标题跟随浮层、输入区暂停、紧凑元信息与建议食用顺序 |
+| [049：前台恢复响应与可读的月度进展](049-foreground-responsiveness-and-readable-monthly-progress.md) | 0.0.18 | 活增量 |
+| [050：轻量进展披露与教练内联控制](050-lightweight-progress-disclosure-and-coach-controls.md) | 0.0.18 | 活增量 |
 
 ## 阅读约定
 

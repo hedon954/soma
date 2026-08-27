@@ -62,7 +62,7 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能：
 - **Non-diagnostic**：动作、体态和饮食反馈是一般建议，不冒充医疗诊断。
 - **Scope discipline**：只实现当前 PRD 或明确需求，不为可能的未来功能预建入口。
 
-当前产品不变量以本节为准；活 PRD 链见 `docs/prd/README.md`（压缩起点 + 0.0.11–0.0.13）。
+当前产品不变量以本节为准；活 PRD 链见 `docs/prd/README.md`（压缩起点 + 最近 3 个营销版本）。
 验收矩阵见 `docs/acceptance.md`。远程 Job 协议见 `docs/engineering/agent-job-protocol.md`。
 
 ## Architecture

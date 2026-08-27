@@ -3,16 +3,16 @@
 - 状态：已采纳，已实施；核心路径已通过模拟器检查，待真机交互验收
 - 日期：2026-08-26
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 收口的记录真值、身体信息、聊天元信息、会话分页、
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 收口的记录真值、身体信息、聊天元信息、会话分页、
     有界进展快照和 ReAct 运行预算
 - 后续修订：
-  - [PRD 048](048-reviewable-record-derivation-and-user-controlled-interruption.md)
-  - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md)（修订进展时间窗、分项来源与全天消耗预估）
+  - [PRD 048](../../../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
+  - [PRD 049](../../../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)（修订进展时间窗、分项来源与全天消耗预估）
 - 上游依据：
   - 维护者提出的十二项功能优化
-  - [目标导向进展指标调研](../research/2026-08-26-goal-directed-progress-metrics.md)
-  - [BUG 0038](../bugs/0038-source-workouts-missing-plan-execution.md)
-  - [BUG 0039](../bugs/0039-meal-occurrence-and-duration-target-truth.md)
+  - [目标导向进展指标调研](../../../research/2026-08-26-goal-directed-progress-metrics.md)
+  - [BUG 0038](../../../bugs/0038-source-workouts-missing-plan-execution.md)
+  - [BUG 0039](../../../bugs/0039-meal-occurrence-and-duration-target-truth.md)
 - 下游落地：
   - [ADR 0101](../adr/0101-record-truth-and-agent-profile-context.md)
   - [ADR 0102](../adr/0102-source-workout-plan-execution-materialization.md)

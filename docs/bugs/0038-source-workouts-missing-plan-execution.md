@@ -5,8 +5,8 @@
 - 影响范围：基于当日训练生成计划的执行历史与统计
 - 上游依据：维护者复现反馈
 - 下游落地：
-  - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
-  - [ADR 0102](../adr/0102-source-workout-plan-execution-materialization.md)
+  - [PRD 046](../archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md)
+  - [ADR 0102](../archive/0.0.15/adr/0102-source-workout-plan-execution-materialization.md)
 
 ## 症状
 

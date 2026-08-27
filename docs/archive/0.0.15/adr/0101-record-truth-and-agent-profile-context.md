@@ -4,14 +4,14 @@
 - 日期：2026-08-26
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 收口的总糖字段、参考体重回退、记录展示与会话初始定位细则
+  - [ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 收口的总糖字段、参考体重回退、记录展示与会话初始定位细则
 - 后续替代：
   - [ADR 0102](0102-source-workout-plan-execution-materialization.md)
-  - [ADR 0106](0106-reviewable-derived-records-and-manual-interruption.md)
+  - [ADR 0106](../../../adr/0106-reviewable-derived-records-and-manual-interruption.md)
 - 上游依据：
   - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
-  - [BUG 0039](../bugs/0039-meal-occurrence-and-duration-target-truth.md)
-- 下游落地：[验收矩阵](../acceptance.md)
+  - [BUG 0039](../../../bugs/0039-meal-occurrence-and-duration-target-truth.md)
+- 下游落地：[验收矩阵](../../../acceptance.md)
 
 ## 背景
 
@@ -61,5 +61,5 @@
 
 ## 参考
 
-- [数据库结构](../engineering/database-schema.md)
-- [Agent Tool 目录](../engineering/agent-tool-catalog.md)
+- [数据库结构](../../../engineering/database-schema.md)
+- [Agent Tool 目录](../../../engineering/agent-tool-catalog.md)

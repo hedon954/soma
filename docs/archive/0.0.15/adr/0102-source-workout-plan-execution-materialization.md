@@ -4,12 +4,12 @@
 - 日期：2026-08-26
 - 维护者：Soma maintainers
 - 修订自：[ADR 0101](0101-record-truth-and-agent-profile-context.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的计划创建与 Session 事实边界
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的计划创建与 Session 事实边界
 - 后续替代：[ADR 0103](0103-goal-directed-progress-energy-and-hypertrophy.md)
 - 上游依据：
   - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
-  - [BUG 0038](../bugs/0038-source-workouts-missing-plan-execution.md)
-- 下游落地：[验收矩阵](../acceptance.md)
+  - [BUG 0038](../../../bugs/0038-source-workouts-missing-plan-execution.md)
+- 下游落地：[验收矩阵](../../../acceptance.md)
 
 ## 背景
 
@@ -47,5 +47,5 @@ Session 只解除原始记录关系；只有 `guided-performance:` 投影键标�
 
 ## 参考
 
-- [训练领域模型](../engineering/training-domain-model.md)
-- [BUG 0038](../bugs/0038-source-workouts-missing-plan-execution.md)
+- [训练领域模型](../../../engineering/training-domain-model.md)
+- [BUG 0038](../../../bugs/0038-source-workouts-missing-plan-execution.md)

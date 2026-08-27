@@ -44,24 +44,29 @@ required_files=(
   docs/prd/000-origin-through-0.0.11.md
   docs/archive/0.0.13/prd/044-behavior-preserving-modernization.md
   docs/archive/0.0.14/prd/045-performance-reliability-and-bounded-data-access.md
-  docs/prd/046-coach-records-and-goal-directed-progress.md
+  docs/archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md
   docs/prd/047-root-aware-tab-reselection.md
   docs/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md
+  docs/prd/049-foreground-responsiveness-and-readable-monthly-progress.md
+  docs/prd/050-lightweight-progress-disclosure-and-coach-controls.md
   docs/adr/0000-origin-through-0.0.11.md
   docs/archive/0.0.13/adr/0099-behavior-preserving-modernization-and-three-version-docs.md
   docs/archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md
-  docs/adr/0101-record-truth-and-agent-profile-context.md
-  docs/adr/0102-source-workout-plan-execution-materialization.md
-  docs/adr/0103-goal-directed-progress-energy-and-hypertrophy.md
-  docs/adr/0104-independent-react-timeouts-by-media.md
+  docs/archive/0.0.15/adr/0101-record-truth-and-agent-profile-context.md
+  docs/archive/0.0.15/adr/0102-source-workout-plan-execution-materialization.md
+  docs/archive/0.0.15/adr/0103-goal-directed-progress-energy-and-hypertrophy.md
+  docs/archive/0.0.15/adr/0104-independent-react-timeouts-by-media.md
   docs/adr/0105-root-aware-tab-reselection.md
   docs/adr/0106-reviewable-derived-records-and-manual-interruption.md
+  docs/adr/0107-foreground-recovery-and-progress-evidence-projection.md
+  docs/adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md
   docs/archive/README.md
   docs/archive/0.0.10/README.md
   docs/archive/0.0.11/README.md
   docs/archive/0.0.12/README.md
   docs/archive/0.0.13/README.md
   docs/archive/0.0.14/README.md
+  docs/archive/0.0.15/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md

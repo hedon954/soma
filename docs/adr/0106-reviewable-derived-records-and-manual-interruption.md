@@ -4,8 +4,7 @@
 - 日期：2026-08-27
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 的饮食派生、人工恢复和设置/消息元信息细则
-  - [ADR 0101](0101-record-truth-and-agent-profile-context.md) 的训练记录目标单位投影细则
+  - [ADR 0000](0000-origin-through-0.0.11.md) 的饮食派生、训练记录目标单位投影、人工恢复和设置/消息元信息细则
 - 后续替代：[ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的输入区暂停、元信息视觉间距与饮食顺序字段
 - 上游依据：
   - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)

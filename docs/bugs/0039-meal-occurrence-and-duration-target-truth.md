@@ -5,8 +5,8 @@
 - 影响范围：饮食餐次与聊天动作卡/训练记录单位
 - 上游依据：维护者复现反馈
 - 下游落地：
-  - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
-  - [ADR 0101](../adr/0101-record-truth-and-agent-profile-context.md)
+  - [PRD 046](../archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md)
+  - [ADR 0101](../archive/0.0.15/adr/0101-record-truth-and-agent-profile-context.md)
   - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
   - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
 

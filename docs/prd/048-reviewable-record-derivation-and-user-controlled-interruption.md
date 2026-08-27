@@ -3,8 +3,7 @@
 - 状态：已采纳，已实施于 0.0.17；模拟器验收完成
 - 日期：2026-08-27
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的派生饮食汇总、人工恢复、设置层级与逐回复元信息
-  - [PRD 046](046-coach-records-and-goal-directed-progress.md) 的聊天记录卡、动作定义绑定与自动保存
+  - [PRD 000](000-origin-through-0.0.11.md) 的派生饮食汇总、人工恢复、设置层级、逐回复元信息、聊天记录卡、动作定义绑定与自动保存
 - 后续修订：[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的输入区暂停、消息元信息间距与建议食用顺序
 - 上游依据：
   - 维护者提供的六项产品优化与界面对照图

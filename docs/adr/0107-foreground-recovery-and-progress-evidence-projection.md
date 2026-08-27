@@ -3,7 +3,7 @@
 - 状态：已采纳，已实施；待 Release 真机量化复验
 - 日期：2026-08-27
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0103](0103-goal-directed-progress-energy-and-hypertrophy.md) 的集中说明入口与仅展示截至当前总消耗
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的集中说明入口与仅展示截至当前总消耗
 - 后续替代：[ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的跟随式进展明细与目标直选
 - 上游依据：
   - [PRD 049](../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)

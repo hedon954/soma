@@ -4,7 +4,7 @@
 - 日期：2026-08-25
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 中活动执行预算固定为文字/图片/视频 3/5/10 分钟的边界
-- 后续替代：[ADR 0104](../../../adr/0104-independent-react-timeouts-by-media.md) 替代统一自定义上限
+- 后续替代：[ADR 0104](../../0.0.15/adr/0104-independent-react-timeouts-by-media.md) 替代统一自定义上限
 - 上游依据：[PRD 043](../prd/043-configurable-react-runtime-timeout.md)
 
 ## 背景

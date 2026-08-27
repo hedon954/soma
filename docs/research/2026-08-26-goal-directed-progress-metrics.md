@@ -3,8 +3,8 @@
 - 状态：已转化
 - 日期：2026-08-26
 - 下游落地：
-  - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
-  - [ADR 0103](../adr/0103-goal-directed-progress-energy-and-hypertrophy.md)
+  - [PRD 046](../archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md)
+  - [ADR 0103](../archive/0.0.15/adr/0103-goal-directed-progress-energy-and-hypertrophy.md)
 
 ## 问题
 
