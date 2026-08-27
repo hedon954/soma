@@ -75,4 +75,10 @@ final class SomaUILayoutContractTests: XCTestCase {
             ["近 7 天", "连续性", "容量"]
         )
     }
+
+    func testProgressPopoverUsesAvailablePhoneWidthWithBoundedMargins() {
+        XCTAssertEqual(ProgressPopoverLayout.width(for: 440), 400)
+        XCTAssertEqual(ProgressPopoverLayout.width(for: 375), 351)
+        XCTAssertEqual(ProgressPopoverLayout.width(for: 1024), 400)
+    }
 }

@@ -93,6 +93,7 @@ struct AgentCheckpointToolCall: Codable, Equatable, @unchecked Sendable {
     var id: String
     var argumentsJSON: String
     var action: AgentToolCall
+    var preflightResult: AgentToolResult? = nil
 
     var native: ToolCall {
         ToolCall(

@@ -83,6 +83,8 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
   create 都新增独立记录，不能把创建当更新。
 - 未提供的重量、间歇、时长、评分等字段保持为空，不自动补默认值。
 - 工具错误作为 `role: tool` 结果返回，让模型解释或修正，不静默写入异常数据。
+- 已知工具的参数类型错误也必须先形成原生 assistant/tool 配对：无单位数字字符串可按注册 Schema
+  安全归一化，仍不合法时返回 `invalid_tool_arguments` 让下一模型步骤修正，不能在解码阶段终止 Loop。
 - Tool 错误包含稳定 `code/field/expected/retryable`；对象 Schema 关闭额外字段并继续执行本地二次校验。
 - 删除工具只处理用户明确指定的单条业务记录；Agent 仍没有账户、云同步或任意代码执行工具。
 - 已成功写入的数据不会因为后续最终回复失败而回滚。

@@ -8,6 +8,7 @@
   - [PRD 047](047-root-aware-tab-reselection.md)（窗口内最旧活文档，0.0.16；再选当前 Tab 改为根感知行为）
   - [PRD 048](048-reviewable-record-derivation-and-user-controlled-interruption.md)（修订派生汇总、人工中断与设置/消息元信息）
   - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md)（修订前台恢复、进展时间窗与全天消耗）
+  - [PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md)（修订 Tool 参数错误恢复）
 - 下游落地：
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md)
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)

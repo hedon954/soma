@@ -1,5 +1,15 @@
 import SwiftUI
 
+enum ProgressPopoverLayout {
+    static let maximumWidth: CGFloat = 400
+    static let minimumWidth: CGFloat = 260
+    static let screenMargin: CGFloat = 24
+
+    static func width(for screenWidth: CGFloat) -> CGFloat {
+        min(maximumWidth, max(minimumWidth, screenWidth - screenMargin))
+    }
+}
+
 struct ProgressSourceRow: Equatable {
     let label: String
     let value: String
@@ -217,13 +227,16 @@ private struct ProgressDataSourcePopover: View {
                                 .frame(width: 10, height: 10)
                             Text(row.label)
                                 .font(.subheadline)
-                                .lineLimit(2)
-                            Spacer(minLength: 12)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .layoutPriority(1)
+                            Spacer(minLength: 8)
                             Text(row.value)
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundStyle(rowAccent(index))
                                 .multilineTextAlignment(.trailing)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                         .padding(.vertical, 10)
                         if index < source.rows.count - 1 {
@@ -240,6 +253,9 @@ private struct ProgressDataSourcePopover: View {
                                 .font(index == 0 ? .subheadline : .caption)
                                 .foregroundStyle(index == 0 ? .primary : .secondary)
                                 .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .allowsTightening(true)
                         }
                     }
                     .padding(14)
@@ -254,14 +270,18 @@ private struct ProgressDataSourcePopover: View {
             .padding(.vertical, 12)
         }
         .scrollIndicators(.hidden)
-        .frame(width: 300, height: preferredHeight)
+        .frame(width: preferredWidth, height: preferredHeight)
         .background(AppTheme.cardBackground)
         .accessibilityElement(children: .contain)
     }
 
+    private var preferredWidth: CGFloat {
+        ProgressPopoverLayout.width(for: UIScreen.main.bounds.width)
+    }
+
     private var preferredHeight: CGFloat {
         let rowsHeight = CGFloat(max(source.rows.count, 1)) * 45
-        let formulaHeight: CGFloat = source.formulaLines.isEmpty ? 0 : 92
+        let formulaHeight: CGFloat = source.formulaLines.isEmpty ? 0 : 78
         return min(rowsHeight + formulaHeight + 24, 380)
     }
 

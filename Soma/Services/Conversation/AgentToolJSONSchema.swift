@@ -320,11 +320,17 @@ extension AgentToolName {
     }
 
     private func integer(_ description: String) -> JSONSchema {
-        JSONSchema(type: .integer, description: description)
+        JSONSchema(
+            type: .integer,
+            description: "\(description)。请传 JSON integer，不要加引号或单位"
+        )
     }
 
     private func number(_ description: String) -> JSONSchema {
-        JSONSchema(type: .number, description: description)
+        JSONSchema(
+            type: .number,
+            description: "\(description)。请传 JSON number，不要加引号或单位；1/3 先换算为 0.333"
+        )
     }
 
     private func array(_ items: JSONSchema, description: String) -> JSONSchema {

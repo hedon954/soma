@@ -5,6 +5,7 @@
 - 修订自：
   - [PRD 048](048-reviewable-record-derivation-and-user-controlled-interruption.md) 的主动中断入口、消息元信息和饮食评价
   - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md) 的指标来源入口与目标概览
+- 后续修订：[PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的宽幅单行明细浮层
 - 上游依据：
   - 维护者提供的进展页标注稿与教练交互反馈
   - [BUG 0031](../bugs/0031-feedback-sheet-transition-jank.md)

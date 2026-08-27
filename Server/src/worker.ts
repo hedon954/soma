@@ -5,6 +5,7 @@ import type { SomaStore } from "./store-contract.js";
 import {
   type DeviceToolDefinition,
   effectiveAllowedDeviceTools,
+  normalizeToolArguments,
   validateDeviceTool,
 } from "./tool-registry.js";
 
@@ -197,32 +198,29 @@ export class AgentWorker {
             );
           }
           const parameters = submittedToolParameters(job, call.toolName);
-          const definition = validateDeviceTool({
-            name: call.toolName,
-            schemaVersion: call.schemaVersion,
-            arguments: call.arguments,
-            allowedNames: [...activeRuntimeTools],
-            ...(parameters === undefined ? {} : { parameters }),
-          });
-          if (job.input?.allowedRemoteTools.includes(call.toolName) === true) {
-            await this.store.appendEvent(job.id, lease.epoch, {
-              kind: "tool",
-              phase: "started",
-              payloadVersion: 1,
-              payload: {
-                toolCallID: call.toolCallID,
-                toolName: call.toolName,
-                schemaVersion: call.schemaVersion,
-                arguments: call.arguments,
-                mutation: false,
-              },
-              createdAt: now,
+          const normalizedArguments = parameters === undefined
+            ? call.arguments
+            : normalizeToolArguments(call.arguments, parameters);
+          let definition: DeviceToolDefinition;
+          try {
+            definition = validateDeviceTool({
+              name: call.toolName,
+              schemaVersion: call.schemaVersion,
+              arguments: normalizedArguments,
+              allowedNames: [...activeRuntimeTools],
+              ...(parameters === undefined ? {} : { parameters }),
             });
-            const result = executeRuntimeTool(
-              job,
-              call.toolName,
-              call.arguments,
-            );
+          } catch (error) {
+            if (!isRetryableToolArgumentError(error)) throw error;
+            const result = {
+              ok: false,
+              code: "invalid_tool_arguments",
+              message: `${error.message} 请按已注册 Schema 修正后重新调用同一工具。`,
+              field: call.toolName,
+              expected:
+                "数值字段使用 JSON number；自然语言分数先换算成小数；其余字段满足严格 Schema",
+              retryable: true,
+            };
             await this.store.appendEvent(job.id, lease.epoch, {
               kind: "tool",
               phase: "completed",
@@ -232,6 +230,40 @@ export class AgentWorker {
                 toolName: call.toolName,
                 schemaVersion: call.schemaVersion,
                 arguments: call.arguments,
+                result,
+              },
+              createdAt: now,
+            });
+            continue;
+          }
+          if (job.input?.allowedRemoteTools.includes(call.toolName) === true) {
+            await this.store.appendEvent(job.id, lease.epoch, {
+              kind: "tool",
+              phase: "started",
+              payloadVersion: 1,
+              payload: {
+                toolCallID: call.toolCallID,
+                toolName: call.toolName,
+                schemaVersion: call.schemaVersion,
+                arguments: normalizedArguments,
+                mutation: false,
+              },
+              createdAt: now,
+            });
+            const result = executeRuntimeTool(
+              job,
+              call.toolName,
+              normalizedArguments,
+            );
+            await this.store.appendEvent(job.id, lease.epoch, {
+              kind: "tool",
+              phase: "completed",
+              payloadVersion: 1,
+              payload: {
+                toolCallID: call.toolCallID,
+                toolName: call.toolName,
+                schemaVersion: call.schemaVersion,
+                arguments: normalizedArguments,
                 result,
               },
               createdAt: now,
@@ -256,7 +288,7 @@ export class AgentWorker {
             toolCallID: call.toolCallID,
             toolName: call.toolName,
             schemaVersion: call.schemaVersion,
-            arguments: call.arguments,
+            arguments: normalizedArguments,
             mutation: definition.mutation,
             expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1_000),
           });
@@ -320,6 +352,11 @@ export class AgentWorker {
       clearInterval(heartbeat);
     }
   }
+}
+
+function isRetryableToolArgumentError(error: unknown): error is ProtocolError {
+  return error instanceof ProtocolError &&
+    error.message.startsWith("Tool 参数不符合固定 Schema：");
 }
 
 function executeRuntimeTool(

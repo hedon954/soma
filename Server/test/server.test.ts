@@ -43,6 +43,7 @@ import { InMemorySomaStore } from "../src/in-memory-store.js";
 import {
   deviceToolRegistry,
   effectiveAllowedDeviceTools,
+  normalizeToolArguments,
   validateDeviceTool,
 } from "../src/tool-registry.js";
 import {
@@ -666,6 +667,71 @@ test("tool validation rejects paths URLs and unsupported schemas", () => {
       arguments: {},
       allowedNames: ["unknown"],
     }),
+  );
+});
+
+test("numeric tool strings and simple fractions normalize by submitted schema", () => {
+  const normalized = normalizeToolArguments({
+    record_id: "42",
+    protein: "1/3",
+    items: [{ name: "虚构食物", fat: "2.5" }],
+  }, testToolParameters("update_meal"));
+
+  assert.equal(normalized.record_id, 42);
+  assert.equal(normalized.protein, 1 / 3);
+  assert.deepEqual(normalized.items, [{ name: "虚构食物", fat: 2.5 }]);
+
+  const conservative = normalizeToolArguments({
+    record_id: "1 2",
+    protein: "1 / 3",
+  }, testToolParameters("update_meal"));
+  assert.equal(conservative.record_id, "1 2");
+  assert.equal(conservative.protein, 1 / 3);
+});
+
+test("worker returns invalid tool arguments to the model for correction", async () => {
+  const store = new InMemorySomaStore();
+  const deviceID = randomUUID();
+  const input = makeJobInput({ allowedDeviceTools: ["update_meal"] });
+  const job = await store.submitJob({
+    deviceID,
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  let run = 0;
+  const worker = new AgentWorker(store, {
+    async run(_job, events) {
+      run += 1;
+      if (run === 1) {
+        return {
+          kind: "toolCalls" as const,
+          assistantText: "",
+          calls: [{
+            toolCallID: "invalid-call",
+            toolName: "update_meal",
+            schemaVersion: 2,
+            arguments: { record_id: "不是数字", protein: "1/3" },
+          }],
+        };
+      }
+      const failedTool = events.find((event) =>
+        event.kind === "tool" && event.phase === "completed"
+      );
+      const result = failedTool?.payload.result as Record<string, unknown>;
+      assert.equal(result.code, "invalid_tool_arguments");
+      assert.equal(result.retryable, true);
+      return { kind: "completed" as const, answer: "已自行修正参数。" };
+    },
+  });
+
+  assert.equal((await worker.runOnce())?.state, "queued");
+  assert.equal((await store.pendingToolRequests(deviceID)).length, 0);
+  assert.equal((await worker.runOnce())?.state, "completed");
+  const events = await store.events(job.id, 0, 100);
+  assert.equal(
+    (events.find((event) => event.kind === "output")?.payload.answer),
+    "已自行修正参数。",
   );
 });
 
@@ -1433,6 +1499,29 @@ function testToolParameters(name: string): Record<string, unknown> {
         limit: { type: "integer" },
       },
       required: ["query"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "update_meal") {
+    return {
+      type: "object",
+      properties: {
+        record_id: { type: "integer" },
+        protein: { type: "number" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              fat: { type: "number" },
+            },
+            required: ["name"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["record_id"],
       additionalProperties: false,
     };
   }

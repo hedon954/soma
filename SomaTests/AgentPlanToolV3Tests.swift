@@ -72,7 +72,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
             arguments(laterality: "none"),
             arguments(set: validSet().merging(["target_reps": 0]) { _, rhs in rhs }),
             arguments(set: validSet().merging(["target_duration_seconds": 30]) { _, rhs in rhs }),
-            arguments(order: "1")
+            arguments(order: "1次")
         ]
 
         for value in invalid {

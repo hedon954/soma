@@ -574,6 +574,69 @@ export function validateDeviceTool(input: {
   return definition;
 }
 
+export function normalizeToolArguments(
+  value: Record<string, unknown>,
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  return normalizeSchemaValue(value, schema) as Record<string, unknown>;
+}
+
+function normalizeSchemaValue(
+  value: unknown,
+  schema: Record<string, unknown>,
+): unknown {
+  const type = schema.type;
+  const expected = typeof type === "string"
+    ? [type]
+    : Array.isArray(type) && type.every((item) => typeof item === "string")
+      ? type as string[]
+      : [];
+  if (typeof value === "string") {
+    if (expected.includes("integer")) {
+      return parsedNumericString(value, true) ?? value;
+    }
+    if (expected.includes("number")) {
+      return parsedNumericString(value, false) ?? value;
+    }
+  }
+  if (isObject(value) && expected.includes("object")) {
+    const properties = isObject(schema.properties) ? schema.properties : {};
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+      const child = properties[key];
+      return [
+        key,
+        isObject(child) ? normalizeSchemaValue(item, child) : item,
+      ];
+    }));
+  }
+  if (Array.isArray(value) && expected.includes("array") && isObject(schema.items)) {
+    return value.map((item) => normalizeSchemaValue(
+      item,
+      schema.items as Record<string, unknown>,
+    ));
+  }
+  return value;
+}
+
+function parsedNumericString(value: string, requiresInteger: boolean): number | undefined {
+  const compact = value.trim();
+  if (compact.length === 0) return undefined;
+  const decimal = String.raw`\+?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
+  let parsed: number;
+  if (new RegExp(`^${decimal}$`).test(compact)) {
+    parsed = Number(compact);
+  } else {
+    const match = compact.match(new RegExp(`^(${decimal})\\s*\/\\s*(${decimal})$`));
+    if (match === null) return undefined;
+    const denominator = Number(match[2]);
+    if (denominator === 0) return undefined;
+    parsed = Number(match[1]) / denominator;
+  }
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  if (requiresInteger && !Number.isInteger(parsed)) return undefined;
+  return parsed;
+}
+
 function registryKey(name: string, schemaVersion: number): string {
   return `${name}@${schemaVersion}`;
 }

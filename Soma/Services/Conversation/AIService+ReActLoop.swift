@@ -78,6 +78,7 @@ extension AIService {
                     let result = try await applyResolvedToolCall(
                         native: checkpointCall.native,
                         call: checkpointCall.action,
+                        preflightResult: checkpointCall.preflightResult,
                         step: operationStep,
                         state: &toolState,
                         execute: execute,
@@ -247,7 +248,7 @@ extension AIService {
                 }
 
                 let resolvedCalls = try orderedDeltas.enumerated().map { position, accumulator in
-                    try accumulator.resolved(
+                    try accumulator.prepared(
                         fallbackID: "soma_call_\(currentModelStep)_\(position)"
                     )
                 }
@@ -261,7 +262,8 @@ extension AIService {
                     AgentCheckpointToolCall(
                         id: resolved.native.id ?? UUID().uuidString,
                         argumentsJSON: resolved.native.function.arguments,
-                        action: resolved.local
+                        action: resolved.local,
+                        preflightResult: resolved.preflightResult
                     )
                 }
                 checkpointBatches.append(AgentCheckpointToolBatch(
@@ -284,6 +286,7 @@ extension AIService {
                     let result = try await applyResolvedToolCall(
                         native: checkpointCall.native,
                         call: checkpointCall.action,
+                        preflightResult: checkpointCall.preflightResult,
                         step: toolStep,
                         state: &toolState,
                         execute: execute,
@@ -329,6 +332,7 @@ extension AIService {
     func applyResolvedToolCall(
         native: ToolCall,
         call: AgentToolCall,
+        preflightResult: AgentToolResult? = nil,
         step: Int,
         state: inout AgentToolLoopState,
         execute: (AgentToolCall) async throws -> AgentToolResult,
@@ -340,6 +344,9 @@ extension AIService {
         let skill = call.arguments.skillID.flatMap {
             AgentSkillRegistry.descriptor(id: $0, defaults: defaults)
         }
+        let traceInput = preflightResult == nil
+            ? AgentTraceText.json(call)
+            : native.function.arguments
         trace?(.span(AgentTraceSpan(
             id: spanID,
             step: step,
@@ -348,14 +355,17 @@ extension AIService {
             status: .running,
             startedAt: startedAt,
             endedAt: startedAt,
-            input: AgentTraceText.json(call)
+            input: traceInput
         )))
 
         let result: AgentToolResult
         let wasDeduplicated: Bool
         do {
-            if call.name.isMutation,
-               !state.executedMutations.insert(call.signature).inserted
+            if let preflightResult {
+                result = preflightResult
+                wasDeduplicated = false
+            } else if call.name.isMutation,
+                      !state.executedMutations.insert(call.signature).inserted
             {
                 result = .success("相同写入操作已经执行，本次重复调用已忽略。")
                 wasDeduplicated = true
@@ -394,7 +404,7 @@ extension AIService {
                 status: error is CancellationError ? .cancelled : .failed,
                 startedAt: startedAt,
                 endedAt: endedAt,
-                input: AgentTraceText.json(call),
+                input: traceInput,
                 metadata: AgentTraceText.jsonObject([
                     "tool_call_id": native.id ?? ""
                 ]),
@@ -432,7 +442,7 @@ extension AIService {
             status: result.ok ? .succeeded : .failed,
             startedAt: startedAt,
             endedAt: endedAt,
-            input: AgentTraceText.json(call),
+            input: traceInput,
             output: AgentTraceText.json(result),
             metadata: traceMetadata,
             errorMessage: result.ok ? nil : result.observation

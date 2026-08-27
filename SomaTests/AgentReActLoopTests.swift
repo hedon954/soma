@@ -5,6 +5,65 @@ import XCTest
 
 final class AgentReActLoopTests: XCTestCase {
     @MainActor
+    func testInvalidToolArgumentsReturnRoleToolFeedbackAndModelCanRetry() async throws {
+        let suiteName = "SomaTests.invalid-tool-arguments.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let transport = MockAgentStreamTransport(responses: [
+            .toolCall(
+                name: "update_meal",
+                argumentsFragments: [#"{"record_id":"不是数字","protein":"1/3"}"#]
+            ),
+            .toolCall(
+                name: "update_meal",
+                argumentsFragments: [#"{"record_id":42,"protein":12.5}"#]
+            ),
+            .text(["已按修正后的参数更新。"])
+        ])
+        let service = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key",
+            agentStreamLoader: transport.load
+        )
+        service.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
+        var executedCalls: [AgentToolCall] = []
+
+        let outcome = try await service.runAgent(
+            text: "把这份虚构餐食改成三分之一份",
+            images: [],
+            hasVideo: false,
+            context: "测试上下文"
+        ) { call in
+            executedCalls.append(call)
+            return .success("饮食记录已更新。")
+        }
+
+        XCTAssertEqual(executedCalls.count, 1)
+        XCTAssertEqual(executedCalls.first?.arguments.recordID, 42)
+        XCTAssertEqual(outcome.finalAnswer, "已按修正后的参数更新。")
+        XCTAssertEqual(outcome.observations.count, 2)
+        XCTAssertFalse(outcome.observations[0].result.ok)
+        XCTAssertEqual(outcome.observations[0].result.code, "invalid_tool_arguments")
+        XCTAssertEqual(outcome.observations[0].result.retryable, true)
+
+        let secondData = try JSONEncoder().encode(transport.requests[1])
+        let secondJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: secondData) as? [String: Any]
+        )
+        let messages = try XCTUnwrap(secondJSON["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.suffix(2).first?["role"] as? String, "assistant")
+        XCTAssertEqual(messages.last?["role"] as? String, "tool")
+        XCTAssertEqual(messages.last?["tool_call_id"] as? String, "call_1")
+        let content = try XCTUnwrap(messages.last?["content"] as? String)
+        XCTAssertTrue(content.contains("invalid_tool_arguments"))
+        XCTAssertTrue(content.contains("retryable"))
+    }
+
+    @MainActor
     func testAIServiceRunsMultipleRemoteReActTurns() async throws {
         let suiteName = "SomaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

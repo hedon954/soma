@@ -30,6 +30,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0106](0106-reviewable-derived-records-and-manual-interruption.md) | 0.0.17 | 已采纳 | 已知营养小计、动作定义投影与用户主动中断共用可审查人工恢复边界 |
 | [0107](0107-foreground-recovery-and-progress-evidence-projection.md) | 0.0.18 | 已采纳 | 前台恢复不切 Session；进展使用有界月度投影、分项来源与确定性全天消耗公式 |
 | [0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) | 0.0.18 | 已采纳 | 指标区域原位展开跟随浮层；暂停复用发送键；建议食用顺序进入可审查记录 |
+| [0109](0109-schema-guided-tool-argument-recovery.md) | Unreleased | 已采纳 | Schema 驱动数字归一化；参数错误回到模型纠正；进展浮层宽幅单行 |
 
 新决策使用 [ADR 模板](template.md)。
 

@@ -33,6 +33,17 @@ enum AgentToolSchemaValidator {
         }
         // 旧 schema 1 的形状由历史 decoder 与业务 Store 继续兜底；当前版本始终严格递归验证。
         guard schemaVersion == name.schemaVersion else { return }
+        let parameters = try parameterSchema(for: name)
+        try validate(raw, schema: parameters, path: name.rawValue)
+        if [.createProgram, .updateProgram, .getProgram].contains(name) {
+            try validatePlanV3(raw, for: name)
+        }
+        if [.createExercise, .createWorkout].contains(name) {
+            try validateBatchCreateV3(raw, for: name)
+        }
+    }
+
+    static func parameterSchema(for name: AgentToolName) throws -> [String: Any] {
         let encoded = try JSONEncoder().encode(name.chatTool)
         guard let tool = try JSONSerialization.jsonObject(with: encoded)
             as? [String: Any],
@@ -41,13 +52,7 @@ enum AgentToolSchemaValidator {
         else {
             throw ReActAgentError.invalidToolCall("\(name.rawValue) 本地 Schema 无法读取。")
         }
-        try validate(raw, schema: parameters, path: name.rawValue)
-        if [.createProgram, .updateProgram, .getProgram].contains(name) {
-            try validatePlanV3(raw, for: name)
-        }
-        if [.createExercise, .createWorkout].contains(name) {
-            try validateBatchCreateV3(raw, for: name)
-        }
+        return parameters
     }
 
     private static func validatePlanV2(

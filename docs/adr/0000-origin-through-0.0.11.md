@@ -10,6 +10,7 @@
   - [ADR 0105](0105-root-aware-tab-reselection.md)（窗口内最旧活 ADR，0.0.16；部分替代 Tab 再选决策）
   - [ADR 0106](0106-reviewable-derived-records-and-manual-interruption.md)（部分替代派生记录、人工恢复和界面元信息细则）
   - [ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md)（部分替代前台恢复与进展投影）
+  - [ADR 0109](0109-schema-guided-tool-argument-recovery.md)（部分替代 Tool 参数失败处理）
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
 - 下游落地：
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)

@@ -6,6 +6,7 @@
 - 部分替代：
   - [ADR 0106](0106-reviewable-derived-records-and-manual-interruption.md) 的中断入口与消息元信息排列
   - [ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md) 的来源 Sheet 交互
+- 后续替代：[ADR 0109](0109-schema-guided-tool-argument-recovery.md) 的宽幅单行浮层
 - 上游依据：
   - [PRD 050](../prd/050-lightweight-progress-disclosure-and-coach-controls.md)
   - [BUG 0031](../bugs/0031-feedback-sheet-transition-jank.md)

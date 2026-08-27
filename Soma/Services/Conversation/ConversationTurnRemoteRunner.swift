@@ -305,14 +305,17 @@ extension ConversationProcessingService {
                 )
             }
             let argumentData = try JSONEncoder().encode(request.arguments)
+            let normalizedArgumentData = request.schemaVersion == name.schemaVersion
+                ? try AgentToolArgumentNormalizer.normalize(argumentData, for: name)
+                : argumentData
             try AgentToolSchemaValidator.validate(
-                argumentData,
+                normalizedArgumentData,
                 for: name,
                 schemaVersion: request.schemaVersion
             )
             let arguments = try JSONDecoder().decode(
                 AgentToolArguments.self,
-                from: argumentData
+                from: normalizedArgumentData
             )
             let call = AgentToolCall(name: name, arguments: arguments)
             try job.transition(to: .waitingForDevice)

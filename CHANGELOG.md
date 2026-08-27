@@ -5,6 +5,15 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Changed
+
+- Tool 数字参数说明明确 JSON number/integer 与分数转小数；本地和远程可安全转换无单位数字字符串。
+- 进展明细浮层扩到接近手机可用宽度，组成名称、数值和公式优先保持单行。
+
+### Fixed
+
+- 修复 Tool 参数类型错误在进入 `role: tool` 回路前直接终止 Agent 的问题；模型现在会收到结构化错误并可在同一 ReAct Loop 内自行修正。
+
 ## [0.0.18] - 2026-08-27
 
 本版本让教练页从后台返回前台时更快恢复交互，并把进展页收紧为可直接查看月度变化、指标组成和

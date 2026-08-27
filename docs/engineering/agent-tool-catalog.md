@@ -64,6 +64,8 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 - create 每次都新增独立记录，同一轮可多次调用；纠正、补图或改已有记录必须先 list/get 再 update。
 - 每个对象 Schema 都设置 `additionalProperties: false`；兼容 Provider 时发送 `strict: true`，
   设备仍执行本地未知字段、类型、ID、关系和授权校验。
+- integer/number 的说明明确要求 JSON 数字。设备只按当轮 Schema 把无单位非负十进制字符串或简单
+  分数字符串转换为数字；integer 换算后仍须为整数，带单位或含混文本不转换。
 - 删除、外发与高影响操作继续要求当前用户消息明确授权。
 
 ## 结果与错误
@@ -76,6 +78,8 @@ ok, code, message, data?, record_refs?, page?, error?
 
 - `record_refs` 返回业务类型和 Int64 ID，供 UI 与后续 Turn 稳定引用。
 - 错误提供稳定的 `code/field/expected/retryable`，并以 `role: tool` 返回模型修正。
+- 已知 Tool 的参数校验失败使用 `invalid_tool_arguments`，保留原 `tool_call_id` 并进入检查点；模型在
+  既有步数预算内生成新参数。未知 Tool、安全拒绝和 Schema 版本冲突不降级为可重试错误。
 - 幂等签名包含解析后的业务 ID 和最终 `occurred_at`；成功写入在重试时不会重复发生。
 - 原始参数、UUID 锚点和 Schema 版本只进入开发者 Trace，不进入普通聊天文案。
 
