@@ -696,7 +696,10 @@ struct GuidedWorkoutView: View {
             presentation = next
         }
         do {
-            try await coordinator.beginCurrentSet(in: modelContext)
+            try await coordinator.beginCurrentSet(
+                in: modelContext,
+                afterPhaseTransition: refreshSnapshot
+            )
             await refreshSnapshot()
         } catch {
             presentOperationError(error)
@@ -748,7 +751,8 @@ struct GuidedWorkoutView: View {
             guard !Task.isCancelled else { return }
             try await coordinator.advanceTimelineIfDue(
                 expectedRevision: revision,
-                in: modelContext
+                in: modelContext,
+                afterPhaseTransition: refreshSnapshot
             )
             await refreshSnapshot()
         } catch is CancellationError {

@@ -181,7 +181,7 @@ private final class CueSpy: WorkoutCueProviding {
 }
 
 final class GuidedWorkoutCoordinatorTests: XCTestCase {
-    private struct Fixture {
+    struct Fixture {
         var container: ModelContainer
         var context: ModelContext
         var defaults: UserDefaults
@@ -1763,7 +1763,7 @@ extension GuidedWorkoutCoordinatorTests {
     }
 
     @MainActor
-    private func makeFixture(
+    func makeFixture(
         firstSetIsWarmup: Bool,
         setCount: Int,
         recordingPolicy: AutoRecordingPolicy = .enabled,

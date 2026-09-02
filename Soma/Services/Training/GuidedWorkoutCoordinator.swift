@@ -50,6 +50,8 @@ final class GuidedWorkoutCoordinator {
     @ObservationIgnored var announcedCountdownValues = Set<Int>()
     @ObservationIgnored var activeEffortCompletionLease:
         EffortCompletionLease?
+    @ObservationIgnored var phaseRecordingStartTask: Task<Void, Never>?
+    @ObservationIgnored var phaseRecordingStartID: UUID?
 
     init(
         recorder: WorkoutRecordingControlling,
@@ -96,6 +98,7 @@ final class GuidedWorkoutCoordinator {
         _ session: WorkoutSession,
         in context: ModelContext
     ) async -> WorkoutCameraSessionOwnerToken {
+        cancelPendingPhaseRecordingStart()
         let owner = recorder.claimWorkoutSession(sessionID: session.id)
         activeSessionOwner = owner
         activeEffortCompletionLease = nil
@@ -141,6 +144,7 @@ final class GuidedWorkoutCoordinator {
     @discardableResult
     func deactivate(owner: WorkoutCameraSessionOwnerToken) async -> Bool {
         guard isActive(owner: owner) else { return false }
+        cancelPendingPhaseRecordingStart()
         await recorder.endWorkoutSession(owner: owner)
         guard isActive(owner: owner) else { return false }
         activeSessionOwner = nil
@@ -212,7 +216,8 @@ final class GuidedWorkoutCoordinator {
     }
 
     func beginCurrentSet(
-        in context: ModelContext
+        in context: ModelContext,
+        afterPhaseTransition: @MainActor () async -> Void = {}
     ) async throws {
         let session = try activeSession(in: context)
         guard session.status == .active,
@@ -257,13 +262,16 @@ final class GuidedWorkoutCoordinator {
             session: session
         )
         if shouldStartRecording {
-            await recorder.waitUntilPreviewHostSettled(
-                from: previousPreviewHostID
-            )
-            await startRecording(
-                for: performance,
-                set: set,
+            // 带练页只渲染不可变快照。先让页面读到 setInProgress 并挂载
+            // 放大相机宿主，再等待宿主稳定和写文件；否则录像会先在旧的
+            // PIP 宿主上等待超时，页面只能在本方法返回后才切换。
+            await afterPhaseTransition()
+            await startRecordingAfterPhaseTransition(
+                sessionID: session.id,
+                performanceID: performance.id,
+                setID: set.id,
                 effortID: effort.id,
+                previousPreviewHostID: previousPreviewHostID,
                 automatic: !queuedManualRecording
             )
         } else {
@@ -765,7 +773,8 @@ final class GuidedWorkoutCoordinator {
 
     func advanceTimelineIfDue(
         expectedRevision: Int,
-        in context: ModelContext
+        in context: ModelContext,
+        afterPhaseTransition: @MainActor () async -> Void = {}
     ) async throws {
         let session = try activeSession(in: context)
         guard session.status == .active,
@@ -775,7 +784,10 @@ final class GuidedWorkoutCoordinator {
         else { return }
         switch session.guidedPhase {
         case .preSetCountdown:
-            try await beginCurrentSet(in: context)
+            try await beginCurrentSet(
+                in: context,
+                afterPhaseTransition: afterPhaseTransition
+            )
         case .resting:
             try finishRest(in: context)
         case .setInProgress:

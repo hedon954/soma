@@ -1,6 +1,6 @@
 # 教练与训练严重 Bug 修复跟踪
 
-- 状态：第二轮实现、自动化验证与 Release 真机安装完成，待人工交互验收
+- 状态：第二轮带练崩溃已通过用户复验；第三轮修复首个工作组自动录像启动
 - 建立日期：2026-09-02
 - 范围：教练消息生命周期、训练 Tool 真值、训练记录展示、带练恢复、语音输入、会话命名、快捷相机、前台恢复性能、模型 Extra Config、思考事件与进展页能量口径
 - 验证规则：每项先补回归测试，完成后记录局部测试、`make check`、`make verify` 与适用的真机证据
@@ -20,7 +20,7 @@
 - [x] BUG-06：Trusted Context 使用唯一、明确的本地时间与时区。
   证据：`AgentV2Tests.testTrustedTimeFreezesLoopStartAndFormatsAtPromptTime`、`testTrustedTimeKeepsNonWholeHourOffsetAndDaylightSaving`、`AgentJobTests.testLoopStartTimeIsFrozenAcrossManualRetry`。
 - [ ] BUG-07：带练 SwiftData 生命周期防护、可恢复错误与未完成 Session 左滑删除。
-  第二轮根因：三份 0.0.18 (22) 报告已用 UUID 完全匹配的 Release dSYM 符号化；相同 `SIGABRT` 均由 `GuidedWorkoutView.swift:182` 的多层 relationship 查询进入 CoreData `NSSQLGenerator`。第二轮已把带练画面改为 `GuidedWorkoutScreenSnapshot`，按 `sessionID → performanceID → workoutSetID` 单层标量查询并仅渲染 DTO；动作替换、阶段操作与记录投影也只跨异步边界传稳定 ID。未完成训练卡还必须保证底部内容不被裁切；左滑操作使用无文字的通用红色垃圾桶按钮。仍需新 Release 真机十轮生命周期复验及崩溃日志确认。
+  第二轮根因：三份 0.0.18 (22) 报告已用 UUID 完全匹配的 Release dSYM 符号化；相同 `SIGABRT` 均由 `GuidedWorkoutView.swift:182` 的多层 relationship 查询进入 CoreData `NSSQLGenerator`。第二轮已把带练画面改为 `GuidedWorkoutScreenSnapshot`，按 `sessionID → performanceID → workoutSetID` 单层标量查询并仅渲染 DTO；动作替换、阶段操作与记录投影也只跨异步边界传稳定 ID。用户已确认带练不再崩溃；未完成训练卡还必须保证底部内容不被裁切，左滑操作使用无文字的通用红色垃圾桶按钮。仍需完成十轮生命周期复验及导出新崩溃日志，才能关闭。
 - [ ] BUG-08：流式滚动使用单一尾随状态机，禁止滚入空白区域。
   代码完成：可测量消息尾部、内容 revision、`scrollPosition` 和用户上滑暂停已统一；`CoachMessageAutoScrollGateTests` 与长流式 Simulator UI 2 项通过。仍需 Release 真机长会话、键盘和零 token 场景验收。
 - [x] BUG-09：首次进入定位最后 AI 回复尾部；教练 Tab 仅双击回底。
@@ -51,6 +51,9 @@
 - [ ] BUG-20：进展页能量展示改为同口径、可追溯指标。
   不再把截至当前活动消耗按当天已过比例线性外推成 TDEE，也不把本地训练 MET 当作全部活动消耗。主层显示“已记录摄入”和“截至当前总消耗”，次层拆分“静息消耗”与“活动消耗”；没有 HealthKit 活动事实时明确写“训练消耗”。能量差只比较截至当前的摄入与消耗；缺任一必要事实保持空，不猜测活动系数。来源映射 4 项单测与 Simulator UI 回归已通过，明确不存在“全天总消耗预估”；待真机 HealthKit 有/无活动能量两种路径验收。
 
+- [ ] BUG-21：首个工作组进入执行态后自动录像必须可靠启动。
+  第三轮根因：带练改为不可变快照后，倒计时拥有的 SwiftUI `.task` 会在快照切到 `setInProgress` 时被取消；原录像请求继承该取消，或在旧画中画宿主上等待超时，因此真机只进入第一组但未开始写文件。修复后先提交并刷新执行态快照，再由协调器独立持有录像启动任务；等待新相机宿主稳定后，按 Session、Performance、Set、Effort 稳定 ID 重新获取和校验事实，再调用录像。退出、暂停、跳过时统一取消待启动任务。`testAutomaticRecordingWaitsForInProgressSnapshotPresentation` 会主动取消倒计时任务并断言录像仍按“快照展示 → 宿主等待 → 开始录像”的顺序启动；相关带练与相机测试 71 项、`make check`、`make verify` 已通过，完整 XCTest 685 项与 Swift Testing 7 项无失败。待 Release 真机确认第一组出现录像状态并产出可回看的录像后关闭。
+
 ## 交付 TODO
 
 - [x] 修复当前所有编译错误与失败测试，补齐 BUG-18～20 的确定性测试及思考逐态 UI fixture。
@@ -60,12 +63,13 @@
 - [x] 按中文 Conventional Commit 提交并推送 `main`：`70cb5c5`。
 - [x] 使用匹配签名的 Release/设备流程安装并启动连接的 iPhone：Soma 0.0.18 (22) Release 已安装并成功启动；安装成功不替代人工交互验收。
 - [ ] 真机人工门禁：带练 10 轮及新崩溃日志、训练卡布局、消息元信息、中文语音停顿、快捷相机桌面/锁屏、前台恢复性能、Extra Config 设置、思考展开/自动收起和进展页能量口径。
+- [ ] 真机人工门禁：默认策略进入首个工作组时自动显示录像中，并在完成后得到可回看的录像文件。
 
 ## 当前执行顺序
 
-1. 审查最终 diff，提交并推送本任务范围。
+1. 完成 BUG-21 全量门禁，审查 diff，提交并推送本任务范围。
 2. 构建 Release 并安装、启动连接的真机。
-3. 人工复验 BUG-07/08/11/13/14/18/19/20；缺证据的项目继续保持未完成。
+3. 人工复验 BUG-21，并继续完成 BUG-07/08/11/13/14/18/19/20 的未结门禁。
 
 ## 已锁定决策
 

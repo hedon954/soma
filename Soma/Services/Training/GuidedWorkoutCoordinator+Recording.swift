@@ -318,6 +318,66 @@ extension GuidedWorkoutCoordinator {
         await recorder.idlePreviewKeepingSessionOwner()
     }
 
+    /// 快照从倒计时切换到执行态时，SwiftUI 会取消原倒计时 `.task`。
+    /// 录像启动必须由协调器独立持有，否则父任务的取消会触发相机服务的
+    /// cancellation handler，导致第一组只显示取景却没有真正开始写文件。
+    func startRecordingAfterPhaseTransition(
+        sessionID: UUID,
+        performanceID: UUID,
+        setID: UUID,
+        effortID: UUID,
+        previousPreviewHostID: UUID?,
+        automatic: Bool
+    ) async {
+        cancelPendingPhaseRecordingStart()
+        let requestID = UUID()
+        phaseRecordingStartID = requestID
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await recorder.waitUntilPreviewHostSettled(
+                from: previousPreviewHostID
+            )
+            guard !Task.isCancelled,
+                  phaseRecordingStartID == requestID,
+                  activeSessionID == sessionID,
+                  let context = activeContext,
+                  let session = try? activeSession(in: context),
+                  session.id == sessionID,
+                  session.status == .active,
+                  session.guidedPhase == .setInProgress,
+                  let performance = currentPerformance(
+                      for: session,
+                      in: context
+                  ),
+                  performance.id == performanceID,
+                  let set = currentSet(for: session, in: context),
+                  set.id == setID,
+                  set.status == .inProgress,
+                  let effort = currentEffort(for: session, in: context),
+                  effort.id == effortID,
+                  effort.status == .inProgress
+            else { return }
+            await startRecording(
+                for: performance,
+                set: set,
+                effortID: effortID,
+                automatic: automatic
+            )
+        }
+        phaseRecordingStartTask = task
+        await task.value
+        if phaseRecordingStartID == requestID {
+            phaseRecordingStartTask = nil
+            phaseRecordingStartID = nil
+        }
+    }
+
+    func cancelPendingPhaseRecordingStart() {
+        phaseRecordingStartTask?.cancel()
+        phaseRecordingStartTask = nil
+        phaseRecordingStartID = nil
+    }
+
     func startRecording(
         for performance: ExercisePerformance,
         set: WorkoutSet,
@@ -373,6 +433,7 @@ extension GuidedWorkoutCoordinator {
     }
 
     func cancelActiveRecording() async {
+        cancelPendingPhaseRecordingStart()
         let attempt = activeRecordingAttempt
         if let attempt {
             finishRecordingState(for: attempt)

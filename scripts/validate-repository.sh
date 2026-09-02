@@ -249,9 +249,12 @@ grep -q 'skipMovieOutputGeometry = state == .startingRecording' \
 grep -q 'guard !skipMovieOutputGeometry, !resources.movieOutput.isRecording else' \
   "$(service_file WorkoutCameraCaptureLifecycle.swift)" ||
   fail "BUG 0025: capture geometry must not rewrite movie output while recording"
-grep -q 'waitUntilPreviewHostSettled' \
+grep -q 'startRecordingAfterPhaseTransition' \
   "$(service_file GuidedWorkoutCoordinator.swift)" ||
-  fail "BUG 0026: beginCurrentSet must wait for the set preview host before recording"
+  fail "BUG 0026: beginCurrentSet must hand recording start to the phase transition coordinator"
+grep -q 'waitUntilPreviewHostSettled' \
+  "$(service_file GuidedWorkoutCoordinator+Recording.swift)" ||
+  fail "BUG 0026: phase recording start must wait for the set preview host"
 grep -q 'shouldRebuildCaptureConnections' \
   "$(service_file WorkoutCameraService.swift)" ||
   fail "BUG 0026: live recording must not rebuild capture connections on preview host handoff"
