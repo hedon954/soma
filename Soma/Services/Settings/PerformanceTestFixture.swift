@@ -451,7 +451,11 @@ enum PerformanceTestFixture {
         let exerciseName = ProcessInfo.processInfo.environment[
             "SOMA_UI_WORKOUT_NAME"
         ] ?? "单杠悬吊"
-        let definition = ExerciseDefinition(canonicalName: exerciseName)
+        let definition = ExerciseDefinition(
+            canonicalName: exerciseName,
+            primaryMuscles: ["前臂"],
+            secondaryMuscles: ["上背"]
+        )
         definition.targetKind = .duration
         definition.laterality = ExerciseLaterality(
             rawValue: ProcessInfo.processInfo.environment[
@@ -608,7 +612,11 @@ enum PerformanceTestFixture {
         startedAt: Date,
         context: ModelContext
     ) {
-        let definition = ExerciseDefinition(canonicalName: "虚构复盘深蹲")
+        let definition = ExerciseDefinition(
+            canonicalName: "虚构复盘深蹲",
+            primaryMuscles: ["股四头肌"],
+            secondaryMuscles: ["臀大肌"]
+        )
         context.insert(definition)
         let prescription = TemplateExercisePrescription(
             exerciseID: definition.id,

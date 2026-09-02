@@ -176,44 +176,63 @@ struct HistoryDayHeader: View {
     var metricUnit: String?
     let isExpanded: Bool
     let toggle: () -> Void
+    var shareAction: (() -> Void)?
 
     var body: some View {
-        Button(action: toggle) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .textCase(nil)
-                    Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                if let metric {
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(metric)
-                            .font(.title3.weight(.semibold).monospacedDigit())
+        HStack(alignment: .center, spacing: 0) {
+            Button(action: toggle) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.headline)
                             .foregroundStyle(.primary)
-                        if let metricUnit {
-                            Text(metricUnit)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            .textCase(nil)
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    if let metric {
+                        HStack(alignment: .firstTextBaseline, spacing: 3) {
+                            Text(metric)
+                                .font(.title3.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.primary)
+                            if let metricUnit {
+                                Text(metricUnit)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
                 }
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                .padding(.vertical, HistoryDayCardLayout.headerVerticalPadding)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, HistoryDayCardLayout.headerVerticalPadding)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(accessibilityValue)
+            .accessibilityHint("点按折叠或展开这一天的记录")
+
+            if let shareAction {
+                Button(action: shareAction) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.body.weight(.medium))
+                        .frame(
+                            width: AppTheme.minimumTapTarget,
+                            height: AppTheme.minimumTapTarget
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("workout-day-share")
+                .accessibilityLabel("分享\(title)训练记录")
+                .accessibilityHint("生成当天全部训练记录的分享海报")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(accessibilityValue)
-        .accessibilityHint("点按折叠或展开这一天的记录")
     }
 
     private var accessibilityValue: String {

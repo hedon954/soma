@@ -186,6 +186,26 @@ final class RecordOptimizationUITests: XCTestCase {
         keepScreenshot(of: app, named: "completed-session-reuses-progress-row")
     }
 
+    func testWorkoutHistoryDayHeaderSharesTheWholeDay() {
+        let app = launchRecordFixture(appearance: "dark")
+        let share = revealWorkoutDayShare(in: app)
+        keepScreenshot(of: app, named: "workout-history-day-share-button")
+        share.tap()
+
+        XCTAssertTrue(app.navigationBars["分享训练"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["训练分享海报"]
+                .waitForExistence(timeout: 10)
+        )
+        keepScreenshot(of: app, named: "workout-history-day-share")
+    }
+
+    func testWorkoutHistoryDayShareButtonInLightTheme() {
+        let app = launchRecordFixture(appearance: "light")
+        _ = revealWorkoutDayShare(in: app)
+        keepScreenshot(of: app, named: "workout-history-day-share-button-light")
+    }
+
     func testSettingsAreFlattenedAndBirthDateHasNoToggle() {
         let app = launchEmptyApp(appearance: "light")
         let settings = app.tabBars.buttons["设置"]
@@ -335,6 +355,21 @@ final class RecordOptimizationUITests: XCTestCase {
             list.swipeDown()
         }
         XCTAssertTrue(title.waitForExistence(timeout: 5))
+    }
+
+    private func revealWorkoutDayShare(in app: XCUIApplication) -> XCUIElement {
+        app.tabBars.buttons["进展"].tap()
+
+        let history = app.buttons["训练记录"].firstMatch
+        XCTAssertTrue(history.waitForExistence(timeout: 15))
+        history.tap()
+        XCTAssertTrue(app.navigationBars["训练记录"].waitForExistence(timeout: 5))
+
+        let share = app.buttons.matching(identifier: "workout-day-share").firstMatch
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(share.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(share.frame.height, 44)
+        return share
     }
 
     private func keepScreenshot(of app: XCUIApplication, named name: String) {

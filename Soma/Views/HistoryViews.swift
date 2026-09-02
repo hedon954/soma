@@ -10,6 +10,8 @@ struct WorkoutHistoryView: View {
     @State private var isLoading = false
     @State private var collapsedDays: Set<Date> = []
     @State private var availableDates: Set<Date> = []
+    @State private var shareModel: WorkoutSharePosterModel?
+    @State private var shareErrorMessage: String?
 
     private var dayGroups: [WorkoutHistoryDayGroup] {
         WorkoutHistoryQuery.groupedByDay(loaded)
@@ -51,7 +53,8 @@ struct WorkoutHistoryView: View {
                             metric: group.totalKnownVolumeKG.map(HistoryDayMetrics.kilograms),
                             metricUnit: group.totalKnownVolumeKG == nil ? nil : "kg",
                             isExpanded: isExpanded,
-                            toggle: { toggleDay(group.day) }
+                            toggle: { toggleDay(group.day) },
+                            shareAction: { shareWorkoutDay(group.day) }
                         )
                         .historyDayCardRow(edge: isExpanded ? .top : .single)
 
@@ -121,6 +124,24 @@ struct WorkoutHistoryView: View {
         .onChange(of: filter) { _, _ in
             reload()
         }
+        .sheet(item: $shareModel) { model in
+            WorkoutShareSheet(model: model)
+        }
+        .alert(
+            "无法分享训练",
+            isPresented: Binding(
+                get: { shareErrorMessage != nil },
+                set: {
+                    if !$0 {
+                        shareErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(shareErrorMessage ?? "")
+        }
     }
 
     private func toggleDay(_ day: Date) {
@@ -166,6 +187,21 @@ struct WorkoutHistoryView: View {
         try? GuidedWorkoutRecordStore.delete(workout, in: modelContext)
         if loaded.count < WorkoutHistoryQuery.pageSize, hasMore {
             loadMore()
+        }
+    }
+
+    private func shareWorkoutDay(_ day: Date) {
+        do {
+            guard let model = try WorkoutSharePosterBuilder.makeModel(
+                forDay: day,
+                in: modelContext
+            ) else {
+                shareErrorMessage = "这一天已经没有可分享的训练记录。"
+                return
+            }
+            shareModel = model
+        } catch {
+            shareErrorMessage = "读取当天训练记录失败，请稍后重试。"
         }
     }
 }

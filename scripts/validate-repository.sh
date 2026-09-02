@@ -268,6 +268,17 @@ grep -q 'shouldIgnoreTransientPreviewInterruption' \
   Soma/Views/GuidedWorkoutInteractionState.swift ||
   fail "BUG 0026: previewing session-interruption must not stop an owned capture session"
 
+share_aggregation_calls="$({
+  grep -F -c 'return makeModel(workouts: workouts, scope: scope)' \
+    Soma/Views/WorkoutSharePosterBuilder.swift || true
+})"
+[[ "$share_aggregation_calls" -eq 2 ]] ||
+  fail "daily workout and plan execution sharing must use the same aggregation path"
+grep -q 'WorkoutSharePosterBuilder.makeModel(' Soma/Views/HistoryViews.swift ||
+  fail "workout history day sharing must use the shared workout poster aggregator"
+grep -q 'forDay: day' Soma/Views/HistoryViews.swift ||
+  fail "workout history day sharing must refetch the complete natural-day batch"
+
 for privacy_key in \
   NSCameraUsageDescription \
   NSMicrophoneUsageDescription \
