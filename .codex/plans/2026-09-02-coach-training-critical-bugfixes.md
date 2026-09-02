@@ -52,7 +52,7 @@
   不再把截至当前活动消耗按当天已过比例线性外推成 TDEE，也不把本地训练 MET 当作全部活动消耗。主层显示“已记录摄入”和“截至当前总消耗”，次层拆分“静息消耗”与“活动消耗”；没有 HealthKit 活动事实时明确写“训练消耗”。能量差只比较截至当前的摄入与消耗；缺任一必要事实保持空，不猜测活动系数。来源映射 4 项单测与 Simulator UI 回归已通过，明确不存在“全天总消耗预估”；待真机 HealthKit 有/无活动能量两种路径验收。
 
 - [ ] BUG-21：首个工作组进入执行态后自动录像必须可靠启动。
-  第三轮根因：带练改为不可变快照后，倒计时拥有的 SwiftUI `.task` 会在快照切到 `setInProgress` 时被取消；原录像请求继承该取消，或在旧画中画宿主上等待超时，因此真机只进入第一组但未开始写文件。修复后先提交并刷新执行态快照，再由协调器独立持有录像启动任务；等待新相机宿主稳定后，按 Session、Performance、Set、Effort 稳定 ID 重新获取和校验事实，再调用录像。退出、暂停、跳过时统一取消待启动任务。`testAutomaticRecordingWaitsForInProgressSnapshotPresentation` 会主动取消倒计时任务并断言录像仍按“快照展示 → 宿主等待 → 开始录像”的顺序启动；相关带练与相机测试 71 项、`make check`、`make verify` 已通过，完整 XCTest 685 项与 Swift Testing 7 项无失败。待 Release 真机确认第一组出现录像状态并产出可回看的录像后关闭。
+  第三轮根因：带练改为不可变快照后，倒计时拥有的 SwiftUI `.task` 会在快照切到 `setInProgress` 时被取消；原录像请求继承该取消，或在旧画中画宿主上等待超时，因此真机只进入第一组但未开始写文件。修复后先提交并刷新执行态快照，再由协调器独立持有录像启动任务；等待新相机宿主稳定后，按 Session、Performance、Set、Effort 稳定 ID 重新获取和校验事实，再调用录像。退出、暂停、跳过时统一取消待启动任务。`testAutomaticRecordingWaitsForInProgressSnapshotPresentation` 会主动取消倒计时任务并断言录像仍按“快照展示 → 宿主等待 → 开始录像”的顺序启动；相关带练与相机测试 71 项、`make check`、`make verify` 已通过，完整 XCTest 685 项与 Swift Testing 7 项无失败。修复提交 `d55241f` 已推送，Soma 0.0.18 (22) Release 已重新安装并启动到物理设备；待真机确认第一组出现录像状态并产出可回看的录像后关闭。
 
 ## 交付 TODO
 
@@ -86,4 +86,5 @@
 - 第一轮阶段证据（已被真机回归失败覆盖）：2026-09-02 的 `make check`、`make verify`、Server 33 项、XCTest 659 项、Swift Testing 7 项及定向 Simulator UI 曾通过；这些结果不代表第二轮实现已通过。
 - 第二轮自动化证据：`make check`、`make verify` 通过；Server 37 项中 36 通过、1 项仅因未配置 `SOMA_TEST_DATABASE_URL` 跳过；XCTest 684 项及 Swift Testing 7 项全部通过。Agent 阶段/推理 UI 3 项全部通过；训练记录、复盘、受力图、元信息和进展能量相关 UI 12 项在修复后全部通过（10 项首轮通过，2 项修复后定向复跑通过）。
 - Release 安装证据：Soma 0.0.18 (22) 已安装到物理设备 `00008150-0001145221DA401C` 并成功启动；可复用设备构建指纹记录为 `837F1BA9-9583-5432-A72C-D84B39F4033C-Release.stamp`。
+- 第三轮 BUG-21 证据：`d55241f` 已推送；带练/录像相关 71 项、`make check`、`make verify` 通过，XCTest 增至 685 项且无失败；同一 Release 版本已重新安装并启动到物理设备，安装成功不替代第一组实际录像验收。
 - 待补：BUG-07 新 Release 带练十轮与崩溃日志；BUG-08 长流式真机；BUG-11 中文语音真机；BUG-13 桌面/锁屏相机；BUG-14 Release signpost 与 p95；BUG-03/04/05/15/16/17/18/19/20 人工交互验收。以上证据补齐前，对应 TODO 保持未勾选。
