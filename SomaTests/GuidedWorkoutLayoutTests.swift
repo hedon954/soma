@@ -474,7 +474,6 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
     func testVisibleCountdownPublishesCompletionAtDeadline() async {
         let completed = expectation(description: "倒计时结束")
         let view = GuidedSetCountdownView(
-            set: nil,
             targetText: "5 次",
             phaseStartedAt: .now.addingTimeInterval(-4),
             deadlineAt: nil,
@@ -540,10 +539,11 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         let view = GuidedExpandedCaptureView(
             camera: camera,
             sessionStartedAt: .now.addingTimeInterval(-38),
-            performance: performance,
+            exerciseName: performance.exerciseName,
+            performanceOrder: performance.order,
             performanceCount: 4,
-            set: sets[1],
-            sets: sets,
+            currentSetID: sets[1].id,
+            sets: sets.map(guidedSetSnapshot),
             targetText: "自重 × 5",
             effortSide: .none,
             isAutomaticDuration: false,
@@ -623,10 +623,11 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         let view = GuidedExpandedCaptureView(
             camera: camera,
             sessionStartedAt: .now.addingTimeInterval(-10),
-            performance: performance,
+            exerciseName: performance.exerciseName,
+            performanceOrder: performance.order,
             performanceCount: 2,
-            set: sets[0],
-            sets: sets,
+            currentSetID: sets[0].id,
+            sets: sets.map(guidedSetSnapshot),
             targetText: "自重 × 5 次",
             effortSide: .none,
             isAutomaticDuration: false,
@@ -666,4 +667,24 @@ final class GuidedWorkoutLayoutTests: XCTestCase {
         XCTAssertGreaterThan(data.count, 10000)
         window.isHidden = true
     }
+}
+
+private func guidedSetSnapshot(_ set: WorkoutSet) -> GuidedWorkoutSetSnapshot {
+    GuidedWorkoutSetSnapshot(
+        id: set.id,
+        performanceID: set.performanceID,
+        order: set.order,
+        kindRaw: set.kindRaw,
+        statusRaw: set.statusRaw,
+        plannedTargetKindRaw: set.plannedTargetKindRaw,
+        plannedReps: set.plannedReps,
+        plannedDurationSeconds: set.plannedDurationSeconds,
+        plannedWeightKG: set.plannedWeightKG,
+        plannedRestSeconds: set.plannedRestSeconds,
+        restBetweenSidesSeconds: set.restBetweenSidesSeconds,
+        actualReps: set.actualReps,
+        actualDurationSeconds: set.actualDurationSeconds,
+        actualWeightKG: set.actualWeightKG,
+        actualRestSeconds: set.actualRestSeconds
+    )
 }

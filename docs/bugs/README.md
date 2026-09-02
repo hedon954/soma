@@ -55,6 +55,12 @@
 | [0042](0042-exercise-editor-eager-merge-query-hang.md) | 已修复并通过真机交互验收 | 动作编辑页提前查询并物化全部合并候选，动作库较大时直接卡死 | 500 条虚构动作 UI 回归、保存时查重与真机交互复验 |
 | [0043](0043-coach-foreground-recovery-main-thread-stall.md) | 已修复，待 Release 真机量化复验 | 教练页回前台时同步解析 Session 与恢复 Agent 队列，造成触摸短时冻结 | 保持当前 Session、FIFO 队首恢复、前台 signpost 与 `perf-check` |
 | [0044](0044-tool-argument-type-mismatch-aborts-react.md) | 已修复，待真机交互验收 | 兼容模型把数字写成字符串后，参数解码绕过 Tool 错误回路并终止任务 | Schema 数字归一化、`role: tool` 自纠与本地/远程测试 |
+| [0045](0045-guided-workout-coredata-abort.md) | 第二轮修复，待新 Release 真机 | 带练 relationship `@Query` 在 `NSSQLGenerator` 触发 `SIGABRT` | 标量 ID 快照、DTO 渲染、静态禁用多层查询与十轮真机复验 |
+| [0046](0046-coach-stream-scrolls-into-blank-space.md) | 已修复，待真机复验 | 流式零 token/首 token 阶段消息页滚入空白 | 真实消息尾部、布局测量、单一 tail-follow 状态机 |
+| [0047](0047-terminal-failure-retry-leaves-stale-error.md) | 已修复，待真机复验 | 手动重试后旧失败卡残留并新增处理气泡 | 预绑定响应、同 ID 清理失败、成功步骤检查点 |
+| [0048](0048-speech-segment-overwrites-committed-text.md) | 已修复，待真机复验 | 语音停顿后继续说话覆盖既有文案 | committed/current partial 分离与停顿提交 |
+| [0049](0049-quick-camera-presentation-deadlock.md) | 代码已修复，待真机 | 桌面/锁屏快捷相机偶发不能拍摄也不能取消 | 根层状态机、单层全屏相机、锁屏安全取消 |
+| [0050](0050-coach-foreground-recovery-freezes-again.md) | 二阶段修复，待量化 | 回到教练页仍短时无法滚动和输入 | 真首帧、generation 恢复、有界 DTO 缓存与 Release p95 |
 
 新增记录时从 [模板](template.md) 开始，并同步更新本索引。
 

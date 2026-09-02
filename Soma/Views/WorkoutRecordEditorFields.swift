@@ -79,6 +79,9 @@ struct WorkoutNumericField: View {
         if isInvalid {
             return "输入无效，\(rangeDescription)"
         }
-        return text.isEmpty ? "未记录" : "\(text) \(unit)"
+        if text.isEmpty {
+            return emptyPrompt == "自重" ? "自重" : "未记录"
+        }
+        return "\(text) \(unit)"
     }
 }

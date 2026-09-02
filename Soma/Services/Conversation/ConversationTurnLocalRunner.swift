@@ -289,9 +289,6 @@ extension ConversationProcessingService {
 
         context.session.touch(at: .now)
         try? context.modelContext.save()
-        if job.state == .succeeded {
-            titleGenerator.request(context: context)
-        }
     }
 
     func handleAttemptFailure(
@@ -319,11 +316,13 @@ extension ConversationProcessingService {
                 : "Soma 已保存本次任务，回到前台后会继续处理。"
             if !job.responseTextSnapshot.isEmpty {
                 responseMessage.text = job.responseTextSnapshot
-            } else if responseMessage.text.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ).isEmpty {
-                responseMessage.text = pausedText
+            } else {
+                responseMessage.text = ""
             }
+            responseMessage.setAgentActivity(
+                phase: .queued,
+                message: pausedText
+            )
             responseMessage.agentStatus = .cancelled
             if job.state == .running {
                 try? job.transition(to: .waitingForForeground)
@@ -343,7 +342,7 @@ extension ConversationProcessingService {
         switch LLMOutageClassifier.disposition(for: error) {
         case let .waitForUser(message):
             job.submissionAttemptCount += 1
-            responseMessage.text = message
+            responseMessage.text = ""
             responseMessage.agentStatus = .failed
             if let activeTrace, activeTrace.status == .running {
                 activeTrace.apply(.failed(
@@ -382,7 +381,7 @@ extension ConversationProcessingService {
             ""
         }
         let failureText = "这次没有处理成功：\(reason)。\(recovery)"
-        responseMessage.text = failureText
+        responseMessage.text = ""
         responseMessage.agentStatus = .failed
         if let activeTrace, activeTrace.status == .cancelled {
             PersistentAgentEventProjection.persistAndProject(
@@ -398,7 +397,7 @@ extension ConversationProcessingService {
             )
         } else if !responseMessage.agentTurnItems.contains(where: { $0.kind == .error }) {
             responseMessage.applyAgentEvent(.failed(
-                message: reason,
+                message: failureText,
                 cancelled: false,
                 at: .now
             ))

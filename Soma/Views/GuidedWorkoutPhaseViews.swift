@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct GuidedExerciseIntroductionView: View {
-    let exercise: ExerciseDefinition?
-    let performance: ExercisePerformance?
+    let exerciseName: String?
+    let artwork: ExerciseImageReference
+    let coachingNotes: String?
     var camera: WorkoutCameraService?
     var isLandscape = false
     var cameraErrorMessage: String?
@@ -13,12 +14,11 @@ struct GuidedExerciseIntroductionView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text(performance?.exerciseName ?? "准备动作")
+                Text(exerciseName ?? "准备动作")
                     .font(.title2.weight(.semibold))
 
                 ExerciseArtworkView(
-                    reference: exercise?.preferredActionIllustration
-                        ?? BundledExerciseCatalog.fallbackActionIllustration
+                    reference: artwork
                 )
                 .aspectRatio(1, contentMode: .fit)
                 .frame(maxWidth: .infinity)
@@ -30,7 +30,7 @@ struct GuidedExerciseIntroductionView: View {
                 )
 
                 Label(
-                    exercise?.coachingNotes.nilIfBlank
+                    coachingNotes?.nilIfBlank
                         ?? "确认器械和动作空间，准备后开始第一组。",
                     systemImage: "arrow.up.right.circle.fill"
                 )
@@ -63,7 +63,6 @@ struct GuidedExerciseIntroductionView: View {
 }
 
 struct GuidedSetCountdownView: View {
-    let set: WorkoutSet?
     let targetText: String
     let phaseStartedAt: Date?
     var deadlineAt: Date?
@@ -193,8 +192,9 @@ struct GuidedSetRecoveryView: View {
 }
 
 struct GuidedRestView: View {
-    let nextSet: WorkoutSet?
-    var nextEffort: WorkoutEffort?
+    let nextTargetText: String?
+    var nextEffortSide: WorkoutEffortSide = .none
+    var targetID: UUID?
     let remainingSeconds: () -> Int
     var camera: WorkoutCameraService?
     var isLandscape = false
@@ -213,16 +213,13 @@ struct GuidedRestView: View {
                 Text(timeText(remainingSeconds()))
                     .font(.system(size: 84, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                if let nextSet {
-                    Text(nextEffort?.side == .right
+                if let nextTargetText {
+                    Text(nextEffortSide == .right
                         ? "下一侧 · 右侧"
                         : "下一组")
                         .font(.title3.bold())
-                    Text(WorkoutPrescriptionFormatter.setTarget(
-                        set: nextSet,
-                        effort: nextEffort
-                    ))
-                    .foregroundStyle(.secondary)
+                    Text(nextTargetText)
+                        .foregroundStyle(.secondary)
                 }
                 HStack(spacing: 16) {
                     Button("-15 秒") { onAdjust(-15) }
@@ -244,12 +241,11 @@ struct GuidedRestView: View {
                 recordingErrorMessage: cameraErrorMessage
             )
         }
-        .task(id: nextEffort?.id ?? nextSet?.id) {
+        .task(id: targetID) {
             var announced: Set<Int> = []
             while !Task.isCancelled {
                 let value = remainingSeconds()
                 if value == 0 {
-                    let targetID = nextEffort?.id ?? nextSet?.id
                     guard automaticallyFinishedTargetID != targetID else {
                         return
                     }

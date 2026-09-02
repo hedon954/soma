@@ -1,5 +1,43 @@
 import SwiftUI
 
+/// `swipeActions` needs a List row, while the training root itself is a
+/// ScrollView. A hidden intrinsic copy gives that one-row List the card's real
+/// Dynamic Type height instead of clipping it with a fixed viewport.
+struct TrainingResumeSwipeContainer: View {
+    let session: WorkoutSession
+    let onResume: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        TrainingResumeCard(session: session)
+            .hidden()
+            .accessibilityHidden(true)
+            .overlay {
+                List {
+                    Button(action: onResume) {
+                        TrainingResumeCard(session: session)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive, action: onDelete) {
+                            Image(systemName: "trash")
+                        }
+                        .accessibilityLabel("删除未完成训练")
+                        .tint(.red)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .contentMargins(.vertical, 0, for: .scrollContent)
+                .scrollDisabled(true)
+            }
+            .accessibilityIdentifier("resumable-workout-list")
+    }
+}
+
 struct TrainingResumeCard: View {
     let session: WorkoutSession
 
@@ -53,6 +91,7 @@ struct TrainingResumeCard: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("training-resume-card")
         .accessibilityHint("继续未完成的训练")
     }
 

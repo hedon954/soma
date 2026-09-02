@@ -36,6 +36,7 @@
 | [049：前台恢复响应与可读的月度进展](049-foreground-responsiveness-and-readable-monthly-progress.md) | 0.0.18 | 活增量 |
 | [050：轻量进展披露与教练内联控制](050-lightweight-progress-disclosure-and-coach-controls.md) | 0.0.18 | 活增量 |
 | [051：可自愈工具参数与宽幅进展明细](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) | Unreleased | 活增量 |
+| [052：教练、训练与生命周期可靠性](052-coach-training-and-lifecycle-reliability.md) | Unreleased | 活增量 |
 
 ## 阅读约定
 

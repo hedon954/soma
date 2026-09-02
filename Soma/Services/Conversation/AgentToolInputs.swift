@@ -8,20 +8,41 @@ struct AgentEquipmentInput: Codable, Equatable {
 }
 
 struct AgentWorkoutSetInput: Codable, Equatable {
+    var logicalSetIndex: Int? = nil
+    var side: WorkoutEffortSide? = nil
+    var targetKind: WorkoutTargetKind? = nil
     var reps: Int?
     var durationSeconds: Int?
     var externalWeightKG: Double?
+    var restSeconds: Int? = nil
 
     enum CodingKeys: String, CodingKey {
-        case reps
+        case reps, side
+        case logicalSetIndex = "logical_set_index"
+        case targetKind = "target_kind"
         case durationSeconds = "duration_seconds"
         case externalWeightKG = "external_weight_kg"
+        case restSeconds = "rest_seconds"
+    }
+}
+
+struct AgentExerciseCreateInput: Codable, Equatable {
+    var exerciseName: String
+    var targetKind: WorkoutTargetKind
+    var laterality: ExerciseLaterality
+
+    enum CodingKeys: String, CodingKey {
+        case laterality
+        case exerciseName = "exercise_name"
+        case targetKind = "target_kind"
     }
 }
 
 /// schema 3 `create_workout` 的一条训练；`record_id` 由本机分配，模型不得指定。
 struct AgentWorkoutCreateInput: Codable, Equatable {
     var exerciseID: Int64
+    var targetKind: WorkoutTargetKind? = nil
+    var laterality: ExerciseLaterality? = nil
     var occurredAt: String? = nil
     var setEntries: [AgentWorkoutSetInput]? = nil
     var restSeconds: Int? = nil
@@ -31,8 +52,9 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
     var feedback: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case intensity, feedback
+        case intensity, feedback, laterality
         case exerciseID = "exercise_id"
+        case targetKind = "target_kind"
         case occurredAt = "occurred_at"
         case setEntries = "set_entries"
         case restSeconds = "rest_seconds"
@@ -44,6 +66,8 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
         AgentToolArguments(
             occurredAt: occurredAt,
             exerciseID: exerciseID,
+            targetKind: targetKind,
+            laterality: laterality,
             setEntries: setEntries,
             restSeconds: restSeconds,
             durationMinutes: durationMinutes,
@@ -59,6 +83,9 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
         }
         return AgentWorkoutCreateInput(
             exerciseID: exerciseID,
+            targetKind: arguments.targetKind,
+            laterality: arguments.laterality,
+            occurredAt: arguments.occurredAt,
             setEntries: arguments.setEntries,
             restSeconds: arguments.restSeconds,
             durationMinutes: arguments.durationMinutes,
@@ -103,6 +130,8 @@ struct AgentMealItemInput: Codable, Equatable {
 struct AgentMutationPayload: Codable, Equatable {
     var exerciseID: Int64? = nil
     var exerciseName: String? = nil
+    var targetKind: WorkoutTargetKind? = nil
+    var laterality: ExerciseLaterality? = nil
     var setEntries: [AgentWorkoutSetInput]? = nil
     var restSeconds: Int? = nil
     var durationMinutes: Int? = nil
@@ -127,9 +156,10 @@ struct AgentMutationPayload: Codable, Equatable {
     var safetyNote: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case intensity, feedback, title, calories, protein, carbs, fat, items, note, weight, waist
+        case intensity, feedback, laterality, title, calories, protein, carbs, fat, items, note, weight, waist
         case exerciseID = "exercise_id"
         case exerciseName = "exercise_name"
+        case targetKind = "target_kind"
         case setEntries = "set_entries"
         case restSeconds = "rest_seconds"
         case durationMinutes = "duration_minutes"
@@ -149,6 +179,8 @@ extension AgentMutationPayload {
         AgentToolArguments(
             exerciseID: exerciseID,
             exerciseName: exerciseName,
+            targetKind: targetKind,
+            laterality: laterality,
             setEntries: setEntries,
             weight: weight,
             restSeconds: restSeconds,
@@ -254,6 +286,8 @@ struct AgentToolArguments: Codable, Equatable {
     var exerciseID: Int64?
     var targetExerciseID: Int64?
     var exerciseName: String?
+    var targetKind: WorkoutTargetKind?
+    var laterality: ExerciseLaterality?
     var setEntries: [AgentWorkoutSetInput]?
     var sets: Int?
     var reps: Int?
@@ -296,11 +330,12 @@ struct AgentToolArguments: Codable, Equatable {
     var sourceWorkoutRecordIDs: [Int64]?
     var autoRecordingPolicy: String?
     var exerciseNames: [String]?
+    var exercises: [AgentExerciseCreateInput]?
     var workouts: [AgentWorkoutCreateInput]?
 
     enum CodingKeys: String, CodingKey {
         case scope, query, sort, limit, cursor, projection, fields, summary, equipment
-        case exercise, sets, reps, weight, intensity, feedback, title, calories, protein
+        case exercise, laterality, sets, reps, weight, intensity, feedback, title, calories, protein
         case carbs, fat, note, items, waist, metric, operation, payload
         case occurredAt = "occurred_at"
         case setEntries = "set_entries"
@@ -313,6 +348,7 @@ struct AgentToolArguments: Codable, Equatable {
         case exerciseID = "exercise_id"
         case targetExerciseID = "target_exercise_id"
         case exerciseName = "exercise_name"
+        case targetKind = "target_kind"
         case restSeconds = "rest_seconds"
         case durationMinutes = "duration_minutes"
         case formScore = "form_score"
@@ -337,6 +373,7 @@ struct AgentToolArguments: Codable, Equatable {
         case sourceWorkoutRecordIDs = "source_workout_record_ids"
         case autoRecordingPolicy = "auto_recording_policy"
         case exerciseNames = "exercise_names"
+        case exercises
         case workouts
     }
 
@@ -364,6 +401,8 @@ struct AgentToolArguments: Codable, Equatable {
         exerciseID: Int64? = nil,
         targetExerciseID: Int64? = nil,
         exerciseName: String? = nil,
+        targetKind: WorkoutTargetKind? = nil,
+        laterality: ExerciseLaterality? = nil,
         setEntries: [AgentWorkoutSetInput]? = nil,
         sets: Int? = nil,
         reps: Int? = nil,
@@ -404,6 +443,7 @@ struct AgentToolArguments: Codable, Equatable {
         sourceWorkoutRecordIDs: [Int64]? = nil,
         autoRecordingPolicy: String? = nil,
         exerciseNames: [String]? = nil,
+        exercises: [AgentExerciseCreateInput]? = nil,
         workouts: [AgentWorkoutCreateInput]? = nil
     ) {
         self.skillID = skillID
@@ -429,6 +469,8 @@ struct AgentToolArguments: Codable, Equatable {
         self.exerciseID = exerciseID
         self.targetExerciseID = targetExerciseID
         self.exerciseName = exerciseName
+        self.targetKind = targetKind
+        self.laterality = laterality
         self.setEntries = setEntries
         self.sets = sets
         self.reps = reps
@@ -469,6 +511,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.sourceWorkoutRecordIDs = sourceWorkoutRecordIDs
         self.autoRecordingPolicy = autoRecordingPolicy
         self.exerciseNames = exerciseNames
+        self.exercises = exercises
         self.workouts = workouts
     }
 }

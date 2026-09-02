@@ -71,9 +71,17 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
             .toolCall(
                 name: "create_workout",
                 argumentsFragments: [
-                    #"{"workouts":[{"exercise_id":\#(exerciseID),"set_entries":["#,
-                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60},"#,
-                    #"{"reps":8,"external_weight_kg":60},{"reps":8,"external_weight_kg":60}]}]}"#
+                    #"{"workouts":[{"exercise_id":\#(exerciseID),"#,
+                    #""target_kind":"repetitions","laterality":"none","#,
+                    #""set_entries":["#,
+                    #"{"logical_set_index":1,"side":"none","target_kind":"repetitions","#,
+                    #""reps":8,"external_weight_kg":60},"#,
+                    #"{"logical_set_index":2,"side":"none","target_kind":"repetitions","#,
+                    #""reps":8,"external_weight_kg":60},"#,
+                    #"{"logical_set_index":3,"side":"none","target_kind":"repetitions","#,
+                    #""reps":8,"external_weight_kg":60},"#,
+                    #"{"logical_set_index":4,"side":"none","target_kind":"repetitions","#,
+                    #""reps":8,"external_weight_kg":60}]}]}"#
                 ]
             ),
             .text(["已记录这次深蹲。"])
@@ -172,7 +180,16 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertTrue(json.contains(#""additionalProperties":false"#))
         XCTAssertTrue(json.contains(#""exercise_id""#))
         XCTAssertTrue(json.contains(#""required":["workouts"]"#))
-        XCTAssertTrue(json.contains(#""required":["exercise_id"]"#))
+        let parameters = try AgentToolSchemaValidator.parameterSchema(for: .createWorkout)
+        XCTAssertEqual(parameters["required"] as? [String], ["workouts"])
+        let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
+        let workouts = try XCTUnwrap(properties["workouts"] as? [String: Any])
+        let item = try XCTUnwrap(workouts["items"] as? [String: Any])
+        let required = try XCTUnwrap(item["required"] as? [String])
+        XCTAssertEqual(
+            Set(required),
+            ["exercise_id", "target_kind", "laterality", "set_entries"]
+        )
         XCTAssertFalse(json.contains(#""record_id""#))
     }
 
@@ -276,7 +293,8 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         for (space, container) in containers {
             let context = container.mainContext
             let session = ConversationSession(
-                startedAt: Date(timeIntervalSince1970: 1_786_300_000)
+                startedAt: Date(timeIntervalSince1970: 1_786_300_000),
+                title: "旧模型生成标题"
             )
             session.businessDate = nil
             session.businessTimeZoneIdentifier = nil
@@ -316,6 +334,11 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
 
             XCTAssertNotNil(session.businessDate)
             XCTAssertEqual(session.businessTimeZoneIdentifier, "Asia/Shanghai")
+            let shanghai = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
+            XCTAssertEqual(session.title, ConversationSession.dateTitle(
+                for: session.startedAt,
+                in: shanghai
+            ))
             XCTAssertNotNil(job.turnSentAt)
             XCTAssertNotNil(job.effectiveBusinessDate)
             XCTAssertNotNil(job.defaultOccurredAt)

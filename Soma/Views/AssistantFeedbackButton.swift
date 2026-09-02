@@ -20,17 +20,19 @@ struct AssistantFeedbackButton: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // 时间和图标的可见间距保持 12pt；每个按钮仍有互不重叠的 44pt 触达框。
             HStack(spacing: 0) {
                 Text(timestamp)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding(.trailing, 8)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
+                    .accessibilityIdentifier("assistant-message-timestamp")
                     .accessibilityLabel(timestampAccessibilityLabel)
 
                 if let traceID {
-                    AssistantTraceLink(traceID: traceID)
+                    AssistantTraceLink(traceID: traceID, placement: .first)
                 }
 
                 Button {
@@ -39,17 +41,21 @@ struct AssistantFeedbackButton: View {
                         onExpanded(scrollTarget)
                     }
                 } label: {
-                    Image(systemName: isExpanded ? "xmark.circle" : "text.bubble")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.tint)
-                        .frame(
-                            width: AppTheme.minimumTapTarget,
-                            height: AppTheme.minimumTapTarget,
-                            alignment: .leading
-                        )
-                        .padding(.leading, 5)
+                    CompactActionLabel(
+                        placement: traceID == nil ? .first : .following
+                    ) {
+                        Image(systemName: isExpanded ? "xmark.circle" : "text.bubble")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.tint)
+                            .accessibilityHidden(true)
+                    }
                 }
                 .buttonStyle(.plain)
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
+                )
+                .contentShape(Rectangle())
                 .accessibilityLabel(isExpanded ? "收起反馈" : "反馈这条 AI 回复")
                 .accessibilityHint(
                     isExpanded
@@ -85,7 +91,10 @@ struct AssistantFeedbackButton: View {
 private struct AssistantTraceLink: View {
     @Query private var traces: [AgentTrace]
 
-    init(traceID: UUID) {
+    let placement: CompactActionVisualPlacement
+
+    init(traceID: UUID, placement: CompactActionVisualPlacement) {
+        self.placement = placement
         var descriptor = FetchDescriptor<AgentTrace>(
             predicate: #Predicate { $0.id == traceID }
         )
@@ -101,6 +110,12 @@ private struct AssistantTraceLink: View {
                 } label: {
                     icon
                 }
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
+                )
+                .contentShape(Rectangle())
+                .accessibilityLabel("查看这条回复的执行日志")
             } else {
                 icon
                     .foregroundStyle(.tertiary)
@@ -111,15 +126,11 @@ private struct AssistantTraceLink: View {
     }
 
     private var icon: some View {
-        Image(systemName: "point.3.connected.trianglepath.dotted")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(AppTheme.tint)
-            .frame(
-                width: AppTheme.minimumTapTarget,
-                height: AppTheme.minimumTapTarget,
-                alignment: .trailing
-            )
-            .padding(.trailing, 5)
-            .accessibilityLabel("查看这条回复的执行日志")
+        CompactActionLabel(placement: placement) {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.tint)
+                .accessibilityHidden(true)
+        }
     }
 }

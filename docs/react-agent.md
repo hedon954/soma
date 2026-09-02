@@ -70,8 +70,9 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 每次调用的工具名同时写入 Trace model span 与本机诊断日志。
 
 训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
-归档和合并。所有业务 ID 是 Int64，`create_workout` 必须绑定有效 `exercise_id`，计划动作也必须
-绑定动作库。完整当前清单和出入参见
+归档和合并。所有业务 ID 是 Int64。训练相关 Tool 当前使用 Schema v4：动作搜索/创建/更新显式
+返回或提交 `target_kind` 与 `laterality`，训练创建/更新以逻辑组和 side effort 保存逐组事实；
+旧 v2/v3 只恢复已持久任务，不向新模型广告。完整当前清单和出入参见
 [Agent Tool 目录](engineering/agent-tool-catalog.md)。
 
 工具名称、描述和参数 Schema 由 Runtime 固定，通过 API 原生注册，不拼接进系统提示词，也不允许用户修改。工具不会向模型暴露数据库句柄、API Key 或本地文件路径。
@@ -97,14 +98,19 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 成功、失败和取消都会落盘。执行中的每一次状态变化都是 Event：
 
 - `model`：模型调用开始、流式文本增量、完成或错误、Token 用量。
-- `skill`：Skill 加载开始、完成或失败，以及是否使用自定义文本。
-- `tool`：工具入参、执行结果、写入类型和去重状态。
+- `skill`：Skill 准备、加载、完成或失败，以及是否使用自定义文本。
+- `tool`：工具准备、执行、等待设备、结果、写入类型和去重状态。
 - `output`：最终回复、失败或取消。
 
 UI 收到 Event 后先经过确定性 reducer，再更新一次 Turn 内的有序 Event Cards：
 
 - 同一 Item ID 的文字 delta 合并到同一张文字卡；
-- Skill/Tool 按 Span ID 更新同一张操作卡；
+- 已接收和模型调用使用 Activity Item，`CoachMessage.text` 不保存临时状态；首段正文或操作卡出现时
+  隐藏重复 Activity，下一轮模型请求再原位显示“正在处理请求…”；
+- Skill/Tool 优先按原生 `toolCallID` 对应的 `operationID` 更新同一张操作卡；旧 Event 缺少该字段
+  时兼容使用 Span ID；
+- 操作阶段固定为 `preparing → running → completed/failed/cancelled`，设备交接使用
+  `waitingForDevice`；模型与排队分别使用 `modelRunning`、`queued`；
 - 操作卡之后的新文字创建新卡，不能回填到此前文字；
 - 失败保留已经完成的卡片，并追加错误卡；
 - 重新进入聊天时按持久化顺序完整重放。
@@ -149,9 +155,13 @@ SwiftData；DEBUG 下投影入口断言主 actor 隔离（见
 
 ### 持久 Job
 
-一次发送必须先原子保存 Turn、媒体引用、上下文快照和 `AgentJob`。App 根层的
+一次发送必须先原子保存用户 Turn、媒体引用、上下文快照、`AgentJob`、预绑定响应消息和
+`jobQueued` Event。模型尚无 token 时响应已可见；排队原因、流式文本、失败和人工重试都按
+`responseMessageID` 原位更新。App 根层的
 `AgentJobRunner` 领取任务并追加带 sequence 的语义 `AgentEvent`；Chat、Trace、
 Live Activity 和通知是独立投影。token delta 继续实时显示，但不逐 token 写入 SwiftData。
+本地、Server 和设备 Tool handoff 都必须保存完整阶段 Event；快速操作可以立即流转到终态，但不得
+通过生产 sleep 延长可见时间。参数校验失败也先创建 preparing 卡，再在同一 operation 上失败。
 
 本地执行获得有限后台时间（约 45 秒租约）。每个 ReAct step 边界落检查点；到期前 Job 进入
 `waitingForForeground`。有有效检查点时恢复复用同一条 CoachMessage、从下一步继续，且不递增
@@ -179,9 +189,13 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 
 训练动作身份已经使用：
 
-- `search_exercises` 按名称返回 `{exercise_id,name}`，已有上下文足够时不得重复搜索；
-- 只有无语义等价项时一次调用 `create_exercise(exercise_names)`，再把返回的 Int64 ID 交给一次
-  `create_workout(workouts)`；不要指定新建 `record_id`；
+- `search_exercises` 按名称返回 `{exercise_id,name,target_kind,laterality}`，已有上下文足够时不得
+  重复搜索；
+- 只有无语义等价项时一次调用 `create_exercise(exercises)`，每项明确 `exercise_name`、
+  `target_kind` 与 `laterality`，再把返回的 Int64 ID 交给一次 `create_workout(workouts)`；
+- 每条 workout 明确 `target_kind`、`laterality` 和 `set_entries`。左右各做用 `laterality=both`，
+  同一 `logical_set_index` 写 left/right 两条 effort；双侧同时才用 `side=none`。每条 effort 保存
+  自己的目标类型、次数/时长、外部重量和已知间歇；不要指定新建 `record_id`；
 - `create_program` 与 `update_program` 的每个动作都必须绑定有效动作 ID；更新直接替换当前计划处方；
 - `list_programs` / `get_program` 提供精确读取，`start_program` 仅创建本地不可变 Session 并路由
   到带练。逐组事实、倒计时和相机控制不暴露给模型，由本地确定性运行时保存。
@@ -190,5 +204,8 @@ Session 保存 `businessDate` 与 IANA 时区。Job 创建时冻结原始 Turn �
 `defaultOccurredAt`；训练、饮食、身体 create/update 可显式传带时区 `occurred_at`，省略时复用
 该稳定默认值。因此排队、跨午夜与失败重试仍记录真实原始时间。自然语言日期只覆盖当前 Turn，
 只有日期芯片会修改 Session 的默认业务日期。
+
+Trusted Context 只向模型投影一个权威本地时间，包含 UTC offset、IANA 时区和自然语言时段；UTC
+若作为机器字段保留必须明确标注且不得先出现。人工重试继续使用原 Turn 时间，Loop 时间单独标识。
 
 工具合同见 [训练领域模型与运行时协议](engineering/training-domain-model.md)。

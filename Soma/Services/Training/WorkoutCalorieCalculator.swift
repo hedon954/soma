@@ -25,37 +25,64 @@ enum WorkoutCalorieCalculator {
         restSeconds: Int? = nil,
         weightKG: Double?
     ) -> WorkoutCalorieEstimate? {
-        let duration: (minutes: Double, estimated: Bool)
         let usableDuration = sanitizedActualDurationMinutes(
             durationMinutes,
             sets: sets,
             reps: reps,
             restSeconds: restSeconds
         )
-        if let usableDuration, usableDuration > 0 {
-            duration = (Double(usableDuration), false)
+        let evidence: [WorkoutSetEvidence] = if let sets, sets > 0, let reps, reps > 0 {
+            (1 ... sets).map { index in
+                WorkoutSetEvidence(
+                    logicalSetIndex: index,
+                    targetKind: .repetitions,
+                    reps: reps,
+                    restSeconds: index < sets ? restSeconds : nil
+                )
+            }
         } else {
-            guard let estimated = estimatedResistanceDuration(
-                sets: sets,
-                reps: reps,
-                restSeconds: restSeconds
+            []
+        }
+        return estimateWorkout(
+            exercise: exercise,
+            intensity: intensity,
+            actualDurationMinutes: usableDuration,
+            evidence: evidence,
+            fallbackRestSeconds: restSeconds,
+            weightKG: weightKG
+        )
+    }
+
+    /// Canonical calculator shared by chat-created and guided workouts.
+    /// Whole-workout measured duration wins; otherwise every work and rest
+    /// interval must be supported by the stored evidence.
+    static func estimateWorkout(
+        exercise: String,
+        intensity: String?,
+        actualDurationMinutes: Int?,
+        evidence: [WorkoutSetEvidence],
+        fallbackRestSeconds: Int?,
+        weightKG: Double?
+    ) -> WorkoutCalorieEstimate? {
+        guard let weightKG, weightKG > 0 else { return nil }
+        let duration: (minutes: Double, estimated: Bool)
+        if let actualDurationMinutes, actualDurationMinutes > 0 {
+            duration = (Double(actualDurationMinutes), false)
+        } else {
+            guard let derived = evidenceDuration(
+                from: evidence,
+                fallbackRestSeconds: fallbackRestSeconds
             ) else {
                 return nil
             }
-            duration = (estimated, true)
-        }
-        guard
-            let weightKG,
-            weightKG > 0
-        else {
-            return nil
+            duration = derived
         }
 
         let activity = activity(for: exercise, intensity: intensity)
         let calories = activity.met * weightKG * duration.minutes / 60
         guard calories.isFinite, calories > 0 else { return nil }
         return WorkoutCalorieEstimate(
-            calories: Int(calories.rounded()),
+            calories: max(Int(calories.rounded()), 1),
             met: activity.met,
             activityLabel: activity.label,
             durationMinutes: duration.minutes,
@@ -71,57 +98,64 @@ enum WorkoutCalorieCalculator {
         evidence: [WorkoutSetEvidence],
         weightKG: Double?
     ) -> WorkoutCalorieEstimate? {
-        guard let duration = guidedDuration(from: evidence),
-              let weightKG,
-              weightKG > 0
-        else {
-            return nil
-        }
-        let activity = activity(for: exercise, intensity: intensity)
-        let calories = activity.met * weightKG * duration.minutes / 60
-        guard calories.isFinite, calories > 0 else { return nil }
-        return WorkoutCalorieEstimate(
-            calories: max(Int(calories.rounded()), 1),
-            met: activity.met,
-            activityLabel: activity.label,
-            durationMinutes: duration.minutes,
-            durationWasEstimated: duration.estimated
+        estimateWorkout(
+            exercise: exercise,
+            intensity: intensity,
+            actualDurationMinutes: nil,
+            evidence: evidence,
+            fallbackRestSeconds: nil,
+            weightKG: weightKG
         )
     }
 
     static func guidedDuration(
         from evidence: [WorkoutSetEvidence]
     ) -> (minutes: Double, estimated: Bool)? {
+        evidenceDuration(from: evidence, fallbackRestSeconds: nil)
+    }
+
+    static func evidenceDuration(
+        from evidence: [WorkoutSetEvidence],
+        fallbackRestSeconds: Int?
+    ) -> (minutes: Double, estimated: Bool)? {
         guard !evidence.isEmpty else { return nil }
+        let draft = WorkoutRecordDraft(evidence: evidence)
+        let groups = draft.groups.sorted { $0.sourceOrder < $1.sourceOrder }
+        guard !groups.isEmpty else { return nil }
         var totalSeconds = 0.0
         var usedRepetitionEstimate = false
-        for item in evidence {
-            switch item.targetKind {
-            case .duration:
-                guard let seconds = item.durationSeconds, seconds > 0 else {
-                    return nil
-                }
-                totalSeconds += Double(seconds)
-            case .repetitions:
-                guard let reps = item.reps, reps > 0 else { return nil }
-                if let seconds = item.durationSeconds, seconds > 0 {
+        for (groupIndex, group) in groups.enumerated() {
+            let efforts = group.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
+            guard !efforts.isEmpty else { return nil }
+            for (effortIndex, item) in efforts.enumerated() {
+                switch item.targetKind {
+                case .duration:
+                    guard let seconds = item.durationSeconds, seconds > 0 else {
+                        return nil
+                    }
                     totalSeconds += Double(seconds)
-                } else {
-                    totalSeconds += Double(reps) * estimatedSecondsPerResistanceRep
-                    usedRepetitionEstimate = true
+                case .repetitions:
+                    guard let reps = item.reps, reps > 0 else { return nil }
+                    if let seconds = item.durationSeconds, seconds > 0 {
+                        totalSeconds += Double(seconds)
+                    } else {
+                        totalSeconds += Double(reps) * estimatedSecondsPerResistanceRep
+                        usedRepetitionEstimate = true
+                    }
                 }
-            case .none:
-                if let seconds = item.durationSeconds, seconds > 0 {
-                    totalSeconds += Double(seconds)
-                } else if let reps = item.reps, reps > 0 {
-                    totalSeconds += Double(reps) * estimatedSecondsPerResistanceRep
-                    usedRepetitionEstimate = true
+
+                if let restSeconds = item.restSeconds, restSeconds >= 0 {
+                    totalSeconds += Double(restSeconds)
                 } else {
-                    return nil
+                    let requiresGroupRest = effortIndex == efforts.count - 1
+                        && groupIndex < groups.count - 1
+                    if requiresGroupRest {
+                        guard let fallbackRestSeconds, fallbackRestSeconds >= 0 else {
+                            return nil
+                        }
+                        totalSeconds += Double(fallbackRestSeconds)
+                    }
                 }
-            }
-            if let restSeconds = item.restSeconds, restSeconds >= 0 {
-                totalSeconds += Double(restSeconds)
             }
         }
         guard totalSeconds > 0 else { return nil }
@@ -233,6 +267,35 @@ enum WorkoutCalorieCalculator {
         entry.calorieDurationMinutes = estimate?.durationMinutes
         entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         return true
+    }
+
+    @MainActor
+    static func refreshStoredEstimate(
+        _ entry: WorkoutEntry,
+        in context: ModelContext
+    ) {
+        refreshStoredEstimate(
+            entry,
+            weightKG: latestRecordedWeight(at: entry.date, in: context)
+        )
+    }
+
+    static func refreshStoredEstimate(
+        _ entry: WorkoutEntry,
+        weightKG: Double?
+    ) {
+        let estimate = estimateWorkout(
+            exercise: entry.exercise,
+            intensity: entry.intensity,
+            actualDurationMinutes: entry.durationMinutes,
+            evidence: entry.setEntries,
+            fallbackRestSeconds: entry.restSeconds,
+            weightKG: weightKG
+        )
+        entry.estimatedCalories = estimate?.calories
+        entry.calorieMET = estimate?.met
+        entry.calorieDurationMinutes = estimate?.durationMinutes
+        entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
     }
 
     @MainActor

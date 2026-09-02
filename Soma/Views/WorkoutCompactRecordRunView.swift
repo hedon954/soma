@@ -5,7 +5,7 @@ struct WorkoutRecordHeaderChips: View {
     let side: String?
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             if let targetKind {
                 chip(targetKind)
             }
@@ -20,7 +20,7 @@ struct WorkoutRecordHeaderChips: View {
         Text(title)
             .font(.caption)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 5)
             .padding(.vertical, 3)
             .background(
                 AppTheme.insetBackground,
@@ -38,21 +38,20 @@ struct WorkoutCompactRecordRunView: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                inlineSummary
-                Spacer(minLength: 12)
-                WorkoutRunCountLabel(count: runCount)
-            }
+            inlineSummary
 
             VStack(alignment: .leading, spacing: 6) {
-                metricSummary
-                HStack {
+                HStack(spacing: 0) {
+                    Text(target)
+                    compactMetricDivider
+                    Text(weight)
+                }
+                HStack(spacing: 0) {
+                    WorkoutCompactGroupCountLabel(count: runCount)
                     if let rest {
+                        compactMetricDivider
                         Text(rest)
-                            .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 8)
-                    WorkoutRunCountLabel(count: runCount)
                 }
             }
         }
@@ -72,29 +71,44 @@ struct WorkoutCompactRecordRunView: View {
     }
 
     private var inlineSummary: some View {
-        HStack(spacing: 8) {
-            metricSummary
+        HStack(spacing: 0) {
+            Text(target)
+            compactMetricDivider
+            Text(weight)
+            compactMetricDivider
+            WorkoutCompactGroupCountLabel(count: runCount)
             if let rest {
-                separator
+                compactMetricDivider
                 Text(rest)
             }
         }
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var metricSummary: some View {
-        HStack(spacing: 8) {
-            Text(target)
-            separator
-            Text(weight)
-        }
-        .fixedSize(horizontal: true, vertical: false)
+    private var compactMetricDivider: some View {
+        WorkoutCompactMetricDivider()
     }
+}
 
-    private var separator: some View {
-        Text("·")
-            .foregroundStyle(.secondary)
+struct WorkoutCompactMetricDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(AppTheme.separator)
+            .frame(width: 0.5, height: 18)
+            .padding(.horizontal, 4)
             .accessibilityHidden(true)
+    }
+}
+
+struct WorkoutCompactGroupCountLabel: View {
+    let count: Int
+
+    var body: some View {
+        Text("\(count) 组")
+            .font(.subheadline.monospacedDigit())
+            .fixedSize()
+            .accessibilityLabel("连续 \(count) 组")
+            .accessibilityIdentifier("workout-run-count-\(count)")
     }
 }
 

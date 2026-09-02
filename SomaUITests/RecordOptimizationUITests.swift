@@ -27,12 +27,163 @@ final class RecordOptimizationUITests: XCTestCase {
                 appearance: "light",
                 workoutLaterality: laterality
             )
-            let title = app.staticTexts["单杠悬吊"]
-            XCTAssertTrue(title.waitForExistence(timeout: 15))
-            XCTAssertEqual(app.staticTexts.matching(identifier: headerLabel).count, 1)
+            let list = app.scrollViews["coach-message-list"]
+            XCTAssertTrue(list.waitForExistence(timeout: 15))
+            let title = app.descendants(matching: .any)["inline-record-title"].firstMatch
+            for _ in 0 ..< 5 where !title.exists {
+                list.swipeDown()
+            }
+            XCTAssertTrue(title.waitForExistence(timeout: 5))
+            XCTAssertEqual(
+                app.staticTexts.matching(
+                    NSPredicate(format: "label == %@", headerLabel)
+                ).count,
+                1
+            )
             XCTAssertFalse(app.staticTexts[innerLabel].exists)
             app.terminate()
         }
+    }
+
+    func testLongWorkoutNameRemainsVisible() {
+        let exerciseName = "超长动作名称哑铃交替保加利亚分腿深蹲"
+        let app = launchRecordFixture(
+            appearance: "light",
+            workoutName: exerciseName
+        )
+        let list = app.scrollViews["coach-message-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 15))
+        let title = app.descendants(matching: .any)["inline-record-title"].firstMatch
+        for _ in 0 ..< 5 where !title.exists {
+            list.swipeDown()
+        }
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(title.frame.height, 36, "长动作名应获得完整多行空间而不是被截断")
+        keepScreenshot(of: app, named: "record-optimizations-long-workout-name")
+    }
+
+    func testResumableWorkoutCardIsCompleteAndUsesIconOnlyDeleteAction() {
+        let app = launchRecordFixture(appearance: "dark")
+        app.tabBars.buttons["训练"].tap()
+
+        let card = app.descendants(matching: .any)
+            .matching(identifier: "training-resume-card")
+            .firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(
+            card.frame.height,
+            126,
+            "继续训练卡必须使用真实内容高度，不能被旧固定高度截掉底部进度"
+        )
+
+        card.swipeLeft()
+        let delete = app.buttons["删除未完成训练"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        XCTAssertLessThan(delete.frame.width, 100, "删除区只显示系统垃圾桶，不应被文字撑宽")
+        XCTAssertFalse(app.staticTexts["删除未完成训练"].exists)
+        keepScreenshot(of: app, named: "training-resume-icon-only-delete")
+    }
+
+    func testAssistantMetadataActionsDoNotOverlapTimestamp() {
+        let app = launchRecordFixture(appearance: "dark")
+
+        let trace = app.buttons["查看这条回复的执行日志"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 15))
+        let feedbacks = app.buttons
+            .matching(NSPredicate(format: "label == %@", "反馈这条 AI 回复"))
+            .allElementsBoundByIndex
+        let feedback = feedbacks.min {
+            abs($0.frame.midY - trace.frame.midY) < abs($1.frame.midY - trace.frame.midY)
+        }
+        XCTAssertNotNil(feedback)
+
+        let timestamps = app.staticTexts
+            .matching(identifier: "assistant-message-timestamp")
+            .allElementsBoundByIndex
+        let timestamp = timestamps.min {
+            abs($0.frame.midY - trace.frame.midY) < abs($1.frame.midY - trace.frame.midY)
+        }
+        XCTAssertNotNil(timestamp)
+        if let timestamp {
+            XCTAssertLessThanOrEqual(timestamp.frame.maxX, trace.frame.minX + 0.5)
+            XCTAssertLessThanOrEqual(
+                trace.frame.minX - timestamp.frame.maxX,
+                24,
+                "时间和日志按钮的可见间距应保持紧凑"
+            )
+        }
+        if let feedback {
+            XCTAssertLessThanOrEqual(trace.frame.maxX, feedback.frame.minX + 0.5)
+            XCTAssertLessThanOrEqual(
+                feedback.frame.minX - trace.frame.maxX,
+                20,
+                "两个图标的可见间距应保持紧凑"
+            )
+            XCTAssertGreaterThanOrEqual(trace.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(feedback.frame.width, 44)
+        }
+        keepScreenshot(of: app, named: "assistant-metadata-no-overlap")
+    }
+
+    func testWorkoutFooterKeepsAddActionAndCaloriesOnOneLine() {
+        let app = launchRecordFixture(appearance: "dark")
+        revealWorkoutCard(in: app)
+        let add = app.buttons["添加一组"].firstMatch
+        let calories = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "预计消耗约 23 千卡")
+        ).firstMatch
+
+        XCTAssertTrue(add.waitForExistence(timeout: 15))
+        XCTAssertTrue(calories.waitForExistence(timeout: 5))
+        XCTAssertLessThan(abs(add.frame.midY - calories.frame.midY), 4)
+        XCTAssertLessThan(add.frame.maxX, calories.frame.minX)
+        XCTAssertGreaterThanOrEqual(add.frame.height, 44)
+    }
+
+    func testProgressEnergyUsesCurrentScopeAndLabelsWorkoutOnlyFallback() {
+        let app = launchRecordFixture(appearance: "light")
+        app.tabBars.buttons["进展"].tap()
+
+        XCTAssertTrue(app.staticTexts["今日能量"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["已记录摄入"].exists)
+        XCTAssertTrue(app.staticTexts["截至当前总消耗"].exists)
+        XCTAssertTrue(app.staticTexts["静息消耗"].exists)
+        XCTAssertTrue(app.staticTexts["训练消耗"].exists)
+        XCTAssertFalse(app.staticTexts["活动消耗"].exists)
+        XCTAssertTrue(app.staticTexts["截至当前能量差"].exists)
+        XCTAssertFalse(app.staticTexts["全天总消耗预估"].exists)
+        keepScreenshot(of: app, named: "progress-current-energy-scope")
+    }
+
+    func testWorkoutDetailShowsMuscleMapWithoutDisclosure() {
+        let app = launchRecordFixture(appearance: "dark")
+        app.tabBars.buttons["进展"].tap()
+
+        let workout = app.staticTexts["单杠悬吊"].firstMatch
+        XCTAssertTrue(workout.waitForExistence(timeout: 15))
+        workout.tap()
+        XCTAssertTrue(app.navigationBars["单杠悬吊"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["受力图"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["受力图"].exists, "受力图不得再由折叠按钮控制")
+        keepScreenshot(of: app, named: "workout-detail-muscle-map-expanded")
+    }
+
+    func testCompletedSessionReviewReusesRecentWorkoutRow() {
+        let app = launchRecordFixture(appearance: "dark")
+        app.tabBars.buttons["训练"].tap()
+
+        let session = app.staticTexts["虚构复盘计划"]
+        for _ in 0 ..< 4 where !session.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(session.waitForExistence(timeout: 10))
+        session.tap()
+        XCTAssertTrue(app.navigationBars["训练复盘"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["虚构复盘深蹲"].exists)
+        XCTAssertTrue(app.staticTexts["5组 × 5次 · 50kg"].exists)
+        XCTAssertTrue(app.staticTexts["1,250 kg"].exists)
+        XCTAssertFalse(app.staticTexts["5组已确认"].exists)
+        keepScreenshot(of: app, named: "completed-session-reuses-progress-row")
     }
 
     func testSettingsAreFlattenedAndBirthDateHasNoToggle() {
@@ -104,7 +255,8 @@ final class RecordOptimizationUITests: XCTestCase {
     private func launchRecordFixture(
         appearance: String,
         exerciseStressCount: Int? = nil,
-        workoutLaterality: String? = nil
+        workoutLaterality: String? = nil,
+        workoutName: String? = nil
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
@@ -117,6 +269,9 @@ final class RecordOptimizationUITests: XCTestCase {
         }
         if let workoutLaterality {
             app.launchEnvironment["SOMA_UI_WORKOUT_LATERALITY"] = workoutLaterality
+        }
+        if let workoutName {
+            app.launchEnvironment["SOMA_UI_WORKOUT_NAME"] = workoutName
         }
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
@@ -133,29 +288,53 @@ final class RecordOptimizationUITests: XCTestCase {
     }
 
     private func assertWorkoutCard(in app: XCUIApplication) {
-        let list = app.scrollViews["coach-message-list"]
-        XCTAssertTrue(list.waitForExistence(timeout: 15))
-        let title = app.staticTexts["单杠悬吊"]
-        for _ in 0 ..< 5 where !title.exists {
-            list.swipeDown()
-        }
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["时长"].exists)
-        XCTAssertEqual(app.staticTexts.matching(identifier: "双侧同时").count, 1)
-        XCTAssertTrue(app.staticTexts["20 秒"].exists)
-        XCTAssertTrue(app.staticTexts["自重"].exists)
-        XCTAssertTrue(app.staticTexts["间歇 30 秒"].exists)
-        XCTAssertTrue(app.staticTexts["workout-run-count-3"].exists)
+        revealWorkoutCard(in: app)
+        let title = app.descendants(matching: .any)["inline-record-title"].firstMatch
+        XCTAssertEqual(title.value as? String, "单杠悬吊")
+        let targetKind = app.staticTexts["时长"]
+        let side = app.staticTexts["双侧同时"]
+        let save = app.buttons["自动保存已就绪"]
+        let delete = app.buttons["删除"]
+        XCTAssertTrue(targetKind.exists)
+        XCTAssertEqual(
+            app.staticTexts.matching(
+                NSPredicate(format: "label == %@", "双侧同时")
+            ).count,
+            1
+        )
+        let headerCenters = [title, targetKind, side, save, delete].map(\.frame.midY)
+        XCTAssertLessThan(
+            (headerCenters.max() ?? 0) - (headerCenters.min() ?? 0),
+            3,
+            "动作名、目标、侧别、保存和删除必须位于同一条水平中线"
+        )
+        XCTAssertEqual(app.textFields["时长"].value as? String, "20 秒")
+        XCTAssertEqual(app.textFields["外部重量"].value as? String, "自重")
+        XCTAssertEqual(app.textFields["间歇"].value as? String, "30 秒")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["workout-run-count-3"].exists
+        )
         XCTAssertTrue(
             app.descendants(matching: .any)["workout-compact-inline-run"].exists
         )
-        XCTAssertTrue(app.images["workout-record-saved"].exists)
+        XCTAssertTrue(save.exists)
+        XCTAssertTrue(delete.exists)
         XCTAssertFalse(app.images["已锁定"].exists)
         XCTAssertFalse(app.staticTexts["A. 单杠悬吊"].exists)
         XCTAssertTrue(
             app.buttons["查看这条回复的执行日志"].waitForExistence(timeout: 5)
         )
         XCTAssertTrue(app.buttons["反馈这条 AI 回复"].exists)
+    }
+
+    private func revealWorkoutCard(in app: XCUIApplication) {
+        let list = app.scrollViews["coach-message-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 15))
+        let title = app.descendants(matching: .any)["inline-record-title"].firstMatch
+        for _ in 0 ..< 5 where !title.exists {
+            list.swipeDown()
+        }
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
     }
 
     private func keepScreenshot(of app: XCUIApplication, named name: String) {

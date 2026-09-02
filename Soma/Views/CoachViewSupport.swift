@@ -3,7 +3,6 @@ import SwiftUI
 enum CoachSheet: Identifiable {
     case media
     case pendingQueue
-    case quickCapture(CaptureEntryRequest)
 
     var id: String {
         switch self {
@@ -11,8 +10,6 @@ enum CoachSheet: Identifiable {
             "media"
         case .pendingQueue:
             "pending-queue"
-        case let .quickCapture(request):
-            "capture-\(request.id)"
         }
     }
 }
@@ -36,6 +33,14 @@ extension Notification.Name {
     /// 用通知替代逐层闭包，避免教练子树携带每次渲染都变化的入参。
     static let coachRequiresAIConfiguration = Notification.Name(
         "Soma.coachRequiresAIConfiguration"
+    )
+
+    static let coachDoubleReselected = Notification.Name(
+        "Soma.coachDoubleReselected"
+    )
+
+    static let focusCoachComposer = Notification.Name(
+        "Soma.focusCoachComposer"
     )
 }
 
@@ -111,8 +116,12 @@ final class CoachComposerState {
     func toggleVoice() {
         if let speechInput, speechInput.isListening {
             speechInput.stop()
+            syncDraftFromSpeech()
             return
         }
+        // A stopped recognizer can still hold the last committed transcript.
+        // Merge it before replacing the baseline for a new listening cycle.
+        syncDraftFromSpeech()
         draftBeforeSpeech = trimmedDraft
         let service = speechInput ?? SpeechInputService()
         speechInput = service
@@ -152,5 +161,6 @@ final class CoachComposerState {
 final class CoachVisibilityState {
     var isVisible = false
     var autoScrollGate = CoachMessageAutoScrollGate()
+    var tailMessageID: UUID?
     let liveScroll = CoachLiveScrollThrottle()
 }

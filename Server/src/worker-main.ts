@@ -16,6 +16,7 @@ import { PostgresSomaStore } from "./postgres-store.js";
 import {
   explicitCapabilityFlag,
   OpenAICompatibleManagedProvider,
+  parseProviderExtraConfig,
 } from "./provider.js";
 import { TokenCipher } from "./security.js";
 import { AgentWorker } from "./worker.js";
@@ -38,6 +39,7 @@ const provider = new OpenAICompatibleManagedProvider(
   undefined,
   undefined,
   explicitCapabilityFlag(process.env.SOMA_PROVIDER_SUPPORTS_DIRECT_VIDEO),
+  parseProviderExtraConfig(process.env.SOMA_PROVIDER_EXTRA_CONFIG),
 );
 const objects = new S3TemporaryObjectStore(
   requiredEnvironment("SOMA_OBJECT_BUCKET"),

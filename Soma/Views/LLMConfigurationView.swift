@@ -11,6 +11,9 @@ struct LLMConfigurationView: View {
     @State private var model = ""
     @State private var imageModel = ""
     @State private var apiKey = ""
+    @State private var extraConfig = ""
+    @State private var extraConfigError: String?
+    @State private var extraConfigSaved = false
     @State private var models: [AIModelInfo] = []
     @State private var isLoadingModels = false
     @State private var modelError: String?
@@ -90,7 +93,15 @@ struct LLMConfigurationView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
-                .onChange(of: baseURL) { persistConfiguration() }
+                .onChange(of: baseURL) { oldValue, newValue in
+                    refreshDefaultExtraIfUnmodified(
+                        previousBaseURL: oldValue,
+                        previousModel: model,
+                        newBaseURL: newValue,
+                        newModel: model
+                    )
+                    persistConfiguration()
+                }
 
             HStack {
                 Group {
@@ -136,6 +147,8 @@ struct LLMConfigurationView: View {
 
         modelSection
 
+        extraConfigSection
+
         if modelTier == .standard {
             Section {
                 TextField("例如 gpt-image-2", text: $imageModel)
@@ -164,7 +177,15 @@ struct LLMConfigurationView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .focused($modelFieldFocused)
-                .onChange(of: model) { persistConfiguration() }
+                .onChange(of: model) { oldValue, newValue in
+                    refreshDefaultExtraIfUnmodified(
+                        previousBaseURL: baseURL,
+                        previousModel: oldValue,
+                        newBaseURL: baseURL,
+                        newModel: newValue
+                    )
+                    persistConfiguration()
+                }
 
             if showsModelSuggestions {
                 InputSuggestionList(
@@ -198,6 +219,27 @@ struct LLMConfigurationView: View {
             Text("模型")
         } footer: {
             Text(modelFooterText)
+        }
+    }
+
+    private var extraConfigSection: some View {
+        Section {
+            JSONEditorView(text: $extraConfig, minHeight: 180)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+
+            if let extraConfigError {
+                Label(extraConfigError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.warning)
+            }
+
+            Button(extraConfigSaved ? "已保存 Extra Config" : "保存 Extra Config") {
+                saveExtraConfig()
+            }
+        } header: {
+            Text("Extra Config")
+        } footer: {
+            Text("默认显示当前厂商关闭思考推理的字段；你可以直接修改。清空并保存会恢复默认，保存 {} 表示不附加任何扩展字段。不能覆盖 messages、stream 或 stream_options。")
         }
     }
 
@@ -317,9 +359,47 @@ struct LLMConfigurationView: View {
         model = draft.model
         imageModel = draft.imageModel
         apiKey = draft.apiKey
+        extraConfig = draft.extraConfig
+        extraConfigError = nil
+        extraConfigSaved = false
         models = []
         modelError = nil
         keySaved = !apiKey.isEmpty
+    }
+
+    private func saveExtraConfig() {
+        do {
+            let normalized = try AIExtraConfig.validatedJSON(extraConfig)
+            try ai.saveExtraConfig(normalized, for: baseURL)
+            extraConfig = normalized.isEmpty
+                ? ai.effectiveExtraConfig(baseURL: baseURL, model: model)
+                : normalized
+            extraConfigError = nil
+            extraConfigSaved = true
+        } catch {
+            extraConfigError = error.localizedDescription
+            extraConfigSaved = false
+        }
+    }
+
+    private func refreshDefaultExtraIfUnmodified(
+        previousBaseURL: String,
+        previousModel: String,
+        newBaseURL: String,
+        newModel: String
+    ) {
+        let previousDefault = AIThinkingExtraConfig.defaultJSON(
+            baseURL: previousBaseURL,
+            model: previousModel
+        )
+        guard extraConfig.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || AIExtraConfig.jsonEquals(extraConfig, previousDefault)
+        else { return }
+        extraConfig = ai.effectiveExtraConfig(
+            baseURL: newBaseURL,
+            model: newModel
+        )
+        extraConfigSaved = false
     }
 
     private func persistConfiguration(

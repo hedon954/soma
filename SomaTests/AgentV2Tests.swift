@@ -13,15 +13,14 @@ final class AgentV2Tests: XCTestCase {
 
         XCTAssertEqual(tools.count, 27)
         XCTAssertEqual(
-            Set(tools.filter { $0.schemaVersion == 3 }),
-            [
-                .getProgram, .createProgram, .updateProgram,
-                .createExercise, .createWorkout
-            ]
+            Set(tools.filter { $0.schemaVersion == 4 }),
+            [.searchExercises, .createExercise, .updateExercise, .createWorkout, .updateWorkout]
         )
-        XCTAssertTrue(tools.filter { $0.schemaVersion != 3 }.allSatisfy {
-            $0.schemaVersion == 2
-        })
+        XCTAssertEqual(
+            Set(tools.filter { $0.schemaVersion == 3 }),
+            [.getProgram, .createProgram, .updateProgram]
+        )
+        XCTAssertTrue(tools.allSatisfy { (2 ... 4).contains($0.schemaVersion) })
         XCTAssertTrue(tools.contains(.updateMeal))
     }
 
@@ -265,7 +264,9 @@ final class AgentV2Tests: XCTestCase {
 
     func testTrustedTimeFreezesLoopStartAndFormatsAtPromptTime() throws {
         let zone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
-        let sent = Date(timeIntervalSince1970: 1_786_422_600)
+        let sent = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-09-01T22:12:00+08:00")
+        )
         let attempt = sent.addingTimeInterval(90)
         let trusted = TrustedTurnContext.make(
             turnSentAt: sent,
@@ -278,12 +279,33 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(frozen.turnSentAt, sent)
         XCTAssertEqual(frozen.loopStartedAt, attempt)
         XCTAssertEqual(frozen.timeZoneIdentifier, "Asia/Shanghai")
-        XCTAssertTrue(frozen.promptText.contains("当前真实时间"))
+        XCTAssertTrue(frozen.promptText.contains(
+            "用户本次发送时间（权威本地时间）：2026-09-01 22:12:00 +08:00（Asia/Shanghai，晚上10点12分）"
+        ))
+        XCTAssertTrue(frozen.promptText.contains(
+            "当前执行时间（仅用于处理延迟）：2026-09-01 22:13:30 +08:00"
+        ))
         XCTAssertTrue(frozen.promptText.contains("省略 occurred_at 时的稳定记录时间"))
+        XCTAssertFalse(frozen.promptText.contains("14:12:00Z"))
         let encoded = try JSONEncoder().encode(frozen)
         let json = try XCTUnwrap(String(data: encoded, encoding: .utf8))
         XCTAssertFalse(json.contains("localDate"))
         XCTAssertFalse(json.contains("weekday"))
+    }
+
+    func testTrustedTimeKeepsNonWholeHourOffsetAndDaylightSaving() throws {
+        let zone = try XCTUnwrap(TimeZone(identifier: "America/St_Johns"))
+        let sent = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-01T22:12:00-02:30")
+        )
+        let trusted = TrustedTurnContext.make(
+            turnSentAt: sent,
+            attemptStartedAt: sent,
+            timeZone: zone
+        )
+
+        XCTAssertTrue(trusted.promptText.contains("2026-07-01 22:12:00 -02:30"))
+        XCTAssertTrue(trusted.promptText.contains("America/St_Johns，晚上10点12分"))
     }
 
     func testDirectVideoRequiresExplicitCatalogVideoModality() {
@@ -437,6 +459,52 @@ final class AgentV2Tests: XCTestCase {
         }
 
         XCTAssertEqual(output, "较晚返回")
+    }
+
+    @MainActor
+    func testAgentStreamWorkerProjectsReasoningSeparatelyFromAssistantText() async throws {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "id": "chatcmpl_reasoning",
+            "object": "chat.completion.chunk",
+            "choices": [[
+                "index": 0,
+                "delta": [
+                    "reasoning_content": "先分析事实。",
+                    "content": "再给结论。"
+                ],
+                "finish_reason": "stop"
+            ]]
+        ])
+        let chunk = try JSONDecoder().decode(ChatCompletionChunkObject.self, from: data)
+        let stream = AsyncThrowingStream<ChatCompletionChunkObject, Error> { continuation in
+            continuation.yield(chunk)
+            continuation.finish()
+        }
+        let textItemID = UUID()
+        let reasoningItemID = UUID()
+        var events: [AgentTraceEvent] = []
+
+        let outcome = try await AgentStreamWorker.consume(
+            stream: stream,
+            mediaMode: .text,
+            policy: AgentStreamDeadlinePolicy(),
+            enforceFirstDelta: false,
+            textItemID: textItemID,
+            reasoningItemID: reasoningItemID
+        ) { event in
+            events.append(event)
+        }
+
+        XCTAssertEqual(outcome.reasoning, "先分析事实。")
+        XCTAssertEqual(outcome.passage, "再给结论。")
+        XCTAssertTrue(events.contains(.reasoningDelta(
+            itemID: reasoningItemID,
+            delta: "先分析事实。"
+        )))
+        XCTAssertTrue(events.contains(.assistantTextDelta(
+            itemID: textItemID,
+            delta: "再给结论。"
+        )))
     }
 
     @MainActor

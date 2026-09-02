@@ -99,7 +99,7 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
         XCTAssertEqual(right.groups[0].sideMode, .rightOnly)
     }
 
-    func testWorkoutHeaderUsesCompactTargetAndLateralityLabels() {
+    func testWorkoutHeaderPrefersExplicitEvidenceOverExerciseFallback() {
         let repetitions = WorkoutSetEvidence(
             logicalSetIndex: 1,
             side: WorkoutEffortSide.none,
@@ -107,14 +107,7 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
             reps: 10
         )
 
-        let expectations: [(ExerciseLaterality, String)] = [
-            (.none, "双侧同时"),
-            (.both, "左右各做"),
-            (.left, "仅左"),
-            (.right, "仅右")
-        ]
-
-        for (laterality, label) in expectations {
+        for laterality in ExerciseLaterality.allCases {
             let draft = WorkoutRecordDraft(
                 evidence: [repetitions],
                 loggingProfile: ExerciseLoggingProfileSnapshot(
@@ -124,7 +117,7 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
             )
 
             XCTAssertEqual(draft.headerTargetKindLabel, "次数")
-            XCTAssertEqual(draft.headerSideLabel, label)
+            XCTAssertEqual(draft.headerSideLabel, "双侧同时")
         }
 
         let durationDraft = WorkoutRecordDraft(
@@ -134,7 +127,17 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
                 targetKind: .duration
             )
         )
-        XCTAssertEqual(durationDraft.headerTargetKindLabel, "时长")
+        XCTAssertEqual(durationDraft.headerTargetKindLabel, "次数")
+
+        let fallback = WorkoutRecordDraft(
+            evidence: [WorkoutSetEvidence(logicalSetIndex: 1, reps: 20)],
+            loggingProfile: ExerciseLoggingProfileSnapshot(
+                laterality: .left,
+                targetKind: .duration
+            )
+        )
+        XCTAssertEqual(fallback.headerTargetKindLabel, "时长")
+        XCTAssertEqual(fallback.headerSideLabel, "仅左")
     }
 
     func testOnlyAlternatingGroupsShowSideLabelsInsideDataRows() {
@@ -331,7 +334,7 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
         XCTAssertEqual(evidence.durationSeconds, 60)
     }
 
-    func testExerciseDefinitionOverridesLegacyRecordUnitAndLateralityLabel() {
+    func testExplicitRecordEvidenceOverridesExerciseDefinitionFallback() {
         let draft = WorkoutRecordDraft(
             evidence: [
                 WorkoutSetEvidence(
@@ -348,12 +351,12 @@ final class WorkoutRecordEditorProjectionTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(draft.groups[0].efforts[0].targetKind, .duration)
-        XCTAssertNil(draft.groups[0].efforts[0].reps)
-        XCTAssertEqual(draft.groups[0].efforts[0].durationSeconds, 20)
+        XCTAssertEqual(draft.groups[0].efforts[0].targetKind, .repetitions)
+        XCTAssertEqual(draft.groups[0].efforts[0].reps, 20)
+        XCTAssertNil(draft.groups[0].efforts[0].durationSeconds)
         XCTAssertEqual(draft.sideLabel(for: draft.groups[0]), "双侧同时")
-        XCTAssertEqual(draft.evidence[0].targetKind, .duration)
-        XCTAssertEqual(draft.evidence[0].durationSeconds, 20)
+        XCTAssertEqual(draft.evidence[0].targetKind, .repetitions)
+        XCTAssertEqual(draft.evidence[0].reps, 20)
     }
 
     func testLegacyMissingTargetKindRemainsMissingAfterRoundTrip() {

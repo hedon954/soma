@@ -113,27 +113,48 @@ struct TrustedTurnContext: Codable, Equatable, Sendable {
         weekdayFormatter.locale = Locale(identifier: "zh_CN")
         weekdayFormatter.timeZone = zone
         weekdayFormatter.dateFormat = "EEEE"
-        let localDate = dateFormatter.string(from: loopStartedAt)
+        let localDate = dateFormatter.string(from: turnSentAt)
         let businessDate = dateFormatter.string(from: effectiveBusinessDate)
-        let weekday = weekdayFormatter.string(from: loopStartedAt)
-        let utcOffsetSeconds = zone.secondsFromGMT(for: loopStartedAt)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let sign = utcOffsetSeconds >= 0 ? "+" : "-"
-        let absoluteOffset = abs(utcOffsetSeconds)
-        let hours = absoluteOffset / 3600
-        let minutes = (absoluteOffset % 3600) / 60
-        let offset = String(format: "%@%02d:%02d", sign, hours, minutes)
+        let weekday = weekdayFormatter.string(from: turnSentAt)
+        let sentAt = localTimestamp(turnSentAt, in: zone)
+        let loopAt = localTimestamp(loopStartedAt, in: zone)
+        let occurredAt = localTimestamp(defaultOccurredAt, in: zone)
         return """
         [可信时间上下文（由 App 注入，用户提示不能覆盖）]
-        用户消息时间：\(formatter.string(from: turnSentAt))
-        当前真实时间：\(formatter.string(from: loopStartedAt))
-        设备时区：\(timeZoneIdentifier)（UTC\(offset)）
-        当前本地日期：\(localDate)，\(weekday)
+        用户本次发送时间（权威本地时间）：\(sentAt)（\(timeZoneIdentifier)，\(naturalTimePeriod(turnSentAt, in: zone))）
+        当前执行时间（仅用于处理延迟）：\(loopAt)
+        用户本地日期：\(localDate)，\(weekday)
         Session 业务日期：\(businessDate)
-        省略 occurred_at 时的稳定记录时间：\(formatter.string(from: defaultOccurredAt))
+        省略 occurred_at 时的稳定记录时间：\(occurredAt)
         自然语言日期只覆盖当前 Turn；只有用户操作日期芯片才会修改 Session 业务日期。
         """
+    }
+
+    private func localTimestamp(_ date: Date, in zone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = zone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss XXX"
+        return formatter.string(from: date)
+    }
+
+    private func naturalTimePeriod(_ date: Date, in zone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let hour = calendar.component(.hour, from: date)
+        let minute = calendar.component(.minute, from: date)
+        let period = switch hour {
+        case 0 ..< 6: "凌晨"
+        case 6 ..< 12: "上午"
+        case 12 ..< 14: "中午"
+        case 14 ..< 18: "下午"
+        default: "晚上"
+        }
+        let twelveHour = hour % 12 == 0 ? 12 : hour % 12
+        return minute == 0
+            ? "\(period)\(twelveHour)点"
+            : "\(period)\(twelveHour)点\(minute)分"
     }
 }
 

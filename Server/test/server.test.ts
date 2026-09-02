@@ -30,8 +30,10 @@ import {
   InMemoryObjectStore,
 } from "../src/object-store.js";
 import {
+  defaultProviderExtraConfig,
   modelStepRetryDelaysSeconds,
   OpenAICompatibleManagedProvider,
+  parseProviderExtraConfig,
 } from "../src/provider.js";
 import {
   AllowDevelopmentAttestation,
@@ -223,6 +225,41 @@ test("worker projects provider deltas before the terminal output", async () => {
   assert.equal(events.at(-1)?.kind, "output");
 });
 
+test("worker projects reasoning as one stable lifecycle before answer text", async () => {
+  const store = new InMemorySomaStore();
+  const input = makeJobInput();
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  const worker = new AgentWorker(store, {
+    async run(_job, _events, _media, onTextDelta, onReasoningDelta) {
+      await onReasoningDelta?.("先核对事实，");
+      await onReasoningDelta?.("再生成答案。");
+      await onTextDelta?.("最终答案。\n");
+      return { kind: "completed", answer: "最终答案。" };
+    },
+  });
+
+  await worker.runOnce();
+  const events = await store.events(job.id, 0, 100);
+  const reasoning = events.filter((event) => event.kind === "reasoning");
+
+  assert.deepEqual(reasoning.map((event) => event.phase), [
+    "updated",
+    "updated",
+    "completed",
+  ]);
+  assert.equal(reasoning[0]?.payload.itemID, reasoning[2]?.payload.itemID);
+  assert.equal(reasoning[2]?.payload.text, "先核对事实，再生成答案。");
+  assert.ok(
+    (events.findIndex((event) => event.kind === "reasoning" && event.phase === "completed")) <
+      events.findIndex((event) => event.kind === "text" && event.phase === "completed"),
+  );
+});
+
 test("worker model start records every exposed tool", async () => {
   const store = new InMemorySomaStore();
   const input = makeJobInput({
@@ -410,6 +447,10 @@ test("worker executes submitted custom skills without delegating runtime tools",
   assert.equal(queued?.state, "queued");
   assert.equal((await store.pendingToolRequests(deviceID)).length, 0);
   const events = await store.events(job.id, 0, 100);
+  assert.deepEqual(
+    events.filter((event) => event.kind === "tool").map((event) => event.phase),
+    ["started", "updated", "completed"],
+  );
   const result = events.find((event) =>
     event.kind === "tool" && event.phase === "completed"
   );
@@ -716,7 +757,7 @@ test("worker returns invalid tool arguments to the model for correction", async 
         };
       }
       const failedTool = events.find((event) =>
-        event.kind === "tool" && event.phase === "completed"
+        event.kind === "tool" && event.phase === "failed"
       );
       const result = failedTool?.payload.result as Record<string, unknown>;
       assert.equal(result.code, "invalid_tool_arguments");
@@ -727,6 +768,13 @@ test("worker returns invalid tool arguments to the model for correction", async 
 
   assert.equal((await worker.runOnce())?.state, "queued");
   assert.equal((await store.pendingToolRequests(deviceID)).length, 0);
+  const firstPassEvents = await store.events(job.id, 0, 100);
+  assert.deepEqual(
+    firstPassEvents
+      .filter((event) => event.kind === "tool")
+      .map((event) => event.phase),
+    ["started", "failed"],
+  );
   assert.equal((await worker.runOnce())?.state, "completed");
   const events = await store.events(job.id, 0, 100);
   assert.equal(
@@ -824,9 +872,12 @@ test("plan schema 3 validates nested prescriptions and keeps schema 2 registered
   }
 });
 
-test("batch create schema 3 validates arrays and keeps schema 2 registered", () => {
-  assert.equal(deviceToolRegistry.get("create_exercise")?.schemaVersion, 3);
-  assert.equal(deviceToolRegistry.get("create_workout")?.schemaVersion, 3);
+test("schema 4 carries workout laterality and keeps schemas 2 and 3 registered", () => {
+  assert.equal(deviceToolRegistry.get("search_exercises")?.schemaVersion, 4);
+  assert.equal(deviceToolRegistry.get("create_exercise")?.schemaVersion, 4);
+  assert.equal(deviceToolRegistry.get("update_exercise")?.schemaVersion, 4);
+  assert.equal(deviceToolRegistry.get("create_workout")?.schemaVersion, 4);
+  assert.equal(deviceToolRegistry.get("update_workout")?.schemaVersion, 4);
 
   assert.equal(validateDeviceTool({
     name: "create_exercise",
@@ -840,6 +891,57 @@ test("batch create schema 3 validates arrays and keeps schema 2 registered", () 
     arguments: { exercise_name: "虚构硬拉" },
     allowedNames: ["create_exercise"],
   }).schemaVersion, 2);
+  assert.equal(validateDeviceTool({
+    name: "create_exercise",
+    schemaVersion: 4,
+    arguments: {
+      exercises: [{
+        exercise_name: "虚构保加利亚分腿蹲",
+        target_kind: "repetitions",
+        laterality: "both",
+      }],
+    },
+    allowedNames: ["create_exercise"],
+  }).schemaVersion, 4);
+  const pairedWorkout = {
+    workouts: [{
+      exercise_id: 7,
+      target_kind: "repetitions",
+      laterality: "both",
+      set_entries: [
+        {
+          logical_set_index: 1,
+          side: "left",
+          target_kind: "repetitions",
+          reps: 12,
+          external_weight_kg: 0,
+          rest_seconds: 30,
+        },
+        {
+          logical_set_index: 1,
+          side: "right",
+          target_kind: "repetitions",
+          reps: 12,
+          external_weight_kg: 0,
+          rest_seconds: 60,
+        },
+      ],
+    }],
+  };
+  assert.equal(validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 4,
+    arguments: pairedWorkout,
+    allowedNames: ["create_workout"],
+  }).schemaVersion, 4);
+  assert.throws(() => validateDeviceTool({
+    name: "create_workout",
+    schemaVersion: 4,
+    arguments: {
+      workouts: [{ ...pairedWorkout.workouts[0], laterality: "none" }],
+    },
+    allowedNames: ["create_workout"],
+  }));
   assert.equal(validateDeviceTool({
     name: "create_workout",
     schemaVersion: 3,
@@ -985,6 +1087,78 @@ test("managed provider streams text before completion and limits media", async (
     answer: "已分析可见关键帧。",
     usage: { input: 4, output: 3 },
   });
+});
+
+test("managed provider streams reasoning separately from answer text", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input: makeJobInput(),
+    bodyDigest: sha256("reasoning-stream"),
+    now: new Date(),
+  });
+  let captured: Record<string, unknown> | undefined;
+  const provider = new OpenAICompatibleManagedProvider(
+    "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "test-key",
+    "qwen3.5-plus",
+    async (_input, init) => {
+      captured = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const encoder = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"reasoning_content":"分析中。"}}]}\n\n',
+          ));
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"content":"答案。"},"finish_reason":"stop"}]}\n\n',
+          ));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  );
+  const text: string[] = [];
+  const reasoning: string[] = [];
+
+  const step = await provider.run(
+    job,
+    [],
+    [],
+    async (delta) => {
+      text.push(delta);
+    },
+    async (delta) => {
+      reasoning.push(delta);
+    },
+  );
+
+  assert.deepEqual(reasoning, ["分析中。"]);
+  assert.deepEqual(text, ["答案。"]);
+  assert.equal(captured?.enable_thinking, false);
+  assert.deepEqual(step, {
+    kind: "completed",
+    answer: "答案。",
+    usage: { input: 0, output: 0 },
+  });
+});
+
+test("managed provider extra config defaults and validation stay provider-specific", () => {
+  assert.deepEqual(
+    defaultProviderExtraConfig("https://openrouter.ai/api/v1", "provider/model"),
+    { reasoning: { enabled: false } },
+  );
+  assert.deepEqual(
+    parseProviderExtraConfig('{"reasoning":{"enabled":true},"top_k":32}'),
+    { reasoning: { enabled: true }, top_k: 32 },
+  );
+  assert.throws(() => parseProviderExtraConfig('{"stream":false}'));
+  assert.throws(() => parseProviderExtraConfig("[]"));
 });
 
 test("explicit direct-video capability sends video without duplicate frames", async () => {

@@ -33,6 +33,28 @@ final class ProgressDataSourceProjectionTests: XCTestCase {
         )
     }
 
+    func testCurrentTotalDistinguishesHealthActivityFromWorkoutEstimate() {
+        XCTAssertEqual(
+            ProgressMetricSource.currentTotal(
+                resting: 1200,
+                active: 480,
+                activeUsesHealth: true
+            ).rows,
+            [
+                ProgressSourceRow(label: "截至当前静息消耗", value: "1200 kcal"),
+                ProgressSourceRow(label: "截至当前活动消耗", value: "480 kcal")
+            ]
+        )
+        XCTAssertEqual(
+            ProgressMetricSource.currentTotal(
+                resting: 1200,
+                active: 180,
+                activeUsesHealth: false
+            ).rows.last,
+            ProgressSourceRow(label: "已记录训练消耗", value: "180 kcal")
+        )
+    }
+
     func testRestingSourceBreaksFormulaIntoRealUserTerms() {
         let input = RestingEnergyFormulaInput(
             weightKG: 70,

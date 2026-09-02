@@ -20,7 +20,13 @@ source_paths="$(
     [[ ! -f Package.resolved ]] || printf '%s\n' Package.resolved
     # Use the deterministic Git tracked/untracked contract. This includes new product
     # files while excluding ignored machine-local inputs such as feedback credentials.
-    git ls-files --cached --others --exclude-standard -- Soma SomaWidget
+    git ls-files --cached --others --exclude-standard -- Soma SomaWidget |
+      while IFS= read -r path; do
+        # A valid dirty worktree can contain tracked deletions. Those paths are
+        # still reported by `git ls-files --cached`, but they were not inputs to
+        # the just-built app and must not be handed to shasum.
+        [[ ! -f "$path" ]] || printf '%s\n' "$path"
+      done
   } | LC_ALL=C sort -u
 )"
 {

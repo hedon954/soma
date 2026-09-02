@@ -158,11 +158,17 @@ struct RootView: View {
     @State private var tabTransition = AppTabTransitionCoordinator()
     @State private var tabNavigation = AppTabNavigationState()
     @State private var didFinishInitialMaintenance = false
+    @State private var capturePresentation = CapturePresentationCoordinator()
+    @State private var foregroundRecovery = ForegroundRecoveryCoordinator()
 
     var body: some View {
+        @Bindable var capturePresentation = capturePresentation
         rootTabs
             .background {
-                RootTabReselectObserver(onReselect: handleTabReselect)
+                RootTabReselectObserver(
+                    onReselect: handleTabReselect,
+                    onDoubleReselect: handleTabDoubleReselect
+                )
             }
             .tint(AppTheme.tint)
             .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
@@ -204,9 +210,29 @@ struct RootView: View {
             .onChange(of: captureRouter.pendingWorkoutSession, initial: true) {
                 handleWorkoutSessionRoute()
             }
+            .onChange(of: sheet?.id) {
+                presentCaptureIfReady()
+            }
+            .onChange(of: routedWorkoutSession?.id) {
+                presentCaptureIfReady()
+            }
+            .fullScreenCover(
+                item: $capturePresentation.presentation,
+                onDismiss: handleCapturePresentationDismissed
+            ) { presentation in
+                QuickCapturePresentationView(
+                    presentation: presentation,
+                    onPick: { media in
+                        completeCapture(presentation, media: media)
+                    },
+                    onCancel: {
+                        cancelCapture(presentation)
+                    }
+                )
+            }
             .fullScreenCover(item: $routedWorkoutSession) { session in
                 NavigationStack {
-                    GuidedWorkoutView(session: session)
+                    GuidedWorkoutView(sessionID: session.id)
                 }
             }
             .onReceive(
@@ -244,7 +270,9 @@ struct RootView: View {
                     await ImagePipeline.shared.removeAllCachedImages()
                 }
                 CoachTextRenderCache.removeAll()
-                CoachMessageRenderPayloadCache.removeAll()
+                CoachMessageRenderPayloadCache.retainCurrentSession(
+                    conversationSessions.activeSessionID
+                )
                 TrainingIntelligenceService.removeCachedPerformanceFingerprints()
             }
             .task {
@@ -311,23 +339,38 @@ struct RootView: View {
                 )
                 didFinishInitialMaintenance = true
             }
-            .onChange(of: scenePhase) {
-                if scenePhase == .active {
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .active {
+                    AppPerformance.event(
+                        .sceneActive,
+                        detail: "tab=\(selectedTab.performanceName)"
+                    )
+                    dataManagement.cancelAutomaticBackupForForeground()
+                    presentCaptureIfReady()
                     // 首次 active 与上面的 root task 处在同一启动窗口。等待初次
                     // 收口完成后才允许执行真正的前台恢复，避免启动时重复查询。
                     guard didFinishInitialMaintenance else { return }
-                    Task {
-                        await Task.yield()
-                        guard scenePhase == .active else { return }
-                        await RemoteAgentRevocationService.retryIfNeeded()
-                        guard scenePhase == .active else { return }
+                    foregroundRecovery.schedule { generation in
+                        guard scenePhase == .active,
+                              foregroundRecovery.isCurrent(generation)
+                        else {
+                            return
+                        }
+                        if selectedTab == .coach {
+                            AppPerformance.event(.coachFirstFrame, detail: "result=visible")
+                        }
+                        AppPerformance.event(
+                            .foregroundInteractive,
+                            detail: "tab=\(selectedTab.performanceName)"
+                        )
                         let performanceInterval = AppPerformance.begin(
                             .foregroundRecovery,
                             detail: "space=\(dataSpace.activeSpace.rawValue)"
                         )
-                        processor.resumePendingJobs(
+                        await processor.resumePendingJobsAfterForeground(
                             dataSpace: dataSpace.activeSpace,
                             ai: ai,
+                            modelContainer: dataSpace.activeContainer,
                             modelContext: modelContext,
                             locationService: locationContext
                         )
@@ -335,8 +378,30 @@ struct RootView: View {
                             performanceInterval,
                             detail: "space=\(dataSpace.activeSpace.rawValue)"
                         )
+                        Task { @MainActor in
+                            let revocationInterval = AppPerformance.begin(
+                                .remoteRevocation,
+                                detail: "phase=foreground"
+                            )
+                            await RemoteAgentRevocationService.retryIfNeeded()
+                            AppPerformance.end(
+                                revocationInterval,
+                                detail: foregroundRecovery.isCurrent(generation)
+                                    ? "result=completed"
+                                    : "result=stale"
+                            )
+                        }
                     }
-                } else if scenePhase == .background {
+                } else {
+                    foregroundRecovery.cancel()
+                    if oldPhase == .active,
+                       let requestID = capturePresentation
+                       .cancelForSceneDeactivation()
+                    {
+                        captureRouter.clear(requestID)
+                    }
+                }
+                if newPhase == .background {
                     dataManagement.backupWhenEnteringBackground(
                         personalContainer: dataSpace.personalContainer
                     )
@@ -445,6 +510,48 @@ struct RootView: View {
             "Routing capture request in root: \(request.mode.rawValue, privacy: .public)"
         )
         selectCoachTabIfNeeded()
+        if request.mode == .text {
+            NotificationCenter.default.post(name: .focusCoachComposer, object: nil)
+            captureRouter.clear(request.id)
+            return
+        }
+        _ = capturePresentation.enqueue(
+            request,
+            sceneIsActive: canPresentCapture
+        )
+    }
+
+    private var canPresentCapture: Bool {
+        scenePhase == .active && sheet == nil && routedWorkoutSession == nil
+    }
+
+    private func presentCaptureIfReady() {
+        guard canPresentCapture else { return }
+        capturePresentation.sceneBecameActive()
+    }
+
+    private func completeCapture(
+        _ presentation: CapturePresentation,
+        media: [PickedMedia]
+    ) {
+        guard !media.isEmpty,
+              capturePresentation.complete(requestID: presentation.requestID)
+        else {
+            return
+        }
+        captureRouter.deliver(media)
+        captureRouter.clear(presentation.requestID)
+    }
+
+    private func cancelCapture(_ presentation: CapturePresentation) {
+        guard capturePresentation.cancel(requestID: presentation.requestID) else { return }
+        captureRouter.clear(presentation.requestID)
+    }
+
+    private func handleCapturePresentationDismissed() {
+        guard let request = capturePresentation.request else { return }
+        _ = capturePresentation.cancel(requestID: request.id)
+        captureRouter.clear(request.id)
     }
 
     private func handleAgentTurnRoute() {
@@ -516,6 +623,11 @@ struct RootView: View {
                 isSelectedTabAtRoot: tabNavigation.isAtRoot(selectedTab)
             )
         )
+    }
+
+    private func handleTabDoubleReselect(_ tab: AppTab) {
+        guard tab == .coach, selectedTab == .coach else { return }
+        NotificationCenter.default.post(name: .coachDoubleReselected, object: nil)
     }
 
     private func applyTabEffect(_ effect: AppTabReselect.Effect) {

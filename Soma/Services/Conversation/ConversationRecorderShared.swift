@@ -78,16 +78,21 @@ extension ConversationRecorder {
     ) -> [WorkoutSetEvidence]? {
         if let entries = arguments.setEntries {
             return entries.map {
-                let targetKind = ExerciseLoggingProfile.resolvedTargetKind(
-                    exercise: exercise,
-                    reps: $0.reps,
-                    durationSeconds: $0.durationSeconds
-                )
+                let targetKind = $0.targetKind
+                    ?? arguments.targetKind
+                    ?? ExerciseLoggingProfile.resolvedTargetKind(
+                        exercise: exercise,
+                        reps: $0.reps,
+                        durationSeconds: $0.durationSeconds
+                    )
                 return WorkoutSetEvidence(
+                    logicalSetIndex: $0.logicalSetIndex,
+                    side: $0.side,
                     targetKind: targetKind,
                     reps: targetKind == .repetitions ? $0.reps : nil,
                     durationSeconds: targetKind == .duration ? $0.durationSeconds : nil,
-                    externalWeightKG: $0.externalWeightKG
+                    externalWeightKG: $0.externalWeightKG,
+                    restSeconds: $0.restSeconds
                 )
             }
         }
@@ -128,6 +133,76 @@ extension ConversationRecorder {
             }
             if let weight = entry.externalWeightKG, !(0 ... 1000).contains(weight) {
                 return "第 \(index + 1) 组 external_weight_kg 必须在 0 到 1000kg 之间。"
+            }
+            if let logicalSetIndex = entry.logicalSetIndex,
+               !(1 ... 1000).contains(logicalSetIndex)
+            {
+                return "第 \(index + 1) 条 logical_set_index 必须在 1 到 1000 之间。"
+            }
+            if let rest = entry.restSeconds, !(0 ... 3600).contains(rest) {
+                return "第 \(index + 1) 条 rest_seconds 必须在 0 到 3600 之间。"
+            }
+        }
+        return nil
+    }
+
+    struct WorkoutProfileValidationFailure {
+        let message: String
+        let field: String
+        let expected: String
+    }
+
+    static func workoutProfileValidationFailure(
+        arguments: AgentToolArguments,
+        entries: [WorkoutSetEvidence]?
+    ) -> WorkoutProfileValidationFailure? {
+        guard let entries, !entries.isEmpty else { return nil }
+        if let targetKind = arguments.targetKind,
+           let conflictIndex = entries.firstIndex(where: { $0.targetKind != targetKind })
+        {
+            return .init(
+                message: "set_entries 的 target_kind 必须与训练 target_kind 一致。",
+                field: "set_entries[\(conflictIndex)].target_kind",
+                expected: targetKind.rawValue
+            )
+        }
+        guard let laterality = arguments.laterality else { return nil }
+        let sides = Set(entries.map { $0.side ?? .none })
+        switch laterality {
+        case .none:
+            if sides.contains(.left) || sides.contains(.right) {
+                return .init(
+                    message: "laterality=none 不能保存 left/right effort；左右各做请使用 both。",
+                    field: "laterality",
+                    expected: ExerciseLaterality.both.rawValue
+                )
+            }
+        case .left:
+            if sides != [.left] {
+                return .init(
+                    message: "laterality=left 只能保存 left effort。",
+                    field: "set_entries.side",
+                    expected: WorkoutEffortSide.left.rawValue
+                )
+            }
+        case .right:
+            if sides != [.right] {
+                return .init(
+                    message: "laterality=right 只能保存 right effort。",
+                    field: "set_entries.side",
+                    expected: WorkoutEffortSide.right.rawValue
+                )
+            }
+        case .both:
+            let draft = WorkoutRecordDraft(evidence: entries)
+            if let conflict = draft.groups.first(where: {
+                Set($0.efforts.compactMap(\.side)) != [.left, .right]
+            }) {
+                return .init(
+                    message: "laterality=both 的每个 logical_set_index 都必须各有一条 left 和 right effort。",
+                    field: "set_entries.logical_set_index",
+                    expected: "paired left/right efforts for logical set \(conflict.logicalSetIndex ?? 0)"
+                )
             }
         }
         return nil

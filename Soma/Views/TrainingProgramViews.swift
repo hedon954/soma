@@ -30,6 +30,7 @@ private struct TrainingProgramLibraryProjection {
 
 struct TrainingProgramLibraryView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(GuidedWorkoutCoordinator.self) private var guidedCoordinator
     @Query private var programs: [TrainingProgram]
     @Query private var resumableSessions: [WorkoutSession]
     @Query private var completedSessions: [WorkoutSession]
@@ -114,7 +115,7 @@ struct TrainingProgramLibraryView: View {
         }
         .fullScreenCover(item: $resumedSession) { session in
             NavigationStack {
-                GuidedWorkoutView(session: session)
+                GuidedWorkoutView(sessionID: session.id)
             }
         }
         .alert(
@@ -142,14 +143,17 @@ struct TrainingProgramLibraryView: View {
         switch section {
         case .resume:
             if let resumableSession {
-                Button {
-                    WorkoutInterfaceOrientationPolicy.shared
-                        .setGuidedWorkoutActive(true)
-                    resumedSession = resumableSession
-                } label: {
-                    TrainingResumeCard(session: resumableSession)
-                }
-                .buttonStyle(.plain)
+                TrainingResumeSwipeContainer(
+                    session: resumableSession,
+                    onResume: {
+                        WorkoutInterfaceOrientationPolicy.shared
+                            .setGuidedWorkoutActive(true)
+                        resumedSession = resumableSession
+                    },
+                    onDelete: {
+                        deleteSession(resumableSession)
+                    }
+                )
             }
         case .programs:
             SectionHeading(title: "我的计划")
@@ -214,10 +218,18 @@ struct TrainingProgramLibraryView: View {
     }
 
     private func deleteSession(_ session: WorkoutSession) {
-        do {
-            try TrainingPlanStore.deleteSession(session, in: modelContext)
-        } catch {
-            errorMessage = error.localizedDescription
+        let sessionID = session.id
+        Task { @MainActor in
+            if guidedCoordinator.activeSessionID == sessionID,
+               let owner = guidedCoordinator.activeSessionOwner
+            {
+                _ = await guidedCoordinator.deactivate(owner: owner)
+            }
+            do {
+                try TrainingPlanStore.deleteSession(session, in: modelContext)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -710,7 +722,7 @@ private struct TrainingProgramDetailView: View {
             }
         }) { session in
             NavigationStack {
-                GuidedWorkoutView(session: session) {
+                GuidedWorkoutView(sessionID: session.id) {
                     returnToTrainingHomeAfterWorkout = true
                 }
             }
@@ -1088,11 +1100,12 @@ private struct WorkoutSessionHistoryRow: View {
 private struct WorkoutSessionReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var performances: [ExercisePerformance]
-    @Query private var sets: [WorkoutSet]
+    @Query private var workouts: [WorkoutEntry]
 
     let session: WorkoutSession
     @State private var shareModel: WorkoutSharePosterModel?
     @State private var summary: TrainingSessionSummary?
+    @State private var repairedMissingProjections = false
 
     init(session: WorkoutSession) {
         self.session = session
@@ -1101,9 +1114,9 @@ private struct WorkoutSessionReviewView: View {
             predicate: #Predicate { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.order)]
         ))
-        _sets = Query(FetchDescriptor<WorkoutSet>(
-            predicate: #Predicate { $0.performance?.sessionID == sessionID },
-            sortBy: [SortDescriptor(\.order)]
+        _workouts = Query(FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.sourceWorkoutSessionID == sessionID },
+            sortBy: [SortDescriptor(\.date)]
         ))
     }
 
@@ -1112,10 +1125,12 @@ private struct WorkoutSessionReviewView: View {
     }
 
     var body: some View {
-        let completedSetsByPerformanceID = Dictionary(
-            grouping: sets.lazy.filter { $0.status == .completed },
-            by: \WorkoutSet.performanceID
-        )
+        let workoutsByPerformanceID = workouts.reduce(
+            into: [UUID: WorkoutEntry]()
+        ) { result, workout in
+            guard let performanceID = workout.sourcePerformanceID else { return }
+            result[performanceID] = workout
+        }
         List {
             Section("本地总结") {
                 if let planLabel {
@@ -1129,28 +1144,35 @@ private struct WorkoutSessionReviewView: View {
             }
             Section("动作") {
                 ForEach(performances) { performance in
-                    NavigationLink {
-                        PerformanceReviewView(performance: performance)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(performance.exerciseName)
-                                .font(.headline)
-                            let performanceSets =
-                                completedSetsByPerformanceID[performance.id]
-                                    ?? []
-                            let videoCount = Set(
-                                performanceSets.compactMap(\.recordedVideoPath)
-                                    + [performance.activeVideoPath].compactMap { $0 }
-                            ).count
-                            Text(
-                                "\(performanceSets.count) 组已确认"
-                                    + (videoCount == 0
-                                        ? ""
-                                        : " · \(videoCount) 段录像")
+                    if let workout = workoutsByPerformanceID[performance.id] {
+                        NavigationLink {
+                            WorkoutRecordDetailView(workout: workout)
+                        } label: {
+                            ProgressRecentActivityRow(
+                                activity: .workout(workout)
                             )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         }
+                        .buttonStyle(.plain)
+                    } else if performance.workoutProjectionSuppressed {
+                        LabeledContent {
+                            Text("训练记录已删除")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Text(performance.exerciseName)
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .frame(minHeight: ProgressRecentActivityViewport.rowHeight)
+                        .accessibilityElement(children: .combine)
+                    } else {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在恢复 \(performance.exerciseName) 的训练记录…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(minHeight: ProgressRecentActivityViewport.rowHeight)
                     }
                 }
             }
@@ -1159,6 +1181,7 @@ private struct WorkoutSessionReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: session.id) {
             await loadSummary()
+            repairMissingWorkoutProjectionsIfNeeded()
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -1192,6 +1215,31 @@ private struct WorkoutSessionReviewView: View {
         }
         .sheet(item: $shareModel) { model in
             WorkoutShareSheet(model: model)
+        }
+    }
+
+    private func repairMissingWorkoutProjectionsIfNeeded() {
+        guard !repairedMissingProjections else { return }
+        repairedMissingProjections = true
+        let existing = Set(workouts.compactMap(\.sourcePerformanceID))
+        var changed = false
+        for performance in performances
+            where !existing.contains(performance.id)
+            && !performance.workoutProjectionSuppressed
+        {
+            if (try? GuidedWorkoutRecordStore.materialize(
+                performanceID: performance.id,
+                sessionID: session.id,
+                in: modelContext
+            )) != nil {
+                changed = true
+            }
+        }
+        guard changed else { return }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
         }
     }
 

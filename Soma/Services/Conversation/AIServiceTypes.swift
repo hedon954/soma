@@ -40,9 +40,9 @@ enum AIServiceError: LocalizedError {
 
 struct AgentStreamOutcome {
     var passage = ""
+    var reasoning = ""
     var toolCalls: [AgentStreamingToolCall] = []
     var usage: ChatUsage?
-    var ignoredReasoning = false
     var firstDeltaAt: Date?
     var projectionSeconds: TimeInterval = 0
     var requestAttempt = 1
@@ -56,6 +56,7 @@ enum StreamingFailure: Error {
     case interrupted(
         Error,
         passage: String,
+        reasoning: String,
         receivedMeaningfulDelta: Bool
     )
 }

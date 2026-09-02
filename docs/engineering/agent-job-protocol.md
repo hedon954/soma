@@ -42,11 +42,14 @@ PostgreSQL 是远程任务事实来源。SSE、APNs、`LISTEN/NOTIFY` 和 Live A
 
 ## 一致性模型
 
-- 本地发送：Turn、媒体引用、Job 与 Outbox item 原子保存。
+- 本地发送：用户 Turn、媒体引用、Job、预绑定响应消息、`jobQueued` Event 与 Outbox item 原子保存；
+  队列等待、流式输出、终态和人工重试始终投影到同一 `responseMessageID`。
 - 网络请求：至少一次投递。
 - 服务端提交：`deviceID + clientJobID` 唯一。
 - Event：`serverJobID + sequence` 唯一，sequence 只增不减。
 - Tool Request：`serverJobID + toolCallID` 唯一。
+- 聊天 operation：原生 `toolCallID` 作为 `operationID`，本地、远程、重连和重放均更新同一张卡；
+  旧 Event 缺少该字段时按既有 Span/status 兼容。
 - 本地 mutation：`turnID + normalizedToolSignature` 由 Receipt 幂等。
 - 产品效果：依靠稳定 ID 和幂等收敛为一次，不宣称传输恰好一次。
 
@@ -115,6 +118,8 @@ accepted
 - `resumeReason`、`lastErrorCode`；
 - `lastCompletedStep`、`loopCheckpointData`：本地 ReAct step 边界检查点；有检查点时
   中断恢复复用 `responseMessageID` 指向的同一条回复气泡，且不递增 `attemptNumber`；
+- `responseMessageID`：入队事务中创建的响应身份；初始显示已接收，FIFO、网络、配置或设备阻塞
+  时原位显示原因，Runner 不得另建响应；
 - `createdAt/updatedAt`。
 
 不得保存 API Key、Authorization 头或媒体 Base64。
@@ -252,7 +257,8 @@ POST /v1/agent-jobs/{serverJobID}/tool-results
 
 - `toolCallID`；
 - 固定 `toolName`；
-- `schemaVersion`（新请求为 v2；迁移期仍接受持久化 v1 调用）；
+- `schemaVersion`（由 Tool 当前固定版本决定；训练搜索/动作/训练写入当前为 v4，计划当前为 v3，
+  其余按注册版本；v1/v2/v3 只在对应 Tool 明确支持时恢复旧持久调用）；
 - 版本化 arguments；
 - 是否 mutation；
 - request expiry。
@@ -278,12 +284,18 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 4. 模型每轮使用 Envelope 指定的原生流式 Tool Calling、`tool_choice=auto`、并行调用、步数与
    20/40/60 秒首增量、3/5/10 分钟活动预算。首段文本立即追加，后续文本按自然边界、48 字符
    阈值或 80ms 窗口合并；有完整 Tool Call 批次后才持久化。
-5. Worker 先持久化 assistant 文本与全部原生 `tool_calls`。当 Envelope 明确暴露时，
-   `load_skill` 使用其中 Skill 快照就地执行。业务 Tool 全部进入 `waitingForDevice`。
+5. Worker 先持久化 assistant 文本与全部原生 `tool_calls`，并为每个调用以 `toolCallID` 追加
+   `started`（preparing）Event；参数校验失败在同一 ID 追加 failed。当 Envelope 明确暴露时，
+   `load_skill` 开始执行时追加 updated（running），使用其中 Skill 快照就地执行。业务 Tool 全部
+   进入 suspended（`waitingForDevice`）；设备领取时投影 running，提交结果后原位完成或失败。
 6. 并行 Tool Result 可任意顺序幂等到达；最后一个结果到达前保持等待，齐备后按原调用顺序重建
    `assistant.tool_calls` 与 `role=tool` 消息，再创建新 lease 继续。
 7. 成功、失败、取消和过期在同一 transaction 写终态 Job 与 Event。
 8. 崩溃恢复只读取已提交 Event 和 Tool Result，不重用进程内半成品。
+
+聊天投影阶段统一为 `queued/modelRunning/preparing/running/waitingForDevice/completed/failed/cancelled`。
+Turn 级 Activity 与 Skill/Tool operation 分开；首段正文或操作卡出现时隐藏重复 Activity。阶段不得
+通过 sleep 伪造停留，完整序列仍须持久化供 Event Log 和重放使用。
 
 服务端保存的是可继续的消息/Tool 历史，不保存或展示模型私有 thinking。
 
@@ -296,6 +308,8 @@ Tool Result 以 `toolCallID` 幂等。相同 ID 与相同 digest 返回首次结
 - `AgentTurnContextEnvelope v3` 在设备冻结原始 Turn 时间、Session businessDate、时区和
   `defaultOccurredAt`，并投影为条件业务上下文、最近十个完整 user-assistant 对、滚动替代摘要与
   确定性媒体选择，再进入 `AgentModelInputEnvelope v2`；较早成功写入不重复长 Tool observation。
+- 模型自然语言时间只出现一个权威本地时间，包含日期、UTC offset、IANA 时区和时段；UTC 如需
+  机器处理必须明确标注且不得先于本地时间。人工重试复用原 Turn 时间，Loop 时间单独标识。
 - 会话压缩只在 ReAct Loop 前发生；小模型失败后回退标准模型，再失败使用确定性 digest。iOS 在
   本地和远程提交前都投影同样的压缩 Chat 事件，Worker 不重新压缩或改写 Prompt。
 - `GET /v1/capabilities` 在媒体准备前返回远程 Provider 是否启用已验证直传视频；直传时只上传

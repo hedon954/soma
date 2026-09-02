@@ -31,6 +31,10 @@ enum AgentToolSchemaValidator {
             try validateCreateV2(raw, for: name)
             return
         }
+        if schemaVersion == 3, [.createExercise, .createWorkout].contains(name) {
+            try validateBatchCreateV3(raw, for: name)
+            return
+        }
         // 旧 schema 1 的形状由历史 decoder 与业务 Store 继续兜底；当前版本始终严格递归验证。
         guard schemaVersion == name.schemaVersion else { return }
         let parameters = try parameterSchema(for: name)
@@ -38,8 +42,8 @@ enum AgentToolSchemaValidator {
         if [.createProgram, .updateProgram, .getProgram].contains(name) {
             try validatePlanV3(raw, for: name)
         }
-        if [.createExercise, .createWorkout].contains(name) {
-            try validateBatchCreateV3(raw, for: name)
+        if schemaVersion == 4 {
+            try validateV4(raw, for: name)
         }
     }
 
@@ -283,6 +287,14 @@ enum AgentToolSchemaValidator {
     ) throws {
         switch name {
         case .createExercise:
+            let allowed: Set = ["exercise_names"]
+            let unknown = Set(raw.keys).subtracting(allowed)
+            guard unknown.isEmpty else {
+                throw invalid(
+                    name.rawValue,
+                    "包含未声明参数：\(unknown.sorted().joined(separator: "、"))"
+                )
+            }
             guard let names = raw["exercise_names"] as? [Any],
                   (1 ... AgentBatchWriteLimit.maxItems).contains(names.count)
             else {
@@ -291,7 +303,25 @@ enum AgentToolSchemaValidator {
                     "必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 个名称"
                 )
             }
+            for (index, value) in names.enumerated() {
+                guard let value = value as? String,
+                      !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else {
+                    throw invalid(
+                        "\(name.rawValue).exercise_names[\(index)]",
+                        "名称不能为空"
+                    )
+                }
+            }
         case .createWorkout:
+            let allowed: Set = ["workouts"]
+            let unknown = Set(raw.keys).subtracting(allowed)
+            guard unknown.isEmpty else {
+                throw invalid(
+                    name.rawValue,
+                    "包含未声明参数：\(unknown.sorted().joined(separator: "、"))"
+                )
+            }
             guard let workouts = raw["workouts"] as? [[String: Any]],
                   (1 ... AgentBatchWriteLimit.maxItems).contains(workouts.count)
             else {
@@ -301,9 +331,55 @@ enum AgentToolSchemaValidator {
                 )
             }
             for (index, workout) in workouts.enumerated() {
+                let path = "\(name.rawValue).workouts[\(index)]"
+                let allowedWorkout: Set = [
+                    "exercise_id", "occurred_at", "set_entries", "rest_seconds",
+                    "duration_minutes", "form_score", "intensity", "feedback"
+                ]
+                let unknownWorkout = Set(workout.keys).subtracting(allowedWorkout)
+                guard unknownWorkout.isEmpty else {
+                    throw invalid(
+                        path,
+                        "包含未声明参数：\(unknownWorkout.sorted().joined(separator: "、"))"
+                    )
+                }
+                try requireInteger(
+                    workout["exercise_id"],
+                    in: 1 ... maximumJSONInteger,
+                    path: "\(path).exercise_id"
+                )
+                if workout["occurred_at"] != nil, !(workout["occurred_at"] is String) {
+                    throw invalid("\(path).occurred_at", "类型必须是 string")
+                }
+                for key in ["intensity", "feedback"]
+                    where workout[key] != nil && !(workout[key] is String)
+                {
+                    throw invalid("\(path).\(key)", "类型必须是 string")
+                }
+                if workout["rest_seconds"] != nil {
+                    try requireInteger(
+                        workout["rest_seconds"],
+                        in: 0 ... 3600,
+                        path: "\(path).rest_seconds"
+                    )
+                }
+                if workout["duration_minutes"] != nil {
+                    try requireInteger(
+                        workout["duration_minutes"],
+                        in: 0 ... 1440,
+                        path: "\(path).duration_minutes"
+                    )
+                }
+                if workout["form_score"] != nil {
+                    try requireInteger(
+                        workout["form_score"],
+                        in: 0 ... 100,
+                        path: "\(path).form_score"
+                    )
+                }
                 try validateWorkoutSetEntries(
                     workout["set_entries"],
-                    path: "\(name.rawValue).workouts[\(index)].set_entries"
+                    path: "\(path).set_entries"
                 )
             }
         default:
@@ -347,6 +423,167 @@ enum AgentToolSchemaValidator {
                     row["external_weight_kg"],
                     in: 0 ... 1000,
                     path: "\(rowPath).external_weight_kg"
+                )
+            }
+        }
+    }
+
+    private static func validateV4(
+        _ raw: [String: Any],
+        for name: AgentToolName
+    ) throws {
+        switch name {
+        case .createExercise:
+            guard let exercises = raw["exercises"] as? [[String: Any]],
+                  (1 ... AgentBatchWriteLimit.maxItems).contains(exercises.count)
+            else {
+                throw invalid(
+                    "create_exercise.exercises",
+                    "必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 个动作"
+                )
+            }
+            for (index, exercise) in exercises.enumerated() {
+                guard let name = exercise["exercise_name"] as? String,
+                      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else {
+                    throw invalid(
+                        "create_exercise.exercises[\(index)].exercise_name",
+                        "名称不能为空"
+                    )
+                }
+            }
+        case .updateExercise:
+            try requireInteger(
+                raw["exercise_id"],
+                in: 1 ... maximumJSONInteger,
+                path: "update_exercise.exercise_id"
+            )
+            guard raw["exercise_name"] != nil
+                || raw["target_kind"] != nil
+                || raw["laterality"] != nil
+            else {
+                throw invalid("update_exercise", "至少提供一个要更新的字段")
+            }
+        case .createWorkout:
+            guard let workouts = raw["workouts"] as? [[String: Any]],
+                  (1 ... AgentBatchWriteLimit.maxItems).contains(workouts.count)
+            else {
+                throw invalid(
+                    "create_workout.workouts",
+                    "必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 条训练"
+                )
+            }
+            for (index, workout) in workouts.enumerated() {
+                try validateWorkoutV4(
+                    workout,
+                    path: "create_workout.workouts[\(index)]"
+                )
+            }
+        case .updateWorkout:
+            try requireInteger(
+                raw["record_id"],
+                in: 1 ... maximumJSONInteger,
+                path: "update_workout.record_id"
+            )
+            if raw["set_entries"] != nil {
+                try validateWorkoutV4(raw, path: "update_workout")
+            }
+        case .searchExercises:
+            break
+        default:
+            break
+        }
+    }
+
+    private static func validateWorkoutV4(
+        _ workout: [String: Any],
+        path: String
+    ) throws {
+        guard let targetText = workout["target_kind"] as? String,
+              let targetKind = WorkoutTargetKind(rawValue: targetText)
+        else {
+            throw invalid("\(path).target_kind", "目标类型无效")
+        }
+        guard let lateralityText = workout["laterality"] as? String,
+              let laterality = ExerciseLaterality(rawValue: lateralityText)
+        else {
+            throw invalid("\(path).laterality", "侧别无效")
+        }
+        guard let entries = workout["set_entries"] as? [[String: Any]],
+              !entries.isEmpty,
+              entries.count <= 200
+        else {
+            throw invalid("\(path).set_entries", "必须包含 1 到 200 条 effort")
+        }
+
+        var sidesByLogicalSet: [Int: [WorkoutEffortSide]] = [:]
+        for (index, entry) in entries.enumerated() {
+            let entryPath = "\(path).set_entries[\(index)]"
+            let logicalIndex = try requireInteger(
+                entry["logical_set_index"],
+                in: 1 ... 1000,
+                path: "\(entryPath).logical_set_index"
+            )
+            guard let sideText = entry["side"] as? String,
+                  let side = WorkoutEffortSide(rawValue: sideText)
+            else {
+                throw invalid("\(entryPath).side", "侧别无效")
+            }
+            guard entry["target_kind"] as? String == targetKind.rawValue else {
+                throw invalid(
+                    "\(entryPath).target_kind",
+                    "必须与训练 target_kind 一致"
+                )
+            }
+            switch targetKind {
+            case .repetitions:
+                try requireInteger(
+                    entry["reps"],
+                    in: 1 ... 1000,
+                    path: "\(entryPath).reps"
+                )
+                guard entry["duration_seconds"] == nil else {
+                    throw invalid(entryPath, "次数 effort 不能同时提供 duration_seconds")
+                }
+            case .duration:
+                try requireInteger(
+                    entry["duration_seconds"],
+                    in: 1 ... 86400,
+                    path: "\(entryPath).duration_seconds"
+                )
+                guard entry["reps"] == nil else {
+                    throw invalid(entryPath, "时长 effort 不能同时提供 reps")
+                }
+            }
+            if entry["external_weight_kg"] != nil {
+                try requireNumber(
+                    entry["external_weight_kg"],
+                    in: 0 ... 1000,
+                    path: "\(entryPath).external_weight_kg"
+                )
+            }
+            if entry["rest_seconds"] != nil {
+                try requireInteger(
+                    entry["rest_seconds"],
+                    in: 0 ... 3600,
+                    path: "\(entryPath).rest_seconds"
+                )
+            }
+            sidesByLogicalSet[logicalIndex, default: []].append(side)
+        }
+
+        for (logicalIndex, sides) in sidesByLogicalSet {
+            let sideSet = Set(sides)
+            let valid: Bool = switch laterality {
+            case .none: sideSet == [.none] && sides.count == 1
+            case .left: sideSet == [.left] && sides.count == 1
+            case .right: sideSet == [.right] && sides.count == 1
+            case .both: sideSet == [.left, .right] && sides.count == 2
+            }
+            guard valid else {
+                throw invalid(
+                    "\(path).set_entries.logical_set_index=\(logicalIndex)",
+                    "effort side 与 laterality=\(laterality.rawValue) 冲突"
                 )
             }
         }

@@ -213,12 +213,18 @@ extension CoachSessionView {
         _ proxy: ScrollViewProxy,
         animated: Bool = true
     ) {
+        guard CoachTailScrollPolicy.shouldScroll(
+            contentFitsViewport: messageListPosition.contentFitsViewport
+        ), let target = visibility.tailMessageID
+        else {
+            return
+        }
         if animated {
             withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo("bottom", anchor: .bottom)
+                proxy.scrollTo(target, anchor: .bottom)
             }
         } else {
-            proxy.scrollTo("bottom", anchor: .bottom)
+            proxy.scrollTo(target, anchor: .bottom)
         }
     }
 
@@ -256,7 +262,9 @@ extension CoachSessionView {
                 return
             }
             throttle.lastScrollAt = Date()
-            if let targetMessageID {
+            if CoachTailScrollPolicy.shouldScroll(
+                contentFitsViewport: messageListPosition.contentFitsViewport
+            ), let targetMessageID {
                 proxy.scrollTo(targetMessageID, anchor: .bottom)
             } else {
                 scrollToBottom(proxy, animated: false)
@@ -270,35 +278,42 @@ extension CoachSessionView {
         completion: (() -> Void)? = nil
     ) {
         Task { @MainActor in
+            let interval = AppPerformance.begin(
+                .coachScrollLayout,
+                detail: "phase=tail"
+            )
             await Task.yield()
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                AppPerformance.end(interval, detail: "result=cancelled")
+                return
+            }
             scrollToBottom(proxy, animated: false)
             await Task.yield()
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                AppPerformance.end(interval, detail: "result=cancelled")
+                return
+            }
             completion?()
+            AppPerformance.end(interval, detail: "result=settled")
         }
     }
 
     func finishInitialScrollSetup(using proxy: ScrollViewProxy) {
-        Task { @MainActor in
-            await Task.yield()
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            if messageListPosition.contentFitsViewport == false,
-               !messageListPosition.isNearBottom
-            {
-                followsLiveMessage = true
-                scrollToBottom(proxy, animated: false)
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-            } else if messageListPosition.contentFitsViewport == true {
-                followsLiveMessage = false
-            }
-            didFinishInitialScroll = true
-            paginationTriggerID = UUID()
-            if let activeSessionID = conversationSessions.activeSessionID {
-                sessionTransition.contentDidBecomeVisible(activeSessionID)
-            }
+        guard !didFinishInitialScroll,
+              let contentFitsViewport = messageListPosition.contentFitsViewport
+        else {
+            return
+        }
+        if !contentFitsViewport, !messageListPosition.isNearBottom {
+            followsLiveMessage = true
+            scrollToBottom(proxy, animated: false)
+        } else if contentFitsViewport {
+            followsLiveMessage = false
+        }
+        didFinishInitialScroll = true
+        paginationTriggerID = UUID()
+        if let activeSessionID = conversationSessions.activeSessionID {
+            sessionTransition.contentDidBecomeVisible(activeSessionID)
         }
     }
 

@@ -100,6 +100,17 @@ extension ConversationProcessingService {
                     || $0.state == .waitingForNetwork)
         }) {
             do {
+                if let responseID = existing.responseMessageID,
+                   let response = ConversationTurnPersistence.message(
+                       id: responseID,
+                       in: context.modelContext
+                   )
+                {
+                    ConversationTurnPersistence.prepareResponseMessageForManualRetry(
+                        response,
+                        from: existing
+                    )
+                }
                 try ConversationTurnPersistence.releaseForManualRetry(
                     existing,
                     dataSpace: context.dataSpace,
@@ -151,9 +162,54 @@ extension ConversationProcessingService {
             turnSentAt: userMessage.date,
             effectiveBusinessDate: businessDate,
             businessTimeZone: context.session.businessTimeZone,
+            selectedSkillID: existingJobs.first(where: {
+                $0.userMessageID == userMessage.id
+            })?.selectedSkillID,
+            selectedShortcutID: existingJobs.first(where: {
+                $0.userMessageID == userMessage.id
+            })?.selectedShortcutID,
             createdAt: submittedAt
         )
         do {
+            if let previous = existingJobs.first(where: {
+                $0.userMessageID == userMessage.id && $0.state.isTerminal
+            }),
+                let responseID = previous.responseMessageID,
+                let response = ConversationTurnPersistence.message(
+                    id: responseID,
+                    in: context.modelContext
+                )
+            {
+                ConversationTurnPersistence.prepareResponseMessageForManualRetry(
+                    response,
+                    from: previous,
+                    to: job
+                )
+            } else {
+                let response = CoachMessage(
+                    date: submittedAt,
+                    sessionID: job.sessionID,
+                    isFromCoach: true,
+                    text: "",
+                    agentStatus: .running,
+                    agentTurnItems: [AgentTurnItem(
+                        sequence: 1,
+                        kind: .activity,
+                        status: .running,
+                        phase: .queued,
+                        title: "已收到，正在准备处理…",
+                        text: "已收到，正在准备处理…",
+                        startedAt: submittedAt
+                    )],
+                    turnID: job.turnID,
+                    attemptNumber: ConversationTurnPersistence.nextAttemptNumber(
+                        for: job.turnID,
+                        in: context.modelContext
+                    )
+                )
+                job.responseMessageID = response.id
+                context.modelContext.insert(response)
+            }
             job.lastEventSequence = 1
             context.modelContext.insert(job)
             context.modelContext.insert(PersistentAgentEvent(
@@ -182,9 +238,19 @@ extension ConversationProcessingService {
         dataSpace: DataSpace,
         ai: AIService,
         modelContext: ModelContext,
-        locationService: LocationContextService
+        locationService: LocationContextService,
+        expectedCandidateID: UUID? = nil
     ) {
         guard !isProcessing else { return }
+        if let expectedCandidateID {
+            var descriptor = FetchDescriptor<AgentJob>(
+                predicate: #Predicate { $0.id == expectedCandidateID }
+            )
+            descriptor.fetchLimit = 1
+            guard (try? modelContext.fetch(descriptor).first) != nil else {
+                return
+            }
+        }
         do {
             _ = try ConversationTurnPersistence.recoverExpiredLeases(
                 dataSpace: dataSpace,
@@ -204,6 +270,34 @@ extension ConversationProcessingService {
             ai: ai,
             modelContext: modelContext,
             locationService: locationService
+        )
+    }
+
+    func resumePendingJobsAfterForeground(
+        dataSpace: DataSpace,
+        ai: AIService,
+        modelContainer: ModelContainer,
+        modelContext: ModelContext,
+        locationService: LocationContextService
+    ) async {
+        guard !isProcessing else { return }
+        let interval = AppPerformance.begin(
+            .jobRecovery,
+            detail: "phase=candidate_read"
+        )
+        let reader = AgentJobRecoveryCandidateReader(modelContainer: modelContainer)
+        let candidateID = try? await reader.firstCandidateID(dataSpace: dataSpace)
+        guard let candidateID else {
+            AppPerformance.end(interval, detail: "result=empty")
+            return
+        }
+        AppPerformance.end(interval, detail: "result=candidate")
+        resumePendingJobs(
+            dataSpace: dataSpace,
+            ai: ai,
+            modelContext: modelContext,
+            locationService: locationService,
+            expectedCandidateID: candidateID
         )
     }
 
@@ -425,6 +519,7 @@ extension ConversationProcessingService {
             )
         )
         let spanID = UUID()
+        let operationID = spanID.uuidString.lowercased()
         let startedAt = Date.now
         PersistentAgentEventProjection.persistAndProject(
             .span(AgentTraceSpan(
@@ -433,8 +528,32 @@ extension ConversationProcessingService {
                 kind: .tool,
                 title: "保存最近训练数据",
                 status: .running,
+                operationID: operationID,
+                phase: .preparing,
                 startedAt: startedAt,
                 endedAt: startedAt,
+                input: AgentTraceText.json(call),
+                metadata: AgentTraceText.jsonObject([
+                    "execution_path": "deterministic_quick_workout",
+                    "llm_invoked": false
+                ])
+            )),
+            job: job,
+            responseMessage: responseMessage,
+            trace: trace,
+            in: context.modelContext
+        )
+        PersistentAgentEventProjection.persistAndProject(
+            .span(AgentTraceSpan(
+                id: spanID,
+                step: 1,
+                kind: .tool,
+                title: "保存最近训练数据",
+                status: .running,
+                operationID: operationID,
+                phase: .running,
+                startedAt: startedAt,
+                endedAt: .now,
                 input: AgentTraceText.json(call),
                 metadata: AgentTraceText.jsonObject([
                     "execution_path": "deterministic_quick_workout",
@@ -464,6 +583,8 @@ extension ConversationProcessingService {
                 kind: .tool,
                 title: "保存最近训练数据",
                 status: result.ok ? .succeeded : .failed,
+                operationID: operationID,
+                phase: result.ok ? .completed : .failed,
                 startedAt: startedAt,
                 endedAt: endedAt,
                 input: AgentTraceText.json(call),
@@ -480,8 +601,13 @@ extension ConversationProcessingService {
             in: context.modelContext
         )
         guard result.ok else {
-            responseMessage.text = result.observation
+            responseMessage.text = ""
             responseMessage.agentStatus = .failed
+            responseMessage.applyAgentEvent(.failed(
+                message: result.observation,
+                cancelled: false,
+                at: endedAt
+            ))
             try? ConversationTurnPersistence.waitForUser(
                 job,
                 message: result.observation,

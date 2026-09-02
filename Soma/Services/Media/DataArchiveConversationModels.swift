@@ -16,13 +16,15 @@ struct ConversationSessionDTO: Codable, Equatable, Sendable {
     }
 
     func makeModel() -> ConversationSession {
-        ConversationSession(
+        let model = ConversationSession(
             id: id,
             startedAt: startedAt,
             updatedAt: updatedAt,
-            title: title,
-            titleSource: titleSourceRaw.flatMap(ConversationTitleSource.init(rawValue:))
+            title: title
         )
+        // Compatibility-only restoration. Product behavior never consults it.
+        model.titleSourceRaw = titleSourceRaw
+        return model
     }
 }
 

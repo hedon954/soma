@@ -797,7 +797,7 @@ extension TrainingDomainV5Tests {
         XCTAssertEqual(
             try fixture.context.fetch(FetchDescriptor<DataMigrationMarker>())
                 .first?.schemaVersion,
-            6
+            SomaDataMigration.currentVersion
         )
     }
 
@@ -828,7 +828,7 @@ extension TrainingDomainV5Tests {
         XCTAssertEqual(
             try fixture.context.fetch(FetchDescriptor<DataMigrationMarker>())
                 .first?.schemaVersion,
-            6
+            SomaDataMigration.currentVersion
         )
     }
 

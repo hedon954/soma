@@ -28,6 +28,12 @@ final class CoachMessageAutoScrollGateTests: XCTestCase {
         XCTAssertNil(gate.lastMessageID)
     }
 
+    func testTailScrollOnlyRunsAfterOverflowIsMeasured() {
+        XCTAssertFalse(CoachTailScrollPolicy.shouldScroll(contentFitsViewport: nil))
+        XCTAssertFalse(CoachTailScrollPolicy.shouldScroll(contentFitsViewport: true))
+        XCTAssertTrue(CoachTailScrollPolicy.shouldScroll(contentFitsViewport: false))
+    }
+
     func testInitialPageUsesLazyStackForCompoundMessageRows() {
         XCTAssertFalse(CoachMessageStackPolicy.usesLazyStack(messageCount: 9))
         XCTAssertTrue(CoachMessageStackPolicy.usesLazyStack(messageCount: 10))
@@ -71,5 +77,48 @@ final class CoachMessageAutoScrollGateTests: XCTestCase {
         XCTAssertEqual(CoachMessageRenderPayloadCache.cachedCount, 0)
         _ = CoachMessageRenderPayloadCache.payload(for: viewed)
         XCTAssertEqual(CoachMessageRenderPayloadCache.cachedCount, 1)
+    }
+
+    @MainActor
+    func testMemoryPressureRetentionKeepsOnlyTenCurrentSessionDTOs() {
+        CoachMessageRenderPayloadCache.removeAll()
+        defer { CoachMessageRenderPayloadCache.removeAll() }
+        let currentSessionID = UUID()
+        for index in 0 ..< 12 {
+            _ = CoachMessageRenderPayloadCache.payload(for: CoachMessage(
+                sessionID: currentSessionID,
+                isFromCoach: true,
+                text: "当前 \(index)"
+            ))
+        }
+        _ = CoachMessageRenderPayloadCache.payload(for: CoachMessage(
+            sessionID: UUID(),
+            isFromCoach: true,
+            text: "其他会话"
+        ))
+
+        CoachMessageRenderPayloadCache.retainCurrentSession(currentSessionID)
+
+        XCTAssertEqual(CoachMessageRenderPayloadCache.cachedCount, 10)
+    }
+
+    @MainActor
+    func testMemoryPressureRetentionHonorsCostLimit() {
+        CoachMessageRenderPayloadCache.removeAll()
+        defer { CoachMessageRenderPayloadCache.removeAll() }
+        let sessionID = UUID()
+        _ = CoachMessageRenderPayloadCache.payload(for: CoachMessage(
+            sessionID: sessionID,
+            isFromCoach: true,
+            text: String(repeating: "很", count: 64)
+        ))
+
+        CoachMessageRenderPayloadCache.retainCurrentSession(
+            sessionID,
+            maxCount: 10,
+            maxCost: 1
+        )
+
+        XCTAssertEqual(CoachMessageRenderPayloadCache.cachedCount, 0)
     }
 }

@@ -6,10 +6,12 @@ enum WorkoutRecordEditorDensity {
 }
 
 struct WorkoutLogicalGroupsEditor: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var draft: WorkoutRecordDraft
     let isEditable: Bool
     var fallbackRestSeconds: Int?
     var density: WorkoutRecordEditorDensity = .standard
+    var showsAddButton = true
 
     private var runs: [WorkoutLogicalGroupRun] {
         draft.displayRuns
@@ -32,7 +34,7 @@ struct WorkoutLogicalGroupsEditor: View {
                 }
             }
 
-            if isEditable {
+            if isEditable, showsAddButton {
                 Button {
                     draft.appendGroup()
                 } label: {
@@ -76,15 +78,25 @@ struct WorkoutLogicalGroupsEditor: View {
             }
 
             if density == .chatCompact,
-               !isEditable,
+               !dynamicTypeSize.isAccessibilitySize,
                let effort = group.efforts.first,
                effortCount == 1
             {
-                compactRecordRun(
-                    run,
-                    effort: effort,
-                    finalGroupID: draft.finalGroupID
-                )
+                if isEditable {
+                    compactEditableRun(
+                        run,
+                        effort: effort,
+                        representativeGroupID: group.id,
+                        groupIDs: groupIDs,
+                        finalGroupID: draft.finalGroupID
+                    )
+                } else {
+                    compactRecordRun(
+                        run,
+                        effort: effort,
+                        finalGroupID: draft.finalGroupID
+                    )
+                }
             } else {
                 VStack(spacing: 0) {
                     ForEach(group.efforts.indices, id: \.self) { effortIndex in
@@ -380,6 +392,102 @@ struct WorkoutLogicalGroupsEditor: View {
             rest: showsRest ? displayRest.map { "间歇 \($0) 秒" } : nil,
             runCount: run.count
         )
+    }
+
+    private func compactEditableRun(
+        _ run: WorkoutLogicalGroupRun,
+        effort: WorkoutEffortDraft,
+        representativeGroupID: UUID,
+        groupIDs: Set<UUID>,
+        finalGroupID: UUID?
+    ) -> some View {
+        let restGroupIDs = run.restTargetGroupIDs(
+            effortIndex: 0,
+            effortCount: 1,
+            finalGroupID: finalGroupID
+        )
+        let evidenceRest = storedRest(
+            in: run,
+            groupIDs: restGroupIDs,
+            effortIndex: 0
+        )
+        let displayRest = evidenceRest ?? fallbackRestSeconds
+
+        return HStack(spacing: 0) {
+            WorkoutNumericField(
+                text: intBinding(
+                    groupIDs: groupIDs,
+                    effortIndex: 0,
+                    keyPath: effort.targetKind == .duration
+                        ? \.durationSeconds
+                        : \.reps
+                ),
+                accessibilityLabel: effort.targetKind == .duration ? "时长" : "次数",
+                unit: effort.targetKind == .duration ? "秒" : "次",
+                decimal: false,
+                compact: true,
+                flat: true,
+                validRange: effort.targetKind == .duration
+                    ? 1 ... 86400
+                    : 1 ... 1000
+            )
+            .frame(width: 58)
+            WorkoutCompactMetricDivider()
+            WorkoutNumericField(
+                text: weightBinding(groupIDs: groupIDs, effortIndex: 0),
+                accessibilityLabel: "外部重量",
+                unit: effort.externalWeightKG == 0 ? "" : "kg",
+                decimal: true,
+                emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
+                compact: true,
+                flat: true,
+                validRange: 0 ... 1000
+            )
+            .frame(width: 55)
+            WorkoutCompactMetricDivider()
+            WorkoutCompactGroupCountLabel(count: run.count)
+            if !restGroupIDs.isEmpty {
+                WorkoutCompactMetricDivider()
+                HStack(spacing: 0) {
+                    Text("间歇")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    WorkoutNumericField(
+                        text: intBinding(
+                            groupIDs: restGroupIDs,
+                            effortIndex: 0,
+                            keyPath: \.restSeconds,
+                            fallbackValue: displayRest
+                        ),
+                        accessibilityLabel: "间歇",
+                        unit: "秒",
+                        decimal: false,
+                        compact: true,
+                        flat: true,
+                        validRange: 0 ... 3600
+                    )
+                    .frame(width: 54)
+                }
+            }
+            WorkoutCompactMetricDivider()
+            groupMenu(
+                representativeGroupID: representativeGroupID,
+                groupIDs: groupIDs,
+                runCount: run.count
+            )
+        }
+        .padding(.leading, 4)
+        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget)
+        .background(
+            AppTheme.insetBackground,
+            in: RoundedRectangle(
+                cornerRadius: AppTheme.controlRadius,
+                style: .continuous
+            )
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("workout-compact-inline-run")
     }
 
     private func restLabel(

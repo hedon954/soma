@@ -285,8 +285,39 @@ private struct InlineWorkoutCard: View {
                 draft: $workoutDraft,
                 isEditable: isEditable,
                 fallbackRestSeconds: workout.restSeconds,
-                density: .chatCompact
+                density: .chatCompact,
+                showsAddButton: false
             )
+            if isEditable || workout.estimatedCalories != nil {
+                HStack(spacing: 12) {
+                    if isEditable {
+                        Button {
+                            workoutDraft.appendGroup()
+                        } label: {
+                            Label("添加一组", systemImage: "plus.circle")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(minHeight: AppTheme.minimumTapTarget)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.tint)
+                        .frame(minHeight: AppTheme.minimumTapTarget)
+                        .contentShape(Rectangle())
+                        .accessibilityIdentifier("inline-workout-add-group")
+                        .accessibilityHint("在末尾添加一个新的逻辑组")
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if let calories = workout.estimatedCalories {
+                        Label("约 \(calories) kcal", systemImage: "flame.fill")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("预计消耗约 \(calories) 千卡")
+                            .accessibilityIdentifier("inline-workout-calories")
+                    }
+                }
+                .accessibilityIdentifier("inline-workout-footer")
+            }
         }
         .confirmationDialog("删除这条训练记录？", isPresented: $showsDelete) {
             Button("删除记录", role: .destructive, action: deleteRecord)
@@ -328,19 +359,7 @@ private struct InlineWorkoutCard: View {
             )
         }
         workout.setEntries = workoutDraft.evidence
-        let estimate = WorkoutCalorieCalculator.estimate(
-            exercise: workout.exercise,
-            intensity: workout.intensity,
-            durationMinutes: workout.durationMinutes,
-            sets: workout.setCount,
-            reps: workout.representativeReps,
-            restSeconds: workout.restSeconds,
-            weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: modelContext)
-        )
-        workout.estimatedCalories = estimate?.calories
-        workout.calorieMET = estimate?.met
-        workout.calorieDurationMinutes = estimate?.durationMinutes
-        workout.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
+        WorkoutCalorieCalculator.refreshStoredEstimate(workout, in: modelContext)
         sourceMessage?.recordManualCorrection(
             "训练记录 \(workout.id.uuidString) 已修改，动作 \(workout.exercise)，保留 \(workoutDraft.groups.count) 个逻辑组的逐组事实"
         )

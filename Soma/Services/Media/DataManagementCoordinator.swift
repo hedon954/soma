@@ -160,6 +160,7 @@ final class DataManagementCoordinator {
         }
         activity = .backingUp
         defer { activity = nil }
+        try Task.checkCancellation()
 
         let destination: URL
         let bookmarkIsStale: Bool
@@ -170,6 +171,7 @@ final class DataManagementCoordinator {
             throw DataArchiveError.destinationUnavailable
         }
         let snapshot = try await captureSnapshot(from: personalContainer)
+        try Task.checkCancellation()
         let fingerprint = try snapshot.contentFingerprint()
         if skipIfUnchanged,
            fingerprint == defaults.string(forKey: DefaultsKey.contentFingerprint)
@@ -182,7 +184,8 @@ final class DataManagementCoordinator {
                     ? try destination.bookmarkData()
                     : nil
                 let result = try await runDetached(priority: .utility) {
-                    try DataBackupService.write(
+                    try Task.checkCancellation()
+                    return try DataBackupService.write(
                         snapshot: snapshot,
                         to: destination,
                         credential: credential
@@ -196,6 +199,8 @@ final class DataManagementCoordinator {
             recordBackupSuccess(at: backedUp.0.completedAt)
             defaults.set(fingerprint, forKey: DefaultsKey.contentFingerprint)
             return backedUp.0
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             recordBackupFailure(error)
             throw userFacing(error, fallback: "自动备份未完成，上一份备份仍然保留。")
@@ -222,6 +227,14 @@ final class DataManagementCoordinator {
                 skipIfUnchanged: true
             )
         }
+    }
+
+    /// 回到前台优先保证界面可交互。取消只中止尚未完成的自动备份，上一份
+    /// 成功备份不会被删除；下一次进入后台会重新尝试。
+    func cancelAutomaticBackupForForeground() {
+        guard let automaticBackupTask else { return }
+        AppPerformance.event(.backupCancellation, detail: "reason=scene_active")
+        automaticBackupTask.cancel()
     }
 
     func restore(

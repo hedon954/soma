@@ -14,11 +14,11 @@ extension AgentToolName {
     private var toolDescription: String {
         switch self {
         case .searchExercises:
-            "按名称搜索未归档动作，返回 Int64 exercise_id；记录训练或计划前使用，已注入的动作无需重复搜索。"
+            "按名称搜索未归档动作，返回 exercise_id、target_kind 与 laterality；记录训练或计划前使用。"
         case .createExercise:
-            "仅在动作库没有语义等价项时批量创建标准动作，返回各 Int64 exercise_id；已存在名称复用原 ID，不要指定动作或记录 ID。"
+            "仅在动作库没有语义等价项时批量创建标准动作，并明确 target_kind 与 laterality。左右各做用 both；双侧同时或不区分用 none。"
         case .updateExercise:
-            "按 Int64 exercise_id 修正动作标准名称。"
+            "按 Int64 exercise_id 修正动作名称、完成方式或侧别；只提交有明确用户或本次训练证据的字段。"
         case .archiveExercise:
             "按 Int64 exercise_id 归档动作；已有训练和计划关系保留。"
         case .mergeExercises:
@@ -28,7 +28,7 @@ extension AgentToolName {
         case .getWorkout:
             "按 Int64 record_id 读取一条训练详情。"
         case .createWorkout:
-            "一次创建一条或多条绑定有效 Int64 exercise_id 的训练记录；同一轮可多次写入，每次都新增。不要指定 record_id，由本机分配。修改已有训练必须先读取再用 update_workout。"
+            "一次创建一条或多条训练。必须显式给出 target_kind、laterality 和逐 effort evidence：‘左右各12次’用 laterality=both，并为同一 logical_set_index 各写 left/right；双腿同时才用 none。"
         case .deleteWorkout:
             "删除指定 Int64 训练记录；仅在当前用户消息明确授权删除时使用。"
         case .listMeals:
@@ -64,7 +64,7 @@ extension AgentToolName {
         case .loadSkill:
             "按需加载一项专业健身 Skill 的完整 Markdown 指令。可用 Skill：\(AgentSkill.catalogForToolDescription)。"
         case .updateWorkout:
-            "按 list_workouts 或 get_workout 返回的 Int64 record_id 更新一条训练记录，并把本次新媒体合并到原记录。"
+            "按 record_id 更新一条训练并复述明确 target_kind/laterality；左右 evidence 与侧别冲突会返回字段错误。"
         case .updateMeal:
             "按 list_meals 或 get_meal 返回的 Int64 record_id 更新一条饮食记录，并把本次新媒体合并到原记录。用户纠正食材、餐名或营养估算时优先使用。"
         case .updateBody:
@@ -89,20 +89,46 @@ extension AgentToolName {
         case .searchExercises:
             object([
                 "query": string("动作名称或同义搜索词"),
+                "target_kind": string(
+                    "完成方式筛选",
+                    values: WorkoutTargetKind.allCases.map(\.rawValue)
+                ),
+                "laterality": string(
+                    "侧别筛选：none=双侧同时或不区分，both=左右分别，left/right=仅单侧",
+                    values: ExerciseLaterality.allCases.map(\.rawValue)
+                ),
                 "limit": integer("最多返回多少条，默认 10，最大 20")
             ], required: ["query"])
         case .createExercise:
             object([
-                "exercise_names": array(
-                    string("简洁、明确、去重后的标准动作名称"),
-                    description: "一次创建 1 到 20 个新动作；已存在名称返回原 exercise_id"
+                "exercises": array(
+                    object([
+                        "exercise_name": string("简洁、明确的标准动作名称"),
+                        "target_kind": string(
+                            "repetitions=按次数，duration=按时长",
+                            values: WorkoutTargetKind.allCases.map(\.rawValue)
+                        ),
+                        "laterality": string(
+                            "none=双侧同时或不区分，both=左右分别，left/right=仅单侧",
+                            values: ExerciseLaterality.allCases.map(\.rawValue)
+                        )
+                    ], required: ["exercise_name", "target_kind", "laterality"]),
+                    description: "一次创建 1 到 20 个动作；已存在名称返回原 exercise_id 并以明确证据更新完成方式与侧别"
                 )
-            ], required: ["exercise_names"])
+            ], required: ["exercises"])
         case .updateExercise:
             object([
                 "exercise_id": integer("要更新的动作 Int64 ID"),
-                "exercise_name": string("新的标准动作名称")
-            ], required: ["exercise_id", "exercise_name"])
+                "exercise_name": string("新的标准动作名称；不改名时省略"),
+                "target_kind": string(
+                    "修正后的完成方式",
+                    values: WorkoutTargetKind.allCases.map(\.rawValue)
+                ),
+                "laterality": string(
+                    "修正后的侧别",
+                    values: ExerciseLaterality.allCases.map(\.rawValue)
+                )
+            ], required: ["exercise_id"])
         case .archiveExercise:
             object([
                 "exercise_id": integer("要归档的动作 Int64 ID")
@@ -177,6 +203,14 @@ extension AgentToolName {
                 "record_id": integer("训练记录 Int64 ID"),
                 "occurred_at": string("仅在用户明确纠正时间时提供的 ISO-8601 发生时间"),
                 "exercise_id": integer("修正后动作 Int64 ID"),
+                "target_kind": string(
+                    "本次记录的明确完成方式",
+                    values: WorkoutTargetKind.allCases.map(\.rawValue)
+                ),
+                "laterality": string(
+                    "本次记录的明确侧别；左右各做必须为 both",
+                    values: ExerciseLaterality.allCases.map(\.rawValue)
+                ),
                 "set_entries": workoutSetEntries(
                     "替换后的完整有序组；不修改组数据时省略"
                 ),
@@ -185,7 +219,7 @@ extension AgentToolName {
                 "form_score": integer("有充分视频证据时的动作评分"),
                 "intensity": string("有证据的负荷判断"),
                 "feedback": string("有证据的动作反馈")
-            ], required: ["record_id"])
+            ], required: ["record_id", "target_kind", "laterality"])
         case .updateMeal:
             object([
                 "record_id": integer("饮食记录 Int64 ID"),
@@ -340,10 +374,20 @@ extension AgentToolName {
     private func workoutSetEntries(_ description: String) -> JSONSchema {
         array(
             object([
+                "logical_set_index": integer("从 1 开始的逻辑组序号；左右两侧使用相同序号"),
+                "side": string(
+                    "none=双侧同时或不区分，left/right=对应单侧 effort",
+                    values: WorkoutEffortSide.allCases.map(\.rawValue)
+                ),
+                "target_kind": string(
+                    "repetitions 只填 reps；duration 只填 duration_seconds",
+                    values: WorkoutTargetKind.allCases.map(\.rawValue)
+                ),
                 "reps": integer("该组明确完成的次数"),
                 "duration_seconds": integer("按时长动作该组明确完成的秒数；与 reps 二选一"),
-                "external_weight_kg": number("该组外部负重 kg；明确自重时填 0")
-            ]),
+                "external_weight_kg": number("该组外部负重 kg；明确自重时填 0"),
+                "rest_seconds": integer("该 effort 之后实际或明确提供的间歇秒数")
+            ], required: ["logical_set_index", "side", "target_kind"]),
             description: description
         )
     }
@@ -352,6 +396,14 @@ extension AgentToolName {
         array(
             object([
                 "exercise_id": integer("必须存在且未归档的动作 Int64 ID"),
+                "target_kind": string(
+                    "本次记录的明确完成方式",
+                    values: WorkoutTargetKind.allCases.map(\.rawValue)
+                ),
+                "laterality": string(
+                    "none=双侧同时或不区分；both=左右分别；left/right=仅单侧",
+                    values: ExerciseLaterality.allCases.map(\.rawValue)
+                ),
                 "occurred_at": string("可选带时区 ISO-8601 发生时间；省略时使用 Job 冻结的默认记录时间"),
                 "set_entries": workoutSetEntries(
                     "按实际顺序保存每组事实；次数或重量未知时省略对应字段"
@@ -361,7 +413,7 @@ extension AgentToolName {
                 "form_score": integer("有充分视频证据时的动作评分"),
                 "intensity": string("有证据的负荷判断"),
                 "feedback": string("有证据的动作反馈")
-            ], required: ["exercise_id"]),
+            ], required: ["exercise_id", "target_kind", "laterality", "set_entries"]),
             description: "一次课的多条训练记录，每条绑定已有动作 ID；不要指定 record_id。最多 20 条。"
         )
     }

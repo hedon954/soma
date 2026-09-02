@@ -440,8 +440,12 @@ final class AgentReliabilityTests: XCTestCase {
         PersistentAgentEventProjection.replayChat(events: events, onto: message)
 
         XCTAssertEqual(message.agentStatus, .running)
-        XCTAssertEqual(message.agentTurnItems.map(\.title), ["保存训练记录"])
+        XCTAssertEqual(
+            message.agentTurnItems.map(\.title),
+            ["保存训练记录", "已收到，正在准备处理…"]
+        )
         XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
+        XCTAssertEqual(message.agentTurnItems.last?.kind, .activity)
     }
 
     func testUnselectedShortcutIncludesFeedbackWhileNarrowedShortcutDoesNot() {

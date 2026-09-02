@@ -4,16 +4,16 @@ import SwiftOpenAI
 import XCTest
 
 final class AgentPlanToolV3Tests: XCTestCase {
-    func testOnlyCurrentPlanAndBatchWriteToolsAdvertiseSchemaThree() {
+    func testPlanToolsUseSchemaThreeAndTrainingWritesUseSchemaFour() {
         XCTAssertEqual(AgentToolName.getProgram.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.createProgram.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.updateProgram.schemaVersion, 3)
-        XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 3)
-        XCTAssertEqual(AgentToolName.createWorkout.schemaVersion, 3)
+        XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 4)
+        XCTAssertEqual(AgentToolName.createWorkout.schemaVersion, 4)
         XCTAssertEqual(AgentToolName.startProgram.schemaVersion, 2)
         XCTAssertEqual(AgentToolName.listPrograms.schemaVersion, 2)
         XCTAssertEqual(AgentToolName.createProgram.supportedSchemaVersions, [1, 2, 3])
-        XCTAssertEqual(AgentToolName.createWorkout.supportedSchemaVersions, [1, 2, 3])
+        XCTAssertEqual(AgentToolName.createWorkout.supportedSchemaVersions, [1, 2, 3, 4])
     }
 
     func testSchemaThreeDecodesIndependentBothSideAndDurationSets() throws {

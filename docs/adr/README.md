@@ -31,6 +31,10 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0107](0107-foreground-recovery-and-progress-evidence-projection.md) | 0.0.18 | 已采纳 | 前台恢复不切 Session；进展使用有界月度投影、分项来源与确定性全天消耗公式 |
 | [0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) | 0.0.18 | 已采纳 | 指标区域原位展开跟随浮层；暂停复用发送键；建议食用顺序进入可审查记录 |
 | [0109](0109-schema-guided-tool-argument-recovery.md) | Unreleased | 已采纳 | Schema 驱动数字归一化；参数错误回到模型纠正；进展浮层宽幅单行 |
+| [0110](0110-workout-tool-and-calorie-evidence.md) | Unreleased | 已采纳 | 训练 Tool v4 与普通/带练热量共用逐组证据 |
+| [0111](0111-agent-response-identity-and-manual-recovery.md) | Unreleased | 已采纳 | 入队预建响应，等待、失败与人工重试复用同一消息 |
+| [0112](0112-coach-scroll-and-session-behavior.md) | Unreleased | 已采纳 | 教练尾随滚动、双击回尾与 Session 日期命名 |
+| [0113](0113-capture-and-foreground-lifecycle.md) | Unreleased | 已采纳 | 根层快捷相机状态机、首帧后前台恢复与稳定 SwiftData ID |
 
 新决策使用 [ADR 模板](template.md)。
 

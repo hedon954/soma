@@ -4,7 +4,7 @@
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
 - 状态：当前 schema 快照；实现收口后仍需以数据库结构门禁复核
-- 最近同步：2026-08-25
+- 最近同步：2026-09-02
 - SwiftData 注册来源：[`Soma/App/SomaApp.swift`](../../Soma/App/SomaApp.swift)
 - SwiftData 版本与启动迁移来源：[`Soma/Models/SomaDataMigration.swift`](../../Soma/Models/SomaDataMigration.swift)
 - SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models)
@@ -44,11 +44,12 @@
 
 磁盘库由 `SomaStoreOpening` 以 `Schema(SomaDataSchema.models)` 打开，不传入
 `migrationPlan`。缺少的可选列由系统轻量推断补齐。打开后启动门禁再展开旧聚合处方、建立
-Effort、修复关系/投影键、收敛当前计划、分配业务 ID 并写入 schema version 6 marker。打开路径见
+Effort、修复关系/投影键、收敛当前计划、分配业务 ID、统一 Session 日期标题、回填证据充分的
+历史训练热量，并写入 schema version 7 marker。打开路径见
 [ADR 0075](../archive/0.0.7/adr/0075-current-swiftdata-schema-without-historical-versions.md)；任一数据空间
 失败时不开放业务 Root。
 
-schema version 6 marker 是当前唯一安装基线。启动先用 `key + schemaVersion` 谓词和
+schema version 7 marker 是当前唯一安装基线。启动先用 `key + schemaVersion` 谓词和
 `fetchLimit = 1` 检查 marker；命中后立即返回，不再扫描业务表。marker 尚未完成时才执行当前
 收口步骤并在完整校验通过后写入。缓存与性能边界见
 [ADR 0000](../adr/0000-origin-through-0.0.11.md)。
@@ -95,11 +96,11 @@ schema version 6 marker 是当前唯一安装基线。启动先用 `key + schema
 <!-- schema-model: ConversationSession | id,startedAt,updatedAt,title,titleSourceRaw,businessDate,businessTimeZoneIdentifier -->
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
-| `ConversationSession` | `id: UUID`、`startedAt: Date`、`updatedAt: Date`、`title: String`、`titleSourceRaw: String?`、`businessDate: Date?`、`businessTimeZoneIdentifier: String?` | 聊天会话根对象；标题来源区分本地兜底、模型生成和用户手动，旧库空值按兜底解释。标题编辑不改变最近活动时间。 |
+| `ConversationSession` | `id: UUID`、`startedAt: Date`、`updatedAt: Date`、`title: String`、`titleSourceRaw: String?`、`businessDate: Date?`、`businessTimeZoneIdentifier: String?` | 聊天会话根对象；默认标题按 `startedAt + businessTimeZoneIdentifier` 确定性生成 `MM月dd日 - 周X`。`titleSourceRaw` 仅保留旧库列兼容，业务不读写；手动标题与恢复日期标题都不改变最近活动时间。 |
 | <!-- schema-model: CoachMessage | id,date,sessionID,isFromCoach,text,mediaKindRaw,mediaPath,mediaAttachmentsData,recordTypeRaw,agentTraceID,agentStatusRaw,agentEventsData,agentTurnItemsData,turnID,attemptNumber,locationData,effectiveGymID,manualCorrectionSummary --> `CoachMessage` | `id: UUID`、`date: Date`、`sessionID: UUID?`、`isFromCoach: Bool`、`text: String`、`mediaKindRaw: String`、`mediaPath: String?`、`mediaAttachmentsData: Data`、`recordTypeRaw: String?`、`agentTraceID: UUID?`、`agentStatusRaw: String?`、`agentEventsData: Data`、`agentTurnItemsData: Data`、`turnID: UUID?`、`attemptNumber: Int`、`locationData: Data`、`effectiveGymID: UUID?`、`manualCorrectionSummary: String?` | 同一响应气泡覆盖重试状态；结构化记录修正摘要进入消息上下文。 |
 | <!-- schema-model: AgentTrace | id,startedAt,endedAt,statusRaw,provider,model,endpoint,dataSpaceRaw,userInput,contextSnapshot,mediaKindRaw,imageCount,imageAttachmentCount,videoAttachmentCount,finalAnswer,errorMessage,spansData,turnID,attemptNumber --> `AgentTrace` | `id: UUID`、`startedAt: Date`、`endedAt: Date?`、`statusRaw: String`、`provider: String`、`model: String`、`endpoint: String`、`dataSpaceRaw: String`、`userInput: String`、`contextSnapshot: String`、`mediaKindRaw: String`、`imageCount: Int`、`imageAttachmentCount: Int`、`videoAttachmentCount: Int`、`finalAnswer: String?`、`errorMessage: String?`、`spansData: Data`、`turnID: UUID?`、`attemptNumber: Int` | 每次远程 attempt 一条 trace；不保存 reasoning 内容。 |
 | <!-- schema-model: AgentMutationReceipt | key,turnID,signature,resultData,createdAt,statusRaw --> `AgentMutationReceipt` | `key: String [unique]`、`turnID: UUID`、`signature: String`、`resultData: Data`、`createdAt: Date`、`statusRaw: String` | 本地业务 Tool 写入的幂等回执。 |
-| <!-- schema-model: AgentJob | clientJobKey,id,turnID,sessionID,userMessageID,responseMessageID,dataSpaceRaw,backendRaw,stateRaw,userText,mediaAttachmentsData,contextSnapshotData,createdAt,updatedAt,completedAt,activeAttemptNumber,submissionAttemptCount,nextRetryAt,lastError,remoteJobID,remoteEventCursor,remoteRequestAttempt,leaseOwner,leaseExpiresAt,leaseEpoch,lastEventSequence,chatProjectionCursor,traceProjectionCursor,liveActivityProjectionCursor,notificationProjectionCursor,responseTextSnapshot,lastCompletedStep,loopCheckpointData,loopStartedAt,loopActiveDuration,loopActiveStartedAt,firstStepDeadlineConsumed,executionKindRaw,deterministicPayloadData,turnSentAt,effectiveBusinessDate,businessTimeZoneIdentifier,defaultOccurredAt,selectedSkillID,selectedShortcutID --> `AgentJob` | durable ReAct Job 字段，以及冻结的 `turnSentAt`、`effectiveBusinessDate`、时区、`defaultOccurredAt`、`selectedSkillID` 与 `selectedShortcutID` | 排队、恢复和跨午夜重试复用原始 Turn 默认发生时间；自然语言日期覆盖只属于当前 Turn；快捷按钮决定本 Turn 的工具曝光。 |
+| <!-- schema-model: AgentJob | clientJobKey,id,turnID,sessionID,userMessageID,responseMessageID,dataSpaceRaw,backendRaw,stateRaw,userText,mediaAttachmentsData,contextSnapshotData,createdAt,updatedAt,completedAt,activeAttemptNumber,submissionAttemptCount,nextRetryAt,lastError,remoteJobID,remoteEventCursor,remoteRequestAttempt,leaseOwner,leaseExpiresAt,leaseEpoch,lastEventSequence,chatProjectionCursor,traceProjectionCursor,liveActivityProjectionCursor,notificationProjectionCursor,responseTextSnapshot,lastCompletedStep,loopCheckpointData,loopStartedAt,loopActiveDuration,loopActiveStartedAt,firstStepDeadlineConsumed,executionKindRaw,deterministicPayloadData,turnSentAt,effectiveBusinessDate,businessTimeZoneIdentifier,defaultOccurredAt,selectedSkillID,selectedShortcutID --> `AgentJob` | durable ReAct Job 字段，以及冻结的 `turnSentAt`、`effectiveBusinessDate`、时区、`defaultOccurredAt`、`selectedSkillID` 与 `selectedShortcutID` | `responseMessageID` 在入队事务中绑定唯一响应；排队、恢复、失败和人工重试原位更新。跨午夜重试复用原始 Turn 默认发生时间；快捷按钮决定本 Turn 的工具曝光。 |
 | <!-- schema-model: PersistentAgentEvent | eventKey,id,jobID,turnID,sequence,attemptNumber,kindRaw,payloadData,createdAt --> `PersistentAgentEvent` | `eventKey: String [unique]`、`id: UUID`、`jobID: UUID`、`turnID: UUID`、`sequence: Int`、`attemptNumber: Int`、`kindRaw: String`、`payloadData: Data`、`createdAt: Date` | Job 的语义事件日志；`jobID + sequence` 形成消费顺序，`eventKey` 负责幂等。 |
 | <!-- schema-model: ConversationCompactionSummary | sessionKey,id,sessionID,summary,coveredTurnIDsData,strategyRaw,updatedAt --> `ConversationCompactionSummary` | `sessionKey: String [unique]`、摘要、覆盖 Turn 和策略 | Loop 前滚动替代更早对话；最近 10 对保持原生消息。 |
 | <!-- schema-model: DataMigrationMarker | key,schemaVersion,completedAt --> `DataMigrationMarker` | `key: String [unique]`、`schemaVersion: Int`、`completedAt: Date` | 每个数据空间独立的启动迁移完成证明。 |

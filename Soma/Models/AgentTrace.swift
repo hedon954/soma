@@ -40,6 +40,8 @@ struct AgentTraceSpan: Codable, Identifiable, Equatable, Sendable {
     var kindRaw: String
     var title: String
     var statusRaw: String
+    var operationID: String?
+    var phaseRaw: String?
     var startedAt: Date
     var endedAt: Date
     var input: String?
@@ -54,6 +56,8 @@ struct AgentTraceSpan: Codable, Identifiable, Equatable, Sendable {
         kind: AgentTraceSpanKind,
         title: String,
         status: AgentTraceStatus,
+        operationID: String? = nil,
+        phase: AgentTurnPhase? = nil,
         startedAt: Date,
         endedAt: Date,
         input: String? = nil,
@@ -67,6 +71,8 @@ struct AgentTraceSpan: Codable, Identifiable, Equatable, Sendable {
         kindRaw = kind.rawValue
         self.title = title
         statusRaw = status.rawValue
+        self.operationID = operationID
+        phaseRaw = phase?.rawValue
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.input = input
@@ -83,6 +89,18 @@ struct AgentTraceSpan: Codable, Identifiable, Equatable, Sendable {
         AgentTraceStatus(rawValue: statusRaw) ?? .failed
     }
 
+    var phase: AgentTurnPhase {
+        if let phaseRaw, let phase = AgentTurnPhase(rawValue: phaseRaw) {
+            return phase
+        }
+        return switch status {
+        case .running: .running
+        case .succeeded: .completed
+        case .failed: .failed
+        case .cancelled: .cancelled
+        }
+    }
+
     var durationMilliseconds: Double {
         max(0, endedAt.timeIntervalSince(startedAt) * 1000)
     }
@@ -92,6 +110,8 @@ enum AgentTraceEvent: Equatable, Sendable {
     case span(AgentTraceSpan)
     case assistantTextDelta(itemID: UUID, delta: String)
     case assistantTextCompleted(itemID: UUID, at: Date)
+    case reasoningDelta(itemID: UUID, delta: String)
+    case reasoningCompleted(itemID: UUID, text: String, at: Date)
     case completed(answer: String, at: Date)
     case failed(message: String, cancelled: Bool, at: Date)
 }
@@ -175,15 +195,22 @@ final class AgentTrace {
         switch event {
         case var .span(span):
             var current = spans
-            if let index = current.firstIndex(where: { $0.id == span.id }) {
+            if let index = current.firstIndex(where: {
+                if let operationID = span.operationID {
+                    return $0.operationID == operationID
+                }
+                return $0.id == span.id
+            }) {
                 span.sequence = current[index].sequence
+                span.id = current[index].id
                 current[index] = span
             } else {
                 span.sequence = current.count + 1
                 current.append(span)
             }
             spansData = (try? JSONEncoder().encode(current)) ?? spansData
-        case .assistantTextDelta, .assistantTextCompleted:
+        case .assistantTextDelta, .assistantTextCompleted,
+             .reasoningDelta, .reasoningCompleted:
             break
         case let .completed(answer, date):
             status = .succeeded

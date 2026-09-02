@@ -85,11 +85,14 @@ struct CoachSessionView: View {
     @State var paginationTriggerID = UUID()
     @State var followsLiveMessage = true
     @State var hasUserInteractedWithMessageList = false
+    @State private var tailScrollPositionID: UUID?
     @State var messageListPosition = CoachMessageScrollPosition(
         isAtTop: false,
         isNearBottom: false,
         contentFitsViewport: nil
     )
+    @State private var measuredMessageContentHeight: CGFloat = 0
+    @State private var measuredMessageViewportHeight: CGFloat = 0
 
     let messageLimit: Int
     let sessionTransition: CoachSessionTransitionCoordinator
@@ -241,7 +244,7 @@ struct CoachSessionView: View {
         .navigationDestination(isPresented: $showsGyms) {
             GymLibraryView()
         }
-        .sheet(item: $sheet, onDismiss: clearDismissedCaptureRequest) { destination in
+        .sheet(item: $sheet) { destination in
             switch destination {
             case .media:
                 MediaSourceDialog(
@@ -267,24 +270,18 @@ struct CoachSessionView: View {
                     onClear: clearPendingQueue,
                     onOpenLLMConfiguration: openLLMConfigurationFromPendingQueue
                 )
-            case let .quickCapture(request):
-                MediaSourceDialog(
-                    allowsVideo: true,
-                    selectionLimit: MediaPicker.maximumSelectionCount,
-                    initialSource: request.mode == .camera ? .camera : .library
-                ) { media in
-                    captureRouter.deliver(media)
-                }
             }
-        }
-        .onChange(of: captureRouter.pendingRequest, initial: true) {
-            handleCaptureRequest()
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .prefillCoachDraft)
         ) { notification in
             guard let text = notification.object as? String else { return }
             composer.draft = text
+            composer.requestFocus()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .focusCoachComposer)
+        ) { _ in
             composer.requestFocus()
         }
         .modifier(CoachPerformanceSessionSelectionModifier(onSelect: selectSession))
@@ -376,9 +373,10 @@ struct CoachSessionView: View {
                 }
                 .onChange(of: projection.messages.last?.id, initial: true) { _, messageID in
                     guard messageID != nil else { return }
+                    visibility.tailMessageID = projection.latestAssistantMessageID
+                        ?? messageID
                     if !didFinishInitialScroll {
                         _ = visibility.autoScrollGate.shouldScroll(to: messageID)
-                        finishInitialScrollSetup(using: proxy)
                         return
                     }
                     guard visibility.autoScrollGate.shouldScroll(to: messageID) else {
@@ -386,6 +384,9 @@ struct CoachSessionView: View {
                     }
                     guard isProcessingHere || followsLiveMessage else { return }
                     scrollToBottomAfterLayout(proxy)
+                }
+                .onChange(of: messageListPosition) {
+                    finishInitialScrollSetup(using: proxy)
                 }
                 .onChange(of: projection.messages.first?.id) {
                     restorePositionAfterLoadingEarlier(
@@ -417,10 +418,22 @@ struct CoachSessionView: View {
                     }
                     scrollToBottomAfterLayout(proxy)
                 }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: .coachDoubleReselected)
+                ) { _ in
+                    followsLiveMessage = true
+                    guard messageListPosition.contentFitsViewport != true else {
+                        return
+                    }
+                    tailScrollPositionID = projection.latestAssistantMessageID
+                        ?? projection.messages.last?.id
+                }
                 .modifier(
                     CoachPerformanceScrollModifier(
                         proxy: proxy,
-                        firstMessageID: projection.messages.first?.id
+                        firstMessageID: projection.messages.first?.id,
+                        lastMessageID: projection.latestAssistantMessageID
+                            ?? projection.messages.last?.id
                     )
                 )
         }
@@ -458,10 +471,26 @@ struct CoachSessionView: View {
                     }
                 }
             }
+            .scrollTargetLayout()
             .padding(.horizontal, 14)
             .padding(.top, 10)
             .frame(maxWidth: AppTheme.readableContentMaxWidth)
             .frame(maxWidth: .infinity)
+            .background {
+                CoachMessageContentHeightReporter()
+            }
+        }
+        .scrollPosition(id: $tailScrollPositionID, anchor: .bottom)
+        .background {
+            CoachMessageViewportHeightReporter()
+        }
+        .onPreferenceChange(CoachMessageContentHeightPreferenceKey.self) { height in
+            measuredMessageContentHeight = height
+            updateLegacyMessageMeasurement()
+        }
+        .onPreferenceChange(CoachMessageViewportHeightPreferenceKey.self) { height in
+            measuredMessageViewportHeight = height
+            updateLegacyMessageMeasurement()
         }
         .modifier(CoachMessageTopPagingModifier())
         .modifier(CoachMessageScrollTrackingModifier { position in
@@ -487,6 +516,24 @@ struct CoachSessionView: View {
             Text(verbatim: AppTestRuntime.isRunning
                 ? "count=\(projection.messages.count),nearBottom=\(messageListPosition.isNearBottom),following=\(followsLiveMessage),streaming=\(processingHere)"
                 : "")
+        )
+    }
+
+    private func updateLegacyMessageMeasurement() {
+        if #available(iOS 18.0, *) {
+            return
+        }
+        guard measuredMessageContentHeight > 0,
+              measuredMessageViewportHeight > 0
+        else {
+            return
+        }
+        let fits = measuredMessageContentHeight <= measuredMessageViewportHeight + 1
+        guard messageListPosition.contentFitsViewport != fits else { return }
+        messageListPosition = CoachMessageScrollPosition(
+            isAtTop: messageListPosition.isAtTop,
+            isNearBottom: fits ? true : messageListPosition.isNearBottom,
+            contentFitsViewport: fits
         )
     }
 
@@ -568,19 +615,6 @@ struct CoachSessionView: View {
             .equatable()
             .id(message.id)
         }
-
-        Group {
-            if AppTestRuntime.isRunning {
-                Text("消息底部")
-                    .font(.system(size: 1))
-                    .foregroundStyle(.clear)
-                    .accessibilityIdentifier("coach-message-bottom")
-            } else {
-                Color.clear
-            }
-        }
-        .frame(height: 0)
-        .id("bottom")
     }
 
     private func composer(pendingCount: Int) -> some View {
@@ -744,45 +778,24 @@ struct CoachSessionView: View {
         title: String
     ) -> Bool {
         let previousTitle = session.title
-        let previousSourceRaw = session.titleSourceRaw
         guard session.setManualTitle(title) else { return false }
         do {
             try modelContext.save()
             return true
         } catch {
             session.title = previousTitle
-            session.titleSourceRaw = previousSourceRaw
             return false
         }
     }
 
     private func restoreAutomaticTitle(_ session: ConversationSession) -> Bool {
         let previousTitle = session.title
-        let previousSourceRaw = session.titleSourceRaw
-        let sessionID = session.id
-        var descriptor = FetchDescriptor<CoachMessage>(
-            predicate: #Predicate {
-                $0.sessionID == sessionID && !$0.isFromCoach
-            },
-            sortBy: [SortDescriptor(\.date)]
-        )
-        descriptor.fetchLimit = 1
-        let fallbackText = ConversationSessionTitleService.fallbackText(
-            sessionID: session.id,
-            messages: (try? modelContext.fetch(descriptor)) ?? []
-        )
-        session.restoreAutomaticTitle(from: fallbackText)
+        session.restoreDateTitle()
         do {
             try modelContext.save()
-            processor.titleGenerator.request(
-                sessionID: session.id,
-                ai: ai,
-                modelContext: modelContext
-            )
             return true
         } catch {
             session.title = previousTitle
-            session.titleSourceRaw = previousSourceRaw
             return false
         }
     }
@@ -797,34 +810,6 @@ struct CoachSessionView: View {
     private func prepareComposerForSessionChange() {
         composer.prepareForSessionChange()
         scrollRequest = UUID()
-    }
-
-    private func handleCaptureRequest() {
-        guard let request = captureRouter.pendingRequest else { return }
-        somaCaptureLogger.info(
-            "Routing capture request in coach: \(request.mode.rawValue, privacy: .public)"
-        )
-        if request.mode == .text {
-            composer.requestFocus()
-            captureRouter.clear(request.id)
-        } else {
-            Task { @MainActor in
-                await Task.yield()
-                guard captureRouter.pendingRequest?.id == request.id else { return }
-                sheet = .quickCapture(request)
-                somaCaptureLogger.info("Presented quick capture sheet state")
-            }
-        }
-    }
-
-    private func clearDismissedCaptureRequest() {
-        somaCaptureLogger.info("Quick capture sheet dismissed")
-        guard let request = captureRouter.pendingRequest,
-              request.mode != .text
-        else {
-            return
-        }
-        captureRouter.clear(request.id)
     }
 
     private func handleMediaDelivery() {

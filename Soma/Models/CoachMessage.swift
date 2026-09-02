@@ -127,7 +127,38 @@ final class CoachMessage {
         var items = agentTurnItems
 
         switch event {
+        case let .reasoningDelta(itemID, delta):
+            items.removeAll { $0.kind == .activity }
+            if let index = items.firstIndex(where: { $0.id == itemID }) {
+                items[index].appendTextDelta(delta)
+            } else {
+                items.append(AgentTurnItem(
+                    id: itemID,
+                    sequence: items.count + 1,
+                    kind: .reasoning,
+                    status: .running,
+                    title: "思考过程",
+                    text: delta
+                ))
+            }
+        case let .reasoningCompleted(itemID, text, date):
+            if let index = items.firstIndex(where: { $0.id == itemID }) {
+                items[index].text = text
+                items[index].finishText(at: date)
+            } else if !text.isEmpty {
+                items.append(AgentTurnItem(
+                    id: itemID,
+                    sequence: items.count + 1,
+                    kind: .reasoning,
+                    status: .succeeded,
+                    title: "思考过程",
+                    text: text,
+                    startedAt: date,
+                    endedAt: date
+                ))
+            }
         case let .assistantTextDelta(itemID, delta):
+            items.removeAll { $0.kind == .activity }
             if let index = items.firstIndex(where: { $0.id == itemID }) {
                 items[index].appendTextDelta(delta)
             } else {
@@ -144,32 +175,44 @@ final class CoachMessage {
                 items[index].finishText(at: date)
             }
         case let .span(span):
+            if span.kind == .model, span.status == .running {
+                setAgentActivity(
+                    phase: .modelRunning,
+                    message: "正在处理请求…",
+                    at: span.startedAt,
+                    items: &items
+                )
+                break
+            }
             guard span.kind == .skill || span.kind == .tool else { break }
-            if let index = items.firstIndex(where: { $0.id == span.id }) {
+            items.removeAll { $0.kind == .activity }
+            if let index = items.firstIndex(where: {
+                if let operationID = span.operationID {
+                    return $0.operationID == operationID
+                }
+                return $0.id == span.id
+            }) {
+                let existingID = items[index].id
                 items[index] = AgentTurnItem(
                     span: span,
                     sequence: items[index].sequence
                 )
+                items[index].id = existingID
             } else {
                 items.append(AgentTurnItem(span: span, sequence: items.count + 1))
             }
             applyLegacyAgentEvent(span)
         case let .completed(_, date):
-            items.removeAll {
-                $0.kind == .error || $0.status == .failed || $0.status == .cancelled
-            }
+            items.removeAll { $0.kind == .activity || $0.kind == .error }
             for index in items.indices
-                where items[index].kind == .text && items[index].status == .running
+                where (items[index].kind == .text || items[index].kind == .reasoning)
+                && items[index].status == .running
             {
                 items[index].finishText(at: date)
             }
         case let .failed(message, _, date):
-            let isReplacingFailure = items.contains { $0.kind == .error }
-            items.removeAll {
-                $0.kind == .error
-                    || (isReplacingFailure
-                        && ($0.status == .failed || $0.status == .cancelled))
-            }
+            items.removeAll { $0.kind == .activity }
+            items.removeAll { $0.kind == .error }
             for index in items.indices where items[index].status == .running {
                 items[index].fail(message: message, at: date)
             }
@@ -192,13 +235,66 @@ final class CoachMessage {
         agentTurnItemsData = (try? JSONEncoder().encode(items)) ?? agentTurnItemsData
     }
 
+    func setAgentActivity(
+        phase: AgentTurnPhase,
+        message: String,
+        at date: Date = .now
+    ) {
+        var items = agentTurnItems
+        setAgentActivity(
+            phase: phase,
+            message: message,
+            at: date,
+            items: &items
+        )
+        agentTurnItemsData = (try? JSONEncoder().encode(items)) ?? agentTurnItemsData
+    }
+
+    func clearAgentActivity() {
+        var items = agentTurnItems
+        items.removeAll { $0.kind == .activity }
+        agentTurnItemsData = (try? JSONEncoder().encode(items)) ?? agentTurnItemsData
+    }
+
+    private func setAgentActivity(
+        phase: AgentTurnPhase,
+        message: String,
+        at date: Date,
+        items: inout [AgentTurnItem]
+    ) {
+        if let index = items.firstIndex(where: { $0.kind == .activity }) {
+            items[index].phaseRaw = phase.rawValue
+            items[index].statusRaw = AgentTraceStatus.running.rawValue
+            items[index].title = message
+            items[index].text = message
+            items[index].endedAt = nil
+        } else {
+            items.append(AgentTurnItem(
+                sequence: items.count + 1,
+                kind: .activity,
+                status: .running,
+                phase: phase,
+                title: message,
+                text: message,
+                startedAt: date
+            ))
+        }
+    }
+
     func applyAgentEvent(_ span: AgentTraceSpan) {
         applyAgentEvent(.span(span))
     }
 
-    private func applyLegacyAgentEvent(_ span: AgentTraceSpan) {
+    private func applyLegacyAgentEvent(_ incomingSpan: AgentTraceSpan) {
+        var span = incomingSpan
         var current = agentEvents
-        if let index = current.firstIndex(where: { $0.id == span.id }) {
+        if let index = current.firstIndex(where: {
+            if let operationID = span.operationID {
+                return $0.operationID == operationID
+            }
+            return $0.id == span.id
+        }) {
+            span.id = current[index].id
             current[index] = span
         } else {
             current.append(span)

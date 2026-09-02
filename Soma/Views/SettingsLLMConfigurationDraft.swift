@@ -7,6 +7,7 @@ struct SettingsLLMConfigurationDraft: Equatable {
     let model: String
     let imageModel: String
     let apiKey: String
+    let extraConfig: String
 
     @MainActor
     static func load(
@@ -20,7 +21,11 @@ struct SettingsLLMConfigurationDraft: Equatable {
             baseURL: ai.baseURL(for: provider, tier: tier),
             model: ai.model(for: provider, tier: tier),
             imageModel: ai.imageModel(for: provider),
-            apiKey: ai.apiKey(for: provider, tier: tier)
+            apiKey: ai.apiKey(for: provider, tier: tier),
+            extraConfig: ai.effectiveExtraConfig(
+                baseURL: ai.baseURL(for: provider, tier: tier),
+                model: ai.model(for: provider, tier: tier)
+            )
         )
     }
 }

@@ -3,13 +3,62 @@ import SwiftData
 import XCTest
 
 final class AgentBatchCreateToolTests: XCTestCase {
-    func testCreateExerciseAndWorkoutAdvertiseSchemaThree() {
-        XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 3)
-        XCTAssertEqual(AgentToolName.createWorkout.schemaVersion, 3)
-        XCTAssertEqual(AgentToolName.createExercise.supportedSchemaVersions, [1, 2, 3])
-        XCTAssertEqual(AgentToolName.createWorkout.supportedSchemaVersions, [1, 2, 3])
-        XCTAssertEqual(AgentToolName.searchExercises.schemaVersion, 2)
-        XCTAssertEqual(AgentToolName.updateWorkout.schemaVersion, 2)
+    func testExerciseAndWorkoutToolsAdvertiseSchemaFour() {
+        for name in [
+            AgentToolName.searchExercises,
+            .createExercise,
+            .updateExercise,
+            .createWorkout,
+            .updateWorkout
+        ] {
+            XCTAssertEqual(name.schemaVersion, 4)
+        }
+        XCTAssertEqual(AgentToolName.createExercise.supportedSchemaVersions, [1, 2, 3, 4])
+        XCTAssertEqual(AgentToolName.createWorkout.supportedSchemaVersions, [1, 2, 3, 4])
+        XCTAssertEqual(AgentToolName.searchExercises.supportedSchemaVersions, [1, 2, 4])
+    }
+
+    func testSchemaFourRequiresExplicitPairedEffortsForBothLaterality() throws {
+        let valid: [String: Any] = [
+            "workouts": [[
+                "exercise_id": 7,
+                "target_kind": "repetitions",
+                "laterality": "both",
+                "set_entries": [
+                    [
+                        "logical_set_index": 1,
+                        "side": "left",
+                        "target_kind": "repetitions",
+                        "reps": 12,
+                        "external_weight_kg": 0,
+                        "rest_seconds": 30
+                    ],
+                    [
+                        "logical_set_index": 1,
+                        "side": "right",
+                        "target_kind": "repetitions",
+                        "reps": 12,
+                        "external_weight_kg": 0,
+                        "rest_seconds": 60
+                    ]
+                ]
+            ]]
+        ]
+        try AgentToolSchemaValidator.validate(
+            json(valid),
+            for: .createWorkout,
+            schemaVersion: 4
+        )
+
+        var conflict = valid
+        var workouts = try XCTUnwrap(conflict["workouts"] as? [[String: Any]])
+        workouts[0]["laterality"] = "none"
+        conflict["workouts"] = workouts
+        XCTAssertThrowsError(try AgentToolSchemaValidator.validate(
+            json(conflict),
+            for: .createWorkout,
+            schemaVersion: 4
+        ))
     }
 
     func testSchemaThreeCreateWorkoutRequiresWorkoutsAndRejectsRecordID() throws {
@@ -239,6 +288,59 @@ final class AgentBatchCreateToolTests: XCTestCase {
             Set(result.recordRefs?.compactMap(\.recordID) ?? []),
             Set(workouts.compactMap(\.businessID))
         )
+    }
+
+    @MainActor
+    func testBothLateralityPersistsPairedEffortsAndBackfillsExercise() throws {
+        let fixture = try makeContext()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let splitSquat = try ExerciseLibraryStore.resolveOrCreateExact(
+            canonicalName: "虚构保加利亚分腿蹲",
+            in: fixture.context
+        )
+        let exerciseID = try XCTUnwrap(splitSquat.businessID)
+        let result = ConversationRecorder.executeAgentTool(
+            AgentToolCall(
+                name: .createWorkout,
+                arguments: .init(workouts: [AgentWorkoutCreateInput(
+                    exerciseID: exerciseID,
+                    targetKind: .repetitions,
+                    laterality: .both,
+                    setEntries: [
+                        AgentWorkoutSetInput(
+                            logicalSetIndex: 1,
+                            side: .left,
+                            targetKind: .repetitions,
+                            reps: 12,
+                            externalWeightKG: 0,
+                            restSeconds: 30
+                        ),
+                        AgentWorkoutSetInput(
+                            logicalSetIndex: 1,
+                            side: .right,
+                            targetKind: .repetitions,
+                            reps: 12,
+                            externalWeightKG: 0,
+                            restSeconds: 60
+                        )
+                    ]
+                )])
+            ),
+            sourceText: "左右各 12 次",
+            mediaKind: .none,
+            mediaPath: nil,
+            in: fixture.context
+        )
+
+        XCTAssertTrue(result.ok, result.message)
+        let workout = try XCTUnwrap(
+            fixture.context.fetch(FetchDescriptor<WorkoutEntry>()).first
+        )
+        XCTAssertEqual(workout.setCount, 1)
+        XCTAssertEqual(Set(workout.setEntries.compactMap(\.side)), [.left, .right])
+        XCTAssertEqual(workout.setEntries.map(\.logicalSetIndex), [1, 1])
+        XCTAssertEqual(splitSquat.laterality, .both)
+        XCTAssertEqual(splitSquat.targetKind, .repetitions)
     }
 
     @MainActor

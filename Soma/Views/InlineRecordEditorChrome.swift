@@ -32,58 +32,38 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 Image(systemName: icon)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(iconTint)
                     .frame(width: 36, height: 36)
                     .background(iconSoftTint, in: Circle())
+                    .padding(.vertical, 4)
                     .accessibilityHidden(true)
                 if isEditable, let titleText {
-                    TextField("名称", text: titleText)
+                    TextField("名称", text: titleText, axis: .vertical)
                         .font(.subheadline.weight(.semibold))
                         .textFieldStyle(.plain)
+                        .lineLimit(1...)
+                        .frame(minHeight: AppTheme.minimumTapTarget, alignment: .leading)
+                        .layoutPriority(10)
+                        .accessibilityIdentifier("inline-record-title")
                 } else {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: AppTheme.minimumTapTarget, alignment: .leading)
+                        .layoutPriority(10)
+                        .accessibilityIdentifier("inline-record-title")
                 }
-                if !dynamicTypeSize.isAccessibilitySize {
-                    accessory
-                }
-                Spacer(minLength: 8)
-                if isEditable {
-                    if let onSave {
-                        InlineRecordActions(state: saveState, save: onSave)
+                Spacer(minLength: 2)
+                HStack(spacing: 0) {
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        accessory
                     }
-                    if let onDelete {
-                        Button(role: .destructive, action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.footnote.weight(.semibold))
-                                .frame(
-                                    width: AppTheme.minimumTapTarget,
-                                    height: AppTheme.minimumTapTarget
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("删除")
-                    }
-                } else if readOnlyStatus == .saved {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(
-                            width: AppTheme.minimumTapTarget,
-                            height: AppTheme.minimumTapTarget
-                        )
-                        .accessibilityLabel("已保存")
-                        .accessibilityIdentifier("workout-record-saved")
-                } else if showsLockWhenReadOnly {
-                    Image(systemName: "lock.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .accessibilityLabel("已锁定")
+                    trailingActions
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
             // 辅助字号下标题会换行，配件挤在同一行会把标题撕成两段，改为单独一行。
             if dynamicTypeSize.isAccessibilitySize {
@@ -99,6 +79,45 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
         .overlay {
             RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
                 .stroke(AppTheme.separator, lineWidth: 0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var trailingActions: some View {
+        if isEditable {
+            if let onSave {
+                InlineRecordActions(
+                    state: saveState,
+                    placement: .first,
+                    save: onSave
+                )
+            }
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    CompactActionLabel(placement: onSave == nil ? .first : .following) {
+                        Image(systemName: "trash")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppTheme.destructive)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("删除")
+            }
+        } else if readOnlyStatus == .saved {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(AppTheme.accent)
+                .frame(
+                    width: AppTheme.minimumTapTarget,
+                    height: AppTheme.minimumTapTarget
+                )
+                .accessibilityLabel("已保存")
+                .accessibilityIdentifier("workout-record-saved")
+        } else if showsLockWhenReadOnly {
+            Image(systemName: "lock.fill")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("已锁定")
         }
     }
 }
@@ -167,24 +186,23 @@ func compactMetric(
 
 struct InlineRecordActions: View {
     @Binding var state: InlineRecordSaveState
+    var placement: CompactActionVisualPlacement = .first
     let save: () -> Bool
 
     var body: some View {
         Button(action: confirmSave) {
-            Group {
-                if state == .saving {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: iconName)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(iconColor)
+            CompactActionLabel(placement: placement) {
+                Group {
+                    if state == .saving {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: iconName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(iconColor)
+                    }
                 }
             }
-            .frame(
-                width: AppTheme.minimumTapTarget,
-                height: AppTheme.minimumTapTarget
-            )
         }
         .buttonStyle(.plain)
         .disabled(state == .saving || state == .saved)

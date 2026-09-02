@@ -15,28 +15,11 @@ extension AIService {
         ) else {
             throw AIServiceError.invalidURL
         }
-        let encoded = try JSONEncoder().encode(parameters)
-        guard var body = try JSONSerialization.jsonObject(with: encoded) as? [String: Any],
-              var messages = body["messages"] as? [[String: Any]],
-              let userIndex = messages.lastIndex(where: { $0["role"] as? String == "user" })
-        else {
-            throw AIServiceError.invalidResponse
-        }
-        var content = messages[userIndex]["content"] as? [[String: Any]]
-            ?? [["type": "text", "text": messages[userIndex]["content"] as? String ?? ""]]
-        content.append(contentsOf: videos.map { video in
-            [
-                "type": "video_url",
-                "video_url": [
-                    "url": "data:\(video.mimeType);base64,\(video.data.base64EncodedString())",
-                    "fps": 2
-                ]
-            ]
-        })
-        messages[userIndex]["content"] = content
-        body["messages"] = messages
-        body["stream"] = true
-
+        let body = try openAICompatibleChatRequestBody(
+            parameters: parameters,
+            videos: videos,
+            baseURL: baseURL
+        )
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -92,6 +75,48 @@ extension AIService {
         }
     }
 
+    func openAICompatibleChatRequestBody(
+        parameters: ChatCompletionParameters,
+        videos: [AgentVideoInput],
+        baseURL: String
+    ) throws -> [String: Any] {
+        let encoded = try JSONEncoder().encode(parameters)
+        guard var body = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            throw AIServiceError.invalidResponse
+        }
+        if !videos.isEmpty {
+            guard var messages = body["messages"] as? [[String: Any]],
+                  let userIndex = messages.lastIndex(where: {
+                      $0["role"] as? String == "user"
+                  })
+            else { throw AIServiceError.invalidResponse }
+            var content = messages[userIndex]["content"] as? [[String: Any]]
+                ?? [[
+                    "type": "text",
+                    "text": messages[userIndex]["content"] as? String ?? ""
+                ]]
+            content.append(contentsOf: videos.map { video in
+                [
+                    "type": "video_url",
+                    "video_url": [
+                        "url": "data:\(video.mimeType);base64,\(video.data.base64EncodedString())",
+                        "fps": 2
+                    ]
+                ]
+            })
+            messages[userIndex]["content"] = content
+            body["messages"] = messages
+        }
+        body["stream"] = true
+        let requestModel = body["model"] as? String ?? ""
+        let extraConfig = effectiveExtraConfig(
+            baseURL: baseURL,
+            model: requestModel
+        )
+        try AIExtraConfig.merge(extraConfig, into: &body)
+        return body
+    }
+
     private func directVideoErrorMessage(
         data: Data,
         statusCode: Int
@@ -102,6 +127,6 @@ extension AIService {
         {
             return message
         }
-        return "视频请求失败（\(statusCode)）"
+        return "模型请求失败（\(statusCode)）"
     }
 }

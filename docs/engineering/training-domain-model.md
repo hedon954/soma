@@ -192,6 +192,12 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 只有 completed Effort 的有效实际次数与外部重量参与容量。duration Effort、计划值、跳过和失败
 Effort 不被伪造成重量容量；逻辑组数按 Set 计算，不因 both 拥有两条 Effort 翻倍。
 
+带练画面不直接观察上述 SwiftData 对象或 relationship。`GuidedWorkoutScreenSnapshot` 在独立读取
+Context 中按 `sessionID → performanceID → workoutSetID` 分段执行单层标量查询，输出 Session、
+Performance、Set、Effort 的不可变 DTO；SwiftUI 只渲染 DTO。动作替换和阶段操作只传稳定 ID，
+回到 MainActor 当前 Context 后重新 fetch。快照刷新使用 generation 丢弃旧结果，失败保留最后成功
+画面。静态门禁禁止带练和复盘热路径恢复跨多层 relationship predicate。
+
 ### 旧记录兼容
 
 1. `WorkoutEntry` 保留旧 UUID `exerciseID` 迁移锚点，并增加可空 `sourceWorkoutSessionID` 与
@@ -216,18 +222,23 @@ Effort 不被伪造成重量容量；逻辑组数按 Set 计算，不因 both �
     历史记录保留但不能继续冒充该 Performance 的唯一投影。
 12. `WorkoutSetEvidence` 可保存 logicalSetIndex、side、kind、targetKind、reps/duration、外部重量、
     休息和录像路径；旧只有 reps/weight 的载荷继续可解码。
+13. 计划执行复盘按 Session 的 Performance 顺序，以 `sourcePerformanceID` 读取对应
+    `WorkoutEntry`，复用进展页最近训练行和训练详情。缺失投影仅在 suppression 为 false 时幂等
+    修复；用户已删除的记录保持删除事实。
 
 ## 固定 Tool 协议
 
 ### 动作与训练记录
 
-- `search_exercises(query)` 返回匹配 active 动作的 Int64 `exercise_id` 和标准名称；已由上下文
-  注入的匹配动作不重复查询。
-- 只有没有语义等价项时才调用 `create_exercise(exercise_names)`；一次最多 20 个名称，已存在
-  名称复用原 ID。
-- `create_workout` 接收 `workouts` 数组，每条必须带有效 `exercise_id`，不允许用名称隐式创建
-  动作，也不允许指定 `record_id`。一次最多 20 条。每次数组项都新增记录，不按同一 Turn 合并。
-- `update_workout` 按 Int64 `record_id` 原位修改；失效 ID 或跨数据空间关系返回结构化错误。
+- 训练相关当前使用 Schema v4。`search_exercises(query)` 返回 active 动作的 Int64
+  `exercise_id`、标准名称、`target_kind` 与 `laterality`；已由上下文注入的匹配动作不重复查询。
+- 只有没有语义等价项时才调用 `create_exercise(exercises)`；一次最多 20 项，每项显式提供名称、
+  target kind 与 laterality，已存在名称复用原 ID。`update_exercise` 同样显式修正元数据。
+- `create_workout` 接收 `workouts` 数组，每条必须带有效 `exercise_id`、本次 `target_kind`、
+  `laterality` 和逐 effort `set_entries`；不允许用名称隐式创建动作或指定 `record_id`。左右各做
+  使用同一 logical set index 的 left/right 两条；双侧同时使用 none。每次数组项都新增记录。
+- `update_workout` 按 Int64 `record_id` 原位修改并复述本次目标/侧别；`.none` 与左右 effort 冲突、
+  失效 ID 或跨数据空间关系返回可重试结构化错误。
 - create/update 可选 `occurred_at`；省略时使用原始 Turn 冻结的稳定默认时间。
 - Tool 成功结果返回最终 `exercise_id` 和 `workout_id`；幂等签名包含两者和最终发生时间。
 
@@ -258,7 +269,8 @@ Tool 可创建、调整计划和在用户明确意图下启动一次带练。完
 2. 不调用模型，不创建或合并动作；
 3. 点击动作只把标准名称填入草稿；
 4. 随后查询该 ID 最近一条训练事实；
-5. 生成可读候选，如“30 kg × 5 次 × 4 组，间歇 2 分钟”；
+5. 生成可读候选；相邻次数、重量、间歇和侧别完全相同的证据压缩为
+   “50kg 5×5组 间歇60s”，异构证据只按连续同值分段；
 6. 只填充最近记录中非空字段；
 7. 用户编辑或发送前不落业务数据。
 
@@ -375,10 +387,13 @@ Performance 终态、完成 Session、结束系统投影并进入本地分享预
 - 投影按 Effort 写 `WorkoutSetEvidence`，保留逻辑组索引、侧别、次数/时长、重量、休息和录像。
 - 投影在同一事务分配 business ID、绑定动作关系、设置 projection key 和一对一关系；删除 suppression
   与统计择一规则继续有效。
-- 动作热量优先使用 Effort 实际时长；次数训练无实际时长时才使用明确标为估算的回退。
+- 普通训练与带练使用同一个计算入口：训练实测总时长优先；否则逐 Effort 使用实际时长，次数证据
+  按每次约 4 秒，并只加明确保存的换侧/组间休息。结果保存 MET、计算时长和推算标记。
 - 体重只取 Session 开始时间之前最近的有效 BodyEntry，不从 UserProfile 回退。
 - Session 热量求和来源动作记录，不能再按 elapsed time 重算；缺体重返回 missing requirement，
   热量保持 `nil`，训练继续。
+- Tool 创建/更新、聊天卡编辑和带练投影后都重算；schema version 7 启动迁移只幂等回填体重和
+  训练证据充分的历史记录，缺事实不写 `0 kcal`。
 
 训练 Live Activity 与休息通知只保存 Session ID、通用阶段、完成/总组数和可选休息结束时间，
 不展示动作名称、重量、用户文字或媒体；点击后通过 `soma://workout/session/{id}` 回到对应 Session。

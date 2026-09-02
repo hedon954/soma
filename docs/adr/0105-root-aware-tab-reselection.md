@@ -4,7 +4,7 @@
 - 日期：2026-08-26
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 中“再选当前 Tab 一律回根”的交互决策
-- 后续替代：暂无
+- 后续替代：[ADR 0112](0112-coach-scroll-and-session-behavior.md) 仅增加教练 Tab 的系统双击回尾；单次再选仍 no-op
 - 上游依据：[PRD 047](../prd/047-root-aware-tab-reselection.md)；[BUG 0040](../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
 
 ## 背景

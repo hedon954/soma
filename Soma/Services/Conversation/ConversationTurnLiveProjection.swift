@@ -18,6 +18,17 @@ extension ConversationProcessingService {
         }
         liveEventRevision += 1
         switch event {
+        case let .reasoningDelta(itemID, delta):
+            if liveReasoningItemID != itemID {
+                liveReasoningItemID = itemID
+                liveReasoningTextBuffer.reset()
+            }
+            liveReasoningTextBuffer.append(delta)
+        case let .reasoningCompleted(itemID, _, _):
+            if liveReasoningItemID == itemID {
+                liveReasoningItemID = nil
+                liveReasoningTextBuffer.reset()
+            }
         case let .assistantTextDelta(itemID, delta):
             if liveAssistantItemID != itemID {
                 liveAssistantItemID = itemID
@@ -34,6 +45,8 @@ extension ConversationProcessingService {
         case .completed, .failed:
             liveAssistantItemID = nil
             liveAssistantTextBuffer.reset()
+            liveReasoningItemID = nil
+            liveReasoningTextBuffer.reset()
         }
     }
 
@@ -46,6 +59,7 @@ extension ConversationProcessingService {
         modelContext: ModelContext
     ) {
         guard let scenario = PerformanceTestFixture.requestedStreamScenario else { return }
+        guard !scenario.usesStaticAgentStage else { return }
         performanceFixtureTask?.cancel()
         performanceFixturePhase = "streaming"
         isProcessing = true
@@ -176,6 +190,16 @@ extension ConversationProcessingService {
         )
     }
 
+    var liveReasoningRenderSnapshot: LiveAgentTextRenderSnapshot? {
+        guard let liveReasoningItemID,
+              !liveReasoningTextBuffer.chunks.isEmpty
+        else { return nil }
+        return LiveAgentTextRenderSnapshot(
+            itemID: liveReasoningItemID,
+            chunks: liveReasoningTextBuffer.chunks
+        )
+    }
+
     /// 完整正文只在持久化边界合并一次，不参与 5Hz UI 投影。
     var liveAssistantTextSnapshot: LiveAgentTextSnapshot? {
         guard let renderSnapshot = liveAssistantRenderSnapshot else { return nil }
@@ -197,7 +221,7 @@ extension ConversationProcessingService {
             return itemID == snapshot.itemID ? snapshot : nil
         case .completed, .failed:
             return snapshot
-        case .assistantTextDelta, .span:
+        case .assistantTextDelta, .reasoningDelta, .reasoningCompleted, .span:
             return nil
         }
     }

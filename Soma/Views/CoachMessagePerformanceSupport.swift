@@ -19,6 +19,7 @@ struct CoachPerformanceSessionSelectionModifier: ViewModifier {
 struct CoachPerformanceScrollModifier: ViewModifier {
     let proxy: ScrollViewProxy
     let firstMessageID: UUID?
+    let lastMessageID: UUID?
 
     func body(content: Content) -> some View {
         content.onReceive(
@@ -27,9 +28,9 @@ struct CoachPerformanceScrollModifier: ViewModifier {
             guard let target = notification.object as? String else { return }
             if target == "top", let firstMessageID {
                 proxy.scrollTo(firstMessageID, anchor: .top)
-            } else if target == "bottom" {
+            } else if target == "bottom", let lastMessageID {
                 withAnimation(.easeOut(duration: 0.25)) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+                    proxy.scrollTo(lastMessageID, anchor: .bottom)
                 }
             }
         }
@@ -94,6 +95,53 @@ struct CoachMessageScrollPosition: Equatable {
     let isAtTop: Bool
     let isNearBottom: Bool
     let contentFitsViewport: Bool?
+}
+
+enum CoachTailScrollPolicy {
+    static func shouldScroll(contentFitsViewport: Bool?) -> Bool {
+        contentFitsViewport == false
+    }
+}
+
+struct CoachMessageContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+struct CoachMessageViewportHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// iOS 17 缺少 `onScrollGeometryChange`，由两个不持有业务状态的叶子只回报
+/// 消息内容与 viewport 高度。把测量隔离在叶子可避免高频消息更新让 Coach 根视图
+/// 直接依赖 GeometryReader，也不会创建可滚入的零高度锚点。
+struct CoachMessageContentHeightReporter: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Color.clear.preference(
+                key: CoachMessageContentHeightPreferenceKey.self,
+                value: geometry.size.height
+            )
+        }
+    }
+}
+
+struct CoachMessageViewportHeightReporter: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Color.clear.preference(
+                key: CoachMessageViewportHeightPreferenceKey.self,
+                value: geometry.size.height
+            )
+        }
+    }
 }
 
 struct CoachMessageScrollTrackingModifier: ViewModifier {
@@ -239,6 +287,7 @@ struct CoachMessageRenderPayload {
 @MainActor
 enum CoachMessageRenderPayloadCache {
     private struct Entry {
+        let sessionID: UUID?
         let text: String
         let isFromCoach: Bool
         let mediaKindRaw: String
@@ -247,6 +296,15 @@ enum CoachMessageRenderPayloadCache {
         let turnItemsData: Data
         let locationData: Data
         let payload: CoachMessageRenderPayload
+
+        var approximateCost: Int {
+            text.utf8.count
+                + mediaKindRaw.utf8.count
+                + (mediaPath?.utf8.count ?? 0)
+                + mediaAttachmentsData.count
+                + turnItemsData.count
+                + locationData.count
+        }
 
         func matches(_ message: CoachMessage) -> Bool {
             text == message.text
@@ -268,6 +326,8 @@ enum CoachMessageRenderPayloadCache {
             return entry.payload
         }
 
+        AppPerformance.event(.coachRenderCache, detail: "result=rebuild")
+
         let items = message.agentTurnItems
         let attachments = message.mediaAttachments
         let payload = CoachMessageRenderPayload(
@@ -285,6 +345,7 @@ enum CoachMessageRenderPayloadCache {
             )
         )
         let entry = Entry(
+            sessionID: message.sessionID,
             text: message.text,
             isFromCoach: message.isFromCoach,
             mediaKindRaw: message.mediaKindRaw,
@@ -306,6 +367,39 @@ enum CoachMessageRenderPayloadCache {
     static func removeAll() {
         entries.removeAll(keepingCapacity: false)
         insertionOrder.removeAll(keepingCapacity: false)
+    }
+
+    /// 内存压力下只保留当前会话最近的不可变渲染 DTO。Entry 不持有任何
+    /// SwiftData `@Model`，业务事实仍以数据库为准，命中时也会核对原始 revision。
+    static func retainCurrentSession(
+        _ sessionID: UUID?,
+        maxCount: Int = 10,
+        maxCost: Int = 2 * 1024 * 1024
+    ) {
+        guard let sessionID else {
+            removeAll()
+            return
+        }
+        var retained: [UUID] = []
+        var retainedCost = 0
+        for messageID in insertionOrder.reversed() {
+            guard retained.count < maxCount,
+                  let entry = entries[messageID],
+                  entry.sessionID == sessionID,
+                  retainedCost + entry.approximateCost <= maxCost
+            else {
+                continue
+            }
+            retained.append(messageID)
+            retainedCost += entry.approximateCost
+        }
+        let retainedSet = Set(retained)
+        entries = entries.filter { retainedSet.contains($0.key) }
+        insertionOrder = retained.reversed()
+        AppPerformance.event(
+            .coachRenderCache,
+            detail: "result=retained,count=\(retained.count),cost=\(retainedCost)"
+        )
     }
 
     static var cachedCount: Int {

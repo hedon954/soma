@@ -122,7 +122,14 @@ export interface AgentEvent {
   id: string;
   jobID: string;
   sequence: number;
-  kind: "job" | "model" | "tool" | "text" | "output" | "error";
+  kind:
+    | "job"
+    | "model"
+    | "tool"
+    | "text"
+    | "reasoning"
+    | "output"
+    | "error";
   phase:
     | "started"
     | "updated"

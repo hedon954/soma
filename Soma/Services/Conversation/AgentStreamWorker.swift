@@ -10,12 +10,16 @@ enum AgentStreamWorker {
         policy: AgentStreamDeadlinePolicy,
         enforceFirstDelta: Bool,
         textItemID: UUID,
+        reasoningItemID: UUID,
         project: @escaping @MainActor (AgentTraceEvent) -> Void
     ) async throws -> AgentStreamOutcome {
         var outcome = AgentStreamOutcome()
         var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
         let projectionPump = AgentTextProjectionPump { text in
             project(.assistantTextDelta(itemID: textItemID, delta: text))
+        }
+        let reasoningProjectionPump = AgentTextProjectionPump { text in
+            project(.reasoningDelta(itemID: reasoningItemID, delta: text))
         }
 
         do {
@@ -32,7 +36,9 @@ enum AgentStreamWorker {
                 for choice in chunk.choices ?? [] where (choice.index ?? 0) == 0 {
                     guard let delta = choice.delta else { continue }
                     if outcome.firstDeltaAt == nil,
-                       delta.content?.isEmpty == false || delta.toolCalls?.isEmpty == false
+                       delta.content?.isEmpty == false
+                       || delta.reasoningContent?.isEmpty == false
+                       || delta.toolCalls?.isEmpty == false
                     {
                         outcome.firstDeltaAt = Date()
                         meaningful = true
@@ -42,7 +48,8 @@ enum AgentStreamWorker {
                         await projectionPump.append(content)
                     }
                     if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
-                        outcome.ignoredReasoning = true
+                        outcome.reasoning += reasoning
+                        await reasoningProjectionPump.append(reasoning)
                     }
                     for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
                         let index = toolDelta.index ?? position
@@ -56,13 +63,16 @@ enum AgentStreamWorker {
             }
         } catch {
             outcome.projectionSeconds = await projectionPump.finish()
+            _ = await reasoningProjectionPump.finish()
             throw StreamingFailure.interrupted(
                 error,
                 passage: outcome.passage,
+                reasoning: outcome.reasoning,
                 receivedMeaningfulDelta: outcome.firstDeltaAt != nil
             )
         }
         outcome.projectionSeconds = await projectionPump.finish()
+        outcome.projectionSeconds += await reasoningProjectionPump.finish()
         outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap {
             toolCallDeltas[$0]
         }

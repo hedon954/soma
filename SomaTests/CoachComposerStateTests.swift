@@ -86,4 +86,119 @@ final class CoachComposerStateTests: XCTestCase {
             MediaPicker.maximumSelectionCount
         )
     }
+
+    func testSpeechAccumulatorNeverLetsShorterPartialEraseCommittedPrefix() {
+        var accumulator = SpeechTranscriptAccumulator()
+        XCTAssertEqual(accumulator.receive("今天练深蹲", isFinal: false), "今天练深蹲")
+        XCTAssertEqual(accumulator.receive("今天练", isFinal: false), "今天练")
+        XCTAssertEqual(accumulator.receive("今天练深蹲", isFinal: true), "今天练深蹲，")
+        XCTAssertEqual(accumulator.receive("五组", isFinal: false), "今天练深蹲，五组")
+        XCTAssertEqual(accumulator.receive("五组五次", isFinal: true), "今天练深蹲，五组五次，")
+    }
+
+    func testSpeechAccumulatorDeduplicatesRepeatedFinalAndPreservesPunctuation() {
+        var accumulator = SpeechTranscriptAccumulator()
+        XCTAssertEqual(accumulator.receive("先做热身。", isFinal: true), "先做热身。")
+        XCTAssertEqual(accumulator.receive("先做热身。", isFinal: true), "先做热身。")
+        XCTAssertEqual(accumulator.receive("Then squat", isFinal: true), "先做热身。Then squat，")
+        XCTAssertEqual(accumulator.commitCurrent(), "先做热身。Then squat，")
+    }
+
+    func testSpeechAccumulatorAddsPunctuationWhenSilenceCommitsPartial() {
+        var accumulator = SpeechTranscriptAccumulator()
+        XCTAssertEqual(accumulator.receive("先做热身", isFinal: false), "先做热身")
+        XCTAssertEqual(
+            accumulator.commitCurrent(addsPausePunctuation: true),
+            "先做热身，"
+        )
+        XCTAssertEqual(accumulator.receive("再做深蹲", isFinal: false), "先做热身，再做深蹲")
+    }
+
+    func testSpeechAccumulatorCommitsUnfinalizedPartialWhenSpeechRestartsAfterPause() {
+        var accumulator = SpeechTranscriptAccumulator()
+        let start = Date(timeIntervalSince1970: 1000)
+
+        XCTAssertEqual(
+            accumulator.receive("今天练深蹲", isFinal: false, at: start),
+            "今天练深蹲"
+        )
+        XCTAssertEqual(
+            accumulator.receive(
+                "五组",
+                isFinal: false,
+                at: start.addingTimeInterval(SpeechTranscriptAccumulator.pauseBoundary + 0.1)
+            ),
+            "今天练深蹲，五组"
+        )
+        XCTAssertEqual(
+            accumulator.receive("五组五次", isFinal: true),
+            "今天练深蹲，五组五次，"
+        )
+    }
+
+    func testStoppingAndRestartingVoiceUsesCommittedDraftAsNewBaseline() {
+        let state = makeListeningState(draft: "已有文字")
+        state.speechInput?.transcript = "第一段"
+        state.syncDraftFromSpeech()
+        XCTAssertEqual(state.draft, "已有文字 第一段")
+
+        state.speechInput?.transcript = ""
+        state.syncDraftFromSpeech()
+        state.draftBeforeSpeech = state.trimmedDraft
+        state.speechInput?.transcript = "第二段"
+        state.syncDraftFromSpeech()
+
+        XCTAssertEqual(state.draft, "已有文字 第一段 第二段")
+    }
+
+    func testRepeatedPartialDoesNotPostponePauseBoundaryAndOverwriteEarlierWords() {
+        var accumulator = SpeechTranscriptAccumulator()
+        let start = Date(timeIntervalSince1970: 1000)
+
+        XCTAssertEqual(
+            accumulator.receive("先记录深蹲", isFinal: false, at: start),
+            "先记录深蹲"
+        )
+        XCTAssertEqual(
+            accumulator.receive(
+                "先记录深蹲",
+                isFinal: false,
+                at: start.addingTimeInterval(0.7)
+            ),
+            "先记录深蹲"
+        )
+        XCTAssertEqual(
+            accumulator.receive(
+                "再记录硬拉",
+                isFinal: false,
+                at: start.addingTimeInterval(
+                    SpeechTranscriptAccumulator.pauseBoundary + 0.1
+                )
+            ),
+            "先记录深蹲，再记录硬拉"
+        )
+    }
+
+    func testAcousticSegmentGapCommitsPriorPartialEvenWhenCallbacksAreClose() {
+        var accumulator = SpeechTranscriptAccumulator()
+        let start = Date(timeIntervalSince1970: 2000)
+
+        _ = accumulator.receive(
+            "第一段",
+            isFinal: false,
+            at: start,
+            speechSegmentStart: 0,
+            speechSegmentEnd: 0.6
+        )
+        XCTAssertEqual(
+            accumulator.receive(
+                "第二段",
+                isFinal: false,
+                at: start.addingTimeInterval(0.2),
+                speechSegmentStart: 1.6,
+                speechSegmentEnd: 2.1
+            ),
+            "第一段，第二段"
+        )
+    }
 }

@@ -31,7 +31,7 @@ enum ConversationRecorder {
             occurredAt = nil
         }
         let resolvedSourceDate = occurredAt ?? sourceDate
-        if call.name.isTypedV3 {
+        if call.name.isTypedTool {
             return executeTypedAgentTool(
                 call,
                 source: TypedAgentToolSource(

@@ -175,7 +175,11 @@ struct LiveAgentTextSnapshot: Equatable, Sendable {
 
 enum ConversationResumeProjection {
     static func completedItems(from items: [AgentTurnItem]) -> [AgentTurnItem] {
-        items.filter { $0.status == .succeeded && $0.kind != .error }
+        items.filter {
+            $0.status == .succeeded
+                && $0.kind != .error
+                && $0.kind != .activity
+        }
     }
 }
 

@@ -34,7 +34,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case recordPerformanceAnalysis = "record_performance_analysis"
     case submitFeedback = "submit_feedback"
 
-    var isTypedV3: Bool {
+    var isTypedTool: Bool {
         switch self {
         case .searchExercises, .createExercise, .updateExercise,
              .archiveExercise, .mergeExercises, .listWorkouts,
@@ -71,15 +71,17 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
 
     var schemaVersion: Int {
         switch self {
+        case .searchExercises,
+             .createExercise,
+             .updateExercise,
+             .createWorkout,
+             .updateWorkout:
+            4
         case .getProgram,
              .createProgram,
-             .updateProgram,
-             .createExercise,
-             .createWorkout:
+             .updateProgram:
             3
-        case .searchExercises,
-             .updateExercise,
-             .archiveExercise,
+        case .archiveExercise,
              .mergeExercises,
              .listWorkouts,
              .getWorkout,
@@ -97,7 +99,6 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .deleteProgram,
              .startProgram,
              .loadSkill,
-             .updateWorkout,
              .updateMeal,
              .updateBody,
              .updateGym,
@@ -108,11 +109,14 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         }
     }
 
-    /// 新计划、批量动作/训练写入只广告 schema 3；升级前持久化的远程 Job 仍可按原版本交回设备执行。
+    /// 新调用只广告当前版本；升级前持久化的远程 Job 仍可按原版本交回设备执行。
     var supportedSchemaVersions: Set<Int> {
         switch self {
-        case .getProgram, .createProgram, .updateProgram,
-             .createExercise, .createWorkout:
+        case .createExercise, .createWorkout:
+            [1, 2, 3, 4]
+        case .searchExercises, .updateExercise, .updateWorkout:
+            [1, 2, 4]
+        case .getProgram, .createProgram, .updateProgram:
             [1, 2, 3]
         default:
             [1, schemaVersion]

@@ -78,6 +78,7 @@ enum PerformanceTestFixture {
     static let longStreamMarkdownCompletion = "long-stream-markdown-completion"
     static let coachTabBehavior = "coach-tab-behavior"
     static let recordOptimizations = "record-optimizations"
+    static let agentStages = "agent-stages"
 
     enum StreamScenario: String, Sendable {
         case paragraphs = "long-stream"
@@ -85,6 +86,7 @@ enum PerformanceTestFixture {
         case markdownCompletion = "long-stream-markdown-completion"
         case coachTabBehavior = "coach-tab-behavior"
         case recordOptimizations = "record-optimizations"
+        case agentStages = "agent-stages"
 
         var completes: Bool {
             self != .paragraphs
@@ -100,7 +102,13 @@ enum PerformanceTestFixture {
                 1 ..< 4
             case .recordOptimizations:
                 1 ..< 2
+            case .agentStages:
+                0 ..< 0
             }
+        }
+
+        var usesStaticAgentStage: Bool {
+            self == .agentStages
         }
     }
 
@@ -162,16 +170,14 @@ enum PerformanceTestFixture {
         let session = ConversationSession(
             startedAt: startedAt,
             updatedAt: .now,
-            title: title,
-            titleSource: .manual
+            title: title
         )
         context.insert(session)
 
         let olderSession = ConversationSession(
             startedAt: startedAt.addingTimeInterval(-3600),
             updatedAt: startedAt.addingTimeInterval(-3600),
-            title: "性能测试：可切换旧对话",
-            titleSource: .manual
+            title: "性能测试：可切换旧对话"
         )
         context.insert(olderSession)
         context.insert(CoachMessage(
@@ -239,6 +245,14 @@ enum PerformanceTestFixture {
                 startedAt: startedAt,
                 context: context
             )
+            seedResumableWorkout(
+                startedAt: startedAt,
+                context: context
+            )
+            seedCompletedWorkoutReview(
+                startedAt: startedAt,
+                context: context
+            )
         }
 
         // Markdown 完成态场景专门压单条 18k 正文，保持消息页在 eager 边界内，
@@ -246,7 +260,7 @@ enum PerformanceTestFixture {
         // 39 轮大会话，覆盖消息级 LazyVStack 与分页。
         let historicalTurnCount = switch scenario {
         case .markdownCompletion: 3
-        case .recordOptimizations: 0
+        case .recordOptimizations, .agentStages: 0
         default: 39
         }
         for index in 0 ..< historicalTurnCount {
@@ -289,19 +303,26 @@ enum PerformanceTestFixture {
         }
 
         let liveTurnID = UUID()
+        let liveUserDate = scenario == .recordOptimizations
+            ? startedAt.addingTimeInterval(1.5)
+            : .now.addingTimeInterval(-1)
+        let liveResponseDate = scenario == .recordOptimizations
+            ? startedAt.addingTimeInterval(2)
+            : .now
         context.insert(CoachMessage(
-            date: .now.addingTimeInterval(-1),
+            date: liveUserDate,
             sessionID: session.id,
             isFromCoach: false,
             text: "继续生成一份完全虚构的长篇训练总结，用于性能测试。",
             turnID: liveTurnID
         ))
         let responseMessage = CoachMessage(
-            date: .now,
+            date: liveResponseDate,
             sessionID: session.id,
             isFromCoach: true,
             text: "",
-            agentStatus: .running,
+            agentStatus: agentStageStatus,
+            agentTurnItems: agentStageItems(startedAt: liveResponseDate),
             turnID: liveTurnID
         )
         context.insert(responseMessage)
@@ -318,7 +339,7 @@ enum PerformanceTestFixture {
 
     static func streamDelta(_ index: Int, scenario: StreamScenario) -> String {
         switch scenario {
-        case .paragraphs, .coachTabBehavior, .recordOptimizations:
+        case .paragraphs, .coachTabBehavior, .recordOptimizations, .agentStages:
             streamParagraph(index)
         case .noNewline:
             "第\(index + 1)段连续虚构训练建议只用于验证无换行正文的增量排版成本不随全文长度增长且不会插入额外字符"
@@ -335,8 +356,91 @@ enum PerformanceTestFixture {
         }
     }
 
-    /// 只用于 UI 回归：记录故意保留旧的“次数”槽位，动作定义明确为按时长/全身，
-    /// 从而验证聊天卡由动作定义纠正展示，而不是继续信任记录级配置。
+    private static var requestedAgentStage: String {
+        ProcessInfo.processInfo.environment["SOMA_UI_AGENT_STAGE"] ?? "received"
+    }
+
+    private static var agentStageStatus: AgentTraceStatus {
+        switch requestedAgentStage {
+        case "completed", "reasoning-completed": .succeeded
+        case "failed": .failed
+        default: .running
+        }
+    }
+
+    private static func agentStageItems(startedAt: Date) -> [AgentTurnItem] {
+        guard requestedStreamScenario == .agentStages else { return [] }
+        let operationID = "fixture-operation"
+        switch requestedAgentStage {
+        case "model":
+            return [AgentTurnItem(
+                kind: .activity,
+                status: .running,
+                phase: .modelRunning,
+                title: "正在处理请求…",
+                text: "正在处理请求…",
+                startedAt: startedAt
+            )]
+        case "preparing", "running", "waiting", "completed", "failed":
+            let phase: AgentTurnPhase = switch requestedAgentStage {
+            case "preparing": .preparing
+            case "running": .running
+            case "waiting": .waitingForDevice
+            case "completed": .completed
+            default: .failed
+            }
+            let status: AgentTraceStatus = switch phase {
+            case .completed: .succeeded
+            case .failed: .failed
+            default: .running
+            }
+            return [AgentTurnItem(
+                kind: .tool,
+                status: status,
+                operationID: operationID,
+                phase: phase,
+                title: "创建训练记录",
+                startedAt: startedAt,
+                endedAt: status == .running ? nil : startedAt.addingTimeInterval(1),
+                output: status == .succeeded
+                    ? AgentTraceText.json(AgentToolResult.success("虚构训练记录已保存。"))
+                    : nil,
+                errorMessage: status == .failed ? "虚构参数错误" : nil
+            )]
+        case "skill":
+            return [AgentTurnItem(
+                kind: .skill,
+                status: .running,
+                operationID: operationID,
+                phase: .preparing,
+                title: "训练记录 Skill",
+                startedAt: startedAt
+            )]
+        case "reasoning-running", "reasoning-completed":
+            let completed = requestedAgentStage == "reasoning-completed"
+            return [AgentTurnItem(
+                kind: .reasoning,
+                status: completed ? .succeeded : .running,
+                phase: completed ? .completed : .modelRunning,
+                title: completed ? "思考过程" : "正在思考…",
+                text: "先核对训练事实，再组织最终答复。",
+                startedAt: startedAt,
+                endedAt: completed ? startedAt.addingTimeInterval(1) : nil
+            )]
+        default:
+            return [AgentTurnItem(
+                kind: .activity,
+                status: .running,
+                phase: .queued,
+                title: "已收到，正在准备处理…",
+                text: "已收到，正在准备处理…",
+                startedAt: startedAt
+            )]
+        }
+    }
+
+    /// 只用于 UI 回归：动作定义与本次逐组 evidence 都明确为按时长，验证聊天卡
+    /// 使用 v4 的显式记录证据，并完整呈现时长、自重、间歇与组数。
     @MainActor
     private static func seedRecordOptimizationTurn(
         in session: ConversationSession,
@@ -344,7 +448,10 @@ enum PerformanceTestFixture {
         context: ModelContext
     ) {
         let turnID = UUID()
-        let definition = ExerciseDefinition(canonicalName: "单杠悬吊")
+        let exerciseName = ProcessInfo.processInfo.environment[
+            "SOMA_UI_WORKOUT_NAME"
+        ] ?? "单杠悬吊"
+        let definition = ExerciseDefinition(canonicalName: exerciseName)
         definition.targetKind = .duration
         definition.laterality = ExerciseLaterality(
             rawValue: ProcessInfo.processInfo.environment[
@@ -352,6 +459,13 @@ enum PerformanceTestFixture {
             ] ?? ""
         ) ?? .none
         context.insert(definition)
+
+        let recordedSide: WorkoutEffortSide? = switch definition.laterality {
+        case .left: .left
+        case .right: .right
+        case .none: WorkoutEffortSide.none
+        case .both: nil
+        }
 
         let requestedStressCount = Int(
             ProcessInfo.processInfo.environment["SOMA_UI_EXERCISE_STRESS_COUNT"]
@@ -370,9 +484,9 @@ enum PerformanceTestFixture {
             setEntries: (1 ... 3).map { index in
                 WorkoutSetEvidence(
                     logicalSetIndex: index,
-                    side: WorkoutEffortSide.none,
-                    targetKind: .repetitions,
-                    reps: 20,
+                    side: recordedSide,
+                    targetKind: .duration,
+                    durationSeconds: 20,
                     externalWeightKG: 0,
                     restSeconds: index < 3 ? 30 : nil
                 )
@@ -382,6 +496,10 @@ enum PerformanceTestFixture {
             sourceSessionID: session.id
         )
         workout.exerciseDefinition = definition
+        workout.estimatedCalories = 23
+        workout.calorieMET = 6
+        workout.calorieDurationMinutes = 2.5
+        workout.calorieDurationEstimated = true
         context.insert(workout)
         try? BusinessIDAllocator.assign(workout, namespace: "workout", in: context)
 
@@ -438,6 +556,115 @@ enum PerformanceTestFixture {
                 turnID: turnID
             ))
         }
+    }
+
+    /// 训练根页 UI 回归夹具：验证继续训练卡的真实高度和系统左滑删除样式。
+    @MainActor
+    private static func seedResumableWorkout(
+        startedAt: Date,
+        context: ModelContext
+    ) {
+        let names = ["杠铃卧推", "坐姿推肩", "上斜哑铃卧推", "侧平举", "绳索下压", "俯卧撑"]
+        let prescriptions = names.enumerated().map { index, name in
+            TemplateExercisePrescription(
+                exerciseID: UUID(),
+                exerciseName: name,
+                order: index + 1,
+                targetSets: 3,
+                targetReps: 10,
+                targetWeightKG: index == 5 ? 0 : 20
+            )
+        }
+        let session = WorkoutSession(
+            startedAt: startedAt.addingTimeInterval(10),
+            programNameSnapshot: "虚构胸肩三头",
+            prescriptionSnapshot: prescriptions,
+            status: .paused,
+            guidedPhase: .exerciseIntroduction
+        )
+        context.insert(session)
+
+        for (index, prescription) in prescriptions.enumerated() {
+            let performance = ExercisePerformance(
+                sessionID: session.id,
+                exerciseID: prescription.exerciseID,
+                exerciseName: prescription.exerciseName,
+                order: prescription.order,
+                prescriptionSnapshot: prescription,
+                status: index == 0 ? .completed : (index == 1 ? .active : .pending)
+            )
+            performance.session = session
+            context.insert(performance)
+            if index == 1 {
+                session.currentPerformanceID = performance.id
+            }
+        }
+    }
+
+    /// 训练复盘 UI 回归夹具：Performance 顺序与来源 WorkoutEntry 使用稳定 ID 对齐，
+    /// 复盘应复用进展页最近记录行而不是只显示“几组已确认”。
+    @MainActor
+    private static func seedCompletedWorkoutReview(
+        startedAt: Date,
+        context: ModelContext
+    ) {
+        let definition = ExerciseDefinition(canonicalName: "虚构复盘深蹲")
+        context.insert(definition)
+        let prescription = TemplateExercisePrescription(
+            exerciseID: definition.id,
+            exerciseName: definition.canonicalName,
+            order: 1,
+            targetSets: 5,
+            targetReps: 5,
+            targetWeightKG: 50,
+            targetRestSeconds: 60
+        )
+        let session = WorkoutSession(
+            startedAt: startedAt.addingTimeInterval(20),
+            endedAt: startedAt.addingTimeInterval(1220),
+            programNameSnapshot: "虚构复盘计划",
+            prescriptionSnapshot: [prescription],
+            status: .completed,
+            guidedPhase: .completed
+        )
+        let performance = ExercisePerformance(
+            sessionID: session.id,
+            exerciseID: definition.id,
+            exerciseName: definition.canonicalName,
+            order: 1,
+            prescriptionSnapshot: prescription,
+            status: .completed
+        )
+        performance.session = session
+        performance.exerciseDefinition = definition
+        session.performances = [performance]
+        context.insert(session)
+        context.insert(performance)
+
+        let entry = WorkoutEntry(
+            date: session.startedAt,
+            exercise: definition.canonicalName,
+            exerciseID: definition.id,
+            setEntries: (1 ... 5).map { index in
+                WorkoutSetEvidence(
+                    logicalSetIndex: index,
+                    side: WorkoutEffortSide.none,
+                    targetKind: .repetitions,
+                    reps: 5,
+                    externalWeightKG: 50,
+                    restSeconds: index < 5 ? 60 : nil
+                )
+            },
+            restSeconds: 60,
+            sourceWorkoutSessionID: session.id,
+            sourcePerformanceID: performance.id,
+            projectionKey: SomaDataMigration.projectionKey(for: performance.id)
+        )
+        entry.exerciseDefinition = definition
+        entry.sourcePerformance = performance
+        performance.projectedWorkout = entry
+        context.insert(entry)
+        try? BusinessIDAllocator.assign(entry, namespace: "workout", in: context)
     }
 
     /// 在非 MainActor 侧生成碎片，并复用真实 SSE 的单飞投影 Pump。这样性能夹具

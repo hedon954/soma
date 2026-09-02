@@ -27,6 +27,33 @@ struct ProgressRecentActivity: Identifiable, Sendable {
     let detail: String
     let metric: String?
 
+    static func workout(_ entry: WorkoutEntry) -> ProgressRecentActivity {
+        workout(
+            id: entry.id,
+            date: entry.date,
+            title: entry.exercise,
+            detail: entry.setEvidenceSummary,
+            volume: entry.estimatedVolume
+        )
+    }
+
+    static func workout(
+        id: UUID,
+        date: Date,
+        title: String,
+        detail: String?,
+        volume: Double?
+    ) -> ProgressRecentActivity {
+        ProgressRecentActivity(
+            id: id,
+            kind: .workout,
+            date: date,
+            title: title,
+            detail: detail ?? "训练记录",
+            metric: volume.map { "\($0.formatted()) kg" }
+        )
+    }
+
     var icon: String {
         switch kind {
         case .workout: "dumbbell.fill"

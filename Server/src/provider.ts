@@ -16,6 +16,7 @@ interface ChatCompletionResponse {
   choices?: {
     message?: {
       content?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: {
         id?: string;
         function?: {
@@ -35,6 +36,8 @@ interface ChatCompletionStreamChunk {
   choices?: {
     delta?: {
       content?: string | null;
+      reasoning_content?: string | null;
+      reasoning?: string | null;
       tool_calls?: {
         index?: number;
         id?: string;
@@ -65,6 +68,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       await new Promise((resolve) => setTimeout(resolve, seconds * 1_000));
     },
     private readonly directVideoEnabled: boolean = false,
+    private readonly extraConfig?: Record<string, unknown>,
   ) {}
 
   async run(
@@ -72,6 +76,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     events: AgentEvent[],
     media: ProviderMedia[],
     onTextDelta?: (delta: string) => Promise<void>,
+    onReasoningDelta?: (delta: string) => Promise<void>,
   ): Promise<ProviderStep> {
     if (job.input === undefined) {
       throw new ProtocolError("job_expired", "任务内容已清理。", 410);
@@ -164,6 +169,22 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         !hasCompletedModelStep,
       );
       try {
+        const requestBody = mergeProviderExtraConfig(
+          {
+            model: this.model,
+            messages,
+            tools,
+            tool_choice: job.input.modelInput.runtime.toolChoice,
+            parallel_tool_calls:
+              job.input.modelInput.runtime.parallelToolCalls,
+            stream: true,
+            stream_options: { include_usage: true },
+          },
+          this.extraConfig ?? defaultProviderExtraConfig(
+            this.baseURL,
+            this.model,
+          ),
+        );
         const response = await this.fetcher(
           `${this.baseURL.replace(/\/$/, "")}/chat/completions`,
           {
@@ -172,16 +193,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
               authorization: `Bearer ${this.apiKey}`,
               "content-type": "application/json",
             },
-            body: JSON.stringify({
-              model: this.model,
-              messages,
-              tools,
-              tool_choice: job.input.modelInput.runtime.toolChoice,
-              parallel_tool_calls:
-                job.input.modelInput.runtime.parallelToolCalls,
-              stream: true,
-              stream_options: { include_usage: true },
-            }),
+            body: JSON.stringify(requestBody),
             signal: deadline.signal,
           },
         );
@@ -197,6 +209,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           step = await this.consumeStream(
             response,
             onTextDelta,
+            onReasoningDelta,
             () => deadline.markMeaningfulDelta(),
             toolSchemas,
           );
@@ -204,6 +217,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           step = await this.consumeResponse(
             response,
             onTextDelta,
+            onReasoningDelta,
             deadline,
             toolSchemas,
           );
@@ -242,11 +256,17 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
   private async consumeResponse(
     response: Response,
     onTextDelta: ((delta: string) => Promise<void>) | undefined,
+    onReasoningDelta: ((delta: string) => Promise<void>) | undefined,
     deadline: ProviderRequestDeadline,
     toolSchemas: Map<string, number>,
   ): Promise<ProviderStep> {
     const payload = (await response.json()) as ChatCompletionResponse;
     const message = payload.choices?.[0]?.message;
+    const reasoning = message?.reasoning_content;
+    if (typeof reasoning === "string" && reasoning.length > 0) {
+      deadline.markMeaningfulDelta();
+      await onReasoningDelta?.(reasoning);
+    }
     if ((message?.tool_calls?.length ?? 0) > 0) {
       deadline.markMeaningfulDelta();
       return {
@@ -282,6 +302,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
   private async consumeStream(
     response: Response,
     onTextDelta?: (delta: string) => Promise<void>,
+    onReasoningDelta?: (delta: string) => Promise<void>,
     onMeaningfulDelta?: () => void,
     toolSchemas: Map<string, number> = new Map(),
   ): Promise<ProviderStep> {
@@ -310,6 +331,14 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       if (onTextDelta === undefined || text.length === 0) return emission;
       emission = emission.then(() => onTextDelta(text));
       return emission;
+    };
+    let reasoningEmission = Promise.resolve();
+    const deliverReasoning = (text: string): Promise<void> => {
+      if (onReasoningDelta === undefined || text.length === 0) {
+        return reasoningEmission;
+      }
+      reasoningEmission = reasoningEmission.then(() => onReasoningDelta(text));
+      return reasoningEmission;
     };
     const flushBufferedText = async (): Promise<void> => {
       if (flushTimer !== undefined) clearTimeout(flushTimer);
@@ -356,6 +385,11 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       }
       const delta = chunk.choices?.[0]?.delta;
       const content = delta?.content;
+      const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+      if (typeof reasoning === "string" && reasoning.length > 0) {
+        onMeaningfulDelta?.();
+        await deliverReasoning(reasoning);
+      }
       if (typeof content === "string" && content.length > 0) {
         onMeaningfulDelta?.();
         answer += content;
@@ -399,6 +433,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     if (buffer.trim().length > 0) await consumeBlock(buffer);
     await flushBufferedText();
     await emission;
+    await reasoningEmission;
 
     const orderedTools = [...toolCalls.entries()]
       .sort(([lhs], [rhs]) => lhs - rhs)
@@ -429,6 +464,98 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     }
     return { kind: "completed", answer: trimmedAnswer, usage };
   }
+}
+
+const providerReservedExtraConfigKeys = new Set([
+  "messages",
+  "stream",
+  "stream_options",
+]);
+
+export function defaultProviderExtraConfig(
+  baseURL: string,
+  model: string,
+): Record<string, unknown> {
+  const endpoint = baseURL.toLowerCase();
+  const modelID = model.toLowerCase();
+  if (
+    endpoint.includes("api.openai.com") ||
+    endpoint.includes("generativelanguage.googleapis.com")
+  ) return {};
+  if (
+    endpoint.includes("dashscope") ||
+    endpoint.includes("bailian") ||
+    endpoint.includes("aliyun") ||
+    endpoint.includes("alibaba") ||
+    endpoint.includes("siliconflow") ||
+    endpoint.includes("idealab")
+  ) return { enable_thinking: false };
+  if (endpoint.includes("openrouter")) {
+    return { reasoning: { enabled: false } };
+  }
+  if (
+    endpoint.includes("deepseek") ||
+    endpoint.includes("bigmodel") ||
+    endpoint.includes("zhipu") ||
+    endpoint.includes("volces") ||
+    endpoint.includes("volcengine")
+  ) return { thinking: { type: "disabled" } };
+  if (modelID.includes("qwen") || modelID.includes("qwq")) {
+    return { chat_template_kwargs: { enable_thinking: false } };
+  }
+  if (
+    modelID.includes("glm") ||
+    modelID.includes("chatglm") ||
+    modelID.includes("deepseek")
+  ) return { thinking: { type: "disabled" } };
+  return {};
+}
+
+export function parseProviderExtraConfig(
+  raw: string | undefined,
+): Record<string, unknown> | undefined {
+  if (raw === undefined || raw.trim().length === 0) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("SOMA_PROVIDER_EXTRA_CONFIG 必须是合法 JSON 对象。");
+  }
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    throw new Error("SOMA_PROVIDER_EXTRA_CONFIG 必须是 JSON 对象。");
+  }
+  const dictionary = value as Record<string, unknown>;
+  const reserved = Object.keys(dictionary).filter((key) =>
+    providerReservedExtraConfigKeys.has(key)
+  );
+  if (reserved.length > 0) {
+    throw new Error(`SOMA_PROVIDER_EXTRA_CONFIG 不能包含 ${reserved.join(", ")}。`);
+  }
+  return dictionary;
+}
+
+function mergeProviderExtraConfig(
+  base: Record<string, unknown>,
+  overlay: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...base };
+  for (const [key, value] of Object.entries(overlay)) {
+    if (providerReservedExtraConfigKeys.has(key)) continue;
+    const existing = result[key];
+    if (
+      value !== null && typeof value === "object" && !Array.isArray(value) &&
+      existing !== null && typeof existing === "object" &&
+      !Array.isArray(existing)
+    ) {
+      result[key] = mergeProviderExtraConfig(
+        existing as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 function modelMessages(

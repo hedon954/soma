@@ -2,6 +2,109 @@
 import XCTest
 
 final class CoachMessageAgentEventTests: XCTestCase {
+    func testReasoningIsSeparateFromAssistantTextAndFinishesCollapsedItemState() {
+        let message = CoachMessage(
+            isFromCoach: true,
+            text: "",
+            agentStatus: .running
+        )
+        let reasoningID = UUID()
+        let textID = UUID()
+        let endedAt = Date()
+
+        message.applyAgentEvent(.reasoningDelta(
+            itemID: reasoningID,
+            delta: "先检查训练证据。"
+        ))
+        message.applyAgentEvent(.reasoningCompleted(
+            itemID: reasoningID,
+            text: "先检查训练证据。再核对体重。",
+            at: endedAt
+        ))
+        message.applyAgentEvent(.assistantTextDelta(
+            itemID: textID,
+            delta: "结论正文"
+        ))
+
+        XCTAssertEqual(message.agentTurnItems.map(\.kind), [.reasoning, .text])
+        XCTAssertEqual(message.agentTurnItems[0].status, .succeeded)
+        XCTAssertEqual(message.agentTurnItems[0].text, "先检查训练证据。再核对体重。")
+        XCTAssertEqual(message.agentTurnItems[1].text, "结论正文")
+        XCTAssertEqual(message.text, "", "思考内容和实时正文都不能直接混入持久正文")
+    }
+
+    func testLegacyTurnItemWithoutOperationOrPhaseUsesStatusFallback() throws {
+        let item = AgentTurnItem(
+            kind: .tool,
+            status: .succeeded,
+            title: "虚构旧工具"
+        )
+        let encoded = try JSONEncoder().encode(item)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "operationID")
+        object.removeValue(forKey: "phaseRaw")
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(AgentTurnItem.self, from: legacy)
+        XCTAssertNil(decoded.operationID)
+        XCTAssertEqual(decoded.phase, .completed)
+    }
+
+    func testOperationPhasesReplaceOneCardByOperationID() {
+        let message = CoachMessage(
+            isFromCoach: true,
+            text: "",
+            agentStatus: .running,
+            agentTurnItems: [AgentTurnItem(
+                kind: .activity,
+                status: .running,
+                phase: .modelRunning,
+                title: "正在处理请求…"
+            )]
+        )
+        let operationID = "call-fixture-1"
+        let startedAt = Date()
+
+        for phase in [AgentTurnPhase.preparing, .running, .completed] {
+            message.applyAgentEvent(.span(AgentTraceSpan(
+                kind: .tool,
+                title: "创建训练记录",
+                status: phase == .completed ? .succeeded : .running,
+                operationID: operationID,
+                phase: phase,
+                startedAt: startedAt,
+                endedAt: .now
+            )))
+        }
+
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(message.agentTurnItems.first?.operationID, operationID)
+        XCTAssertEqual(message.agentTurnItems.first?.phase, .completed)
+        XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
+    }
+
+    func testTurnCompletionKeepsFailedOperationCard() {
+        let message = CoachMessage(isFromCoach: true, text: "")
+        let startedAt = Date()
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: "创建训练记录",
+            status: .failed,
+            operationID: "call-fixture-2",
+            phase: .failed,
+            startedAt: startedAt,
+            endedAt: startedAt,
+            errorMessage: "虚构字段错误"
+        )))
+        message.applyAgentEvent(.completed(answer: "已完成纠正。", at: .now))
+
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(message.agentTurnItems.first?.phase, .failed)
+        XCTAssertEqual(message.agentTurnItems.first?.errorMessage, "虚构字段错误")
+    }
+
     func testCoachMessageKeepsLiveToolAndSkillEventsAfterCompletion() {
         let message = CoachMessage(
             isFromCoach: true,

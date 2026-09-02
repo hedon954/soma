@@ -160,7 +160,7 @@ enum AgentTurnTranscriptSegments {
         switch item.kind {
         case .skill, .tool:
             item.status != .failed && item.status != .cancelled
-        case .text, .error:
+        case .activity, .reasoning, .text, .error:
             false
         }
     }

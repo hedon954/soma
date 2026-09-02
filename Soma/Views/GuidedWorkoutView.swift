@@ -43,37 +43,46 @@ private struct GuidedTimelineRevision: Hashable {
 }
 
 private struct GuidedExerciseReplacementList: View {
-    @Query private var definitions: [ExerciseDefinition]
-    let onSelect: (ExerciseDefinition) -> Void
-
-    init(onSelect: @escaping (ExerciseDefinition) -> Void) {
-        self.onSelect = onSelect
-        var descriptor = FetchDescriptor<ExerciseDefinition>(
-            predicate: #Predicate { $0.archivedAt == nil },
-            sortBy: [SortDescriptor(\.canonicalName)]
-        )
-        descriptor.fetchLimit = 2000
-        _definitions = Query(descriptor)
-    }
+    @Environment(\.modelContext) private var modelContext
+    let onSelect: (UUID) -> Void
+    @State private var choices: [GuidedWorkoutExerciseChoice] = []
+    @State private var errorMessage: String?
 
     var body: some View {
-        List(definitions) { exercise in
-            Button {
-                onSelect(exercise)
-            } label: {
-                HStack(spacing: 12) {
-                    ExerciseArtworkView(
-                        reference: exercise.preferredActionIllustration
-                    )
-                    .frame(width: 54, height: 54)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    Text(exercise.canonicalName)
+        List {
+            if let errorMessage {
+                ContentUnavailableView(
+                    "无法载入动作",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(errorMessage)
+                )
+            } else {
+                ForEach(choices) { choice in
+                    Button {
+                        onSelect(choice.id)
+                    } label: {
+                        HStack(spacing: 12) {
+                            ExerciseArtworkView(reference: choice.artwork)
+                                .frame(width: 54, height: 54)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            Text(choice.name)
+                        }
+                    }
+                    .foregroundStyle(.primary)
                 }
             }
-            .foregroundStyle(.primary)
         }
         .navigationTitle("替换当前动作")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            do {
+                choices = try GuidedWorkoutScreenSnapshotLoader
+                    .replacementChoices(from: modelContext.container)
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }
 
@@ -82,12 +91,11 @@ struct GuidedWorkoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(GuidedWorkoutCoordinator.self) private var coordinator
     @Environment(WorkoutCameraService.self) private var camera
-    @Query private var allPerformances: [ExercisePerformance]
-    @Query private var allSets: [WorkoutSet]
-    @Query private var allEfforts: [WorkoutEffort]
-
-    let session: WorkoutSession
+    let sessionID: UUID
     var onFinishedReturnHome: () -> Void = {}
+    @State private var snapshot: GuidedWorkoutScreenSnapshot?
+    @State private var snapshotErrorMessage: String?
+    @State private var snapshotGeneration = 0
     @State private var actualReps = ""
     @State private var actualDuration = ""
     @State private var actualWeight = ""
@@ -104,34 +112,11 @@ struct GuidedWorkoutView: View {
     @State private var sessionOwner: WorkoutCameraSessionOwnerToken?
 
     init(
-        session: WorkoutSession,
+        sessionID: UUID,
         onFinishedReturnHome: @escaping () -> Void = {}
     ) {
-        self.session = session
+        self.sessionID = sessionID
         self.onFinishedReturnHome = onFinishedReturnHome
-        let sessionID = session.id
-        _allPerformances = Query(
-            FetchDescriptor<ExercisePerformance>(
-                predicate: #Predicate { $0.sessionID == sessionID },
-                sortBy: [SortDescriptor(\.order)]
-            )
-        )
-        _allSets = Query(
-            FetchDescriptor<WorkoutSet>(
-                predicate: #Predicate {
-                    $0.performance?.sessionID == sessionID
-                },
-                sortBy: [SortDescriptor(\.order)]
-            )
-        )
-        _allEfforts = Query(
-            FetchDescriptor<WorkoutEffort>(
-                predicate: #Predicate {
-                    $0.workoutSet?.performance?.sessionID == sessionID
-                },
-                sortBy: [SortDescriptor(\.order)]
-            )
-        )
         #if DEBUG
             if ProcessInfo.processInfo.environment["SOMA_GUIDED_CAPTURE_PREVIEW"] == "1" {
                 _presentation = State(initialValue: GuidedWorkoutPresentationState(
@@ -141,104 +126,26 @@ struct GuidedWorkoutView: View {
         #endif
     }
 
-    private var performances: [ExercisePerformance] {
-        allPerformances
-    }
-
-    private var currentPerformance: ExercisePerformance? {
-        guard let id = session.currentPerformanceID else { return nil }
-        return performances.first { $0.id == id }
-    }
-
-    private var currentSet: WorkoutSet? {
-        guard let id = session.currentSetID else { return nil }
-        return allSets.first { $0.id == id }
-    }
-
-    private var currentEffort: WorkoutEffort? {
-        guard let id = session.currentEffortID else { return nil }
-        return allEfforts.first { $0.id == id }
-    }
-
-    private var currentPerformanceSets: [WorkoutSet] {
-        guard let id = currentPerformance?.id else { return [] }
-        return allSets.filter { $0.performanceID == id }
-    }
-
-    private var sessionSets: [WorkoutSet] {
-        allSets
-    }
-
-    private var completedSetCount: Int {
-        sessionSets.count { $0.status == .completed }
-    }
-
-    private var workoutProgressExercises: [GuidedWorkoutProgressExercise] {
-        let setsByPerformanceID = Dictionary(
-            grouping: allSets,
-            by: \.performanceID
-        )
-        let effortsBySetID = Dictionary(
-            grouping: allEfforts,
-            by: \.workoutSetID
-        )
-        return performances.map { performance in
-            let sets = (setsByPerformanceID[performance.id] ?? [])
-                .map { set in
-                    let efforts = effortsBySetID[set.id] ?? []
-                    let state: GuidedWorkoutProgressSetState = switch set.status {
-                    case .completed:
-                        .completed
-                    case .partial:
-                        .partial
-                    case .skipped:
-                        .skipped
-                    case .failed:
-                        .failed
-                    case .inProgress:
-                        .current
-                    case .pending:
-                        set.id == session.currentSetID ? .current : .pending
-                    }
-                    return GuidedWorkoutProgressExercise.SetSegment(
-                        id: set.id,
-                        state: state,
-                        completionFraction: GuidedWorkoutProgressExercise
-                            .completionFraction(
-                                set: set,
-                                efforts: efforts
-                            )
-                    )
-                }
-            return GuidedWorkoutProgressExercise(
-                id: performance.id,
-                sets: sets
-            )
-        }
-    }
-
-    private var projectionKey: GuidedProjectionRevision {
-        GuidedProjectionRevision(
-            statusRaw: session.statusRaw,
-            phaseRaw: session.guidedPhaseRaw,
-            currentSetID: session.currentSetID,
-            currentEffortID: session.currentEffortID,
-            restTargetEndAt: session.restTargetEndAt,
-            completedSetCount: completedSetCount
+    private var projectionKey: GuidedProjectionRevision? {
+        guard let snapshot else { return nil }
+        return GuidedProjectionRevision(
+            statusRaw: snapshot.session.statusRaw,
+            phaseRaw: snapshot.session.guidedPhaseRaw,
+            currentSetID: snapshot.session.currentSetID,
+            currentEffortID: snapshot.session.currentEffortID,
+            restTargetEndAt: snapshot.session.restTargetEndAt,
+            completedSetCount: snapshot.completedSetCount
         )
     }
 
-    private var timelineKey: GuidedTimelineRevision {
-        GuidedTimelineRevision(
-            statusRaw: session.statusRaw,
-            phaseRaw: session.guidedPhaseRaw,
-            transitionRevision: session.transitionRevision,
-            phaseDeadlineAt: session.phaseDeadlineAt
+    private var timelineKey: GuidedTimelineRevision? {
+        guard let snapshot else { return nil }
+        return GuidedTimelineRevision(
+            statusRaw: snapshot.session.statusRaw,
+            phaseRaw: snapshot.session.guidedPhaseRaw,
+            transitionRevision: snapshot.session.transitionRevision,
+            phaseDeadlineAt: snapshot.session.phaseDeadlineAt
         )
-    }
-
-    private var currentExerciseDefinition: ExerciseDefinition? {
-        currentPerformance?.exerciseDefinition
     }
 
     var body: some View {
@@ -247,27 +154,29 @@ struct GuidedWorkoutView: View {
                 AppTheme.pageBackground
                     .ignoresSafeArea()
 
-                if session.status == .active,
+                if let snapshot,
+                   snapshot.session.status == .active,
                    GuidedExpandedCaptureVisibility.isVisible(
                        sessionIsActive: true,
                        mode: presentation.mode,
-                       phase: session.guidedPhase,
+                       phase: snapshot.session.guidedPhase,
                        cameraState: camera.state,
                        isStartingRecording: coordinator.isStartingRecording
                    )
                 {
                     GuidedExpandedCaptureView(
                         camera: camera,
-                        sessionStartedAt: session.startedAt,
-                        performance: currentPerformance,
-                        performanceCount: performances.count,
-                        set: currentSet,
-                        sets: currentPerformanceSets,
+                        sessionStartedAt: snapshot.session.startedAt,
+                        exerciseName: snapshot.currentPerformance?.exerciseName,
+                        performanceOrder: snapshot.currentPerformance?.order,
+                        performanceCount: snapshot.performances.count,
+                        currentSetID: snapshot.currentSet?.id,
+                        sets: snapshot.currentPerformanceSets,
                         targetText: targetText,
-                        effortSide: currentEffort?.side ?? .none,
+                        effortSide: snapshot.currentEffort?.side ?? .none,
                         isAutomaticDuration: isAutomaticDuration,
                         remainingDurationSeconds: remainingDurationSeconds,
-                        durationDeadlineAt: session.phaseDeadlineAt,
+                        durationDeadlineAt: snapshot.session.phaseDeadlineAt,
                         isCompletingEffort: coordinator
                             .isCompletingCurrentEffort,
                         coachingNote: coachingNote,
@@ -283,19 +192,26 @@ struct GuidedWorkoutView: View {
                         onEdit: { showsActualEditor = true },
                         onMore: { showsEndConfirmation = true }
                     )
+                } else if let snapshot {
+                    compactContent(
+                        snapshot: snapshot,
+                        isLandscape: proxy.size.width > proxy.size.height
+                    )
                 } else {
-                    compactContent(isLandscape: proxy.size.width > proxy.size.height)
+                    snapshotUnavailableContent
                 }
             }
         }
-        .navigationBarBackButtonHidden(session.status == .active)
+        .navigationBarBackButtonHidden(snapshot?.session.status == .active)
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: coordinator.recordingFailure?.id) {
             if let failure = coordinator.recordingFailure {
                 presentRecordingError(failure.message)
             }
         }
-        .task {
+        .task(id: sessionID) {
+            await refreshSnapshot()
+            guard let session = fetchSession() else { return }
             isCoordinatorActivated = false
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(true)
@@ -313,6 +229,7 @@ struct GuidedWorkoutView: View {
             if session.guidedPhase == .ready {
                 do {
                     try coordinator.introduceCurrentExercise(in: modelContext)
+                    await refreshSnapshot()
                 } catch {
                     presentOperationError(error)
                 }
@@ -323,13 +240,17 @@ struct GuidedWorkoutView: View {
             }
         }
         .task(id: projectionKey) {
+            guard let snapshot else { return }
             await WorkoutSystemProjectionCoordinator.shared.update(
-                session: session,
-                completedSetCount: completedSetCount,
-                totalSetCount: sessionSets.count
+                sessionID: snapshot.session.id,
+                status: snapshot.session.status,
+                guidedPhase: snapshot.session.guidedPhase,
+                restTargetEndAt: snapshot.session.restTargetEndAt,
+                completedSetCount: snapshot.completedSetCount,
+                totalSetCount: snapshot.sets.count
             )
         }
-        .task(id: session.currentEffortID) {
+        .task(id: snapshot?.session.currentEffortID) {
             guard isCoordinatorActivated else { return }
             await coordinator.preflightAutomaticRecording(in: modelContext)
         }
@@ -338,6 +259,7 @@ struct GuidedWorkoutView: View {
         }
         .onDisappear {
             isCoordinatorActivated = false
+            snapshotGeneration += 1
             let owner = sessionOwner
             sessionOwner = nil
             Task {
@@ -349,15 +271,15 @@ struct GuidedWorkoutView: View {
                 }
             }
         }
-        .onChange(of: session.currentEffortID, initial: true) {
+        .onChange(of: snapshot?.session.currentEffortID, initial: true) {
             effortCompletionErrorMessage = nil
-            actualReps = (currentEffort?.actualReps
-                ?? currentEffort?.plannedReps).map(String.init) ?? ""
-            actualDuration = (currentEffort?.actualDurationSeconds
-                ?? currentEffort?.plannedDurationSeconds).map(String.init)
+            actualReps = (snapshot?.currentEffort?.actualReps
+                ?? snapshot?.currentEffort?.plannedReps).map(String.init) ?? ""
+            actualDuration = (snapshot?.currentEffort?.actualDurationSeconds
+                ?? snapshot?.currentEffort?.plannedDurationSeconds).map(String.init)
                 ?? ""
-            actualWeight = (currentEffort?.actualWeightKG
-                ?? currentEffort?.plannedWeightKG).map {
+            actualWeight = (snapshot?.currentEffort?.actualWeightKG
+                ?? snapshot?.currentEffort?.plannedWeightKG).map {
                 $0.formatted()
             } ?? ""
         }
@@ -369,16 +291,15 @@ struct GuidedWorkoutView: View {
             )
             presentation = next
         }
-        .onChange(of: session.guidedPhaseRaw) {
+        .onChange(of: snapshot?.session.guidedPhaseRaw) {
+            guard let snapshot else { return }
             var next = presentation
             next.phaseChanged(
-                session.guidedPhase,
-                expandForRecording: coordinator.shouldCaptureCurrentEffort(
-                    in: modelContext
-                )
+                snapshot.session.guidedPhase,
+                expandForRecording: shouldCaptureCurrentEffort(snapshot)
             )
             #if DEBUG
-                if session.guidedPhase == .setInProgress,
+                if snapshot.session.guidedPhase == .setInProgress,
                    ProcessInfo.processInfo.environment[
                        "SOMA_GUIDED_CAPTURE_PREVIEW"
                    ] == "1"
@@ -387,8 +308,8 @@ struct GuidedWorkoutView: View {
                 }
             #endif
             presentation = next
-            if session.guidedPhase == .sessionReview
-                || session.guidedPhase == .completed
+            if snapshot.session.guidedPhase == .sessionReview
+                || snapshot.session.guidedPhase == .completed
             {
                 finalizeSessionAndShare()
             }
@@ -399,8 +320,8 @@ struct GuidedWorkoutView: View {
                 duration: $actualDuration,
                 weight: $actualWeight,
                 targetText: targetText,
-                targetKind: currentEffort?.targetKind ?? .repetitions,
-                side: currentEffort?.side ?? .none,
+                targetKind: snapshot?.currentEffort?.targetKind ?? .repetitions,
+                side: snapshot?.currentEffort?.side ?? .none,
                 onSave: saveActualDraft
             )
         }
@@ -411,6 +332,7 @@ struct GuidedWorkoutView: View {
             Button("结束并保留已完成组", role: .destructive) {
                 run {
                     try await coordinator.endEarly(in: modelContext)
+                    await refreshSnapshot()
                     finalizeSessionAndShare()
                 }
             }
@@ -452,15 +374,32 @@ struct GuidedWorkoutView: View {
         }
     }
 
-    private func compactContent(isLandscape: Bool) -> some View {
+    private var snapshotUnavailableContent: some View {
+        ContentUnavailableView {
+            Label("训练暂时无法显示", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(snapshotErrorMessage ?? "正在载入训练…")
+        } actions: {
+            if snapshotErrorMessage != nil {
+                Button("重试") { Task { await refreshSnapshot() } }
+                Button("退出") { dismiss() }
+            } else {
+                ProgressView()
+            }
+        }
+    }
+
+    private func compactContent(
+        snapshot: GuidedWorkoutScreenSnapshot,
+        isLandscape: Bool
+    ) -> some View {
         VStack(spacing: 0) {
             GuidedWorkoutChrome(
-                session: session,
-                completedExerciseCount: performances.count {
-                    $0.status == .completed || $0.status == .skipped
-                },
-                exerciseCount: performances.count,
-                progressExercises: workoutProgressExercises,
+                sessionStartedAt: snapshot.session.startedAt,
+                sessionStatus: snapshot.session.status,
+                completedExerciseCount: snapshot.completedExerciseCount,
+                exerciseCount: snapshot.performances.count,
+                progressExercises: snapshot.progressExercises,
                 isRecording: coordinator.recordingSetID != nil,
                 isStartingRecording: coordinator.isStartingRecording,
                 isRecordingQueued: coordinator.manualRecordingQueued,
@@ -475,23 +414,28 @@ struct GuidedWorkoutView: View {
             .padding(.horizontal, 20)
             .padding(.top, 12)
 
-            phaseContent(isLandscape: isLandscape)
+            phaseContent(snapshot: snapshot, isLandscape: isLandscape)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
     @ViewBuilder
-    private func phaseContent(isLandscape: Bool) -> some View {
-        if session.status == .paused {
+    private func phaseContent(
+        snapshot: GuidedWorkoutScreenSnapshot,
+        isLandscape: Bool
+    ) -> some View {
+        if snapshot.session.status == .paused {
             GuidedPausedView(onResume: pauseOrResume)
         } else {
-            switch session.guidedPhase {
+            switch snapshot.session.guidedPhase {
             case .ready:
                 ProgressView("准备训练…")
             case .exerciseIntroduction:
                 GuidedExerciseIntroductionView(
-                    exercise: currentExerciseDefinition,
-                    performance: currentPerformance,
+                    exerciseName: snapshot.currentPerformance?.exerciseName,
+                    artwork: snapshot.currentPerformance?.artwork
+                        ?? BundledExerciseCatalog.fallbackActionIllustration,
+                    coachingNotes: snapshot.currentPerformance?.coachingNotes,
                     camera: phasePictureInPictureCamera,
                     isLandscape: isLandscape,
                     cameraErrorMessage: coordinator.recordingErrorMessage,
@@ -501,10 +445,9 @@ struct GuidedWorkoutView: View {
                 )
             case .preSetCountdown:
                 GuidedSetCountdownView(
-                    set: currentSet,
                     targetText: targetText,
-                    phaseStartedAt: session.phaseStartedAt,
-                    deadlineAt: session.phaseDeadlineAt,
+                    phaseStartedAt: snapshot.session.phaseStartedAt,
+                    deadlineAt: snapshot.session.phaseDeadlineAt,
                     camera: phasePictureInPictureCamera,
                     isLandscape: isLandscape,
                     cameraErrorMessage: coordinator.recordingErrorMessage,
@@ -514,26 +457,27 @@ struct GuidedWorkoutView: View {
             case .setInProgress:
                 GuidedCompactSetView(
                     camera: camera,
-                    exercise: currentExerciseDefinition,
-                    performance: currentPerformance,
-                    performanceCount: performances.count,
-                    set: currentSet,
-                    sets: currentPerformanceSets,
+                    artwork: snapshot.currentPerformance?.artwork
+                        ?? BundledExerciseCatalog.fallbackActionIllustration,
+                    exerciseName: snapshot.currentPerformance?.exerciseName,
+                    performanceOrder: snapshot.currentPerformance?.order,
+                    performanceCount: snapshot.performances.count,
+                    setKind: snapshot.currentSet?.kind,
                     targetText: targetText,
-                    effortSide: currentEffort?.side ?? .none,
+                    effortSide: snapshot.currentEffort?.side ?? .none,
                     isAutomaticDuration: isAutomaticDuration,
                     remainingDurationSeconds: remainingDurationSeconds,
-                    durationDeadlineAt: session.phaseDeadlineAt,
+                    durationDeadlineAt: snapshot.session.phaseDeadlineAt,
                     completionErrorMessage: effortCompletionErrorMessage,
                     coachingNote: coachingNote,
                     isLandscape: isLandscape,
                     showsCamera: showsCompactCamera,
-                    isRecording: coordinator.recordingSetID == currentSet?.id,
+                    isRecording: coordinator.recordingSetID == snapshot.currentSet?.id,
                     isStartingRecording: coordinator.isStartingRecording,
                     isCompletingEffort: coordinator
                         .isCompletingCurrentEffort,
                     canStartRecording: coordinator.recordingSetID == nil
-                        || coordinator.recordingSetID == currentSet?.id,
+                        || coordinator.recordingSetID == snapshot.currentSet?.id,
                     cameraErrorMessage: coordinator.recordingErrorMessage,
                     onExpandCamera: {
                         var next = presentation
@@ -548,7 +492,7 @@ struct GuidedWorkoutView: View {
             case .setConfirmation:
                 GuidedSetRecoveryView(
                     targetText: targetText,
-                    effortSide: currentEffort?.side ?? .none,
+                    effortSide: snapshot.currentEffort?.side ?? .none,
                     isCompletingEffort: coordinator
                         .isCompletingCurrentEffort,
                     onCompleted: completeCurrentSet,
@@ -557,13 +501,15 @@ struct GuidedWorkoutView: View {
                 )
             case .resting:
                 GuidedRestView(
-                    nextSet: currentSet,
-                    nextEffort: currentEffort,
+                    nextTargetText: targetText,
+                    nextEffortSide: snapshot.currentEffort?.side ?? .none,
+                    targetID: snapshot.currentEffort?.id
+                        ?? snapshot.currentSet?.id,
                     remainingSeconds: {
-                        coordinator.remainingRestSeconds(
-                            for: session,
-                            in: modelContext
-                        )
+                        guard let target = snapshot.session.restTargetEndAt else {
+                            return 0
+                        }
+                        return max(Int(ceil(target.timeIntervalSinceNow)), 0)
                     },
                     camera: phasePictureInPictureCamera,
                     isLandscape: isLandscape,
@@ -586,16 +532,18 @@ struct GuidedWorkoutView: View {
         let duration = Int(actualDuration)
         let weight = Double(actualWeight)
         var tokens: [String] = []
-        if let effort = currentEffort, effort.side != .none {
+        if let effort = snapshot?.currentEffort, effort.side != .none {
             tokens.append(WorkoutPrescriptionFormatter.sideName(effort.side))
         }
         if let weight {
             tokens.append(weight == 0 ? "自重" : "\(weight.formatted()) kg")
         }
-        switch currentEffort?.targetKind ?? currentSet?.plannedTargetKind {
+        switch snapshot?.currentEffort?.targetKind
+            ?? snapshot?.currentSet?.plannedTargetKind
+        {
         case .duration:
             if let remainingDurationSeconds,
-               session.guidedPhase == .setInProgress
+               snapshot?.session.guidedPhase == .setInProgress
             {
                 tokens.append("剩余 \(remainingDurationSeconds) 秒")
             } else if let duration {
@@ -610,19 +558,19 @@ struct GuidedWorkoutView: View {
     }
 
     private var isAutomaticDuration: Bool {
-        currentEffort?.targetKind == .duration
+        snapshot?.currentEffort?.targetKind == .duration
     }
 
     private var remainingDurationSeconds: Int? {
-        // 渲染路径使用无取数变体：当前 Effort 已由本视图的 @Query 持有。
-        coordinator.remainingEffortSeconds(
-            for: session,
-            currentEffort: currentEffort
-        )
+        guard snapshot?.session.guidedPhase == .setInProgress,
+              snapshot?.currentEffort?.targetKind == .duration,
+              let deadline = snapshot?.session.phaseDeadlineAt
+        else { return nil }
+        return max(Int(ceil(deadline.timeIntervalSinceNow)), 0)
     }
 
     private var coachingNote: String {
-        let note = currentExerciseDefinition?.coachingNotes
+        let note = snapshot?.currentPerformance?.coachingNotes
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfBlank
             ?? "保持动作稳定，在可控范围内完成本组。"
@@ -649,21 +597,71 @@ struct GuidedWorkoutView: View {
     }
 
     private var cameraSurfacePlacement: GuidedCameraSurfacePlacement {
-        // 渲染路径使用无取数变体：当前动作/组/Effort 已由本视图的 @Query 持有，
-        // 相机与录像状态变化触发的 body 重算不再回查数据库。
         GuidedCameraSurfacePlacement.resolve(
-            phase: session.guidedPhase,
+            phase: snapshot?.session.guidedPhase ?? .ready,
             cameraState: camera.state,
             isStarting: coordinator.isStartingRecording,
-            sessionIsActive: session.status == .active,
-            isCaptureTarget: coordinator.shouldCaptureEffort(
-                session: session,
-                performance: currentPerformance,
-                set: currentSet,
-                effort: currentEffort,
-                in: modelContext
-            )
+            sessionIsActive: snapshot?.session.status == .active,
+            isCaptureTarget: snapshot.map(shouldCaptureCurrentEffort) ?? false
         )
+    }
+
+    private func shouldCaptureCurrentEffort(
+        _ snapshot: GuidedWorkoutScreenSnapshot
+    ) -> Bool {
+        if coordinator.recordingSetID != nil
+            || coordinator.isStartingRecording
+            || coordinator.manualRecordingQueued
+        {
+            return true
+        }
+        guard !coordinator.automaticRecordingPaused,
+              snapshot.session.status == .active
+              || snapshot.session.status == .paused,
+              let performance = snapshot.currentPerformance
+        else { return false }
+
+        func shouldRecord(
+            set: GuidedWorkoutSetSnapshot,
+            effort: GuidedWorkoutEffortSnapshot
+        ) -> Bool {
+            guard effort.recordedVideoPath == nil else { return false }
+            if snapshot.session.autoRecordingPolicy == .everySet {
+                return true
+            }
+            guard snapshot.session.autoRecordingPolicy == .enabled,
+                  let prescription = performance.prescription
+            else { return false }
+            let firstWorkingOrder = prescription.plannedSets
+                .filter { $0.kind == .working }
+                .min { $0.order < $1.order }?.order
+            return set.kind == .working
+                && set.order == (
+                    firstWorkingOrder
+                        ?? (prescription.firstSetIsWarmup ? 2 : 1)
+                )
+        }
+
+        if let set = snapshot.currentSet,
+           let effort = snapshot.currentEffort,
+           shouldRecord(set: set, effort: effort)
+        {
+            return true
+        }
+        guard snapshot.session.guidedPhase == .exerciseIntroduction
+            || snapshot.session.guidedPhase == .preSetCountdown
+        else { return false }
+        for set in snapshot.currentPerformanceSets {
+            for effort in snapshot.efforts
+                where effort.workoutSetID == set.id
+                && (effort.status == .pending || effort.status == .inProgress)
+            {
+                if shouldRecord(set: set, effort: effort) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private func toggleManualRecording() {
@@ -678,35 +676,28 @@ struct GuidedWorkoutView: View {
     }
 
     private func pauseOrResume() {
-        if session.status == .paused {
-            do {
-                try coordinator.resume(in: modelContext)
-            } catch {
-                presentOperationError(error)
-            }
+        if snapshot?.session.status == .paused {
+            run { try coordinator.resume(in: modelContext) }
         } else {
             run { try await coordinator.pause(in: modelContext) }
         }
     }
 
     private func prepareCurrentSet() {
-        do {
-            try coordinator.prepareCurrentSet(in: modelContext)
-        } catch {
-            presentOperationError(error)
-        }
+        run { try coordinator.prepareCurrentSet(in: modelContext) }
     }
 
     @MainActor
     private func beginCurrentSetAfterCountdown() async {
-        guard session.guidedPhase == .preSetCountdown else { return }
-        if coordinator.shouldCaptureCurrentEffort(in: modelContext) {
+        guard snapshot?.session.guidedPhase == .preSetCountdown else { return }
+        if snapshot.map(shouldCaptureCurrentEffort) == true {
             var next = presentation
             next.expand()
             presentation = next
         }
         do {
             try await coordinator.beginCurrentSet(in: modelContext)
+            await refreshSnapshot()
         } catch {
             presentOperationError(error)
         }
@@ -722,6 +713,7 @@ struct GuidedWorkoutView: View {
                     in: modelContext
                 )
                 effortCompletionErrorMessage = nil
+                await refreshSnapshot()
             } catch {
                 effortCompletionErrorMessage = error.localizedDescription
                 presentOperationError(error)
@@ -737,6 +729,7 @@ struct GuidedWorkoutView: View {
                 actualWeightKG: Double(actualWeight),
                 in: modelContext
             )
+            Task { await refreshSnapshot() }
         } catch {
             presentOperationError(error)
         }
@@ -744,7 +737,8 @@ struct GuidedWorkoutView: View {
 
     @MainActor
     private func advanceTimelineAtDeadline() async {
-        guard session.status == .active,
+        guard let session = snapshot?.session,
+              session.status == .active,
               let deadline = session.phaseDeadlineAt
         else { return }
         let revision = session.transitionRevision
@@ -756,11 +750,12 @@ struct GuidedWorkoutView: View {
                 expectedRevision: revision,
                 in: modelContext
             )
+            await refreshSnapshot()
         } catch is CancellationError {
             return
         } catch {
             if session.guidedPhase == .setInProgress,
-               currentEffort?.targetKind == .duration
+               snapshot?.currentEffort?.targetKind == .duration
             {
                 effortCompletionErrorMessage = error.localizedDescription
             }
@@ -781,19 +776,11 @@ struct GuidedWorkoutView: View {
     }
 
     private func adjustRest(_ seconds: Int) {
-        do {
-            try coordinator.adjustRest(by: seconds, in: modelContext)
-        } catch {
-            presentOperationError(error)
-        }
+        run { try coordinator.adjustRest(by: seconds, in: modelContext) }
     }
 
     private func finishRest() {
-        do {
-            try coordinator.finishRest(in: modelContext)
-        } catch {
-            presentOperationError(error)
-        }
+        run { try coordinator.finishRest(in: modelContext) }
     }
 
     private func finalizeSessionAndShare() {
@@ -802,13 +789,20 @@ struct GuidedWorkoutView: View {
         finalizationState = .saving
         Task {
             do {
+                guard var session = fetchSession() else {
+                    throw GuidedWorkoutSnapshotError.missingSession
+                }
                 if session.status == .active {
                     try coordinator.complete(in: modelContext)
+                    guard let reloaded = fetchSession() else {
+                        throw GuidedWorkoutSnapshotError.missingSession
+                    }
+                    session = reloaded
                 }
                 await WorkoutSystemProjectionCoordinator.shared.end(
-                    session: session,
-                    completedSetCount: completedSetCount,
-                    totalSetCount: sessionSets.count
+                    sessionID: session.id,
+                    completedSetCount: snapshot?.completedSetCount ?? 0,
+                    totalSetCount: snapshot?.sets.count ?? 0
                 )
                 shareModel = WorkoutSharePosterBuilder.makeModel(
                     session: session,
@@ -822,13 +816,14 @@ struct GuidedWorkoutView: View {
         }
     }
 
-    private func replaceCurrentExercise(with exercise: ExerciseDefinition) {
+    private func replaceCurrentExercise(with exerciseID: UUID) {
         do {
             try coordinator.replaceCurrentExercise(
-                with: exercise,
+                withExerciseID: exerciseID,
                 in: modelContext
             )
             showsReplacement = false
+            Task { await refreshSnapshot() }
         } catch {
             presentOperationError(error)
         }
@@ -840,8 +835,45 @@ struct GuidedWorkoutView: View {
         Task {
             do {
                 try await operation()
+                await refreshSnapshot()
             } catch {
                 presentOperationError(error)
+            }
+        }
+    }
+
+    private func fetchSession() -> WorkoutSession? {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    @MainActor
+    private func refreshSnapshot() async {
+        snapshotGeneration += 1
+        let generation = snapshotGeneration
+        do {
+            let loaded = try GuidedWorkoutScreenSnapshotLoader.load(
+                sessionID: sessionID,
+                from: modelContext.container
+            )
+            guard !Task.isCancelled, generation == snapshotGeneration else {
+                return
+            }
+            snapshot = loaded
+            snapshotErrorMessage = nil
+        } catch {
+            guard !Task.isCancelled, generation == snapshotGeneration else {
+                return
+            }
+            snapshotErrorMessage = error.localizedDescription
+            if snapshot != nil {
+                presentedAlert = GuidedWorkoutAlertItem(
+                    kind: .operation,
+                    message: "训练状态刷新失败，已保留上一次画面。\(error.localizedDescription)"
+                )
             }
         }
     }

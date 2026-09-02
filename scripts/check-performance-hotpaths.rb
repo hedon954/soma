@@ -99,7 +99,9 @@ end
 unless root_source.match?(/case \.noAction:.*?break/m) &&
        root_source.match?(/case let \.switchTo\(tab\):.*?selectedTab = tab/m) &&
        root_source.match?(/case let \.resetStack\(tab\):.*?tabStackIDs\[tab\] = UUID\(\)/m) &&
-       root_source.include?("RootTabReselectObserver(onReselect: handleTabReselect)") &&
+       root_source.match?(
+         /RootTabReselectObserver\(\s*onReselect: handleTabReselect,\s*onDoubleReselect: handleTabDoubleReselect\s*\)/m
+       ) &&
        root_source.include?("tabNavigation.isAtRoot(selectedTab)")
   fail_check("Tab selection or root-aware reselect lost its single bounded effect")
 end
@@ -180,8 +182,9 @@ unless device_profile_source.include?("device-app-fingerprint.sh") &&
 end
 device_fingerprint_source = File.read(File.join(ROOT, "scripts/device-app-fingerprint.sh"))
 unless device_fingerprint_source.include?("git ls-files --cached --others --exclude-standard") &&
+       device_fingerprint_source.include?('[[ ! -f "$path" ]]') &&
        !device_fingerprint_source.include?("rg --files Soma SomaWidget")
-  fail_check("device build fingerprint can again include ignored local credentials nondeterministically")
+  fail_check("device build fingerprint can again include ignored credentials or tracked deletions")
 end
 if coach_response_source.include?("MarkdownText(") ||
    selectable_chat_source.include?("struct SelectableChatText: UIViewRepresentable") ||
@@ -522,8 +525,16 @@ unless media_preparation_source.include?("nonisolated func prepareStoredMedia")
 end
 
 guided_record_source = File.read(File.join(ROOT, service_file("GuidedWorkoutRecordStore.swift")))
-if guided_record_source.match?(/FetchDescriptor<(WorkoutSet|WorkoutEffort|ExerciseDefinition)>/)
-  fail_check("guided workout materialization restored current-relationship fallback queries")
+if guided_record_source.include?("let sets = performance.workoutSets") ||
+   guided_record_source.include?("sets.flatMap(\\.efforts)") ||
+   guided_record_source.include?("guard let definition = performance.exerciseDefinition") ||
+   guided_record_source.include?("if let existing = performance.projectedWorkout")
+  fail_check("guided workout materialization restored relationship reads")
+end
+unless guided_record_source.include?("$0.performanceID == performanceID") &&
+       guided_record_source.include?("$0.workoutSetID == setID") &&
+       guided_record_source.include?("$0.id == exerciseID")
+  fail_check("guided workout materialization no longer walks the scalar ID graph")
 end
 
 share_source = File.read(File.join(ROOT, "Soma/Views/WorkoutShareViews.swift"))
@@ -646,10 +657,26 @@ if training_home_source.scan(/session\.performances\.sorted/).length > 1 ||
 end
 
 guided_workout_source = File.read(File.join(ROOT, "Soma/Views/GuidedWorkoutView.swift"))
-if guided_workout_source.include?(".filter { $0.sessionID == session.id }") ||
-   guided_workout_source.include?("let performanceIDs = Set(performances.map") ||
-   guided_workout_source.match?(/setsByPerformanceID\[performance\.id\].*?\.sorted/m)
-  fail_check("guided workout again filters or sorts relationships already scoped by its SwiftData queries")
+guided_snapshot_source = File.read(
+  File.join(ROOT, service_file("GuidedWorkoutScreenSnapshot.swift"))
+)
+if guided_workout_source.include?("@Query private var allPerformances") ||
+   guided_workout_source.include?("@Query private var allSets") ||
+   guided_workout_source.include?("@Query private var allEfforts") ||
+   guided_workout_source.include?("$0.performance?.sessionID") ||
+   guided_workout_source.include?("$0.workoutSet?.performance?.sessionID")
+  fail_check("guided workout restored SwiftData relationship queries in its render path")
+end
+unless guided_workout_source.include?("let sessionID: UUID") &&
+       guided_workout_source.include?("GuidedWorkoutScreenSnapshotLoader.load") &&
+       guided_snapshot_source.include?("$0.sessionID == sessionID") &&
+       guided_snapshot_source.include?("$0.performanceID == performanceID") &&
+       guided_snapshot_source.include?("$0.workoutSetID == setID")
+  fail_check("guided workout no longer renders from a scalar-ID immutable snapshot")
+end
+if training_source.include?("$0.performance?.sessionID == sessionID") ||
+   training_source.include?("$0.workoutSet?.performance?.sessionID == sessionID")
+  fail_check("training review restored a multi-relationship SwiftData predicate")
 end
 
 footprints_source = File.read(File.join(ROOT, "Soma/Views/FootprintsView.swift"))

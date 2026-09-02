@@ -458,7 +458,7 @@ final class LLMOutageStagingTests: XCTestCase {
         XCTAssertTrue(jobs.allSatisfy { $0.state == .staged })
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<CoachMessage>()).count,
-            3
+            6
         )
         XCTAssertTrue(try context.fetch(FetchDescriptor<AgentTrace>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutEntry>()).isEmpty)
@@ -512,7 +512,7 @@ final class LLMOutageStagingTests: XCTestCase {
             locationService: location
         ))
         XCTAssertEqual(try modelContext.fetch(FetchDescriptor<AgentJob>()).count, 2)
-        XCTAssertEqual(try modelContext.fetch(FetchDescriptor<CoachMessage>()).count, 2)
+        XCTAssertEqual(try modelContext.fetch(FetchDescriptor<CoachMessage>()).count, 4)
 
         XCTAssertTrue(processor.clearPendingQueue(context: processingContext))
         XCTAssertTrue(try modelContext.fetch(FetchDescriptor<AgentJob>()).isEmpty)

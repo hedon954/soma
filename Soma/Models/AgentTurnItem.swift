@@ -1,10 +1,23 @@
 import Foundation
 
 enum AgentTurnItemKind: String, Codable, Hashable, Sendable {
+    case activity
     case text
+    case reasoning
     case skill
     case tool
     case error
+}
+
+enum AgentTurnPhase: String, Codable, CaseIterable, Sendable {
+    case queued
+    case modelRunning
+    case preparing
+    case running
+    case waitingForDevice
+    case completed
+    case failed
+    case cancelled
 }
 
 struct AgentTurnItem: Codable, Identifiable, Equatable, Sendable {
@@ -12,6 +25,8 @@ struct AgentTurnItem: Codable, Identifiable, Equatable, Sendable {
     var sequence: Int
     var kindRaw: String
     var statusRaw: String
+    var operationID: String?
+    var phaseRaw: String?
     var title: String
     var text: String
     var startedAt: Date
@@ -26,6 +41,8 @@ struct AgentTurnItem: Codable, Identifiable, Equatable, Sendable {
         sequence: Int = 0,
         kind: AgentTurnItemKind,
         status: AgentTraceStatus,
+        operationID: String? = nil,
+        phase: AgentTurnPhase? = nil,
         title: String = "",
         text: String = "",
         startedAt: Date = .now,
@@ -39,6 +56,8 @@ struct AgentTurnItem: Codable, Identifiable, Equatable, Sendable {
         self.sequence = sequence
         kindRaw = kind.rawValue
         statusRaw = status.rawValue
+        self.operationID = operationID
+        phaseRaw = phase?.rawValue
         self.title = title
         self.text = text
         self.startedAt = startedAt
@@ -55,6 +74,8 @@ struct AgentTurnItem: Codable, Identifiable, Equatable, Sendable {
             sequence: sequence,
             kind: span.kind == .skill ? .skill : .tool,
             status: span.status,
+            operationID: span.operationID,
+            phase: span.phase,
             title: span.title,
             startedAt: span.startedAt,
             endedAt: span.status == .running ? nil : span.endedAt,
@@ -71,6 +92,18 @@ struct AgentTurnItem: Codable, Identifiable, Equatable, Sendable {
 
     var status: AgentTraceStatus {
         AgentTraceStatus(rawValue: statusRaw) ?? .failed
+    }
+
+    var phase: AgentTurnPhase {
+        if let phaseRaw, let phase = AgentTurnPhase(rawValue: phaseRaw) {
+            return phase
+        }
+        return switch status {
+        case .running: .running
+        case .succeeded: .completed
+        case .failed: .failed
+        case .cancelled: .cancelled
+        }
     }
 
     mutating func appendTextDelta(_ delta: String) {

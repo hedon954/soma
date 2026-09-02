@@ -218,6 +218,35 @@ final class NoopWorkoutRecordingController: WorkoutRecordingControlling {
 enum GuidedWorkoutRecordStore {
     @discardableResult
     static func materialize(
+        performanceID: UUID,
+        sessionID: UUID,
+        in context: ModelContext
+    ) throws -> WorkoutEntry? {
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.id == sessionID }
+        )
+        sessionDescriptor.fetchLimit = 1
+        guard let session = try context.fetch(sessionDescriptor).first else {
+            throw GuidedWorkoutError.missingSession
+        }
+        var performanceDescriptor = FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.id == performanceID }
+        )
+        performanceDescriptor.fetchLimit = 1
+        guard let performance = try context.fetch(performanceDescriptor).first,
+              performance.sessionID == sessionID
+        else {
+            throw GuidedWorkoutError.missingPerformance
+        }
+        return try materialize(
+            performance: performance,
+            session: session,
+            in: context
+        )
+    }
+
+    @discardableResult
+    static func materialize(
         performance: ExercisePerformance,
         session: WorkoutSession,
         in context: ModelContext
@@ -233,12 +262,15 @@ enum GuidedWorkoutRecordStore {
         )
         existingDescriptor.fetchLimit = 1
         let fetchedExisting = try context.fetch(existingDescriptor).first
-        if let existing = performance.projectedWorkout
-            ?? fetchedExisting
-        {
-            guard let definition = performance.exerciseDefinition else {
-                throw TrainingPlanError.missingExercise(performance.exerciseID)
-            }
+        let exerciseID = performance.exerciseID
+        var definitionDescriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == exerciseID }
+        )
+        definitionDescriptor.fetchLimit = 1
+        guard let definition = try context.fetch(definitionDescriptor).first else {
+            throw TrainingPlanError.missingExercise(exerciseID)
+        }
+        if let existing = fetchedExisting {
             existing.projectionKey = projectionKey
             existing.exercise = performance.exerciseName
             existing.exerciseID = performance.exerciseID
@@ -255,10 +287,14 @@ enum GuidedWorkoutRecordStore {
                     in: context
                 )
             }
+            WorkoutCalorieCalculator.refreshStoredEstimate(existing, in: context)
             return existing
         }
 
-        let sets = performance.workoutSets.sorted { $0.order < $1.order }
+        let sets = try context.fetch(FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.performanceID == performanceID },
+            sortBy: [SortDescriptor(\.order)]
+        ))
         guard !sets.isEmpty,
               sets.allSatisfy({
                   $0.status == .completed
@@ -270,7 +306,16 @@ enum GuidedWorkoutRecordStore {
             return nil
         }
 
-        let efforts = sets.flatMap(\.efforts)
+        var efforts: [WorkoutEffort] = []
+        for set in sets {
+            let setID = set.id
+            try efforts.append(contentsOf: context.fetch(
+                FetchDescriptor<WorkoutEffort>(
+                    predicate: #Predicate { $0.workoutSetID == setID },
+                    sortBy: [SortDescriptor(\.order)]
+                )
+            ))
+        }
         let usesEffortEvidence = efforts.contains { $0.status != .pending }
         if usesEffortEvidence,
            !efforts.allSatisfy({
@@ -287,10 +332,6 @@ enum GuidedWorkoutRecordStore {
         }
         let completedEfforts = efforts.filter { $0.status == .completed }
         guard !completed.isEmpty || !completedEfforts.isEmpty else { return nil }
-
-        guard let definition = performance.exerciseDefinition else {
-            throw TrainingPlanError.missingExercise(performance.exerciseID)
-        }
 
         let setByID = Dictionary(uniqueKeysWithValues: sets.map { ($0.id, $0) })
         let orderedCompletedEfforts = completedEfforts

@@ -85,8 +85,8 @@ struct ConversationSessionDrawer: View {
             Button("取消", role: .cancel) {
                 renamingSessionID = nil
             }
-            if renamingSession?.titleSource == .manual {
-                Button("恢复自动标题") {
+            if renamingSession?.isUsingDateTitle == false {
+                Button("恢复日期标题") {
                     restoreAutomaticTitle()
                 }
             }

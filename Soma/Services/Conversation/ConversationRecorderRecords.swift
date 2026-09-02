@@ -30,6 +30,23 @@ extension ConversationRecorder {
         if let error = workoutSetValidationError(setEntries) {
             return .failure(error)
         }
+        if let failure = workoutProfileValidationFailure(
+            arguments: arguments,
+            entries: setEntries
+        ) {
+            return .failure(
+                failure.message,
+                code: "invalid_argument",
+                field: failure.field,
+                expected: failure.expected
+            )
+        }
+        if let targetKind = arguments.targetKind {
+            definition.targetKind = targetKind
+        }
+        if let laterality = arguments.laterality {
+            definition.laterality = laterality
+        }
         if let rest = arguments.restSeconds, !(0 ... 3600).contains(rest) {
             return .failure("rest_seconds 必须在 0 到 3600 之间。")
         }
@@ -40,7 +57,8 @@ extension ConversationRecorder {
             return .failure("form_score 必须在 0 到 100 之间。")
         }
 
-        let sets = setEntries?.count ?? arguments.sets
+        let sets = setEntries.map { WorkoutRecordDraft(evidence: $0).groups.count }
+            ?? arguments.sets
         let reps = representativeReps(in: setEntries) ?? arguments.reps
         let durationMinutes = WorkoutCalorieCalculator.sanitizedActualDurationMinutes(
             arguments.durationMinutes,
@@ -48,15 +66,30 @@ extension ConversationRecorder {
             reps: reps,
             restSeconds: arguments.restSeconds
         )
-        let calorieEstimate = WorkoutCalorieCalculator.estimate(
-            exercise: exercise,
-            intensity: arguments.intensity,
-            durationMinutes: durationMinutes,
-            sets: sets,
-            reps: reps,
-            restSeconds: arguments.restSeconds,
-            weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: context)
+        let historicalWeight = WorkoutCalorieCalculator.latestRecordedWeight(
+            at: sourceDate,
+            in: context
         )
+        let calorieEstimate: WorkoutCalorieEstimate? = if let setEntries {
+            WorkoutCalorieCalculator.estimateWorkout(
+                exercise: exercise,
+                intensity: arguments.intensity,
+                actualDurationMinutes: durationMinutes,
+                evidence: setEntries,
+                fallbackRestSeconds: arguments.restSeconds,
+                weightKG: historicalWeight
+            )
+        } else {
+            WorkoutCalorieCalculator.estimate(
+                exercise: exercise,
+                intensity: arguments.intensity,
+                durationMinutes: durationMinutes,
+                sets: sets,
+                reps: reps,
+                restSeconds: arguments.restSeconds,
+                weightKG: historicalWeight
+            )
+        }
         let resolvedMedia = resolvedMediaAttachments(
             mediaAttachments,
             legacyKind: mediaKind,
@@ -363,8 +396,25 @@ extension ConversationRecorder {
         if let error = workoutSetValidationError(setEntries) {
             return .failure(error)
         }
+        if let failure = workoutProfileValidationFailure(
+            arguments: arguments,
+            entries: setEntries
+        ) {
+            return .failure(
+                failure.message,
+                code: "invalid_argument",
+                field: failure.field,
+                expected: failure.expected
+            )
+        }
         if let setEntries {
             entry.setEntries = setEntries
+        }
+        if let targetKind = arguments.targetKind {
+            entry.exerciseDefinition?.targetKind = targetKind
+        }
+        if let laterality = arguments.laterality {
+            entry.exerciseDefinition?.laterality = laterality
         }
         entry.restSeconds = arguments.restSeconds ?? entry.restSeconds
         if arguments.durationMinutes != nil {
@@ -377,7 +427,10 @@ extension ConversationRecorder {
         } else {
             WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
                 entry,
-                weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: context)
+                weightKG: WorkoutCalorieCalculator.latestRecordedWeight(
+                    at: entry.date,
+                    in: context
+                )
             )
         }
         entry.formScore = arguments.formScore ?? entry.formScore
@@ -392,19 +445,7 @@ extension ConversationRecorder {
                 legacyPath: mediaPath
             )
         )
-        let estimate = WorkoutCalorieCalculator.estimate(
-            exercise: entry.exercise,
-            intensity: entry.intensity,
-            durationMinutes: entry.durationMinutes,
-            sets: entry.setCount,
-            reps: entry.representativeReps,
-            restSeconds: entry.restSeconds,
-            weightKG: WorkoutCalorieCalculator.currentRecordedWeight(in: context)
-        )
-        entry.estimatedCalories = estimate?.calories
-        entry.calorieMET = estimate?.met
-        entry.calorieDurationMinutes = estimate?.durationMinutes
-        entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
+        WorkoutCalorieCalculator.refreshStoredEstimate(entry, in: context)
         try? context.save()
         return .success(
             "已更新训练 [id:\(entry.businessID ?? 0)]：\(workoutSummary(entry))。",

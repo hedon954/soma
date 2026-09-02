@@ -594,7 +594,7 @@ final class ExerciseLibraryTests: XCTestCase {
 
         XCTAssertEqual(
             ExerciseQuickFill.text(for: workout),
-            "4×5次 30kg · 间歇 2min"
+            "30kg 5×4组 间歇120s"
         )
         XCTAssertEqual(ExerciseQuickFill.text(for: incomplete), "3组")
     }
@@ -621,7 +621,7 @@ final class ExerciseLibraryTests: XCTestCase {
 
         XCTAssertEqual(
             ExerciseQuickFill.text(for: completed + [pending]),
-            "4×5次 30kg · 间歇 2min"
+            "30kg 5×4组 间歇120s"
         )
     }
 
@@ -664,7 +664,7 @@ final class ExerciseLibraryTests: XCTestCase {
 
         XCTAssertEqual(
             ExerciseQuickFill.text(for: workout),
-            "4×5次 29kg · 1×3次 29kg · 间歇 1min"
+            "29kg 5×4组 间歇60s · 29kg 3×1组"
         )
         XCTAssertFalse(ExerciseQuickFill.text(for: workout).contains("第1组"))
         XCTAssertFalse(ExerciseQuickFill.text(for: workout).contains("999"))
@@ -694,7 +694,55 @@ final class ExerciseLibraryTests: XCTestCase {
 
         XCTAssertEqual(
             ExerciseQuickFill.text(for: workout),
-            "左右各做 1×每侧45秒 自重"
+            "左右分别 自重 每侧45秒×1组 换侧15s"
+        )
+    }
+
+    func testQuickFillSplitsAdjacentRunsWhenRestOrSideChanges() {
+        let workout = WorkoutEntry(
+            exercise: "保加利亚分腿蹲",
+            setEntries: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    side: .left,
+                    reps: 8,
+                    externalWeightKG: 10,
+                    restSeconds: 30
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    side: .right,
+                    reps: 8,
+                    externalWeightKG: 10,
+                    restSeconds: 60
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 2,
+                    side: .left,
+                    reps: 8,
+                    externalWeightKG: 10,
+                    restSeconds: 45
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 2,
+                    side: .right,
+                    reps: 8,
+                    externalWeightKG: 10,
+                    restSeconds: 90
+                ),
+                WorkoutSetEvidence(
+                    logicalSetIndex: 3,
+                    reps: 8,
+                    externalWeightKG: 10
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            ExerciseQuickFill.text(for: workout),
+            "左右分别 10kg 每侧8×1组 换侧30s 间歇60s · "
+                + "左右分别 10kg 每侧8×1组 换侧45s 间歇90s · "
+                + "10kg 8×1组"
         )
     }
 

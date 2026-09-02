@@ -32,6 +32,7 @@ struct AgentStreamStepRequest {
     var apiKey: String
     var userPrompt: String
     var textItemID: UUID
+    var reasoningItemID: UUID = .init()
     var enforceFirstStepDeadline: Bool = false
 }
 
@@ -69,6 +70,7 @@ extension AIService {
                     route: request.route,
                     apiKey: request.apiKey,
                     textItemID: request.textItemID,
+                    reasoningItemID: request.reasoningItemID,
                     enforceFirstDelta: request.enforceFirstStepDeadline,
                     trace: trace
                 )
@@ -79,6 +81,7 @@ extension AIService {
             } catch let StreamingFailure.interrupted(
                 error,
                 passage,
+                reasoning,
                 receivedMeaningfulDelta
             ) {
                 guard !receivedMeaningfulDelta,
@@ -88,6 +91,7 @@ extension AIService {
                     throw StreamingFailure.interrupted(
                         error,
                         passage: passage,
+                        reasoning: reasoning,
                         receivedMeaningfulDelta: receivedMeaningfulDelta
                     )
                 }
@@ -140,6 +144,7 @@ extension AIService {
         route: AIModelRoute,
         apiKey: String,
         textItemID: UUID,
+        reasoningItemID: UUID,
         enforceFirstDelta: Bool,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
@@ -159,6 +164,7 @@ extension AIService {
             ),
             enforceFirstDelta: enforceFirstDelta,
             textItemID: textItemID,
+            reasoningItemID: reasoningItemID,
             project: { event in trace?(event) }
         )
     }
@@ -174,6 +180,7 @@ extension AIService {
             kind: .model,
             title: "LLM 推理",
             status: .running,
+            phase: .modelRunning,
             startedAt: start.startedAt,
             endedAt: start.startedAt,
             input: start.modelStep == 1
@@ -236,7 +243,7 @@ extension AIService {
             "model": route.model,
             "model_tier": route.tier.title,
             "stream": true,
-            "thinking_ignored": streamed.ignoredReasoning,
+            "reasoning_visible": !streamed.reasoning.isEmpty,
             "prompt_tokens": usage?.promptTokens.map { $0 as Any } ?? NSNull(),
             "completion_tokens": usage?.completionTokens.map { $0 as Any } ?? NSNull(),
             "total_tokens": usage?.totalTokens.map { $0 as Any } ?? NSNull(),
@@ -262,23 +269,15 @@ extension AIService {
         if let agentStreamLoader {
             return try await agentStreamLoader(parameters, provider, baseURL, apiKey)
         }
-        let configuration = openAICompatibleConfiguration(baseURL: baseURL)
-        let service = OpenAIServiceFactory.service(
-            apiKey: apiKey,
-            overrideBaseURL: configuration.origin,
-            proxyPath: configuration.proxyPath,
-            overrideVersion: configuration.version
+        // SwiftOpenAI 的固定 Codable 请求无法携带厂商扩展字段。所有生产 Agent
+        // 请求统一经过这条原始 JSON 通道，确保设置页 Extra Config 真正进入请求体。
+        return try await directVideoStream(
+            parameters: parameters,
+            videos: videos,
+            provider: provider,
+            baseURL: baseURL,
+            apiKey: apiKey
         )
-        if !videos.isEmpty {
-            return try await directVideoStream(
-                parameters: parameters,
-                videos: videos,
-                provider: provider,
-                baseURL: baseURL,
-                apiKey: apiKey
-            )
-        }
-        return try await service.startStreamedChat(parameters: parameters)
     }
 
     func initialMediaMode(

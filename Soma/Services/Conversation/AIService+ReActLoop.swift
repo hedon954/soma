@@ -114,6 +114,7 @@ extension AIService {
                 let operationStep = completedOperationCount + 1
                 let modelSpanID = UUID()
                 let textItemID = UUID()
+                let reasoningItemID = UUID()
                 let modelStartedAt = Date()
                 announceModelStepStart(
                     AgentModelStepStart(
@@ -157,6 +158,7 @@ extension AIService {
                             apiKey: key,
                             userPrompt: userPrompt,
                             textItemID: textItemID,
+                            reasoningItemID: reasoningItemID,
                             enforceFirstStepDeadline: firstStepDeadlineEnabled
                                 && currentModelStep == 1
                         ),
@@ -167,10 +169,18 @@ extension AIService {
                 } catch let StreamingFailure.interrupted(
                     error,
                     passage,
+                    reasoning,
                     _
                 ) {
                     let endedAt = Date()
                     let reason = agentErrorDescription(error)
+                    if !reasoning.isEmpty {
+                        trace?(.reasoningCompleted(
+                            itemID: reasoningItemID,
+                            text: reasoning,
+                            at: endedAt
+                        ))
+                    }
                     trace?(.span(AgentTraceSpan(
                         id: modelSpanID,
                         step: operationStep,
@@ -197,6 +207,13 @@ extension AIService {
 
                 let passage = streamed.passage
                 let modelEndedAt = Date()
+                if !streamed.reasoning.isEmpty {
+                    trace?(.reasoningCompleted(
+                        itemID: reasoningItemID,
+                        text: streamed.reasoning,
+                        at: modelEndedAt
+                    ))
+                }
                 if !passage.isEmpty {
                     trace?(.assistantTextCompleted(
                         itemID: textItemID,
@@ -309,24 +326,31 @@ extension AIService {
             }
             throw ReActAgentError.stepLimit(maxSteps: maxSteps)
         } catch {
-            let failedAt = Date()
-            let cancelled = error is CancellationError
-            let reason = agentErrorDescription(error)
-            trace?(.span(AgentTraceSpan(
-                kind: .output,
-                title: cancelled ? "执行取消" : "执行失败",
-                status: cancelled ? .cancelled : .failed,
-                startedAt: failedAt,
-                endedAt: failedAt,
-                errorMessage: reason
-            )))
-            trace?(.failed(
-                message: reason,
-                cancelled: cancelled,
-                at: failedAt
-            ))
+            projectAgentRunFailure(error, trace: trace)
             throw error
         }
+    }
+
+    private func projectAgentRunFailure(
+        _ error: Error,
+        trace: ((AgentTraceEvent) -> Void)?
+    ) {
+        let failedAt = Date()
+        let cancelled = error is CancellationError
+        let reason = agentErrorDescription(error)
+        trace?(.span(AgentTraceSpan(
+            kind: .output,
+            title: cancelled ? "执行取消" : "执行失败",
+            status: cancelled ? .cancelled : .failed,
+            startedAt: failedAt,
+            endedAt: failedAt,
+            errorMessage: reason
+        )))
+        trace?(.failed(
+            message: reason,
+            cancelled: cancelled,
+            at: failedAt
+        ))
     }
 
     func applyResolvedToolCall(
@@ -340,6 +364,7 @@ extension AIService {
     ) async throws -> AgentToolResult {
         try Task.checkCancellation()
         let spanID = UUID()
+        let operationID = native.id ?? spanID.uuidString.lowercased()
         let startedAt = Date()
         let skill = call.arguments.skillID.flatMap {
             AgentSkillRegistry.descriptor(id: $0, defaults: defaults)
@@ -353,8 +378,24 @@ extension AIService {
             kind: call.name == .loadSkill ? .skill : .tool,
             title: skill?.title ?? call.name.displayTitle,
             status: .running,
+            operationID: operationID,
+            phase: .preparing,
             startedAt: startedAt,
             endedAt: startedAt,
+            input: traceInput
+        )))
+
+        let runningAt = Date()
+        trace?(.span(AgentTraceSpan(
+            id: spanID,
+            step: step,
+            kind: call.name == .loadSkill ? .skill : .tool,
+            title: skill?.title ?? call.name.displayTitle,
+            status: .running,
+            operationID: operationID,
+            phase: .running,
+            startedAt: startedAt,
+            endedAt: runningAt,
             input: traceInput
         )))
 
@@ -402,6 +443,8 @@ extension AIService {
                 kind: call.name == .loadSkill ? .skill : .tool,
                 title: skill?.title ?? call.name.displayTitle,
                 status: error is CancellationError ? .cancelled : .failed,
+                operationID: operationID,
+                phase: error is CancellationError ? .cancelled : .failed,
                 startedAt: startedAt,
                 endedAt: endedAt,
                 input: traceInput,
@@ -440,6 +483,8 @@ extension AIService {
             kind: spanKind,
             title: skill?.title ?? call.name.displayTitle,
             status: result.ok ? .succeeded : .failed,
+            operationID: operationID,
+            phase: result.ok ? .completed : .failed,
             startedAt: startedAt,
             endedAt: endedAt,
             input: traceInput,

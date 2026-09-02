@@ -5,6 +5,77 @@ import XCTest
 
 final class AgentJobTests: XCTestCase {
     @MainActor
+    func testEnqueueAtomicallyCreatesQueuedResponseAndEvent() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let job = makeJob()
+        let user = CoachMessage(
+            sessionID: job.sessionID,
+            isFromCoach: false,
+            text: "帮我记录训练",
+            turnID: job.turnID
+        )
+
+        try AgentJobStore.enqueue(job, userMessage: user, in: context)
+
+        let responseID = try XCTUnwrap(job.responseMessageID)
+        let response = try XCTUnwrap(
+            ConversationTurnPersistence.message(id: responseID, in: context)
+        )
+        XCTAssertTrue(response.text.isEmpty)
+        XCTAssertEqual(response.agentStatus, .running)
+        XCTAssertEqual(response.agentTurnItems.map(\.kind), [.activity])
+        XCTAssertEqual(response.agentTurnItems.first?.phase, .queued)
+        XCTAssertEqual(response.agentTurnItems.first?.title, "已收到，正在准备处理…")
+        XCTAssertEqual(response.turnID, job.turnID)
+        XCTAssertEqual(
+            AgentJobStore.events(for: job.id, in: context).map(\.kind),
+            [.jobQueued]
+        )
+    }
+
+    @MainActor
+    func testManualRetryRemovesFailureProjectionInPlace() {
+        let job = makeJob()
+        let response = CoachMessage(
+            sessionID: job.sessionID,
+            isFromCoach: true,
+            text: "失败提示",
+            agentStatus: .failed,
+            agentTurnItems: [
+                AgentTurnItem(
+                    sequence: 1,
+                    kind: .tool,
+                    status: .succeeded,
+                    title: "已完成记录"
+                ),
+                AgentTurnItem(
+                    sequence: 2,
+                    kind: .error,
+                    status: .failed,
+                    title: "执行失败",
+                    errorMessage: "网络失败"
+                )
+            ],
+            turnID: job.turnID,
+            attemptNumber: 1
+        )
+        let originalID = response.id
+        job.responseTextSnapshot = ""
+
+        ConversationTurnPersistence.prepareResponseMessageForManualRetry(
+            response,
+            from: job
+        )
+
+        XCTAssertTrue(response.text.isEmpty)
+        XCTAssertEqual(response.agentStatus, .running)
+        XCTAssertEqual(response.agentTurnItems.map(\.kind), [.tool, .activity])
+        XCTAssertEqual(response.agentTurnItems.last?.phase, .queued)
+        XCTAssertEqual(response.id, originalID)
+    }
+
+    @MainActor
     func testStateMachineRejectsTerminalRestart() throws {
         let job = makeJob()
 
@@ -163,6 +234,24 @@ final class AgentJobTests: XCTestCase {
 
         XCTAssertEqual(claimed.id, firstQueued.id)
         XCTAssertEqual(secondQueued.state, .queued)
+    }
+
+    @MainActor
+    func testForegroundCandidateReaderReturnsOnlyStableFIFOIdentifier() async throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let completed = makeJob(createdAt: Date(timeIntervalSince1970: 10))
+        try completed.transition(to: .running)
+        try completed.transition(to: .succeeded)
+        let queued = makeJob(createdAt: Date(timeIntervalSince1970: 20))
+        context.insert(completed)
+        context.insert(queued)
+        try context.save()
+
+        let reader = AgentJobRecoveryCandidateReader(modelContainer: container)
+        let candidateID = try await reader.firstCandidateID(dataSpace: .personal)
+
+        XCTAssertEqual(candidateID, queued.id)
     }
 
     @MainActor
@@ -379,6 +468,7 @@ final class AgentJobTests: XCTestCase {
         try ModelContainer(
             for: AgentJob.self,
             PersistentAgentEvent.self,
+            CoachMessage.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }

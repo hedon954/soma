@@ -4,7 +4,7 @@ import type { AgentEvent } from "./domain.js";
 export interface DeviceToolDefinition {
   name: string;
   description?: string;
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   mutation: boolean;
   parameters: {
     type: "object";
@@ -33,6 +33,28 @@ const setEntries = {
       reps: integerValue,
       external_weight_kg: numberValue,
     },
+    additionalProperties: false,
+  },
+};
+const targetKindValue = { type: "string", enum: ["repetitions", "duration"] };
+const lateralityValue = { type: "string", enum: ["none", "both", "left", "right"] };
+const effortSideValue = { type: "string", enum: ["none", "left", "right"] };
+const setEntriesV4 = {
+  type: "array",
+  minItems: 1,
+  maxItems: 200,
+  items: {
+    type: "object",
+    properties: {
+      logical_set_index: { type: "integer", minimum: 1, maximum: 1_000 },
+      side: effortSideValue,
+      target_kind: targetKindValue,
+      reps: { type: "integer", minimum: 1, maximum: 1_000 },
+      duration_seconds: { type: "integer", minimum: 1, maximum: 86_400 },
+      external_weight_kg: { type: "number", minimum: 0, maximum: 1_000 },
+      rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
+    },
+    required: ["logical_set_index", "side", "target_kind"],
     additionalProperties: false,
   },
 };
@@ -262,6 +284,59 @@ const definitions: DeviceToolDefinition[] = [
     ),
   },
   {
+    name: "search_exercises",
+    schemaVersion: 4,
+    mutation: false,
+    parameters: parameters(
+      {
+        query: stringValue,
+        target_kind: targetKindValue,
+        laterality: lateralityValue,
+        limit: { type: "integer", minimum: 1, maximum: 20 },
+      },
+      ["query"],
+    ),
+  },
+  {
+    name: "create_exercise",
+    schemaVersion: 4,
+    mutation: true,
+    parameters: parameters(
+      {
+        exercises: {
+          type: "array",
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: "object",
+            properties: {
+              exercise_name: stringValue,
+              target_kind: targetKindValue,
+              laterality: lateralityValue,
+            },
+            required: ["exercise_name", "target_kind", "laterality"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ["exercises"],
+    ),
+  },
+  {
+    name: "update_exercise",
+    schemaVersion: 4,
+    mutation: true,
+    parameters: parameters(
+      {
+        exercise_id: { type: "integer", minimum: 1 },
+        exercise_name: stringValue,
+        target_kind: targetKindValue,
+        laterality: lateralityValue,
+      },
+      ["exercise_id"],
+    ),
+  },
+  {
     name: "archive_exercise",
     schemaVersion: 2,
     mutation: true,
@@ -300,6 +375,38 @@ const definitions: DeviceToolDefinition[] = [
               feedback: stringValue,
             },
             required: ["exercise_id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ["workouts"],
+    ),
+  },
+  {
+    name: "create_workout",
+    schemaVersion: 4,
+    mutation: true,
+    parameters: parameters(
+      {
+        workouts: {
+          type: "array",
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: "object",
+            properties: {
+              exercise_id: { type: "integer", minimum: 1 },
+              target_kind: targetKindValue,
+              laterality: lateralityValue,
+              occurred_at: stringValue,
+              set_entries: setEntriesV4,
+              rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
+              duration_minutes: { type: "integer", minimum: 0, maximum: 1_440 },
+              form_score: { type: "integer", minimum: 0, maximum: 100 },
+              intensity: stringValue,
+              feedback: stringValue,
+            },
+            required: ["exercise_id", "target_kind", "laterality", "set_entries"],
             additionalProperties: false,
           },
         },
@@ -428,6 +535,27 @@ const definitions: DeviceToolDefinition[] = [
         feedback: stringValue,
       },
       ["record_id"],
+    ),
+  },
+  {
+    name: "update_workout",
+    schemaVersion: 4,
+    mutation: true,
+    parameters: parameters(
+      {
+        record_id: { type: "integer", minimum: 1 },
+        occurred_at: stringValue,
+        exercise_id: { type: "integer", minimum: 1 },
+        target_kind: targetKindValue,
+        laterality: lateralityValue,
+        set_entries: setEntriesV4,
+        rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
+        duration_minutes: { type: "integer", minimum: 0, maximum: 1_440 },
+        form_score: { type: "integer", minimum: 0, maximum: 100 },
+        intensity: stringValue,
+        feedback: stringValue,
+      },
+      ["record_id", "target_kind", "laterality"],
     ),
   },
   {
@@ -570,8 +698,109 @@ export function validateDeviceTool(input: {
   if (input.schemaVersion === 3 && [
     "get_program", "create_program", "update_program",
   ].includes(input.name)) validatePlanV3(input);
+  if (input.schemaVersion === 4) validateToolV4(input);
   rejectForbiddenValues(input.arguments);
   return definition;
+}
+
+function validateToolV4(input: {
+  name: string;
+  arguments: Record<string, unknown>;
+}): void {
+  if (input.name === "create_exercise") {
+    const exercises = input.arguments.exercises;
+    if (!Array.isArray(exercises)) return;
+    exercises.forEach((item, index) => {
+      if (!isObject(item) || typeof item.exercise_name !== "string" || item.exercise_name.trim() === "") {
+        invalidSchema(`create_exercise.exercises[${index}].exercise_name 不能为空。`);
+      }
+    });
+    return;
+  }
+  if (input.name === "update_exercise") {
+    if (input.arguments.exercise_name === undefined &&
+        input.arguments.target_kind === undefined &&
+        input.arguments.laterality === undefined) {
+      invalidSchema("update_exercise 至少需要一个更新字段。");
+    }
+    return;
+  }
+  if (input.name === "create_workout") {
+    const workouts = input.arguments.workouts;
+    if (!Array.isArray(workouts)) return;
+    workouts.forEach((workout, index) => {
+      if (!isObject(workout)) invalidSchema(`create_workout.workouts[${index}] 无效。`);
+      validateWorkoutV4(workout as Record<string, unknown>, `create_workout.workouts[${index}]`);
+    });
+    return;
+  }
+  if (input.name === "update_workout" && input.arguments.set_entries !== undefined) {
+    validateWorkoutV4(input.arguments, "update_workout");
+  }
+}
+
+function validateWorkoutV4(
+  workout: Record<string, unknown>,
+  path: string,
+): void {
+  const targetKind = workout.target_kind;
+  const laterality = workout.laterality;
+  if (targetKind !== "repetitions" && targetKind !== "duration") {
+    invalidSchema(`${path}.target_kind 无效。`);
+  }
+  if (typeof laterality !== "string" || !["none", "both", "left", "right"].includes(laterality)) {
+    invalidSchema(`${path}.laterality 无效。`);
+  }
+  const entries = workout.set_entries;
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 200) {
+    invalidSchema(`${path}.set_entries 必须包含 1 到 200 条 effort。`);
+  }
+  const sidesBySet = new Map<number, string[]>();
+  for (const [index, raw] of entries.entries()) {
+    if (!isObject(raw)) invalidSchema(`${path}.set_entries[${index}] 无效。`);
+    const entry = raw as Record<string, unknown>;
+    const entryPath = `${path}.set_entries[${index}]`;
+    const logicalIndex = requireInteger(
+      entry.logical_set_index,
+      1,
+      1_000,
+      `${entryPath}.logical_set_index`,
+    );
+    const side = entry.side;
+    if (typeof side !== "string" || !["none", "left", "right"].includes(side)) {
+      invalidSchema(`${entryPath}.side 无效。`);
+    }
+    if (entry.target_kind !== targetKind) {
+      invalidSchema(`${entryPath}.target_kind 必须与训练一致。`);
+    }
+    if (targetKind === "repetitions") {
+      requireInteger(entry.reps, 1, 1_000, `${entryPath}.reps`);
+      if (entry.duration_seconds !== undefined) {
+        invalidSchema(`${entryPath} 次数和时长不能同时提供。`);
+      }
+    } else {
+      requireInteger(entry.duration_seconds, 1, 86_400, `${entryPath}.duration_seconds`);
+      if (entry.reps !== undefined) {
+        invalidSchema(`${entryPath} 时长和次数不能同时提供。`);
+      }
+    }
+    const sides = sidesBySet.get(logicalIndex) ?? [];
+    sides.push(side as string);
+    sidesBySet.set(logicalIndex, sides);
+  }
+  for (const [logicalIndex, sides] of sidesBySet) {
+    const unique = new Set(sides);
+    const valid = laterality === "none"
+      ? unique.size === 1 && unique.has("none") && sides.length === 1
+      : laterality === "left"
+        ? unique.size === 1 && unique.has("left") && sides.length === 1
+        : laterality === "right"
+          ? unique.size === 1 && unique.has("right") && sides.length === 1
+          : unique.size === 2 && unique.has("left") && unique.has("right") && sides.length === 2;
+    if (!valid) {
+      invalidSchema(`${path}.set_entries logical_set_index=${logicalIndex} 与 laterality 冲突。`);
+    }
+  }
 }
 
 export function normalizeToolArguments(

@@ -46,7 +46,7 @@ struct AgentTurnTranscript: View {
             }
 
             if isLive, !visibleItems.contains(where: { $0.status == .running }) {
-                AgentTurnWaitingCard()
+                AgentTurnWaitingCard(message: "已收到，正在准备处理…")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,6 +57,7 @@ struct AgentTurnTranscript: View {
 /// `AgentTurnItem`。这样每个 UI tick 只更新尾块，避免反复清洗和扫描全文。
 struct LiveAgentTurnTranscriptContent: View {
     let persistedItems: [AgentTurnItem]
+    let liveReasoning: LiveAgentTextRenderSnapshot?
     let liveText: LiveAgentTextRenderSnapshot?
     let sourceMessage: CoachMessage
     let isEditable: Bool
@@ -65,9 +66,12 @@ struct LiveAgentTurnTranscriptContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !persistedItems.isEmpty {
+            let stableItems = liveReasoning == nil
+                ? persistedItems
+                : persistedItems.filter { $0.kind != .activity }
+            if !stableItems.isEmpty {
                 AgentTurnTranscript(
-                    items: persistedItems,
+                    items: stableItems,
                     isLive: false,
                     sourceMessage: sourceMessage,
                     isEditable: isEditable,
@@ -76,9 +80,16 @@ struct LiveAgentTurnTranscriptContent: View {
                 )
             }
 
+            if let liveReasoning,
+               !liveReasoning.chunks.isEmpty,
+               !stableItems.contains(where: { $0.id == liveReasoning.itemID })
+            {
+                LiveAgentReasoningCard(chunks: liveReasoning.chunks)
+            }
+
             if let liveText,
                !liveText.chunks.isEmpty,
-               !persistedItems.contains(where: { $0.id == liveText.itemID })
+               !stableItems.contains(where: { $0.id == liveText.itemID })
             {
                 StreamingAgentTextView(chunks: liveText.chunks)
                     .padding(.horizontal, 2)
@@ -92,8 +103,10 @@ struct LiveAgentTurnTranscriptContent: View {
                         .frame(height: 2)
                         .accessibilityIdentifier("coach-live-agent-bottom")
                 }
-            } else if !persistedItems.contains(where: { $0.status == .running }) {
-                AgentTurnWaitingCard()
+            } else if liveReasoning == nil,
+                      !stableItems.contains(where: { $0.status == .running })
+            {
+                AgentTurnWaitingCard(message: "已收到，正在准备处理…")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -111,9 +124,10 @@ struct CoachLiveAgentTurnTranscript: View {
     let onLiveRevision: () -> Void
 
     var body: some View {
-        CoachLiveScrollObserver(onLiveRevision: onLiveRevision) { liveText in
+        CoachLiveScrollObserver(onLiveRevision: onLiveRevision) { liveReasoning, liveText in
             LiveAgentTurnTranscriptContent(
                 persistedItems: persistedItems,
+                liveReasoning: liveReasoning,
                 liveText: liveText,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable,
@@ -132,14 +146,20 @@ private struct CoachLiveScrollObserver<Content: View>: View {
     @Environment(\.coachTabIsActive) private var observesLiveText
 
     let onLiveRevision: () -> Void
-    @ViewBuilder let content: (LiveAgentTextRenderSnapshot?) -> Content
+    @ViewBuilder let content: (
+        LiveAgentTextRenderSnapshot?,
+        LiveAgentTextRenderSnapshot?
+    ) -> Content
 
     var body: some View {
         let revision = observesLiveText ? processor.liveEventRevision : 0
         let liveText = observesLiveText
             ? processor.liveAssistantRenderSnapshot
             : nil
-        content(liveText)
+        let liveReasoning = observesLiveText
+            ? processor.liveReasoningRenderSnapshot
+            : nil
+        content(liveReasoning, liveText)
             .onChange(of: revision) {
                 guard observesLiveText else { return }
                 onLiveRevision()
@@ -153,6 +173,10 @@ private struct AgentProcessGroupCard: View {
 
     private var isRunning: Bool {
         items.contains { $0.status == .running }
+    }
+
+    private var hasFailure: Bool {
+        items.contains { $0.status == .failed || $0.status == .cancelled }
     }
 
     var body: some View {
@@ -216,6 +240,10 @@ private struct AgentProcessGroupCard: View {
             ProgressView()
                 .controlSize(.small)
                 .tint(AppTheme.tint)
+        } else if hasFailure {
+            Image(systemName: "xmark.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(.red)
         } else {
             Image(systemName: "checkmark.circle.fill")
                 .font(.subheadline)
@@ -233,13 +261,68 @@ private struct AgentTurnItemCard: View {
 
     var body: some View {
         switch item.kind {
+        case .activity:
+            AgentTurnWaitingCard(message: item.title)
         case .text:
             textCard
+        case .reasoning:
+            reasoningCard
         case .skill, .tool:
             operationCard
         case .error:
             errorCard
         }
+    }
+
+    private var reasoningCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                guard item.status != .running else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "brain.head.profile")
+                        .foregroundStyle(AppTheme.trendAccent)
+                        .frame(width: 22, height: 22)
+                    Text(item.status == .running ? "正在思考…" : "思考过程")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    if item.status != .running {
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.trendAccent)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(item.status == .running ? "正在思考" : "思考过程")
+            .accessibilityValue(item.status == .running || isExpanded ? "已展开" : "已收起")
+
+            if item.status == .running || isExpanded {
+                Text(item.text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            AppTheme.insetBackground,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppTheme.trendAccent.opacity(0.15), lineWidth: 1)
+        }
+        .accessibilityIdentifier("agent-reasoning-\(item.status.rawValue)")
     }
 
     private var textCard: some View {
@@ -301,6 +384,7 @@ private struct AgentTurnItemCard: View {
                     .stroke(kindColor.opacity(0.12), lineWidth: 1)
             }
         }
+        .accessibilityIdentifier("agent-operation-\(item.phase.rawValue)")
         .accessibilityElement(children: .contain)
     }
 
@@ -422,14 +506,22 @@ private struct AgentTurnItemCard: View {
         if let summary = toolPresentation?.summary, !summary.isEmpty {
             return summary
         }
-        switch item.status {
+        switch item.phase {
+        case .queued:
+            return "等待执行"
+        case .modelRunning:
+            return "正在处理请求"
+        case .preparing:
+            return item.kind == .skill ? "准备加载" : "准备执行"
         case .running:
             return item.kind == .skill ? "正在加载" : "正在执行"
+        case .waitingForDevice:
+            return "等待在本机执行"
         case .cancelled:
             return "已取消"
         case .failed:
             return "未完成"
-        case .succeeded:
+        case .completed:
             return "已完成"
         }
     }
@@ -451,6 +543,42 @@ struct StreamingAgentTextView: View {
         IncrementalChatTextView(chunks: chunks)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityHidden(true)
+    }
+}
+
+private struct LiveAgentReasoningCard: View {
+    let chunks: [LiveAgentTextChunk]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(AppTheme.trendAccent)
+                    .frame(width: 22, height: 22)
+                Text("正在思考…")
+                    .font(.subheadline.weight(.medium))
+                Spacer(minLength: 8)
+            }
+            IncrementalChatTextView(chunks: chunks)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            AppTheme.insetBackground,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppTheme.trendAccent.opacity(0.15), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("agent-reasoning-running")
+        .accessibilityLabel("正在思考")
     }
 }
 
@@ -488,17 +616,20 @@ private struct AgentOperationResult: View {
 }
 
 private struct AgentTurnWaitingCard: View {
+    let message: String
+
     var body: some View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-            Text("正在继续处理…")
+            Text(message)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: AppTheme.minimumTapTarget)
-        .accessibilityLabel("Agent 正在继续处理")
+        .accessibilityIdentifier("agent-activity-item")
+        .accessibilityLabel(message)
     }
 }
 

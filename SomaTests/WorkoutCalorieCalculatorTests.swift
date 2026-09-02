@@ -1,4 +1,5 @@
 @testable import Soma
+import SwiftData
 import XCTest
 
 final class WorkoutCalorieCalculatorTests: XCTestCase {
@@ -188,5 +189,76 @@ final class WorkoutCalorieCalculatorTests: XCTestCase {
             )],
             weightKG: nil
         ))
+    }
+
+    func testOrdinaryWorkoutUsesHeterogeneousEvidenceAndPerSetRest() throws {
+        let evidence = [
+            WorkoutSetEvidence(
+                logicalSetIndex: 1,
+                targetKind: .repetitions,
+                reps: 5,
+                externalWeightKG: 50,
+                restSeconds: 60
+            ),
+            WorkoutSetEvidence(
+                logicalSetIndex: 2,
+                targetKind: .repetitions,
+                reps: 3,
+                externalWeightKG: 50
+            )
+        ]
+
+        let estimate = try XCTUnwrap(WorkoutCalorieCalculator.estimateWorkout(
+            exercise: "杠铃深蹲",
+            intensity: nil,
+            actualDurationMinutes: nil,
+            evidence: evidence,
+            fallbackRestSeconds: nil,
+            weightKG: 70
+        ))
+
+        XCTAssertEqual(estimate.durationMinutes, 92.0 / 60.0, accuracy: 0.001)
+        XCTAssertTrue(estimate.durationWasEstimated)
+    }
+
+    @MainActor
+    func testStoredEstimateUsesLatestWeightBeforeWorkoutNotFutureWeight() throws {
+        let suite = "WorkoutCalorieHistory.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let spaces = DataSpaceController(
+            defaults: defaults,
+            isStoredInMemoryOnly: true
+        )
+        let context = try ModelContext(XCTUnwrap(spaces.personalContainer))
+        let workoutDate = Date(timeIntervalSince1970: 2000)
+        context.insert(BodyEntry(date: Date(timeIntervalSince1970: 1000), weight: 70))
+        context.insert(BodyEntry(date: Date(timeIntervalSince1970: 3000), weight: 90))
+        let workout = WorkoutEntry(
+            date: workoutDate,
+            exercise: "深蹲",
+            setEntries: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    targetKind: .repetitions,
+                    reps: 10
+                )
+            ]
+        )
+        context.insert(workout)
+        try context.save()
+
+        WorkoutCalorieCalculator.refreshStoredEstimate(workout, in: context)
+        let expected = try XCTUnwrap(WorkoutCalorieCalculator.estimateWorkout(
+            exercise: "深蹲",
+            intensity: nil,
+            actualDurationMinutes: nil,
+            evidence: workout.setEntries,
+            fallbackRestSeconds: nil,
+            weightKG: 70
+        ))
+
+        XCTAssertEqual(workout.estimatedCalories, expected.calories)
+        XCTAssertTrue(workout.calorieDurationEstimated)
     }
 }

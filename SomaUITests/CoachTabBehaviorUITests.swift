@@ -61,6 +61,30 @@ final class CoachTabBehaviorUITests: XCTestCase {
         )
     }
 
+    func testDoubleTappingCoachTabReturnsToLatestMessage() {
+        let app = launchCompletedLongStreamApp()
+        let messageList = app.scrollViews["coach-message-list"]
+        XCTAssertTrue(messageList.waitForExistence(timeout: 15))
+        let retainedCount = scrollUpUntilPagedAwayFromBottom(messageList)
+
+        let coach = app.tabBars.buttons["教练"]
+        XCTAssertTrue(coach.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForSelection(of: coach, timeout: 5), "教练 Tab 未处于选中态")
+        coach.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        ).doubleTap()
+
+        XCTAssertTrue(
+            waitForValue(containing: "nearBottom=true", on: messageList, timeout: 5),
+            "双击教练没有回到最后消息尾部：\(messageList.value as? String ?? "nil")"
+        )
+        XCTAssertGreaterThanOrEqual(
+            messageCount(of: messageList) ?? 0,
+            retainedCount,
+            "双击教练不应丢失已加载分页：\(messageList.value as? String ?? "nil")"
+        )
+    }
+
     func testReselectingSettingsReturnsToRootOnlyFromDetail() {
         let app = launchCompletedLongStreamApp()
         let settings = app.tabBars.buttons["设置"]

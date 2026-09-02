@@ -25,22 +25,25 @@ struct MediaPicker: UIViewControllerRepresentable {
     let allowsVideo: Bool
     let selectionLimit: Int
     let onPick: ([PickedMedia]) -> Void
+    let onCancel: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     init(
         source: Source,
         allowsVideo: Bool,
         selectionLimit: Int = Self.maximumSelectionCount,
+        onCancel: @escaping () -> Void = {},
         onPick: @escaping ([PickedMedia]) -> Void
     ) {
         self.source = source
         self.allowsVideo = allowsVideo
         self.selectionLimit = max(1, min(selectionLimit, Self.maximumSelectionCount))
         self.onPick = onPick
+        self.onCancel = onCancel
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onPick: onPick, dismiss: dismiss)
+        Coordinator(onPick: onPick, onCancel: onCancel, dismiss: dismiss)
     }
 
     func makeUIViewController(context: Context) -> UIViewController {
@@ -77,14 +80,21 @@ struct MediaPicker: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate, PHPickerViewControllerDelegate {
         let onPick: ([PickedMedia]) -> Void
+        let onCancel: () -> Void
         let dismissAction: DismissAction
 
-        init(onPick: @escaping ([PickedMedia]) -> Void, dismiss: DismissAction) {
+        init(
+            onPick: @escaping ([PickedMedia]) -> Void,
+            onCancel: @escaping () -> Void,
+            dismiss: DismissAction
+        ) {
             self.onPick = onPick
+            self.onCancel = onCancel
             dismissAction = dismiss
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onCancel()
             dismissAction()
         }
 
@@ -116,6 +126,7 @@ struct MediaPicker: UIViewControllerRepresentable {
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             guard !results.isEmpty else {
+                onCancel()
                 dismissAction()
                 return
             }

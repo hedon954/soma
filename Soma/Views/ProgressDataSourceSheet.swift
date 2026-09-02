@@ -24,6 +24,7 @@ enum ProgressMetricSource: Identifiable, Equatable {
     )
     case active([ProgressMetricBreakdownItem])
     case dailyTotal(DailyEnergyProjectionResult?)
+    case currentTotal(resting: Int?, active: Int?, activeUsesHealth: Bool)
     case energyBalance(intake: Int?, expenditure: Int?)
     case trainingDays([ProgressMetricBreakdownItem])
     case trainingVolume([ProgressMetricBreakdownItem])
@@ -36,6 +37,7 @@ enum ProgressMetricSource: Identifiable, Equatable {
         case .resting: "resting"
         case .active: "active"
         case .dailyTotal: "daily-total"
+        case .currentTotal: "current-total"
         case .energyBalance: "energy-balance"
         case .trainingDays: "training-days"
         case .trainingVolume: "training-volume"
@@ -50,6 +52,7 @@ enum ProgressMetricSource: Identifiable, Equatable {
         case .resting: "静息消耗来源"
         case .active: "活动消耗来源"
         case .dailyTotal: "全天总消耗预估"
+        case .currentTotal: "截至当前总消耗"
         case .energyBalance: "能量差来源"
         case .trainingDays: "训练日来源"
         case .trainingVolume: "训练容量来源"
@@ -108,13 +111,27 @@ enum ProgressMetricSource: Identifiable, Equatable {
                     value: "\(projection.projectedActiveKilocalories) kcal"
                 )
             ]
+        case let .currentTotal(resting, active, activeUsesHealth):
+            guard let resting, let active else {
+                return [ProgressSourceRow(label: "必要数据不足", value: "暂不计算")]
+            }
+            return [
+                ProgressSourceRow(
+                    label: "截至当前静息消耗",
+                    value: "\(resting) kcal"
+                ),
+                ProgressSourceRow(
+                    label: activeUsesHealth ? "截至当前活动消耗" : "已记录训练消耗",
+                    value: "\(active) kcal"
+                )
+            ]
         case let .energyBalance(intake, expenditure):
             guard let intake, let expenditure else {
                 return [ProgressSourceRow(label: "必要数据不足", value: "暂不计算")]
             }
             return [
                 ProgressSourceRow(label: "今日摄入", value: "+\(intake) kcal"),
-                ProgressSourceRow(label: "全天总消耗预估", value: "−\(expenditure) kcal")
+                ProgressSourceRow(label: "截至当前总消耗", value: "−\(expenditure) kcal")
             ]
         case let .trainingDays(components):
             return componentRows(components, emptyLabel: "最近 7 天没有训练")
@@ -150,7 +167,8 @@ enum ProgressMetricSource: Identifiable, Equatable {
     var accent: Color {
         switch self {
         case .intake: AppSemanticRole.meal.accent
-        case .resting, .active, .dailyTotal, .energyBalance, .trainingVolume:
+        case .resting, .active, .dailyTotal, .currentTotal, .energyBalance,
+             .trainingVolume:
             AppMetricRole.trainingLoad.accent
         case .trainingDays: AppMetricRole.consistency.accent
         case .muscleCoverage: AppSemanticRole.training.accent

@@ -238,9 +238,6 @@ extension ConversationProcessingService {
             persistRemoteProjectionCursor(for: job)
             context.session.touch(at: .now)
             try context.modelContext.save()
-            if job.state == .succeeded {
-                titleGenerator.request(context: context)
-            }
         } catch {
             if job.state == .waitingForUser,
                responseMessage.agentStatus == .cancelled
@@ -260,7 +257,7 @@ extension ConversationProcessingService {
                 at: .now
             ))
             failRemoteJob(job, message: message, context: context)
-            responseMessage.text = message
+            responseMessage.text = ""
             responseMessage.agentStatus = .failed
             responseMessage.applyAgentEvent(.failed(
                 message: message,
@@ -318,12 +315,52 @@ extension ConversationProcessingService {
                 from: normalizedArgumentData
             )
             let call = AgentToolCall(name: name, arguments: arguments)
+            let operationID = request.toolCallID
+            let existingStartedAt = responseMessage.agentTurnItems.first {
+                $0.operationID == operationID
+            }?.startedAt ?? event.createdAt
             try job.transition(to: .waitingForDevice)
             _ = try? ConversationTurnPersistence.append(
                 kind: .waitingForDevice,
                 payload: .init(message: "正在本机执行 \(name.displayTitle)。"),
                 to: job,
                 in: context.modelContext
+            )
+            projectRemoteSpan(
+                AgentTraceSpan(
+                    sequence: event.sequence,
+                    step: event.sequence,
+                    kind: name == .loadSkill ? .skill : .tool,
+                    title: name.displayTitle,
+                    status: .running,
+                    operationID: operationID,
+                    phase: .waitingForDevice,
+                    startedAt: existingStartedAt,
+                    endedAt: event.createdAt,
+                    input: AgentTraceText.json(arguments)
+                ),
+                job: job,
+                responseMessage: responseMessage,
+                trace: trace,
+                context: context
+            )
+            projectRemoteSpan(
+                AgentTraceSpan(
+                    sequence: event.sequence,
+                    step: event.sequence,
+                    kind: name == .loadSkill ? .skill : .tool,
+                    title: name.displayTitle,
+                    status: .running,
+                    operationID: operationID,
+                    phase: .running,
+                    startedAt: existingStartedAt,
+                    endedAt: .now,
+                    input: AgentTraceText.json(arguments)
+                ),
+                job: job,
+                responseMessage: responseMessage,
+                trace: trace,
+                context: context
             )
             let currentGymID = GymSelection.current(in: context.gyms)?.id
             let result = try await executeAgentTool(
@@ -348,7 +385,9 @@ extension ConversationProcessingService {
                     kind: name == .loadSkill ? .skill : .tool,
                     title: name.displayTitle,
                     status: result.ok ? .succeeded : .failed,
-                    startedAt: event.createdAt,
+                    operationID: operationID,
+                    phase: result.ok ? .completed : .failed,
+                    startedAt: existingStartedAt,
                     endedAt: .now,
                     input: AgentTraceText.json(arguments),
                     output: AgentTraceText.json(result),
@@ -363,6 +402,16 @@ extension ConversationProcessingService {
         }
 
         if projectRemoteRuntimeTool(
+            event,
+            job: job,
+            responseMessage: responseMessage,
+            trace: trace,
+            context: context
+        ) {
+            return
+        }
+
+        if projectRemoteReasoning(
             event,
             job: job,
             responseMessage: responseMessage,
@@ -427,6 +476,7 @@ extension ConversationProcessingService {
                     kind: .model,
                     title: "Soma 后台模型",
                     status: .running,
+                    phase: .modelRunning,
                     startedAt: event.createdAt,
                     endedAt: event.createdAt,
                     metadata: remoteModelSpanMetadata(event)
@@ -495,7 +545,7 @@ extension ConversationProcessingService {
                 cancelled: false,
                 at: event.createdAt
             ))
-            responseMessage.text = message
+            responseMessage.text = ""
             responseMessage.agentStatus = .failed
             responseMessage.applyAgentEvent(.failed(
                 message: message,
@@ -523,7 +573,7 @@ extension ConversationProcessingService {
                 at: event.createdAt
             ))
             failRemoteJob(job, message: message, context: context)
-            responseMessage.text = message
+            responseMessage.text = ""
             responseMessage.agentStatus = .failed
             responseMessage.applyAgentEvent(.failed(
                 message: message,
@@ -531,5 +581,51 @@ extension ConversationProcessingService {
                 at: event.createdAt
             ))
         }
+    }
+
+    private func projectRemoteReasoning(
+        _ event: RemoteAgentEvent,
+        job: AgentJob,
+        responseMessage: CoachMessage,
+        trace: AgentTrace,
+        context: ConversationProcessingContext
+    ) -> Bool {
+        guard event.kind == "reasoning" else { return false }
+        let itemID = event.payload["itemID"]?.stringValue
+            .flatMap(UUID.init(uuidString:))
+            ?? UUID(uuidString: event.id)
+            ?? UUID()
+        if event.phase == "updated",
+           let delta = event.payload["delta"]?.stringValue
+        {
+            if !remoteModelReceivedFirstDelta {
+                updateRemoteModelSpan(
+                    firstDeltaAt: event.createdAt,
+                    completedAt: nil,
+                    status: nil,
+                    trace: trace,
+                    responseMessage: responseMessage
+                )
+                remoteModelReceivedFirstDelta = true
+            }
+            applyLiveAgentEvent(.reasoningDelta(itemID: itemID, delta: delta))
+        } else if event.phase == "completed" {
+            let text = event.payload["text"]?.stringValue
+                ?? (liveReasoningItemID == itemID ? liveReasoningTextBuffer.text : "")
+            let traceEvent = AgentTraceEvent.reasoningCompleted(
+                itemID: itemID,
+                text: text,
+                at: event.createdAt
+            )
+            PersistentAgentEventProjection.persistAndProject(
+                traceEvent,
+                job: job,
+                responseMessage: responseMessage,
+                trace: trace,
+                in: context.modelContext
+            )
+            applyLiveAgentEvent(traceEvent)
+        }
+        return true
     }
 }

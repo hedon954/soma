@@ -2,19 +2,13 @@ import Foundation
 import Observation
 import SwiftData
 
-enum ConversationTitleSource: String, Codable, Equatable, Sendable {
-    case fallback
-    case generated
-    case manual
-}
-
 @Model
 final class ConversationSession {
     var id: UUID
     var startedAt: Date
     var updatedAt: Date
     var title: String
-    /// 旧库缺字段时按 fallback 解释；manual 永远不被异步生成结果覆盖。
+    /// 仅为旧数据库与备份兼容而保留；业务代码不再读取或写入。
     var titleSourceRaw: String?
     /// 用户在这个 Session 内默认操作的业务日期；旧库由启动迁移按 startedAt 回填。
     var businessDate: Date?
@@ -25,17 +19,16 @@ final class ConversationSession {
         id: UUID = UUID(),
         startedAt: Date = .now,
         updatedAt: Date? = nil,
-        title: String = "新对话",
-        titleSource: ConversationTitleSource? = nil,
+        title: String? = nil,
         businessDate: Date? = nil,
         businessTimeZoneIdentifier: String = TimeZone.current.identifier
     ) {
         self.id = id
         self.startedAt = startedAt
         self.updatedAt = updatedAt ?? startedAt
-        self.title = title
-        titleSourceRaw = (titleSource ?? .fallback).rawValue
         let zone = TimeZone(identifier: businessTimeZoneIdentifier) ?? .current
+        self.title = title ?? Self.dateTitle(for: startedAt, in: zone)
+        titleSourceRaw = nil
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = zone
         self.businessDate = businessDate ?? calendar.startOfDay(for: startedAt)
@@ -44,15 +37,6 @@ final class ConversationSession {
 
     var effectiveBusinessDate: Date {
         businessDate ?? startedAt
-    }
-
-    var titleSource: ConversationTitleSource {
-        get { ConversationTitleSource(rawValue: titleSourceRaw ?? "") ?? .fallback }
-        set { titleSourceRaw = newValue.rawValue }
-    }
-
-    var canGenerateTitle: Bool {
-        titleSource == .fallback
     }
 
     var businessTimeZone: TimeZone {
@@ -67,10 +51,7 @@ final class ConversationSession {
         touch(at: .now)
     }
 
-    func recordUserMessage(_ text: String, at date: Date) {
-        if titleSource == .fallback, title == Self.defaultTitle {
-            title = Self.fallbackTitle(from: text)
-        }
+    func recordUserMessage(_: String, at date: Date) {
         updatedAt = max(updatedAt, date)
     }
 
@@ -83,46 +64,35 @@ final class ConversationSession {
             return false
         }
         title = normalized
-        titleSource = .manual
         return true
     }
 
-    func restoreAutomaticTitle(from text: String?) {
-        title = text.map(Self.fallbackTitle(from:)) ?? Self.defaultTitle
-        titleSource = .fallback
+    func restoreDateTitle() {
+        title = Self.dateTitle(for: startedAt, in: businessTimeZone)
     }
 
-    @discardableResult
-    func applyGeneratedTitle(_ value: String) -> Bool {
-        guard canGenerateTitle,
-              let normalized = Self.normalizedTitle(
-                  value,
-                  maximumLength: Self.maximumGeneratedTitleLength
-              )
-        else {
-            return false
-        }
-        title = normalized
-        titleSource = .generated
-        return true
+    var isUsingDateTitle: Bool {
+        title == Self.dateTitle(for: startedAt, in: businessTimeZone)
     }
 
     func touch(at date: Date) {
         updatedAt = max(updatedAt, date)
     }
 
-    static let defaultTitle = "新对话"
-    static let maximumGeneratedTitleLength = 28
     static let maximumManualTitleLength = 40
 
-    static func fallbackTitle(from text: String) -> String {
-        guard let normalized = normalizedTitle(
-            text,
-            maximumLength: maximumGeneratedTitleLength
-        ) else {
-            return "媒体对话"
-        }
-        return normalized
+    static func dateTitle(for date: Date, in timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.month, .day, .weekday], from: date)
+        let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        let weekdayIndex = max(min((components.weekday ?? 1) - 1, 6), 0)
+        return String(
+            format: "%02d月%02d日 - %@",
+            components.month ?? 1,
+            components.day ?? 1,
+            weekdays[weekdayIndex]
+        )
     }
 
     static func normalizedTitle(

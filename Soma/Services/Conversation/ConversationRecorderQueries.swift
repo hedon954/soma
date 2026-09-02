@@ -65,45 +65,11 @@ extension ConversationRecorder {
             )
 
         case "workouts":
-            let values = filteredByDate(
-                queryWorkouts(arguments, limit: limit, in: context),
-                arguments: arguments,
-                date: \.date
+            return queryWorkoutUserData(
+                arguments,
+                limit: limit,
+                in: context
             )
-            .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
-            .map { entry in
-                var value = [
-                    "record_id": businessIDValue(entry.businessID),
-                    "date": .string(entry.date.ISO8601Format()),
-                    "title": .string(entry.exercise),
-                    "summary": .string(workoutSummary(entry))
-                ] as [String: AgentJSONValue]
-                if arguments.projection == "detail" {
-                    let definitionID = entry.exerciseDefinition?.businessID
-                        ?? entry.exerciseID.flatMap { internalID in
-                            exerciseDefinition(
-                                internalID: internalID,
-                                in: context
-                            )?.businessID
-                        }
-                    value["exercise_id"] = businessIDValue(definitionID)
-                    value["set_entries"] = .array(entry.setEntries.map { set in
-                        .object([
-                            "reps": set.reps.map { .number(Double($0)) } ?? .null,
-                            "external_weight_kg": set.externalWeightKG
-                                .map(AgentJSONValue.number) ?? .null
-                        ])
-                    })
-                    value["rest_seconds"] = entry.restSeconds
-                        .map { .number(Double($0)) } ?? .null
-                    value["duration_minutes"] = entry.durationMinutes
-                        .map { .number(Double($0)) } ?? .null
-                    value["feedback"] = entry.feedback?.nilIfEmpty
-                        .map(AgentJSONValue.string) ?? .null
-                }
-                return value
-            }
-            return pagedResult(values, noun: "训练记录", arguments: arguments, limit: limit)
 
         case "meals":
             let values = filteredByDate(
@@ -255,6 +221,90 @@ extension ConversationRecorder {
                 "scope 不支持。可选值：overview、profile、workouts、meals、body、gyms、exercises、exercise_history、programs、sessions。"
             )
         }
+    }
+
+    private static func queryWorkoutUserData(
+        _ arguments: AgentToolArguments,
+        limit: Int,
+        in context: ModelContext
+    ) -> AgentToolResult {
+        let values = filteredByDate(
+            queryWorkouts(arguments, limit: limit, in: context),
+            arguments: arguments,
+            date: \.date
+        )
+        .filter { arguments.recordID == nil || $0.businessID == arguments.recordID }
+        .map { entry in
+            var value = [
+                "record_id": businessIDValue(entry.businessID),
+                "date": .string(entry.date.ISO8601Format()),
+                "title": .string(entry.exercise),
+                "summary": .string(workoutSummary(entry))
+            ] as [String: AgentJSONValue]
+            guard arguments.projection == "detail" else {
+                return value
+            }
+
+            let evidenceSides = Set(entry.setEntries.compactMap(\.side))
+            let hasBothSides = evidenceSides.contains(.left) && evidenceSides.contains(.right)
+            let evidenceLaterality: ExerciseLaterality? = if hasBothSides {
+                .both
+            } else if evidenceSides == [.left] {
+                .left
+            } else if evidenceSides == [.right] {
+                .right
+            } else if evidenceSides == [.none] {
+                ExerciseLaterality.none
+            } else {
+                nil
+            }
+            let definitionID = entry.exerciseDefinition?.businessID
+                ?? entry.exerciseID.flatMap { internalID in
+                    exerciseDefinition(
+                        internalID: internalID,
+                        in: context
+                    )?.businessID
+                }
+            value["exercise_id"] = businessIDValue(definitionID)
+            value["target_kind"] = .string(
+                entry.exerciseDefinition?.targetKind.rawValue
+                    ?? entry.setEntries.compactMap(\.targetKind).first?.rawValue
+                    ?? WorkoutTargetKind.repetitions.rawValue
+            )
+            value["laterality"] = .string(
+                evidenceLaterality?.rawValue
+                    ?? entry.exerciseDefinition?.laterality.rawValue
+                    ?? ExerciseLaterality.none.rawValue
+            )
+            value["set_entries"] = .array(entry.setEntries.map { set in
+                .object([
+                    "logical_set_index": set.logicalSetIndex
+                        .map { .number(Double($0)) } ?? .null,
+                    "side": .string((set.side ?? .none).rawValue),
+                    "target_kind": .string(
+                        (set.targetKind
+                            ?? (set.durationSeconds == nil
+                                ? .repetitions
+                                : .duration)).rawValue
+                    ),
+                    "reps": set.reps.map { .number(Double($0)) } ?? .null,
+                    "duration_seconds": set.durationSeconds
+                        .map { .number(Double($0)) } ?? .null,
+                    "external_weight_kg": set.externalWeightKG
+                        .map(AgentJSONValue.number) ?? .null,
+                    "rest_seconds": set.restSeconds
+                        .map { .number(Double($0)) } ?? .null
+                ])
+            })
+            value["rest_seconds"] = entry.restSeconds
+                .map { .number(Double($0)) } ?? .null
+            value["duration_minutes"] = entry.durationMinutes
+                .map { .number(Double($0)) } ?? .null
+            value["feedback"] = entry.feedback?.nilIfEmpty
+                .map(AgentJSONValue.string) ?? .null
+            return value
+        }
+        return pagedResult(values, noun: "训练记录", arguments: arguments, limit: limit)
     }
 
     static func fetchGyms(in context: ModelContext) -> [GymProfile] {

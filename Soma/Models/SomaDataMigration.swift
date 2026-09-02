@@ -72,7 +72,7 @@ enum SomaDataSchema {
 }
 
 enum SomaDataMigration {
-    static let currentVersion = 6
+    static let currentVersion = 7
 
     @MainActor
     static func migrateIfNeeded(
@@ -145,6 +145,15 @@ enum SomaDataMigration {
             if session.businessTimeZoneIdentifier == nil {
                 session.businessTimeZoneIdentifier = timeZone.identifier
             }
+            let sessionZone = session.businessTimeZoneIdentifier
+                .flatMap(TimeZone.init(identifier:)) ?? timeZone
+            // v7 deliberately normalizes every existing title, including old
+            // generated and manual values. Manual naming remains available
+            // after migration and no longer relies on titleSourceRaw.
+            session.title = ConversationSession.dateTitle(
+                for: session.startedAt,
+                in: sessionZone
+            )
         }
 
         let jobs = try context.fetch(FetchDescriptor<AgentJob>())
@@ -171,6 +180,7 @@ enum SomaDataMigration {
         ExerciseLibraryStore.migrateLegacyWorkoutNames(in: context)
         try repairExerciseRelationships(in: context)
         try migrateTrainingDomainV5(in: context)
+        try backfillWorkoutCalories(in: context)
         try BusinessIDAllocator.repairAndAssignAllIDs(in: context)
 
         for oldMarker in markers {
@@ -199,6 +209,32 @@ enum SomaDataMigration {
         }
         for performance in try context.fetch(FetchDescriptor<ExercisePerformance>()) {
             performance.exerciseDefinition = byID[performance.exerciseID]
+        }
+    }
+
+    /// v7: deterministic, idempotent calorie backfill. Weight facts are walked
+    /// once in occurrence order so migration does not issue one SwiftData query
+    /// per workout during launch.
+    @MainActor
+    private static func backfillWorkoutCalories(in context: ModelContext) throws {
+        let bodies = try context.fetch(FetchDescriptor<BodyEntry>())
+            .filter { ($0.weight ?? 0) > 0 }
+            .sorted { $0.date < $1.date }
+        let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
+            .sorted { $0.date < $1.date }
+        var bodyIndex = 0
+        var currentWeight: Double?
+        for workout in workouts {
+            while bodyIndex < bodies.count,
+                  bodies[bodyIndex].date <= workout.date
+            {
+                currentWeight = bodies[bodyIndex].weight
+                bodyIndex += 1
+            }
+            WorkoutCalorieCalculator.refreshStoredEstimate(
+                workout,
+                weightKG: currentWeight
+            )
         }
     }
 

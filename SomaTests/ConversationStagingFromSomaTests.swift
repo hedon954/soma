@@ -36,7 +36,16 @@ final class ConversationStagingFromSomaTests: XCTestCase {
         XCTAssertFalse(service.isProcessing)
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<CoachMessage>()).count,
-            1
+            2
+        )
+        let messages = try context.fetch(FetchDescriptor<CoachMessage>())
+        let response = try XCTUnwrap(messages.filter(\.isFromCoach).first)
+        XCTAssertEqual(response.text, "")
+        XCTAssertEqual(response.agentTurnItems.count, 1)
+        XCTAssertEqual(response.agentTurnItems.first?.kind, .activity)
+        XCTAssertEqual(
+            response.agentTurnItems.first?.title,
+            "还没有可用的 LLM 配置，消息已暂存。"
         )
         let job = try XCTUnwrap(
             context.fetch(FetchDescriptor<AgentJob>()).first

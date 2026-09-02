@@ -41,6 +41,7 @@ export interface ManagedModelProvider {
     events: AgentEvent[],
     media: ProviderMedia[],
     onTextDelta?: (delta: string) => Promise<void>,
+    onReasoningDelta?: (delta: string) => Promise<void>,
   ): Promise<ProviderStep>;
 }
 
@@ -55,6 +56,7 @@ export class DeterministicTestProvider implements ManagedModelProvider {
     _events: AgentEvent[],
     _media: ProviderMedia[],
     onTextDelta?: (delta: string) => Promise<void>,
+    _onReasoningDelta?: (delta: string) => Promise<void>,
   ): Promise<ProviderStep> {
     if (this.step.kind === "completed" && onTextDelta !== undefined) {
       await onTextDelta(this.step.answer);
@@ -105,7 +107,10 @@ export class AgentWorker {
       createdAt: now,
     }));
     const textItemID = randomUUID();
+    const reasoningItemID = randomUUID();
     let emittedText = false;
+    let emittedReasoning = false;
+    let reasoningText = "";
     const heartbeat = setInterval(() => {
       void this.store.renewLease(
         job.id,
@@ -128,17 +133,43 @@ export class AgentWorker {
         );
       }
       const media = await this.mediaResolver.resolve(job);
-      const step = await this.provider.run(job, history, media, async (delta) => {
-        if (delta.length === 0) return;
-        emittedText = true;
+      const step = await this.provider.run(
+        job,
+        history,
+        media,
+        async (delta) => {
+          if (delta.length === 0) return;
+          emittedText = true;
+          await this.store.appendEvent(job.id, lease.epoch, {
+            kind: "text",
+            phase: "updated",
+            payloadVersion: 1,
+            payload: { itemID: textItemID, delta },
+            createdAt: new Date(),
+          });
+        },
+        async (delta) => {
+          if (delta.length === 0) return;
+          emittedReasoning = true;
+          reasoningText += delta;
+          await this.store.appendEvent(job.id, lease.epoch, {
+            kind: "reasoning",
+            phase: "updated",
+            payloadVersion: 1,
+            payload: { itemID: reasoningItemID, delta },
+            createdAt: new Date(),
+          });
+        },
+      );
+      if (emittedReasoning) {
         await this.store.appendEvent(job.id, lease.epoch, {
-          kind: "text",
-          phase: "updated",
+          kind: "reasoning",
+          phase: "completed",
           payloadVersion: 1,
-          payload: { itemID: textItemID, delta },
+          payload: { itemID: reasoningItemID, text: reasoningText },
           createdAt: new Date(),
         });
-      });
+      }
       if (emittedText) {
         await this.store.appendEvent(job.id, lease.epoch, {
           kind: "text",
@@ -201,6 +232,18 @@ export class AgentWorker {
           const normalizedArguments = parameters === undefined
             ? call.arguments
             : normalizeToolArguments(call.arguments, parameters);
+          await this.store.appendEvent(job.id, lease.epoch, {
+            kind: "tool",
+            phase: "started",
+            payloadVersion: 1,
+            payload: {
+              toolCallID: call.toolCallID,
+              toolName: call.toolName,
+              schemaVersion: call.schemaVersion,
+              arguments: normalizedArguments,
+            },
+            createdAt: now,
+          });
           let definition: DeviceToolDefinition;
           try {
             definition = validateDeviceTool({
@@ -223,7 +266,7 @@ export class AgentWorker {
             };
             await this.store.appendEvent(job.id, lease.epoch, {
               kind: "tool",
-              phase: "completed",
+              phase: "failed",
               payloadVersion: 1,
               payload: {
                 toolCallID: call.toolCallID,
@@ -239,7 +282,7 @@ export class AgentWorker {
           if (job.input?.allowedRemoteTools.includes(call.toolName) === true) {
             await this.store.appendEvent(job.id, lease.epoch, {
               kind: "tool",
-              phase: "started",
+              phase: "updated",
               payloadVersion: 1,
               payload: {
                 toolCallID: call.toolCallID,

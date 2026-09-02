@@ -160,25 +160,49 @@ extension ConversationProcessingService {
         context: ConversationProcessingContext
     ) -> Bool {
         guard event.kind == "tool",
-              event.phase == "completed",
               let nameRaw = event.payload["toolName"]?.stringValue,
               let name = AgentToolName(rawValue: nameRaw),
-              name == .loadSkill
+              ["started", "updated", "suspended", "completed", "failed", "cancelled"]
+              .contains(event.phase)
         else {
             return false
         }
         let result = event.payload["result"]?.objectValue
         let ok = result?["ok"]?.boolValue ?? false
+        let operationID = event.payload["toolCallID"]?.stringValue ?? event.id
+        let existingStartedAt = responseMessage.agentTurnItems.first {
+            $0.operationID == operationID
+        }?.startedAt ?? event.createdAt
+        let status: AgentTraceStatus = switch event.phase {
+        case "started", "updated", "suspended": .running
+        case "cancelled": .cancelled
+        case "failed": .failed
+        default: ok ? .succeeded : .failed
+        }
+        let phase: AgentTurnPhase = switch event.phase {
+        case "started": .preparing
+        case "updated": .running
+        case "suspended": .waitingForDevice
+        case "cancelled": .cancelled
+        case "failed": .failed
+        default: ok ? .completed : .failed
+        }
         projectRemoteSpan(
             AgentTraceSpan(
                 sequence: event.sequence,
                 step: event.sequence,
                 kind: name == .loadSkill ? .skill : .tool,
                 title: name.displayTitle,
-                status: ok ? .succeeded : .failed,
-                startedAt: event.createdAt,
+                status: status,
+                operationID: operationID,
+                phase: phase,
+                startedAt: existingStartedAt,
                 endedAt: event.createdAt,
-                errorMessage: ok ? nil : result?["message"]?.stringValue
+                input: event.payload["arguments"].map(AgentTraceText.json),
+                output: result.map(AgentTraceText.json),
+                errorMessage: status == .failed
+                    ? result?["message"]?.stringValue
+                    : nil
             ),
             job: job,
             responseMessage: responseMessage,

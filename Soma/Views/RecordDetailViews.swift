@@ -169,7 +169,6 @@ private struct WorkoutRecordEditor: View {
     @State private var intensity: String
     @State private var feedback: String
     @State private var notes: String
-    @State private var muscleMapExpanded = false
     @State private var caloriesExpanded = false
     @State private var analysisExpanded = false
     @State private var notesExpanded = false
@@ -257,17 +256,16 @@ private struct WorkoutRecordEditor: View {
                     }
                     .accessibilityLabel("查看动作 \(linkedExercise.canonicalName)")
 
-                    // PRD 020：受力图默认收起，展开后仍可点击放大。
-                    DisclosureGroup("受力图", isExpanded: $muscleMapExpanded) {
-                        MuscleMapView(
-                            intensities: MuscleMapView.intensities(for: linkedExercise),
-                            height: 180,
-                            allowsExpansion: true
-                        )
-                        Text("肌群图来自动作库元数据，不是本次记录的个人测量。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("受力图")
+                        .font(.headline)
+                    MuscleMapView(
+                        intensities: MuscleMapView.intensities(for: linkedExercise),
+                        height: 180,
+                        allowsExpansion: true
+                    )
+                    Text("肌群图来自动作库元数据，不是本次记录的个人测量。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -297,11 +295,26 @@ private struct WorkoutRecordEditor: View {
             // PRD 020：热量估算、AI 解析与原始记录默认折叠，展开后仍可完整编辑。
             Section {
                 DisclosureGroup(isExpanded: $caloriesExpanded) {
-                    numericField("预计消耗", unit: "kcal", text: $estimatedCalories, keyboard: .numberPad)
-                    numericField("MET", text: $calorieMET, keyboard: .decimalPad)
-                    numericField("计算时长", unit: "分钟", text: $calorieDurationMinutes, keyboard: .decimalPad)
-                    Toggle("计算时长来自推算", isOn: $calorieDurationEstimated)
-                        .appToggleStyle()
+                    LabeledContent(
+                        "预计消耗",
+                        value: EditorValue.int(estimatedCalories).map { "约 \($0) kcal" } ?? "无法计算"
+                    )
+                    LabeledContent(
+                        "MET",
+                        value: EditorValue.double(calorieMET)?.formatted(
+                            .number.precision(.fractionLength(0 ... 1))
+                        ) ?? "—"
+                    )
+                    LabeledContent(
+                        "计算时长",
+                        value: EditorValue.double(calorieDurationMinutes).map {
+                            "\($0.formatted(.number.precision(.fractionLength(0 ... 1)))) 分钟"
+                        } ?? "—"
+                    )
+                    LabeledContent(
+                        "时长来源",
+                        value: calorieDurationEstimated ? "按训练证据推算" : "实际记录"
+                    )
 
                     if hasCalorieReferenceWeight == false {
                         NavigationLink {
@@ -314,6 +327,10 @@ private struct WorkoutRecordEditor: View {
                             .foregroundStyle(.orange)
                         }
                         .accessibilityHint("已有训练事实不会被改写")
+                    } else if EditorValue.int(estimatedCalories) == nil {
+                        Text("还缺少完整的次数/时长或组间歇事实，暂不猜测训练消耗。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 } label: {
                     LabeledContent(
@@ -389,9 +406,6 @@ private struct WorkoutRecordEditor: View {
             && workoutDraft.isValid
             && EditorValue.validInt(restSeconds, range: 0 ... 3600)
             && EditorValue.validInt(durationMinutes, range: 0 ... 1440)
-            && EditorValue.validInt(estimatedCalories, range: 0 ... 10000)
-            && EditorValue.validDouble(calorieMET, range: 0 ... 25)
-            && EditorValue.validDouble(calorieDurationMinutes, range: 0 ... 1440)
             && EditorValue.validInt(formScore, range: 0 ... 100)
     }
 
@@ -401,10 +415,6 @@ private struct WorkoutRecordEditor: View {
             || workoutDraft.evidence != workout.setEntries
             || EditorValue.int(restSeconds) != workout.restSeconds
             || EditorValue.int(durationMinutes) != workout.durationMinutes
-            || EditorValue.int(estimatedCalories) != workout.estimatedCalories
-            || EditorValue.double(calorieMET) != workout.calorieMET
-            || EditorValue.double(calorieDurationMinutes) != workout.calorieDurationMinutes
-            || calorieDurationEstimated != workout.calorieDurationEstimated
             || EditorValue.int(formScore) != workout.formScore
             || EditorValue.optionalText(intensity) != workout.intensity
             || EditorValue.optionalText(feedback) != workout.feedback
@@ -427,7 +437,10 @@ private struct WorkoutRecordEditor: View {
     }
 
     private func sanitizeMistakenDurationIfNeeded() {
-        let weight = WorkoutCalorieCalculator.currentRecordedWeight(in: modelContext)
+        let weight = WorkoutCalorieCalculator.latestRecordedWeight(
+            at: workout.date,
+            in: modelContext
+        )
         guard WorkoutCalorieCalculator.sanitizeStoredDurationIfNeeded(
             workout,
             weightKG: weight
@@ -479,14 +492,15 @@ private struct WorkoutRecordEditor: View {
             restSeconds: workout.restSeconds
         )
         durationMinutes = EditorValue.string(workout.durationMinutes)
-        workout.estimatedCalories = EditorValue.int(estimatedCalories)
-        workout.calorieMET = EditorValue.double(calorieMET)
-        workout.calorieDurationMinutes = EditorValue.double(calorieDurationMinutes)
-        workout.calorieDurationEstimated = calorieDurationEstimated
         workout.formScore = EditorValue.int(formScore)
         workout.intensity = EditorValue.optionalText(intensity)
         workout.feedback = EditorValue.optionalText(feedback)
         workout.notes = normalizedNotes
+        WorkoutCalorieCalculator.refreshStoredEstimate(workout, in: modelContext)
+        estimatedCalories = EditorValue.string(workout.estimatedCalories)
+        calorieMET = EditorValue.string(workout.calorieMET)
+        calorieDurationMinutes = EditorValue.string(workout.calorieDurationMinutes)
+        calorieDurationEstimated = workout.calorieDurationEstimated
         try? modelContext.save()
     }
 }

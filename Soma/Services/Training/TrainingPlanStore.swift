@@ -577,6 +577,7 @@ enum TrainingPlanStore {
         _ session: WorkoutSession,
         in context: ModelContext
     ) throws {
+        WorkoutRecordingDiagnostics.breadcrumb(stage: "session-delete-begin")
         let sessionID = session.id
         let performances = session.performances.isEmpty
             ? try context.fetch(FetchDescriptor<ExercisePerformance>(
@@ -633,8 +634,18 @@ enum TrainingPlanStore {
         sets.forEach(context.delete)
         performances.forEach(context.delete)
         context.delete(session)
-        try context.save()
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            WorkoutRecordingDiagnostics.failure(
+                stage: "session-delete-save",
+                error: error
+            )
+            throw error
+        }
         mediaPaths.forEach { _ = MediaStore.removeStoredFile(at: $0) }
+        WorkoutRecordingDiagnostics.breadcrumb(stage: "session-delete-complete")
     }
 
     static func archive(

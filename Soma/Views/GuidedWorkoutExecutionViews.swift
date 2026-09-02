@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-enum GuidedWorkoutProgressSetState: Equatable {
+enum GuidedWorkoutProgressSetState: Equatable, Sendable {
     case pending
     case current
     case completed
@@ -10,8 +10,8 @@ enum GuidedWorkoutProgressSetState: Equatable {
     case failed
 }
 
-struct GuidedWorkoutProgressExercise: Identifiable, Equatable {
-    struct SetSegment: Identifiable, Equatable {
+struct GuidedWorkoutProgressExercise: Identifiable, Equatable, Sendable {
+    struct SetSegment: Identifiable, Equatable, Sendable {
         let id: UUID
         let state: GuidedWorkoutProgressSetState
         let completionFraction: Double
@@ -41,6 +41,18 @@ struct GuidedWorkoutProgressExercise: Identifiable, Equatable {
         let terminalCount = efforts.count {
             $0.status == .completed
         }
+        return Double(terminalCount) / Double(efforts.count)
+    }
+
+    static func completionFraction(
+        set: GuidedWorkoutSetSnapshot,
+        efforts: [GuidedWorkoutEffortSnapshot]
+    ) -> Double {
+        if set.status == .completed {
+            return 1
+        }
+        guard !efforts.isEmpty else { return 0 }
+        let terminalCount = efforts.count { $0.status == .completed }
         return Double(terminalCount) / Double(efforts.count)
     }
 }
@@ -121,7 +133,8 @@ enum GuidedCameraStatusPresentation: Equatable {
 }
 
 struct GuidedWorkoutChrome: View {
-    let session: WorkoutSession
+    let sessionStartedAt: Date
+    let sessionStatus: WorkoutSessionStatus
     let completedExerciseCount: Int
     let exerciseCount: Int
     var progressExercises: [GuidedWorkoutProgressExercise] = []
@@ -141,7 +154,7 @@ struct GuidedWorkoutChrome: View {
             HStack {
                 Button(action: onPause) {
                     VStack(spacing: 3) {
-                        Image(systemName: session.status == .paused
+                        Image(systemName: sessionStatus == .paused
                             ? "play.fill"
                             : "pause.fill")
                             .font(.headline)
@@ -150,12 +163,12 @@ struct GuidedWorkoutChrome: View {
                                 height: AppTheme.minimumTapTarget
                             )
                             .background(.thinMaterial, in: Circle())
-                        Text(session.status == .paused ? "继续" : "暂停")
+                        Text(sessionStatus == .paused ? "继续" : "暂停")
                             .font(.caption2)
                     }
                 }
                 .foregroundStyle(.primary)
-                .accessibilityLabel(session.status == .paused ? "继续训练" : "暂停训练")
+                .accessibilityLabel(sessionStatus == .paused ? "继续训练" : "暂停训练")
 
                 Button(action: onRecord) {
                     VStack(spacing: 3) {
@@ -387,7 +400,7 @@ struct GuidedWorkoutChrome: View {
     }
 
     private func elapsedText(at date: Date) -> String {
-        let total = max(Int(date.timeIntervalSince(session.startedAt)), 0)
+        let total = max(Int(date.timeIntervalSince(sessionStartedAt)), 0)
         return String(format: "%02d:%02d", total / 60, total % 60)
     }
 
@@ -433,11 +446,11 @@ struct GuidedWorkoutChrome: View {
 
 struct GuidedCompactSetView: View {
     let camera: WorkoutCameraService
-    let exercise: ExerciseDefinition?
-    let performance: ExercisePerformance?
+    let artwork: ExerciseImageReference
+    let exerciseName: String?
+    let performanceOrder: Int?
     let performanceCount: Int
-    let set: WorkoutSet?
-    let sets: [WorkoutSet]
+    let setKind: WorkoutSetKind?
     let targetText: String
     var effortSide: WorkoutEffortSide = .none
     var isAutomaticDuration = false
@@ -488,12 +501,12 @@ struct GuidedCompactSetView: View {
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(performance?.exerciseName ?? "当前动作")
+                Text(exerciseName ?? "当前动作")
                     .font(.title2.weight(.semibold))
                     .lineLimit(2)
                 Spacer()
-                if let performance {
-                    Text("动作 \(performance.order)/\(max(performanceCount, 1))")
+                if let performanceOrder {
+                    Text("动作 \(performanceOrder)/\(max(performanceCount, 1))")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -501,8 +514,7 @@ struct GuidedCompactSetView: View {
 
             GeometryReader { _ in
                 ExerciseArtworkView(
-                    reference: exercise?.preferredActionIllustration
-                        ?? BundledExerciseCatalog.fallbackActionIllustration
+                    reference: artwork
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 26))
@@ -685,9 +697,8 @@ struct GuidedCompactSetView: View {
     }
 
     private var setProgressText: String {
-        guard let set else { return "本组目标" }
         let side = WorkoutPrescriptionFormatter.sideName(effortSide)
-        let kind = set.kind == .warmup ? "热身" : "当前目标"
+        let kind = setKind == .warmup ? "热身" : "当前目标"
         return side.isEmpty ? kind : "\(side) · \(kind)"
     }
 
@@ -717,10 +728,11 @@ struct GuidedCompactSetView: View {
 struct GuidedExpandedCaptureView: View {
     let camera: WorkoutCameraService
     let sessionStartedAt: Date
-    let performance: ExercisePerformance?
+    let exerciseName: String?
+    let performanceOrder: Int?
     let performanceCount: Int
-    let set: WorkoutSet?
-    let sets: [WorkoutSet]
+    let currentSetID: UUID?
+    let sets: [GuidedWorkoutSetSnapshot]
     let targetText: String
     var effortSide: WorkoutEffortSide = .none
     var isAutomaticDuration = false
@@ -845,7 +857,7 @@ struct GuidedExpandedCaptureView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .overlay(alignment: .bottom) {
             Text(
-                "动作 \(performance?.order ?? 1)/\(max(performanceCount, 1))"
+                "动作 \(performanceOrder ?? 1)/\(max(performanceCount, 1))"
             )
             .font(.subheadline.bold())
             .foregroundStyle(.white)
@@ -859,12 +871,12 @@ struct GuidedExpandedCaptureView: View {
     private var controlPanel: some View {
         VStack(alignment: .leading, spacing: isLandscape ? 12 : 10) {
             Text(GuidedWorkoutDisplayText.expandedActionTitle(
-                exerciseName: performance?.exerciseName,
+                exerciseName: exerciseName,
                 targetText: targetText
             ))
             .font(.title3.bold())
             .lineLimit(2)
-            GuidedSetProgressRail(sets: sets, currentSetID: set?.id)
+            GuidedSetProgressRail(sets: sets, currentSetID: currentSetID)
             Label(coachingNote, systemImage: "lightbulb.fill")
                 .font(.subheadline)
                 .lineLimit(isLandscape ? 2 : 3)
@@ -1023,7 +1035,7 @@ struct WorkoutCameraSurface: View {
 }
 
 struct GuidedSetProgressRail: View {
-    let sets: [WorkoutSet]
+    let sets: [GuidedWorkoutSetSnapshot]
     let currentSetID: UUID?
 
     var body: some View {
@@ -1046,7 +1058,7 @@ struct GuidedSetProgressRail: View {
         .accessibilityLabel(progressAccessibilityLabel)
     }
 
-    private func segmentFill(for set: WorkoutSet) -> Color {
+    private func segmentFill(for set: GuidedWorkoutSetSnapshot) -> Color {
         if set.status == .completed {
             return AppTheme.tint
         }

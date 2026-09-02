@@ -430,6 +430,7 @@ enum PersistentAgentEventKind: String, Codable, CaseIterable, Sendable {
     case attemptStarted
     case assistantTextDelta
     case assistantTextCompleted
+    case reasoningCompleted
     case span
     case waitingForNetwork
     case staged
@@ -516,9 +517,29 @@ enum AgentJobStore {
         in context: ModelContext,
         at date: Date = .now
     ) throws {
+        let responseMessage = CoachMessage(
+            date: date.addingTimeInterval(0.001),
+            sessionID: job.sessionID,
+            isFromCoach: true,
+            text: "",
+            agentStatus: .running,
+            agentTurnItems: [AgentTurnItem(
+                sequence: 1,
+                kind: .activity,
+                status: .running,
+                phase: .queued,
+                title: "已收到，正在准备处理…",
+                text: "已收到，正在准备处理…",
+                startedAt: date
+            )],
+            turnID: job.turnID,
+            attemptNumber: 1
+        )
+        job.responseMessageID = responseMessage.id
         job.lastEventSequence = 1
         job.updatedAt = date
         context.insert(userMessage)
+        context.insert(responseMessage)
         context.insert(job)
         context.insert(PersistentAgentEvent(
             jobID: job.id,
@@ -529,6 +550,23 @@ enum AgentJobStore {
             createdAt: date
         ))
         try context.save()
+    }
+
+    static func updateQueuedResponse(
+        for job: AgentJob,
+        message: String,
+        status: AgentTraceStatus = .running,
+        in context: ModelContext
+    ) {
+        guard let responseID = job.responseMessageID else { return }
+        var descriptor = FetchDescriptor<CoachMessage>(
+            predicate: #Predicate { $0.id == responseID }
+        )
+        descriptor.fetchLimit = 1
+        guard let response = try? context.fetch(descriptor).first else { return }
+        response.text = ""
+        response.agentStatus = status
+        response.setAgentActivity(phase: .queued, message: message)
     }
 
     static func append(
@@ -788,6 +826,7 @@ enum AgentJobStore {
         job.leaseOwner = nil
         job.leaseExpiresAt = nil
         job.nextRetryAt = retryDelay.map { now.addingTimeInterval($0) }
+        updateQueuedResponse(for: job, message: message, in: context)
         try context.save()
         _ = try append(
             kind: .staged,
@@ -810,6 +849,24 @@ enum AgentJobStore {
         job.leaseOwner = nil
         job.leaseExpiresAt = nil
         job.nextRetryAt = nil
+        if let responseID = job.responseMessageID {
+            var descriptor = FetchDescriptor<CoachMessage>(
+                predicate: #Predicate { $0.id == responseID }
+            )
+            descriptor.fetchLimit = 1
+            if let response = try? context.fetch(descriptor).first,
+               response.agentStatus != .failed,
+               response.agentStatus != .cancelled
+            {
+                response.text = ""
+                response.agentStatus = .failed
+                response.applyAgentEvent(.failed(
+                    message: message,
+                    cancelled: false,
+                    at: now
+                ))
+            }
+        }
         try context.save()
         _ = try append(
             kind: .waitingForUser,
@@ -853,6 +910,7 @@ enum AgentJobStore {
             job.leaseOwner = nil
             job.leaseExpiresAt = nil
             job.nextRetryAt = nil
+            updateQueuedResponse(for: job, message: message, in: context)
             _ = try append(
                 kind: .staged,
                 payload: .init(message: message),
@@ -984,6 +1042,11 @@ enum PersistentAgentEventProjection {
             // 这里不再反复修改三份增长中的字符串、解码/编码完整
             // agentTurnItems JSON，或使 SwiftData 观察者整页失效。
             return
+        case .reasoningDelta:
+            // 高频增量由 ConversationProcessingService 的瞬态缓冲驱动 UI。
+            // 这里不再反复修改三份增长中的字符串、解码/编码完整
+            // agentTurnItems JSON，或使 SwiftData 观察者整页失效。
+            return
         case let .assistantTextCompleted(itemID, date):
             commitLiveText(
                 liveText,
@@ -997,6 +1060,14 @@ enum PersistentAgentEventProjection {
                     itemID: itemID,
                     text: job.responseTextSnapshot
                 ),
+                job: job,
+                context: context,
+                at: date
+            )
+        case let .reasoningCompleted(itemID, text, date):
+            persist(
+                kind: .reasoningCompleted,
+                payload: .init(itemID: itemID, text: text),
                 job: job,
                 context: context,
                 at: date
@@ -1101,9 +1172,9 @@ enum PersistentAgentEventProjection {
     ) {
         message.applyAgentEvent(event)
         switch event {
-        case .assistantTextDelta:
+        case .assistantTextDelta, .reasoningDelta:
             break
-        case .assistantTextCompleted, .span:
+        case .assistantTextCompleted, .reasoningCompleted, .span:
             break
         case let .completed(answer, _):
             message.text = answer
@@ -1144,6 +1215,14 @@ enum PersistentAgentEventProjection {
                 itemID: itemID,
                 at: event.createdAt
             ))
+        case .reasoningCompleted:
+            if let text = payload.text, !text.isEmpty {
+                message.applyAgentEvent(.reasoningCompleted(
+                    itemID: payload.itemID ?? UUID(),
+                    text: text,
+                    at: event.createdAt
+                ))
+            }
         case .span:
             if let span = payload.span {
                 message.applyAgentEvent(.span(span))
@@ -1166,7 +1245,9 @@ enum PersistentAgentEventProjection {
             message.agentStatus = cancelled ? .cancelled : .failed
         case .attemptStarted:
             let completedItems = message.agentTurnItems.filter {
-                $0.status == .succeeded && $0.kind != .error
+                $0.status == .succeeded
+                    && $0.kind != .error
+                    && $0.kind != .activity
             }
             message.replaceAgentTurnItems(completedItems)
             message.replaceAgentEvents(
@@ -1177,14 +1258,39 @@ enum PersistentAgentEventProjection {
                 .map(\.text)
                 .joined(separator: "\n\n")
             message.agentStatus = .running
-        case .jobQueued,
-             .jobClaimed,
-             .waitingForNetwork,
-             .staged,
-             .waitingForUser,
-             .waitingForForeground,
-             .waitingForDevice:
-            break
+            message.setAgentActivity(
+                phase: .queued,
+                message: "已收到，正在准备处理…",
+                at: event.createdAt
+            )
+        case .jobQueued, .jobClaimed:
+            message.setAgentActivity(
+                phase: .queued,
+                message: payload.message ?? "已收到，正在准备处理…",
+                at: event.createdAt
+            )
+            message.agentStatus = .running
+        case .waitingForNetwork, .staged, .waitingForForeground:
+            message.setAgentActivity(
+                phase: .queued,
+                message: payload.message ?? "正在等待可用条件…",
+                at: event.createdAt
+            )
+            message.agentStatus = .running
+        case .waitingForDevice:
+            message.setAgentActivity(
+                phase: .waitingForDevice,
+                message: payload.message ?? "等待在本机执行…",
+                at: event.createdAt
+            )
+            message.agentStatus = .running
+        case .waitingForUser:
+            message.applyAgentEvent(.failed(
+                message: payload.message ?? "这一步需要你手动重试。",
+                cancelled: false,
+                at: event.createdAt
+            ))
+            message.agentStatus = .failed
         }
     }
 }

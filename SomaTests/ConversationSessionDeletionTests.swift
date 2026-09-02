@@ -147,7 +147,14 @@ final class ConversationSessionDeletionTests: XCTestCase {
         XCTAssertEqual(remaining.count, 1)
         XCTAssertNotEqual(remaining.first?.id, deletedID)
         XCTAssertEqual(controller.activeSessionID, remaining.first?.id)
-        XCTAssertEqual(remaining.first?.title, "新对话")
+        let replacement = try XCTUnwrap(remaining.first)
+        XCTAssertEqual(
+            replacement.title,
+            ConversationSession.dateTitle(
+                for: replacement.startedAt,
+                in: replacement.businessTimeZone
+            )
+        )
     }
 
     @MainActor

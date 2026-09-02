@@ -4,6 +4,7 @@
 - 发现日期：2026-08-27
 - 影响范围：教练长会话从后台返回前台后的首个触摸、滚动与输入
 - 上游依据：维护者真机反馈
+- 后续修订：[BUG 0050](0050-coach-foreground-recovery-freezes-again.md) 的第二阶段前台恢复量化与缓存边界
 - 下游落地：
   - [PRD 049](../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)
   - [ADR 0107](../adr/0107-foreground-recovery-and-progress-evidence-projection.md)

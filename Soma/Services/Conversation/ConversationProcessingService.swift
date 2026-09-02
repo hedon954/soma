@@ -22,6 +22,12 @@ final class ConversationProcessingService {
     @ObservationIgnored
     var liveAssistantTextBuffer = LiveAgentTextBuffer()
 
+    @ObservationIgnored
+    var liveReasoningItemID: UUID?
+
+    @ObservationIgnored
+    var liveReasoningTextBuffer = LiveAgentTextBuffer()
+
     var liveEventRevision = 0
 
     /// 仅供显式性能夹具把跨层完成阶段暴露给 UI 自动化；普通运行始终为 nil。
@@ -50,8 +56,6 @@ final class ConversationProcessingService {
 
     @ObservationIgnored
     var performanceFixtureTask: Task<Void, Never>?
-
-    @ObservationIgnored let titleGenerator = SessionTitleGenerator()
 
     @ObservationIgnored
     let backgroundLease: BackgroundExecutionLease
@@ -302,6 +306,8 @@ final class ConversationProcessingService {
         self.sessionID = sessionID
         liveAssistantItemID = nil
         liveAssistantTextBuffer.reset()
+        liveReasoningItemID = nil
+        liveReasoningTextBuffer.reset()
         remoteTextCoalescer = AgentTextDeltaCoalescer()
         remoteTextItemID = nil
         remoteModelReceivedFirstDelta = false
@@ -436,6 +442,8 @@ final class ConversationProcessingService {
         backgroundLeaseExpired = false
         liveAssistantItemID = nil
         liveAssistantTextBuffer.reset()
+        liveReasoningItemID = nil
+        liveReasoningTextBuffer.reset()
         remoteTextCoalescer = AgentTextDeltaCoalescer()
         remoteTextItemID = nil
         remoteModelReceivedFirstDelta = false

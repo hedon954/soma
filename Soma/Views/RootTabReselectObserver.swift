@@ -5,9 +5,13 @@ import UIKit
 /// 的触摸，不接管 delegate、不阻断系统手势，业务效果仍由 `AppTabReselect` 决定。
 struct RootTabReselectObserver: UIViewRepresentable {
     let onReselect: @MainActor (AppTab) -> Void
+    let onDoubleReselect: @MainActor (AppTab) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onReselect: onReselect)
+        Coordinator(
+            onReselect: onReselect,
+            onDoubleReselect: onDoubleReselect
+        )
     }
 
     func makeUIView(context: Context) -> UIView {
@@ -18,6 +22,7 @@ struct RootTabReselectObserver: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         context.coordinator.onReselect = onReselect
+        context.coordinator.onDoubleReselect = onDoubleReselect
         DispatchQueue.main.async {
             context.coordinator.installIfNeeded(from: uiView)
         }
@@ -30,7 +35,9 @@ struct RootTabReselectObserver: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var onReselect: @MainActor (AppTab) -> Void
+        var onDoubleReselect: @MainActor (AppTab) -> Void
         private weak var tabBar: UITabBar?
+        private weak var observedWindow: UIWindow?
         private var selectedIndexAtTouchStart: Int?
         private var touchedIndex: Int?
         private lazy var recognizer: UITapGestureRecognizer = {
@@ -43,8 +50,23 @@ struct RootTabReselectObserver: UIViewRepresentable {
             return recognizer
         }()
 
-        init(onReselect: @escaping @MainActor (AppTab) -> Void) {
+        private lazy var doubleRecognizer: UITapGestureRecognizer = {
+            let recognizer = UITapGestureRecognizer(
+                target: self,
+                action: #selector(handleDoubleTap(_:))
+            )
+            recognizer.numberOfTapsRequired = 2
+            recognizer.cancelsTouchesInView = false
+            recognizer.delegate = self
+            return recognizer
+        }()
+
+        init(
+            onReselect: @escaping @MainActor (AppTab) -> Void,
+            onDoubleReselect: @escaping @MainActor (AppTab) -> Void
+        ) {
             self.onReselect = onReselect
+            self.onDoubleReselect = onDoubleReselect
         }
 
         func installIfNeeded(from view: UIView) {
@@ -58,12 +80,16 @@ struct RootTabReselectObserver: UIViewRepresentable {
 
             uninstall()
             tabBar = foundTabBar
+            observedWindow = window
             foundTabBar.addGestureRecognizer(recognizer)
+            window.addGestureRecognizer(doubleRecognizer)
         }
 
         func uninstall() {
             tabBar?.removeGestureRecognizer(recognizer)
+            observedWindow?.removeGestureRecognizer(doubleRecognizer)
             tabBar = nil
+            observedWindow = nil
             selectedIndexAtTouchStart = nil
             touchedIndex = nil
         }
@@ -78,6 +104,10 @@ struct RootTabReselectObserver: UIViewRepresentable {
                   let selectedIndex = items.firstIndex(of: selectedItem),
                   let index = itemIndex(at: touch.location(in: tabBar), in: tabBar)
             else { return false }
+
+            if gestureRecognizer === doubleRecognizer {
+                return selectedIndex == 0 && index == 0
+            }
 
             selectedIndexAtTouchStart = selectedIndex
             touchedIndex = index
@@ -103,6 +133,11 @@ struct RootTabReselectObserver: UIViewRepresentable {
             else { return }
 
             onReselect(tab)
+        }
+
+        @objc private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended else { return }
+            onDoubleReselect(.coach)
         }
 
         private func itemIndex(at point: CGPoint, in tabBar: UITabBar) -> Int? {

@@ -4,7 +4,9 @@
 - 日期：2026-08-27
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的集中说明入口与仅展示截至当前总消耗
-- 后续替代：[ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的跟随式进展明细与目标直选
+- 后续替代：
+  - [ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的跟随式进展明细与目标直选
+  - [ADR 0113](0113-capture-and-foreground-lifecycle.md) 的真实首帧门禁、可取消 generation 与有界渲染快照
 - 上游依据：
   - [PRD 049](../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)
   - [BUG 0043](../bugs/0043-coach-foreground-recovery-main-thread-stall.md)

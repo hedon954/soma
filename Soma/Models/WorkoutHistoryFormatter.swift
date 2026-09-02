@@ -58,63 +58,171 @@ enum WorkoutHistoryFormatter {
         let draft = WorkoutRecordDraft(evidence: evidence)
         guard !draft.groups.isEmpty else { return "尚无完成数据" }
 
-        var values = draft.displayRuns.map(runText)
-        if let rest = commonRestSeconds(
+        return formattedRuns(
             in: draft,
-            fallback: fallbackRestSeconds
-        ) {
-            values.append("间歇 \(durationText(seconds: rest))")
-        }
-        return values.joined(separator: " · ")
+            fallbackRestSeconds: fallbackRestSeconds
+        )
+        .map(runText)
+        .joined(separator: " · ")
     }
 
-    private static func runText(_ run: WorkoutLogicalGroupRun) -> String {
-        let group = run.representative
-        let orderedEfforts = group.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
-        let details = orderedEfforts.compactMap(effortText)
-        if details.isEmpty {
-            return "\(run.count)组"
+    private struct FormattedGroup {
+        let group: LogicalWorkoutGroupDraft
+        /// The final set has no meaningful post-set rest. For run comparison it
+        /// inherits the preceding interval so five identical sets still become
+        /// one run, while its own singleton presentation stays rest-free.
+        let comparisonRestSeconds: Int?
+        let displayRestSeconds: Int?
+    }
+
+    private struct FormattedRun {
+        var groups: [FormattedGroup]
+
+        var count: Int {
+            groups.count
         }
 
-        var values: [String] = []
-        if group.sideMode != .simultaneous {
-            values.append(group.sideMode.displayName)
+        var representative: FormattedGroup {
+            groups[0]
         }
+
+        var displayedRestSeconds: Int? {
+            groups.compactMap(\.displayRestSeconds).last
+                ?? (groups.count > 1 ? representative.comparisonRestSeconds : nil)
+        }
+    }
+
+    private static func formattedRuns(
+        in draft: WorkoutRecordDraft,
+        fallbackRestSeconds: Int?
+    ) -> [FormattedRun] {
+        let groups = draft.groups.sorted { $0.sourceOrder < $1.sourceOrder }
+        var priorInterval: Int?
+        let formatted = groups.enumerated().map { index, group in
+            let explicit = group.restPresentation.afterGroupSeconds
+            let isFinal = index == groups.indices.last
+            let displayRest = isFinal ? nil : (explicit ?? fallbackRestSeconds)
+            let comparisonRest = displayRest
+                ?? fallbackRestSeconds
+                ?? priorInterval
+            if let displayRest {
+                priorInterval = displayRest
+            }
+            return FormattedGroup(
+                group: group,
+                comparisonRestSeconds: comparisonRest,
+                displayRestSeconds: displayRest
+            )
+        }
+
+        var runs: [FormattedRun] = []
+        for group in formatted {
+            if let last = runs.indices.last,
+               groupsMatch(runs[last].representative, group)
+            {
+                runs[last].groups.append(group)
+            } else {
+                runs.append(FormattedRun(groups: [group]))
+            }
+        }
+        return runs
+    }
+
+    private static func groupsMatch(
+        _ lhs: FormattedGroup,
+        _ rhs: FormattedGroup
+    ) -> Bool {
+        let left = lhs.group.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
+        let right = rhs.group.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
+        guard left.count == right.count,
+              lhs.comparisonRestSeconds == rhs.comparisonRestSeconds,
+              lhs.group.restPresentation.betweenSidesSeconds
+              == rhs.group.restPresentation.betweenSidesSeconds
+        else {
+            return false
+        }
+        return zip(left, right).allSatisfy { lhsEffort, rhsEffort in
+            lhsEffort.side == rhsEffort.side
+                && effortValuesMatchIgnoringSide(lhsEffort, rhsEffort)
+        }
+    }
+
+    private static func runText(_ run: FormattedRun) -> String {
+        let group = run.representative.group
+        let orderedEfforts = group.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
+        var values: [String] = []
         if orderedEfforts.count == 2,
            group.sideMode == .alternating,
-           effortValuesMatchIgnoringSide(orderedEfforts[0], orderedEfforts[1]),
-           let detail = details.first
+           effortValuesMatchIgnoringSide(orderedEfforts[0], orderedEfforts[1])
         {
-            values.append("\(run.count)×每侧\(detail)")
-        } else if details.count == 1, let detail = details.first {
-            values.append("\(run.count)×\(detail)")
+            values.append("左右分别")
+            if let weight = weightText(orderedEfforts[0].externalWeightKG) {
+                values.append(weight)
+            }
+            if let target = targetText(orderedEfforts[0], perSide: true) {
+                values.append("\(target)×\(run.count)组")
+            } else {
+                values.append("\(run.count)组")
+            }
+        } else if orderedEfforts.count == 1, let effort = orderedEfforts.first {
+            if group.sideMode != .simultaneous {
+                values.append(sideModeText(group.sideMode))
+            }
+            if let weight = weightText(effort.externalWeightKG) {
+                values.append(weight)
+            }
+            if let target = targetText(effort, perSide: false) {
+                values.append("\(target)×\(run.count)组")
+            } else {
+                values.append("\(run.count)组")
+            }
         } else {
             let sideDetails = orderedEfforts.compactMap { effort in
-                effortText(effort).map {
+                compactEffortText(effort).map {
                     "\(sideLabel(effort.side))\($0)"
                 }
             }
-            values.append("\(run.count)×\(sideDetails.joined(separator: "/"))")
+            if !sideDetails.isEmpty {
+                values.append("\(sideDetails.joined(separator: "/"))×\(run.count)组")
+            } else {
+                values.append("\(run.count)组")
+            }
+        }
+        if let between = group.restPresentation.betweenSidesSeconds {
+            values.append("换侧\(durationText(seconds: between))")
+        }
+        if let rest = run.displayedRestSeconds {
+            values.append("间歇\(durationText(seconds: rest))")
         }
         return values.joined(separator: " ")
     }
 
-    private static func effortText(_ effort: WorkoutEffortDraft) -> String? {
-        var values: [String] = []
+    private static func targetText(
+        _ effort: WorkoutEffortDraft,
+        perSide: Bool
+    ) -> String? {
+        let prefix = perSide ? "每侧" : ""
         switch effort.targetKind {
         case .repetitions:
-            if let reps = effort.reps {
-                values.append("\(reps)次")
-            }
+            return effort.reps.map { "\(prefix)\($0)" }
         case .duration:
-            if let seconds = effort.durationSeconds {
-                values.append("\(seconds)秒")
-            }
+            return effort.durationSeconds.map { "\(prefix)\($0)秒" }
         }
-        if let weight = effort.externalWeightKG {
-            values.append(weight == 0 ? "自重" : "\(number(weight))kg")
+    }
+
+    private static func compactEffortText(_ effort: WorkoutEffortDraft) -> String? {
+        var values: [String] = []
+        if let weight = weightText(effort.externalWeightKG) {
+            values.append(weight)
+        }
+        if let target = targetText(effort, perSide: false) {
+            values.append(target)
         }
         return values.isEmpty ? nil : values.joined(separator: " ")
+    }
+
+    private static func weightText(_ weight: Double?) -> String? {
+        weight.map { $0 == 0 ? "自重" : "\(number($0))kg" }
     }
 
     private static func effortValuesMatchIgnoringSide(
@@ -126,24 +234,6 @@ enum WorkoutHistoryFormatter {
             && lhs.reps == rhs.reps
             && lhs.durationSeconds == rhs.durationSeconds
             && lhs.externalWeightKG == rhs.externalWeightKG
-    }
-
-    private static func commonRestSeconds(
-        in draft: WorkoutRecordDraft,
-        fallback: Int?
-    ) -> Int? {
-        let groups = draft.groups.sorted { $0.sourceOrder < $1.sourceOrder }
-        guard groups.count > 1 else { return nil }
-        let rests = groups.dropLast().compactMap { group in
-            group.efforts.max { $0.sourceOrder < $1.sourceOrder }?.restSeconds
-        }
-        if rests.count == groups.count - 1,
-           let first = rests.first,
-           rests.allSatisfy({ $0 == first })
-        {
-            return first
-        }
-        return fallback
     }
 
     private static func sideLabel(_ side: WorkoutEffortSide?) -> String {
@@ -159,9 +249,15 @@ enum WorkoutHistoryFormatter {
     }
 
     private static func durationText(seconds: Int) -> String {
-        if seconds > 0, seconds.isMultiple(of: 60) {
-            return "\(seconds / 60)min"
+        "\(seconds)s"
+    }
+
+    private static func sideModeText(_ mode: WorkoutRecordSideMode) -> String {
+        switch mode {
+        case .simultaneous: "双侧同时"
+        case .alternating: "左右分别"
+        case .leftOnly: "仅左"
+        case .rightOnly: "仅右"
         }
-        return "\(seconds)s"
     }
 }

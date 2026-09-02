@@ -64,6 +64,10 @@ final class SomaCaptureRouter {
 
     func request(_ mode: CaptureEntryMode) {
         somaCaptureLogger.info("Received capture request: \(mode.rawValue, privacy: .public)")
+        guard pendingRequest == nil else {
+            somaCaptureLogger.info("Ignored duplicate capture request while one is pending")
+            return
+        }
         pendingRequest = CaptureEntryRequest(mode: mode)
     }
 
@@ -128,6 +132,7 @@ final class SomaCaptureRouter {
     }
 }
 
+@available(iOS 18.0, *)
 struct StartSomaCaptureIntent: AppIntent {
     static let title: LocalizedStringResource = "在 Soma 中记录"
     static let description = IntentDescription("打开 Soma，直接开始输入文字、拍照或选择照片与视频。")
@@ -144,12 +149,12 @@ struct StartSomaCaptureIntent: AppIntent {
         self.mode = mode
     }
 
-    func perform() async throws -> some IntentResult {
-        await SomaCaptureRouter.shared.request(mode)
-        return .result()
+    func perform() async throws -> some IntentResult & OpensIntent {
+        .result(opensIntent: OpenURLIntent(mode.routeURL))
     }
 }
 
+@available(iOS 18.0, *)
 struct SomaAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

@@ -333,7 +333,8 @@ struct WorkoutRecordDraft: Equatable, Sendable {
     }
 
     var headerTargetKindLabel: String? {
-        if let loggingProfile {
+        let explicitEfforts = groups.flatMap(\.efforts).filter(\.persistsTargetKind)
+        if explicitEfforts.isEmpty, let loggingProfile {
             return loggingProfile.targetKind.workoutRecordLabel
         }
         let kinds = Set(groups.flatMap(\.efforts).map(\.targetKind))
@@ -344,7 +345,8 @@ struct WorkoutRecordDraft: Equatable, Sendable {
     }
 
     var headerSideLabel: String? {
-        if let loggingProfile {
+        let hasExplicitSide = groups.flatMap(\.efforts).contains { $0.side != nil }
+        if !hasExplicitSide, let loggingProfile {
             return loggingProfile.laterality.workoutRecordLabel
         }
         let modes = Set(groups.map(\.sideMode))
@@ -355,7 +357,9 @@ struct WorkoutRecordDraft: Equatable, Sendable {
     }
 
     func sideLabel(for group: LogicalWorkoutGroupDraft) -> String {
-        loggingProfile?.laterality.workoutRecordLabel ?? group.sideMode.displayName
+        group.efforts.contains { $0.side != nil }
+            ? group.sideMode.displayName
+            : loggingProfile?.laterality.workoutRecordLabel ?? group.sideMode.displayName
     }
 
     mutating func applyLoggingProfile(_ profile: ExerciseLoggingProfileSnapshot) {
@@ -363,20 +367,22 @@ struct WorkoutRecordDraft: Equatable, Sendable {
         for groupIndex in groups.indices {
             for effortIndex in groups[groupIndex].efforts.indices {
                 var effort = groups[groupIndex].efforts[effortIndex]
-                if profile.targetKind == .duration {
-                    if effort.durationSeconds == nil {
-                        effort.durationSeconds = effort.reps
+                if !effort.persistsTargetKind {
+                    if profile.targetKind == .duration {
+                        if effort.durationSeconds == nil {
+                            effort.durationSeconds = effort.reps
+                        }
+                        effort.reps = nil
+                    } else {
+                        if effort.reps == nil {
+                            effort.reps = effort.durationSeconds
+                        }
+                        effort.durationSeconds = nil
                     }
-                    effort.reps = nil
-                } else {
-                    if effort.reps == nil {
-                        effort.reps = effort.durationSeconds
-                    }
-                    effort.durationSeconds = nil
+                    effort.targetKind = profile.targetKind
+                    effort.persistsTargetKind = true
                 }
-                effort.targetKind = profile.targetKind
-                effort.persistsTargetKind = true
-                if groups[groupIndex].efforts.count == 1 {
+                if effort.side == nil, groups[groupIndex].efforts.count == 1 {
                     switch profile.laterality {
                     case .none:
                         effort.side = WorkoutEffortSide.none

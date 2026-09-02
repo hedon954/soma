@@ -38,7 +38,6 @@ final class GuidedWorkoutCoordinator {
             WorkoutSession,
             ModelContext
         ) throws -> WorkoutEntry?
-    @ObservationIgnored var activeSessionReference: WorkoutSession?
     @ObservationIgnored var activeContext: ModelContext?
     @ObservationIgnored var recordingRequestID: UUID?
     @ObservationIgnored var activeRecordingAttempt:
@@ -62,8 +61,8 @@ final class GuidedWorkoutCoordinator {
             ModelContext
         ) throws -> WorkoutEntry? = { performance, session, context in
             try GuidedWorkoutRecordStore.materialize(
-                performance: performance,
-                session: session,
+                performanceID: performance.id,
+                sessionID: session.id,
                 in: context
             )
         },
@@ -102,8 +101,8 @@ final class GuidedWorkoutCoordinator {
         activeEffortCompletionLease = nil
         isCompletingCurrentEffort = false
         activeSessionID = session.id
-        activeSessionReference = session
         activeContext = context
+        WorkoutRecordingDiagnostics.breadcrumb(stage: "session-activate")
         recordingSetID = nil
         isStartingRecording = false
         recordingRequestID = nil
@@ -146,8 +145,8 @@ final class GuidedWorkoutCoordinator {
         guard isActive(owner: owner) else { return false }
         activeSessionOwner = nil
         activeSessionID = nil
-        activeSessionReference = nil
         activeContext = nil
+        WorkoutRecordingDiagnostics.breadcrumb(stage: "session-deactivate")
         recordingSetID = nil
         isStartingRecording = false
         recordingRequestID = nil
@@ -378,7 +377,7 @@ final class GuidedWorkoutCoordinator {
                 session.queuedRecordingEffortID = nil
                 manualRecordingQueued = false
                 recordingStatusMessage = automaticRecordingPaused
-                    ? activeSessionReference.map(Self.pausedRecordingStatus(for:))
+                    ? Self.pausedRecordingStatus(for: session)
                     : nil
                 await recorder.cancelRecording(attemptID: nil)
             } else if let effort = queueableEffort(for: session, in: context) {
@@ -481,7 +480,6 @@ final class GuidedWorkoutCoordinator {
         }
         guard activeEffortCompletionLease == completionLease,
               activeSessionID == completionLease.sessionID,
-              activeSessionReference?.id == completionLease.sessionID,
               session.status == .active,
               session.currentEffortID == completionLease.effortID,
               currentEffort(for: session, in: context)?.id
@@ -634,6 +632,20 @@ final class GuidedWorkoutCoordinator {
             )
         }
         try context.save()
+    }
+
+    func replaceCurrentExercise(
+        withExerciseID exerciseID: UUID,
+        in context: ModelContext
+    ) throws {
+        var descriptor = FetchDescriptor<ExerciseDefinition>(
+            predicate: #Predicate { $0.id == exerciseID }
+        )
+        descriptor.fetchLimit = 1
+        guard let exercise = try context.fetch(descriptor).first else {
+            throw TrainingPlanError.missingExercise(exerciseID)
+        }
+        try replaceCurrentExercise(with: exercise, in: context)
     }
 
     func finishRest(in context: ModelContext) throws {
@@ -796,8 +808,8 @@ final class GuidedWorkoutCoordinator {
             _ = try? materializePerformance(performance, session, context)
         }
         activeSessionID = nil
-        activeSessionReference = nil
         activeContext = nil
+        WorkoutRecordingDiagnostics.breadcrumb(stage: "session-end-early")
         cues.announce("训练已提前结束")
         try context.save()
     }
@@ -852,8 +864,8 @@ final class GuidedWorkoutCoordinator {
         do {
             try context.save()
             activeSessionID = nil
-            activeSessionReference = nil
             activeContext = nil
+            WorkoutRecordingDiagnostics.breadcrumb(stage: "session-complete")
         } catch {
             session.status = .active
             session.guidedPhase = .sessionReview

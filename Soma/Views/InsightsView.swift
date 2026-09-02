@@ -129,6 +129,7 @@ struct InsightsView: View {
                 restingFormulaInput: snapshot.restingFormulaInput,
                 activeCalories: healthEnergy.activeKilocalories
                     ?? snapshot.localActiveCalories,
+                activeUsesHealth: healthEnergy.activeKilocalories != nil,
                 activeBreakdown: healthEnergy.activeKilocalories != nil
                     ? healthEnergy.activeComponents.map(\.progressBreakdown)
                     : snapshot.localActiveBreakdown,
@@ -1175,13 +1176,12 @@ private struct InsightsScreenSnapshot: Sendable {
         }
 
         let workoutActivities = workouts.map {
-            ProgressRecentActivity(
+            ProgressRecentActivity.workout(
                 id: $0.id,
-                kind: .workout,
                 date: $0.date,
                 title: $0.exercise,
-                detail: $0.setSummary ?? "训练记录",
-                metric: $0.volume.map { "\($0.formatted()) kg" }
+                detail: $0.setSummary,
+                volume: $0.volume
             )
         }
         let mealActivities = input.meals.map {

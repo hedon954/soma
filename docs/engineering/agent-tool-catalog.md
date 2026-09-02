@@ -46,9 +46,9 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 
 - 业务 `record_id`、`exercise_id`、`program_id`、计划动作 ID 均为正 `Int64`；UUID 只留给
   Session、Turn、Job、Trace、Event、媒体、外部来源和旧备份映射。
-- `create_workout` 必须接收已经存在的 `exercise_id` 数组项。动作不存在时先
-  `search_exercises`，确认无语义等价项后一次 `create_exercise(exercise_names)`，再一次
-  `create_workout(workouts)`。新建训练记录不要传 `record_id`。
+- 训练域当前为 Schema v4：`search_exercises` 返回动作 ID、`target_kind` 与 `laterality`；动作
+  不存在时先搜索，确认无语义等价项后一次 `create_exercise(exercises)`，每项显式提供名称、目标
+  类型和侧别，再一次 `create_workout(workouts)`。新建训练记录不要传 `record_id`。
 - 计划的每个动作也必须绑定动作库 `exercise_id`。用户要求把当日原始训练总结为计划时，
   `create_program` 同时传唯一、同日的 `source_workout_record_ids`；设备组装一次完成 Session，原始
   `WorkoutEntry` 仍是事实本体。
@@ -59,8 +59,12 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
   省略时使用 Job 从原始用户 Turn 冻结的 `defaultOccurredAt`，重试、排队和跨午夜不会漂移。
   `defaultOccurredAt` 保留发送时刻的钟点，不是业务日零点；用户没有明确说时间就应省略。
 - list/get/create/update/delete 彼此独立；get/update/delete 必须传对应领域的精确 Int64 ID。
-- `create_workout.set_entries` 每组以 `reps` 或 `duration_seconds` 二选一；设备结合动作定义的
-  `targetKind` 归一化，按时长动作不得写成次数。
+- `create_workout`/`update_workout` 显式提供本次 `target_kind` 与 `laterality`；每条
+  `set_entries` 包含 `logical_set_index`、`side`、`target_kind`、对应的 `reps` 或
+  `duration_seconds`、可选外部重量和 `rest_seconds`。左右各做必须把同一逻辑组拆成 left/right
+  efforts；`.none` 与左右 effort 冲突返回可重试字段错误。本次 evidence 优先于动作库 fallback。
+- 新模型调用只广告当前 Schema；create 的 v2/v3 和其他 Tool 明确声明的旧版本仅用于恢复已持久
+  Job，仍执行闭合字段、类型、范围与关系校验。
 - create 每次都新增独立记录，同一轮可多次调用；纠正、补图或改已有记录必须先 list/get 再 update。
 - 每个对象 Schema 都设置 `additionalProperties: false`；兼容 Provider 时发送 `strict: true`，
   设备仍执行本地未知字段、类型、ID、关系和授权校验。

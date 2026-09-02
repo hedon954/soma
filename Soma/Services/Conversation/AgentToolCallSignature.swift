@@ -40,6 +40,7 @@ private struct AgentToolSignatureArguments {
         appendPayload(arguments.payload)
         appendSetEntries(arguments.setEntries)
         appendExerciseNames(arguments.exerciseNames)
+        appendExercises(arguments.exercises)
         appendWorkouts(arguments.workouts)
         appendEquipment(arguments.equipment)
         appendTemplateExercises(arguments.templateExercises)
@@ -73,6 +74,8 @@ private struct AgentToolSignatureArguments {
         )
         put("exercise_id", arguments.exerciseID)
         put("target_exercise_id", arguments.targetExerciseID)
+        put("target_kind", arguments.targetKind?.rawValue)
+        put("laterality", arguments.laterality?.rawValue)
         put("sets", arguments.sets)
         put("reps", arguments.reps)
         put("weight", arguments.weight)
@@ -138,6 +141,18 @@ private struct AgentToolSignatureArguments {
         values["exercise_names"] = names.compactMap { Self.nonempty($0) }
     }
 
+    private mutating func appendExercises(_ exercises: [AgentExerciseCreateInput]?) {
+        guard let exercises, !exercises.isEmpty else { return }
+        values["exercises"] = exercises.map {
+            [
+                "exercise_name": $0.exerciseName
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                "target_kind": $0.targetKind.rawValue,
+                "laterality": $0.laterality.rawValue
+            ]
+        }
+    }
+
     private mutating func appendWorkouts(
         _ workouts: [AgentWorkoutCreateInput]?
     ) {
@@ -194,6 +209,15 @@ private struct AgentToolSignatureArguments {
         _ entry: AgentWorkoutSetInput
     ) -> [String: Any] {
         var item: [String: Any] = [:]
+        if let logicalSetIndex = entry.logicalSetIndex {
+            item["logical_set_index"] = logicalSetIndex
+        }
+        if let side = entry.side {
+            item["side"] = side.rawValue
+        }
+        if let targetKind = entry.targetKind {
+            item["target_kind"] = targetKind.rawValue
+        }
         if let reps = entry.reps {
             item["reps"] = reps
         }
@@ -203,6 +227,9 @@ private struct AgentToolSignatureArguments {
         if let weight = entry.externalWeightKG {
             item["external_weight_kg"] = rounded(weight)
         }
+        if let rest = entry.restSeconds {
+            item["rest_seconds"] = rest
+        }
         return item
     }
 
@@ -210,6 +237,12 @@ private struct AgentToolSignatureArguments {
         _ item: AgentWorkoutCreateInput
     ) -> [String: Any] {
         var row: [String: Any] = ["exercise_id": item.exerciseID]
+        if let targetKind = item.targetKind {
+            row["target_kind"] = targetKind.rawValue
+        }
+        if let laterality = item.laterality {
+            row["laterality"] = laterality.rawValue
+        }
         if let occurredAt = nonempty(item.occurredAt) {
             row["occurred_at"] = occurredAt
         }

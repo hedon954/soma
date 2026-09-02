@@ -166,12 +166,18 @@ enum ConversationTurnPersistence {
            let existingID = job.responseMessageID,
            let existing = message(id: existingID, in: context.modelContext)
         {
-            let attemptNumber = max(existing.attemptNumber, 1)
+            let attemptNumber = max(
+                max(existing.attemptNumber, job.activeAttemptNumber),
+                1
+            )
             job.activeAttemptNumber = attemptNumber
             prepareResponseMessageForResume(existing, job: job)
+            existing.attemptNumber = attemptNumber
             _ = try? append(
                 kind: .attemptStarted,
-                payload: .init(message: "继续处理首个未完成 step。"),
+                payload: .init(message: job.hasResumableCheckpoint
+                    ? "继续处理首个未完成 step。"
+                    : "开始第 \(attemptNumber) 次处理。"),
                 to: job,
                 in: context.modelContext
             )
@@ -224,6 +230,33 @@ enum ConversationTurnPersistence {
             message.text = ""
         }
         message.agentStatus = .running
+    }
+
+    static func prepareResponseMessageForManualRetry(
+        _ message: CoachMessage,
+        from previousJob: AgentJob,
+        to retryJob: AgentJob? = nil
+    ) {
+        let targetJob = retryJob ?? previousJob
+        if let retryJob {
+            retryJob.responseMessageID = message.id
+            retryJob.loopCheckpoint = previousJob.loopCheckpoint
+            retryJob.lastCompletedStep = previousJob.lastCompletedStep
+            retryJob.responseTextSnapshot = previousJob.responseTextSnapshot
+            retryJob.loopStartedAt = previousJob.loopStartedAt
+            retryJob.firstStepDeadlineConsumed = previousJob.firstStepDeadlineConsumed
+            retryJob.executionKind = previousJob.executionKind
+            retryJob.deterministicPayloadData = previousJob.deterministicPayloadData
+        }
+        message.attemptNumber = max(
+            max(message.attemptNumber, previousJob.activeAttemptNumber),
+            1
+        ) + (retryJob == nil ? 0 : 1)
+        prepareResponseMessageForResume(message, job: targetJob)
+        message.setAgentActivity(
+            phase: .queued,
+            message: "已收到，正在准备处理…"
+        )
     }
 
     static func nextAttemptNumber(

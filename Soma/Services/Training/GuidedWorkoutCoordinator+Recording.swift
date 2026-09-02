@@ -63,7 +63,10 @@ extension GuidedWorkoutCoordinator {
         do {
             try await recorder.prepare()
             guard recordingRequestID == requestID else { return }
-            guard activeSessionReference?.queuedRecordingEffortID == effortID else {
+            guard let context = activeContext,
+                  let session = try? activeSession(in: context),
+                  session.queuedRecordingEffortID == effortID
+            else {
                 clearRecordingState()
                 return
             }
@@ -72,9 +75,13 @@ extension GuidedWorkoutCoordinator {
                 : "相机已就绪，下一组将自动开始录像。"
         } catch {
             guard recordingRequestID == requestID else { return }
-            activeSessionReference?.queuedRecordingEffortID = nil
+            if let context = activeContext,
+               let session = try? activeSession(in: context)
+            {
+                session.queuedRecordingEffortID = nil
+                try? context.save()
+            }
             manualRecordingQueued = false
-            try? activeContext?.save()
             reportRecordingFailure(
                 error,
                 stage: "prepare-queued",
@@ -142,16 +149,17 @@ extension GuidedWorkoutCoordinator {
         reason: String? = nil
     ) {
         automaticRecordingPaused = value
-        activeSessionReference?.automaticRecordingPaused = value
+        let session = activeContext.flatMap { try? activeSession(in: $0) }
+        session?.automaticRecordingPaused = value
         if value {
-            activeSessionReference?.automaticRecordingPauseCode = code ?? .unknown
-            activeSessionReference?.automaticRecordingPauseReason = reason
-            recordingStatusMessage = activeSessionReference.map(
+            session?.automaticRecordingPauseCode = code ?? .unknown
+            session?.automaticRecordingPauseReason = reason
+            recordingStatusMessage = session.map(
                 Self.pausedRecordingStatus(for:)
             )
         } else {
-            activeSessionReference?.automaticRecordingPauseCode = nil
-            activeSessionReference?.automaticRecordingPauseReason = nil
+            session?.automaticRecordingPauseCode = nil
+            session?.automaticRecordingPauseReason = nil
         }
         try? activeContext?.save()
     }
@@ -499,7 +507,9 @@ extension GuidedWorkoutCoordinator {
             }
             finishRecordingState(for: attempt)
             recordingStatusMessage = automaticRecordingPaused
-                ? activeSessionReference.map(Self.pausedRecordingStatus(for:))
+                ? activeContext
+                .flatMap { try? activeSession(in: $0) }
+                .map(Self.pausedRecordingStatus(for:))
                 : nil
         }
     }
@@ -524,7 +534,9 @@ extension GuidedWorkoutCoordinator {
         recordingRequestID = nil
         activeRecordingAttempt = nil
         recordingStatusMessage = automaticRecordingPaused
-            ? activeSessionReference.map(Self.pausedRecordingStatus(for:))
+            ? activeContext
+            .flatMap { try? activeSession(in: $0) }
+            .map(Self.pausedRecordingStatus(for:))
             : nil
     }
 

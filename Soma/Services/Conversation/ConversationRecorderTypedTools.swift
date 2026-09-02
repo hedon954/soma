@@ -356,8 +356,10 @@ extension ConversationRecorder {
         let limit = min(max(arguments.limit ?? 10, 1), 20)
         let matches = ExerciseLibraryStore.activeDefinitions(in: context)
             .filter {
-                $0.canonicalName.localizedCaseInsensitiveContains(query)
-                    || query.localizedCaseInsensitiveContains($0.canonicalName)
+                ($0.canonicalName.localizedCaseInsensitiveContains(query)
+                    || query.localizedCaseInsensitiveContains($0.canonicalName))
+                    && (arguments.targetKind == nil || $0.targetKind == arguments.targetKind)
+                    && (arguments.laterality == nil || $0.laterality == arguments.laterality)
             }
             .prefix(limit)
         let items: [AgentJSONValue] = matches.map { exercise in
@@ -365,7 +367,9 @@ extension ConversationRecorder {
                 "exercise_id": exercise.businessID.map {
                     .number(Double($0))
                 } ?? .null,
-                "name": .string(exercise.canonicalName)
+                "name": .string(exercise.canonicalName),
+                "target_kind": .string(exercise.targetKind.rawValue),
+                "laterality": .string(exercise.laterality.rawValue)
             ])
         }
         return .success(
@@ -378,56 +382,66 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        let names: [String]
-        if let batch = arguments.exerciseNames {
-            names = batch
+        let requested: [(name: String, targetKind: WorkoutTargetKind?, laterality: ExerciseLaterality?)]
+        if let batch = arguments.exercises {
+            requested = batch.map { ($0.exerciseName, $0.targetKind, $0.laterality) }
+        } else if let batch = arguments.exerciseNames {
+            requested = batch.map { ($0, nil, nil) }
         } else if let single = arguments.exerciseName {
-            names = [single]
+            requested = [(single, arguments.targetKind, arguments.laterality)]
         } else {
             return .failure(
-                "exercise_names 不能为空。",
+                "exercises 不能为空。",
                 code: "invalid_argument",
-                field: "exercise_names",
-                expected: "1 to \(AgentBatchWriteLimit.maxItems) canonical exercise names"
+                field: "exercises",
+                expected: "1 to \(AgentBatchWriteLimit.maxItems) exercise objects"
             )
         }
-        guard (1 ... AgentBatchWriteLimit.maxItems).contains(names.count) else {
+        guard (1 ... AgentBatchWriteLimit.maxItems).contains(requested.count) else {
             return .failure(
-                "exercise_names 必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 个名称。",
+                "exercises 必须包含 1 到 \(AgentBatchWriteLimit.maxItems) 个动作。",
                 code: "invalid_argument",
-                field: "exercise_names",
-                expected: "1 to \(AgentBatchWriteLimit.maxItems) canonical exercise names"
+                field: "exercises",
+                expected: "1 to \(AgentBatchWriteLimit.maxItems) exercise objects"
             )
         }
         var seen = Set<String>()
-        var unique: [String] = []
-        for raw in names {
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var unique: [(name: String, targetKind: WorkoutTargetKind?, laterality: ExerciseLaterality?)] = []
+        for item in requested {
+            let trimmed = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
             let key = ExerciseLibraryStore.canonicalNameKey(trimmed)
             guard seen.insert(key).inserted else { continue }
-            unique.append(trimmed)
+            unique.append((trimmed, item.targetKind, item.laterality))
         }
         guard !unique.isEmpty else {
             return .failure(
-                "exercise_names 不能全为空。",
+                "exercises 中的名称不能全为空。",
                 code: "invalid_argument",
-                field: "exercise_names",
+                field: "exercises",
                 expected: "non-empty canonical exercise names"
             )
         }
         do {
             var items: [AgentJSONValue] = []
             var summaries: [String] = []
-            for name in unique {
+            for item in unique {
                 let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
-                    canonicalName: name,
+                    canonicalName: item.name,
                     in: context
                 )
+                if let targetKind = item.targetKind {
+                    exercise.targetKind = targetKind
+                }
+                if let laterality = item.laterality {
+                    exercise.laterality = laterality
+                }
                 let id = exercise.businessID ?? 0
                 items.append(.object([
                     "exercise_id": .number(Double(id)),
-                    "name": .string(exercise.canonicalName)
+                    "name": .string(exercise.canonicalName),
+                    "target_kind": .string(exercise.targetKind.rawValue),
+                    "laterality": .string(exercise.laterality.rawValue)
                 ]))
                 summaries.append("[exercise_id:\(id)]：\(exercise.canonicalName)")
             }
@@ -447,20 +461,46 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        guard let id = arguments.exerciseID,
-              let name = arguments.exerciseName?.trimmingCharacters(
-                  in: .whitespacesAndNewlines
-              ), !name.isEmpty
+        guard let id = arguments.exerciseID else {
+            return .failure("update_exercise 需要 exercise_id。")
+        }
+        let name = arguments.exerciseName?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard name?.isEmpty != true,
+              name != nil || arguments.targetKind != nil || arguments.laterality != nil
         else {
-            return .failure("update_exercise 需要 exercise_id 和 exercise_name。")
+            return .failure(
+                "update_exercise 至少需要 exercise_name、target_kind 或 laterality 之一。",
+                code: "invalid_argument",
+                field: "exercise_name",
+                expected: "at least one mutable field"
+            )
         }
         do {
             let exercise = try ExerciseLibraryStore.definition(
                 businessID: id,
                 in: context
             )
-            try ExerciseLibraryStore.rename(exercise, to: name, in: context)
-            return .success("已更新动作 [exercise_id:\(id)]：\(exercise.canonicalName)。")
+            if let name {
+                try ExerciseLibraryStore.rename(exercise, to: name, in: context)
+            }
+            if let targetKind = arguments.targetKind {
+                exercise.targetKind = targetKind
+            }
+            if let laterality = arguments.laterality {
+                exercise.laterality = laterality
+            }
+            try context.save()
+            return .success(
+                "已更新动作 [exercise_id:\(id)]：\(exercise.canonicalName)，\(exercise.targetKind.displayName)，\(exercise.laterality.displayName)。",
+                data: .object([
+                    "exercise_id": .number(Double(id)),
+                    "name": .string(exercise.canonicalName),
+                    "target_kind": .string(exercise.targetKind.rawValue),
+                    "laterality": .string(exercise.laterality.rawValue)
+                ])
+            )
         } catch {
             return .failure(error.localizedDescription)
         }

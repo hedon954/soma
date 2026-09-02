@@ -12,6 +12,7 @@ struct ProgressGoalOverviewCard: View {
     let dailyRestingEstimate: Double?
     let restingFormulaInput: RestingEnergyFormulaInput?
     let activeCalories: Int?
+    let activeUsesHealth: Bool
     let activeBreakdown: [ProgressMetricBreakdownItem]
     let muscleSets: [ProgressMuscleSetSummary]
     let trainingDays: Int
@@ -75,7 +76,7 @@ struct ProgressGoalOverviewCard: View {
 
     private var goalDescription: String {
         switch goal {
-        case .fatLoss: "今天的摄入、消耗与全天预估"
+        case .fatLoss: "今天已记录的摄入与截至当前消耗"
         case .muscleGain: "最近 7 天训练覆盖与节奏"
         case .recomposition: "能量趋势与训练覆盖"
         case nil: "先明确目标，再看相关变化"
@@ -87,14 +88,31 @@ struct ProgressGoalOverviewCard: View {
             MetricHeading(title: "今日能量", role: .trainingLoad)
             HStack(spacing: 0) {
                 EnergyMetricTile(
-                    title: intakeIsPartial ? "摄入（部分）" : "摄入",
+                    title: "已记录摄入",
                     value: intakeCalories,
                     valuePrefix: intakeIsPartial && intakeCalories != nil ? "≥ " : "",
                     source: .intake(intakeBreakdown)
                 )
                 Divider()
                 EnergyMetricTile(
-                    title: "静息",
+                    title: "截至当前总消耗",
+                    value: currentExpenditure,
+                    source: .currentTotal(
+                        resting: restingCalories,
+                        active: activeCalories,
+                        activeUsesHealth: activeUsesHealth
+                    )
+                )
+            }
+            .padding(.horizontal, 2)
+            .background(
+                AppTheme.insetBackground,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+
+            HStack(spacing: 0) {
+                EnergyMetricTile(
+                    title: "静息消耗",
                     value: restingCalories,
                     source: .resting(
                         usesHealth: restingUsesHealth,
@@ -104,15 +122,9 @@ struct ProgressGoalOverviewCard: View {
                 )
                 Divider()
                 EnergyMetricTile(
-                    title: "活动",
+                    title: activeUsesHealth ? "活动消耗" : "训练消耗",
                     value: activeCalories,
                     source: .active(activeBreakdown)
-                )
-                Divider()
-                EnergyMetricTile(
-                    title: "全天",
-                    value: dailyProjection?.dailyTotalKilocalories,
-                    source: .dailyTotal(dailyProjection)
                 )
             }
             .padding(.horizontal, 2)
@@ -124,11 +136,11 @@ struct ProgressGoalOverviewCard: View {
             ProgressSourceDisclosure(
                 source: .energyBalance(
                     intake: intakeCalories,
-                    expenditure: dailyProjection?.dailyTotalKilocalories
+                    expenditure: currentExpenditure
                 )
             ) {
                 HStack(spacing: 8) {
-                    Text("预计能量差")
+                    Text("截至当前能量差")
                         .font(.caption)
                     Text(signedEnergyBalance)
                         .font(.caption.weight(.medium).monospacedDigit())
@@ -210,18 +222,14 @@ struct ProgressGoalOverviewCard: View {
         .foregroundStyle(.secondary)
     }
 
-    private var dailyProjection: DailyEnergyProjectionResult? {
-        DailyEnergyProjectionCalculator.estimate(
-            restingKilocaloriesSoFar: restingCalories,
-            dailyRestingEstimate: dailyRestingEstimate,
-            restingUsesHealth: restingUsesHealth,
-            activeKilocaloriesSoFar: activeCalories
-        )
+    private var currentExpenditure: Int? {
+        guard let restingCalories, let activeCalories else { return nil }
+        return restingCalories + activeCalories
     }
 
     private var signedEnergyBalance: String {
         guard let intakeCalories,
-              let total = dailyProjection?.dailyTotalKilocalories
+              let total = currentExpenditure
         else {
             return "—"
         }
