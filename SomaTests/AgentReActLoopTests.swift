@@ -5,6 +5,121 @@ import XCTest
 
 final class AgentReActLoopTests: XCTestCase {
     @MainActor
+    func testInternalDraftIsMovedToReasoningBeforeFinalAnswerRetry() async throws {
+        let suiteName = "SomaTests.internal-draft.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let draft = """
+        8 月 28 日的训练记录还不完整，让我核实一下工具返回。其实我不应过度纠结，
+        让我退一步整理这些数字，正确的做法是最后再组织一个清晰回复。
+        """
+        let transport = MockAgentStreamTransport(responses: [
+            .text([draft]),
+            .text(["本周已记录的摄入与消耗证据不足，暂时无法可靠计算热量缺口。"])
+        ])
+        let service = AIService(
+            defaults: defaults,
+            apiKeyOverride: "test-key",
+            agentStreamLoader: transport.load
+        )
+        service.configure(
+            provider: .openAI,
+            baseURL: "https://example.com/v1",
+            model: "gpt-4.1-mini"
+        )
+        var events: [AgentTraceEvent] = []
+        var checkpoint: AgentLoopCheckpoint?
+
+        let outcome = try await service.runAgent(
+            text: "我这星期热量缺口有多少",
+            images: [],
+            hasVideo: false,
+            context: "测试上下文",
+            onCheckpoint: { checkpoint = $0 },
+            trace: { events.append($0) }
+        ) { _ in
+            .failure("不应调用工具")
+        }
+
+        XCTAssertEqual(transport.requests.count, 2)
+        XCTAssertEqual(
+            outcome.finalAnswer,
+            "本周已记录的摄入与消耗证据不足，暂时无法可靠计算热量缺口。"
+        )
+        XCTAssertNotNil(events.first { event in
+            guard case .assistantTextDiscarded = event else { return false }
+            return true
+        })
+        XCTAssertNotNil(events.first { event in
+            guard case let .reasoningCompleted(_, text, _) = event else { return false }
+            return text.contains("让我退一步")
+        })
+        XCTAssertFalse(events.contains { event in
+            guard case let .assistantTextDelta(_, delta) = event else { return false }
+            return delta.contains("让我核实") || delta.contains("让我退一步")
+        })
+
+        let secondData = try JSONEncoder().encode(transport.requests[1])
+        let secondJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: secondData) as? [String: Any]
+        )
+        let secondMessages = try XCTUnwrap(
+            secondJSON["messages"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            secondMessages.suffix(2).map { $0["role"] as? String },
+            ["assistant", "user"]
+        )
+        XCTAssertEqual(try XCTUnwrap(checkpoint).toolBatches?.last?.reasoning, draft)
+        XCTAssertEqual(
+            secondMessages.last?["content"] as? String,
+            AgentFinalAnswerRecoveryPrompt.text
+        )
+    }
+
+    func testProvisionalContentGateRoutesStrongScratchpadPrefixToReasoning() {
+        var gate = AgentProvisionalContentGate()
+        let first = gate.append(
+            "用户问了热量估算问题，需要先分析用户的计算，再组织最终答复。",
+            hasProtocolReasoning: false
+        )
+
+        XCTAssertTrue(first.visible.isEmpty)
+        XCTAssertFalse(first.reasoning.isEmpty)
+        XCTAssertEqual(gate.destination, .reasoning)
+
+        let second = gate.append("接下来核对公式。", hasProtocolReasoning: false)
+        XCTAssertEqual(second.reasoning, "接下来核对公式。")
+        XCTAssertTrue(second.visible.isEmpty)
+    }
+
+    func testProvisionalContentGateKeepsNormalUserFacingAnswerVisible() {
+        var gate = AgentProvisionalContentGate()
+        let answer = "我需要先确认你的训练发生时间，再解释为什么昨天的数据不能计入今天。让我整理成两个用户可执行的步骤。"
+
+        let pending = gate.append(answer, hasProtocolReasoning: false)
+        XCTAssertTrue(pending.visible.isEmpty)
+        XCTAssertTrue(pending.reasoning.isEmpty)
+
+        let completed = gate.finish()
+        XCTAssertEqual(completed.visible, answer)
+        XCTAssertTrue(completed.reasoning.isEmpty)
+        XCTAssertEqual(gate.destination, .visible)
+    }
+
+    func testProvisionalContentGateTrustsProtocolReasoningBoundary() {
+        var gate = AgentProvisionalContentGate()
+        let projection = gate.append(
+            "这是给用户看的最终结论。",
+            hasProtocolReasoning: true
+        )
+
+        XCTAssertEqual(projection.visible, "这是给用户看的最终结论。")
+        XCTAssertTrue(projection.reasoning.isEmpty)
+        XCTAssertEqual(gate.destination, .visible)
+    }
+
+    @MainActor
     func testInvalidToolArgumentsReturnRoleToolFeedbackAndModelCanRetry() async throws {
         let suiteName = "SomaTests.invalid-tool-arguments.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

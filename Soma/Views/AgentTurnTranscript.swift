@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-struct AgentTurnTranscript: View {
+struct AgentTurnTranscript: View, Equatable {
     let items: [AgentTurnItem]
     var preparedSegments: [AgentTurnTranscriptSegment]?
     let isLive: Bool
@@ -9,6 +9,15 @@ struct AgentTurnTranscript: View {
     var isEditable = false
     var canRetry = false
     var onRetry: () -> Void = {}
+
+    static func == (lhs: AgentTurnTranscript, rhs: AgentTurnTranscript) -> Bool {
+        lhs.items == rhs.items
+            && lhs.preparedSegments == rhs.preparedSegments
+            && lhs.isLive == rhs.isLive
+            && lhs.sourceMessage === rhs.sourceMessage
+            && lhs.isEditable == rhs.isEditable
+            && lhs.canRetry == rhs.canRetry
+    }
 
     private var visibleItems: [AgentTurnItem] {
         AgentTurnVisibleItems.make(from: items)
@@ -57,6 +66,9 @@ struct AgentTurnTranscript: View {
 /// `AgentTurnItem`。这样每个 UI tick 只更新尾块，避免反复清洗和扫描全文。
 struct LiveAgentTurnTranscriptContent: View {
     let persistedItems: [AgentTurnItem]
+    let preparedSegments: [AgentTurnTranscriptSegment]
+    let persistedItemsWithoutActivity: [AgentTurnItem]
+    let preparedSegmentsWithoutActivity: [AgentTurnTranscriptSegment]
     let liveReasoning: LiveAgentTextRenderSnapshot?
     let liveText: LiveAgentTextRenderSnapshot?
     let sourceMessage: CoachMessage
@@ -68,34 +80,45 @@ struct LiveAgentTurnTranscriptContent: View {
         VStack(alignment: .leading, spacing: 8) {
             let stableItems = liveReasoning == nil
                 ? persistedItems
-                : persistedItems.filter { $0.kind != .activity }
+                : persistedItemsWithoutActivity
+            let stableSegments = liveReasoning == nil
+                ? preparedSegments
+                : preparedSegmentsWithoutActivity
             if !stableItems.isEmpty {
                 AgentTurnTranscript(
                     items: stableItems,
+                    preparedSegments: stableSegments,
                     isLive: false,
                     sourceMessage: sourceMessage,
                     isEditable: isEditable,
                     canRetry: canRetry,
                     onRetry: onRetry
                 )
+                .equatable()
             }
 
             if let liveReasoning,
                !liveReasoning.chunks.isEmpty,
                !stableItems.contains(where: { $0.id == liveReasoning.itemID })
             {
-                LiveAgentReasoningCard(chunks: liveReasoning.chunks)
+                LiveAgentReasoningCard(
+                    streamID: liveReasoning.itemID,
+                    chunks: liveReasoning.chunks
+                )
             }
 
             if let liveText,
                !liveText.chunks.isEmpty,
                !stableItems.contains(where: { $0.id == liveText.itemID })
             {
-                StreamingAgentTextView(chunks: liveText.chunks)
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 3)
-                    .accessibilityIdentifier("coach-live-agent-text")
-                    .accessibilityLabel("Soma 正在回复")
+                StreamingAgentTextView(
+                    streamID: liveText.itemID,
+                    chunks: liveText.chunks
+                )
+                .padding(.horizontal, 2)
+                .padding(.vertical, 3)
+                .accessibilityIdentifier("coach-live-agent-text")
+                .accessibilityLabel("Soma 正在回复")
                 if AppTestRuntime.isRunning {
                     Text("流式回复底部")
                         .font(.system(size: 1))
@@ -117,16 +140,21 @@ struct LiveAgentTurnTranscriptContent: View {
 /// 都不会因为正文每批增量而重新求值；Tab 隐藏时连这一层也停止观察。
 struct CoachLiveAgentTurnTranscript: View {
     let persistedItems: [AgentTurnItem]
+    let preparedSegments: [AgentTurnTranscriptSegment]
+    let persistedItemsWithoutActivity: [AgentTurnItem]
+    let preparedSegmentsWithoutActivity: [AgentTurnTranscriptSegment]
     let sourceMessage: CoachMessage
     let isEditable: Bool
     let canRetry: Bool
     let onRetry: () -> Void
-    let onLiveRevision: () -> Void
 
     var body: some View {
-        CoachLiveScrollObserver(onLiveRevision: onLiveRevision) { liveReasoning, liveText in
+        CoachLiveTextObserver { liveReasoning, liveText in
             LiveAgentTurnTranscriptContent(
                 persistedItems: persistedItems,
+                preparedSegments: preparedSegments,
+                persistedItemsWithoutActivity: persistedItemsWithoutActivity,
+                preparedSegmentsWithoutActivity: preparedSegmentsWithoutActivity,
                 liveReasoning: liveReasoning,
                 liveText: liveText,
                 sourceMessage: sourceMessage,
@@ -141,29 +169,30 @@ struct CoachLiveAgentTurnTranscript: View {
 /// 把 Observation 依赖和滚动副作用一起限制在实时回复叶子。Tab 激活态直接读
 /// `\.coachTabIsActive` 环境值，不经父链入参传递；隐藏 Tab 不读取 revision，
 /// 再次进入时直接取得内存中的最新 snapshot，只补一次当前画面。
-private struct CoachLiveScrollObserver<Content: View>: View {
+private struct CoachLiveTextObserver<Content: View>: View {
     @Environment(ConversationProcessingService.self) private var processor
     @Environment(\.coachTabIsActive) private var observesLiveText
 
-    let onLiveRevision: () -> Void
     @ViewBuilder let content: (
         LiveAgentTextRenderSnapshot?,
         LiveAgentTextRenderSnapshot?
     ) -> Content
 
     var body: some View {
-        let revision = observesLiveText ? processor.liveEventRevision : 0
-        let liveText = observesLiveText
-            ? processor.liveAssistantRenderSnapshot
-            : nil
-        let liveReasoning = observesLiveText
-            ? processor.liveReasoningRenderSnapshot
-            : nil
-        content(liveReasoning, liveText)
-            .onChange(of: revision) {
-                guard observesLiveText else { return }
-                onLiveRevision()
-            }
+        let snapshots = liveSnapshots
+        content(snapshots.reasoning, snapshots.text)
+    }
+
+    private var liveSnapshots: (
+        reasoning: LiveAgentTextRenderSnapshot?,
+        text: LiveAgentTextRenderSnapshot?
+    ) {
+        guard observesLiveText else { return (nil, nil) }
+        _ = processor.liveEventRevision
+        return (
+            processor.liveReasoningRenderSnapshot,
+            processor.liveAssistantRenderSnapshot
+        )
     }
 }
 
@@ -537,34 +566,54 @@ private struct AgentTurnItemCard: View {
 }
 
 struct StreamingAgentTextView: View {
+    let streamID: UUID
     let chunks: [LiveAgentTextChunk]
 
     var body: some View {
-        IncrementalChatTextView(chunks: chunks)
+        IncrementalChatTextView(chunks: chunks, streamID: streamID)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityHidden(true)
     }
 }
 
 private struct LiveAgentReasoningCard: View {
+    let streamID: UUID
     let chunks: [LiveAgentTextChunk]
+    @State private var isExpanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(AppTheme.trendAccent)
-                    .frame(width: 22, height: 22)
-                Text("正在思考…")
-                    .font(.subheadline.weight(.medium))
-                Spacer(minLength: 8)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(AppTheme.trendAccent)
+                        .frame(width: 22, height: 22)
+                    Text("正在思考…")
+                        .font(.subheadline.weight(.medium))
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .contentShape(Rectangle())
             }
-            IncrementalChatTextView(chunks: chunks)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHidden(true)
+            .buttonStyle(.plain)
+            .accessibilityLabel("思考过程")
+            .accessibilityValue(isExpanded ? "已展开" : "已收起")
+
+            if isExpanded {
+                IncrementalChatTextView(chunks: chunks, streamID: streamID)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

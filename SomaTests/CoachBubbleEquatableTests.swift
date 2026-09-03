@@ -23,14 +23,12 @@ final class CoachBubbleEquatableTests: XCTestCase {
         let lhs = CoachBubble(
             message: message,
             isLatestAssistantMessage: true,
-            onRetry: {},
-            onLiveRevision: {}
+            onRetry: {}
         )
         let rhs = CoachBubble(
             message: message,
             isLatestAssistantMessage: true,
-            onRetry: {},
-            onLiveRevision: {}
+            onRetry: {}
         )
         XCTAssertEqual(lhs, rhs)
     }

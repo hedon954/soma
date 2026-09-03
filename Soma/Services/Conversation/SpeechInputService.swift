@@ -33,6 +33,7 @@ struct SpeechTranscriptAccumulator: Equatable {
     private var lastFinalSource: String?
     private var lastPartialAt: Date?
     private var lastSpeechSegmentEnd: TimeInterval?
+    private(set) var speechActivityRevision: UInt64 = 0
 
     mutating func reset() {
         committedSegments = []
@@ -40,6 +41,7 @@ struct SpeechTranscriptAccumulator: Equatable {
         lastFinalSource = nil
         lastPartialAt = nil
         lastSpeechSegmentEnd = nil
+        speechActivityRevision = 0
     }
 
     @discardableResult
@@ -64,7 +66,28 @@ struct SpeechTranscriptAccumulator: Equatable {
             // is already silent. Treating that callback as fresh speech keeps
             // postponing the pause timer and lets the later suffix replace the
             // earlier phrase. An identical callback is not new evidence.
-            guard normalized != currentPartial else { return transcript }
+            let speechAdvanced = speechDidAdvance(
+                normalized,
+                speechSegmentEnd: speechSegmentEnd
+            )
+            guard normalized != currentPartial else {
+                recordSpeechActivity(
+                    at: receivedAt,
+                    speechSegmentEnd: speechSegmentEnd,
+                    didAdvance: speechAdvanced
+                )
+                return transcript
+            }
+            // A recognizer can temporarily retract words while refining the
+            // same audio. Keeping that shorter snapshot visible makes already
+            // displayed dictation appear to be overwritten, and used to move
+            // the silence boundary as well. With no newer acoustic evidence,
+            // retain the longer current tail until a real correction/final or
+            // the next spoken segment arrives.
+            let isBackwardRevision = currentPartial.hasPrefix(normalized)
+                && normalized.count < currentPartial.count
+                && !speechAdvanced
+            guard !isBackwardRevision else { return transcript }
             if startsNewSegment(
                 normalized,
                 at: receivedAt,
@@ -73,15 +96,41 @@ struct SpeechTranscriptAccumulator: Equatable {
                 committedSegments.append(Self.withPausePunctuation(currentPartial))
             }
             currentPartial = normalized
-            lastPartialAt = receivedAt
-            if let speechSegmentEnd {
-                lastSpeechSegmentEnd = speechSegmentEnd
-            }
+            recordSpeechActivity(
+                at: receivedAt,
+                speechSegmentEnd: speechSegmentEnd,
+                didAdvance: speechAdvanced
+            )
             // A new partial marks a new recognition segment; an identical
             // spoken phrase is allowed to be committed again afterward.
             lastFinalSource = nil
         }
         return transcript
+    }
+
+    private func speechDidAdvance(
+        _ value: String,
+        speechSegmentEnd: TimeInterval?
+    ) -> Bool {
+        if let speechSegmentEnd {
+            guard let lastSpeechSegmentEnd else { return true }
+            return speechSegmentEnd > lastSpeechSegmentEnd + 0.01
+        }
+        guard !currentPartial.isEmpty else { return true }
+        return value.count > currentPartial.count
+    }
+
+    private mutating func recordSpeechActivity(
+        at receivedAt: Date,
+        speechSegmentEnd: TimeInterval?,
+        didAdvance: Bool
+    ) {
+        guard didAdvance else { return }
+        lastPartialAt = receivedAt
+        if let speechSegmentEnd {
+            lastSpeechSegmentEnd = speechSegmentEnd
+        }
+        speechActivityRevision &+= 1
     }
 
     @discardableResult
@@ -263,7 +312,7 @@ final class SpeechInputService {
                 if let result {
                     let latest = result.bestTranscription.formattedString
                     let segments = result.bestTranscription.segments
-                    let before = self.accumulator.transcript
+                    let activityRevision = self.accumulator.speechActivityRevision
                     let accumulated = self.accumulator.receive(
                         latest,
                         isFinal: result.isFinal,
@@ -272,14 +321,15 @@ final class SpeechInputService {
                             $0.timestamp + $0.duration
                         }
                     )
-                    let transcriptChanged = accumulated != before
                     if self.transcript != accumulated {
                         self.transcript = accumulated
                     }
                     if result.isFinal {
                         self.silenceCommitTask?.cancel()
                         self.silenceCommitTask = nil
-                    } else if transcriptChanged {
+                    } else if self.accumulator.speechActivityRevision
+                        != activityRevision
+                    {
                         self.scheduleSilenceCommit(generation: generation)
                     }
                 }

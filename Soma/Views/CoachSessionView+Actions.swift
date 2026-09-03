@@ -11,6 +11,9 @@ extension CoachSessionView {
         guard !composer.isPersistingSubmission else { return }
         let text = composer.trimmedDraft
         guard !text.isEmpty || !composer.attachments.isEmpty else { return }
+        // “发送”本身就是显式回到底部的用户意图。必须在异步落盘之前恢复
+        // follow，避免 SwiftData 先发布新增消息、而旧的暂停状态漏掉这次 append。
+        visibility.tailScroll.followState.resumeExplicitly()
         composer.stopVoice()
         let pending = composer.attachments
         let session = conversationSessions.ensureActiveSession(
@@ -73,8 +76,8 @@ extension CoachSessionView {
     func finishAcceptedSubmission(
         needsConfigurationGuidance: Bool
     ) {
+        visibility.tailScroll.followState.resumeExplicitly()
         composer.clearAfterSubmission()
-        scrollRequest = UUID()
         if needsConfigurationGuidance {
             openLLMConfiguration()
         }
@@ -214,7 +217,8 @@ extension CoachSessionView {
         animated: Bool = true
     ) {
         guard CoachTailScrollPolicy.shouldScroll(
-            contentFitsViewport: messageListPosition.contentFitsViewport
+            contentFitsViewport: visibility.tailScroll.contentFitsViewport
+                ?? messageListPosition.contentFitsViewport
         ), let target = visibility.tailMessageID
         else {
             return
@@ -235,9 +239,7 @@ extension CoachSessionView {
         targetMessageID: UUID? = nil
     ) {
         guard isProcessingHere else { return }
-        if !followsLiveMessage {
-            followsLiveMessage = true
-        }
+        guard visibility.tailScroll.followState.isFollowing else { return }
         let performanceInterval = AppPerformance.begin(
             .agentProjection,
             detail: "phase=stream-scroll"
@@ -245,57 +247,80 @@ extension CoachSessionView {
         defer {
             AppPerformance.end(performanceInterval, detail: "phase=stream-scroll")
         }
-        let throttle = visibility.liveScroll
-        guard throttle.task == nil else { return }
+        let coordinator = visibility.tailScroll
+        guard let generation = coordinator.startRequest(replacingExisting: false) else {
+            return
+        }
         let interval: TimeInterval = 0.2
-        let elapsed = Date().timeIntervalSince(throttle.lastScrollAt)
+        let elapsed = Date().timeIntervalSince(coordinator.lastScrollAt)
         let delay = max(interval - elapsed, 0)
-        throttle.task = Task { @MainActor in
+        let task = Task { @MainActor in
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
-            // revision 的 onChange 可能先于 UIViewRepresentable 的新高度提交。
-            // 先让本轮 TextKit/SwiftUI 布局完成，再滚到稳定的底部锚点。
-            await Task.yield()
-            guard !Task.isCancelled, isProcessingHere else {
-                throttle.task = nil
+            guard !Task.isCancelled,
+                  coordinator.owns(generation),
+                  isProcessingHere,
+                  coordinator.followState.isFollowing
+            else {
+                coordinator.finish(generation)
                 return
             }
-            throttle.lastScrollAt = Date()
+            coordinator.lastScrollAt = Date()
             if CoachTailScrollPolicy.shouldScroll(
-                contentFitsViewport: messageListPosition.contentFitsViewport
+                contentFitsViewport: coordinator.contentFitsViewport
+                    ?? messageListPosition.contentFitsViewport
             ), let targetMessageID {
                 proxy.scrollTo(targetMessageID, anchor: .bottom)
             } else {
                 scrollToBottom(proxy, animated: false)
             }
-            throttle.task = nil
+            coordinator.finish(generation)
         }
+        coordinator.install(task, generation: generation)
     }
 
-    func scrollToBottomAfterLayout(
+    func requestTailScroll(
         _ proxy: ScrollViewProxy,
-        completion: (() -> Void)? = nil
+        targetMessageID: UUID?,
+        waitsForLayout: Bool,
+        animated: Bool = false
     ) {
-        Task { @MainActor in
+        let coordinator = visibility.tailScroll
+        guard coordinator.followState.isFollowing,
+              let generation = coordinator.startRequest(replacingExisting: true)
+        else {
+            return
+        }
+        let task = Task { @MainActor in
             let interval = AppPerformance.begin(
                 .coachScrollLayout,
                 detail: "phase=tail"
             )
-            await Task.yield()
-            guard !Task.isCancelled else {
+            if waitsForLayout {
+                await Task.yield()
+            }
+            guard !Task.isCancelled, coordinator.owns(generation) else {
                 AppPerformance.end(interval, detail: "result=cancelled")
+                coordinator.finish(generation)
                 return
             }
-            scrollToBottom(proxy, animated: false)
-            await Task.yield()
-            guard !Task.isCancelled else {
-                AppPerformance.end(interval, detail: "result=cancelled")
-                return
+            if CoachTailScrollPolicy.shouldScroll(
+                contentFitsViewport: coordinator.contentFitsViewport
+                    ?? messageListPosition.contentFitsViewport
+            ), let targetMessageID {
+                if animated {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo(targetMessageID, anchor: .bottom)
+                    }
+                } else {
+                    proxy.scrollTo(targetMessageID, anchor: .bottom)
+                }
             }
-            completion?()
             AppPerformance.end(interval, detail: "result=settled")
+            coordinator.finish(generation)
         }
+        coordinator.install(task, generation: generation)
     }
 
     func finishInitialScrollSetup(using proxy: ScrollViewProxy) {
@@ -305,10 +330,10 @@ extension CoachSessionView {
             return
         }
         if !contentFitsViewport, !messageListPosition.isNearBottom {
-            followsLiveMessage = true
+            visibility.tailScroll.followState.resumeExplicitly()
             scrollToBottom(proxy, animated: false)
         } else if contentFitsViewport {
-            followsLiveMessage = false
+            visibility.tailScroll.followState.userDidInteract()
         }
         didFinishInitialScroll = true
         paginationTriggerID = UUID()
@@ -340,27 +365,12 @@ extension CoachSessionView {
         if !hasUserInteractedWithMessageList {
             hasUserInteractedWithMessageList = true
         }
-        guard !isProcessingHere else {
-            if !followsLiveMessage {
-                followsLiveMessage = true
-            }
-            return
-        }
         stopFollowingLiveMessage()
     }
 
     func stopFollowingLiveMessage() {
-        guard !isProcessingHere else {
-            if !followsLiveMessage {
-                followsLiveMessage = true
-            }
-            return
-        }
-        if followsLiveMessage {
-            followsLiveMessage = false
-        }
-        visibility.liveScroll.task?.cancel()
-        visibility.liveScroll.task = nil
+        visibility.tailScroll.followState.userDidInteract()
+        visibility.tailScroll.cancelRequest()
     }
 
     func restorePositionAfterLoadingEarlier(

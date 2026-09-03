@@ -138,3 +138,132 @@ enum ReActAgentError: LocalizedError {
         }
     }
 }
+
+enum AgentFinalAnswerRecoveryPrompt {
+    static let text = "请现在只输出面向用户的最终答复：直接给结论、必要依据和下一步，不要输出分析草稿或自我对话。"
+}
+
+/// Some compatible models occasionally place their internal scratchpad in
+/// `content` instead of a reasoning field. Only classify text when several
+/// strong self-directed planning markers co-occur; one conversational phrase
+/// is never enough to hide a legitimate answer.
+enum AgentInternalDraftClassifier {
+    private static let highConfidencePrefixes = [
+        "用户问了", "用户的问题是", "先分析用户", "分析用户的", "我们需要回答",
+        "we need answer", "we need to answer", "need answer", "analyze the user"
+    ]
+    private static let markers = [
+        "让我核实", "让我确认", "让我检查", "让我退一步", "让我组织", "让我整理",
+        "我不应", "我需要先", "接下来我", "正确的做法是", "最终回复应该",
+        "let me verify", "let me check", "let me step back", "i should not",
+        "i need to inspect", "final answer should"
+    ]
+
+    static func isLikelyInternalDraft(_ text: String) -> Bool {
+        let normalized = normalized(text)
+        guard normalized.count >= 60 else { return false }
+        if highConfidencePrefixes.contains(where: normalized.hasPrefix) {
+            return true
+        }
+        return markerScore(in: normalized) >= 3
+            || markerScore(in: normalized) >= 2
+            && containsMetaAnswerLanguage(normalized)
+    }
+
+    static func isLikelyInternalDraftPrefix(_ text: String) -> Bool {
+        let normalized = normalized(text)
+        if highConfidencePrefixes.contains(where: normalized.hasPrefix) {
+            return true
+        }
+        guard normalized.count >= 48 else { return false }
+        return markerScore(in: normalized) >= 2
+            && containsMetaAnswerLanguage(normalized)
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func markerScore(in normalized: String) -> Int {
+        markers.reduce(into: 0) { score, marker in
+            if normalized.contains(marker) {
+                score += 1
+            }
+        }
+    }
+
+    private static func containsMetaAnswerLanguage(_ normalized: String) -> Bool {
+        [
+            "最终回复", "最终答复", "回复应该", "组织回复", "回答用户",
+            "final answer", "respond to the user", "answer the user"
+        ].contains(where: normalized.contains)
+    }
+}
+
+/// 兼容端点偶尔把 scratchpad 错放到 `content`。先只缓冲一个很短的前缀：
+/// 有协议级 reasoning 时立即确认 content 是正文；强内部草稿前缀改投 reasoning；
+/// 其余正文达到阈值后一次性放行，之后保持严格增量。
+struct AgentProvisionalContentGate {
+    enum Destination: Equatable {
+        case undecided
+        case visible
+        case reasoning
+    }
+
+    struct Projection: Equatable {
+        var visible = ""
+        var reasoning = ""
+    }
+
+    static let decisionCharacterCount = 96
+
+    private(set) var destination = Destination.undecided
+    private var pending = ""
+
+    mutating func append(
+        _ delta: String,
+        hasProtocolReasoning: Bool
+    ) -> Projection {
+        guard !delta.isEmpty else { return Projection() }
+        switch destination {
+        case .visible:
+            return Projection(visible: delta)
+        case .reasoning:
+            return Projection(reasoning: delta)
+        case .undecided:
+            pending += delta
+            if hasProtocolReasoning {
+                return resolve(.visible)
+            }
+            if AgentInternalDraftClassifier.isLikelyInternalDraftPrefix(pending) {
+                return resolve(.reasoning)
+            }
+            if pending.count >= Self.decisionCharacterCount {
+                return resolve(.visible)
+            }
+            return Projection()
+        }
+    }
+
+    mutating func finish() -> Projection {
+        guard destination == .undecided else { return Projection() }
+        let target: Destination = AgentInternalDraftClassifier
+            .isLikelyInternalDraft(pending)
+            ? .reasoning
+            : .visible
+        return resolve(target)
+    }
+
+    private mutating func resolve(_ target: Destination) -> Projection {
+        destination = target
+        defer { pending = "" }
+        return switch target {
+        case .visible:
+            Projection(visible: pending)
+        case .reasoning:
+            Projection(reasoning: pending)
+        case .undecided:
+            Projection()
+        }
+    }
+}

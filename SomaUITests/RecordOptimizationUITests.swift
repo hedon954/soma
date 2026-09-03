@@ -140,19 +140,18 @@ final class RecordOptimizationUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(add.frame.height, 44)
     }
 
-    func testProgressEnergyUsesCurrentScopeAndLabelsWorkoutOnlyFallback() {
+    func testProgressEnergyShowsCurrentComponentsAndDailyProjection() {
         let app = launchRecordFixture(appearance: "light")
         app.tabBars.buttons["进展"].tap()
 
         XCTAssertTrue(app.staticTexts["今日能量"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["已记录摄入"].exists)
-        XCTAssertTrue(app.staticTexts["截至当前总消耗"].exists)
         XCTAssertTrue(app.staticTexts["静息消耗"].exists)
         XCTAssertTrue(app.staticTexts["训练消耗"].exists)
         XCTAssertFalse(app.staticTexts["活动消耗"].exists)
-        XCTAssertTrue(app.staticTexts["截至当前能量差"].exists)
-        XCTAssertFalse(app.staticTexts["全天总消耗预估"].exists)
-        keepScreenshot(of: app, named: "progress-current-energy-scope")
+        XCTAssertTrue(app.staticTexts["基础 + 训练"].exists)
+        XCTAssertTrue(app.staticTexts["相对基础 + 训练"].exists)
+        keepScreenshot(of: app, named: "progress-daily-energy-projection")
     }
 
     func testWorkoutDetailShowsMuscleMapWithoutDisclosure() {

@@ -461,6 +461,29 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(output, "较晚返回")
     }
 
+    func testOpenAICompatibleStreamNormalizesReasoningAliases() throws {
+        for alias in ["reasoning", "analysis"] {
+            let raw = try JSONSerialization.data(withJSONObject: [
+                "id": "chatcmpl_reasoning_alias",
+                "object": "chat.completion.chunk",
+                "choices": [[
+                    "index": 0,
+                    "delta": [alias: "先核对事实。", "content": "再给结论。"],
+                    "finish_reason": "stop"
+                ]]
+            ])
+
+            let normalized = try OpenAICompatibleStreamPayload.normalize(raw)
+            let chunk = try JSONDecoder().decode(
+                ChatCompletionChunkObject.self,
+                from: normalized
+            )
+
+            XCTAssertEqual(chunk.choices?.first?.delta?.reasoningContent, "先核对事实。")
+            XCTAssertEqual(chunk.choices?.first?.delta?.content, "再给结论。")
+        }
+    }
+
     @MainActor
     func testAgentStreamWorkerProjectsReasoningSeparatelyFromAssistantText() async throws {
         let data = try JSONSerialization.data(withJSONObject: [

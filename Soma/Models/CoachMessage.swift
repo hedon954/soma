@@ -174,6 +174,8 @@ final class CoachMessage {
             if let index = items.firstIndex(where: { $0.id == itemID }) {
                 items[index].finishText(at: date)
             }
+        case let .assistantTextDiscarded(itemID, _):
+            items.removeAll { $0.id == itemID }
         case let .span(span):
             if span.kind == .model, span.status == .running {
                 setAgentActivity(

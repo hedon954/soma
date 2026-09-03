@@ -83,16 +83,12 @@ struct CoachSessionView: View {
     @State var isLoadingEarlier = false
     @State var paginationAnchorMessageID: UUID?
     @State var paginationTriggerID = UUID()
-    @State var followsLiveMessage = true
     @State var hasUserInteractedWithMessageList = false
-    @State private var tailScrollPositionID: UUID?
     @State var messageListPosition = CoachMessageScrollPosition(
         isAtTop: false,
         isNearBottom: false,
         contentFitsViewport: nil
     )
-    @State private var measuredMessageContentHeight: CGFloat = 0
-    @State private var measuredMessageViewportHeight: CGFloat = 0
 
     let messageLimit: Int
     let sessionTransition: CoachSessionTransitionCoordinator
@@ -350,17 +346,6 @@ struct CoachSessionView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .appPageBackground()
                 .background {
-                    CoachLiveAutoScrollDriver(
-                        isActive: isProcessingHere,
-                        onRevision: {
-                            scheduleLiveScroll(
-                                proxy,
-                                targetMessageID: projection.messages.last?.id
-                            )
-                        }
-                    )
-                }
-                .background {
                     // 切换到「教练」Tab 时自动回到最新消息；只有这枚叶子
                     // 因激活态变化重新求值。
                     CoachTabActivationDriver {
@@ -372,7 +357,7 @@ struct CoachSessionView: View {
                     composer(pendingCount: projection.pendingJobCount)
                 }
                 .onChange(of: projection.messages.last?.id, initial: true) { _, messageID in
-                    guard messageID != nil else { return }
+                    guard let messageID else { return }
                     visibility.tailMessageID = projection.latestAssistantMessageID
                         ?? messageID
                     if !didFinishInitialScroll {
@@ -382,8 +367,10 @@ struct CoachSessionView: View {
                     guard visibility.autoScrollGate.shouldScroll(to: messageID) else {
                         return
                     }
-                    guard isProcessingHere || followsLiveMessage else { return }
-                    scrollToBottomAfterLayout(proxy)
+                    guard visibility.tailScroll.followState.isFollowing else { return }
+                    visibility.tailScroll.enqueueMessage(
+                        projection.latestAssistantMessageID ?? messageID
+                    )
                 }
                 .onChange(of: messageListPosition) {
                     finishInitialScrollSetup(using: proxy)
@@ -394,39 +381,41 @@ struct CoachSessionView: View {
                         projection: projection
                     )
                 }
-                .onChange(of: processor.isProcessing) { _, isProcessing in
-                    if isProcessing {
-                        // 只要当前会话进入流式回复，就重新取得底部跟随权。
-                        // 用户不需要先手动滚到底，内容增长也不能让 geometry
-                        // 的瞬时“离底部”反过来关闭自动跟随。
-                        followsLiveMessage = true
-                        scheduleLiveScroll(
+                .onChange(of: isProcessingHere) { wasProcessing, isProcessing in
+                    guard wasProcessing, !isProcessing else { return }
+                    visibility.tailScroll.cancelRequest()
+                    if visibility.tailScroll.followState.isFollowing {
+                        requestTailScroll(
                             proxy,
-                            targetMessageID: projection.messages.last?.id
+                            targetMessageID: projection.latestAssistantMessageID
+                                ?? projection.messages.last?.id,
+                            waitsForLayout: true,
+                            animated: true
                         )
-                    } else {
-                        visibility.liveScroll.task?.cancel()
-                        visibility.liveScroll.task = nil
-                        if followsLiveMessage {
-                            scrollToBottom(proxy)
-                        }
                     }
                 }
                 .onChange(of: scrollRequest) {
-                    if !followsLiveMessage {
-                        followsLiveMessage = true
-                    }
-                    scrollToBottomAfterLayout(proxy)
+                    visibility.tailScroll.followState.resumeExplicitly()
+                    requestTailScroll(
+                        proxy,
+                        targetMessageID: projection.latestAssistantMessageID
+                            ?? projection.messages.last?.id,
+                        waitsForLayout: true
+                    )
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .coachDoubleReselected)
                 ) { _ in
-                    followsLiveMessage = true
+                    visibility.tailScroll.followState.resumeExplicitly()
                     guard messageListPosition.contentFitsViewport != true else {
                         return
                     }
-                    tailScrollPositionID = projection.latestAssistantMessageID
-                        ?? projection.messages.last?.id
+                    requestTailScroll(
+                        proxy,
+                        targetMessageID: projection.latestAssistantMessageID
+                            ?? projection.messages.last?.id,
+                        waitsForLayout: true
+                    )
                 }
                 .modifier(
                     CoachPerformanceScrollModifier(
@@ -471,7 +460,6 @@ struct CoachSessionView: View {
                     }
                 }
             }
-            .scrollTargetLayout()
             .padding(.horizontal, 14)
             .padding(.top, 10)
             .frame(maxWidth: AppTheme.readableContentMaxWidth)
@@ -480,27 +468,36 @@ struct CoachSessionView: View {
                 CoachMessageContentHeightReporter()
             }
         }
-        .scrollPosition(id: $tailScrollPositionID, anchor: .bottom)
         .background {
             CoachMessageViewportHeightReporter()
         }
         .onPreferenceChange(CoachMessageContentHeightPreferenceKey.self) { height in
-            measuredMessageContentHeight = height
+            let didGrow = visibility.tailScroll.recordContentHeight(height)
             updateLegacyMessageMeasurement()
+            guard didGrow, didFinishInitialScroll else { return }
+            if let pendingMessageID = visibility.tailScroll.consumePendingMessageID() {
+                requestTailScroll(
+                    proxy,
+                    targetMessageID: pendingMessageID,
+                    waitsForLayout: false
+                )
+            } else if isProcessingHere,
+                      visibility.tailScroll.followState.isFollowing
+            {
+                scheduleLiveScroll(
+                    proxy,
+                    targetMessageID: projection.latestAssistantMessageID
+                        ?? projection.messages.last?.id
+                )
+            }
         }
         .onPreferenceChange(CoachMessageViewportHeightPreferenceKey.self) { height in
-            measuredMessageViewportHeight = height
+            visibility.tailScroll.recordViewportHeight(height)
             updateLegacyMessageMeasurement()
         }
         .modifier(CoachMessageTopPagingModifier())
         .modifier(CoachMessageScrollTrackingModifier { position in
             messageListPosition = position
-            if didFinishInitialScroll,
-               !position.isNearBottom,
-               !isProcessingHere
-            {
-                stopFollowingLiveMessage()
-            }
             guard hasUserInteractedWithMessageList, position.isAtTop else {
                 return
             }
@@ -514,7 +511,11 @@ struct CoachSessionView: View {
         .accessibilityIdentifier("coach-message-list")
         .accessibilityValue(
             Text(verbatim: AppTestRuntime.isRunning
-                ? "count=\(projection.messages.count),nearBottom=\(messageListPosition.isNearBottom),following=\(followsLiveMessage),streaming=\(processingHere)"
+                ? "count=\(projection.messages.count),"
+                + "tail=\(projection.messages.last?.id.uuidString ?? "none"),"
+                + "nearBottom=\(messageListPosition.isNearBottom),"
+                + "following=\(visibility.tailScroll.followState.isFollowing),"
+                + "streaming=\(processingHere)"
                 : "")
         )
     }
@@ -523,12 +524,7 @@ struct CoachSessionView: View {
         if #available(iOS 18.0, *) {
             return
         }
-        guard measuredMessageContentHeight > 0,
-              measuredMessageViewportHeight > 0
-        else {
-            return
-        }
-        let fits = measuredMessageContentHeight <= measuredMessageViewportHeight + 1
+        guard let fits = visibility.tailScroll.contentFitsViewport else { return }
         guard messageListPosition.contentFitsViewport != fits else { return }
         messageListPosition = CoachMessageScrollPosition(
             isAtTop: messageListPosition.isAtTop,
@@ -603,12 +599,6 @@ struct CoachSessionView: View {
                     AssistantFeedbackScroller.scrollAfterLayout(
                         to: target,
                         using: proxy
-                    )
-                },
-                onLiveRevision: {
-                    scheduleLiveScroll(
-                        proxy,
-                        targetMessageID: message.id
                     )
                 }
             )

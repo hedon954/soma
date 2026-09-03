@@ -213,13 +213,14 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
         var buffer = LiveAgentTextBuffer(targetCharacterCount: 32)
         let view = UITextView()
         let coordinator = IncrementalChatTextView.Coordinator()
+        let streamID = UUID()
 
         buffer.append(String(repeating: "甲", count: 20))
-        coordinator.replaceText(in: view, with: buffer.chunks)
+        coordinator.replaceText(in: view, with: buffer.chunks, streamID: streamID)
         buffer.append(String(repeating: "乙", count: 30))
-        coordinator.update(view, with: buffer.chunks)
+        coordinator.update(view, with: buffer.chunks, streamID: streamID)
         buffer.append("结尾")
-        coordinator.update(view, with: buffer.chunks)
+        coordinator.update(view, with: buffer.chunks, streamID: streamID)
 
         XCTAssertEqual(
             view.text,
@@ -227,6 +228,49 @@ final class AgentStreamProjectionSafetyTests: XCTestCase {
                 + String(repeating: "乙", count: 30)
                 + "结尾"
         )
+    }
+
+    @MainActor
+    func testIncrementalTextKitHeightMeasurementIsCachedUntilTextChanges() {
+        var buffer = LiveAgentTextBuffer(targetCharacterCount: 32)
+        let view = UITextView(usingTextLayoutManager: false)
+        view.isScrollEnabled = false
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        let coordinator = IncrementalChatTextView.Coordinator()
+        let streamID = UUID()
+
+        buffer.append(String(repeating: "虚构长流式内容", count: 80))
+        coordinator.replaceText(in: view, with: buffer.chunks, streamID: streamID)
+        let first = coordinator.measuredHeight(in: view, width: 320)
+        let second = coordinator.measuredHeight(in: view, width: 320)
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(coordinator.measurementCount, 1)
+
+        buffer.append("新增尾部")
+        coordinator.update(view, with: buffer.chunks, streamID: streamID)
+        _ = coordinator.measuredHeight(in: view, width: 320)
+        XCTAssertEqual(coordinator.measurementCount, 2)
+    }
+
+    @MainActor
+    func testIncrementalTextKitReplacesContentWhenStreamIdentityChanges() {
+        let view = UITextView()
+        let coordinator = IncrementalChatTextView.Coordinator()
+
+        coordinator.replaceText(
+            in: view,
+            with: [LiveAgentTextChunk(id: 0, text: "上一条回复")],
+            streamID: UUID()
+        )
+        coordinator.update(
+            view,
+            with: [LiveAgentTextChunk(id: 0, text: "新回复")],
+            streamID: UUID()
+        )
+
+        XCTAssertEqual(view.text, "新回复")
     }
 
     func testLiveTextProjectionAddsOnlyOneTransientItem() {

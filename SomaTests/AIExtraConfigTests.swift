@@ -165,4 +165,31 @@ final class AIExtraConfigTests: XCTestCase {
         let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.last?["content"] as? String, "普通文本输出")
     }
+
+    func testProductionRequestCarriesReasoningWithAssistantToolCallContinuation() throws {
+        let suite = "AIReasoningContinuationTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let ai = AIService(defaults: defaults)
+        let parameters = ChatCompletionParameters(
+            messages: [
+                .init(role: .system, content: .text("系统提示")),
+                .init(role: .assistant, content: .text("")),
+                .init(role: .tool, content: .text("工具结果"), toolCallID: "call_1")
+            ],
+            model: .custom("deepseek-chat")
+        )
+
+        let body = try ai.openAICompatibleChatRequestBody(
+            parameters: parameters,
+            videos: [],
+            baseURL: "https://api.deepseek.com/v1",
+            assistantReasoningByMessageIndex: [1: "先判断要调用哪个工具。"]
+        )
+
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages[1]["reasoning_content"] as? String, "先判断要调用哪个工具。")
+        XCTAssertNil(messages[0]["reasoning_content"])
+        XCTAssertNil(messages[2]["reasoning_content"])
+    }
 }

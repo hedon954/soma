@@ -7,7 +7,8 @@ extension AIService {
         videos: [AgentVideoInput],
         provider: AIProvider,
         baseURL: String,
-        apiKey: String
+        apiKey: String,
+        assistantReasoningByMessageIndex: [Int: String] = [:]
     ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error> {
         guard let url = provider.endpoint(
             baseURL: baseURL,
@@ -18,7 +19,8 @@ extension AIService {
         let body = try openAICompatibleChatRequestBody(
             parameters: parameters,
             videos: videos,
-            baseURL: baseURL
+            baseURL: baseURL,
+            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
         )
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -57,10 +59,11 @@ extension AIService {
                             .trimmingCharacters(in: .whitespaces)
                         guard payload != "[DONE]" else { break }
                         guard let data = payload.data(using: .utf8) else { continue }
+                        let normalized = try OpenAICompatibleStreamPayload.normalize(data)
                         try continuation.yield(
                             decoder.decode(
                                 ChatCompletionChunkObject.self,
-                                from: data
+                                from: normalized
                             )
                         )
                     }
@@ -78,7 +81,8 @@ extension AIService {
     func openAICompatibleChatRequestBody(
         parameters: ChatCompletionParameters,
         videos: [AgentVideoInput],
-        baseURL: String
+        baseURL: String,
+        assistantReasoningByMessageIndex: [Int: String] = [:]
     ) throws -> [String: Any] {
         let encoded = try JSONEncoder().encode(parameters)
         guard var body = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
@@ -107,6 +111,16 @@ extension AIService {
             messages[userIndex]["content"] = content
             body["messages"] = messages
         }
+        if !assistantReasoningByMessageIndex.isEmpty,
+           var messages = body["messages"] as? [[String: Any]]
+        {
+            for (index, reasoning) in assistantReasoningByMessageIndex
+                where messages.indices.contains(index) && !reasoning.isEmpty
+            {
+                messages[index]["reasoning_content"] = reasoning
+            }
+            body["messages"] = messages
+        }
         body["stream"] = true
         let requestModel = body["model"] as? String ?? ""
         let extraConfig = effectiveExtraConfig(
@@ -128,5 +142,35 @@ extension AIService {
             return message
         }
         return "模型请求失败（\(statusCode)）"
+    }
+}
+
+/// OpenAI-compatible vendors do not all use the same delta key for thinking.
+/// SwiftOpenAI decodes `reasoning_content`; normalize established aliases first.
+enum OpenAICompatibleStreamPayload {
+    static func normalize(_ data: Data) throws -> Data {
+        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var choices = root["choices"] as? [[String: Any]]
+        else {
+            return data
+        }
+        var changed = false
+        for index in choices.indices {
+            guard var delta = choices[index]["delta"] as? [String: Any],
+                  delta["reasoning_content"] == nil
+            else { continue }
+            for alias in ["reasoning", "analysis"] {
+                guard let reasoning = delta[alias] as? String, !reasoning.isEmpty else {
+                    continue
+                }
+                delta["reasoning_content"] = reasoning
+                choices[index]["delta"] = delta
+                changed = true
+                break
+            }
+        }
+        guard changed else { return data }
+        root["choices"] = choices
+        return try JSONSerialization.data(withJSONObject: root)
     }
 }

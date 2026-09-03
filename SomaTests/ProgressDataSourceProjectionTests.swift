@@ -33,25 +33,37 @@ final class ProgressDataSourceProjectionTests: XCTestCase {
         )
     }
 
-    func testCurrentTotalDistinguishesHealthActivityFromWorkoutEstimate() {
+    func testActiveSourceExplainsMissingWorkoutEvidence() {
         XCTAssertEqual(
-            ProgressMetricSource.currentTotal(
-                resting: 1200,
-                active: 480,
-                activeUsesHealth: true
+            ProgressMetricSource.active(
+                [],
+                missingReason: "今天没有训练记录"
             ).rows,
             [
-                ProgressSourceRow(label: "截至当前静息消耗", value: "1200 kcal"),
-                ProgressSourceRow(label: "截至当前活动消耗", value: "480 kcal")
+                ProgressSourceRow(label: "今天没有训练记录", value: "—")
             ]
         )
         XCTAssertEqual(
+            ProgressMetricSource.active(
+                [ProgressMetricBreakdownItem(label: "深蹲", value: "未计算")],
+                missingReason: "缺少训练证据"
+            ).rows,
+            [ProgressSourceRow(label: "深蹲", value: "未计算")]
+        )
+    }
+
+    func testCurrentTotalShowsKnownRestingAndWhyActivityIsMissing() {
+        XCTAssertEqual(
             ProgressMetricSource.currentTotal(
-                resting: 1200,
-                active: 180,
-                activeUsesHealth: false
-            ).rows.last,
-            ProgressSourceRow(label: "已记录训练消耗", value: "180 kcal")
+                resting: 1575,
+                active: nil,
+                activeUsesHealth: false,
+                activeMissingReason: "今天没有训练记录"
+            ).rows,
+            [
+                ProgressSourceRow(label: "24h 静息估算", value: "1575 kcal"),
+                ProgressSourceRow(label: "今日已记录训练消耗", value: "今天没有训练记录")
+            ]
         )
     }
 

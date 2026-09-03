@@ -58,7 +58,7 @@
 | [0045](0045-guided-workout-coredata-abort.md) | 第二轮修复，待新 Release 真机 | 带练 relationship `@Query` 在 `NSSQLGenerator` 触发 `SIGABRT` | 标量 ID 快照、DTO 渲染、静态禁用多层查询与十轮真机复验 |
 | [0046](0046-coach-stream-scrolls-into-blank-space.md) | 已修复，待真机复验 | 流式零 token/首 token 阶段消息页滚入空白 | 真实消息尾部、布局测量、单一 tail-follow 状态机 |
 | [0047](0047-terminal-failure-retry-leaves-stale-error.md) | 已修复，待真机复验 | 手动重试后旧失败卡残留并新增处理气泡 | 预绑定响应、同 ID 清理失败、成功步骤检查点 |
-| [0048](0048-speech-segment-overwrites-committed-text.md) | 已修复，待真机复验 | 语音停顿后继续说话覆盖既有文案 | committed/current partial 分离与停顿提交 |
+| [0048](0048-speech-segment-overwrites-committed-text.md) | 第三轮修复中，待真机复验 | 语音停顿后继续说话覆盖既有文案 | committed/current partial 分离、声学活动边界与停顿提交 |
 | [0049](0049-quick-camera-presentation-deadlock.md) | 代码已修复，待真机 | 桌面/锁屏快捷相机偶发不能拍摄也不能取消 | 根层状态机、单层全屏相机、锁屏安全取消 |
 | [0050](0050-coach-foreground-recovery-freezes-again.md) | 二阶段修复，待量化 | 回到教练页仍短时无法滚动和输入 | 真首帧、generation 恢复、有界 DTO 缓存与 Release p95 |
 

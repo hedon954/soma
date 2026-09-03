@@ -34,6 +34,48 @@ final class CoachMessageAutoScrollGateTests: XCTestCase {
         XCTAssertTrue(CoachTailScrollPolicy.shouldScroll(contentFitsViewport: false))
     }
 
+    func testLiveTailFollowStopsAfterUserInteractionUntilExplicitlyResumed() {
+        var state = CoachTailFollowState()
+
+        XCTAssertTrue(state.isFollowing)
+
+        state.userDidInteract()
+        XCTAssertFalse(state.isFollowing)
+
+        // 流式内容增长不写 follow state，也不能覆盖用户的阅读选择。
+        XCTAssertFalse(state.isFollowing)
+
+        state.resumeExplicitly()
+        XCTAssertTrue(state.isFollowing)
+    }
+
+    @MainActor
+    func testTailCoordinatorKeepsOnlyLatestPendingAppend() {
+        let coordinator = CoachTailScrollCoordinator()
+        let first = UUID()
+        let second = UUID()
+
+        coordinator.enqueueMessage(first)
+        coordinator.enqueueMessage(second)
+
+        XCTAssertEqual(coordinator.consumePendingMessageID(), second)
+        XCTAssertNil(coordinator.consumePendingMessageID())
+    }
+
+    @MainActor
+    func testTailCoordinatorCancelsOlderGeneration() throws {
+        let coordinator = CoachTailScrollCoordinator()
+        let first = try XCTUnwrap(
+            coordinator.startRequest(replacingExisting: false)
+        )
+        let second = try XCTUnwrap(
+            coordinator.startRequest(replacingExisting: true)
+        )
+
+        XCTAssertFalse(coordinator.owns(first))
+        XCTAssertTrue(coordinator.owns(second))
+    }
+
     func testInitialPageUsesLazyStackForCompoundMessageRows() {
         XCTAssertFalse(CoachMessageStackPolicy.usesLazyStack(messageCount: 9))
         XCTAssertTrue(CoachMessageStackPolicy.usesLazyStack(messageCount: 10))

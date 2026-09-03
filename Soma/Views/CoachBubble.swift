@@ -13,7 +13,6 @@ struct CoachBubble: View, Equatable {
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
     var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
-    var onLiveRevision: () -> Void = {}
 
     static func == (lhs: CoachBubble, rhs: CoachBubble) -> Bool {
         lhs.message === rhs.message
@@ -49,11 +48,14 @@ struct CoachBubble: View, Equatable {
                     if isLive {
                         CoachLiveAgentTurnTranscript(
                             persistedItems: payload.turnItems,
+                            preparedSegments: payload.transcriptSegments,
+                            persistedItemsWithoutActivity: payload.turnItemsWithoutActivity,
+                            preparedSegmentsWithoutActivity: payload
+                                .transcriptSegmentsWithoutActivity,
                             sourceMessage: message,
                             isEditable: isLatestAssistantMessage,
                             canRetry: canRetry,
-                            onRetry: onRetry,
-                            onLiveRevision: onLiveRevision
+                            onRetry: onRetry
                         )
                     } else {
                         AgentTurnTranscript(

@@ -89,11 +89,70 @@ final class CoachComposerStateTests: XCTestCase {
 
     func testSpeechAccumulatorNeverLetsShorterPartialEraseCommittedPrefix() {
         var accumulator = SpeechTranscriptAccumulator()
-        XCTAssertEqual(accumulator.receive("今天练深蹲", isFinal: false), "今天练深蹲")
-        XCTAssertEqual(accumulator.receive("今天练", isFinal: false), "今天练")
+        XCTAssertEqual(
+            accumulator.receive(
+                "今天练深蹲",
+                isFinal: false,
+                speechSegmentStart: 0,
+                speechSegmentEnd: 0.8
+            ),
+            "今天练深蹲"
+        )
+        XCTAssertEqual(
+            accumulator.receive(
+                "今天练",
+                isFinal: false,
+                speechSegmentStart: 0,
+                speechSegmentEnd: 0.8
+            ),
+            "今天练深蹲"
+        )
         XCTAssertEqual(accumulator.receive("今天练深蹲", isFinal: true), "今天练深蹲，")
         XCTAssertEqual(accumulator.receive("五组", isFinal: false), "今天练深蹲，五组")
         XCTAssertEqual(accumulator.receive("五组五次", isFinal: true), "今天练深蹲，五组五次，")
+    }
+
+    func testSameAudioTextRevisionDoesNotMoveSilenceBoundary() {
+        var accumulator = SpeechTranscriptAccumulator()
+        let start = Date(timeIntervalSince1970: 3000)
+
+        XCTAssertEqual(
+            accumulator.receive(
+                "第一段训练",
+                isFinal: false,
+                at: start,
+                speechSegmentStart: 0,
+                speechSegmentEnd: 0.6
+            ),
+            "第一段训练"
+        )
+        let activityRevision = accumulator.speechActivityRevision
+
+        // Speech.framework may refine punctuation after the user is already
+        // silent. The acoustic end is unchanged, so this must not postpone the
+        // boundary that makes the first phrase immutable.
+        XCTAssertEqual(
+            accumulator.receive(
+                "第一段训练，",
+                isFinal: false,
+                at: start.addingTimeInterval(0.7),
+                speechSegmentStart: 0,
+                speechSegmentEnd: 0.6
+            ),
+            "第一段训练，"
+        )
+        XCTAssertEqual(accumulator.speechActivityRevision, activityRevision)
+
+        XCTAssertEqual(
+            accumulator.receive(
+                "第二段饮食",
+                isFinal: false,
+                at: start.addingTimeInterval(
+                    SpeechTranscriptAccumulator.pauseBoundary + 0.05
+                )
+            ),
+            "第一段训练，第二段饮食"
+        )
     }
 
     func testSpeechAccumulatorDeduplicatesRepeatedFinalAndPreservesPunctuation() {

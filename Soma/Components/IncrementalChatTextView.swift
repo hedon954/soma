@@ -1,10 +1,18 @@
 import SwiftUI
 import UIKit
 
+private struct IncrementalChatTextMeasurement: Equatable {
+    var width: CGFloat
+    var textLength: Int
+    var contentSizeCategory: UIContentSizeCategory
+    var height: CGFloat
+}
+
 /// 使用同一个 TextKit 文本存储追加流式尾部。SwiftUI 只更新 representable，
 /// 不再让不断增长的无换行段落在每个 tick 重建一个完整 `Text`。
 struct IncrementalChatTextView: UIViewRepresentable {
     let chunks: [LiveAgentTextChunk]
+    var streamID: UUID?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -24,39 +32,47 @@ struct IncrementalChatTextView: UIViewRepresentable {
         view.textContainer.lineFragmentPadding = 0
         view.adjustsFontForContentSizeCategory = true
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        context.coordinator.replaceText(in: view, with: chunks)
+        context.coordinator.replaceText(in: view, with: chunks, streamID: streamID)
         return view
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        context.coordinator.update(uiView, with: chunks)
+        context.coordinator.update(uiView, with: chunks, streamID: streamID)
     }
 
     func sizeThatFits(
         _ proposal: ProposedViewSize,
         uiView: UITextView,
-        context _: Context
+        context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
-        let size = uiView.sizeThatFits(
-            CGSize(width: width, height: .greatestFiniteMagnitude)
+        return CGSize(
+            width: width,
+            height: context.coordinator.measuredHeight(in: uiView, width: width)
         )
-        return CGSize(width: width, height: ceil(size.height))
     }
 
     final class Coordinator {
         private var renderedChunks: [LiveAgentTextChunk] = []
+        private var renderedStreamID: UUID?
         private var contentSizeCategory: UIContentSizeCategory?
+        private var cachedMeasurement: IncrementalChatTextMeasurement?
+        private(set) var measurementCount = 0
 
-        func update(_ view: UITextView, with chunks: [LiveAgentTextChunk]) {
+        func update(
+            _ view: UITextView,
+            with chunks: [LiveAgentTextChunk],
+            streamID: UUID?
+        ) {
             let currentCategory = view.traitCollection.preferredContentSizeCategory
-            guard contentSizeCategory == currentCategory,
+            guard renderedStreamID == streamID,
+                  contentSizeCategory == currentCategory,
                   let suffix = Self.appendedSuffix(
                       from: renderedChunks,
                       to: chunks
                   )
             else {
-                replaceText(in: view, with: chunks)
+                replaceText(in: view, with: chunks, streamID: streamID)
                 return
             }
             guard !suffix.isEmpty else {
@@ -65,14 +81,56 @@ struct IncrementalChatTextView: UIViewRepresentable {
             }
             view.textStorage.append(Self.attributedText(suffix))
             renderedChunks = chunks
+            cachedMeasurement = nil
             view.invalidateIntrinsicContentSize()
         }
 
-        func replaceText(in view: UITextView, with chunks: [LiveAgentTextChunk]) {
+        func replaceText(
+            in view: UITextView,
+            with chunks: [LiveAgentTextChunk],
+            streamID: UUID?
+        ) {
             view.attributedText = Self.attributedText(chunks.map(\.text).joined())
             renderedChunks = chunks
+            renderedStreamID = streamID
             contentSizeCategory = view.traitCollection.preferredContentSizeCategory
+            cachedMeasurement = nil
             view.invalidateIntrinsicContentSize()
+        }
+
+        func measuredHeight(in view: UITextView, width: CGFloat) -> CGFloat {
+            let category = view.traitCollection.preferredContentSizeCategory
+            if let cachedMeasurement,
+               cachedMeasurement.width == width,
+               cachedMeasurement.textLength == view.textStorage.length,
+               cachedMeasurement.contentSizeCategory == category
+            {
+                return cachedMeasurement.height
+            }
+
+            let availableWidth = max(
+                0,
+                width - view.textContainerInset.left - view.textContainerInset.right
+            )
+            if view.textContainer.size.width != availableWidth {
+                view.textContainer.size = CGSize(
+                    width: availableWidth,
+                    height: .greatestFiniteMagnitude
+                )
+            }
+            view.layoutManager.ensureLayout(for: view.textContainer)
+            let usedRect = view.layoutManager.usedRect(for: view.textContainer)
+            let height = ceil(
+                usedRect.height + view.textContainerInset.top + view.textContainerInset.bottom
+            )
+            measurementCount += 1
+            cachedMeasurement = IncrementalChatTextMeasurement(
+                width: width,
+                textLength: view.textStorage.length,
+                contentSizeCategory: category,
+                height: height
+            )
+            return height
         }
 
         private static func appendedSuffix(
@@ -83,22 +141,22 @@ struct IncrementalChatTextView: UIViewRepresentable {
                 return previous.isEmpty ? current.map(\.text).joined() : nil
             }
             let previousTailIndex = previous.index(before: previous.endIndex)
-            guard previous[..<previousTailIndex]
-                .elementsEqual(current.prefix(previousTailIndex)),
-                current[previousTailIndex].id == previous[previousTailIndex].id,
-                current[previousTailIndex].text.hasPrefix(previous[previousTailIndex].text)
+            // 同一个 streamID 内，LiveAgentTextBuffer 已封口的 chunk 永不修改。
+            // 只核对可变尾块，避免每批增量扫描全部历史 chunk。
+            guard current[previousTailIndex].id == previous[previousTailIndex].id,
+                  current[previousTailIndex].text.hasPrefix(previous[previousTailIndex].text)
             else {
                 return nil
             }
-            var suffix = String(
+            var suffixParts = [String(
                 current[previousTailIndex].text.dropFirst(
                     previous[previousTailIndex].text.count
                 )
-            )
+            )]
             for chunk in current.dropFirst(previous.count) {
-                suffix += chunk.text
+                suffixParts.append(chunk.text)
             }
-            return suffix
+            return suffixParts.joined()
         }
 
         private static func attributedText(_ text: String) -> NSAttributedString {

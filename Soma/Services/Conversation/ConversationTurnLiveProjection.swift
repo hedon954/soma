@@ -40,6 +40,11 @@ extension ConversationProcessingService {
                 liveAssistantItemID = nil
                 liveAssistantTextBuffer.reset()
             }
+        case let .assistantTextDiscarded(itemID, _):
+            if liveAssistantItemID == itemID {
+                liveAssistantItemID = nil
+                liveAssistantTextBuffer.reset()
+            }
         case .span:
             break
         case .completed, .failed:
@@ -221,7 +226,8 @@ extension ConversationProcessingService {
             return itemID == snapshot.itemID ? snapshot : nil
         case .completed, .failed:
             return snapshot
-        case .assistantTextDelta, .reasoningDelta, .reasoningCompleted, .span:
+        case .assistantTextDelta, .assistantTextDiscarded,
+             .reasoningDelta, .reasoningCompleted, .span:
             return nil
         }
     }

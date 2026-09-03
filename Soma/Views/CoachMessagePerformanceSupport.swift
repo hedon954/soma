@@ -37,30 +37,6 @@ struct CoachPerformanceScrollModifier: ViewModifier {
     }
 }
 
-/// 独立叶子负责观察高频 revision。即使用户把 LazyVStack 的最后一条消息滚出
-/// 挂载区，驱动仍在，流式底部跟随不会因为 live row 被回收而永久停止。
-/// Tab 隐藏时（`\.coachTabIsActive == false`）完全停止订阅，不为不可见的
-/// 画面安排布局或滚动；再次进入时 revision 从 0 跳回当前值，正好补一次滚底。
-struct CoachLiveAutoScrollDriver: View {
-    @Environment(ConversationProcessingService.self) private var processor
-    @Environment(\.coachTabIsActive) private var isTabActive
-
-    let isActive: Bool
-    let onRevision: () -> Void
-
-    var body: some View {
-        let revision = isActive && isTabActive
-            ? processor.liveEventRevision
-            : 0
-        Color.clear
-            .frame(width: 0, height: 0)
-            .onChange(of: revision) { _, newValue in
-                guard newValue != 0 else { return }
-                onRevision()
-            }
-    }
-}
-
 /// 教练 Tab 激活滚底驱动：整棵教练子树里只有这枚叶子和实时转写观察者读取
 /// `\.coachTabIsActive`。切换到教练时回到最新消息，切走时什么都不做。
 struct CoachTabActivationDriver: View {
@@ -100,6 +76,20 @@ struct CoachMessageScrollPosition: Equatable {
 enum CoachTailScrollPolicy {
     static func shouldScroll(contentFitsViewport: Bool?) -> Bool {
         contentFitsViewport == false
+    }
+}
+
+/// 尾部跟随只有一个 owner。发送、重新进入或用户显式要求时恢复；用户开始
+/// 阅读历史后即使流仍在增长也保持暂停，直到下一次显式恢复。
+struct CoachTailFollowState: Equatable {
+    private(set) var isFollowing = true
+
+    mutating func userDidInteract() {
+        isFollowing = false
+    }
+
+    mutating func resumeExplicitly() {
+        isFollowing = true
     }
 }
 
@@ -279,6 +269,8 @@ struct CoachMessageRenderPayload {
     let visibleText: String
     let turnItems: [AgentTurnItem]
     let transcriptSegments: [AgentTurnTranscriptSegment]
+    let turnItemsWithoutActivity: [AgentTurnItem]
+    let transcriptSegmentsWithoutActivity: [AgentTurnTranscriptSegment]
     let mediaAttachments: [MediaAttachmentReference]
     let location: LocationSnapshot?
     let isAutomaticMediaSummary: Bool
@@ -330,12 +322,17 @@ enum CoachMessageRenderPayloadCache {
 
         let items = message.agentTurnItems
         let attachments = message.mediaAttachments
+        let turnItemsWithoutActivity = items.filter { $0.kind != .activity }
         let payload = CoachMessageRenderPayload(
             visibleText: message.isFromCoach
                 ? AgentVisibleTextSanitizer.sanitize(message.text)
                 : message.text,
             turnItems: items,
             transcriptSegments: AgentTurnTranscriptSegments.make(from: items),
+            turnItemsWithoutActivity: turnItemsWithoutActivity,
+            transcriptSegmentsWithoutActivity: AgentTurnTranscriptSegments.make(
+                from: turnItemsWithoutActivity
+            ),
             mediaAttachments: attachments,
             location: message.location,
             isAutomaticMediaSummary: automaticMediaSummary(

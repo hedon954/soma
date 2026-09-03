@@ -41,6 +41,7 @@ enum AIServiceError: LocalizedError {
 struct AgentStreamOutcome {
     var passage = ""
     var reasoning = ""
+    var contentWasProjectedAsReasoning = false
     var toolCalls: [AgentStreamingToolCall] = []
     var usage: ChatUsage?
     var firstDeltaAt: Date?
@@ -64,6 +65,7 @@ enum StreamingFailure: Error {
 struct AgentToolLoopState {
     var messages: [ChatCompletionParameters.Message]
     var tools: [ChatCompletionParameters.Tool]
+    var assistantReasoningByMessageIndex: [Int: String] = [:]
     /// PRD 033：本次调用真正交给模型的工具名，也是恢复时要还原的曝光集合。
     /// `ChatCompletionParameters.Tool` 读不回名字，所以在组装时一并保存，供 Trace
     /// metadata、诊断日志与 checkpoint 使用。

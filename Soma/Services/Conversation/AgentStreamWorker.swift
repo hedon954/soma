@@ -15,6 +15,7 @@ enum AgentStreamWorker {
     ) async throws -> AgentStreamOutcome {
         var outcome = AgentStreamOutcome()
         var toolCallDeltas: [Int: AgentStreamingToolCall] = [:]
+        var contentGate = AgentProvisionalContentGate()
         let projectionPump = AgentTextProjectionPump { text in
             project(.assistantTextDelta(itemID: textItemID, delta: text))
         }
@@ -43,13 +44,22 @@ enum AgentStreamWorker {
                         outcome.firstDeltaAt = Date()
                         meaningful = true
                     }
-                    if let content = delta.content, !content.isEmpty {
-                        outcome.passage += content
-                        await projectionPump.append(content)
-                    }
                     if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
                         outcome.reasoning += reasoning
                         await reasoningProjectionPump.append(reasoning)
+                    }
+                    if let content = delta.content, !content.isEmpty {
+                        outcome.passage += content
+                        let projection = contentGate.append(
+                            content,
+                            hasProtocolReasoning: !outcome.reasoning.isEmpty
+                        )
+                        if !projection.visible.isEmpty {
+                            await projectionPump.append(projection.visible)
+                        }
+                        if !projection.reasoning.isEmpty {
+                            await reasoningProjectionPump.append(projection.reasoning)
+                        }
                     }
                     for (position, toolDelta) in (delta.toolCalls ?? []).enumerated() {
                         let index = toolDelta.index ?? position
@@ -62,16 +72,48 @@ enum AgentStreamWorker {
                 return meaningful
             }
         } catch {
+            let tail = contentGate.finish()
+            if !tail.visible.isEmpty {
+                await projectionPump.append(tail.visible)
+            }
+            if !tail.reasoning.isEmpty {
+                await reasoningProjectionPump.append(tail.reasoning)
+            }
+            let contentIsInternal = outcome.reasoning.isEmpty
+                && (contentGate.destination == .reasoning
+                    || AgentInternalDraftClassifier.isLikelyInternalDraft(outcome.passage))
             outcome.projectionSeconds = await projectionPump.finish()
-            _ = await reasoningProjectionPump.finish()
+            if contentIsInternal, contentGate.destination == .visible {
+                await project(.assistantTextDiscarded(itemID: textItemID, at: .now))
+                await reasoningProjectionPump.append(outcome.passage)
+            }
+            outcome.projectionSeconds += await reasoningProjectionPump.finish()
             throw StreamingFailure.interrupted(
                 error,
-                passage: outcome.passage,
-                reasoning: outcome.reasoning,
+                passage: contentIsInternal ? "" : outcome.passage,
+                reasoning: [outcome.reasoning, contentIsInternal ? outcome.passage : ""]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n\n"),
                 receivedMeaningfulDelta: outcome.firstDeltaAt != nil
             )
         }
+        let tail = contentGate.finish()
+        if !tail.visible.isEmpty {
+            await projectionPump.append(tail.visible)
+        }
+        if !tail.reasoning.isEmpty {
+            await reasoningProjectionPump.append(tail.reasoning)
+        }
+        outcome.contentWasProjectedAsReasoning = outcome.reasoning.isEmpty
+            && (contentGate.destination == .reasoning
+                || AgentInternalDraftClassifier.isLikelyInternalDraft(outcome.passage))
         outcome.projectionSeconds = await projectionPump.finish()
+        if outcome.contentWasProjectedAsReasoning,
+           contentGate.destination == .visible
+        {
+            await project(.assistantTextDiscarded(itemID: textItemID, at: .now))
+            await reasoningProjectionPump.append(outcome.passage)
+        }
         outcome.projectionSeconds += await reasoningProjectionPump.finish()
         outcome.toolCalls = toolCallDeltas.keys.sorted().compactMap {
             toolCallDeltas[$0]

@@ -44,12 +44,76 @@ extension Notification.Name {
     )
 }
 
-/// 流式滚动节流的可变状态。5 Hz 的滚动 tick 只改写这个引用类型的字段，
-/// 不触发 SwiftUI 失效；真正的界面更新仍由实时回复叶子承担。
+/// 消息尾部滚动的唯一可变 owner。发送、流式增长、回到教练和显式回底都先进入
+/// 这里，再由同一 generation 取消旧请求。测量值与 5 Hz 节流不属于界面状态，
+/// 因此正文每批增长不会让 Coach 根视图失效。
 @MainActor
-final class CoachLiveScrollThrottle {
+final class CoachTailScrollCoordinator {
+    var followState = CoachTailFollowState()
+    var contentHeight: CGFloat = 0
+    var viewportHeight: CGFloat = 0
+    var pendingMessageID: UUID?
     var lastScrollAt = Date.distantPast
     var task: Task<Void, Never>?
+    private(set) var generation: UInt64 = 0
+
+    var contentFitsViewport: Bool? {
+        guard contentHeight > 0, viewportHeight > 0 else { return nil }
+        return contentHeight <= viewportHeight + 1
+    }
+
+    @discardableResult
+    func recordContentHeight(_ height: CGFloat) -> Bool {
+        let didGrow = height > contentHeight + 0.5
+        contentHeight = height
+        return didGrow
+    }
+
+    func recordViewportHeight(_ height: CGFloat) {
+        viewportHeight = height
+    }
+
+    func enqueueMessage(_ messageID: UUID) {
+        pendingMessageID = messageID
+    }
+
+    func consumePendingMessageID() -> UUID? {
+        defer { pendingMessageID = nil }
+        return pendingMessageID
+    }
+
+    func startRequest(replacingExisting: Bool) -> UInt64? {
+        if replacingExisting {
+            cancelRequest()
+        } else if task != nil {
+            return nil
+        }
+        generation &+= 1
+        return generation
+    }
+
+    func install(_ task: Task<Void, Never>, generation: UInt64) {
+        guard self.generation == generation else {
+            task.cancel()
+            return
+        }
+        self.task = task
+    }
+
+    func owns(_ generation: UInt64) -> Bool {
+        self.generation == generation
+    }
+
+    func finish(_ generation: UInt64) {
+        guard self.generation == generation else { return }
+        task = nil
+    }
+
+    func cancelRequest() {
+        generation &+= 1
+        task?.cancel()
+        task = nil
+    }
 }
 
 /// 输入区的全部可变状态。会话页只持有引用、在事件回调里读写，
@@ -162,5 +226,5 @@ final class CoachVisibilityState {
     var isVisible = false
     var autoScrollGate = CoachMessageAutoScrollGate()
     var tailMessageID: UUID?
-    let liveScroll = CoachLiveScrollThrottle()
+    let tailScroll = CoachTailScrollCoordinator()
 }

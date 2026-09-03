@@ -40,7 +40,7 @@ final class LongStreamPerformanceUITests: XCTestCase {
         keepScreenshot(of: app, named: "long-stream-coach-after-loop")
     }
 
-    func testLongStreamContinuesFollowingBottomAfterUserScroll() {
+    func testLongStreamPausesTailFollowingAfterUserScroll() {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "long-stream"
@@ -53,24 +53,65 @@ final class LongStreamPerformanceUITests: XCTestCase {
                 .waitForExistence(timeout: 15)
         )
 
-        // 流式期间即使用户尝试上滑查看历史，也必须在下一次投影时回到底部；
-        // 这是产品明确要求的持续跟随，不依赖用户手动追赶最新 token。
+        // 用户主动上滑是在阅读历史；后续增量只能增长当前消息，不能抢回
+        // 滚动位置。下一次发送或显式回到底部时才恢复 tail-follow。
         messageList.swipeDown()
-        let bottom = app.descendants(matching: .any)["coach-live-agent-bottom"]
         let deadline = Date().addingTimeInterval(5)
-        var bottomIsVisible = false
-        while Date() < deadline, !bottomIsVisible {
-            bottomIsVisible = bottom.exists
-                && bottom.isHittable
-                && (messageList.value as? String ?? "").contains("streaming=true")
-            if !bottomIsVisible {
+        var followPaused = false
+        while Date() < deadline, !followPaused {
+            let value = messageList.value as? String ?? ""
+            followPaused = value.contains("following=false")
+                && value.contains("streaming=true")
+            if !followPaused {
                 RunLoop.current.run(until: Date().addingTimeInterval(0.1))
             }
         }
         XCTAssertTrue(
-            bottomIsVisible,
-            "流式回复没有持续跟随可见底部：\(messageList.value as? String ?? "nil")"
+            followPaused,
+            "用户阅读历史后流式回复仍抢回滚动位置：\(messageList.value as? String ?? "nil")"
         )
+    }
+
+    func testSendingDuringLongStreamAppendsWithoutBlankingConversation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "long-stream-append"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FAST_STREAM"] = "1"
+        app.launchArguments += [
+            "-agent.remote.enabled", "YES",
+            "-agent.remote.baseURL", "http://127.0.0.1:65535"
+        ]
+        app.launch()
+
+        let messageList = app.scrollViews["coach-message-list"]
+        XCTAssertTrue(messageList.waitForExistence(timeout: 15))
+        let tailBefore = messageListField("tail", in: messageList)
+
+        let draft = "虚构追加消息-不应清屏"
+        let input = app.textFields["说点什么，或添加照片与视频…"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText(draft)
+        let send = app.buttons["发送"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.tap()
+
+        let deadline = Date().addingTimeInterval(10)
+        var settledAtNewTail = false
+        while Date() < deadline, !settledAtNewTail {
+            let value = messageList.value as? String ?? ""
+            settledAtNewTail = messageListField("tail", in: value) != tailBefore
+                && value.contains("nearBottom=true")
+                && value.contains("following=true")
+            if !settledAtNewTail {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+        }
+        XCTAssertTrue(
+            settledAtNewTail,
+            "追加消息后没有稳定定位到新尾部：\(messageList.value as? String ?? "nil")"
+        )
+        keepScreenshot(of: app, named: "long-stream-send-appends-without-blank")
     }
 
     func testConversationHistoryCanReturnToLargeSession() {
@@ -237,5 +278,22 @@ final class LongStreamPerformanceUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         } while Date() < deadline
         return false
+    }
+
+    private func messageCount(in messageList: XCUIElement) -> Int {
+        let value = messageList.value as? String ?? ""
+        let prefix = value.split(separator: ",").first ?? ""
+        return Int(prefix.dropFirst("count=".count)) ?? 0
+    }
+
+    private func messageListField(_ name: String, in messageList: XCUIElement) -> String {
+        messageListField(name, in: messageList.value as? String ?? "")
+    }
+
+    private func messageListField(_ name: String, in value: String) -> String {
+        let prefix = "\(name)="
+        return value.split(separator: ",")
+            .first(where: { $0.hasPrefix(prefix) })
+            .map { String($0.dropFirst(prefix.count)) } ?? ""
     }
 }

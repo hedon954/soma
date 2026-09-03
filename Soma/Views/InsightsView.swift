@@ -133,6 +133,9 @@ struct InsightsView: View {
                 activeBreakdown: healthEnergy.activeKilocalories != nil
                     ? healthEnergy.activeComponents.map(\.progressBreakdown)
                     : snapshot.localActiveBreakdown,
+                activeMissingReason: healthEnergy.activeKilocalories == nil
+                    ? snapshot.localActiveMissingReason
+                    : nil,
                 muscleSets: snapshot.weeklyPrimaryMuscleSets,
                 trainingDays: snapshot.weekTrainingDays.count,
                 trainingDayBreakdown: snapshot.weekTrainingDayBreakdown,
@@ -940,6 +943,7 @@ private struct InsightsScreenSnapshot: Sendable {
     let todayIntakeBreakdown: [ProgressMetricBreakdownItem]
     let localActiveCalories: Int?
     let localActiveBreakdown: [ProgressMetricBreakdownItem]
+    let localActiveMissingReason: String?
     let estimatedRestingCalories: Int?
     let dailyRestingEstimate: Double?
     let restingFormulaInput: RestingEnergyFormulaInput?
@@ -997,8 +1001,11 @@ private struct InsightsScreenSnapshot: Sendable {
             )
         }
         let todayWorkouts = workouts.filter { $0.date >= todayStart && $0.date <= now }
-        let activeValues = todayWorkouts.compactMap(\.activeCalories)
-        localActiveCalories = activeValues.isEmpty ? nil : activeValues.reduce(0, +)
+        let activeSummary = ProgressLocalActiveEnergySummary(
+            values: todayWorkouts.map(\.activeCalories)
+        )
+        localActiveCalories = activeSummary.totalKilocalories
+        localActiveMissingReason = activeSummary.missingReason
         localActiveBreakdown = todayWorkouts.sorted { $0.date < $1.date }.map {
             ProgressMetricBreakdownItem(
                 label: $0.exercise,

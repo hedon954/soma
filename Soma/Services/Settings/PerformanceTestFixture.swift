@@ -74,6 +74,7 @@ enum PerformanceTestFixture {
     static let environmentKey = "SOMA_UI_PERFORMANCE_FIXTURE"
     static let fastStreamEnvironmentKey = "SOMA_UI_PERFORMANCE_FAST_STREAM"
     static let longStream = "long-stream"
+    static let longStreamAppend = "long-stream-append"
     static let longStreamNoNewline = "long-stream-no-newline"
     static let longStreamMarkdownCompletion = "long-stream-markdown-completion"
     static let coachTabBehavior = "coach-tab-behavior"
@@ -82,6 +83,7 @@ enum PerformanceTestFixture {
 
     enum StreamScenario: String, Sendable {
         case paragraphs = "long-stream"
+        case append = "long-stream-append"
         case noNewline = "long-stream-no-newline"
         case markdownCompletion = "long-stream-markdown-completion"
         case coachTabBehavior = "coach-tab-behavior"
@@ -96,6 +98,8 @@ enum PerformanceTestFixture {
             switch self {
             case .paragraphs:
                 160 ..< 1060
+            case .append:
+                160 ..< 240
             case .noNewline, .markdownCompletion:
                 1 ..< 240
             case .coachTabBehavior:
@@ -339,7 +343,7 @@ enum PerformanceTestFixture {
 
     static func streamDelta(_ index: Int, scenario: StreamScenario) -> String {
         switch scenario {
-        case .paragraphs, .coachTabBehavior, .recordOptimizations, .agentStages:
+        case .paragraphs, .append, .coachTabBehavior, .recordOptimizations, .agentStages:
             streamParagraph(index)
         case .noNewline:
             "第\(index + 1)段连续虚构训练建议只用于验证无换行正文的增量排版成本不随全文长度增长且不会插入额外字符"

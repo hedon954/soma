@@ -58,6 +58,31 @@ enum AIThinkingExtraConfig {
     static func defaultJSON(baseURL: String, model: String) -> String {
         AIExtraConfig.prettyPrinted(defaultObject(baseURL: baseURL, model: model))
     }
+
+    static func isEnabled(_ raw: String) -> Bool? {
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        if let value = object["enable_thinking"] as? Bool {
+            return value
+        }
+        if let thinking = object["thinking"] as? [String: Any],
+           let type = thinking["type"] as? String
+        {
+            return type.lowercased() == "enabled"
+        }
+        if let reasoning = object["reasoning"] as? [String: Any],
+           let enabled = reasoning["enabled"] as? Bool
+        {
+            return enabled
+        }
+        if let template = object["chat_template_kwargs"] as? [String: Any],
+           let enabled = template["enable_thinking"] as? Bool
+        {
+            return enabled
+        }
+        return nil
+    }
 }
 
 enum AIExtraConfig {

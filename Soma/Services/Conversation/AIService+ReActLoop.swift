@@ -50,6 +50,7 @@ extension AIService {
         var checkpointBatches = prepared.checkpointBatches
         var completedOperationCount = prepared.completedOperationCount
         var clearedHistoryFrames = prepared.clearedHistoryFrames
+        var requestedFinalAnswerAfterReasoning = false
         let maxSteps = prepared.maxSteps
 
         func persistCheckpoint(nextModelStep: Int) {
@@ -116,37 +117,40 @@ extension AIService {
                 let textItemID = UUID()
                 let reasoningItemID = UUID()
                 let modelStartedAt = Date()
-                announceModelStepStart(
-                    AgentModelStepStart(
-                        spanID: modelSpanID,
-                        operationStep: operationStep,
-                        modelStep: currentModelStep,
-                        startedAt: modelStartedAt,
-                        traceInput: traceInput,
-                        route: selectedRoute,
-                        historyExchangeCount: history.count,
-                        historicalImageCount: checkpoint != nil || clearedHistoryFrames
-                            ? 0
-                            : historicalImageCount,
-                        directVideoCount: videos.count,
-                        mediaMode: initialMediaMode(
-                            images: images,
-                            videos: videos,
-                            hasVideo: hasVideo
-                        ),
-                        messageCount: toolState.messages.count,
-                        exposedToolNames: toolState.exposedToolNames,
-                        selectedSkillID: selectedSkillID,
-                        selectedShortcutID: selectedShortcutID
+                let stepStart = AgentModelStepStart(
+                    spanID: modelSpanID,
+                    operationStep: operationStep,
+                    modelStep: currentModelStep,
+                    startedAt: modelStartedAt,
+                    traceInput: traceInput,
+                    route: selectedRoute,
+                    historyExchangeCount: history.count,
+                    historicalImageCount: checkpoint != nil || clearedHistoryFrames
+                        ? 0
+                        : historicalImageCount,
+                    directVideoCount: videos.count,
+                    mediaMode: initialMediaMode(
+                        images: images,
+                        videos: videos,
+                        hasVideo: hasVideo
                     ),
-                    trace: trace
+                    messageCount: toolState.messages.count,
+                    exposedToolNames: toolState.exposedToolNames,
+                    selectedSkillID: selectedSkillID,
+                    selectedShortcutID: selectedShortcutID,
+                    thinkingEnabled: AIThinkingExtraConfig.isEnabled(
+                        effectiveExtraConfig(
+                            baseURL: selectedRoute.baseURL,
+                            model: selectedRoute.model
+                        )
+                    )
                 )
 
-                var streamed: AgentStreamOutcome
-                do {
-                    streamed = try await consumeAgentStepWithRetry(
-                        messages: &toolState.messages,
-                        request: AgentStreamStepRequest(
+                let streamedStep = try await executeAgentModelStep(
+                    messages: &toolState.messages,
+                    request: AgentModelStepExecutionRequest(
+                        start: stepStart,
+                        stream: AgentStreamStepRequest(
                             tools: toolState.tools,
                             model: model,
                             provider: provider,
@@ -159,105 +163,66 @@ extension AIService {
                             userPrompt: userPrompt,
                             textItemID: textItemID,
                             reasoningItemID: reasoningItemID,
+                            assistantReasoningByMessageIndex: toolState
+                                .assistantReasoningByMessageIndex,
                             enforceFirstStepDeadline: firstStepDeadlineEnabled
                                 && currentModelStep == 1
                         ),
-                        maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
-                        videoFrameFallback: videoFrameFallback,
-                        trace: trace
-                    )
-                } catch let StreamingFailure.interrupted(
-                    error,
-                    passage,
-                    reasoning,
-                    _
-                ) {
-                    let endedAt = Date()
-                    let reason = agentErrorDescription(error)
-                    if !reasoning.isEmpty {
-                        trace?(.reasoningCompleted(
-                            itemID: reasoningItemID,
-                            text: reasoning,
-                            at: endedAt
-                        ))
-                    }
-                    trace?(.span(AgentTraceSpan(
-                        id: modelSpanID,
-                        step: operationStep,
-                        kind: .model,
-                        title: "LLM 推理",
-                        status: error is CancellationError ? .cancelled : .failed,
-                        startedAt: modelStartedAt,
-                        endedAt: endedAt,
-                        input: currentModelStep == 1
-                            ? traceInput
-                            : "继续处理上一轮工具结果。",
-                        output: passage.nilIfEmpty,
-                        errorMessage: reason
-                    )))
-                    if hasVisualInput, support == .unknown, error is APIError {
-                        throw AIServiceError.multimodalRequestFailed(
-                            provider: provider.displayName,
-                            model: model,
-                            reason: reason
-                        )
-                    }
-                    throw error
-                }
-
-                let passage = streamed.passage
-                let modelEndedAt = Date()
-                if !streamed.reasoning.isEmpty {
-                    trace?(.reasoningCompleted(
-                        itemID: reasoningItemID,
-                        text: streamed.reasoning,
-                        at: modelEndedAt
-                    ))
-                }
-                if !passage.isEmpty {
-                    trace?(.assistantTextCompleted(
-                        itemID: textItemID,
-                        at: modelEndedAt
-                    ))
-                }
-                let orderedDeltas = streamed.toolCalls
-                trace?(.span(AgentTraceSpan(
-                    id: modelSpanID,
-                    step: operationStep,
-                    kind: .model,
-                    title: "LLM 推理",
-                    status: .succeeded,
-                    startedAt: modelStartedAt,
-                    endedAt: modelEndedAt,
-                    input: currentModelStep == 1
-                        ? traceInput
-                        : "继续处理上一轮工具结果。",
-                    output: passage.nilIfEmpty ?? (
-                        orderedDeltas.isEmpty
-                            ? nil
-                            : "生成 \(orderedDeltas.count) 个原生 tool_call。"
-                    ),
-                    metadata: modelSpanMetadata(
                         history: history,
-                        historicalImageCount: checkpoint != nil || clearedHistoryFrames
-                            ? 0
-                            : historicalImageCount,
-                        directVideoCount: videos.count,
-                        route: selectedRoute,
-                        streamed: streamed,
-                        exposedToolNames: toolState.exposedToolNames,
-                        startedAt: modelStartedAt,
-                        endedAt: modelEndedAt
-                    )
-                )))
+                        checkpointWasProvided: checkpoint != nil,
+                        clearedHistoryFrames: clearedHistoryFrames,
+                        historicalImageCount: historicalImageCount,
+                        hasVisualInput: hasVisualInput,
+                        multimodalSupport: support,
+                        videoFrameFallback: videoFrameFallback
+                    ),
+                    trace: trace
+                )
+                let visiblePassage = streamedStep.visiblePassage
+                let reasoning = streamedStep.reasoning
+                let orderedDeltas = streamedStep.toolCalls
 
-                if !passage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    assistantPassages.append(passage)
+                if !visiblePassage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    assistantPassages.append(visiblePassage)
                 }
 
                 guard !orderedDeltas.isEmpty else {
+                    if visiblePassage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       !reasoning.isEmpty
+                    {
+                        guard !requestedFinalAnswerAfterReasoning,
+                              currentModelStep < maxSteps
+                        else {
+                            throw ReActAgentError.emptyResponse
+                        }
+                        requestedFinalAnswerAfterReasoning = true
+                        let assistantMessageIndex = toolState.messages.count
+                        toolState.messages.append(ChatCompletionParameters.Message(
+                            role: .assistant,
+                            content: .text("")
+                        ))
+                        toolState.assistantReasoningByMessageIndex[
+                            assistantMessageIndex
+                        ] = reasoning
+                        checkpointBatches.append(AgentCheckpointToolBatch(
+                            modelStep: currentModelStep,
+                            modelOperationStep: operationStep,
+                            passage: "",
+                            reasoning: reasoning,
+                            calls: [],
+                            completedResults: []
+                        ))
+                        completedOperationCount = operationStep
+                        toolState.messages.append(ChatCompletionParameters.Message(
+                            role: .user,
+                            content: .text(AgentFinalAnswerRecoveryPrompt.text)
+                        ))
+                        currentModelStep += 1
+                        persistCheckpoint(nextModelStep: currentModelStep)
+                        continue
+                    }
                     return try completeAgentRun(
-                        passage: passage,
+                        passage: visiblePassage,
                         assistantPassages: assistantPassages,
                         observations: toolState.observations,
                         trace: trace
@@ -269,11 +234,15 @@ extension AIService {
                         fallbackID: "soma_call_\(currentModelStep)_\(position)"
                     )
                 }
+                let assistantMessageIndex = toolState.messages.count
                 toolState.messages.append(ChatCompletionParameters.Message(
                     role: .assistant,
-                    content: .text(passage),
+                    content: .text(visiblePassage),
                     toolCalls: resolvedCalls.map(\.native)
                 ))
+                if !reasoning.isEmpty {
+                    toolState.assistantReasoningByMessageIndex[assistantMessageIndex] = reasoning
+                }
 
                 let checkpointCalls = resolvedCalls.map { resolved in
                     AgentCheckpointToolCall(
@@ -286,7 +255,8 @@ extension AIService {
                 checkpointBatches.append(AgentCheckpointToolBatch(
                     modelStep: currentModelStep,
                     modelOperationStep: operationStep,
-                    passage: passage,
+                    passage: visiblePassage,
+                    reasoning: reasoning.nilIfEmpty,
                     calls: checkpointCalls,
                     completedResults: []
                 ))
@@ -507,11 +477,21 @@ extension AIService {
         state: inout AgentToolLoopState
     ) {
         for batch in batches {
+            let assistantMessageIndex = state.messages.count
             state.messages.append(ChatCompletionParameters.Message(
                 role: .assistant,
                 content: .text(batch.passage),
                 toolCalls: batch.calls.map(\.native)
             ))
+            if let reasoning = batch.reasoning, !reasoning.isEmpty {
+                state.assistantReasoningByMessageIndex[assistantMessageIndex] = reasoning
+            }
+            if batch.calls.isEmpty, batch.reasoning?.isEmpty == false {
+                state.messages.append(ChatCompletionParameters.Message(
+                    role: .user,
+                    content: .text(AgentFinalAnswerRecoveryPrompt.text)
+                ))
+            }
             for completed in batch.completedResults {
                 let call = completed.call.action
                 let result = completed.result

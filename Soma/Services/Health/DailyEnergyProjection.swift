@@ -33,6 +33,27 @@ struct DailyEnergyProjectionResult: Equatable, Sendable {
     let substitutedFormula: String
 }
 
+/// 本地训练热量只有在当天每条记录都有证据时才能作为精确活动总量。
+/// 已知小计不能冒充完整总数，否则全天外推会进一步放大误差。
+struct ProgressLocalActiveEnergySummary: Equatable, Sendable {
+    let totalKilocalories: Int?
+    let missingReason: String?
+
+    init(values: [Int?]) {
+        let known = values.compactMap { $0 }
+        if values.isEmpty {
+            totalKilocalories = nil
+            missingReason = "今天没有训练记录"
+        } else if known.count != values.count {
+            totalKilocalories = nil
+            missingReason = "有训练缺少训练前体重，或缺少完整次数、时长与间歇"
+        } else {
+            totalKilocalories = known.reduce(0, +)
+            missingReason = nil
+        }
+    }
+}
+
 enum DailyEnergyProjectionCalculator {
     static func estimate(
         restingKilocaloriesSoFar: Int?,

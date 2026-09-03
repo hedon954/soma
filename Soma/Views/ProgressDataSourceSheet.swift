@@ -22,9 +22,14 @@ enum ProgressMetricSource: Identifiable, Equatable {
         components: [ProgressMetricBreakdownItem],
         formula: RestingEnergyFormulaInput?
     )
-    case active([ProgressMetricBreakdownItem])
+    case active([ProgressMetricBreakdownItem], missingReason: String?)
     case dailyTotal(DailyEnergyProjectionResult?)
-    case currentTotal(resting: Int?, active: Int?, activeUsesHealth: Bool)
+    case currentTotal(
+        resting: Int?,
+        active: Int?,
+        activeUsesHealth: Bool,
+        activeMissingReason: String?
+    )
     case energyBalance(intake: Int?, expenditure: Int?)
     case trainingDays([ProgressMetricBreakdownItem])
     case trainingVolume([ProgressMetricBreakdownItem])
@@ -52,7 +57,7 @@ enum ProgressMetricSource: Identifiable, Equatable {
         case .resting: "静息消耗来源"
         case .active: "活动消耗来源"
         case .dailyTotal: "全天总消耗预估"
-        case .currentTotal: "截至当前总消耗"
+        case .currentTotal: "当前可确认消耗"
         case .energyBalance: "能量差来源"
         case .trainingDays: "训练日来源"
         case .trainingVolume: "训练容量来源"
@@ -95,8 +100,11 @@ enum ProgressMetricSource: Identifiable, Equatable {
                     value: "\(Int(formula.dailyKilocalories.rounded())) kcal"
                 )
             ]
-        case let .active(components):
-            return componentRows(components)
+        case let .active(components, missingReason):
+            return componentRows(
+                components,
+                emptyLabel: missingReason ?? "暂无可计算活动"
+            )
         case let .dailyTotal(projection):
             guard let projection else {
                 return [ProgressSourceRow(label: "必要数据不足", value: "暂不估算")]
@@ -111,27 +119,25 @@ enum ProgressMetricSource: Identifiable, Equatable {
                     value: "\(projection.projectedActiveKilocalories) kcal"
                 )
             ]
-        case let .currentTotal(resting, active, activeUsesHealth):
-            guard let resting, let active else {
-                return [ProgressSourceRow(label: "必要数据不足", value: "暂不计算")]
-            }
-            return [
-                ProgressSourceRow(
-                    label: "截至当前静息消耗",
-                    value: "\(resting) kcal"
-                ),
-                ProgressSourceRow(
-                    label: activeUsesHealth ? "截至当前活动消耗" : "已记录训练消耗",
-                    value: "\(active) kcal"
-                )
-            ]
+        case let .currentTotal(resting, active, activeUsesHealth, missingReason):
+            var rows = [ProgressSourceRow]()
+            rows.append(ProgressSourceRow(
+                label: activeUsesHealth ? "截至当前静息消耗" : "24h 静息估算",
+                value: resting.map { "\($0) kcal" } ?? "未计算"
+            ))
+            rows.append(ProgressSourceRow(
+                label: activeUsesHealth ? "截至当前活动消耗" : "今日已记录训练消耗",
+                value: active.map { "\($0) kcal" }
+                    ?? (missingReason ?? "未计算")
+            ))
+            return rows
         case let .energyBalance(intake, expenditure):
             guard let intake, let expenditure else {
                 return [ProgressSourceRow(label: "必要数据不足", value: "暂不计算")]
             }
             return [
                 ProgressSourceRow(label: "今日摄入", value: "+\(intake) kcal"),
-                ProgressSourceRow(label: "截至当前总消耗", value: "−\(expenditure) kcal")
+                ProgressSourceRow(label: "当前可确认消耗", value: "−\(expenditure) kcal")
             ]
         case let .trainingDays(components):
             return componentRows(components, emptyLabel: "最近 7 天没有训练")

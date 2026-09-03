@@ -2,6 +2,23 @@
 import XCTest
 
 final class DailyEnergyProjectionTests: XCTestCase {
+    func testLocalActivityDoesNotPresentPartialWorkoutCaloriesAsExactTotal() {
+        let partial = ProgressLocalActiveEnergySummary(values: [120, nil, 80])
+
+        XCTAssertNil(partial.totalKilocalories)
+        XCTAssertEqual(
+            partial.missingReason,
+            "有训练缺少训练前体重，或缺少完整次数、时长与间歇"
+        )
+    }
+
+    func testLocalActivityTotalsOnlyCompleteWorkoutEvidence() {
+        let complete = ProgressLocalActiveEnergySummary(values: [120, 80])
+
+        XCTAssertEqual(complete.totalKilocalories, 200)
+        XCTAssertNil(complete.missingReason)
+    }
+
     func testHealthProjectionUsesActualEnergyAndElapsedDay() throws {
         let (calendar, midday) = try middayFixture()
 

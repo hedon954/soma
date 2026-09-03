@@ -18,6 +18,7 @@ struct AgentModelStepStart {
     var exposedToolNames: [String]
     var selectedSkillID: String?
     var selectedShortcutID: String?
+    var thinkingEnabled: Bool?
 }
 
 struct AgentStreamStepRequest {
@@ -33,10 +34,149 @@ struct AgentStreamStepRequest {
     var userPrompt: String
     var textItemID: UUID
     var reasoningItemID: UUID = .init()
+    var assistantReasoningByMessageIndex: [Int: String] = [:]
     var enforceFirstStepDeadline: Bool = false
 }
 
+struct AgentModelStepExecutionRequest {
+    var start: AgentModelStepStart
+    var stream: AgentStreamStepRequest
+    var history: [AgentConversationExchange]
+    var checkpointWasProvided: Bool
+    var clearedHistoryFrames: Bool
+    var historicalImageCount: Int
+    var hasVisualInput: Bool
+    var multimodalSupport: MultimodalSupport
+    var videoFrameFallback: (() async -> [Data])?
+}
+
+struct AgentModelStepExecutionResult {
+    var visiblePassage: String
+    var reasoning: String
+    var toolCalls: [AgentStreamingToolCall]
+}
+
 extension AIService {
+    func executeAgentModelStep(
+        messages: inout [ChatCompletionParameters.Message],
+        request: AgentModelStepExecutionRequest,
+        trace: ((AgentTraceEvent) -> Void)?
+    ) async throws -> AgentModelStepExecutionResult {
+        announceModelStepStart(request.start, trace: trace)
+        let streamed: AgentStreamOutcome
+        do {
+            streamed = try await consumeAgentStepWithRetry(
+                messages: &messages,
+                request: request.stream,
+                maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
+                videoFrameFallback: request.videoFrameFallback,
+                trace: trace
+            )
+        } catch let StreamingFailure.interrupted(error, passage, reasoning, _) {
+            let endedAt = Date()
+            let reason = agentErrorDescription(error)
+            if !reasoning.isEmpty {
+                trace?(.reasoningCompleted(
+                    itemID: request.stream.reasoningItemID,
+                    text: reasoning,
+                    at: endedAt
+                ))
+            }
+            trace?(.span(AgentTraceSpan(
+                id: request.start.spanID,
+                step: request.start.operationStep,
+                kind: .model,
+                title: "LLM 推理",
+                status: error is CancellationError ? .cancelled : .failed,
+                startedAt: request.start.startedAt,
+                endedAt: endedAt,
+                input: request.start.modelStep == 1
+                    ? request.start.traceInput
+                    : "继续处理上一轮工具结果。",
+                output: passage.isEmpty ? nil : passage,
+                errorMessage: reason
+            )))
+            if request.hasVisualInput,
+               request.multimodalSupport == .unknown,
+               error is APIError
+            {
+                throw AIServiceError.multimodalRequestFailed(
+                    provider: request.start.route.provider.displayName,
+                    model: request.start.route.model,
+                    reason: reason
+                )
+            }
+            throw error
+        }
+
+        let passage = streamed.passage
+        let passageIsInternalDraft = streamed.contentWasProjectedAsReasoning
+            || streamed.reasoning.isEmpty
+            && AgentInternalDraftClassifier.isLikelyInternalDraft(passage)
+        let visiblePassage = passageIsInternalDraft ? "" : passage
+        let reasoning = [
+            streamed.reasoning,
+            passageIsInternalDraft ? passage : ""
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n\n")
+        let endedAt = Date()
+        if passageIsInternalDraft {
+            trace?(.assistantTextDiscarded(
+                itemID: request.stream.textItemID,
+                at: endedAt
+            ))
+        }
+        if !reasoning.isEmpty {
+            trace?(.reasoningCompleted(
+                itemID: request.stream.reasoningItemID,
+                text: reasoning,
+                at: endedAt
+            ))
+        }
+        if !visiblePassage.isEmpty {
+            trace?(.assistantTextCompleted(
+                itemID: request.stream.textItemID,
+                at: endedAt
+            ))
+        }
+        trace?(.span(AgentTraceSpan(
+            id: request.start.spanID,
+            step: request.start.operationStep,
+            kind: .model,
+            title: "LLM 推理",
+            status: .succeeded,
+            startedAt: request.start.startedAt,
+            endedAt: endedAt,
+            input: request.start.modelStep == 1
+                ? request.start.traceInput
+                : "继续处理上一轮工具结果。",
+            output: (visiblePassage.isEmpty ? nil : visiblePassage) ?? (
+                streamed.toolCalls.isEmpty
+                    ? nil
+                    : "生成 \(streamed.toolCalls.count) 个原生 tool_call。"
+            ),
+            metadata: modelSpanMetadata(
+                history: request.history,
+                historicalImageCount: request.checkpointWasProvided
+                    || request.clearedHistoryFrames
+                    ? 0
+                    : request.historicalImageCount,
+                directVideoCount: request.stream.videos.count,
+                route: request.start.route,
+                streamed: streamed,
+                exposedToolNames: request.start.exposedToolNames,
+                startedAt: request.start.startedAt,
+                endedAt: endedAt
+            )
+        )))
+        return AgentModelStepExecutionResult(
+            visiblePassage: visiblePassage,
+            reasoning: reasoning,
+            toolCalls: streamed.toolCalls
+        )
+    }
+
     func consumeAgentStepWithRetry(
         messages: inout [ChatCompletionParameters.Message],
         request: AgentStreamStepRequest,
@@ -71,6 +211,7 @@ extension AIService {
                     apiKey: request.apiKey,
                     textItemID: request.textItemID,
                     reasoningItemID: request.reasoningItemID,
+                    assistantReasoningByMessageIndex: request.assistantReasoningByMessageIndex,
                     enforceFirstDelta: request.enforceFirstStepDeadline,
                     trace: trace
                 )
@@ -145,6 +286,7 @@ extension AIService {
         apiKey: String,
         textItemID: UUID,
         reasoningItemID: UUID,
+        assistantReasoningByMessageIndex: [Int: String] = [:],
         enforceFirstDelta: Bool,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
@@ -153,7 +295,8 @@ extension AIService {
             videos: videos,
             provider: route.provider,
             baseURL: route.baseURL,
-            apiKey: apiKey
+            apiKey: apiKey,
+            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
         )
         return try await AgentStreamWorker.consume(
             stream: stream,
@@ -203,7 +346,7 @@ extension AIService {
                 "selected_shortcut_id": start.selectedShortcutID
                     .map { $0 as Any } ?? NSNull(),
                 "stream": true,
-                "thinking": false
+                "thinking": start.thinkingEnabled.map { $0 as Any } ?? NSNull()
             ])
         )))
         AgentDiagnostics.modelRequest(
@@ -264,7 +407,8 @@ extension AIService {
         videos: [AgentVideoInput],
         provider: AIProvider,
         baseURL: String,
-        apiKey: String
+        apiKey: String,
+        assistantReasoningByMessageIndex: [Int: String] = [:]
     ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error> {
         if let agentStreamLoader {
             return try await agentStreamLoader(parameters, provider, baseURL, apiKey)
@@ -276,7 +420,8 @@ extension AIService {
             videos: videos,
             provider: provider,
             baseURL: baseURL,
-            apiKey: apiKey
+            apiKey: apiKey,
+            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
         )
     }
 

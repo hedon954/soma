@@ -17,6 +17,8 @@ interface ChatCompletionResponse {
     message?: {
       content?: string | null;
       reasoning_content?: string | null;
+      reasoning?: string | null;
+      analysis?: string | null;
       tool_calls?: {
         id?: string;
         function?: {
@@ -38,6 +40,7 @@ interface ChatCompletionStreamChunk {
       content?: string | null;
       reasoning_content?: string | null;
       reasoning?: string | null;
+      analysis?: string | null;
       tool_calls?: {
         index?: number;
         id?: string;
@@ -91,7 +94,19 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     const appendCompletedModelEvents = (
       messages: Record<string, unknown>[],
     ): void => {
+      let reasoningSinceModelStart: string | undefined;
       for (const event of events) {
+        if (event.kind === "model" && event.phase === "started") {
+          reasoningSinceModelStart = undefined;
+          continue;
+        }
+        if (event.kind === "reasoning" && event.phase === "completed") {
+          const text = event.payload.text;
+          reasoningSinceModelStart = typeof text === "string" && text.length > 0
+            ? text
+            : undefined;
+          continue;
+        }
         if (
           event.kind !== "model" ||
           event.phase !== "completed" ||
@@ -104,13 +119,22 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           type?: unknown;
           function?: unknown;
         }[];
-        messages.push({
+        const explicitReasoning = event.payload.reasoningText;
+        const reasoning = typeof explicitReasoning === "string" &&
+            explicitReasoning.length > 0
+          ? explicitReasoning
+          : reasoningSinceModelStart;
+        const assistantMessage: Record<string, unknown> = {
           role: "assistant",
           content: typeof event.payload.assistantText === "string"
             ? event.payload.assistantText
             : null,
           tool_calls: toolCalls,
-        });
+        };
+        if (reasoning !== undefined) {
+          assistantMessage.reasoning_content = reasoning;
+        }
+        messages.push(assistantMessage);
         for (const call of toolCalls) {
           if (typeof call.id !== "string") continue;
           const result = events.find((candidate) =>
@@ -126,6 +150,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
             });
           }
         }
+        reasoningSinceModelStart = undefined;
       }
     };
     let messages = modelMessages(
@@ -262,8 +287,8 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
   ): Promise<ProviderStep> {
     const payload = (await response.json()) as ChatCompletionResponse;
     const message = payload.choices?.[0]?.message;
-    const reasoning = message?.reasoning_content;
-    if (typeof reasoning === "string" && reasoning.length > 0) {
+    const reasoning = reasoningText(message);
+    if (reasoning !== undefined) {
       deadline.markMeaningfulDelta();
       await onReasoningDelta?.(reasoning);
     }
@@ -385,8 +410,8 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       }
       const delta = chunk.choices?.[0]?.delta;
       const content = delta?.content;
-      const reasoning = delta?.reasoning_content ?? delta?.reasoning;
-      if (typeof reasoning === "string" && reasoning.length > 0) {
+      const reasoning = reasoningText(delta);
+      if (reasoning !== undefined) {
         onMeaningfulDelta?.();
         await deliverReasoning(reasoning);
       }
@@ -464,6 +489,27 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     }
     return { kind: "completed", answer: trimmedAnswer, usage };
   }
+}
+
+function reasoningText(
+  value:
+    | {
+      reasoning_content?: string | null;
+      reasoning?: string | null;
+      analysis?: string | null;
+    }
+    | undefined,
+): string | undefined {
+  for (const candidate of [
+    value?.reasoning_content,
+    value?.reasoning,
+    value?.analysis,
+  ]) {
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 const providerReservedExtraConfigKeys = new Set([

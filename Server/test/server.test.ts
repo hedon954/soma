@@ -248,16 +248,50 @@ test("worker projects reasoning as one stable lifecycle before answer text", asy
   const reasoning = events.filter((event) => event.kind === "reasoning");
 
   assert.deepEqual(reasoning.map((event) => event.phase), [
+    "started",
     "updated",
     "updated",
     "completed",
   ]);
-  assert.equal(reasoning[0]?.payload.itemID, reasoning[2]?.payload.itemID);
-  assert.equal(reasoning[2]?.payload.text, "先核对事实，再生成答案。");
+  assert.ok(reasoning.every((event) =>
+    event.payload.itemID === reasoning[0]?.payload.itemID
+  ));
+  assert.equal(reasoning[3]?.payload.text, "先核对事实，再生成答案。");
   assert.ok(
     (events.findIndex((event) => event.kind === "reasoning" && event.phase === "completed")) <
       events.findIndex((event) => event.kind === "text" && event.phase === "completed"),
   );
+});
+
+test("worker closes a partial reasoning lifecycle when the provider fails", async () => {
+  const store = new InMemorySomaStore();
+  const input = makeJobInput();
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input,
+    bodyDigest: sha256(JSON.stringify(input)),
+    now: new Date(),
+  });
+  const worker = new AgentWorker(store, {
+    async run(_job, _events, _media, _onTextDelta, onReasoningDelta) {
+      await onReasoningDelta?.("尚未完成的思考");
+      throw new Error("provider interrupted");
+    },
+  });
+
+  assert.equal((await worker.runOnce())?.state, "failed");
+  const reasoning = (await store.events(job.id, 0, 100)).filter((event) =>
+    event.kind === "reasoning"
+  );
+  assert.deepEqual(reasoning.map((event) => event.phase), [
+    "started",
+    "updated",
+    "failed",
+  ]);
+  assert.ok(reasoning.every((event) =>
+    event.payload.itemID === reasoning[0]?.payload.itemID
+  ));
+  assert.equal(reasoning[2]?.payload.text, "尚未完成的思考");
 });
 
 test("worker model start records every exposed tool", async () => {
@@ -1108,7 +1142,7 @@ test("managed provider streams reasoning separately from answer text", async () 
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(encoder.encode(
-            'data: {"choices":[{"delta":{"reasoning_content":"分析中。"}}]}\n\n',
+            'data: {"choices":[{"delta":{"reasoning_content":"","analysis":"分析中。"}}]}\n\n',
           ));
           controller.enqueue(encoder.encode(
             'data: {"choices":[{"delta":{"content":"答案。"},"finish_reason":"stop"}]}\n\n',
@@ -1146,6 +1180,146 @@ test("managed provider streams reasoning separately from answer text", async () 
     answer: "答案。",
     usage: { input: 0, output: 0 },
   });
+});
+
+test("managed provider normalizes non-stream reasoning aliases", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input: makeJobInput(),
+    bodyDigest: sha256("reasoning-json"),
+    now: new Date(),
+  });
+  const provider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1",
+    "test-key",
+    "test-model",
+    async () =>
+      new Response(JSON.stringify({
+        choices: [{
+          message: {
+            reasoning_content: "",
+            analysis: "先分析事实",
+            content: "再给答案",
+          },
+        }],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  const text: string[] = [];
+  const reasoning: string[] = [];
+
+  const step = await provider.run(
+    job,
+    [],
+    [],
+    async (delta) => {
+      text.push(delta);
+    },
+    async (delta) => {
+      reasoning.push(delta);
+    },
+  );
+
+  assert.deepEqual(reasoning, ["先分析事实"]);
+  assert.deepEqual(text, ["再给答案"]);
+  assert.equal(step.kind, "completed");
+});
+
+test("remote tool continuation replays assistant reasoning after worker replacement", async () => {
+  const store = new InMemorySomaStore();
+  const input = makeJobInput({ allowedRemoteTools: ["load_skill"] });
+  input.modelInput.skills = [{
+    id: "training_plan",
+    content: "设备提交的训练计划 Skill",
+  }];
+  const job = await store.submitJob({
+    deviceID: randomUUID(),
+    input,
+    bodyDigest: sha256("remote-reasoning-continuation"),
+    now: new Date(),
+  });
+  const requestBodies: Record<string, unknown>[] = [];
+  let requestCount = 0;
+  const provider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1",
+    "test-key",
+    "test-model",
+    async (_request, init) => {
+      requestBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>,
+      );
+      requestCount += 1;
+      const encoder = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (requestCount === 1) {
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({
+                choices: [{
+                  delta: {
+                    reasoning_content: "先判断应加载哪个 Skill。",
+                    tool_calls: [{
+                      index: 0,
+                      id: "call_reasoning_skill",
+                      function: {
+                        name: "load_skill",
+                        arguments: JSON.stringify({ skill_id: "training_plan" }),
+                      },
+                    }],
+                  },
+                }],
+              })}\n\n`,
+            ));
+          } else {
+            controller.enqueue(encoder.encode(
+              'data: {"choices":[{"delta":{"content":"已完成。"},"finish_reason":"stop"}]}\n\n',
+            ));
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  );
+
+  const firstWorker = new AgentWorker(store, provider, "reasoning-worker-1");
+  assert.equal((await firstWorker.runOnce())?.state, "queued");
+  const firstEvents = await store.events(job.id, 0, 100);
+  const firstModelCompletion = firstEvents.find((event) =>
+    event.kind === "model" && event.phase === "completed"
+  );
+  assert.equal(
+    firstModelCompletion?.payload.reasoningText,
+    "先判断应加载哪个 Skill。",
+  );
+
+  const replacementWorker = new AgentWorker(
+    store,
+    provider,
+    "reasoning-worker-2",
+  );
+  assert.equal((await replacementWorker.runOnce())?.state, "completed");
+  const continuationMessages = requestBodies[1]?.messages as
+    | Record<string, unknown>[]
+    | undefined;
+  const assistant = continuationMessages?.find((message) =>
+    message.role === "assistant"
+  );
+  assert.equal(
+    assistant?.reasoning_content,
+    "先判断应加载哪个 Skill。",
+  );
+  assert.equal(
+    (assistant?.tool_calls as { id?: string }[] | undefined)?.[0]?.id,
+    "call_reasoning_skill",
+  );
 });
 
 test("managed provider extra config defaults and validation stay provider-specific", () => {

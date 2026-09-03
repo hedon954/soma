@@ -110,6 +110,7 @@ enum AgentTraceEvent: Equatable, Sendable {
     case span(AgentTraceSpan)
     case assistantTextDelta(itemID: UUID, delta: String)
     case assistantTextCompleted(itemID: UUID, at: Date)
+    case assistantTextDiscarded(itemID: UUID, at: Date)
     case reasoningDelta(itemID: UUID, delta: String)
     case reasoningCompleted(itemID: UUID, text: String, at: Date)
     case completed(answer: String, at: Date)
@@ -209,7 +210,7 @@ final class AgentTrace {
                 current.append(span)
             }
             spansData = (try? JSONEncoder().encode(current)) ?? spansData
-        case .assistantTextDelta, .assistantTextCompleted,
+        case .assistantTextDelta, .assistantTextCompleted, .assistantTextDiscarded,
              .reasoningDelta, .reasoningCompleted:
             break
         case let .completed(answer, date):

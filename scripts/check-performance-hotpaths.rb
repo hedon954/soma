@@ -146,6 +146,11 @@ end
 coach_source = File.read(File.join(ROOT, "Soma/Views/CoachView.swift"))
 coach_actions_source = File.read(File.join(ROOT, "Soma/Views/CoachSessionView+Actions.swift"))
 coach_screen_source = "#{coach_source}\n#{coach_actions_source}"
+if coach_source.include?(".scrollPosition(")
+  fail_check(
+    "Coach message list can again mix declarative scrollPosition ownership with ScrollViewReader commands"
+  )
+end
 coach_support_source = File.read(File.join(ROOT, "Soma/Views/CoachMessagePerformanceSupport.swift"))
 coach_view_support_source = File.read(File.join(ROOT, "Soma/Views/CoachViewSupport.swift"))
 coach_bubble_source = File.read(File.join(ROOT, "Soma/Views/CoachBubble.swift"))
@@ -249,17 +254,21 @@ unless coach_source.scan(/processor\.liveEventRevision/).empty?
 end
 unless agent_transcript_source.match?(/struct StreamingAgentTextView.*?IncrementalChatTextView/m) &&
        incremental_chat_text_source.include?("view.textStorage.append") &&
+       incremental_chat_text_source.include?("renderedStreamID") &&
+       !incremental_chat_text_source.include?(".elementsEqual(") &&
        incremental_chat_text_source.include?("func sizeThatFits(") &&
        processing_models_source.include?("static let defaultTargetCharacterCount = 256") &&
        processing_models_source.include?("targetCharacterCount - chunks[chunks.count - 1].text.count")
   fail_check("long-stream text can again remeasure a large eager stack or unbounded mutable tail")
 end
-unless coach_support_source.include?("struct CoachLiveAutoScrollDriver: View") &&
-       coach_support_source.include?("processor.liveEventRevision") &&
+unless coach_source.include?("CoachMessageContentHeightPreferenceKey.self") &&
+       coach_source.include?("visibility.tailScroll.recordContentHeight(height)") &&
+       coach_source.include?("consumePendingMessageID()") &&
+       coach_source.include?("visibility.tailScroll.followState.isFollowing") &&
        coach_actions_source.include?("targetMessageID: UUID? = nil") &&
        coach_actions_source.include?("proxy.scrollTo(targetMessageID, anchor: .bottom)") &&
-       coach_source.include?("targetMessageID: message.id")
-  fail_check("live coach output no longer follows the stable message bottom independently of lazy rows")
+       coach_actions_source.include?("func requestTailScroll(")
+  fail_check("live coach output no longer follows measured content growth through one tail owner")
 end
 if coach_source.include?("@State private var isCoachVisible") ||
    coach_source.match?(/\.onAppear\s*\{[^}]*refreshInputShortcuts/m)
@@ -305,12 +314,13 @@ end
 if coach_screen_source.match?(/@State[^\n]*(lastLiveScrollAt|liveScrollTask)/)
   fail_check("live scroll throttling again writes observable @State on every streaming tick")
 end
-unless coach_view_support_source.include?("final class CoachLiveScrollThrottle") &&
-       coach_actions_source.include?("visibility.liveScroll")
+unless coach_view_support_source.include?("final class CoachTailScrollCoordinator") &&
+       coach_actions_source.include?("visibility.tailScroll") &&
+       !coach_actions_source.include?("scrollToBottomAfterLayout")
   fail_check("live scroll throttling no longer lives on the non-observed holder")
 end
 unless coach_support_source.include?("struct CoachTabActivationDriver") &&
-       coach_support_source.scan(/@Environment\(\\\.coachTabIsActive\)/).length == 2 &&
+       coach_support_source.scan(/@Environment\(\\\.coachTabIsActive\)/).length == 1 &&
        coach_source.include?("CoachTabActivationDriver {")
   fail_check("switching to the coach tab no longer returns to the latest message through one leaf driver")
 end
@@ -459,7 +469,7 @@ pump_source = File.read(File.join(ROOT, service_file("AgentTextProjectionPump.sw
 unless streaming_source.include?("enum AgentStreamWorker") &&
        streaming_source.include?("project: @escaping @MainActor (AgentTraceEvent) -> Void") &&
        streaming_source.include?("let projectionPump = AgentTextProjectionPump") &&
-       streaming_source.include?("await projectionPump.append(content)") &&
+       streaming_source.include?("await projectionPump.append(projection.visible)") &&
        streaming_source.include?("await projectionPump.finish()") &&
        pump_source.include?("minimumInterval: Duration = .milliseconds(200)") &&
        pump_source.include?("private var drainTask: Task<Void, Never>?")
@@ -472,7 +482,9 @@ unless coalescer_source.include?("minimumInterval: TimeInterval = 0.2")
 end
 
 agent_job_source = File.read(File.join(ROOT, "Soma/Models/AgentJob.swift"))
-delta_projection = agent_job_source[/case \.assistantTextDelta:.*?case let \.assistantTextCompleted/m]
+delta_projection = agent_job_source[
+  /case \.assistantTextDelta, \.assistantTextDiscarded:.*?case \.reasoningDelta:/m
+]
 unless delta_projection&.include?("return") &&
        !delta_projection.include?("responseMessage.applyAgentEvent") &&
        !delta_projection.include?("try? context.save()")
@@ -508,7 +520,9 @@ unless coach_actions_source.include?("let interval: TimeInterval = 0.2") &&
        transcript_source.include?("struct LiveAgentTurnTranscriptContent") &&
        transcript_source.scan(/processor\.liveEventRevision/).length == 1 &&
        transcript_source.include?("struct CoachLiveAgentTurnTranscript") &&
-       transcript_source.include?("StreamingAgentTextView(chunks: liveText.chunks)") &&
+       transcript_source.include?("preparedSegments: stableSegments") &&
+       transcript_source.include?("StreamingAgentTextView(") &&
+       transcript_source.include?("streamID: liveText.itemID") &&
        chat_presentation_source.include?("enum AgentTurnLiveProjection")
   fail_check("running text no longer renders directly from stable chunks")
 end

@@ -116,6 +116,7 @@ struct AgentCheckpointToolBatch: Codable, Equatable, @unchecked Sendable {
     var modelStep: Int
     var modelOperationStep: Int
     var passage: String
+    var reasoning: String? = nil
     var calls: [AgentCheckpointToolCall]
     var completedResults: [AgentCheckpointToolResult]
 

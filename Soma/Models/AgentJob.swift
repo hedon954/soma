@@ -1037,7 +1037,7 @@ enum PersistentAgentEventProjection {
         trace.apply(event)
 
         switch event {
-        case .assistantTextDelta:
+        case .assistantTextDelta, .assistantTextDiscarded:
             // 高频增量由 ConversationProcessingService 的瞬态缓冲驱动 UI。
             // 这里不再反复修改三份增长中的字符串、解码/编码完整
             // agentTurnItems JSON，或使 SwiftData 观察者整页失效。
@@ -1172,7 +1172,7 @@ enum PersistentAgentEventProjection {
     ) {
         message.applyAgentEvent(event)
         switch event {
-        case .assistantTextDelta, .reasoningDelta:
+        case .assistantTextDelta, .assistantTextDiscarded, .reasoningDelta:
             break
         case .assistantTextCompleted, .reasoningCompleted, .span:
             break

@@ -110,6 +110,7 @@ export class AgentWorker {
     const reasoningItemID = randomUUID();
     let emittedText = false;
     let emittedReasoning = false;
+    let completedReasoning = false;
     let reasoningText = "";
     const heartbeat = setInterval(() => {
       void this.store.renewLease(
@@ -150,7 +151,16 @@ export class AgentWorker {
         },
         async (delta) => {
           if (delta.length === 0) return;
-          emittedReasoning = true;
+          if (!emittedReasoning) {
+            emittedReasoning = true;
+            await this.store.appendEvent(job.id, lease.epoch, {
+              kind: "reasoning",
+              phase: "started",
+              payloadVersion: 1,
+              payload: { itemID: reasoningItemID },
+              createdAt: new Date(),
+            });
+          }
           reasoningText += delta;
           await this.store.appendEvent(job.id, lease.epoch, {
             kind: "reasoning",
@@ -169,6 +179,7 @@ export class AgentWorker {
           payload: { itemID: reasoningItemID, text: reasoningText },
           createdAt: new Date(),
         });
+        completedReasoning = true;
       }
       if (emittedText) {
         await this.store.appendEvent(job.id, lease.epoch, {
@@ -197,6 +208,7 @@ export class AgentWorker {
           payloadVersion: 1,
           payload: {
             assistantText: step.assistantText,
+            ...(reasoningText.length === 0 ? {} : { reasoningText }),
             toolCalls: calls.map((call) => ({
               id: call.toolCallID,
               type: "function",
@@ -370,6 +382,15 @@ export class AgentWorker {
           ? error.code
           : "provider_unavailable";
       try {
+        if (emittedReasoning && !completedReasoning) {
+          await this.store.appendEvent(job.id, lease.epoch, {
+            kind: "reasoning",
+            phase: "failed",
+            payloadVersion: 1,
+            payload: { itemID: reasoningItemID, text: reasoningText },
+            createdAt: new Date(),
+          });
+        }
         await this.store.appendEvent(job.id, lease.epoch, {
           kind: "error",
           phase: "failed",
