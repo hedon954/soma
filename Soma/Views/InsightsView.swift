@@ -47,7 +47,7 @@ struct InsightsView: View {
                     if period == .day, let day = snapshot.days.first, !day.isFuture {
                         ProgressDayRecordSections(day: day)
                     }
-                    resources
+                    ProgressResourceLinks()
                 } else if errorMessage == nil {
                     ProgressView("正在加载进展…")
                         .frame(maxWidth: .infinity, minHeight: 200)
@@ -153,27 +153,6 @@ struct InsightsView: View {
             anchorDate = .now
         }
         revision += 1
-    }
-
-    private var resources: some View {
-        VStack(spacing: 12) {
-            HStack {
-                NavigationLink("全部训练") { WorkoutHistoryView() }.frame(minHeight: 44)
-                Spacer()
-                NavigationLink("全部饮食") { MealHistoryView() }.frame(minHeight: 44)
-                Spacer()
-                NavigationLink("身体记录") { BodyHistoryView() }.frame(minHeight: 44)
-            }
-            HStack {
-                NavigationLink("足迹") { FootprintsView() }.frame(minHeight: 44)
-                Spacer()
-                NavigationLink("健身房") { GymLibraryView() }.frame(minHeight: 44)
-                Spacer()
-                NavigationLink("动作库") { ExerciseLibraryView() }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("exercise-library-link")
-            }
-        }.font(.subheadline).buttonStyle(.plain).frame(minHeight: 44)
     }
 
     private func load(_ key: ProgressHistoryRequest) async {

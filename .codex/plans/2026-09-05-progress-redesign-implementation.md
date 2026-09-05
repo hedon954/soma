@@ -18,6 +18,7 @@
 - [x] P08 训练按逻辑组统计天数、组数、容量；身体使用真实测量日期，不插值造事实。
 - [x] P09 共用原记录详情和当日训练分享；保留已有编辑、删除、分享逻辑。进展日页分享入口 UI 回归通过。
 - [ ] P10 浅／深色、44pt 点击、Dynamic Type、VoiceOver；清除装饰说明文案，不删单位、图例、必要状态。
+- [x] P11 底部六个资源入口改为语义图标小卡片；默认三列，大字号两列，保留顺序、目的地与完整触达。浅深色、几何、大字号及六项导航回归通过；小屏与 iPad 已检查。
 
 ## 动态消耗预估
 
@@ -64,3 +65,5 @@
 - 最新交付：17 Pro Max Release 0.0.18 (22) 已安装并启动（`build/progress-release-17pm.log`）；14 Pro Max 已重新连接，待最终版本安装。进展日页分享新增 UI 回归通过（`build/progress-delivery-ui.log`），iPad 日页和能量依据目视复核通过；真实 HealthKit、VoiceOver 和全场景真机性能不视为已验收。
 - 收尾 UI 批次：7 项全部通过，123 秒；记录在 `build/progress-delivery-ui.log`。单柱／孤立点、日页分享、依据整行触达、四周期及大字号均有回归。
 - 最终交付：进展提交 `8bfecf9` 已推送。2026-09-05 Release 0.0.18 (22) 已安装并正常启动到两机（`build/fifth-round-release-14pm.log`、`build/fifth-round-release-17pm.log` 和对应正常启动日志）；真实 HealthKit 与 VoiceOver 保持未验收。
+- 底部入口补充：旧链接辅助功能几何仅 18pt 高，测试先失败；改为 88pt 起的完整卡片与按下反馈。大字号先复现行高错位，统一两行文字区域后 3 项 UI 测试全部通过（`build/progress-resources-final-ui.log`）；浅深色和大字号截图在 `build/progress-resources-ui-final/`。不改变六个入口的目的地、顺序或任何数据规则。
+- 底部入口最终门禁：`build/progress-resources-verify.log` 的 `make verify` 通过，727 项 XCTest、7 项 Swift Testing；Server 39 项通过、1 项测试库未配置而跳过。双机 Release 安装/启动分别记录在 `build/progress-resources-install-14pm.log` 与 `build/progress-resources-install-17pm.log`，不复用此前安装结果。
