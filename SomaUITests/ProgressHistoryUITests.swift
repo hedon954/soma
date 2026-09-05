@@ -6,6 +6,20 @@ final class ProgressHistoryUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testDayShowsEstimatedCalorieDeficitInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance)
+            let picker = app.segmentedControls["progress-period-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 15))
+            picker.buttons["日"].tap()
+            XCTAssertTrue(app.staticTexts["445 kcal"].waitForExistence(timeout: 5), "缺口应为预估消耗 2345 减去已记录摄入 1900")
+            XCTAssertTrue(app.staticTexts["预估热量缺口"].exists)
+            XCTAssertFalse(app.staticTexts["与预估的差值"].exists)
+            keep(app, "progress-calorie-deficit-\(appearance)")
+            app.terminate()
+        }
+    }
+
     func testFourPeriodsDarkAndHistoricalNavigation() {
         let app = launch("dark")
         let picker = app.segmentedControls["progress-period-picker"]

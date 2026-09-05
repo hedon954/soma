@@ -149,7 +149,7 @@ final class RecordOptimizationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已记录摄入"].exists)
         XCTAssertTrue(app.staticTexts["预估总消耗"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["基础 + 训练"].exists)
-        XCTAssertTrue(app.staticTexts["与预估的差值"].exists)
+        XCTAssertTrue(app.staticTexts["预估热量缺口"].exists)
         keepScreenshot(of: app, named: "progress-daily-energy-projection")
     }
 

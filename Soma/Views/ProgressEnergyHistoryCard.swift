@@ -66,11 +66,11 @@ struct ProgressEnergyHistoryCard: View {
                     }
                 } else if let day = snapshot.days.first {
                     metricLayout {
-                        Text("与预估的差值").foregroundStyle(.secondary)
+                        Text("预估热量缺口").foregroundStyle(.secondary)
                         if !dynamicTypeSize.isAccessibilitySize {
                             Spacer()
                         }
-                        Text(balanceText(day))
+                        Text(deficitText(day))
                     }.font(.subheadline)
                     metricLayout {
                         nutrient("蛋白质", day.protein.value)
@@ -203,9 +203,9 @@ struct ProgressEnergyHistoryCard: View {
         value.map { text($0) + " kcal" } ?? missing
     }
 
-    private func balanceText(_ day: ProgressDailyMetrics) -> String {
+    private func deficitText(_ day: ProgressDailyMetrics) -> String {
         guard let estimate = day.energy.estimate else { return "待估算" }
-        let difference = day.intake.value - estimate.totalKilocalories
-        return difference.formatted(.number.sign(strategy: .always()).precision(.fractionLength(0))) + " kcal"
+        let deficit = estimate.totalKilocalories - day.intake.value
+        return text(deficit) + " kcal"
     }
 }

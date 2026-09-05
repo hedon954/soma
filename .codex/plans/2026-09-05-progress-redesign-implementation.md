@@ -11,7 +11,7 @@
 - [x] P01 日／周／月／年共用日期状态；自然周从周一开始，支持闰年、跨年、夏令时。
 - [x] P02 上一周期／下一周期、日历选日、回到当前周期；未来日期不可选，超出当前周期的下一步置灰；切 Tab、返回详情保持选择与位置。
 - [x] P03 首页固定为饮食与能量主图、训练卡、身体卡；保留资源入口的可达路径。
-- [x] P04 日页：摄入、全天预估消耗、差值、三大营养素、饮食／训练／身体记录。
+- [x] P04 日页：摄入、全天预估消耗、预估热量缺口、三大营养素、饮食／训练／身体记录。缺口 = 预估总消耗 − 已记录摄入，负值表示盈余。
 - [x] P05 周／月按天绘制摄入柱、消耗虚线；同 kcal 坐标，点选不改变时间窗口。
 - [x] P06 年按月汇总；均值按有效天数加权，不能平均每月均值。
 - [x] P07 图表选中条两行排列，查看当天／该月下钻；历史可回查，未来不造数。
@@ -67,3 +67,4 @@
 - 最终交付：进展提交 `8bfecf9` 已推送。2026-09-05 Release 0.0.18 (22) 已安装并正常启动到两机（`build/fifth-round-release-14pm.log`、`build/fifth-round-release-17pm.log` 和对应正常启动日志）；真实 HealthKit 与 VoiceOver 保持未验收。
 - 底部入口补充：旧链接辅助功能几何仅 18pt 高，测试先失败；改为 88pt 起的完整卡片与按下反馈。大字号先复现行高错位，统一两行文字区域后 3 项 UI 测试全部通过（`build/progress-resources-final-ui.log`）；浅深色和大字号截图在 `build/progress-resources-ui-final/`。不改变六个入口的目的地、顺序或任何数据规则。
 - 底部入口最终门禁：`build/progress-resources-verify.log` 的 `make verify` 通过，727 项 XCTest、7 项 Swift Testing；Server 39 项通过、1 项测试库未配置而跳过。双机 Release 安装/启动分别记录在 `build/progress-resources-install-14pm.log` 与 `build/progress-resources-install-17pm.log`，不复用此前安装结果。
+- 日页缺口：统一为「预估热量缺口」，按消耗减摄入显示。2345 − 1900 = 445 的 UI 回归先失败再通过，浅深色及 iPad 已检查；截图在 `build/progress-deficit-ui-evidence/`，全量门禁通过见 `build/progress-deficit-verify.log`。
