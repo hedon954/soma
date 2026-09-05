@@ -5,68 +5,99 @@ struct ProgressEnergySourcesView: View {
     let snapshot: ProgressHistorySnapshot
     let healthError: String?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var selectedDate: Date?
 
     private var day: ProgressDailyMetrics? {
-        snapshot.days.last { !$0.isFuture }
+        snapshot.days.first { $0.date == selectedDate && !$0.isFuture } ?? snapshot.days.last { !$0.isFuture }
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("统计范围") {
-                    Text(snapshot.window.title())
-                    LabeledContent("摄入有记录日", value: "\(snapshot.intakeDayCount) 天")
-                    LabeledContent("可估算日", value: "\(snapshot.estimateDayCount) 天")
-                    if snapshot.window.period != .day {
-                        Text("日均按已结束且有对应数据的日期计算；不是各月均值的平均。")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
+            List {
                 if let day {
-                    Section(day.date.formatted(.dateTime.year().month().day())) {
-                        LabeledContent("近 30 天有效设备日", value: "\(day.energy.eligibleDayCount) 天")
-                        LabeledContent("已记录训练消耗", value: "\(day.trainingCalories.value.formatted()) kcal")
-                        if day.trainingCalories.missingCount > 0 {
-                            Text("\(day.trainingCalories.missingCount) 条训练未计入").foregroundStyle(.secondary)
-                        }
-                        if day.intake.missingCount > 0 {
-                            Text("\(day.intake.missingCount) 条饮食能量不完整").foregroundStyle(.secondary)
-                        }
-                        if let estimate = day.energy.estimate {
-                            LabeledContent("静息基准", value: "\(estimate.restingKilocalories.formatted(.number.precision(.fractionLength(0)))) kcal")
-                            LabeledContent("有效活动系数", value: estimate.factor.formatted(.number.precision(.fractionLength(2))))
-                            LabeledContent("来源", value: estimate.sourceName)
-                            Text(formulaText(estimate))
-                                .font(.subheadline.monospacedDigit())
-                            if let first = estimate.evidenceDays.first, let last = estimate.evidenceDays.last {
-                                Text("\(first.formatted(.dateTime.month().day()))—\(last.formatted(.dateTime.month().day()))，\(estimate.evidenceDays.count) 个有效日")
-                            } else {
-                                LabeledContent("参考生效日期", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
+                    if snapshot.window.period == .day {
+                        LabeledContent("日期", value: day.date.formatted(.dateTime.year().month().day()))
+                    } else {
+                        Picker("日期", selection: Binding(get: { day.date }, set: { selectedDate = $0 })) {
+                            ForEach(snapshot.days.filter { !$0.isFuture }) { item in
+                                Text(item.date.formatted(.dateTime.year().month().day())).tag(item.date)
                             }
-                            Text("预估已包含活动，不再另加训练。设备能量仍是估计，不等于真实全天消耗。")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        } else {
-                            Text(healthError ?? day.energy.missingReason ?? "暂时无法估算").foregroundStyle(.secondary)
                         }
                     }
-                    if let formula = day.restingFormula {
-                        Section("个人静息公式") {
-                            Text(formula.originalFormula)
-                            Text(formula.substitutedFormula)
-                            if day.usesLaterProfile {
-                                Text("历史回算使用当前身高等个人资料及当时体重。")
-                            }
-                        }.font(.footnote)
+                    LabeledContent("静息消耗", value: energy(day.energy.estimate?.restingKilocalories ?? day.restingFormula?.dailyKilocalories))
+                    NavigationLink {
+                        ProgressLifestyleEditor()
+                    } label: {
+                        LabeledContent("活动系数", value: factorText(day.energy.estimate))
                     }
-                }
-                Section {
-                    NavigationLink("生活方式参考") { ProgressLifestyleEditor() }
-                    NavigationLink("身体资料") { PersonalBodyInfoView() }
+                    LabeledContent("预估总消耗", value: energy(day.energy.estimate?.totalKilocalories))
+                    LabeledContent("已记录摄入", value: energy(day.intake.value))
+                    LabeledContent("预估热量缺口", value: energy(day.energy.estimate.map { $0.totalKilocalories - day.intake.value }))
+                    LabeledContent("已记录训练消耗", value: energy(day.trainingCalories.value))
+                    if day.energy.estimate == nil {
+                        NavigationLink("补充身体资料") { PersonalBodyInfoView() }
+                    }
+                    DisclosureGroup("计算明细") {
+                        calculationDetails(day)
+                    }
                 }
             }
+            .font(.subheadline)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .appPageBackground()
             .navigationTitle("能量依据").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+    }
+
+    @ViewBuilder
+    private func calculationDetails(_ day: ProgressDailyMetrics) -> some View {
+        if let estimate = day.energy.estimate {
+            Text(formulaText(estimate)).monospacedDigit()
+            LabeledContent("静息来源", value: estimate.restingSourceName)
+            if let first = estimate.evidenceDays.first, let last = estimate.evidenceDays.last {
+                LabeledContent("设备历史", value: "\(first.formatted(.dateTime.month().day()))—\(last.formatted(.dateTime.month().day())) · \(estimate.evidenceDays.count) 天")
+            } else if estimate.method == .confirmedLifestyle {
+                LabeledContent("参考生效", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
+            }
+            Text("已包含活动，训练消耗不再累加。").foregroundStyle(.secondary)
+        } else {
+            Text(day.energy.missingReason ?? "缺少静息资料").foregroundStyle(.secondary)
+        }
+        if let formula = day.restingFormula {
+            Text(formula.originalFormula).font(.footnote)
+            Text(formula.substitutedFormula).font(.footnote)
+            if day.usesLaterProfile {
+                Text("历史回算使用当前身高等资料及当时体重。").font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        if day.trainingCalories.missingCount > 0 {
+            LabeledContent("训练能量缺项", value: "\(day.trainingCalories.missingCount) 条")
+        }
+        if day.intake.missingCount > 0 {
+            LabeledContent("饮食能量缺项", value: "\(day.intake.missingCount) 条")
+        }
+        if let healthError {
+            Text(healthError).font(.footnote).foregroundStyle(.secondary)
+        }
+        NavigationLink("身体资料") { PersonalBodyInfoView() }
+    }
+
+    private func energy(_ value: Double?) -> String {
+        value.map { $0.formatted(.number.precision(.fractionLength(0))) + " kcal" } ?? "缺少静息资料"
+    }
+
+    private func factorText(_ estimate: AdaptiveEnergyEstimate?) -> String {
+        guard let estimate else { return "默认参考 1.40" }
+        let source = switch estimate.method {
+        case .deviceHistory: "动态估算"
+        case .confirmedLifestyle: "个人设置"
+        case .defaultReference: "默认参考"
+        }
+        return estimate.factor.formatted(.number.precision(.fractionLength(2))) + " · " + source
     }
 
     private func formulaText(_ estimate: AdaptiveEnergyEstimate) -> String {
@@ -99,7 +130,7 @@ private struct ProgressLifestyleEditor: View {
                         .accessibilityLabel("有效活动系数")
                 }
                 DatePicker("生效日期", selection: $effectiveFrom, in: ...Date.now, displayedComponents: .date)
-                Text("反映工作、走动和训练的整体生活方式。充分的设备历史会优先更新估算；未确认前不会自动套用系数。")
+                Text("默认参考 1.4；个人设置或充分的设备历史优先。")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if let errorMessage {

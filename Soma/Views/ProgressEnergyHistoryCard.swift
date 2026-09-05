@@ -30,11 +30,15 @@ struct ProgressEnergyHistoryCard: View {
                 ContentUnavailableView("尚未发生", systemImage: "calendar")
             } else {
                 metricLayout {
-                    metric("已记录摄入", value: snapshot.window.period == .day ? snapshot.days.first?.intake.value : snapshot.averageIntake, estimated: false)
+                    ProgressEnergyBreakdownDisclosure(snapshot: snapshot, kind: .intake) {
+                        metric("已记录摄入", value: snapshot.window.period == .day ? snapshot.days.first?.intake.value : snapshot.averageIntake, estimated: false)
+                    }
                     if !dynamicTypeSize.isAccessibilitySize {
                         Divider().frame(height: 58)
                     }
-                    metric("预估总消耗", value: snapshot.averageEstimate, estimated: true)
+                    ProgressEnergyBreakdownDisclosure(snapshot: snapshot, kind: .expenditure) {
+                        metric("预估总消耗", value: snapshot.averageEstimate, estimated: true)
+                    }
                 }
                 if snapshot.window.period != .day {
                     Text("摄入 \(snapshot.intakeDayCount) 天 · 估算 \(snapshot.estimateDayCount) 天")

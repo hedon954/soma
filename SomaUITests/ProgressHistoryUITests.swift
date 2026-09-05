@@ -20,6 +20,92 @@ final class ProgressHistoryUITests: XCTestCase {
         }
     }
 
+    func testEnergyNumbersOpenSeparateCompactBreakdowns() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance, noBaseline: true)
+            let picker = app.segmentedControls["progress-period-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 15))
+            picker.buttons["日"].tap()
+            let intake = app.buttons["progress-intake-breakdown"]
+            XCTAssertTrue(intake.waitForExistence(timeout: 5))
+            XCTAssertGreaterThanOrEqual(intake.frame.height, 44)
+            intake.tap()
+            let popover = app.scrollViews["progress-energy-breakdown-list"]
+            XCTAssertTrue(popover.waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["进展夹具餐食 0"].exists)
+            XCTAssertFalse(app.navigationBars["能量依据"].exists)
+            keep(app, "energy-intake-breakdown-\(appearance)")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+            let expenditure = app.buttons["progress-expenditure-breakdown"]
+            XCTAssertTrue(expenditure.waitForExistence(timeout: 5))
+            expenditure.tap()
+            XCTAssertTrue(popover.waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["活动等消耗"].exists)
+            XCTAssertFalse(popover.staticTexts["个人静息公式"].exists)
+            XCTAssertFalse(popover.staticTexts["默认参考"].exists)
+            XCTAssertFalse(popover.staticTexts["个人设置"].exists)
+            XCTAssertLessThanOrEqual(popover.frame.height, 190, "四行内容不应留下空行")
+            XCTAssertFalse(popover.staticTexts["已记录摄入"].exists)
+            keep(app, "energy-expenditure-breakdown-\(appearance)")
+            app.terminate()
+        }
+    }
+
+    func testRestingOnlyEstimateAndCompactDetails() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance, noBaseline: true)
+            let picker = app.segmentedControls["progress-period-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 15))
+            picker.buttons["日"].tap()
+            XCTAssertTrue(app.staticTexts["预估热量缺口"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.staticTexts["待估算"].exists)
+            app.buttons["饮食与能量，查看估算依据"].tap()
+            XCTAssertTrue(app.navigationBars["能量依据"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["静息消耗"].exists)
+            XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "1.40 · 默认参考")).firstMatch.exists)
+            XCTAssertFalse(app.staticTexts["统计范围"].exists)
+            XCTAssertFalse(app.staticTexts["摄入有记录日"].exists)
+            XCTAssertFalse(app.staticTexts["个人静息公式"].exists)
+            keep(app, "energy-compact-details-\(appearance)")
+            app.terminate()
+        }
+    }
+
+    func testCompactEnergyDetailsRemainAccessibleAtLargeType() {
+        let app = launch("dark", largeType: true, noBaseline: true)
+        let picker = app.segmentedControls["progress-period-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        picker.buttons["日"].tap()
+        app.buttons["饮食与能量，查看估算依据"].tap()
+        XCTAssertTrue(app.staticTexts["静息消耗"].waitForExistence(timeout: 5))
+        let details = app.buttons["计算明细"]
+        reveal(details, in: app)
+        details.tap()
+        let body = app.buttons["身体资料"]
+        reveal(body, in: app)
+        keep(app, "energy-compact-details-accessibility")
+    }
+
+    func testEnergyBreakdownAtLargeTypeRemainsScrollable() {
+        let app = launch("dark", largeType: true, noBaseline: true)
+        let picker = app.segmentedControls["progress-period-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        picker.buttons["日"].tap()
+        let expenditure = app.buttons["progress-expenditure-breakdown"]
+        reveal(expenditure, in: app)
+        expenditure.tap()
+        let list = app.scrollViews["progress-energy-breakdown-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(list.frame.height, 300, "大字号不能挤在锚点下方的窄缝里")
+        let factor = list.staticTexts["1.40"]
+        for _ in 0 ..< 4 where !factor.isHittable {
+            list.swipeUp()
+        }
+        XCTAssertTrue(factor.isHittable)
+        keep(app, "energy-breakdown-accessibility")
+    }
+
     func testFourPeriodsDarkAndHistoricalNavigation() {
         let app = launch("dark")
         let picker = app.segmentedControls["progress-period-picker"]
@@ -150,11 +236,14 @@ final class ProgressHistoryUITests: XCTestCase {
         XCTAssertTrue(app.segmentedControls["progress-detail-metric"].waitForExistence(timeout: 10))
     }
 
-    private func launch(_ appearance: String, largeType: Bool = false) -> XCUIApplication {
+    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = "1"
         app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] = appearance
+        if noBaseline {
+            app.launchEnvironment["SOMA_UI_PROGRESS_NO_BASELINE"] = "1"
+        }
         if largeType {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }

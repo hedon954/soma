@@ -29,6 +29,7 @@ struct AdaptiveEnergyEstimate: Equatable, Sendable {
     enum Method: String, Sendable {
         case deviceHistory
         case confirmedLifestyle
+        case defaultReference
     }
 
     let method: Method
@@ -37,6 +38,7 @@ struct AdaptiveEnergyEstimate: Equatable, Sendable {
     let sourceName: String
     let evidenceDays: [Date]
     let effectiveFrom: Date
+    var restingSourceName = "个人静息公式"
     var totalKilocalories: Double {
         restingKilocalories * factor
     }
@@ -111,7 +113,7 @@ enum AdaptiveEnergyEstimator {
                 estimate: .init(
                     method: .deviceHistory, restingKilocalories: resting, factor: factor,
                     sourceName: source.sourceName, evidenceDays: days.map { calendar.startOfDay(for: $0.date) },
-                    effectiveFrom: lowerBound
+                    effectiveFrom: lowerBound, restingSourceName: source.sourceName
                 ), eligibleDayCount: days.count, missingReason: nil
             )
         }
@@ -120,18 +122,45 @@ enum AdaptiveEnergyEstimator {
         }.max {
             $0.effectiveFrom == $1.effectiveFrom ? $0.id.uuidString < $1.id.uuidString : $0.effectiveFrom < $1.effectiveFrom
         }
-        guard let baseline else {
-            return .init(estimate: nil, eligibleDayCount: eligibleCount, missingReason: "请设置生活方式参考，或补充完整设备历史")
-        }
-        guard let restingEstimate, restingEstimate > 0, validEnergy(restingEstimate * baseline.factor) else {
-            return .init(estimate: nil, eligibleDayCount: eligibleCount, missingReason: "缺少当时的体重、身高或出生日期等资料")
+        let deviceResting = latestRestingDay(history, from: lowerBound, before: targetDay, calendar: calendar, policy: policy)
+        let formulaResting = restingEstimate.flatMap { validEnergy($0) && $0 > 0 ? $0 : nil }
+        let resting = formulaResting ?? deviceResting?.restingKilocalories
+        // An explicit product fallback, never persisted as a user-confirmed lifestyle fact.
+        let factor = baseline?.factor ?? 1.4
+        guard let resting, validEnergy(resting * factor) else {
+            return .init(estimate: nil, eligibleDayCount: eligibleCount, missingReason: "缺少有效静息消耗，请补充身体资料")
         }
         return .init(
             estimate: .init(
-                method: .confirmedLifestyle, restingKilocalories: restingEstimate, factor: baseline.factor,
-                sourceName: baseline.label, evidenceDays: [], effectiveFrom: baseline.effectiveFrom
+                method: baseline == nil ? .defaultReference : .confirmedLifestyle, restingKilocalories: resting, factor: factor,
+                sourceName: baseline?.label ?? "默认参考", evidenceDays: [], effectiveFrom: baseline?.effectiveFrom ?? targetDay,
+                restingSourceName: formulaResting != nil ? "个人静息公式" : (deviceResting?.sourceName ?? "设备静息")
             ), eligibleDayCount: eligibleCount, missingReason: nil
         )
+    }
+
+    private static func latestRestingDay(
+        _ history: [EnergyHistoryDay], from lowerBound: Date, before targetDay: Date, calendar: Calendar, policy: AdaptiveEnergyPolicy
+    ) -> EnergyHistoryDay? {
+        let candidates = history.filter { day in
+            let date = calendar.startOfDay(for: day.date)
+            guard date >= lowerBound, date < targetDay, !day.sourceID.isEmpty,
+                  day.coverage.isFinite, day.coverage >= policy.minimumCoverage, day.coverage <= 1,
+                  let resting = day.restingKilocalories, validEnergy(resting), resting > 0
+            else { return false }
+            return true
+        }
+        let distinct = Dictionary(grouping: candidates, by: \.sourceID).values.flatMap { source in
+            Dictionary(grouping: source, by: { calendar.startOfDay(for: $0.date) }).values.compactMap { duplicates in
+                guard let first = duplicates.first, duplicates.allSatisfy({ $0.restingKilocalories == first.restingKilocalories }) else { return nil as EnergyHistoryDay? }
+                return first
+            }
+        }
+        return distinct.sorted {
+            let left = calendar.startOfDay(for: $0.date)
+            let right = calendar.startOfDay(for: $1.date)
+            return left == right ? $0.sourceID < $1.sourceID : left > right
+        }.first
     }
 
     private static func validEnergy(_ value: Double) -> Bool {

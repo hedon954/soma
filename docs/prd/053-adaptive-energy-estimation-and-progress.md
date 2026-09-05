@@ -5,6 +5,7 @@
 - 修订自：[PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md)、[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的能量估算与展示
 - 上游依据：[ADR 0107](../adr/0107-foreground-recovery-and-progress-evidence-projection.md)
 - 下游落地：[ADR 0114](../adr/0114-progress-periods-and-adaptive-energy.md)、[PRD 054](054-progress-history-and-periods.md)
+- 后续修订：[ADR 0115](../adr/0115-energy-default-reference-and-compact-details.md) 增加默认起步参考，不再要求先手动配置
 - 跟踪：[BUG-20](../../.codex/plans/2026-09-02-coach-training-critical-bugfixes.md)、[实施 TODO](../../.codex/plans/2026-09-05-progress-redesign-implementation.md)
 
 ## 我们的目标是什么
@@ -12,7 +13,7 @@
 让进展页清楚回答：**今天记录了多少摄入、一天大约消耗多少、两者相差多少。**
 
 - 展示全天预估总消耗，而不只是静息消耗或“静息 + 训练”。
-- 活动系数随个人数据动态更新，不固定套用 1.4 或 1.5。
+- 活动系数随个人数据动态更新；缺少设备历史和个人设置时，先用默认参考 1.4。
 - 没有记录的累计项显示 0，不因部分数据缺失让整个合计变成横杠。
 
 ## 我们调研了什么
@@ -34,7 +35,8 @@
    只有本地训练数据时明确叫“已记录训练消耗”。摄入与全天预估的差值只是参考，不代表今天已经形成的真实缺口。
 
 2. **采用“静息估算 × 动态有效活动系数”的方案。**
-   优先用覆盖充分的历史设备静息与活动数据更新系数；没有设备数据时，依据用户明确提供的生活方式形成初始参考。
+   优先用覆盖充分的历史设备静息与活动数据更新系数；不足时用当时有效的个人设置，再回退默认参考 1.4。
+   有有效全天静息即可先估算；默认值不是个人活动事实，不写入个人设置，后续仍可动态更新。
    不能仅靠力量训练次数推断全天活动，也不把设备估算称为真实测量。
 
 3. **先评估最近 28–30 天，不直接锁定 7 天。**

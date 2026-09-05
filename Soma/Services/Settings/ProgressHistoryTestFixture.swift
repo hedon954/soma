@@ -18,9 +18,11 @@ enum ProgressHistoryTestFixture {
                 updatedAt: first, displayName: "虚构进展用户", biologicalSex: .male,
                 birthDate: calendar.date(from: DateComponents(year: 1996, month: 1, day: 1)), height: 170
             )
-            profile.energyBaselinesData = try JSONEncoder().encode([
-                EnergyLifestyleBaseline(effectiveFrom: first, factor: 1.45, label: "虚构生活方式参考")
-            ])
+            if ProcessInfo.processInfo.environment["SOMA_UI_PROGRESS_NO_BASELINE"] != "1" {
+                profile.energyBaselinesData = try JSONEncoder().encode([
+                    EnergyLifestyleBaseline(effectiveFrom: first, factor: 1.45, label: "虚构生活方式参考")
+                ])
+            }
             context.insert(profile)
             for offset in -90 ... 0 {
                 let day = calendar.date(byAdding: .day, value: offset, to: today)!

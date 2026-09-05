@@ -6,6 +6,7 @@
 - 部分替代：[PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的进展浮层；依据移入周期详情，Tool 参数规则不变
 - 上游依据：[产品调研](../research/2026-09-05-progress-history-and-chart-design.md)、[PRD 053](053-adaptive-energy-estimation-and-progress.md) 的消耗估算
 - 下游落地：[ADR 0114](../adr/0114-progress-periods-and-adaptive-energy.md)
+- 后续修订：[ADR 0115](../adr/0115-energy-default-reference-and-compact-details.md) 恢复数值独立点击的彩色明细浮层，能量依据改为紧凑列表，公式与诊断默认收起
 - 跟踪：[TODO](../../.codex/plans/2026-09-05-progress-redesign-implementation.md)
 
 ## 目标

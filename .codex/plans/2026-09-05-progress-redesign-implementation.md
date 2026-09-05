@@ -25,10 +25,11 @@
 - [x] E01 训练／饮食累计未知项按 0 相加，保留未知数量与原始 nil，不作为校准零值。
 - [ ] E02 读取历史静息与活动能量，区分无数据、错误、真实零；来源去重、取消及演示空间隔离。
 - [x] E03 仅使用目标日期之前已完成且覆盖充分的设备日，计算动态有效系数；移除当天活动线性放大。算法测试通过，真实设备覆盖验证另记 E02/D07。
-- [x] E04 无充分设备历史时使用用户明确设置、带生效日期的生活方式参考；不擅自套固定系数。
+- [x] E04 无充分设备历史时使用当时有效的个人设置；缺设置时按 ADR 0115 使用标注的默认参考 1.4，不写成用户事实。
 - [x] E05 历史估算使用当时可用体重、年龄及基准；不使用未来数据或将静息当作总消耗。
 - [x] E06 系数已包含活动，不额外叠加训练；估算详情提供公式、来源、日期、覆盖与缺失原因。
 - [x] E07 参数为可测试的产品策略，不冒充生理定律；不实现未经验证的短期体重／摄入反推。
+- [x] E08 补齐仅静息的默认估算与紧凑明细；摄入／总消耗各自点击展示彩色组成浮层，无备注或底部空行。浅深色、大字号与双机 Release 安装已验证；真实 HealthKit 保留 E02/D07b 验收。
 
 ## 数据、测试与交付
 
@@ -68,3 +69,11 @@
 - 底部入口补充：旧链接辅助功能几何仅 18pt 高，测试先失败；改为 88pt 起的完整卡片与按下反馈。大字号先复现行高错位，统一两行文字区域后 3 项 UI 测试全部通过（`build/progress-resources-final-ui.log`）；浅深色和大字号截图在 `build/progress-resources-ui-final/`。不改变六个入口的目的地、顺序或任何数据规则。
 - 底部入口最终门禁：`build/progress-resources-verify.log` 的 `make verify` 通过，727 项 XCTest、7 项 Swift Testing；Server 39 项通过、1 项测试库未配置而跳过。双机 Release 安装/启动分别记录在 `build/progress-resources-install-14pm.log` 与 `build/progress-resources-install-17pm.log`，不复用此前安装结果。
 - 日页缺口：统一为「预估热量缺口」，按消耗减摄入显示。2345 − 1900 = 445 的 UI 回归先失败再通过，浅深色及 iPad 已检查；截图在 `build/progress-deficit-ui-evidence/`，全量门禁通过见 `build/progress-deficit-verify.log`。
+
+### 2026-09-05 静息兜底与明细收紧
+
+- 仅静息估算先复现 2 项失败，修复后 14 项估算测试通过；新增 6 项明细测试覆盖餐食、缺项、周期均值及不重复计入训练。
+- 摄入／消耗独立彩色浮层在浅深色通过；备注不存在、四行高度不超过 190pt 的断言通过。截图在 `build/energy-final-testEnergyNumbersOpenSeparateCompactBreakdowns/`。
+- 12 项 UI 首批 11 项通过，四周期导航被已打开的浮层阻挡；移到独立 iPhone 16e 后该项通过。无障碍大字号改用可滚动 Sheet，最终高度和数值可达性测试通过，截图在 `build/energy-accessibility-final/`。
+- 最终 `build/energy-ready-verify.log`：`make verify` 通过，738 项 XCTest、7 项 Swift Testing；真实设备能量覆盖与流畅度不以这些测试替代。
+- Release 0.0.18 (22) 已更新安装到两机：17 Pro Max 已启动，14 Pro Max 因锁屏未确认启动。分别见 `build/energy-ready-install-17pm.log`、`build/energy-ready-install-14pm.log`。

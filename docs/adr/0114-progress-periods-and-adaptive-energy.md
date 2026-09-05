@@ -1,7 +1,8 @@
 # ADR 0114：进展周期与动态能量估算
 
-- 状态：已采纳，实施中
+- 状态：部分已替代；周期、历史和动态校准仍有效
 - 日期：2026-09-05
+- 后续替代：[ADR 0115](0115-energy-default-reference-and-compact-details.md) 放开无手动配置时的默认参考，简化明细；其余历史与校准规则不变
 - 部分替代：[ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md) 的固定 30 天投影与当天活动线性外推
 - 部分替代：[ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的进展指标浮层；改为对应范围的能量依据页，饮食记录顺序规则不变
 - 部分替代：[ADR 0109](0109-schema-guided-tool-argument-recovery.md) 的进展浮层尺寸；Tool 参数恢复不变
