@@ -17,7 +17,8 @@ final class MealOccurrenceTimeTests: XCTestCase {
         _ month: Int,
         _ day: Int,
         _ hour: Int,
-        _ minute: Int
+        _ minute: Int,
+        in calendar: Calendar? = nil
     ) throws -> Date {
         var components = DateComponents()
         components.year = year
@@ -25,7 +26,7 @@ final class MealOccurrenceTimeTests: XCTestCase {
         components.day = day
         components.hour = hour
         components.minute = minute
-        return try XCTUnwrap(calendar().date(from: components))
+        return try XCTUnwrap((calendar ?? self.calendar()).date(from: components))
     }
 
     func testDefaultOccurredAtKeepsSendClockTimeOnTheBusinessDay() throws {
@@ -69,24 +70,25 @@ final class MealOccurrenceTimeTests: XCTestCase {
 
     @MainActor
     func testInferredMealTypeFollowsRecordTimeNotWallClock() throws {
+        // 推断使用设备本地时区，样本钟点必须采用相同日历。
         XCTAssertEqual(
-            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 8, 0)),
+            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 8, 0, in: .current)),
             .breakfast
         )
         XCTAssertEqual(
-            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 12, 30)),
+            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 12, 30, in: .current)),
             .lunch
         )
         XCTAssertEqual(
-            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 15, 30)),
+            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 15, 30, in: .current)),
             .afternoonSnack
         )
         XCTAssertEqual(
-            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 19, 15)),
+            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 19, 15, in: .current)),
             .dinner
         )
         XCTAssertEqual(
-            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 23, 40)),
+            try ConversationRecorder.inferredMealType(at: date(2026, 8, 20, 23, 40, in: .current)),
             .snack
         )
     }
@@ -105,7 +107,7 @@ final class MealOccurrenceTimeTests: XCTestCase {
                 title: "虚构傍晚餐"
             ),
             sourceText: "记录刚吃的这份餐",
-            sourceDate: date(2026, 8, 20, 18, 0),
+            sourceDate: date(2026, 8, 20, 18, 0, in: .current),
             mediaKind: .none,
             mediaPath: nil,
             in: context
@@ -116,7 +118,7 @@ final class MealOccurrenceTimeTests: XCTestCase {
                 title: "虚构补记午餐"
             ),
             sourceText: "补记今天的午餐",
-            sourceDate: date(2026, 8, 20, 18, 5),
+            sourceDate: date(2026, 8, 20, 18, 5, in: .current),
             mediaKind: .none,
             mediaPath: nil,
             in: context

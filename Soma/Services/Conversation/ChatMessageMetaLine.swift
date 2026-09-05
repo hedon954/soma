@@ -45,26 +45,13 @@ enum ChatMessageMetaLine {
         now: Date,
         calendar: Calendar
     ) -> String {
-        if let year = calendar.dateComponents([.year], from: date).year,
-           let currentYear = calendar.dateComponents([.year], from: now).year,
-           year != currentYear
-        {
-            return yearDayTimeFormatter.string(from: date)
-        }
-        return dayTimeFormatter.string(from: date)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        let includesYear = calendar.component(.year, from: date)
+            != calendar.component(.year, from: now)
+        formatter.dateFormat = includesYear ? "yyyy年M月d日 HH:mm" : "M月d日 HH:mm"
+        return formatter.string(from: date)
     }
-
-    private static let dayTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 HH:mm"
-        return formatter
-    }()
-
-    private static let yearDayTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月d日 HH:mm"
-        return formatter
-    }()
 }

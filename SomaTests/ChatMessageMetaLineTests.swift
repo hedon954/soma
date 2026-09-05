@@ -76,6 +76,32 @@ final class ChatMessageMetaLineTests: XCTestCase {
         )
     }
 
+    func testTimeZoneControlsBothClockAndYearBoundary() throws {
+        let shanghai = fixedCalendar
+        var utc = shanghai
+        utc.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let date = try XCTUnwrap(shanghai.date(from: DateComponents(
+            year: 2026, month: 1, day: 1, hour: 1, minute: 8
+        )))
+        let now = try XCTUnwrap(shanghai.date(from: DateComponents(
+            year: 2026, month: 1, day: 2, hour: 12
+        )))
+
+        XCTAssertEqual(
+            ChatMessageMetaLine.timeText(for: date, now: now, calendar: shanghai),
+            "1月1日 01:08"
+        )
+        XCTAssertEqual(
+            ChatMessageMetaLine.timeText(for: date, now: now, calendar: utc),
+            "2025年12月31日 17:08"
+        )
+        XCTAssertEqual(
+            ChatMessageMetaLine.timeText(for: date, now: now, calendar: shanghai),
+            "1月1日 01:08",
+            "切换时区不能污染后续格式化"
+        )
+    }
+
     private var fixedCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
