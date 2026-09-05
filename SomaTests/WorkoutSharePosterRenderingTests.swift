@@ -23,7 +23,7 @@ final class WorkoutSharePosterRenderingTests: XCTestCase {
         model.failedSets = 1
         model.exercises[3].name = "虚构哑铃交替保加利亚分腿深蹲长名称"
         model.exercises[3].partialSetCount = 2
-        model.exercises[3].loadSummary = "左 重量未记录 · 8次 / 右 10kg · 6次 × 1组；左 12kg · 6次 / 右 10kg · 6次 × 1组"
+        model.exercises[3].loadGroups = ["左 重量未记录 · 8次 / 右 10kg · 6次 × 1组", "左 12kg · 6次 / 右 10kg · 6次 × 1组"]
         let expanded = try render(model, scheme: .dark, name: "workout-share-long-missing")
         XCTAssertEqual(expanded.size.width, 390)
         XCTAssertGreaterThan(expanded.size.height, reference.size.height)
@@ -58,7 +58,7 @@ final class WorkoutSharePosterRenderingTests: XCTestCase {
             durationText: "约 35 分 38 秒", volumeValue: "5,840", exerciseCount: 6, completedSets: 22,
             estimatedCalories: 187, intensities: [.quadriceps: 5, .calves: 5],
             exercises: rows.map { name, summary, sets in
-                WorkoutSharePosterModel.ExerciseLine(id: UUID(), name: name, setCount: sets, loadSummary: summary)
+                WorkoutSharePosterModel.ExerciseLine(id: UUID(), name: name, setCount: sets, loadGroups: summary.components(separatedBy: "；"))
             }
         )
     }

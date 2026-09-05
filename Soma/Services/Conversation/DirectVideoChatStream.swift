@@ -92,25 +92,21 @@ extension AIService {
         }
         if !videos.isEmpty {
             guard var messages = body["messages"] as? [[String: Any]],
-                  let userIndex = messages.lastIndex(where: {
-                      $0["role"] as? String == "user"
-                  })
+                  let lastUserIndex = messages.lastIndex(where: { $0["role"] as? String == "user" })
             else { throw AIServiceError.invalidResponse }
-            var content = messages[userIndex]["content"] as? [[String: Any]]
-                ?? [[
-                    "type": "text",
-                    "text": messages[userIndex]["content"] as? String ?? ""
-                ]]
-            content.append(contentsOf: videos.map { video in
-                [
+            for video in videos {
+                let index = video.messageIndex ?? lastUserIndex
+                guard messages.indices.contains(index), messages[index]["role"] as? String == "user" else {
+                    throw AIServiceError.invalidResponse
+                }
+                var content = messages[index]["content"] as? [[String: Any]]
+                    ?? [["type": "text", "text": messages[index]["content"] as? String ?? ""]]
+                content.append([
                     "type": "video_url",
-                    "video_url": [
-                        "url": "data:\(video.mimeType);base64,\(video.data.base64EncodedString())",
-                        "fps": 2
-                    ]
-                ]
-            })
-            messages[userIndex]["content"] = content
+                    "video_url": ["url": "data:\(video.mimeType);base64,\(video.data.base64EncodedString())"]
+                ])
+                messages[index]["content"] = content
+            }
             body["messages"] = messages
         }
         if !assistantReasoningByMessageIndex.isEmpty,

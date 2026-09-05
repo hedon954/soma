@@ -157,13 +157,9 @@ struct WorkoutSharePosterView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(WorkoutSharePalette.secondaryInk)
             } else {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
                     ForEach(model.exercises) { exercise in
                         exerciseRow(exercise)
-                            .padding(.vertical, 10)
-                        Rectangle()
-                            .fill(WorkoutSharePalette.rule)
-                            .frame(height: 0.5)
                     }
                 }
             }
@@ -172,30 +168,41 @@ struct WorkoutSharePosterView: View {
     }
 
     private func exerciseRow(_ exercise: WorkoutSharePosterModel.ExerciseLine) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(exercise.name)
-                        .fixedSize()
-                    Spacer(minLength: 0)
-                    Text(exercise.loadSummary)
-                        .monospacedDigit()
-                        .fixedSize()
-                }
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(exercise.name)
-                    Text(exercise.loadSummary)
-                        .monospacedDigit()
-                }
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(exercise.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Text("\(exercise.setCount)组")
+                    .font(.system(size: 12))
+                    .foregroundStyle(WorkoutSharePalette.secondaryInk)
+                    .fixedSize()
             }
-            .font(.system(size: 14))
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(exercise.loadGroups.enumerated()), id: \.offset) { _, text in
+                    Text(text)
+                        .font(.system(size: 14).monospacedDigit())
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(WorkoutSharePalette.paper, in: RoundedRectangle(cornerRadius: 8))
+                }
+                if exercise.loadGroups.isEmpty {
+                    Text("组次未记录")
+                        .font(.system(size: 13))
+                        .foregroundStyle(WorkoutSharePalette.secondaryInk)
+                }
+            }
             if exercise.partialSetCount > 0 {
                 Text("含 \(exercise.partialSetCount) 组部分完成")
                     .font(.system(size: 12))
                     .foregroundStyle(WorkoutSharePalette.secondaryInk)
             }
         }
+        .padding(12)
+        .background(Color(white: 0.96), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .combine)
     }
 

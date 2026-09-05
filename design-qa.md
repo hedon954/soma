@@ -1,5 +1,7 @@
 # 动作库分类与餐次明细视觉 QA
 
+本轮补充（2026-09-05）：分享明细为动作外卡＋合并项内卡。`build/media-qa-unit/` 已检查长动作名、异构组、左右差异与缺失数据导出；`build/media-qa-ui/` 记录 iPhone 17 Pro 正常字号浅深主题、滚动、安全区和保存入口，WorkoutShareUITests 两项通过。页面没有输入键盘。未使用用户健康截图作夹具，未做大字号检查。完整门禁 make verify 已通过：759 XCTest＋7 Swift Testing、服务端 40 项通过（未配置 PostgreSQL 的一项集成测试按既有条件跳过）。物理 iPhone 当前 unavailable，未安装或启动，真实中文准确率与真机声画仍待手动验收。
+
 日期：2026-09-05。按维护者要求使用左侧常驻多级分类与右侧即时结果，正常字号验收。
 
 - 状态：passed。iPhone 17 Pro、iPhone 16e 双主题与 iPad Air 11 英寸竖屏完成检查。

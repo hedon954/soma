@@ -133,8 +133,6 @@ final class CoachComposerState {
     var dismissRequest = UUID()
     /// 语音服务只在用户第一次点麦克风时创建。
     var speechInput: SpeechInputService?
-    /// 听写基线不影响渲染，只在合成草稿时读取。
-    @ObservationIgnored var draftBeforeSpeech = ""
 
     var trimmedDraft: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -150,6 +148,7 @@ final class CoachComposerState {
 
     /// 发送被接受后的收口：清空草稿与选择，收起键盘。
     func clearAfterSubmission() {
+        stopVoice()
         draft = ""
         attachments = []
         useLocalForNextMessage = false
@@ -160,10 +159,10 @@ final class CoachComposerState {
 
     /// 切换 Session 前的收口：不保留上一个会话的草稿、附件和语音。
     func prepareForSessionChange() {
+        stopVoice()
         draft = ""
         attachments = []
         useLocalForNextMessage = false
-        stopVoice()
         dismissKeyboard()
     }
 
@@ -179,18 +178,13 @@ final class CoachComposerState {
 
     func toggleVoice() {
         if let speechInput, speechInput.isListening {
-            speechInput.stop()
-            syncDraftFromSpeech()
+            Task { await speechInput.finish() }
             return
         }
-        // A stopped recognizer can still hold the last committed transcript.
-        // Merge it before replacing the baseline for a new listening cycle.
-        syncDraftFromSpeech()
-        draftBeforeSpeech = trimmedDraft
         let service = speechInput ?? SpeechInputService()
         speechInput = service
-        Task {
-            await service.start()
+        service.start { [weak self] segment, pause in
+            self?.appendSpeechSegment(segment, pause: pause)
         }
     }
 
@@ -198,15 +192,12 @@ final class CoachComposerState {
         speechInput?.stop()
     }
 
-    /// 听写增量合入草稿：保留听写开始前的文字，后接最新转写。
-    func syncDraftFromSpeech() {
-        guard let speechInput else { return }
-        let transcript = speechInput.transcript
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !transcript.isEmpty else { return }
-        draft = [draftBeforeSpeech, transcript]
-            .filter { !$0.isEmpty }
-            .joined(separator: draftBeforeSpeech.isEmpty ? "" : " ")
+    func finishVoice() async {
+        await speechInput?.finish()
+    }
+
+    func appendSpeechSegment(_ segment: String, pause: TimeInterval = 0) {
+        draft = SpeechDraftAppend.append(segment, to: draft, pause: pause)
     }
 
     /// 草稿一旦偏离所选建议文本，精确快捷记录立即失效，

@@ -283,7 +283,7 @@ enum DemoSeeder {
             status: .failed,
             startedAt: failureStart,
             endedAt: failureEnd,
-            input: "图片或视频关键帧 4 张；原始输入是视频：是。",
+            input: "完整视频 1 项；原始输入是视频：是。",
             errorMessage: failureMessage
         )))
         failure.apply(.span(AgentTraceSpan(

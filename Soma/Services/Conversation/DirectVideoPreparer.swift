@@ -6,7 +6,11 @@ enum DirectVideoPreparer {
         for sourceURL: URL,
         capability: DirectVideoCapability
     ) async -> AgentVideoInput? {
+        let asset = AVURLAsset(url: sourceURL)
+        guard !Task.isCancelled, await (try? asset.load(.isPlayable)) == true else { return nil }
         if sourceURL.pathExtension.lowercased() == "mp4",
+           let size = try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           size > 0, size <= capability.maximumRawBytes,
            let data = try? Data(contentsOf: sourceURL),
            !data.isEmpty,
            data.count <= capability.maximumRawBytes
@@ -21,7 +25,6 @@ enum DirectVideoPreparer {
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("mp4")
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
-        let asset = AVURLAsset(url: sourceURL)
         guard let exporter = AVAssetExportSession(
             asset: asset,
             presetName: AVAssetExportPresetMediumQuality
@@ -32,14 +35,19 @@ enum DirectVideoPreparer {
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
         let sendableExporter = SendableExportSession(exporter)
-        let completed = await withCheckedContinuation { continuation in
-            exporter.exportAsynchronously {
-                continuation.resume(
-                    returning: sendableExporter.value.status == .completed
-                )
+        let completed = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                exporter.exportAsynchronously {
+                    continuation.resume(returning: sendableExporter.value.status == .completed)
+                }
             }
+        } onCancel: {
+            sendableExporter.value.cancelExport()
         }
+        guard !Task.isCancelled else { return nil }
         guard completed,
+              let size = try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size > 0, size <= capability.maximumRawBytes,
               let data = try? Data(contentsOf: temporaryURL),
               !data.isEmpty,
               data.count <= capability.maximumRawBytes

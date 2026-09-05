@@ -872,7 +872,7 @@ struct CoachSessionView: View {
     }
 
     private func send() {
-        guard !composer.trimmedDraft.isEmpty || !composer.attachments.isEmpty else {
+        guard composer.speechInput?.isListening == true || !composer.trimmedDraft.isEmpty || !composer.attachments.isEmpty else {
             return
         }
         guard locationPreference != .unasked else {

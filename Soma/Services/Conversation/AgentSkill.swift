@@ -33,7 +33,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         switch self {
         case .gymAnalysis: "识别环境与器械，区分可见证据和推断，并更新电子健身房。"
         case .trainingPlan: "结合目标、历史、身体状态和当前器械制定可执行训练计划。"
-        case .movementAnalysis: "基于图片或视频关键帧评估动作、负荷与安全边界。"
+        case .movementAnalysis: "基于图片或完整视频评估动作、负荷与安全边界。"
         case .nutritionAnalysis: "识别食物与份量，给出带不确定性的营养与餐食组成升糖速度估算。"
         case .postureAnalysis: "以中性、非诊断方式记录体态与标准化照片的可比变化。"
         case .trendAnalysis: "分析训练、体重和饮食的周期趋势，区分信号、噪声和缺失数据。"
@@ -97,7 +97,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             """
             # 动作分析
 
-            目标：基于图片或视频关键帧提供有证据、可执行的动作反馈，并判断当前负荷是否明显过轻或过重。
+            目标：基于图片或完整视频提供有证据、可执行的动作反馈，并判断当前负荷是否明显过轻或过重。
 
             执行规则：
             1. 先说明拍摄角度、遮挡、帧率和关键阶段是否足够；单张照片不能假装覆盖完整动作过程。

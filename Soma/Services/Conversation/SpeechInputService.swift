@@ -2,411 +2,202 @@ import AVFoundation
 import Observation
 import Speech
 
+/// Session implementations never receive the composer's draft.
+@MainActor
+protocol LocalSpeechSession: AnyObject {
+    func start(
+        onResult: @escaping (String, Bool, TimeInterval) -> Void,
+        onError: @escaping (Error) -> Void
+    ) async throws
+    func cancel()
+    func finish() async
+}
+
+extension LocalSpeechSession {
+    func finish() async {
+        cancel()
+    }
+}
+
 enum SpeechInputError: LocalizedError {
     case recognizerUnavailable
     case speechPermissionDenied
     case microphonePermissionDenied
     case audioInputUnavailable
+    case localModelUnavailable
 
     var errorDescription: String? {
         switch self {
-        case .recognizerUnavailable:
-            "系统语音识别暂不可用，请稍后重试。"
-        case .speechPermissionDenied:
-            "需要在系统设置中允许语音识别。"
-        case .microphonePermissionDenied:
-            "需要在系统设置中允许麦克风访问。"
-        case .audioInputUnavailable:
-            "当前没有可用的音频输入。"
+        case .recognizerUnavailable: "系统本地语音识别暂不可用，请稍后重试。"
+        case .speechPermissionDenied: "需要在系统设置中允许语音识别。"
+        case .microphonePermissionDenied: "需要在系统设置中允许麦克风访问。"
+        case .audioInputUnavailable: "当前没有可用的音频输入。"
+        case .localModelUnavailable: "本地中文语音模型尚不可用，请联网完成系统模型下载后重试。"
         }
     }
 }
 
-/// Speech.framework may revise a partial result backwards and starts a new
-/// transcription after a pause. Only the current partial is replaceable;
-/// finalized segments are immutable user text.
-struct SpeechTranscriptAccumulator: Equatable {
-    static let pauseBoundary: TimeInterval = 0.85
-
-    private(set) var committedSegments: [String] = []
-    private(set) var currentPartial = ""
-    private var lastFinalSource: String?
-    private var lastPartialAt: Date?
-    private var lastSpeechSegmentEnd: TimeInterval?
-    private(set) var speechActivityRevision: UInt64 = 0
-
-    mutating func reset() {
-        committedSegments = []
-        currentPartial = ""
-        lastFinalSource = nil
-        lastPartialAt = nil
-        lastSpeechSegmentEnd = nil
-        speechActivityRevision = 0
-    }
-
-    @discardableResult
-    mutating func receive(
-        _ value: String,
-        isFinal: Bool,
-        at receivedAt: Date = .now,
-        speechSegmentStart: TimeInterval? = nil,
-        speechSegmentEnd: TimeInterval? = nil
-    ) -> String {
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return transcript }
-        if isFinal {
-            currentPartial = ""
-            guard normalized != lastFinalSource else { return transcript }
-            committedSegments.append(Self.withPausePunctuation(normalized))
-            lastFinalSource = normalized
-            lastPartialAt = nil
-            lastSpeechSegmentEnd = nil
-        } else {
-            // Speech.framework may repeat an unchanged partial while the user
-            // is already silent. Treating that callback as fresh speech keeps
-            // postponing the pause timer and lets the later suffix replace the
-            // earlier phrase. An identical callback is not new evidence.
-            let speechAdvanced = speechDidAdvance(
-                normalized,
-                speechSegmentEnd: speechSegmentEnd
-            )
-            guard normalized != currentPartial else {
-                recordSpeechActivity(
-                    at: receivedAt,
-                    speechSegmentEnd: speechSegmentEnd,
-                    didAdvance: speechAdvanced
-                )
-                return transcript
-            }
-            // A recognizer can temporarily retract words while refining the
-            // same audio. Keeping that shorter snapshot visible makes already
-            // displayed dictation appear to be overwritten, and used to move
-            // the silence boundary as well. With no newer acoustic evidence,
-            // retain the longer current tail until a real correction/final or
-            // the next spoken segment arrives.
-            let isBackwardRevision = currentPartial.hasPrefix(normalized)
-                && normalized.count < currentPartial.count
-                && !speechAdvanced
-            guard !isBackwardRevision else { return transcript }
-            if startsNewSegment(
-                normalized,
-                at: receivedAt,
-                speechSegmentStart: speechSegmentStart
-            ) {
-                committedSegments.append(Self.withPausePunctuation(currentPartial))
-            }
-            currentPartial = normalized
-            recordSpeechActivity(
-                at: receivedAt,
-                speechSegmentEnd: speechSegmentEnd,
-                didAdvance: speechAdvanced
-            )
-            // A new partial marks a new recognition segment; an identical
-            // spoken phrase is allowed to be committed again afterward.
-            lastFinalSource = nil
-        }
-        return transcript
-    }
-
-    private func speechDidAdvance(
-        _ value: String,
-        speechSegmentEnd: TimeInterval?
-    ) -> Bool {
-        if let speechSegmentEnd {
-            guard let lastSpeechSegmentEnd else { return true }
-            return speechSegmentEnd > lastSpeechSegmentEnd + 0.01
-        }
-        guard !currentPartial.isEmpty else { return true }
-        return value.count > currentPartial.count
-    }
-
-    private mutating func recordSpeechActivity(
-        at receivedAt: Date,
-        speechSegmentEnd: TimeInterval?,
-        didAdvance: Bool
-    ) {
-        guard didAdvance else { return }
-        lastPartialAt = receivedAt
-        if let speechSegmentEnd {
-            lastSpeechSegmentEnd = speechSegmentEnd
-        }
-        speechActivityRevision &+= 1
-    }
-
-    @discardableResult
-    mutating func commitCurrent(addsPausePunctuation: Bool = false) -> String {
-        let value = currentPartial.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !value.isEmpty {
-            committedSegments.append(
-                addsPausePunctuation ? Self.withPausePunctuation(value) : value
-            )
-        }
-        currentPartial = ""
-        lastFinalSource = nil
-        lastPartialAt = nil
-        lastSpeechSegmentEnd = nil
-        return transcript
-    }
-
-    var transcript: String {
-        (committedSegments + (currentPartial.isEmpty ? [] : [currentPartial]))
-            .joined()
-    }
-
-    private static func withPausePunctuation(_ value: String) -> String {
-        let punctuation = CharacterSet(charactersIn: "。！？!?；;，,：:")
-        guard let scalar = value.unicodeScalars.last,
-              !punctuation.contains(scalar)
-        else {
-            return value
-        }
-        return value + "，"
-    }
-
-    /// Some Speech.framework sessions start the next utterance from an empty
-    /// source after a pause without first delivering `isFinal`. Treat only a
-    /// time-separated, unrelated partial as a new segment. Normal prefix
-    /// growth and recognizer backtracking stay replaceable within the current
-    /// segment, so corrections do not duplicate text.
-    private func startsNewSegment(
-        _ value: String,
-        at receivedAt: Date,
-        speechSegmentStart: TimeInterval?
-    ) -> Bool {
-        guard !currentPartial.isEmpty,
-              value != currentPartial
-        else {
-            return false
-        }
-        let unrelated = !value.hasPrefix(currentPartial)
-            && !currentPartial.hasPrefix(value)
-        guard unrelated else { return false }
-        let callbackPause = lastPartialAt.map {
-            receivedAt.timeIntervalSince($0) >= Self.pauseBoundary
-        } ?? false
-        let acousticPause: Bool = if let speechSegmentStart, let lastSpeechSegmentEnd {
-            speechSegmentStart - lastSpeechSegmentEnd
-                >= Self.pauseBoundary
-        } else {
-            false
-        }
-        return callbackPause || acousticPause
-    }
-}
-
+/// Only the current unconfirmed phrase is retained. Committed text belongs to the editor.
 @MainActor
 @Observable
 final class SpeechInputService {
-    private var recognizer: SFSpeechRecognizer?
-    private var audioEngine: AVAudioEngine?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var silenceCommitTask: Task<Void, Never>?
-    private var hasInstalledTap = false
-    private var recognitionGeneration = UUID()
-    private var accumulator = SpeechTranscriptAccumulator()
+    private let sessionFactory: () async -> any LocalSpeechSession
+    private let microphonePermission: () async -> Bool
 
-    var transcript = ""
-    var isListening = false
+    init(
+        sessionFactory: (() async -> any LocalSpeechSession)? = nil,
+        microphonePermission: (() async -> Bool)? = nil
+    ) {
+        self.sessionFactory = sessionFactory ?? Self.defaultSession
+        self.microphonePermission = microphonePermission ?? {
+            await withCheckedContinuation { continuation in
+                AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
+            }
+        }
+    }
+
+    private static func defaultSession() async -> any LocalSpeechSession {
+        if #available(iOS 26.0, *), SpeechTranscriber.isAvailable,
+           let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh-CN"))
+        {
+            return AppleSpeechAnalyzerSession(locale: locale)
+        }
+        return LegacyLocalSpeechSession()
+    }
+
+    private var session: (any LocalSpeechSession)?
+    private var startTask: Task<Void, Never>?
+    private var finishTask: Task<Void, Never>?
+    private var generation = UUID()
+    private var isReady = false
+    private var onCommit: ((String, TimeInterval) -> Void)?
+    private var pendingPause: TimeInterval = 0
+    private(set) var pendingText = ""
+    private(set) var isListening = false
+    private(set) var statusMessage = ""
     var errorMessage: String?
 
-    func start() async {
+    func start(onCommit: @escaping (String, TimeInterval) -> Void) {
         guard !isListening else { return }
+        stop()
+        self.onCommit = onCommit
         errorMessage = nil
-        accumulator.reset()
-        transcript = ""
-
-        do {
-            try await authorize()
-            try beginRecognition()
-        } catch {
-            stop()
-            errorMessage = error.localizedDescription
+        isListening = true
+        statusMessage = "正在准备本地听写…"
+        let token = generation
+        startTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let allowed = await microphonePermission()
+                try Task.checkCancellation()
+                guard allowed else { throw SpeechInputError.microphonePermissionDenied }
+                let selected = await sessionFactory()
+                try Task.checkCancellation()
+                guard generation == token else { return }
+                session = selected
+                try await selected.start { [weak self] text, isFinal, pause in
+                    guard let self, generation == token, isListening else { return }
+                    pendingText = text
+                    pendingPause = pause
+                    if isFinal {
+                        commitPending()
+                    }
+                } onError: { [weak self] error in
+                    guard let self, generation == token else { return }
+                    stop()
+                    errorMessage = error.localizedDescription
+                }
+                try Task.checkCancellation()
+                guard generation == token else { return }
+                isReady = true
+                statusMessage = "正在本地听写…"
+            } catch is CancellationError {
+                return
+            } catch {
+                guard generation == token else { return }
+                stop()
+                errorMessage = error.localizedDescription
+            }
         }
+    }
+
+    func finish() async {
+        if let finishTask {
+            await finishTask.value; return
+        }
+        guard isListening else { return }
+        guard isReady else { stop(); return }
+        let token = generation
+        statusMessage = "正在完成听写…"
+        let task = Task { [weak self] in
+            guard let self else { return }
+            if let startTask {
+                await startTask.value
+            }
+            guard generation == token, !Task.isCancelled else { return }
+            await session?.finish()
+            guard generation == token, !Task.isCancelled else { return }
+            finishTask = nil
+            stop()
+        }
+        finishTask = task
+        await task.value
     }
 
     func stop() {
-        transcript = accumulator.commitCurrent()
-        recognitionGeneration = UUID()
-        tearDownRecognitionCycle(cancelTask: true)
+        commitPending()
+        generation = UUID()
+        finishTask?.cancel()
+        finishTask = nil
+        startTask?.cancel()
+        startTask = nil
+        session?.cancel()
+        session = nil
+        onCommit = nil
         isListening = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        isReady = false
+        statusMessage = ""
     }
 
-    private func authorize() async throws {
-        let speechStatus = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status)
-            }
-        }
-        guard speechStatus == .authorized else {
-            throw SpeechInputError.speechPermissionDenied
-        }
-
-        let microphoneGranted = await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission { granted in
-                continuation.resume(returning: granted)
-            }
-        }
-        guard microphoneGranted else {
-            throw SpeechInputError.microphonePermissionDenied
-        }
+    private func commitPending() {
+        let text = pendingText
+        pendingText = ""
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        onCommit?(text, pendingPause)
+        pendingPause = 0
     }
+}
 
-    private func beginRecognition() throws {
-        let recognizer: SFSpeechRecognizer
-        if let existingRecognizer = self.recognizer {
-            recognizer = existingRecognizer
-        } else if let newRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")) {
-            self.recognizer = newRecognizer
-            recognizer = newRecognizer
+/// Applies only to today's editor contents; there is no baseline or transcript cache.
+enum SpeechDraftAppend {
+    static func append(_ segment: String, to current: String, pause: TimeInterval) -> String {
+        var segment = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !segment.isEmpty else { return current }
+        guard let last = current.last else { return segment }
+        let punctuation = "。！？!?；;，,：:、."
+        if punctuation.contains(last) {
+            while let first = segment.first, punctuation.contains(first) {
+                segment.removeFirst()
+            }
+        }
+        guard let first = segment.first else { return current }
+        let separator: String = if ".!?;,:".contains(last), isASCIIWord(first) {
+            " "
+        } else if last.isWhitespace || punctuation.contains(last) || punctuation.contains(first) {
+            ""
+        } else if pause >= 1.6 {
+            isASCIIWord(last) && isASCIIWord(first) ? ". " : "。"
+        } else if pause >= 0.55 {
+            isASCIIWord(last) && isASCIIWord(first) ? ", " : "，"
+        } else if isASCIIWord(last), isASCIIWord(first) {
+            " "
         } else {
-            throw SpeechInputError.recognizerUnavailable
+            ""
         }
-        guard recognizer.isAvailable else {
-            throw SpeechInputError.recognizerUnavailable
-        }
-
-        let audioEngine: AVAudioEngine
-        if let existingAudioEngine = self.audioEngine {
-            audioEngine = existingAudioEngine
-        } else {
-            let newAudioEngine = AVAudioEngine()
-            self.audioEngine = newAudioEngine
-            audioEngine = newAudioEngine
-        }
-
-        tearDownRecognitionCycle(cancelTask: true, deactivateAudioSession: false)
-
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.addsPunctuation = true
-        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
-        recognitionRequest = request
-
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw SpeechInputError.audioInputUnavailable
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
-        }
-        hasInstalledTap = true
-
-        audioEngine.prepare()
-        try audioEngine.start()
-        isListening = true
-
-        let generation = UUID()
-        recognitionGeneration = generation
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor in
-                guard let self, self.recognitionGeneration == generation else { return }
-                if let result {
-                    let latest = result.bestTranscription.formattedString
-                    let segments = result.bestTranscription.segments
-                    let activityRevision = self.accumulator.speechActivityRevision
-                    let accumulated = self.accumulator.receive(
-                        latest,
-                        isFinal: result.isFinal,
-                        speechSegmentStart: segments.first?.timestamp,
-                        speechSegmentEnd: segments.last.map {
-                            $0.timestamp + $0.duration
-                        }
-                    )
-                    if self.transcript != accumulated {
-                        self.transcript = accumulated
-                    }
-                    if result.isFinal {
-                        self.silenceCommitTask?.cancel()
-                        self.silenceCommitTask = nil
-                    } else if self.accumulator.speechActivityRevision
-                        != activityRevision
-                    {
-                        self.scheduleSilenceCommit(generation: generation)
-                    }
-                }
-                if result?.isFinal == true, self.isListening {
-                    self.restartRecognitionAfterPause(generation: generation)
-                } else if error != nil {
-                    self.stop()
-                    self.errorMessage = SpeechInputError.recognizerUnavailable.localizedDescription
-                }
-            }
-        }
+        return current + separator + segment
     }
 
-    private func restartRecognitionAfterPause(generation: UUID) {
-        guard isListening, recognitionGeneration == generation else { return }
-        do {
-            try beginRecognition()
-        } catch {
-            stop()
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    /// Speech.framework does not guarantee an `isFinal` callback before a
-    /// post-pause transcription starts over. Commit the current partial after
-    /// a real silence window and rotate the request, so the next utterance can
-    /// only append to the immutable prefix.
-    private func scheduleSilenceCommit(generation: UUID) {
-        silenceCommitTask?.cancel()
-        silenceCommitTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(
-                for: .seconds(SpeechTranscriptAccumulator.pauseBoundary)
-            )
-            guard !Task.isCancelled,
-                  let self,
-                  isListening,
-                  recognitionGeneration == generation
-            else {
-                return
-            }
-            let committed = accumulator.commitCurrent(
-                addsPausePunctuation: true
-            )
-            if transcript != committed {
-                transcript = committed
-            }
-            silenceCommitTask = nil
-            restartRecognitionAfterPause(generation: generation)
-        }
-    }
-
-    private func tearDownRecognitionCycle(
-        cancelTask: Bool,
-        deactivateAudioSession: Bool = false
-    ) {
-        silenceCommitTask?.cancel()
-        silenceCommitTask = nil
-        recognitionRequest?.endAudio()
-        if cancelTask {
-            recognitionTask?.cancel()
-        }
-        recognitionRequest = nil
-        recognitionTask = nil
-        if let audioEngine {
-            if audioEngine.isRunning {
-                audioEngine.stop()
-            }
-            if hasInstalledTap {
-                audioEngine.inputNode.removeTap(onBus: 0)
-                hasInstalledTap = false
-            }
-        }
-        if deactivateAudioSession {
-            try? AVAudioSession.sharedInstance().setActive(
-                false,
-                options: .notifyOthersOnDeactivation
-            )
-        }
+    private static func isASCIIWord(_ value: Character) -> Bool {
+        value.unicodeScalars.allSatisfy { $0.isASCII && CharacterSet.alphanumerics.contains($0) }
     }
 }

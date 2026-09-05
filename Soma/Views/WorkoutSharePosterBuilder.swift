@@ -22,8 +22,10 @@ struct WorkoutSharePosterModel: Equatable, Identifiable {
         var name: String
         var setCount: Int
         var partialSetCount: Int = 0
-        /// Consecutive logical groups, including their counts and actual evidence.
-        var loadSummary: String
+        var loadGroups: [String]
+        var loadSummary: String {
+            loadGroups.joined(separator: "；")
+        }
     }
 }
 
@@ -146,7 +148,7 @@ enum WorkoutSharePosterBuilder {
                 name: workout.exercise,
                 setCount: workout.setCount ?? 0,
                 partialSetCount: scope.partialSetsByWorkoutID[workout.id] ?? 0,
-                loadSummary: evidenceLoadSummary(workout.setEntries)
+                loadGroups: evidenceLoadGroups(workout.setEntries)
             )
         }
         let volumes = workouts.compactMap(\.estimatedVolume)
@@ -255,24 +257,58 @@ enum WorkoutSharePosterBuilder {
     }
 
     static func evidenceLoadSummary(_ evidence: [WorkoutSetEvidence]) -> String {
-        let runs = WorkoutRecordDraft(evidence: evidence).displayRuns
-        guard !runs.isEmpty else { return "—" }
-        return runs.map { run in
-            let efforts = run.representative.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
+        let groups = evidenceLoadGroups(evidence)
+        return groups.isEmpty ? "—" : groups.joined(separator: "；")
+    }
+
+    /// 分享只比较实际负荷与目标，元数据不能把相同完成值拆开。
+    private struct EffortKey: Hashable {
+        var side: WorkoutEffortSide
+        var target: WorkoutTargetKind
+        var weight: Double?
+        var reps: Int?
+        var seconds: Int?
+    }
+
+    static func evidenceLoadGroups(_ evidence: [WorkoutSetEvidence]) -> [String] {
+        var positions: [[EffortKey]: Int] = [:]
+        var merged: [(efforts: [WorkoutEffortDraft], count: Int)] = []
+        for group in WorkoutRecordDraft(evidence: evidence).groups {
+            let efforts = group.efforts.sorted {
+                ($0.side ?? .none).rawValue < ($1.side ?? .none).rawValue
+            }
+            let key = efforts.map {
+                EffortKey(
+                    side: $0.side ?? .none,
+                    target: $0.targetKind,
+                    weight: $0.externalWeightKG,
+                    reps: $0.targetKind == .repetitions ? $0.reps : nil,
+                    seconds: $0.targetKind == .duration ? $0.durationSeconds : nil
+                )
+            }
+            if let index = positions[key] {
+                merged[index].count += 1
+            } else {
+                positions[key] = merged.count
+                merged.append((efforts, 1))
+            }
+        }
+        return merged.map { item in
+            let efforts = item.efforts
             let details: String = if efforts.count == 2,
-                                     run.representative.sideMode == .alternating,
+                                     Set(efforts.compactMap(\.side)) == [.left, .right],
                                      matchingValues(efforts[0], efforts[1])
             {
                 "左右各 " + effortText(efforts[0], includesSide: false)
             } else {
                 efforts.map { effortText($0, includesSide: true) }.joined(separator: " / ")
             }
-            return "\(details) × \(run.count)组"
-        }.joined(separator: "；")
+            return "\(details) × \(item.count)组"
+        }
     }
 
     private static func matchingValues(_ lhs: WorkoutEffortDraft, _ rhs: WorkoutEffortDraft) -> Bool {
-        lhs.kind == rhs.kind && lhs.targetKind == rhs.targetKind
+        lhs.targetKind == rhs.targetKind
             && lhs.reps == rhs.reps && lhs.durationSeconds == rhs.durationSeconds
             && lhs.externalWeightKG == rhs.externalWeightKG
     }
@@ -285,9 +321,6 @@ enum WorkoutSharePosterBuilder {
             case .some(.right): prefix.append("右")
             case nil, .some(.none): break
             }
-        }
-        if let kind = effort.kind, kind != .working {
-            prefix.append(WorkoutPrescriptionFormatter.kindTitle(kind))
         }
         if let weight = effort.externalWeightKG {
             prefix.append(weight == 0 ? "自重" : "\(weight.formatted(.number.precision(.fractionLength(0 ... 2))))kg")

@@ -86,14 +86,12 @@ extension ConversationProcessingService {
         do {
             let route = context.ai.route(
                 text: userMessage.text,
-                hasMedia: !media.attachments.isEmpty,
-                hasVideo: media.hasVideo
+                hasMedia: !media.attachments.isEmpty || history.contains { !$0.images.isEmpty || !$0.videos.isEmpty },
+                hasVideo: media.hasVideo || history.contains { !$0.videos.isEmpty }
             )
             let directVideos = media.videos
-            if media.failedVideoCount > 0,
-               directVideos.count != media.videoCount
-            {
-                throw ConversationMediaPreparationError.videoFramesUnavailable
+            if media.failedVideoCount > 0 || history.contains(where: \.videoPreparationFailed) {
+                throw ConversationMediaPreparationError.fullVideoUnavailable
             }
             let provider = route.provider
             let trace = AgentTrace(
@@ -108,7 +106,7 @@ extension ConversationProcessingService {
                 contextSnapshot: """
                 \(persistentContext)
                 Session 上下文投影：最近 \(history.count) 个来回；重新提供历史视觉帧 \(historicalFrameCount) 张。
-                媒体模式：\(media.mode.rawValue)；视频字节 \(media.videos.reduce(0) { $0 + $1.data.count })；关键帧 \(media.mode == .keyframes ? media.frames.count : 0)。
+                媒体模式：\(media.mode.rawValue)；视频字节 \(media.videos.reduce(0) { $0 + $1.data.count })；图片 \(media.frames.count)。
                 本地准备耗时 \(prepared.preparationMilliseconds) ms（含被明确引用的历史媒体准备）。
                 """,
                 mediaKind: media.primaryKind,
@@ -133,7 +131,7 @@ extension ConversationProcessingService {
                 metadata: AgentTraceText.jsonObject([
                     "media_mode": media.mode.rawValue,
                     "video_bytes": ConversationMediaMetrics.videoBytes(media.attachments),
-                    "frame_count": media.mode == .keyframes ? media.frames.count : 0,
+                    "image_count": media.frames.count,
                     "duration_ms": media.preparationMilliseconds
                 ])
             )
@@ -163,9 +161,7 @@ extension ConversationProcessingService {
             responseMessage.applyAgentEvent(.span(contextSpan))
             if media.hasVideo {
                 let modeItemID = UUID()
-                let notice = media.mode == .directVideo
-                    ? "本次使用完整视频分析。\n\n"
-                    : "本次使用关键帧分析；未覆盖的动作阶段不会据此推断。\n\n"
+                let notice = "本次使用完整视频分析。\n\n"
                 PersistentAgentEventProjection.persistAndProject(
                     .assistantTextCompleted(itemID: modeItemID, at: traceNow),
                     job: job,
@@ -217,14 +213,6 @@ extension ConversationProcessingService {
                             .joined(separator: "\n\n")
                         try? context.modelContext.save()
                     },
-                    videoFrameFallback: media.mode == .directVideo ? { [weak self] in
-                        guard let self else { return [] }
-                        let fallback = await prepareStoredMedia(
-                            job.mediaAttachments,
-                            frameLimit: Self.maximumAnalysisImageCount
-                        )
-                        return fallback.frames
-                    } : nil,
                     trace: { [weak self] event in
                         let liveText = self?.pendingLiveTextSnapshot(for: event)
                         if case .failed = event,
@@ -504,16 +492,16 @@ extension ConversationProcessingService {
         frameLimit: Int
     ) async -> [AgentConversationExchange] {
         var remainingFrameCount = max(0, frameLimit)
-        var framesByTurnID: [UUID: [Data]] = [:]
+        var mediaByTurnID: [UUID: PreparedConversationMedia] = [:]
 
         for exchange in exchanges.reversed()
-            where remainingFrameCount > 0 && selectedTurnIDs.contains(exchange.turnID)
+            where selectedTurnIDs.contains(exchange.turnID)
         {
             let media = await prepareStoredMedia(
                 exchange.mediaAttachments,
                 frameLimit: remainingFrameCount
             )
-            framesByTurnID[exchange.turnID] = media.frames
+            mediaByTurnID[exchange.turnID] = media
             remainingFrameCount -= media.frames.count
         }
 
@@ -521,7 +509,9 @@ extension ConversationProcessingService {
             AgentConversationExchange(
                 userText: exchange.userText,
                 assistantText: exchange.assistantText,
-                images: framesByTurnID[exchange.turnID] ?? [],
+                images: mediaByTurnID[exchange.turnID]?.frames ?? [],
+                videos: mediaByTurnID[exchange.turnID]?.videos ?? [],
+                videoPreparationFailed: (mediaByTurnID[exchange.turnID]?.failedVideoCount ?? 0) > 0,
                 imageAttachmentCount: exchange.imageAttachmentCount,
                 videoAttachmentCount: exchange.videoAttachmentCount
             )

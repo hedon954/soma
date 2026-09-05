@@ -107,6 +107,7 @@ struct AIModelRoute: Equatable {
 struct AgentVideoInput: Equatable, Sendable {
     var data: Data
     var mimeType: String
+    var messageIndex: Int?
 }
 
 enum AgentMediaMode: String, Codable, Equatable, Sendable {
@@ -117,6 +118,7 @@ enum AgentMediaMode: String, Codable, Equatable, Sendable {
 }
 
 struct DirectVideoCapability: Equatable, Sendable {
+    static let standard = DirectVideoCapability(maximumRawBytes: 7 * 1024 * 1024, preferredMIMEType: "video/mp4")
     var maximumRawBytes: Int
     var preferredMIMEType: String
 }
@@ -128,7 +130,7 @@ enum MultimodalSupport: String, Codable, Hashable, Sendable {
 
     var label: String {
         switch self {
-        case .supported: "支持多模态：图片与视频关键帧"
+        case .supported: "支持图片输入；完整视频按平台能力处理"
         case .unsupported: "不支持多模态：只能发送文字"
         case .unknown: "多模态能力未知：平台模型目录未提供明确标注"
         }
@@ -209,7 +211,7 @@ enum ModelCapability {
     static func directVideoCapability(
         assessment: MultimodalCapabilityAssessment
     ) -> DirectVideoCapability? {
-        guard supportsDirectVideo(assessment: assessment) else { return nil }
+        guard assessment.support != .unsupported, assessment.directVideoSupport != false else { return nil }
         return DirectVideoCapability(
             maximumRawBytes: 7 * 1024 * 1024,
             preferredMIMEType: "video/mp4"

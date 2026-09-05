@@ -17,7 +17,6 @@ extension AIService {
         checkpoint: AgentLoopCheckpoint? = nil,
         firstStepDeadlineEnabled: Bool = true,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
-        videoFrameFallback: (() async -> [Data])? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) async throws -> AgentToolResult
     ) async throws -> AgentOutcome {
@@ -35,6 +34,7 @@ extension AIService {
             selectedShortcutID: selectedShortcutID,
             checkpoint: checkpoint
         ))
+        let videos = prepared.videos
         let selectedRoute = prepared.selectedRoute
         let provider = selectedRoute.provider
         let model = selectedRoute.model
@@ -173,8 +173,7 @@ extension AIService {
                         clearedHistoryFrames: clearedHistoryFrames,
                         historicalImageCount: historicalImageCount,
                         hasVisualInput: hasVisualInput,
-                        multimodalSupport: support,
-                        videoFrameFallback: videoFrameFallback
+                        multimodalSupport: support
                     ),
                     trace: trace
                 )

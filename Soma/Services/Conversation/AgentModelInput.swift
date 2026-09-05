@@ -93,7 +93,6 @@ enum AgentModelInputBuilder {
         userPrompt: String,
         currentImages: [Data],
         currentVideos: [AgentVideoInput],
-        currentVideoFrames: [Data] = [],
         skills: [AgentModelSkillSnapshot],
         tools: [AgentToolName],
         selectedSkillID: String? = nil,
@@ -104,12 +103,15 @@ enum AgentModelInputBuilder {
         var media: [AgentModelMediaPayload] = []
 
         for (exchangeIndex, exchange) in history.enumerated() {
-            let mediaIDs = exchange.images.indices.map {
+            var mediaIDs = exchange.images.indices.map {
                 "history-\(exchangeIndex)-image-\($0)"
             }
             media.append(contentsOf: zip(mediaIDs, exchange.images).map {
                 .image(id: $0.0, data: $0.1)
             })
+            let videoIDs = exchange.videos.indices.map { "history-\(exchangeIndex)-video-\($0)" }
+            media.append(contentsOf: zip(videoIDs, exchange.videos).map { .video(id: $0.0, input: $0.1) })
+            mediaIDs += videoIDs
             messages.append(AgentModelMessage(
                 role: .user,
                 text: ReActAgentPrompt.historicalUser(
@@ -132,9 +134,6 @@ enum AgentModelInputBuilder {
         }
 
         let currentImageIDs = currentImages.indices.map { "current-image-\($0)" }
-        let currentVideoFrameIDs = currentVideoFrames.indices.map {
-            "current-video-frame-\($0)"
-        }
         let currentVideoIDs = currentVideos.indices.map { "current-video-\($0)" }
         media.append(contentsOf: zip(currentImageIDs, currentImages).map {
             .image(id: $0.0, data: $0.1)
@@ -142,13 +141,10 @@ enum AgentModelInputBuilder {
         media.append(contentsOf: zip(currentVideoIDs, currentVideos).map {
             .video(id: $0.0, input: $0.1)
         })
-        media.append(contentsOf: zip(currentVideoFrameIDs, currentVideoFrames).map {
-            .image(id: $0.0, data: $0.1)
-        })
         messages.append(AgentModelMessage(
             role: .user,
             text: userPrompt,
-            mediaIDs: currentImageIDs + currentVideoFrameIDs + currentVideoIDs
+            mediaIDs: currentImageIDs + currentVideoIDs
         ))
 
         return try PreparedAgentModelInput(

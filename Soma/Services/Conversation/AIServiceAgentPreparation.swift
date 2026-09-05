@@ -17,6 +17,7 @@ struct AgentRunPreparationRequest {
 }
 
 struct PreparedAgentRun {
+    var videos: [AgentVideoInput]
     var selectedRoute: AIModelRoute
     var apiKey: String
     var support: MultimodalSupport
@@ -41,17 +42,27 @@ extension AIService {
         let routing = try resolvedRoute(
             requested: request.requestedRoute,
             text: request.text,
-            hasMedia: !request.images.isEmpty,
-            hasVideo: request.hasVideo
+            hasMedia: !request.images.isEmpty || request.history.contains { !$0.images.isEmpty || !$0.videos.isEmpty },
+            hasVideo: request.hasVideo || request.history.contains { !$0.videos.isEmpty }
         )
         let route = routing.route
-        let support = modelMultimodalAssessment(
+        let assessment = modelMultimodalAssessment(
             provider: route.provider,
             baseURL: route.baseURL,
             model: route.model
-        ).support
+        )
+        if (!request.videos.isEmpty || request.history.contains { !$0.videos.isEmpty }),
+           assessment.directVideoSupport == false
+        {
+            throw ConversationMediaPreparationError.fullVideoUnavailable
+        }
+        let support = assessment.support
         let historicalImageCount = request.history.reduce(0) { $0 + $1.images.count }
-        let hasVisualInput = !request.images.isEmpty
+        if request.history.contains(where: \.videoPreparationFailed) {
+            throw ConversationMediaPreparationError.fullVideoUnavailable
+        }
+        let historicalVideoCount = request.history.reduce(0) { $0 + $1.videos.count }
+        let hasVisualInput = historicalVideoCount > 0 || !request.images.isEmpty
             || !request.videos.isEmpty
             || historicalImageCount > 0
         if hasVisualInput, support == .unsupported {
@@ -121,7 +132,19 @@ extension AIService {
         )
         let batches = request.checkpoint?.toolBatches ?? []
         restoreCheckpointBatches(batches, state: &toolState)
+        let videosByID = Dictionary(uniqueKeysWithValues: modelInput.media.compactMap { payload -> (String, AgentVideoInput)? in
+            guard case let .video(id, input) = payload else { return nil }
+            return (id, input)
+        })
+        let indexedVideos = modelInput.envelope.messages.enumerated().flatMap { index, message in
+            message.mediaIDs.compactMap { id -> AgentVideoInput? in
+                guard var video = videosByID[id] else { return nil }
+                video.messageIndex = index
+                return video
+            }
+        }
         return PreparedAgentRun(
+            videos: indexedVideos,
             selectedRoute: route,
             apiKey: routing.apiKey,
             support: support,
@@ -214,6 +237,8 @@ extension AIService {
             userText: exchange.userText,
             assistantText: exchange.assistantText,
             images: [],
+            videos: exchange.videos,
+            videoPreparationFailed: exchange.videoPreparationFailed,
             imageAttachmentCount: exchange.imageAttachmentCount,
             videoAttachmentCount: exchange.videoAttachmentCount
         )

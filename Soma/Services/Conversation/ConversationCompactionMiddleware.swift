@@ -180,7 +180,6 @@ extension AIService {
                 userPrompt: input,
                 textItemID: UUID()
             ),
-            videoFrameFallback: nil,
             trace: nil
         )
         let text = outcome.passage.trimmingCharacters(in: .whitespacesAndNewlines)

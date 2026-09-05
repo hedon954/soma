@@ -320,11 +320,11 @@ final class AgentV2Tests: XCTestCase {
 
         XCTAssertNotNil(ModelCapability.directVideoCapability(assessment: explicitVideo))
         XCTAssertNil(ModelCapability.directVideoCapability(assessment: imageOnly))
-        XCTAssertNil(ModelCapability.directVideoCapability(assessment: .unknown))
+        XCTAssertNotNil(ModelCapability.directVideoCapability(assessment: .unknown))
     }
 
     @MainActor
-    func testDirectVideoTTFTRetriesOnceWithKeyframes() async throws {
+    func testDirectVideoRetryPreservesCompleteVideo() async throws {
         let transport = RetryStreamTransport()
         let suiteName = "AgentV2Tests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(
@@ -374,15 +374,14 @@ final class AgentV2Tests: XCTestCase {
                 enforceFirstStepDeadline: true
             ),
             maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
-            videoFrameFallback: { [Data([2, 3])] },
             trace: nil
         )
 
         XCTAssertEqual(transport.requestCount, 2)
         XCTAssertEqual(outcome.requestAttempt, 2)
-        XCTAssertEqual(outcome.mediaMode, .keyframes)
-        XCTAssertEqual(outcome.passage, "关键帧结果")
-        XCTAssertNotNil(outcome.fallbackReason)
+        XCTAssertEqual(outcome.mediaMode, .directVideo)
+        XCTAssertEqual(outcome.passage, "完整视频结果")
+        XCTAssertNil(outcome.fallbackReason)
     }
 
     @MainActor
@@ -426,7 +425,6 @@ final class AgentV2Tests: XCTestCase {
                 textItemID: UUID()
             ),
             maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
-            videoFrameFallback: nil,
             trace: nil
         )
 
@@ -653,7 +651,7 @@ private final class RetryStreamTransport: @unchecked Sendable {
             "object": "chat.completion.chunk",
             "choices": [[
                 "index": 0,
-                "delta": ["content": "关键帧结果"],
+                "delta": ["content": "完整视频结果"],
                 "finish_reason": "stop"
             ]]
         ])

@@ -250,7 +250,7 @@ enum TrainingIntelligenceService {
         已确认的实际组：
         \(setText.isEmpty ? "未提供可确认的组数值" : setText)
 
-        请只依据本消息附带的视频或关键帧分析可见内容；单个阶段或关键帧不足时，不要描述为完整动作。
+        请只依据本消息附带的完整视频分析可见内容；可见证据不足时，不要描述为完整动作。
         不推断不可见关节、疼痛或伤病，不作医疗诊断。若出现疼痛、眩晕或明显不适，建议停止训练并寻求专业帮助。
         完成分析后必须调用 record_performance_analysis，原样传回上述 performance_id 和 input_fingerprint，
         并分别填写：按阶段描述的 evidence、镜头/遮挡/采样造成的 limitations、以及中性可执行的 feedback。

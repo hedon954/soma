@@ -44,7 +44,7 @@ struct MediaViewer: View {
 
             TabView(selection: $selectedAttachmentID) {
                 ForEach(attachments) { attachment in
-                    MediaViewerPage(attachment: attachment)
+                    MediaViewerPage(attachment: attachment, isSelected: attachment.id == selectedAttachmentID)
                         .tag(attachment.id)
                 }
             }
@@ -113,6 +113,12 @@ struct MediaViewer: View {
             guard chromeOpacity == 0 else { return }
             withAnimation(.easeOut(duration: 0.18)) {
                 chromeOpacity = 1
+            }
+        }
+        .onDisappear {
+            let session = AVAudioSession.sharedInstance()
+            if session.category == .playback, session.mode == .moviePlayback {
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
             }
         }
         .alert(
@@ -247,6 +253,7 @@ private extension View {
 
 private struct MediaViewerPage: View {
     let attachment: MediaAttachmentReference
+    let isSelected: Bool
 
     var body: some View {
         Group {
@@ -254,7 +261,7 @@ private struct MediaViewerPage: View {
             case .image:
                 ZoomableLocalImage(path: attachment.path)
             case .video:
-                MediaViewerVideo(path: attachment.path)
+                MediaViewerVideo(path: attachment.path, isSelected: isSelected)
             case .none:
                 ContentUnavailableView("媒体不可用", systemImage: "photo.badge.exclamationmark")
                     .foregroundStyle(.white)
@@ -311,24 +318,6 @@ private struct ZoomableLocalImage: View {
             )
             guard !Task.isCancelled else { return }
             didLoad = true
-        }
-    }
-}
-
-private struct MediaViewerVideo: View {
-    @State private var player: AVPlayer?
-
-    init(path: String) {
-        _player = State(initialValue: MediaStore.url(at: path).map { AVPlayer(url: $0) })
-    }
-
-    var body: some View {
-        if let player {
-            VideoPlayer(player: player)
-                .onDisappear { player.pause() }
-        } else {
-            ContentUnavailableView("视频不可用", systemImage: "video.slash")
-                .foregroundStyle(.white)
         }
     }
 }

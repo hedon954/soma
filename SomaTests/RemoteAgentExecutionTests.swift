@@ -147,14 +147,13 @@ struct RemoteAgentExecutionTests {
     }
 
     @Test
-    func directVideoFallbackFramesUseDistinctRemoteMediaIDs() throws {
+    func directVideoContainsOnlyFullVideoAndSelectedImages() throws {
         let modelInput = try AgentModelInputBuilder.build(
             systemPrompt: "虚构系统提示",
             history: [],
             userPrompt: "[SOMA CURRENT TURN v1]\n分析虚构视频",
             currentImages: [Data([1])],
             currentVideos: [AgentVideoInput(data: Data([2]), mimeType: "video/mp4")],
-            currentVideoFrames: [Data([3]), Data([4])],
             skills: [],
             tools: [],
             maxSteps: 3,
@@ -163,11 +162,9 @@ struct RemoteAgentExecutionTests {
 
         #expect(modelInput.envelope.messages.last?.mediaIDs == [
             "current-image-0",
-            "current-video-frame-0",
-            "current-video-frame-1",
             "current-video-0"
         ])
-        #expect(modelInput.media.count == 4)
+        #expect(modelInput.media.count == 2)
     }
 
     @Test

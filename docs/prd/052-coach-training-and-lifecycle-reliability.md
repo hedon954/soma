@@ -19,6 +19,7 @@
   - [ADR 0111](../adr/0111-agent-response-identity-and-manual-recovery.md)
   - [ADR 0112](../adr/0112-coach-scroll-and-session-behavior.md)
   - [ADR 0113](../adr/0113-capture-and-foreground-lifecycle.md)
+- 后续修订：[PRD 056](056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
 
 ## 背景
 

@@ -19,10 +19,13 @@ extension ConversationProcessingService {
         client: RemoteAgentClient
     ) async throws -> PreparedRemoteAgentSubmission {
         let hasVideo = job.mediaAttachments.contains { $0.kind == .video }
-        let supportsDirectVideo = if job.remoteRequestAttempt == 1, hasVideo {
+        let supportsDirectVideo = if hasVideo {
             try await client.supportsDirectVideo()
         } else {
             false
+        }
+        if hasVideo, !supportsDirectVideo {
+            throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程模型未开启完整视频输入，请切换支持视频的模型后重试。")
         }
         let media = await prepareStoredMedia(
             job.mediaAttachments,
@@ -38,19 +41,10 @@ extension ConversationProcessingService {
            media.videos.count != media.videoCount
         {
             throw RemoteAgentError.server(
-                code: "video_frames_unavailable",
-                message: "视频未能产生可供模型分析的完整视频或关键帧。"
+                code: "full_video_unavailable",
+                message: "完整视频准备失败，请使用体积更小的可播放视频后重试。"
             )
         }
-        let videoFallbackFrames: [Data] = if media.mode == .directVideo {
-            await prepareStoredMedia(
-                job.mediaAttachments.filter { $0.kind == .video },
-                frameLimit: Self.maximumAnalysisImageCount
-            ).frames
-        } else {
-            []
-        }
-
         let resolution = GymLocationResolver.resolve(
             text: userMessage.text,
             snapshot: userMessage.location,
@@ -69,6 +63,14 @@ extension ConversationProcessingService {
                 .selectedHistoricalTurnIDs,
             context: context
         )
+        if preparedHistory.history.contains(where: \.videoPreparationFailed) {
+            throw ConversationMediaPreparationError.fullVideoUnavailable
+        }
+        if preparedHistory.history.contains(where: { !$0.videos.isEmpty }),
+           try await !(client.supportsDirectVideo())
+        {
+            throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程模型未开启完整视频输入。")
+        }
         let compaction = await ConversationCompactionMiddleware.prepare(
             sessionID: job.sessionID,
             excludingTurnID: turnID,
@@ -129,7 +131,6 @@ extension ConversationProcessingService {
             userPrompt: userPrompt,
             currentImages: media.frames,
             currentVideos: media.videos,
-            currentVideoFrames: videoFallbackFrames,
             skills: AgentSkill.snapshots(defaults: context.ai.defaults),
             tools: AgentToolExposurePolicy.tools(selectedShortcut: selectedShortcut),
             selectedSkillID: selectedSkill?.id,

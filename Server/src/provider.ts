@@ -84,13 +84,21 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     if (job.input === undefined) {
       throw new ProtocolError("job_expired", "任务内容已清理。", 410);
     }
+    if (job.input.mediaMode === "keyframes") {
+      throw new ProtocolError("provider_unavailable", "该视频任务只有旧关键帧，请重新发送完整视频。", 422);
+    }
     const directVideo = this.directVideoEnabled;
     const hasCompletedModelStep = events.some((event) =>
       event.kind === "model" && event.phase === "completed"
     );
-    let usesDirectVideo = directVideo && media.some((item) =>
-      item.contentType.startsWith("video/")
+    const referencedIDs = new Set(job.input.modelInput.messages.flatMap((message) => message.mediaIDs));
+    const hasVideo = media.some((item) =>
+      referencedIDs.has(item.id) && item.contentType.startsWith("video/")
     );
+    const usesDirectVideo = directVideo && hasVideo;
+    if (!directVideo && hasVideo) {
+      throw new ProtocolError("provider_unavailable", "模型未开启完整视频输入。", 422);
+    }
     const appendCompletedModelEvents = (
       messages: Record<string, unknown>[],
     ): void => {
@@ -153,7 +161,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         reasoningSinceModelStart = undefined;
       }
     };
-    let messages = modelMessages(
+    const messages = modelMessages(
       job.input.modelInput.messages,
       media,
       usesDirectVideo,
@@ -177,15 +185,15 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         return tool === undefined ? [] : [[name, tool.schemaVersion] as const];
       }),
     );
-    const hasKeyframeFallback = media.some((item) =>
-      item.contentType.startsWith("image/")
+    const hasImages = media.some((item) =>
+      referencedIDs.has(item.id) && item.contentType.startsWith("image/")
     );
     const maximumRequestAttempts = modelStepRetryDelaysSeconds.length + 1;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maximumRequestAttempts; attempt += 1) {
       const mediaMode = usesDirectVideo
         ? "direct_video"
-        : hasKeyframeFallback
+        : hasImages
           ? "images"
           : "text";
       const deadline = new ProviderRequestDeadline(
@@ -257,16 +265,6 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           !deadline.receivedMeaningfulDelta &&
           isRetryable(lastError)
         ) {
-          if (usesDirectVideo && hasKeyframeFallback) {
-            usesDirectVideo = false;
-            messages = modelMessages(
-              job.input.modelInput.messages,
-              media,
-              false,
-              hasCompletedModelStep,
-            );
-            appendCompletedModelEvents(messages);
-          }
           const retryDelay = modelStepRetryDelaysSeconds[attempt - 1];
           if (retryDelay === undefined) throw lastError;
           await this.retrySleeper(retryDelay);
@@ -612,6 +610,7 @@ function modelMessages(
 ): Record<string, unknown>[] {
   const mediaByID = new Map(media.map((item) => [item.id, item]));
   return input.map((message, index) => {
+    const clearImages = clearHistoricalMedia && index > 0 && index < input.length - 1;
     const attachments = message.mediaIDs
       .map((id) => ({ id, item: mediaByID.get(id) }))
       .filter((entry): entry is { id: string; item: ProviderMedia } =>
@@ -620,13 +619,11 @@ function modelMessages(
       .filter((entry) => directVideo
         ? !entry.id.startsWith("current-video-frame-")
         : !entry.item.contentType.startsWith("video/"))
+      .filter((entry) => !clearImages || entry.item.contentType.startsWith("video/"))
       .map((entry) => entry.item);
-    if (
-      attachments.length === 0 ||
-      (clearHistoricalMedia && index > 0 && index < input.length - 1)
-    ) {
-      const text = attachments.length > 0
-        ? `${message.text}\n（历史视觉帧已在后续步骤清除，仅保留文字上下文。）`
+    if (attachments.length === 0) {
+      const text = clearImages && message.mediaIDs.length > 0
+        ? `${message.text}\n（历史图片已在后续步骤清除，仅保留文字上下文。）`
         : message.text;
       return { role: message.role, content: text };
     }
@@ -638,7 +635,7 @@ function modelMessages(
           if (directVideo && item.contentType.startsWith("video/")) {
             return {
               type: "video_url",
-              video_url: { url: item.url, fps: 2 },
+              video_url: { url: item.url },
             };
           }
           return {

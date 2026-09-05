@@ -1379,7 +1379,7 @@ struct PerformanceReviewView: View {
                 } header: {
                     Text("AI 视频复盘")
                 } footer: {
-                    Text("点击后 Soma 会创建一条可恢复的教练任务，发送所选视频或关键帧、动作身份和已确认组数值；分析经固定 Tool 保存，不会重复记录训练。")
+                    Text("点击后 Soma 会创建一条可恢复的教练任务，发送所选完整视频、动作身份和已确认组数值；分析经固定 Tool 保存，不会重复记录训练。")
                 }
             }
 

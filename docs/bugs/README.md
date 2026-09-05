@@ -11,9 +11,10 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0054](0054-full-video-playback-and-dictation-regressions.md) | 自动回归通过，真机待验收 | 修订 0002/0012/0048：完整视频、可靠播放、直接追加听写与分享组卡 | 完整请求/重试、合成视频播放、实时草稿编辑、分享分组与 UI |
 | [0053](0053-stream-executor-and-production-fixture-gap.md) | 双机虚构链路通过，真实会话待复验 | 修订 [0024](0024-streaming-cross-actor-swiftdata-crash.md)/[0036](0036-long-stream-continuous-text-and-completion-cliff.md)：原始流误入主线程，简化夹具未覆盖生产边界 | 执行器回归、真实持久化长流、完成后交互与真机 Trace |
 | [0001](0001-widget-configuration-metadata-crash.md) | 已修复，待真机界面确认 | 动态 Widget 配置文本导致扩展崩溃并从组件库消失 | `make check` 禁止 Widget 配置元数据使用 `Text` 重载 |
-| [0002](0002-video-frame-extraction-silent-fallback.md) | 已修复，待真机媒体验收 | 视频抽帧失败后仍以无画面的纯文本请求调用模型 | 稳定副本抽帧、零帧阻断、直接视频降级与首次/重试媒体一致性 |
+| [0002](0002-video-frame-extraction-silent-fallback.md) | 已修复，待真机媒体验收 | 视频抽帧失败后仍以无画面的纯文本请求调用模型 | 完整视频规则由 [0054](0054-full-video-playback-and-dictation-regressions.md) 修订，准备失败阻断 |
 | [0003](0003-gym-photo-lost-after-name-followup.md) | 已修复，待真机媒体验收 | 下一轮补充健身房名称时，上一轮图片只留在聊天 | 紧邻同 Session 归档、禁止跨 Turn 回捞与单张解绑测试 |
 | [0004](0004-agent-background-stream-interruption.md) | 已修复，待部署后持续验收 | App 进入后台后 Agent SSE 与本地 ReAct 执行被系统挂起 | 持久 Job、后台租约、远程执行、事件游标与真机验收 |
 | [0005](0005-remote-agent-streaming-latency-regression.md) | 已修复，待真机体验确认 | 远程模式丢失流式输出，并由 Worker/iOS 固定轮询叠加延迟 | 统一体验事件、流式 Provider、PostgreSQL 通知与 SSE 恢复 |
@@ -23,7 +24,7 @@
 | [0009](0009-guided-workout-preview-host-ownership-and-visible-state.md) | 已修复并部分修订 | 旧 Host 抢回共享层导致放大/返回黑屏，且错误和动作信息缺失 | Host 所有权、真实 previewing 状态、错误投影与竖屏布局测试 |
 | [0010](0010-guided-recording-state-and-cue-gaps.md) | 已修复，待真机复验 | 录像策略和真实活动混用，导致首组失败、相机常驻、语音与完成反馈缺失 | 多策略/手动录像、启动回调、Cue 序列、总结与级联删除测试 |
 | [0011](0011-meal-correction-misattributed-media.md) | 修复中 | 饮食纠错把当前图片写入错误记录，且结果难以审查 | 选择性媒体、精确 record ID、歧义不写入与 typed 结果卡 |
-| [0012](0012-direct-video-and-first-delta-timeout.md) | 修复中 | 直传视频仍重复抽帧，请求缺少首增量门禁 | 请求体、延迟抽帧、8/10/20 秒 TTFT、Abort 与单次重试 |
+| [0012](0012-direct-video-and-first-delta-timeout.md) | 后续部分修订 | 直传视频与首增量门禁 | [0054](0054-full-video-playback-and-dictation-regressions.md) 取消帧降级，重试保持完整视频 |
 | [0013](0013-guided-recording-startup-silent-stall.md) | 首次修复不足，后续见 0019/0020 | 带练录像启动可永久等待，失败无诊断日志且提示不可见 | 完整 activation 截止、独立失败事件、阶段日志、系统警告框与真机复验 |
 | [0014](0014-guided-performance-missing-workout-entry.md) | 已修复，待真机观察 | 带练动作完成后只保留 Session/Set，没有形成统一训练记录 | 终态投影、来源 ID、幂等回填、趋势去重、备份与级联删除测试 |
 | [0015](0015-billing-retry-loop-and-queue-order.md) | 已修复，待真机确认 | 明确欠费在进入 App 后反复重试，后发消息可能错序 | 欠费分类、人工释放、严格 FIFO、单删与全清测试 |
@@ -59,7 +60,7 @@
 | [0045](0045-guided-workout-coredata-abort.md) | 第二轮修复，待新 Release 真机 | 带练 relationship `@Query` 在 `NSSQLGenerator` 触发 `SIGABRT` | 标量 ID 快照、DTO 渲染、静态禁用多层查询与十轮真机复验 |
 | [0046](0046-coach-stream-scrolls-into-blank-space.md) | 已修复，待真机复验 | 流式零 token/首 token 阶段消息页滚入空白 | 真实消息尾部、布局测量、单一 tail-follow 状态机 |
 | [0047](0047-terminal-failure-retry-leaves-stale-error.md) | 已修复，待真机复验 | 手动重试后旧失败卡残留并新增处理气泡 | 预绑定响应、同 ID 清理失败、成功步骤检查点 |
-| [0048](0048-speech-segment-overwrites-committed-text.md) | 第三轮修复中，待真机复验 | 语音停顿后继续说话覆盖既有文案 | committed/current partial 分离、声学活动边界与停顿提交 |
+| [0048](0048-speech-segment-overwrites-committed-text.md) | 后续修订，待真机复验 | 语音停顿后继续说话覆盖既有文案 | [0054](0054-full-video-playback-and-dictation-regressions.md) 改为当前草稿直接追加 |
 | [0049](0049-quick-camera-presentation-deadlock.md) | 代码已修复，待真机 | 桌面/锁屏快捷相机偶发不能拍摄也不能取消 | 根层状态机、单层全屏相机、锁屏安全取消 |
 | [0050](0050-coach-foreground-recovery-freezes-again.md) | 二阶段修复，待量化 | 回到教练页仍短时无法滚动和输入 | 真首帧、generation 恢复、有界 DTO 缓存与 Release p95 |
 

@@ -36,6 +36,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0116](0116-progress-period-specific-focus.md) | 0.0.19 | 已采纳 | 默认日看记录，周看执行频率，月看变化，年看长期积累 |
 | [0117](0117-workout-share-editorial-poster.md) | 0.0.21 | 已采纳 | 部分替代 [0000](0000-origin-through-0.0.11.md) 的分享导出外观：固定白底、橙黄色主视觉与连续逻辑组压缩 |
 | [0118](0118-exercise-facets-and-meal-colors.md) | 0.0.21 | 已采纳 | 动作部位／模式／肌群派生筛选、餐次文字与固定双主题配色 |
+| [0119](0119-full-video-and-append-only-dictation.md) | Unreleased | 已采纳 | 完整视频、当前草稿追加和分享同值组卡 |
 
 新决策使用 [ADR 模板](template.md)。
 

@@ -100,7 +100,7 @@ struct CoachComposer: View {
             }
 
             if isListening {
-                Label("正在听写…", systemImage: "waveform")
+                Label(state.speechInput?.statusMessage ?? "正在本地听写…", systemImage: "waveform")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.tint)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,9 +153,6 @@ struct CoachComposer: View {
         }
         .onChange(of: state.draft) {
             state.reconcileSelectedSuggestion()
-        }
-        .onChange(of: state.speechInput?.transcript) {
-            state.syncDraftFromSpeech()
         }
     }
 
@@ -318,6 +315,7 @@ struct CoachComposer: View {
     var sendDisabled: Bool {
         state.trimmedDraft.isEmpty
             && state.attachments.isEmpty
+            && (state.speechInput?.pendingText.isEmpty ?? true)
     }
 
     var sendLabel: some View {

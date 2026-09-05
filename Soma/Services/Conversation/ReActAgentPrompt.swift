@@ -70,7 +70,7 @@ enum ReActAgentPrompt {
         let analysisMode = if directVideoCount > 0 {
             "完整视频直传：\(directVideoCount) 个视频；另有 \(imageCount) 张图片。"
         } else if hasVideo {
-            "关键帧：提供 \(imageCount) 张图片或视频关键帧；不能据此推断未覆盖阶段。"
+            "提供 \(imageCount) 张图片；未附带完整视频时不能声称已经分析视频。"
         } else {
             "图片：提供 \(imageCount) 张。"
         }
@@ -128,7 +128,7 @@ enum ReActAgentPrompt {
         \(text.isEmpty ? "无文字。" : text)
 
         该轮原始附件：\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频；
-        本次随 Session 上下文重新提供的图片或视频关键帧共 \(imageCount) 张。
+        本次随 Session 上下文重新提供图片 \(imageCount) 张；视频以完整文件附件为准。
         没有重新提供的历史画面不可凭文字提示臆测。
         \(mediaReference)
         """

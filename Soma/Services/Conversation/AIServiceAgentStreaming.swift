@@ -47,7 +47,6 @@ struct AgentModelStepExecutionRequest {
     var historicalImageCount: Int
     var hasVisualInput: Bool
     var multimodalSupport: MultimodalSupport
-    var videoFrameFallback: (() async -> [Data])?
 }
 
 struct AgentModelStepExecutionResult {
@@ -69,7 +68,6 @@ extension AIService {
                 messages: &messages,
                 request: request.stream,
                 maximumRetryCount: AgentStepRetryPolicy.maximumRetryCount,
-                videoFrameFallback: request.videoFrameFallback,
                 trace: trace
             )
         } catch let StreamingFailure.interrupted(error, passage, reasoning, _) {
@@ -181,17 +179,15 @@ extension AIService {
         messages: inout [ChatCompletionParameters.Message],
         request: AgentStreamStepRequest,
         maximumRetryCount: Int = 0,
-        videoFrameFallback: (() async -> [Data])?,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
         var requestAttempt = 0
-        var activeVideos = request.step == 1 ? request.videos : []
-        var mediaMode = initialMediaMode(
+        let activeVideos = request.videos
+        let mediaMode = initialMediaMode(
             images: request.images,
             videos: activeVideos,
             hasVideo: request.hasVideo
         )
-        var fallbackReason: String?
         while true {
             requestAttempt += 1
             do {
@@ -217,7 +213,6 @@ extension AIService {
                 )
                 streamed.requestAttempt = requestAttempt
                 streamed.mediaMode = mediaMode
-                streamed.fallbackReason = fallbackReason
                 return streamed
             } catch let StreamingFailure.interrupted(
                 error,
@@ -236,23 +231,6 @@ extension AIService {
                         receivedMeaningfulDelta: receivedMeaningfulDelta
                     )
                 }
-                if !activeVideos.isEmpty,
-                   let fallbackFrames = await videoFrameFallback?(),
-                   !fallbackFrames.isEmpty
-                {
-                    activeVideos = []
-                    mediaMode = .keyframes
-                    fallbackReason = agentErrorDescription(error)
-                    replaceCurrentUserImages(
-                        in: &messages,
-                        prompt: request.userPrompt,
-                        images: fallbackFrames
-                    )
-                    trace?(.assistantTextDelta(
-                        itemID: request.textItemID,
-                        delta: "完整视频直传未在时限内响应，本次已切换为关键帧分析。\n\n"
-                    ))
-                }
                 let retryNumber = requestAttempt
                 let retryAt = Date()
                 trace?(.span(AgentTraceSpan(
@@ -266,8 +244,7 @@ extension AIService {
                         "request_attempt": requestAttempt,
                         "next_request_attempt": requestAttempt + 1,
                         "media_mode": mediaMode.rawValue,
-                        "fallback_reason": fallbackReason
-                            .map { $0 as Any } ?? NSNull()
+                        "fallback_reason": NSNull()
                     ])
                 )))
                 try await agentRetrySleeper(
@@ -434,7 +411,7 @@ extension AIService {
             return .directVideo
         }
         if hasVideo {
-            return .keyframes
+            return .directVideo
         }
         return images.isEmpty ? .text : .images
     }

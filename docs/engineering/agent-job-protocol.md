@@ -1,5 +1,7 @@
 # Agent Job 与远程执行协议
 
+- 后续修订：[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
+
 - 状态：已实现协议
 - 协议版本：1
 - 日期：2026-07-31
@@ -86,8 +88,8 @@ localRunning | waitingForForeground
 重试或删除屏障才能继续。`waitingForNetwork` 仅保留旧数据兼容，不能由 runner 自动领取。
 判定规则见 [ADR 0092](../archive/0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md)。
 
-远程 Worker 在单个 provider model-step 内也只使用同一组三次退避；直传视频失败时若已有关键帧，
-在这组三次预算内切换媒体模式。Worker 发出 terminal error event 后，App 不得创建自动 fallback Job。
+远程 Worker 在单个 provider model-step 内只使用同一组三次退避；重试保持完整视频，
+不切换媒体模式。Worker 发出 terminal error event 后，App 不得创建自动 fallback Job。
 
 ### 服务端 Job
 
@@ -312,12 +314,10 @@ Turn 级 Activity 与 Skill/Tool operation 分开；首段正文或操作卡出�
   机器处理必须明确标注且不得先于本地时间。人工重试复用原 Turn 时间，Loop 时间单独标识。
 - 会话压缩只在 ReAct Loop 前发生；小模型失败后回退标准模型，再失败使用确定性 digest。iOS 在
   本地和远程提交前都投影同样的压缩 Chat 事件，Worker 不重新压缩或改写 Prompt。
-- `GET /v1/capabilities` 在媒体准备前返回远程 Provider 是否启用已验证直传视频；直传时只上传
-  规范化 MP4，非直传模型只上传关键帧，同一 Provider 请求不同时包含视频和帧。
-- Job 输入显式携带 `mediaMode=text|images|keyframes|direct_video` 与
-  `requestAttempt=1|2`。直传首请求失败时 Server 不重复直传，而是返回带实际媒体模式和请求序号的
-  失败 Event；设备随后才抽取并上传关键帧，以稳定的第二个 `clientJobID` 在同一设备 Attempt/Trace
-  内完成唯一重试。第二次请求不得再由 Server 内部重试。
+- `GET /v1/capabilities` 在准备前确认远程 Provider 是否启用完整视频；上传规范化全时长 MP4，
+  不支持或准备失败则阻断，禁止上传替代帧。
+- 新 Job 的视频模式为 `direct_video`；保留 `keyframes` 和 `requestAttempt` 解码兼容，
+  旧关键帧 Job 要求重新发送完整视频。Worker 的瞬态重试保持同一完整文件与 Job，不创建降级任务。
 - 需要最新数据库事实时请求分页设备 Tool，不静默上传整个数据库。
 - Provider request ID 可以进入非内容诊断；Authorization 和请求正文不得进入普通日志。
 - Provider background mode 只可作为纯分析适配器，不能取代 Soma Job 和 Tool 协议。

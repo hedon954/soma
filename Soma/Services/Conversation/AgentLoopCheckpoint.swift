@@ -151,6 +151,8 @@ struct AgentConversationExchange: Sendable {
     var userText: String
     var assistantText: String?
     var images: [Data]
+    var videos: [AgentVideoInput] = []
+    var videoPreparationFailed = false
     var imageAttachmentCount: Int
     var videoAttachmentCount: Int
 
@@ -166,7 +168,7 @@ struct AgentConversationExchange: Sendable {
         return """
         [HISTORY USER]
         \(user.isEmpty ? "无文字" : user)
-        原始附件：\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频；本次重新提供 \(images.count) 张图片或视频关键帧。
+        原始附件：\(imageAttachmentCount) 张图片、\(videoAttachmentCount) 个视频；本次重新提供 \(images.count) 张图片、\(videos.count) 个完整视频。
         [HISTORY ASSISTANT]
         \(assistant)
         """

@@ -9,6 +9,18 @@ extension CoachSessionView {
         quickRecordOverride: ExerciseInputSuggestion? = nil
     ) {
         guard !composer.isPersistingSubmission else { return }
+        if composer.speechInput?.isListening == true {
+            composer.isPersistingSubmission = true
+            let activeSessionID = conversationSessions.activeSessionID
+            Task { @MainActor in
+                await composer.finishVoice()
+                composer.isPersistingSubmission = false
+                guard conversationSessions.activeSessionID == activeSessionID else { return }
+                submitCurrentDraft(quickRecordOverride: quickRecordOverride)
+            }
+            return
+        }
+        composer.stopVoice()
         let text = composer.trimmedDraft
         guard !text.isEmpty || !composer.attachments.isEmpty else { return }
         // “发送”本身就是显式回到底部的用户意图。必须在异步落盘之前恢复

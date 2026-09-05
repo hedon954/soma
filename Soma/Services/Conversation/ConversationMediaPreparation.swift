@@ -22,18 +22,8 @@ extension ConversationProcessingService {
     nonisolated func prepareStoredMedia(
         _ attachments: [MediaAttachmentReference],
         frameLimit: Int,
-        directVideoCapability: DirectVideoCapability? = nil
+        directVideoCapability: DirectVideoCapability? = .standard
     ) async -> PreparedConversationMedia {
-        guard frameLimit > 0 else {
-            return PreparedConversationMedia(
-                attachments: attachments,
-                frames: [],
-                imageCount: attachments.count { $0.kind == .image },
-                videoCount: attachments.count { $0.kind == .video },
-                failedVideoCount: 0,
-                mode: attachments.isEmpty ? .text : .images
-            )
-        }
         var frameGroups: [[Data]] = []
         var imageCount = 0
         let videoAttachments = attachments.filter { $0.kind == .video }
@@ -68,24 +58,12 @@ extension ConversationProcessingService {
                 videos.append(input)
             }
         }
-        if videos.count != videoAttachments.count {
+        if videos.count != videoCount {
+            failedVideoCount = videoCount
             videos = []
-            for attachment in videoAttachments {
-                guard let url = MediaStore.url(at: attachment.path) else {
-                    failedVideoCount += 1
-                    continue
-                }
-                let frames = await VideoFrameCache.frames(for: url)
-                frameGroups.append(frames)
-                if frames.isEmpty {
-                    failedVideoCount += 1
-                }
-            }
         }
         let mode: AgentMediaMode = if !videos.isEmpty {
             .directVideo
-        } else if videoCount > 0 {
-            .keyframes
         } else if imageCount > 0 {
             .images
         } else {

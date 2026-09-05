@@ -7,21 +7,18 @@ final class WorkoutShareUITests: XCTestCase {
     }
 
     func testLightPosterAndSaveAction() {
-        assertSharePoster(appearance: "light", largeType: false)
+        assertSharePoster(appearance: "light")
     }
 
-    func testDarkPosterAndSaveActionWithAccessibilityType() {
-        assertSharePoster(appearance: "dark", largeType: true)
+    func testDarkPosterAndSaveAction() {
+        assertSharePoster(appearance: "dark")
     }
 
-    private func assertSharePoster(appearance: String, largeType: Bool) {
+    private func assertSharePoster(appearance: String) {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = "1"
         app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] = appearance
-        if largeType {
-            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        }
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 15))
         app.tabBars.buttons["进展"].tap()

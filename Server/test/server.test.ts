@@ -1380,9 +1380,23 @@ test("explicit direct-video capability sends video without duplicate frames", as
   assert.equal(content.filter((part) => part.type === "image_url").length, 0);
   assert.match(JSON.stringify(captured), /video\.mp4/);
   assert.doesNotMatch(JSON.stringify(captured), /frame\.jpg/);
+  assert.ok(job.input);
+  job.input.modelInput.messages.push(
+    { role: "assistant", text: "已查看", mediaIDs: [] },
+    { role: "user", text: "继续查看之前的视频", mediaIDs: [] },
+  );
+  await provider.run(job, [{
+    id: randomUUID(), jobID: job.id, sequence: 1, kind: "model", phase: "completed",
+    payloadVersion: 1, payload: {}, createdAt: new Date(),
+  }], [
+    { id: "current-video-0", contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+  ]);
+  const continued = captured?.messages as Record<string, unknown>[];
+  assert.match(JSON.stringify(continued[1]), /video\.mp4/);
+  assert.doesNotMatch(JSON.stringify(captured), /"fps"/);
 });
 
-test("remote model step uses three retries and video fallback stays in that budget", async () => {
+test("remote video retries preserve the complete file and never fall back", async () => {
   const store = new InMemorySomaStore();
   const directJob = await store.submitJob({
     deviceID: randomUUID(),
@@ -1408,7 +1422,7 @@ test("remote model step uses three retries and video fallback stays in that budg
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(
-            'data: {"choices":[{"delta":{"content":"关键帧结果"},"finish_reason":"stop"}]}\n\n',
+            'data: {"choices":[{"delta":{"content":"完整视频结果"},"finish_reason":"stop"}]}\n\n',
           ));
           controller.close();
         },
@@ -1433,15 +1447,36 @@ test("remote model step uses three retries and video fallback stays in that budg
   assert.deepEqual(retryDelays, [1, 2, 4]);
   assert.deepEqual(step, {
     kind: "completed",
-    answer: "关键帧结果",
+    answer: "完整视频结果",
     usage: { input: 0, output: 0 },
   });
   assert.match(JSON.stringify(capturedBodies[0]), /video\.mp4/);
   assert.doesNotMatch(JSON.stringify(capturedBodies[0]), /frame\.jpg/);
   for (const body of capturedBodies.slice(1)) {
-    assert.match(JSON.stringify(body), /frame\.jpg/);
-    assert.doesNotMatch(JSON.stringify(body), /video\.mp4/);
+    assert.doesNotMatch(JSON.stringify(body), /frame\.jpg/);
+    assert.match(JSON.stringify(body), /video\.mp4/);
   }
+});
+
+test("unsupported full video and legacy keyframe jobs fail before provider requests", async () => {
+  const store = new InMemorySomaStore();
+  let calls = 0;
+  const provider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1", "test-key", "text-model",
+    async () => { calls += 1; return new Response("unexpected"); },
+    undefined, false,
+  );
+  for (const mediaMode of ["direct_video", "keyframes"] as const) {
+    const job = await store.submitJob({
+      deviceID: randomUUID(),
+      input: makeJobInput({ mediaMode, modelInput: makeModelInput(["current-video-0"]) }),
+      bodyDigest: sha256(mediaMode), now: new Date(),
+    });
+    await assert.rejects(provider.run(job, [], [
+      { id: "current-video-0", contentType: "video/mp4", url: "https://signed.invalid/video.mp4" },
+    ]), /完整视频/);
+  }
+  assert.equal(calls, 0);
 });
 
 test("remote model step stops after the third retry", async () => {

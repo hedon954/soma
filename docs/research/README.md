@@ -7,6 +7,7 @@
 
 | 调研 | 状态 | 下游落地 |
 | --- | --- | --- |
+| [Apple 本地中文听写](2026-09-05-apple-local-speech.md) | 已转化，真机准确率待对比 | PRD 056、ADR 0119 |
 | [动作库、训练计划、带练与视频复盘](2026-07-31-exercise-library-plans-guided-training.md) | 已转化并部分修订 | PRD 010、ADR 0028—0035、训练领域架构；带练体验由后续调研深化 |
 | [训练计划编排、沉浸式带练与真实取景](2026-08-03-guided-workout-flow-and-capture.md) | 已转化并部分修订 | PRD 013、ADR 0038、BUG 0006；录像反馈由后续调研深化 |
 | [带练录像策略、语音节奏、完成反馈与历史管理](2026-08-04-guided-workout-recording-cues-and-review.md) | 已转化 | PRD 014、ADR 0039、BUG 0010 |

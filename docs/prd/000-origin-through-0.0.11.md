@@ -13,6 +13,7 @@
 - 下游落地：
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md)
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
+- 后续修订：[PRD 056](056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
 
 本文是活 PRD 链的起点，对应对话压缩后的滚动摘要：只保留 0.0.18 收口时仍然成立的要求，
 不含 0.0.1 到 0.0.18 沿途被替代的过渡方案。0.0.19 起的增量见后续活 PRD。

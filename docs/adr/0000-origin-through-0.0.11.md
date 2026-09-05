@@ -19,6 +19,7 @@
   - [全 App 性能审计报告](../engineering/performance-audit-2026-08-24.md)
   - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
   - [验收矩阵](../acceptance.md)
+- 后续替代：[ADR 0119](0119-full-video-and-append-only-dictation.md)（仅视频、语音或分享明细相关部分）
 
 本文是活 ADR 链的起点。只记录 0.0.18 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
 0.0.19 起的修订见后续活 ADR。

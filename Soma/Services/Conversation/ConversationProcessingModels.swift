@@ -13,14 +13,14 @@ struct ConversationProcessingContext {
 
 enum ConversationMediaPreparationError: LocalizedError {
     case attachmentPersistenceFailed
-    case videoFramesUnavailable
+    case fullVideoUnavailable
 
     var errorDescription: String? {
         switch self {
         case .attachmentPersistenceFailed:
             "附件未能完整保存到本机，请检查存储空间后重试"
-        case .videoFramesUnavailable:
-            "视频已保存在本机，但未能提取任何可供模型分析的画面，请换一个可播放的视频后重试"
+        case .fullVideoUnavailable:
+            "视频已保存在本机，但未能准备完整视频。请确认模型支持视频，并尝试体积更小的可播放文件后重试"
         }
     }
 }

@@ -506,9 +506,7 @@ extension ConversationProcessingService {
                 trace: trace,
                 responseMessage: responseMessage
             )
-            let presentedAnswer = job.remoteRequestAttempt > 1
-                ? "本次完整视频直传失败，已降级为关键帧分析。\n\n\(answer)"
-                : answer
+            let presentedAnswer = answer
             job.responseTextSnapshot = presentedAnswer
             responseMessage.text = presentedAnswer
             responseMessage.agentStatus = .succeeded

@@ -1,5 +1,7 @@
 # ReAct Agent
 
+- 后续修订：[ADR 0119](adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
+
 本文描述当前持久 Job、本地 ReAct 与可选远程 Backend 运行时。产品范围
 见 [PRD 003](archive/0.0.1/prd/003-streaming-react-agent.md)、
 [PRD 011](archive/0.0.1/prd/011-durable-agent-jobs-remote-continuity.md) 和
@@ -25,16 +27,15 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 
 每轮模型调用都使用流式接口。文本增量和 Span 生命周期会立刻作为 Event 发送给 UI；模型返回的 `reasoning_content` 当前不展示、不持久化，也不参与工具执行。
 
-请求真正发出后启用首增量门禁：文字 8 秒、图片/关键帧 10 秒、直传视频 20 秒。首个非空文字
-或 Tool delta 才算响应，headers、heartbeat 与 reasoning 不算；首增量前失败最多自动重试一次，
-收到首增量后使用 30 秒流空闲和 180 秒单步骤总时限。超时会取消底层请求；直传视频的唯一
-重试改为按需关键帧，并在聊天与 Trace 明示实际模式。
+请求发出后按当前 ReAct 配置执行文字、图片、视频各自首增量、流空闲和总时限。首个非空文字
+或 Tool delta 才算响应，headers、heartbeat 与 reasoning 不算。瞬态失败在模型步骤内使用
+1/2/4 秒三次退避；完整视频在重试及后续步骤中保持完整，不再自动抽帧。超时取消底层请求。
 
 图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库和业务 Tool 始终留在
 设备上；本地模式标准档没有 API Key 时，消息仍然落盘并进入暂存，首次遇到时同时打开「LLM 配置」，
 恢复后按发送顺序自动补偿消费（见 [ADR 0045](archive/0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md)）。用户明确启用
 远程持续模式后，当前图片或媒体能力注册允许的规范化视频可作为短期任务素材上传；用户 BYOK
-不上传。直传和关键帧模式不会在同一个 Provider 请求里重复发送。
+不上传。完整视频失败时明确报错，不再以关键帧替代其证据。
 
 ## 渐进式 Skills
 
