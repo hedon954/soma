@@ -3,7 +3,7 @@
 - 状态：已采纳，实施中
 - 后续修订：[PRD 055](055-exercise-facets-and-meal-breakdown.md) 增加餐次文字与固定配色
 - 日期：2026-09-05
-- 修订自：[PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md) 的固定月度总览、[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的目标驱动首页层级
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的进展信息层级与趋势入口
 - 部分替代：[PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的进展浮层；依据移入周期详情，Tool 参数规则不变
 - 上游依据：[产品调研](../research/2026-09-05-progress-history-and-chart-design.md)、[PRD 053](053-adaptive-energy-estimation-and-progress.md) 的消耗估算
 - 下游落地：[ADR 0114](../adr/0114-progress-periods-and-adaptive-energy.md)

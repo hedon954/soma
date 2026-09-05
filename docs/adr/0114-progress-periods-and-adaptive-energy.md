@@ -4,8 +4,7 @@
 - 日期：2026-09-05
 - 后续替代：[ADR 0115](0115-energy-default-reference-and-compact-details.md) 放开无手动配置时的默认参考，简化明细；其余历史与校准规则不变
 - 后续替代：[ADR 0116](0116-progress-period-specific-focus.md) 按日、周、月、年区分训练与身体摘要，日期边界与能量规则不变
-- 部分替代：[ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md) 的固定 30 天投影与当天活动线性外推
-- 部分替代：[ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的进展指标浮层；改为对应范围的能量依据页，饮食记录顺序规则不变
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的进展周期投影、能量估算与披露范围；饮食记录顺序规则不变
 - 部分替代：[ADR 0109](0109-schema-guided-tool-argument-recovery.md) 的进展浮层尺寸；Tool 参数恢复不变
 - 上游依据：[PRD 053](../prd/053-adaptive-energy-estimation-and-progress.md)、[PRD 054](../prd/054-progress-history-and-periods.md)
 - 跟踪：[TODO](../../.codex/plans/2026-09-05-progress-redesign-implementation.md)

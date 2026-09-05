@@ -3,15 +3,15 @@
 - 状态：已采纳，已实施；已通过模拟器验收，待 Release 真机验收
 - 日期：2026-08-27
 - 修订自：
-  - [PRD 048](../archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md) 的主动中断入口、消息元信息和饮食评价
+  - [PRD 048](../../0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md) 的主动中断入口、消息元信息和饮食评价
   - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md) 的指标来源入口与目标概览
 - 后续修订：
-  - [PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的宽幅单行明细浮层
-  - [PRD 053](053-adaptive-energy-estimation-and-progress.md) 修订能量预估、累计缺失与公式披露，实施中
-  - [PRD 054](054-progress-history-and-periods.md) 修订为固定首页层级与四周期历史，实施中
+  - [PRD 051](../../../prd/051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的宽幅单行明细浮层
+  - [PRD 053](../../../prd/053-adaptive-energy-estimation-and-progress.md) 修订能量预估、累计缺失与公式披露，实施中
+  - [PRD 054](../../../prd/054-progress-history-and-periods.md) 修订为固定首页层级与四周期历史，实施中
 - 上游依据：
   - 维护者提供的进展页标注稿与教练交互反馈
-  - [BUG 0031](../bugs/0031-feedback-sheet-transition-jank.md)
+  - [BUG 0031](../../../bugs/0031-feedback-sheet-transition-jank.md)
 - 下游落地：[ADR 0108](../adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md)
 
 ## 用户结果

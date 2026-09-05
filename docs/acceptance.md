@@ -8,8 +8,8 @@
   - [ADR 0103：目标导向的能量与增肌进展快照](archive/0.0.15/adr/0103-goal-directed-progress-energy-and-hypertrophy.md)
   - [ADR 0104：文字、图片与视频 ReAct 超时独立配置](archive/0.0.15/adr/0104-independent-react-timeouts-by-media.md)
   - [ADR 0106：可审查派生记录与人工中断屏障](archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md)
-  - [ADR 0107：前台恢复与进展证据投影](adr/0107-foreground-recovery-and-progress-evidence-projection.md)
-  - [ADR 0108：跟随式进展披露与可审查饮食顺序](adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md)
+  - [ADR 0107：前台恢复与进展证据投影](archive/0.0.18/adr/0107-foreground-recovery-and-progress-evidence-projection.md)
+  - [ADR 0108：跟随式进展披露与可审查饮食顺序](archive/0.0.18/adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md)
   - [ADR 0109：Schema 驱动的 Tool 参数恢复](adr/0109-schema-guided-tool-argument-recovery.md)
 
 本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。自然语言与媒体事实由

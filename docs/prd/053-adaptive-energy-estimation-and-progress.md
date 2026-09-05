@@ -2,8 +2,8 @@
 
 - 状态：已采纳，实施中
 - 日期：2026-09-05
-- 修订自：[PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md)、[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的能量估算与展示
-- 上游依据：[ADR 0107](../adr/0107-foreground-recovery-and-progress-evidence-projection.md)
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的能量估算与展示
+- 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md)
 - 下游落地：[ADR 0114](../adr/0114-progress-periods-and-adaptive-energy.md)、[PRD 054](054-progress-history-and-periods.md)
 - 后续修订：[ADR 0115](../adr/0115-energy-default-reference-and-compact-details.md) 增加默认起步参考，不再要求先手动配置
 - 跟踪：[BUG-20](../../.codex/plans/2026-09-02-coach-training-critical-bugfixes.md)、[实施 TODO](../../.codex/plans/2026-09-05-progress-redesign-implementation.md)

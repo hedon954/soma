@@ -7,7 +7,7 @@
 - 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的通用训练概览首屏
 - 后续替代：
   - [ADR 0104](0104-independent-react-timeouts-by-media.md)
-  - [ADR 0107](../../../adr/0107-foreground-recovery-and-progress-evidence-projection.md)（部分替代集中指标说明与仅显示截至当前消耗的边界）
+  - [ADR 0107](../../0.0.18/adr/0107-foreground-recovery-and-progress-evidence-projection.md)（部分替代集中指标说明与仅显示截至当前消耗的边界）
 - 上游依据：
   - [PRD 046](../prd/046-coach-records-and-goal-directed-progress.md)
   - [目标导向进展指标调研](../../../research/2026-08-26-goal-directed-progress-metrics.md)

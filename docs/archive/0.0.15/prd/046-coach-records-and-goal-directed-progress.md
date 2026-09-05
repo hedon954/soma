@@ -7,7 +7,7 @@
     有界进展快照和 ReAct 运行预算
 - 后续修订：
   - [PRD 048](../../0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
-  - [PRD 049](../../../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)（修订进展时间窗、分项来源与全天消耗预估）
+  - [PRD 049](../../0.0.18/prd/049-foreground-responsiveness-and-readable-monthly-progress.md)（修订进展时间窗、分项来源与全天消耗预估）
 - 上游依据：
   - 维护者提出的十二项功能优化
   - [目标导向进展指标调研](../../../research/2026-08-26-goal-directed-progress-metrics.md)

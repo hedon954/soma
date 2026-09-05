@@ -4,7 +4,7 @@
 - 日期：2026-09-02
 - 修订自：
   - [PRD 047](../archive/0.0.16/prd/047-root-aware-tab-reselection.md) 的教练 Tab 再选行为
-  - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md) 的前台恢复响应边界
+  - [PRD 000](000-origin-through-0.0.11.md) 的前台恢复响应边界
 - 后续修订：暂无
 - 上游依据：
   - 维护者提供的十七项严重 Bug、界面截图与崩溃报告

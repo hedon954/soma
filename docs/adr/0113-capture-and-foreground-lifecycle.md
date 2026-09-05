@@ -3,7 +3,7 @@
 - 状态：已采纳，代码已实施；待 Release 真机量化验收
 - 日期：2026-09-02
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md) 的前台恢复执行顺序
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的前台恢复执行顺序
 - 后续替代：暂无
 - 上游依据：
   - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)

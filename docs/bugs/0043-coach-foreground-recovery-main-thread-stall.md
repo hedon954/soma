@@ -6,8 +6,8 @@
 - 上游依据：维护者真机反馈
 - 后续修订：[BUG 0050](0050-coach-foreground-recovery-freezes-again.md) 的第二阶段前台恢复量化与缓存边界
 - 下游落地：
-  - [PRD 049](../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)
-  - [ADR 0107](../adr/0107-foreground-recovery-and-progress-evidence-projection.md)
+  - [PRD 049](../archive/0.0.18/prd/049-foreground-responsiveness-and-readable-monthly-progress.md)
+  - [ADR 0107](../archive/0.0.18/adr/0107-foreground-recovery-and-progress-evidence-projection.md)
 
 ## 症状
 

@@ -3,8 +3,7 @@
 - 状态：已采纳，已实施；待真机交互验收
 - 日期：2026-08-28
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的严格 Tool 参数与 ReAct 错误回路
-  - [PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的跟随式进展明细
+  - [PRD 000](000-origin-through-0.0.11.md) 的 Tool 参数、ReAct 错误回路与进展明细
 - 后续替代：[PRD 054](054-progress-history-and-periods.md) 替代进展浮层；Tool 参数纠错规则保持有效
 - 上游依据：
   - 维护者提供的真机参数失败与进展浮层截图

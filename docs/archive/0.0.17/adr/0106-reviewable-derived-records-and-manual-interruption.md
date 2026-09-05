@@ -5,7 +5,7 @@
 - 维护者：Soma maintainers
 - 部分替代：
   - [ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的饮食派生、训练记录目标单位投影、人工恢复和设置/消息元信息细则
-- 后续替代：[ADR 0108](../../../adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的输入区暂停、元信息视觉间距与饮食顺序字段
+- 后续替代：[ADR 0108](../../0.0.18/adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的输入区暂停、元信息视觉间距与饮食顺序字段
 - 上游依据：
   - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
   - [BUG 0027](../../../bugs/0027-meal-aggregate-overrides-item-facts.md)
