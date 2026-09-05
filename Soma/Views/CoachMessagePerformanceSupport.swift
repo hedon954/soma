@@ -290,12 +290,13 @@ enum CoachMessageRenderPayloadCache {
         let payload: CoachMessageRenderPayload
 
         var approximateCost: Int {
-            text.utf8.count
-                + mediaKindRaw.utf8.count
-                + (mediaPath?.utf8.count ?? 0)
-                + mediaAttachmentsData.count
-                + turnItemsData.count
-                + locationData.count
+            var cost = text.utf8.count
+            cost += mediaKindRaw.utf8.count
+            cost += mediaPath?.utf8.count ?? 0
+            cost += mediaAttachmentsData.count
+            cost += turnItemsData.count
+            cost += locationData.count
+            return cost
         }
 
         func matches(_ message: CoachMessage) -> Bool {

@@ -1,7 +1,7 @@
 # Soma 架构决策记录
 
 活 ADR 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.19`、`0.0.18`、`0.0.17`。0.0.16 及更早的**原文**在 [文档归档](../archive/README.md)，
+`0.0.20`、`0.0.19`、`0.0.18`。0.0.17 及更早的**原文**在 [文档归档](../archive/README.md)，
 仅供人类考古；Agent 默认不要读取归档。
 
 ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答一个问题：当时有哪些选择、最终选了什么、为什么，以及这一选择带来的约束。
@@ -11,7 +11,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 阅读顺序：
 
 ```text
-[ADR 0000 压缩起点] → 0.0.17 → 0.0.18 → 0.0.19
+[ADR 0000 压缩起点] → 0.0.18 → 0.0.19 → 0.0.20
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后仍然成立的最终决策。窗口内最旧活 ADR 的
@@ -25,8 +25,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | ADR | 版本 | 状态 | 决策 |
 | --- | --- | --- | --- |
-| [0000](0000-origin-through-0.0.11.md) | ≤0.0.16 | 压缩起点 | 0.0.16 收口后仍约束实现的架构决策 |
-| [0106](0106-reviewable-derived-records-and-manual-interruption.md) | 0.0.17 | 已采纳 | 已知营养小计、动作定义投影与用户主动中断共用可审查人工恢复边界 |
+| [0000](0000-origin-through-0.0.11.md) | ≤0.0.17 | 压缩起点 | 0.0.17 收口后仍约束实现的架构决策 |
 | [0107](0107-foreground-recovery-and-progress-evidence-projection.md) | 0.0.18 | 部分已替代 | 前台恢复不切 Session；[0114](0114-progress-periods-and-adaptive-energy.md) 替代固定窗口与当天活动外推 |
 | [0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) | 0.0.18 | 部分替代 | 进展披露由 [0114](0114-progress-periods-and-adaptive-energy.md) 修订；暂停复用发送键与可审查食用顺序仍有效 |
 | [0109](0109-schema-guided-tool-argument-recovery.md) | 0.0.19 | 部分替代 | Schema 驱动数字归一化与错误回路仍有效；进展浮层由 [0114](0114-progress-periods-and-adaptive-energy.md) 修订 |

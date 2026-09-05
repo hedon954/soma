@@ -5,8 +5,8 @@
 - 下游落地：
   - [PRD 042](../archive/0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
   - [ADR 0092](../archive/0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md)
-  - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
-  - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
+  - [PRD 048](../archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
+  - [ADR 0106](../archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md)
 
 ## 症状
 

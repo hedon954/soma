@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.19`、`0.0.18`、`0.0.17`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.20`、`0.0.19`、`0.0.18`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.16 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.17 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.17 → 0.0.18 → 0.0.19
+[PRD 000 压缩起点] → 0.0.18 → 0.0.19 → 0.0.20
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,8 +30,7 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.16 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.16 | 压缩起点 |
-| [048：可审查记录派生与用户主动中断](048-reviewable-record-derivation-and-user-controlled-interruption.md) | 0.0.17 | 窗口最旧活增量 |
+| [000：0.0.17 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.17 | 压缩起点 |
 | [049：前台恢复响应与可读的月度进展](049-foreground-responsiveness-and-readable-monthly-progress.md) | 0.0.18 | 活增量 |
 | [050：轻量进展披露与教练内联控制](050-lightweight-progress-disclosure-and-coach-controls.md) | 0.0.18 | 活增量 |
 | [051：可自愈工具参数与宽幅进展明细](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) | 0.0.19 | Tool 规则有效；进展浮层由 054 部分替代 |

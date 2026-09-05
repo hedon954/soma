@@ -3,14 +3,14 @@
 - 状态：已采纳，已实施于 0.0.17；模拟器验收完成
 - 日期：2026-08-27
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的派生饮食汇总、人工恢复、设置层级、逐回复元信息、聊天记录卡、动作定义绑定与自动保存
-- 后续修订：[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的输入区暂停、消息元信息间距与建议食用顺序
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的派生饮食汇总、人工恢复、设置层级、逐回复元信息、聊天记录卡、动作定义绑定与自动保存
+- 后续修订：[PRD 050](../../../prd/050-lightweight-progress-disclosure-and-coach-controls.md) 的输入区暂停、消息元信息间距与建议食用顺序
 - 上游依据：
   - 维护者提供的六项产品优化与界面对照图
-  - [BUG 0027](../bugs/0027-meal-aggregate-overrides-item-facts.md)
-  - [BUG 0029](../bugs/0029-visible-failure-keeps-retrying-and-stale-error.md)
-  - [BUG 0031](../bugs/0031-feedback-sheet-transition-jank.md)
-  - [BUG 0039](../bugs/0039-meal-occurrence-and-duration-target-truth.md)
+  - [BUG 0027](../../../bugs/0027-meal-aggregate-overrides-item-facts.md)
+  - [BUG 0029](../../../bugs/0029-visible-failure-keeps-retrying-and-stale-error.md)
+  - [BUG 0031](../../../bugs/0031-feedback-sheet-transition-jank.md)
+  - [BUG 0039](../../../bugs/0039-meal-occurrence-and-duration-target-truth.md)
 - 下游落地：
   - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
 

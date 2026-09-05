@@ -5,6 +5,20 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-09-05
+
+本版本承接 0.0.19 的教练、带练、训练分享与四周期进展改进，并修复 GitHub Release 使用
+Xcode 26.3 构建时的 Swift 类型检查超时。
+
+### Fixed
+
+- 拆分教练消息渲染缓存的复合成本表达式，避免 Xcode 26.3 云端编译器无法在合理时间内完成类型检查。
+
+### Data, privacy and compatibility
+
+- 不新增持久字段、数据迁移或远程数据流；最低系统版本仍为 iOS 17。
+- GitHub Release 只包含源码与变更说明，不包含 TestFlight 安装包。
+
 ## [0.0.19] - 2026-09-05
 
 本版本集中修复教练长对话、带练生命周期和训练记录的可靠性，并重做进展页：默认从当天记录出发，

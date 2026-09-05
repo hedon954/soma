@@ -3,7 +3,7 @@
 - 状态：已采纳，已实施；已通过模拟器验收，待 Release 真机验收
 - 日期：2026-08-27
 - 修订自：
-  - [PRD 048](048-reviewable-record-derivation-and-user-controlled-interruption.md) 的主动中断入口、消息元信息和饮食评价
+  - [PRD 048](../archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md) 的主动中断入口、消息元信息和饮食评价
   - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md) 的指标来源入口与目标概览
 - 后续修订：
   - [PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的宽幅单行明细浮层

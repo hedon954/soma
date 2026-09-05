@@ -6,7 +6,7 @@
 - 日期：2026-08-27
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0106](0106-reviewable-derived-records-and-manual-interruption.md) 的中断入口与消息元信息排列
+  - [ADR 0106](../archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md) 的中断入口与消息元信息排列
   - [ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md) 的来源 Sheet 交互
 - 后续替代：[ADR 0109](0109-schema-guided-tool-argument-recovery.md) 的宽幅单行浮层
 - 上游依据：

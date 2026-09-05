@@ -46,7 +46,7 @@ required_files=(
   docs/archive/0.0.14/prd/045-performance-reliability-and-bounded-data-access.md
   docs/archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md
   docs/archive/0.0.16/prd/047-root-aware-tab-reselection.md
-  docs/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md
+  docs/archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md
   docs/prd/049-foreground-responsiveness-and-readable-monthly-progress.md
   docs/prd/050-lightweight-progress-disclosure-and-coach-controls.md
   docs/adr/0000-origin-through-0.0.11.md
@@ -57,7 +57,7 @@ required_files=(
   docs/archive/0.0.15/adr/0103-goal-directed-progress-energy-and-hypertrophy.md
   docs/archive/0.0.15/adr/0104-independent-react-timeouts-by-media.md
   docs/archive/0.0.16/adr/0105-root-aware-tab-reselection.md
-  docs/adr/0106-reviewable-derived-records-and-manual-interruption.md
+  docs/archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md
   docs/adr/0107-foreground-recovery-and-progress-evidence-projection.md
   docs/adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md
   docs/archive/README.md
@@ -68,6 +68,7 @@ required_files=(
   docs/archive/0.0.14/README.md
   docs/archive/0.0.15/README.md
   docs/archive/0.0.16/README.md
+  docs/archive/0.0.17/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md

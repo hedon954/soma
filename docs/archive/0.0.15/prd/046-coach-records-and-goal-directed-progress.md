@@ -6,7 +6,7 @@
   - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 收口的记录真值、身体信息、聊天元信息、会话分页、
     有界进展快照和 ReAct 运行预算
 - 后续修订：
-  - [PRD 048](../../../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
+  - [PRD 048](../../0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
   - [PRD 049](../../../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)（修订进展时间窗、分项来源与全天消耗预估）
 - 上游依据：
   - 维护者提出的十二项功能优化

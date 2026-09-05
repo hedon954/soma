@@ -7,8 +7,8 @@
 - 下游落地：
   - [PRD 046](../archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md)
   - [ADR 0101](../archive/0.0.15/adr/0101-record-truth-and-agent-profile-context.md)
-  - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
-  - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
+  - [PRD 048](../archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
+  - [ADR 0106](../archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md)
 
 ## 症状
 

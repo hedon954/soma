@@ -6,8 +6,8 @@
 - 上游依据：[PRD 042](../archive/0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
 - 下游落地：
   - [ADR 0093](../archive/0.0.11/adr/0093-bounded-per-reply-multimodal-feedback-context.md)
-  - [PRD 048](../prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
-  - [ADR 0106](../adr/0106-reviewable-derived-records-and-manual-interruption.md)
+  - [PRD 048](../archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
+  - [ADR 0106](../archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md)
   - [PRD 050](../prd/050-lightweight-progress-disclosure-and-coach-controls.md)
   - [ADR 0108](../adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md)
 
