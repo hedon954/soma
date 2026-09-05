@@ -256,7 +256,7 @@ make format         # 格式化 Swift
 make lint           # SwiftLint、Actions、shell、文档和仓库契约
 make check          # 快速静态门禁，不启动 Simulator
 make verify         # 静态门禁、构建和模拟器测试
-make install-device # 使用本机 Team 签名、安装并启动已连接的 iPhone
+make install-device # 使用本机 Team 签名并安装到已连接的 iPhone，由维护者手动启动
 make archive        # 使用本机 Team 导出 TestFlight 归档
 make clean
 ```

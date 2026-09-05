@@ -19,7 +19,7 @@ help:
 	@echo "  make verify        Run static checks, build, and Simulator tests"
 	@echo "  make perf-profile-device  Reuse an installed Release and run the bounded physical-device profile"
 	@echo "  make online-check  Block external distribution while mail credentials live in the App"
-	@echo "  make install-device Sign, install, and launch on a connected iPhone"
+	@echo "  make install-device Sign and install on a connected iPhone; launch manually"
 	@echo "  make archive       Export a signed App Store Connect archive"
 	@echo "  make clean         Remove generated project and build artifacts"
 

@@ -12,8 +12,8 @@ DEVELOPMENT_TEAM=你的TeamID make install-device
 ```
 
 可以用 `SOMA_DEVICE_ID=设备UDID` 指定设备；未指定时脚本选择第一个可用的物理 iPhone。
-脚本为 Soma App 和 Widget Extension 使用同一个 Team 自动签名，安装后直接启动 Soma。
-如果安装时设备处于锁屏状态，安装仍视为成功；解锁 iPhone 后手动打开 Soma 即可。
+脚本为 Soma App 和 Widget Extension 使用同一个 Team 自动签名，只安装，不启动或重启 App。
+安装成功后由维护者自行打开 Soma。
 同一 Bundle ID 的覆盖安装保留 App 沙盒数据。Personal Team 的签名会定期过期，需要重新
 连线安装。
 
