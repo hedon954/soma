@@ -6,6 +6,8 @@
 - 后续修订：
   - [PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的目标直选与跟随式分项浮层
   - [PRD 052](052-coach-training-and-lifecycle-reliability.md) 的首帧后 generation 恢复、有界渲染快照与真机性能门禁
+  - [PRD 053](053-adaptive-energy-estimation-and-progress.md) 修订全天能量估算与缺失累计规则，实施中
+  - [PRD 054](054-progress-history-and-periods.md) 修订固定月度窗口为四周期与历史下钻，实施中
 - 上游依据：
   - 维护者提出的四项前台响应、月度曲线、分项来源和全天消耗优化
   - [BUG 0043](../bugs/0043-coach-foreground-recovery-main-thread-stall.md)

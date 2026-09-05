@@ -35,6 +35,8 @@ final class UserProfile: BusinessIdentifiedModel {
     var height: Double?
     var fitnessGoal: String
     var healthNotes: String
+    /// Explicit, effective-dated estimation settings; nil in stores created before PRD 053.
+    var energyBaselinesData: Data?
 
     var biologicalSex: BiologicalSex {
         get { BiologicalSex(rawValue: biologicalSexRaw) ?? .unspecified }
@@ -65,5 +67,6 @@ final class UserProfile: BusinessIdentifiedModel {
         self.height = height
         self.fitnessGoal = fitnessGoal
         self.healthNotes = healthNotes
+        energyBaselinesData = nil
     }
 }

@@ -8,7 +8,7 @@ private final class SendableNotificationBox: @unchecked Sendable {
 
 final class PerformancePressureTests: XCTestCase {
     @MainActor
-    func testSaveImpactIgnoresChatForCoachButInvalidatesInsights() throws {
+    func testSaveImpactIgnoresChatForBusinessSnapshots() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let message = CoachMessage(
@@ -26,7 +26,7 @@ final class PerformancePressureTests: XCTestCase {
                 in: context
             )
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             ModelContextSaveImpact.affectsInsights(notification, in: context)
         )
         XCTAssertFalse(
@@ -476,7 +476,7 @@ final class PerformancePressureTests: XCTestCase {
     }
 
     @MainActor
-    func testFiveThousandWorkoutVolumeAggregationIsStable() {
+    func testFiveThousandWorkoutVolumeAggregationIsStable() throws {
         let calendar = Calendar(identifier: .gregorian)
         let start = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
         let workouts = (0 ..< 5000).map { index in
@@ -489,13 +489,17 @@ final class PerformancePressureTests: XCTestCase {
             )
         }
 
-        let points = TrainingVolumeAnalytics.dailyPoints(
-            from: workouts,
-            calendar: calendar
+        let values = workouts.map { workout in
+            ProgressHistoryRecord(activity: .workout(workout), volume: workout.estimatedVolume, logicalSets: 1)
+        }
+        let end = try XCTUnwrap(calendar.date(byAdding: .day, value: 100, to: start))
+        let snapshot = ProgressHistoryProjection.build(
+            window: ProgressPeriodWindow(period: .year, start: start, end: end),
+            records: values, profile: nil, now: end, calendar: calendar
         )
-
-        XCTAssertEqual(points.count, 100)
-        XCTAssertEqual(points.reduce(0) { $0 + $1.volume }, 1_000_000)
+        XCTAssertEqual(snapshot.trainingDayCount, 100)
+        XCTAssertEqual(snapshot.logicalSets, 5000)
+        XCTAssertEqual(snapshot.volume, 1_000_000)
     }
 
     func testOneThousandMediaReferencesSelectOnlyUnretainedOrphans() {

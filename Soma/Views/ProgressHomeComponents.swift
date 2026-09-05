@@ -198,6 +198,7 @@ struct ProgressConclusionCard: View {
 
 struct ProgressRecentActivityRow: View {
     let activity: ProgressRecentActivity
+    var showsDisclosure = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -228,9 +229,11 @@ struct ProgressRecentActivityRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .frame(minHeight: 64)
         .contentShape(Rectangle())

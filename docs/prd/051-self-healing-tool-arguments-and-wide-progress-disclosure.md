@@ -5,7 +5,7 @@
 - 修订自：
   - [PRD 000](000-origin-through-0.0.11.md) 的严格 Tool 参数与 ReAct 错误回路
   - [PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的跟随式进展明细
-- 后续修订：暂无
+- 后续替代：[PRD 054](054-progress-history-and-periods.md) 替代进展浮层；Tool 参数纠错规则保持有效
 - 上游依据：
   - 维护者提供的真机参数失败与进展浮层截图
   - [BUG 0044](../bugs/0044-tool-argument-type-mismatch-aborts-react.md)

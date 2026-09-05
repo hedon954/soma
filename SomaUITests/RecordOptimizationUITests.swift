@@ -140,17 +140,16 @@ final class RecordOptimizationUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(add.frame.height, 44)
     }
 
-    func testProgressEnergyShowsCurrentComponentsAndDailyProjection() {
+    func testProgressEnergySeparatesRecordedIntakeAndEstimatedDailyExpenditure() {
         let app = launchRecordFixture(appearance: "light")
         app.tabBars.buttons["进展"].tap()
 
-        XCTAssertTrue(app.staticTexts["今日能量"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.segmentedControls["progress-period-picker"].waitForExistence(timeout: 15))
+        app.segmentedControls["progress-period-picker"].buttons["日"].tap()
         XCTAssertTrue(app.staticTexts["已记录摄入"].exists)
-        XCTAssertTrue(app.staticTexts["静息消耗"].exists)
-        XCTAssertTrue(app.staticTexts["训练消耗"].exists)
-        XCTAssertFalse(app.staticTexts["活动消耗"].exists)
-        XCTAssertTrue(app.staticTexts["基础 + 训练"].exists)
-        XCTAssertTrue(app.staticTexts["相对基础 + 训练"].exists)
+        XCTAssertTrue(app.staticTexts["预估总消耗"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["基础 + 训练"].exists)
+        XCTAssertTrue(app.staticTexts["与预估的差值"].exists)
         keepScreenshot(of: app, named: "progress-daily-energy-projection")
     }
 
@@ -159,6 +158,11 @@ final class RecordOptimizationUITests: XCTestCase {
         app.tabBars.buttons["进展"].tap()
 
         let workout = app.staticTexts["单杠悬吊"].firstMatch
+        XCTAssertTrue(app.segmentedControls["progress-period-picker"].waitForExistence(timeout: 15))
+        app.segmentedControls["progress-period-picker"].buttons["日"].tap()
+        for _ in 0 ..< 5 where !workout.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(workout.waitForExistence(timeout: 15))
         workout.tap()
         XCTAssertTrue(app.navigationBars["单杠悬吊"].waitForExistence(timeout: 5))
@@ -359,7 +363,10 @@ final class RecordOptimizationUITests: XCTestCase {
     private func revealWorkoutDayShare(in app: XCUIApplication) -> XCUIElement {
         app.tabBars.buttons["进展"].tap()
 
-        let history = app.buttons["训练记录"].firstMatch
+        let history = app.buttons["全部训练"].firstMatch
+        for _ in 0 ..< 5 where !history.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(history.waitForExistence(timeout: 15))
         history.tap()
         XCTAssertTrue(app.navigationBars["训练记录"].waitForExistence(timeout: 5))

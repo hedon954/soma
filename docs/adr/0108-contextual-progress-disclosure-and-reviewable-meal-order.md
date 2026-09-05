@@ -1,5 +1,7 @@
 # ADR 0108：跟随式进展披露与可审查饮食顺序
 
+- 后续替代：[ADR 0114](0114-progress-periods-and-adaptive-energy.md) 部分替代进展浮层为四周期能量依据；饮食记录顺序仍有效
+
 - 状态：已采纳
 - 日期：2026-08-27
 - 维护者：Soma maintainers

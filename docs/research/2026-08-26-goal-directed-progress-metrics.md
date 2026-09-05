@@ -2,6 +2,7 @@
 
 - 状态：已转化
 - 日期：2026-08-26
+- 后续修订：[进展历史与图表逻辑重设计](2026-09-05-progress-history-and-chart-design.md)（提议；时间入口与指标层级，目标导向和来源可查仍有效）
 - 下游落地：
   - [PRD 046](../archive/0.0.15/prd/046-coach-records-and-goal-directed-progress.md)
   - [ADR 0103](../archive/0.0.15/adr/0103-goal-directed-progress-energy-and-hypertrophy.md)

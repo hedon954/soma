@@ -17,7 +17,7 @@ enum ModelContextSaveImpact {
         BodyEntry.self,
         GymProfile.self,
         GymEquipment.self,
-        CoachMessage.self,
+        UserProfile.self,
         ExerciseDefinition.self,
         ExercisePerformance.self,
         WorkoutSession.self,

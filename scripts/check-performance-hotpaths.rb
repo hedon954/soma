@@ -343,22 +343,24 @@ end
 
 insights_source = File.read(File.join(ROOT, "Soma/Views/InsightsView.swift"))
 fail_check("InsightsView restored on-appear revision polling") if insights_source.include?("refreshRevision")
-if insights_source.match?(/\.onAppear\s*\{[^}]*requestSnapshotIfNeeded\(\)/m) ||
-   !insights_source.match?(/\.task\s*\{.*?await Task\.yield\(\).*?requestSnapshotIfNeeded\(\)/m)
-  fail_check("Insights snapshot request again competes with the Tab selection commit frame")
+unless insights_source.include?(".task(id: request)") && insights_source.include?("Task.detached") &&
+       insights_source.include?("guard request == key") && insights_source.include?("withTaskCancellationHandler")
+  fail_check("Insights history lost cancellable off-main reading or request identity checks")
 end
 if insights_source.include?("equipmentDescriptor") || insights_source.include?("definitionDescriptor")
   fail_check("Insights snapshot restored materializing full equipment or exercise objects for counts")
 end
-if insights_source.include?("performanceDescriptor.fetchLimit = 2000") ||
-   insights_source.include?("setDescriptor.fetchLimit = 5000") ||
-   !insights_source.include?(".flatMap(\\.performances)") ||
-   !insights_source.include?(".flatMap(\\.workoutSets)")
-  fail_check("Insights restored global child-table scans instead of the bounded session graph")
+progress_loader = File.read(File.join(ROOT, service_file("ProgressHistoryLoader.swift")))
+unless progress_loader.include?("@ModelActor") && progress_loader.include?("descriptor.fetchLimit = 256") &&
+       progress_loader.include?("descriptor.fetchOffset") && progress_loader.include?("try Task.checkCancellation()") &&
+       progress_loader.scan(/\$0.date >= start && \$0.date < end/).length == 3
+  fail_check("Insights history lost bounded date queries or cancellable pagination")
 end
-unless insights_source.match?(/currentEquipmentCount.*?modelContext\.fetchCount/m) &&
-       insights_source.match?(/activeExerciseCount.*?modelContext\.fetchCount/m)
-  fail_check("Insights snapshot no longer uses count-only queries for count-only metrics")
+if progress_loader.match?(/\.(performances|workoutSets|efforts)\b/) || insights_source.include?("modelContext.fetch(")
+  fail_check("Insights history restored relationship traversal or root MainActor fetching")
+end
+if progress_loader.match?(/\$0\.\w+!/)
+  fail_check("Insights predicates use unsupported SwiftData forced unwrap")
 end
 if insights_source.include?("points.map(\\.volume).max()") ||
    (insights_source.include?("TrainingVolumeTrendCard") &&

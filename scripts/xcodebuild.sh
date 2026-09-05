@@ -108,7 +108,7 @@ echo "Running '$action' for destination: $destination"
 xcodebuild_args=(
   "$action"
   -project "$project_path"
-  -scheme Soma
+  -scheme "${SOMA_TEST_SCHEME:-Soma}"
   -configuration Debug
   -destination "$destination"
   -derivedDataPath "$derived_data_path"
@@ -120,6 +120,11 @@ xcodebuild_args=(
 )
 if [[ -n "$quiet_flag" ]]; then
   xcodebuild_args=("$action" "$quiet_flag" "${xcodebuild_args[@]:1}")
+fi
+
+# 局部回归仍复用同一构建入口；完整 make verify 不设置此变量。
+if [[ "$action" == "test" && -n "${SOMA_TEST_FILTER:-}" ]]; then
+  xcodebuild_args+=("-only-testing:$SOMA_TEST_FILTER")
 fi
 
 set +e

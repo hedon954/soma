@@ -320,6 +320,7 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
     var height: Double?
     var fitnessGoal: String
     var healthNotes: String
+    var energyBaselinesData: Data?
 
     init(_ model: UserProfile) {
         id = model.id
@@ -332,6 +333,7 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
         height = model.height
         fitnessGoal = model.fitnessGoal
         healthNotes = model.healthNotes
+        energyBaselinesData = model.energyBaselinesData
     }
 
     func makeModel() -> UserProfile {
@@ -348,6 +350,7 @@ struct UserProfileDTO: Codable, Equatable, Sendable {
         model.id = id
         model.businessID = businessID
         model.biologicalSexRaw = biologicalSexRaw
+        model.energyBaselinesData = energyBaselinesData
         return model
     }
 }

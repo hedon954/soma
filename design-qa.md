@@ -1,82 +1,41 @@
-# Soma UI 设计 QA
+# 进展页视觉与交互验收
 
-- 日期：2026-08-23
-- 范围：黑白双主题、四个根页面、教练消息排版、输入区、训练记录逻辑组、计划总览与动作详情
-- 设备：iPhone 17 Pro Simulator，iOS 26.5
-- 数据：仅使用演示空间虚构内容
+## 范围
 
-## 对照方法
+- 参考：[选定稿与四周期细化](docs/assets/ui/2026-09-05/progress-refinement/README.md)
+- 实现：[PRD 054](docs/prd/054-progress-history-and-periods.md)；进展首页、训练／身体详情、能量依据。
+- 数据：`ProgressHistoryTestFixture` 的虚构餐食、体重、训练；未使用真实健康数据截图。
+- 主视口：iPhone 17 Pro，402×874pt / 1206×2622px，iOS Simulator 26.3。
 
-教练页设计稿为 853×1844，Simulator 原图为 1206×2622。实施截图按比例归一为 853×1844，
-与设计稿左右并排检查；输入区另截取底部 620 px 聚焦比较。比较范围包括信息层级、字体大小与
-字重、边距、留白、表面层级、图标、边框、圆角、Tab、Composer 和浅深主题；设计稿的长回复与
-实施截图的空态引导仅用于覆盖两种内容状态。
+## 检查与修复
 
-| 场景 | 设计稿 | 实施截图 | 同屏对照 |
-| --- | --- | --- | --- |
-| 教练浅色 | [设计稿](docs/assets/ui/2026-08-22/reference-coach-light.png) | [实施](docs/assets/ui/2026-08-22/implementation-coach-light.png) | [全页](docs/assets/ui/2026-08-22/qa-coach-light.png) / [底部](docs/assets/ui/2026-08-22/qa-coach-light-bottom.png) |
-| 教练深色 | [设计稿](docs/assets/ui/2026-08-22/reference-coach-dark.png) | [实施](docs/assets/ui/2026-08-22/implementation-coach-dark.png) | [全页](docs/assets/ui/2026-08-22/qa-coach-dark.png) / [底部](docs/assets/ui/2026-08-22/qa-coach-dark-bottom.png) |
-| 训练记录逻辑组 | [设计稿](docs/assets/ui/2026-08-22/reference-workout-editor.png) | `WorkoutLogicalGroupsEditor` | 双主题共用无损逻辑组投影 |
+| 检查 | 结果 |
+| --- | --- |
+| 层级与主题 | 保留紧凑标题、日历、四周期、能量主图、训练／身体卡、系统四 Tab；深色纯黑，浅色纯白 |
+| 柱与线 | 首轮截图发现双 x 范围 BarMark 误成短横线；改为零基线 RectangleMark，第二轮截图确认柱高和坐标一致 |
+| 选中与下钻 | 两行选中条；点图更新日期，不改窗口；再点进入日／月，返回保留原周期 |
+| 未来日期 | 日历限制到今天；当前周期下一步置灰；不能从图表进入未来 |
+| Accessibility XXXL | 首轮数字被分割换行；改用纵向指标和完整数字，第三轮截图确认修复；控件仍可滚动抵达 |
+| 记录列表 | 共用原记录详情、肌群主要／辅助不混同；详情 List 移除重复 chevron |
+| 文案 | 首页不含“月内可继续选择任意一天”等教学句；仅指标、单位、图例、覆盖与必要状态；公式在能量依据 |
+| 日页摘要 | 已移除训练单柱和孤立体重点；iPhone 17 Pro 自动化与 iPhone 16e 浅色截图确认。多周期至少两个有效点才显示小趋势 |
 
-四个根页面实施证据：
+## 可复核证据
 
-- [训练浅色](docs/assets/ui/2026-08-22/implementation-training-light.png) / [训练深色](docs/assets/ui/2026-08-22/implementation-training-dark.png)
-- [进展浅色](docs/assets/ui/2026-08-22/implementation-progress-light.png) / [进展深色](docs/assets/ui/2026-08-22/implementation-progress-dark.png)
-- [进展趋势浅色](docs/assets/ui/2026-08-22/implementation-progress-trends-light.png) / [进展趋势深色](docs/assets/ui/2026-08-22/implementation-progress-trends-dark.png)
-- [设置浅色](docs/assets/ui/2026-08-22/implementation-settings-light.png) / [设置深色](docs/assets/ui/2026-08-22/implementation-settings-dark.png)
+- `build/progress-ui-evidence-v3/manifest.json`：4 项 UI 测试对应浅／深色、四周期、下钻、大字号与详情截图。
+- `build/progress-ui-evidence-v3/8EA82ACF-611A-4E6C-9D67-49C0CAA881CB.png`：周视图，柱图修复后。
+- `build/progress-ui-evidence-v3/DA573A7A-0CC5-4249-90ED-9290BDA9BA65.png`：Accessibility XXXL 数字修复后。
+- `build/progress-verify.log`：阶段性 make verify 通过，722 项单元测试；后续修改仍需最后一次完整门禁。
+- `build/progress-final-verify.log`：最终批次通过 725 项 XCTest 与 7 项 Swift Testing；静态门禁和构建通过。
+- `build/progress-ui-evidence-final/manifest.json`：最后 5 项 UI 测试截图；日视图小图缺席断言通过。
+- `build/progress-layout-evidence/iphone16e-day-light.jpg`、`build/progress-layout-evidence/ipad-mini-week-dark.jpg`：小屏日页、iPad 周页目视复核。
+- `build/progress-layout-evidence/ipad-mini-day-dark.jpg`、`build/progress-layout-evidence/ipad-mini-energy-sources-dark.jpg`：iPad 切日后标题完整，整行点击进入依据；标题触达回归先失败（24pt），修复后通过（至少 44pt）。
+- `build/progress-ready-verify.log`：标题修复后的完整静态、构建、725 项 XCTest 和 7 项 Swift Testing 通过。
+- `build/progress-delivery-ui.log`：收尾 7 项 UI 回归全部通过，包含进展日页分享同一训练海报、标题整行触达、四周期和大字号。
 
-## 视觉结论
+## 状态
 
-- 浅色页面为纯白、分组卡为浅灰；深色页面为纯黑、卡片与内嵌块为两级深灰。页面、卡片、输入、
-  用户消息和分隔线在两种主题中均可区分，没有灰雾或反相感。
-- 黑白承担导航、标题与主操作；类别、指标、状态各自使用确定语义色，不形成品牌色铺面，也不把
-  训练页面无差别染橙。训练计划和最近训练仍使用训练类别橙，不使用无差别黑色。
-- 浅色语义图标与数据标记适度提高明度与饱和度，在纯白背景上保持清晰且对比度至少为 4.5:1；
-  不使用阴影、柔光或模糊。暗色八组语义色保持既定色值。
-- 进展页的最近训练柱和连续性热力格使用频率青，训练容量线/点/面积使用负荷橙，体重线/点使用
-  身体蓝；指标标题使用对应 SF Symbol。坐标轴、网格、分隔线和根 Tab 保持中性。同一曲线只有在
-  确定阈值存在时才按状态分段，不使用装饰性彩虹色。
-- AI 正文为 Dynamic Type Subheadline Light，标题和显式强调只升到 Medium。没有厚重 Bold/
-  Semibold 文字块。
-- AI 消息直接从消息区左边界开始，没有重复头像或装饰图标列。用户消息为右对齐主题灰色小气泡，
-  暗色不出现突兀白块。
-- 每条消息显示日期与时间。AI 结构只由本地受控 Markdown 映射标题、段落、分隔线和列表。
-- Composer 只保留加号、文本、麦克风和发送；三个 Skill 小胶囊保持紧凑，按钮触达范围仍为 44 pt。
-- 四个 Tab 未选中使用线框符号，选中项使用对应填充符号和中性底；没有彩色品牌导航。
-- 设置的浅灰分组卡、组间距和分隔线在纯白背景上清晰；分区标题对齐卡片外沿，反馈输入使用 inset
-  表面和 1 pt 边界；外观倒数第二，反馈保持末端直接发送。设置首页保留原文字、SF Symbol 和行布局，
-  仅给现有图标增加身体蓝、训练橙、智能紫、健康红、数据青、通知黄和后台绿等功能色，不给文字或
-  图标背景着色。
-- 训练记录编辑器不显示组号，覆盖次数/时长、双侧同时、左右各做、仅左、仅右；处方字段相同的
-  连续逻辑组忽略间歇压缩为 `×N`，最后一组无组间歇但保留必要的换侧间歇，缺失值不补齐。
-- 计划总览分别显示主要与辅助肌群，累计强度不改变动作库角色；动作详情把主要/辅助肌群、提示、
-  双面训练橙受力图和图例合并为“标准动作”的单一列表行，浅深主题均无幽灵分隔行或重复章节。
-
-## 交互与辅助功能
-
-- Simulator 语义树确认历史、业务日期、三个 Skill、加号、语音、四个 Tab 和设置外观均为独立可触达控件。
-- 浅色、深色切换即时生效；四个 Tab 可切换且保持各自导航栈。
-- 长文本区域可滚动；消息选择与复制、Tool/Skill 过程展开、用户消息右对齐和输入安全区均保留。
-- 训练记录逻辑组继续复用同一草稿和保存投影，视觉压缩不改变数据真值。
-
-## 工程门禁
-
-- `make format`：通过。
-- `make check`：通过；格式、Lint、Markdown 链接、文档生命周期、仓库契约与 Server 类型检查均通过。
-- `make verify`：通过；Server 30 项中 29 项通过、1 项因未配置测试数据库而跳过；iOS XCTest
-  544 项与 Swift Testing 6 项通过，0 项失败。
-
-## 2026-08-27 记录真值与中断交互复验
-
-- 设备：iPhone 17 Pro Simulator，iOS 26.3；只使用 `record-optimizations` 内存虚构夹具。
-- `RecordOptimizationUITests` 浅色、深色训练卡片均通过：动作库把历史 `20` 解释为 `20 秒`，
-  卡片显示“时长 / 全身 / 自重”，并保留 Trace 与单条回复反馈入口。
-- 截图复核确认训练记录从重复嵌套表面收敛为“记录卡 + 逻辑组编辑区”，消息时间、Trace 与反馈按钮
-  共用一条左对齐元数据行，两个图标使用相同 44 pt 触达槽位。
-- 设置首页不再显示“更多”分区；身体信息页把称呼和出生日期直接放入基本信息，未填写出生日期保持
-  空值且不再出现开关。自动化同时验证了姓名输入框可唤起系统键盘，且输入框下沿保持在键盘上沿之上。
-- 结果包：`build/Soma-record-optimization-ui-v2.xcresult`（浅色、深色、设置 3/3 通过）与
-  `build/Soma-record-optimization-ui-v5.xcresult`（键盘遮挡补充场景 1/1 通过）。结果包属于
-  本地忽略构建产物，不进入 Git。
-- 最终 `make format`、`make check`、`make verify` 均通过：Server 32 项中 31 项通过、1 项因未配置
-  测试数据库而跳过；iOS XCTest 627 项与 Swift Testing 7 项通过，0 项失败。
+主视口自动化与截图阶段 **passed**；最终交付门禁仍进行中。
+小屏日页浅色及 iPad mini 周／日页、能量依据已通过目视复核；整行标题点击有自动化回归。
+Release 真机 HealthKit 历史覆盖和帧率尚未作为通过证据；不能用安装成功替代真实数据验收。
+进度见 [TODO](.codex/plans/2026-09-05-progress-redesign-implementation.md)。

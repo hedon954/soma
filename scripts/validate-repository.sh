@@ -219,9 +219,13 @@ fi
 if grep -n '\.prefix(3)' Soma/Views/InsightsView.swift >/dev/null 2>&1; then
   fail "recent activity must not be truncated to three rows"
 fi
-grep -q 'static let maximumVisibleRows = 6' \
-  Soma/Views/ProgressHomeComponents.swift ||
-  fail "recent activity viewport must show six rows before internal scrolling"
+grep -q 'ForEach(records, id:' Soma/Views/ProgressHistoryRecordsView.swift ||
+  fail "progress day view must expose every record through shared detail navigation"
+grep -q 'yStart: .value("基线", 0)' Soma/Views/ProgressEnergyHistoryCard.swift ||
+  fail "progress intake columns must originate at the zero baseline"
+if rg -q 'DailyEnergyProjectionCalculator|activeKilocaloriesSoFar.*fraction' Soma; then
+  fail "progress must not extrapolate today's partial activity by elapsed clock time"
+fi
 grep -q '^Soma/Resources/FeedbackCredentials\.plist$' .gitignore ||
   fail "the local mail credential resource must stay ignored"
 grep -q 'online-check.sh' scripts/archive-testflight.sh ||

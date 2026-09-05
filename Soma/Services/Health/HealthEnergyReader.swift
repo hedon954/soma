@@ -110,8 +110,8 @@ enum RestingEnergyCalculator {
         age: Int?,
         biologicalSex: BiologicalSex
     ) -> Double? {
-        guard let weightKG, weightKG > 0,
-              let heightCM, heightCM > 0,
+        guard let weightKG, weightKG.isFinite, weightKG > 0,
+              let heightCM, heightCM.isFinite, heightCM > 0,
               let age, age > 0
         else { return nil }
         let sexAdjustment: Double
@@ -120,7 +120,8 @@ enum RestingEnergyCalculator {
         case .female: sexAdjustment = -161
         case .unspecified, .other: return nil
         }
-        return 10 * weightKG + 6.25 * heightCM - 5 * Double(age) + sexAdjustment
+        let result = 10 * weightKG + 6.25 * heightCM - 5 * Double(age) + sexAdjustment
+        return result.isFinite && result > 0 ? result : nil
     }
 
     static func elapsedTodayKilocalories(
