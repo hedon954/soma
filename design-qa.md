@@ -1,3 +1,54 @@
+# 训练分享海报视觉 QA
+
+日期：2026-09-05。视觉目标为维护者选定的白底黑字、橙黄色主视觉海报。范围仅训练分享。
+
+## 来源与环境
+
+- 来源：`build/share-qa/selected-final/reference.png`，853 × 1844 px；对话中维护者明确选定的效果图。
+- 原生实现：`build/share-qa/selected-final/poster.png`，780 × 1720 px，390 pt 宽、2× ImageRenderer 导出。
+- 完整比较：`build/share-qa/selected-final/comparison.png`；来源等比例归一到 780 px 宽，与原生导出并排。
+- 明细局部比较：`build/share-qa/selected-final/details-comparison.png`。
+- 状态：相同的六动作虚构训练、容量 5,840 kg、22 组、预计 187 kcal、约 35 分 38 秒。
+- 数据文案的必要差异：真实投影保留左右各「自重」，页脚使用产品文案「本地训练记录」。不把效果图当作事实数据或运行时贴图。
+
+## 比较与修正
+
+1. 首轮 `build/share-qa/selected-first/comparison.png`：P2 容量字过宽而被缩小、总耗时折为两行、头部间隔偏大。改用 iOS 自带 DINCondensed-Bold，调整容量与统计列宽，收紧头部间隔和行距。
+2. 第二轮 `build/share-qa/selected-second/comparison.png`：耗时与明细同排；进一步增大容量可用宽度。
+3. 最终完整与局部比较确认：白底、黑色文字、橙黄色主视觉、左容量右肌群、三列统计、明细分隔线和页脚色条均落实；无待修复 P0/P1/P2。
+
+## 五项视觉检查
+
+- 字体：中文使用系统字体，容量采用原生窄体大字；14 pt 明细完整可读，大容量自动缩放，长标题与异构明细扩展高度。未拉伸字体或把文字转为图片素材。
+- 布局：390 pt 固定纸面，主视觉外边距 14 pt、文字外边距 24 pt；普通动作名与摘要同排，统计耗时保持一行；无水平裁切。
+- 配色：纸面纯白、正文纯黑，主视觉 `#FFB536`；主视觉黑字对比度约 11.92:1，白底次要文字约 6.20:1。App 深浅外观导出的海报像素一致。
+- 素材：前后肌群图复用仓库 SVG 路径与真实强度映射，专用纸面呈现移除灰色底卡，主次肌群用橙色深浅；不使用生成图里的近似解剖素材。该资产形态差异是事实素材复用边界。
+- 文案：所有组段保留，未知重量不是自重；部分完成与失败仍可见；没有生成稿中的虚构成绩、日期或演示标记写入用户记录。
+
+## 交互与边界
+
+- iPhone 17 Pro：浅色和深色 Accessibility XXXL 的 UI 测试通过，打开分享、读取摘要、保存入口、滚动到末尾说明和关闭返回进展均通过。
+- iPhone 16e：`iphone16e-top.png` 与 `iphone16e-system-share.png` 位于最终证据目录；确认小屏保存入口、系统分享缩略图和安全区。
+- iPad Air 11-inch：同目录 `ipad-top.png`、`ipad-bottom.png`；原生居中弹层的宽度、滚动到保存与说明、关闭均正常。
+- 长数据：同目录 `long.png`；百万级容量、长中文标题、不对称左右、缺失重量/热量和部分完成完整保留。
+- 键盘：分享页没有输入控件，不出现键盘覆盖；外观和文字大小不影响导出事实。
+- 原生运行日志未发现分享渲染相关错误。系统分享面板可正常打开；模拟器结果不替代维护者真机上的相册权限和最终审美验收。
+
+## 工程证据
+
+- `make verify`：静态门禁、模拟器构建、751 项 XCTest 与 7 项 Swift Testing 全部通过。
+- `SOMA_TEST_SCHEME=SomaPerformance SOMA_TEST_FILTER=SomaUITests/WorkoutShareUITests make test`：2 项 UI 回归通过。
+- 单元测试结果归档：`build/share-qa/selected-unit-tests.xcresult`；UI 导出附件位于 `build/share-qa/selected-ui-final/`。
+- 真机安装后由维护者手动启动，不以安装成功宣称 UI 已由维护者验收。
+
+## 剩余细节
+
+P3：系统中文字形与生成稿存在轻微差别；主视觉采用清晰实色，生成稿的纸张噪点不进入原生导出。
+
+final result: passed
+
+---
+
 # 进展页视觉与交互验收
 
 ## 范围

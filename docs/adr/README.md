@@ -37,6 +37,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0114](0114-progress-periods-and-adaptive-energy.md) | 0.0.19 | 部分已替代 | 动态校准仍有效；0115 修订默认参考与披露，0116 区分周期信息重点 |
 | [0115](0115-energy-default-reference-and-compact-details.md) | 0.0.19 | 已采纳 | 有效静息默认估算、数值独立点击的彩色浮层与紧凑依据 |
 | [0116](0116-progress-period-specific-focus.md) | 0.0.19 | 已采纳 | 默认日看记录，周看执行频率，月看变化，年看长期积累 |
+| [0117](0117-workout-share-editorial-poster.md) | Unreleased | 已采纳 | 部分替代 [0000](0000-origin-through-0.0.11.md) 的分享导出外观：固定白底、橙黄色主视觉与连续逻辑组压缩 |
 
 新决策使用 [ADR 模板](template.md)。
 

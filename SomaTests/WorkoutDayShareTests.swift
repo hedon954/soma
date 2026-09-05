@@ -84,7 +84,7 @@ final class WorkoutDayShareTests: XCTestCase {
             calendar: calendar
         ))
 
-        XCTAssertEqual(model.dateText, "2026-09-03 周四")
+        XCTAssertEqual(model.dateText, "2026.09.03 周四")
         XCTAssertEqual(model.title, "股四头肌 · 小腿")
         XCTAssertEqual(model.exerciseCount, 2)
         XCTAssertEqual(model.completedSets, 3)
@@ -93,6 +93,7 @@ final class WorkoutDayShareTests: XCTestCase {
         XCTAssertEqual(model.durationText, "约 8 分")
         XCTAssertEqual(model.exercises.map(\.name), ["虚构深蹲", "虚构提踵"])
         XCTAssertEqual(model.exercises.map(\.setCount), [2, 1])
+        XCTAssertEqual(model.exercises.map(\.loadSummary), ["20kg · 5次 × 2组", "自重 · 12次 × 1组"])
         XCTAssertEqual(model.intensities[.quadriceps], 2)
         XCTAssertEqual(model.intensities[.calves], 1)
         XCTAssertNil(model.exercises.first { $0.name == "次日记录" })

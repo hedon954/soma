@@ -8,6 +8,12 @@ struct MuscleMapView: View {
     /// When true, tapping opens a full-screen enlarged map.
     var allowsExpansion: Bool = false
     var labelFontSize: CGFloat = 6
+    var presentation: Presentation = .card
+
+    enum Presentation {
+        case card
+        case poster
+    }
 
     @State private var isExpanded = false
 
@@ -81,13 +87,13 @@ struct MuscleMapView: View {
                 }
             }
             Text(side == .anterior ? "正面" : "背面")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(presentation == .poster ? .system(size: 14) : .caption2.weight(.semibold))
+                .foregroundStyle(presentation == .poster ? WorkoutSharePalette.ink : Color.secondary)
         }
-        .padding(6)
+        .padding(presentation == .poster ? 0 : 6)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.secondary.opacity(0.07))
+                .fill(presentation == .poster ? Color.clear : Color.secondary.opacity(0.07))
         )
         .accessibilityLabel(side == .anterior ? "正面肌群图" : "背面肌群图")
     }
@@ -151,7 +157,7 @@ struct MuscleMapView: View {
                 outlinePath = outlinePath.applying(transform)
                 context.fill(
                     outlinePath,
-                    with: .color(Color.secondary.opacity(0.10))
+                    with: .color(presentation == .poster ? Color.white.opacity(0.45) : Color.secondary.opacity(0.10))
                 )
             }
 
@@ -164,6 +170,9 @@ struct MuscleMapView: View {
                     guard let cgPath = SVGPath.cachedCGPath(from: data) else { continue }
                     let path = Path(cgPath).applying(transform)
                     context.fill(path, with: .color(fill))
+                    if presentation == .poster {
+                        context.stroke(path, with: .color(.white.opacity(0.85)), lineWidth: 0.6)
+                    }
                 }
             }
         }
@@ -217,6 +226,12 @@ struct MuscleMapView: View {
     }
 
     private func fillColor(intensity: Double, structural: Bool) -> Color {
+        if presentation == .poster {
+            if structural || intensity <= 0 {
+                return Color.white.opacity(structural ? 0.6 : 0.4)
+            }
+            return WorkoutSharePalette.activeMuscle.opacity(intensity < 0.55 ? 0.48 : 1)
+        }
         if structural {
             return Color.secondary.opacity(0.16)
         }

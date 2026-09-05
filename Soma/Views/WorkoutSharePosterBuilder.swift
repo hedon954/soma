@@ -22,7 +22,7 @@ struct WorkoutSharePosterModel: Equatable, Identifiable {
         var name: String
         var setCount: Int
         var partialSetCount: Int = 0
-        /// Load only, without the set-count prefix (e.g. `自重 × 5`).
+        /// Consecutive logical groups, including their counts and actual evidence.
         var loadSummary: String
     }
 }
@@ -165,7 +165,7 @@ enum WorkoutSharePosterBuilder {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.calendar = scope.calendar
         formatter.timeZone = scope.calendar.timeZone
-        formatter.dateFormat = "yyyy-MM-dd EEE"
+        formatter.dateFormat = "yyyy.MM.dd EEE"
         let focusTitle = focusMuscles.prefix(2).joined(separator: " · ")
 
         return WorkoutSharePosterModel(
@@ -254,82 +254,50 @@ enum WorkoutSharePosterBuilder {
         return label
     }
 
-    /// Compact load summary for the share poster (set count shown separately).
-    static func loadSummary(for sets: [WorkoutSet]) -> String {
-        let loads = sets.map(loadToken(for:))
-        guard let first = loads.first else { return "—" }
-        if loads.allSatisfy({ $0 == first }) {
-            return first
-        }
-        let visible = loads.prefix(4)
-        let joined = visible.joined(separator: " · ")
-        return loads.count > visible.count ? "\(joined) 等" : joined
-    }
-
-    /// Full one-line summary used by tests / callers that want set count inline.
-    static func exerciseSummary(for sets: [WorkoutSet]) -> String {
-        guard !sets.isEmpty else { return "0组" }
-        return "\(sets.count)组 · \(loadSummary(for: sets))"
-    }
-
-    static func evidenceLoadSummary(
-        _ evidence: [WorkoutSetEvidence]
-    ) -> String {
-        guard !evidence.isEmpty else { return "—" }
-        let grouped = Dictionary(grouping: evidence) {
-            $0.logicalSetIndex ?? 0
-        }
-        let tokens = grouped.keys.sorted().map { key in
-            let values = grouped[key, default: []]
-            return values.map(evidenceLoadToken).joined(separator: " / ")
-        }
-        let visible = tokens.prefix(4).joined(separator: " · ")
-        return tokens.count > 4 ? "\(visible) 等" : visible
-    }
-
-    private static func loadToken(for set: WorkoutSet) -> String {
-        let weight = set.actualWeightKG ?? set.plannedWeightKG
-        if set.plannedTargetKind == .duration {
-            let seconds = set.actualDurationSeconds ?? set.plannedDurationSeconds
-            let duration = seconds.map { "\($0)秒" } ?? "时长未记录"
-            if let weight, weight > 0 {
-                return "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg · \(duration)"
+    static func evidenceLoadSummary(_ evidence: [WorkoutSetEvidence]) -> String {
+        let runs = WorkoutRecordDraft(evidence: evidence).displayRuns
+        guard !runs.isEmpty else { return "—" }
+        return runs.map { run in
+            let efforts = run.representative.efforts.sorted { $0.sourceOrder < $1.sourceOrder }
+            let details: String = if efforts.count == 2,
+                                     run.representative.sideMode == .alternating,
+                                     matchingValues(efforts[0], efforts[1])
+            {
+                "左右各 " + effortText(efforts[0], includesSide: false)
+            } else {
+                efforts.map { effortText($0, includesSide: true) }.joined(separator: " / ")
             }
-            return duration
-        }
-        let reps = set.actualReps ?? set.plannedReps
-        let repsText = reps.map(String.init) ?? "—"
-        if let weight, weight > 0 {
-            let weightText = weight.formatted(.number.precision(.fractionLength(0 ... 1)))
-            return "\(weightText)kg × \(repsText)"
-        }
-        return "自重 × \(repsText)"
+            return "\(details) × \(run.count)组"
+        }.joined(separator: "；")
     }
 
-    private static func evidenceLoadToken(
-        _ evidence: WorkoutSetEvidence
-    ) -> String {
-        var tokens: [String] = []
-        switch evidence.side {
-        case .some(.left):
-            tokens.append("左")
-        case .some(.right):
-            tokens.append("右")
-        case nil, .some(.none):
-            break
+    private static func matchingValues(_ lhs: WorkoutEffortDraft, _ rhs: WorkoutEffortDraft) -> Bool {
+        lhs.kind == rhs.kind && lhs.targetKind == rhs.targetKind
+            && lhs.reps == rhs.reps && lhs.durationSeconds == rhs.durationSeconds
+            && lhs.externalWeightKG == rhs.externalWeightKG
+    }
+
+    private static func effortText(_ effort: WorkoutEffortDraft, includesSide: Bool) -> String {
+        var prefix: [String] = []
+        if includesSide {
+            switch effort.side {
+            case .some(.left): prefix.append("左")
+            case .some(.right): prefix.append("右")
+            case nil, .some(.none): break
+            }
         }
-        if let weight = evidence.externalWeightKG, weight > 0 {
-            tokens.append(
-                "\(weight.formatted(.number.precision(.fractionLength(0 ... 1))))kg"
-            )
+        if let kind = effort.kind, kind != .working {
+            prefix.append(WorkoutPrescriptionFormatter.kindTitle(kind))
+        }
+        if let weight = effort.externalWeightKG {
+            prefix.append(weight == 0 ? "自重" : "\(weight.formatted(.number.precision(.fractionLength(0 ... 2))))kg")
         } else {
-            tokens.append("自重")
+            prefix.append("重量未记录")
         }
-        if let reps = evidence.reps {
-            tokens.append("× \(reps)")
-        } else if let duration = evidence.durationSeconds {
-            tokens.append("· \(duration)秒")
+        let target: String = switch effort.targetKind {
+        case .repetitions: effort.reps.map { "\($0)次" } ?? "次数未记录"
+        case .duration: effort.durationSeconds.map { "\($0)秒" } ?? "时长未记录"
         }
-        return tokens.joined(separator: " ")
+        return prefix.joined(separator: " ") + " · " + target
     }
 }

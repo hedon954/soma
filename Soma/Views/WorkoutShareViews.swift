@@ -15,188 +15,6 @@ private enum WorkoutShareRenderError: Error {
     case encodingFailed
 }
 
-/// Shareable poster: one hero card + compact exercise summaries.
-/// No avatar, QR, photos, location, training-day streak, or privacy copy on-image.
-struct WorkoutSharePosterView: View {
-    let model: WorkoutSharePosterModel
-
-    private let ink = Color(red: 0.10, green: 0.18, blue: 0.15)
-    private let muted = Color(red: 0.45, green: 0.50, blue: 0.48)
-    private let posterWidth: CGFloat = 390
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            heroCard
-            detailCard
-            footer
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 16)
-        .frame(width: posterWidth, alignment: .leading)
-        .background(canvasBackground)
-    }
-
-    private var heroCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(model.dateText)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(muted)
-                Text(model.title)
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(ink)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                if !model.focusMuscles.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(model.focusMuscles, id: \.self) { name in
-                            Text(name)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(ink.opacity(0.78))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(AppTheme.softTint)
-                                )
-                        }
-                    }
-                }
-            }
-
-            HStack(alignment: .center, spacing: 8) {
-                MuscleMapView(
-                    intensities: model.intensities,
-                    showsBothSides: true,
-                    showsLabels: false,
-                    height: 236,
-                    allowsExpansion: false
-                )
-                .frame(maxWidth: .infinity)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    metric(model.volumeValue, unit: "kg", label: "有效容量")
-                    metric(
-                        model.partialSets > 0 || model.failedSets > 0
-                            ? "\(model.completedSets)/\(model.partialSets)/\(model.failedSets)"
-                            : "\(model.completedSets)",
-                        unit: "组",
-                        label: model.partialSets > 0 || model.failedSets > 0
-                            ? "完整 / 部分 / 失败"
-                            : "完成组"
-                    )
-                    metric(
-                        model.estimatedCalories.map(String.init) ?? "—",
-                        unit: "kcal",
-                        label: "预计消耗"
-                    )
-                    metric(model.durationText, unit: nil, label: "总耗时")
-                }
-                .frame(width: 104, alignment: .leading)
-            }
-        }
-        .padding(16)
-        .background(cardBackground)
-    }
-
-    private var detailCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(model.exercises.enumerated()), id: \.element.id) { index, exercise in
-                if index > 0 {
-                    Divider()
-                        .overlay(Color.black.opacity(0.06))
-                        .padding(.vertical, 12)
-                }
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(exercise.name)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(ink)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.85)
-                        Text(exercise.loadSummary)
-                            .font(.subheadline.weight(.medium).monospacedDigit())
-                            .foregroundStyle(muted)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.8)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("\(exercise.setCount)")
-                            .font(.system(size: 22, weight: .bold).monospacedDigit())
-                            .foregroundStyle(ink)
-                        Text(exercise.partialSetCount > 0
-                            ? "组 · \(exercise.partialSetCount) 部分"
-                            : "组")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(muted)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        "\(exercise.setCount)组，其中 \(exercise.partialSetCount) 组部分完成"
-                    )
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-    }
-
-    private var footer: some View {
-        HStack(alignment: .center) {
-            Text("Soma")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(AppTheme.tint)
-            Spacer()
-            Text("本地训练记录")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(muted)
-        }
-        .padding(.horizontal, 4)
-        .padding(.top, 2)
-    }
-
-    private func metric(_ value: String, unit: String?, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 24, weight: .bold).monospacedDigit())
-                    .foregroundStyle(ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-                if let unit {
-                    Text(unit)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(muted)
-                }
-            }
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(muted)
-        }
-    }
-
-    private var canvasBackground: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.88, green: 0.96, blue: 0.91),
-                Color(red: 0.95, green: 0.97, blue: 0.95),
-                Color(red: 0.98, green: 0.96, blue: 0.93)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color.white)
-            .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
-    }
-}
-
 struct WorkoutShareSheet: View {
     let model: WorkoutSharePosterModel
     @Environment(\.dismiss) private var dismiss
@@ -206,6 +24,7 @@ struct WorkoutShareSheet: View {
     @State private var saveMessage: String?
     @State private var isSaving = false
     @State private var isRendering = false
+    @State private var renderID: UUID?
 
     var body: some View {
         NavigationStack {
@@ -216,7 +35,6 @@ struct WorkoutShareSheet: View {
                             .resizable()
                             .scaledToFit()
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                             // PRD 020：长按菜单只保留拷贝；保存用主按钮、分享用工具栏。
                             .contextMenu {
                                 Button {
@@ -226,6 +44,7 @@ struct WorkoutShareSheet: View {
                                 }
                             }
                             .accessibilityLabel("训练分享海报")
+                            .accessibilityValue(model.exercises.map { "\($0.name)，\($0.loadSummary)" }.joined(separator: "。"))
                             .accessibilityHint("长按可拷贝图片")
                     } else if let errorMessage {
                         ContentUnavailableView {
@@ -294,18 +113,12 @@ struct WorkoutShareSheet: View {
                         .padding(.horizontal, 8)
                 }
                 .padding(16)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.92, green: 0.96, blue: 0.94),
-                        Color(uiColor: .systemGroupedBackground)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-            )
+            .background(AppTheme.pageBackground)
+            .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .navigationTitle("分享训练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -351,12 +164,17 @@ struct WorkoutShareSheet: View {
 
     @MainActor
     private func renderPoster() async {
-        guard !isRendering else { return }
+        let currentRenderID = UUID()
+        renderID = currentRenderID
         isRendering = true
         errorMessage = nil
-        defer { isRendering = false }
+        defer {
+            if renderID == currentRenderID {
+                isRendering = false
+            }
+        }
         let poster = WorkoutSharePosterView(model: model)
-            .environment(\.colorScheme, .light)
+            .environment(\.dynamicTypeSize, .large)
         let renderer = ImageRenderer(content: poster)
         renderer.scale = max(UIScreen.main.scale, 2)
         guard let image = renderer.uiImage else {
@@ -376,9 +194,14 @@ struct WorkoutShareSheet: View {
                 try data.write(to: url, options: .atomic)
                 return url
             }.value
+            guard !Task.isCancelled, renderID == currentRenderID else {
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
             renderedImage = image
             shareURL = url
         } catch {
+            guard !Task.isCancelled, renderID == currentRenderID else { return }
             errorMessage = "无法保存分享图片。"
         }
     }

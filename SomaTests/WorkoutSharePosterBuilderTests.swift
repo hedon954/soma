@@ -38,60 +38,63 @@ final class WorkoutSharePosterBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             summary,
-            "左 12kg × 8 / 右 10kg × 8 · 左 12kg · 30秒"
+            "左 12kg · 8次 / 右 10kg · 8次 × 1组；左 12kg · 30秒 × 1组"
         )
     }
 
-    func testExerciseSummaryCollapsesUniformBodyweightSets() {
-        let sets = (1 ... 5).map { order in
-            WorkoutSet(
-                performanceID: UUID(),
-                order: order,
-                plannedReps: 5,
-                actualReps: 5,
-                actualWeightKG: nil,
-                status: .completed
-            )
+    func testEvidenceSummaryCompressesConsecutiveSetsIgnoringRest() {
+        let evidence = (1 ... 5).map { index in
+            WorkoutSetEvidence(logicalSetIndex: index, reps: 5, externalWeightKG: 60, restSeconds: index * 10)
+        }
+        XCTAssertEqual(WorkoutSharePosterBuilder.evidenceLoadSummary(evidence), "60kg · 5次 × 5组")
+    }
+
+    func testEvidenceSummaryKeepsEveryDifferentRunInOriginalOrder() {
+        let weights: [Double] = [60, 60, 50, 60, 40, 30, 20]
+        let evidence = weights.enumerated().map { index, weight in
+            WorkoutSetEvidence(logicalSetIndex: 10 - index, reps: 5, externalWeightKG: weight)
         }
         XCTAssertEqual(
-            WorkoutSharePosterBuilder.exerciseSummary(for: sets),
-            "5组 · 自重 × 5"
+            WorkoutSharePosterBuilder.evidenceLoadSummary(evidence),
+            "60kg · 5次 × 2组；50kg · 5次 × 1组；60kg · 5次 × 1组；40kg · 5次 × 1组；30kg · 5次 × 1组；20kg · 5次 × 1组"
         )
     }
 
-    func testExerciseSummaryCollapsesUniformLoadedSets() {
-        let sets = (1 ... 2).map { order in
-            WorkoutSet(
-                performanceID: UUID(),
-                order: order,
-                plannedReps: 5,
-                plannedWeightKG: 30,
-                actualReps: 5,
-                actualWeightKG: 30,
-                status: .completed
-            )
-        }
+    func testEvidenceSummaryKeepsLegacySetsAndMissingWeightDistinctFromBodyweight() {
+        let evidence = [
+            WorkoutSetEvidence(reps: 12),
+            WorkoutSetEvidence(reps: 12),
+            WorkoutSetEvidence(reps: 12, externalWeightKG: 0)
+        ]
         XCTAssertEqual(
-            WorkoutSharePosterBuilder.exerciseSummary(for: sets),
-            "2组 · 30kg × 5"
+            WorkoutSharePosterBuilder.evidenceLoadSummary(evidence),
+            "重量未记录 · 12次 × 2组；自重 · 12次 × 1组"
         )
+        XCTAssertEqual(WorkoutSharePosterBuilder.evidenceLoadSummary([]), "—")
     }
 
-    func testExerciseSummaryJoinsVariedSetsAndTruncates() {
-        let weights: [Double] = [30, 35, 40, 45, 50]
-        let sets = weights.enumerated().map { index, weight in
-            WorkoutSet(
-                performanceID: UUID(),
-                order: index + 1,
-                plannedReps: 5,
-                actualReps: 5,
-                actualWeightKG: weight,
-                status: .completed
-            )
+    func testEvidenceSummaryCompressesMatchingSidesAndDuration() {
+        let paired = (1 ... 3).flatMap { index in
+            [WorkoutEffortSide.left, .right].map { side in
+                WorkoutSetEvidence(logicalSetIndex: index, side: side, reps: 12, externalWeightKG: 0)
+            }
         }
+        XCTAssertEqual(WorkoutSharePosterBuilder.evidenceLoadSummary(paired), "左右各 自重 · 12次 × 3组")
+        let timed = (1 ... 3).map { index in
+            WorkoutSetEvidence(logicalSetIndex: index, targetKind: .duration, durationSeconds: 30, externalWeightKG: 0)
+        }
+        XCTAssertEqual(WorkoutSharePosterBuilder.evidenceLoadSummary(timed), "自重 · 30秒 × 3组")
+    }
+
+    func testEvidenceSummaryDoesNotMergeSetKindsOrDifferentReps() {
+        let evidence = [
+            WorkoutSetEvidence(logicalSetIndex: 1, kind: .warmup, reps: 5, externalWeightKG: 20),
+            WorkoutSetEvidence(logicalSetIndex: 2, kind: .working, reps: 5, externalWeightKG: 20),
+            WorkoutSetEvidence(logicalSetIndex: 3, kind: .working, reps: 3, externalWeightKG: 20)
+        ]
         XCTAssertEqual(
-            WorkoutSharePosterBuilder.exerciseSummary(for: sets),
-            "5组 · 30kg × 5 · 35kg × 5 · 40kg × 5 · 45kg × 5 等"
+            WorkoutSharePosterBuilder.evidenceLoadSummary(evidence),
+            "热身组 20kg · 5次 × 1组；20kg · 5次 × 1组；20kg · 3次 × 1组"
         )
     }
 
@@ -171,7 +174,7 @@ final class WorkoutSharePosterBuilderTests: XCTestCase {
 
         XCTAssertEqual(model.estimatedCalories, 12)
         XCTAssertEqual(model.volumeValue, "50")
-        XCTAssertEqual(model.exercises.first?.loadSummary, "10kg × 5")
+        XCTAssertEqual(model.exercises.first?.loadSummary, "10kg · 5次 × 1组")
     }
 
     @MainActor

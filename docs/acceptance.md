@@ -279,7 +279,7 @@ HealthKit 与真机 VoiceOver 继续单列。
 | Tab 再选 | `RootTabReselectObserver` 只旁听原生 Tab Bar 上触摸开始时已选中的 item；`AppTabNavigationState` 从设置 path 和训练/进展根显隐维护非 Observation 根状态。`AppTabReselect.effect` 将每次点击限定为一个效果：普通切换只写一次 selection，教练与任一根页 `.noAction`，训练、进展、设置仅在非根时 `.resetStack`。旧 `.restoreCoachRoot` 通知已删除。教练根仍只持有稳定入参，Tab 激活态经 `\.coachTabIsActive` 只送达实时转写与切回滚底叶子；`AppTabTransitionCoordinator` 只记录隐私安全 signpost。`AppTabReselectTests`、`CoachTabBehaviorUITests` 与 `perf-check` 覆盖根感知行为。 |
 | 自动录像宿主 | `beginCurrentSet` 先进入 `.setInProgress` 并打开放大取景，`waitUntilPreviewHostSettled` 后再 `startRecording`。已有预览连接时换宿主不重建、不因 `session-interruption` 停掉 Session；`prepare()` 复用仍在跑的 Session。录像中可缩小。非目标组不显示取景。`GuidedWorkoutCoordinatorTests` / `WorkoutCameraServiceTests` / `GuidedWorkoutLayoutTests` 覆盖时序与居中；`validate-repository.sh` 静态守卫。 |
 | 预览 fill | `WorkoutCameraSurface` 与 `CameraPreviewView` 默认 `.resizeAspectFill`；历史录像缩略按取景比例 `scaledToFill`。 |
-| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。 |
+| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。海报固定白底黑字，橙黄色主视觉内展示大号容量、肌群图和三列统计；分享弹层适配双主题。动作名和数据优先单行、长内容自适应换行；明细复用逻辑组连续压缩并保留所有异构段；同值左右合并、异值分列、未知重量不作自重。见 [ADR 0117](adr/0117-workout-share-editorial-poster.md)。 |
 | 计划执行复盘 | 按 Session 的 Performance 顺序和 `sourcePerformanceID` 加载对应训练记录，直接复用进展页 `ProgressRecentActivityRow`，显示动作名、压缩组次、可计算容量和训练时间，并进入同一 `WorkoutRecordDetailView`。完成但投影缺失时只在未设置删除抑制的情况下幂等修复；用户已删除时显示“训练记录已删除”。 |
 
 ## 会话标题与输入上下文单行布局

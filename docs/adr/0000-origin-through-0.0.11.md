@@ -7,6 +7,7 @@
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
+  - [ADR 0117](0117-workout-share-editorial-poster.md)（仅训练分享导出采用固定白底与橙黄色主视觉，App 双主题不变）
   - [ADR 0107](0107-foreground-recovery-and-progress-evidence-projection.md)（部分替代前台恢复与进展投影）
   - [ADR 0109](0109-schema-guided-tool-argument-recovery.md)（部分替代 Tool 参数失败处理）
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
