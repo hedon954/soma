@@ -170,7 +170,9 @@ final class LongStreamPerformanceUITests: XCTestCase {
     func testCoachStartsWithTenMessagesAndPagesUpByTen() {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
-        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "long-stream"
+        // 同样保留 39 轮历史，但使用短尾消息，确保手势确实到达分页边界。
+        // 长流尾部可达数十屏，其持续增长与交互另由专门的长流用例覆盖。
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "coach-tab-behavior"
         app.launch()
 
         let messageList = app.scrollViews["coach-message-list"]
@@ -256,6 +258,32 @@ final class LongStreamPerformanceUITests: XCTestCase {
         }
         XCTAssertTrue(app.navigationBars["Soma"].waitForExistence(timeout: 3))
         keepScreenshot(of: app, named: "markdown-completed-after-tabs")
+    }
+
+    func testProductionStreamWithHistoryCompletesAndRemainsInteractive() {
+        let app = XCUIApplication()
+        app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FIXTURE"] = "long-stream-production-completion"
+        app.launchEnvironment["SOMA_UI_PERFORMANCE_FAST_STREAM"] = "1"
+        app.launch()
+        let phase = app.descendants(matching: .any)["performance-fixture-phase"]
+        XCTAssertTrue(phase.waitForExistence(timeout: 15))
+        XCTAssertTrue(waitForValuePrefix("completed", on: phase, timeout: 20))
+        let list = app.scrollViews["coach-message-list"]
+        XCTAssertTrue((list.value as? String ?? "").hasPrefix("count=10"))
+        for _ in 0 ..< 3 {
+            for label in ["训练", "进展", "设置", "教练"] {
+                app.tabBars.buttons[label].tap()
+            }
+        }
+        let completed = app.descendants(matching: .any)["coach-completed-agent-text"].firstMatch
+        XCTAssertTrue(completed.waitForExistence(timeout: 10))
+        XCTAssertTrue(completed.isHittable, "完成后不应落在空白区域")
+        let input = app.textFields["说点什么，或添加照片与视频…"]
+        input.tap()
+        input.typeText("虚构完成后输入")
+        XCTAssertEqual(app.textFields["coach-message-input"].value as? String, "虚构完成后输入")
+        keepScreenshot(of: app, named: "production-stream-completed-interactive")
     }
 
     private func keepScreenshot(of app: XCUIApplication, named name: String) {

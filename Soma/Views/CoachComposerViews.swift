@@ -270,6 +270,7 @@ struct CoachComposer: View {
 
     var composerTextField: some View {
         TextField("说点什么，或添加照片与视频…", text: $state.draft, axis: .vertical)
+            .accessibilityIdentifier("coach-message-input")
             .lineLimit(1 ... 5)
             .focused($focused)
             .padding(.horizontal, 13)

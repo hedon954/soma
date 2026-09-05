@@ -30,7 +30,9 @@ extension AIService {
         request.timeoutInterval = 180
 
         return AsyncThrowingStream { continuation in
-            let task = Task {
+            // AIService 属于 MainActor；网络字节解析不能继承它的执行器。
+            // 只捕获不可变请求，终止流时同步取消这个生产任务。
+            let task = Task.detached {
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     guard let http = response as? HTTPURLResponse else {
@@ -45,7 +47,7 @@ extension AIService {
                             }
                         }
                         throw AIServiceError.remote(
-                            directVideoErrorMessage(
+                            Self.directVideoErrorMessage(
                                 data: data,
                                 statusCode: http.statusCode
                             )
@@ -131,7 +133,7 @@ extension AIService {
         return body
     }
 
-    private func directVideoErrorMessage(
+    private nonisolated static func directVideoErrorMessage(
         data: Data,
         statusCode: Int
     ) -> String {
@@ -157,7 +159,7 @@ enum OpenAICompatibleStreamPayload {
         var changed = false
         for index in choices.indices {
             guard var delta = choices[index]["delta"] as? [String: Any],
-                  delta["reasoning_content"] == nil
+                  (delta["reasoning_content"] as? String)?.isEmpty != false
             else { continue }
             for alias in ["reasoning", "analysis"] {
                 guard let reasoning = delta[alias] as? String, !reasoning.isEmpty else {

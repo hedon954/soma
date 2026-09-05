@@ -75,14 +75,14 @@ private enum AgentStreamRaceResult: @unchecked Sendable {
 }
 
 enum AgentStreamDeadline {
-    /// 原始网络 chunk 由私有 reader actor 顺序读取；chunk 回调会触及 SwiftData 和
-    /// 可观察投影，因此必须明确回到 MainActor。这里保留异步回调，避免恢复旧的同步全文处理。
+    /// 原始 chunk 及其累积回调在非 UI 执行器顺序处理。
+    /// 只有 Worker 的合批 project 闭包回到 MainActor；这里不接触 SwiftData。
     static func consume(
         stream: AsyncThrowingStream<ChatCompletionChunkObject, Error>,
         mode: AgentMediaMode,
         policy: AgentStreamDeadlinePolicy,
         enforceFirstDelta: Bool,
-        onChunk: @MainActor (ChatCompletionChunkObject) async throws -> Bool
+        onChunk: (ChatCompletionChunkObject) async throws -> Bool
     ) async throws {
         let reader = AgentStreamChunkReader(stream: stream)
         guard enforceFirstDelta else {

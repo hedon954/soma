@@ -4,6 +4,7 @@
 - 日期：2026-08-25
 - 影响：长段落越流越卡；流式结束后整段 Markdown 同步解析、重建和布局，拖慢整个 App
 - 修订自：[BUG 0035](0035-long-stream-text-relayout-thermal-jank.md)
+- 后续修订：[BUG 0053](0053-stream-executor-and-production-fixture-gap.md)；补齐原始流隔离与生产链路夹具
 - 下游落地：
   - [PRD 045](../archive/0.0.14/prd/045-performance-reliability-and-bounded-data-access.md)
   - [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)

@@ -1,6 +1,6 @@
 # 进展页改造 TODO
 
-- 状态：代码与本地门禁通过，双机交付及真实 HealthKit 验收分别跟踪
+- 状态：代码、本地门禁、提交推送与双机安装完成；真实 HealthKit 验收继续跟踪
 - 用户目标：能查看任意一天，以及周、月、年的饮食、能量、训练、身体趋势
 - 上游依据：[PRD 053](../../docs/prd/053-adaptive-energy-estimation-and-progress.md)、[PRD 054](../../docs/prd/054-progress-history-and-periods.md)、[ADR 0114](../../docs/adr/0114-progress-periods-and-adaptive-energy.md)
 - 设计：[四个周期设计稿](../../docs/assets/ui/2026-09-05/progress-refinement/README.md)
@@ -37,8 +37,9 @@
 - [ ] D04 UI 测试日历、四周期、点选下钻、返回保持、空态、长记录、主题与字号。
 - [x] D05 同步 PRD／ADR、数据库（如改字段）、验收与索引；所有旧决策修订双向链接。
 - [x] D06 局部测试、make check、make verify，分别记录结果，不复用旧报告。2026-09-05 最终批次通过；之后若修改代码须重新验证。
-- [ ] D07 真机 14 Pro Max／17 Pro Max 安装与真实 HealthKit 历史、操作流畅度验收分开报告。
-- [ ] D08 仅提交本次范围，推送结果与本地通过分别记录。
+- [x] D07a Release 安装并正常启动到 14 Pro Max／17 Pro Max。
+- [ ] D07b 真实 HealthKit 历史、操作流畅度与 VoiceOver 验收，不能用安装成功代替。
+- [x] D08 仅提交本次范围并推送：`8bfecf9`；本地通过证据见下。
 
 ## 验证记录
 
@@ -62,3 +63,4 @@
 - 收尾回归：标题整行点击先复现 24pt 触达失败，补充显式 contentShape 后测试通过；iPad mini 重新安装检查，日页标题和明细均完整可见。最新 `build/progress-ready-verify.log` 静态、构建、725 项 XCTest / 7 项 Swift Testing 通过。新增进展日页分享回归待运行，Release 安装进行中。
 - 最新交付：17 Pro Max Release 0.0.18 (22) 已安装并启动（`build/progress-release-17pm.log`）；14 Pro Max 已重新连接，待最终版本安装。进展日页分享新增 UI 回归通过（`build/progress-delivery-ui.log`），iPad 日页和能量依据目视复核通过；真实 HealthKit、VoiceOver 和全场景真机性能不视为已验收。
 - 收尾 UI 批次：7 项全部通过，123 秒；记录在 `build/progress-delivery-ui.log`。单柱／孤立点、日页分享、依据整行触达、四周期及大字号均有回归。
+- 最终交付：进展提交 `8bfecf9` 已推送。2026-09-05 Release 0.0.18 (22) 已安装并正常启动到两机（`build/fifth-round-release-14pm.log`、`build/fifth-round-release-17pm.log` 和对应正常启动日志）；真实 HealthKit 与 VoiceOver 保持未验收。

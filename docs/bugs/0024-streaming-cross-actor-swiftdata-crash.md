@@ -3,6 +3,7 @@
 - 状态：已修复，待真机连续对话复验
 - 发现日期：2026-08-20
 - 影响范围：教练聊天流式回复、Agent Event 投影、Turn Item 卡片渲染
+- 后续修订：[BUG 0053](0053-stream-executor-and-production-fixture-gap.md)；合批投影留在 MainActor，原始 chunk 移出 UI 执行器
 - 上游依据：
   - [ADR 0031](../archive/0.0.1/adr/0031-durable-agent-jobs-event-log-and-projections.md)
   - [ADR 0014](../archive/0.0.1/adr/0014-agent-turn-ordered-event-cards.md)

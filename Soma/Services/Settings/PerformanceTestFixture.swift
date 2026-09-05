@@ -86,6 +86,7 @@ enum PerformanceTestFixture {
         case append = "long-stream-append"
         case noNewline = "long-stream-no-newline"
         case markdownCompletion = "long-stream-markdown-completion"
+        case productionCompletion = "long-stream-production-completion"
         case coachTabBehavior = "coach-tab-behavior"
         case recordOptimizations = "record-optimizations"
         case agentStages = "agent-stages"
@@ -100,7 +101,7 @@ enum PerformanceTestFixture {
                 160 ..< 1060
             case .append:
                 160 ..< 240
-            case .noNewline, .markdownCompletion:
+            case .noNewline, .markdownCompletion, .productionCompletion:
                 1 ..< 240
             case .coachTabBehavior:
                 1 ..< 4
@@ -347,7 +348,7 @@ enum PerformanceTestFixture {
             streamParagraph(index)
         case .noNewline:
             "第\(index + 1)段连续虚构训练建议只用于验证无换行正文的增量排版成本不随全文长度增长且不会插入额外字符"
-        case .markdownCompletion:
+        case .markdownCompletion, .productionCompletion:
             """
             ## 第 \(index + 1) 段虚构复盘
 

@@ -458,12 +458,16 @@ unless agent_job_source.match?(/recoverExpiredLeases.*?fetchLimit = 1/m) &&
 end
 
 stream_deadline_source = File.read(File.join(ROOT, service_file("AgentStreamDeadline.swift")))
-if stream_deadline_source.match?(/@MainActor\s+static func consume/) ||
-   !stream_deadline_source.include?(
-     "onChunk: @MainActor (ChatCompletionChunkObject) async throws -> Bool"
-   ) ||
+if stream_deadline_source.include?("@MainActor") ||
+   !stream_deadline_source.include?("onChunk: (ChatCompletionChunkObject) async throws -> Bool") ||
    !stream_deadline_source.include?("_ = try await onChunk(chunk)")
-  fail_check("raw Agent stream reading or MainActor projection isolation regressed")
+  fail_check("raw Agent chunks must not run on MainActor; only the batched project callback may do so")
+end
+
+stream_transport_source = File.read(File.join(ROOT, service_file("DirectVideoChatStream.swift")))
+unless stream_transport_source.include?("let task = Task.detached") &&
+       stream_transport_source.match?(/onTermination.*?task.cancel\(\)/m)
+  fail_check("raw SSE decoding inherited AIService's MainActor or lost its cancellation owner")
 end
 
 streaming_source = File.read(File.join(ROOT, service_file("AgentStreamWorker.swift")))
@@ -495,6 +499,11 @@ end
 
 processing_source = File.read(File.join(ROOT, service_file("ConversationProcessingService.swift")))
 processing_live_source = File.read(File.join(ROOT, service_file("ConversationTurnLiveProjection.swift")))
+pending_snapshot = processing_live_source[/func pendingLiveTextSnapshot.*\z/m]
+unless pending_snapshot&.match?(/switch event.*?liveAssistantTextSnapshot/m) &&
+       !pending_snapshot.match?(/liveAssistantTextSnapshot.*?switch event/m)
+  fail_check("transient Agent events eagerly join the entire growing response again")
+end
 processing_models_source = File.read(File.join(ROOT, service_file("ConversationProcessingModels.swift")))
 if processing_source.match?(/private\(set\) var liveAssistantText\s*=/) ||
    processing_models_source.include?("private(set) var text = \"\"")

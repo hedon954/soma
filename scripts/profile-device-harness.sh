@@ -151,7 +151,7 @@ fi
 
 wait_for_fixture_completion=0
 case "$fixture" in
-  long-stream-no-newline | long-stream-markdown-completion)
+  long-stream-no-newline | long-stream-markdown-completion | long-stream-production-completion)
     wait_for_fixture_completion=1
     ;;
 esac

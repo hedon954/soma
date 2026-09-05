@@ -245,8 +245,8 @@ fi
 
 grep -q 'MainActor.assertIsolated' Soma/Models/AgentJob.swift ||
   fail "BUG 0024: agent event projection must assert main actor isolation"
-grep -q 'onChunk: @MainActor' "$(service_file AgentStreamDeadline.swift)" ||
-  fail "BUG 0024: streaming chunk handling must stay isolated to the main actor"
+grep -q 'project: @escaping @MainActor' "$(service_file AgentStreamWorker.swift)" ||
+  fail "BUG 0024: only the batched event projection must cross to the main actor"
 grep -q 'skipMovieOutputGeometry = state == .startingRecording' \
   "$(service_file WorkoutCameraCaptureLifecycle.swift)" ||
   fail "BUG 0025: capture geometry must skip movie output while starting or recording"

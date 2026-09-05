@@ -71,12 +71,24 @@
 
 ### 第五轮：进展收尾与遗留故障复发
 
-- [ ] 完成进展页当前改造、标题整行点击回归及交付；独立记录自动化、两台设备安装和人工验收。
+- [x] 完成进展页当前改造、标题整行点击回归及双机安装；真实 HealthKit／VoiceOver 人工验收另列，不随安装关闭。
 - [ ] BUG-08/14：复现长流式期间及结束后的全 App 卡顿，检查增量排版、完成态替换、滚动反馈和残留任务；以虚构长会话记录修复前后 Trace，不能用模型延迟解释 UI 阻塞。
 - [ ] BUG-19：核对模型请求上下文、原始流字段与最终投影，修复自我讨论草稿出现在正文的问题；覆盖本地、远程、重放和正常答案不被误判。
-- [ ] 修复后执行局部回归、`make check`、`make verify`，按任务范围提交、推送，安装到 iPhone 14 Pro Max 与 iPhone 17 Pro Max。
+- [x] 修复后执行局部回归、`make check`、`make verify`，按任务范围提交、推送，安装到 iPhone 14 Pro Max 与 iPhone 17 Pro Max。
 
 2026-09-05 证据边界：反馈邮件中一次模型阶段约 75 秒，另一次正文包含自我讨论回答方式的草稿；邮件没有原始 SSE 字段，尚不能确认提示词或通道归类的具体责任。临近的 MetricKit 为进程退出超时 watchdog（`0x8BADF00D`），不能当作已符号化的流式卡顿根因。邮件原文和个人记录不进入仓库或测试夹具。
+
+第五轮阶段记录：
+
+- 进展提交 `8bfecf9` 已推送；725 项 XCTest、7 项 Swift Testing 和 7 项进展 UI 通过。17 Pro Max 安装/启动成功；最终双机版本另记。
+- [BUG 0053](../../docs/bugs/0053-stream-executor-and-production-fixture-gap.md)：原始 SSE Task 继承 MainActor、Deadline 强制主线程处理原始 chunk、快照在事件过滤前全文合并，均已修复。静态门禁同时纠正旧约束，业务投影仍严格在 MainActor。
+- 执行器与思考别名测试先失败后通过（`build/stream-boundary-red.log`、`build/stream-boundary-green.log`）。新增 39 轮历史的生产处理链路 UI 回归通过（`build/stream-production-ui.log`），含完成后多轮 Tab 和文字输入。
+- 17 Pro Max Release 简化夹具基线完成后 40 次 Tab p95 76.803ms、max 86.446ms，没有大于 250ms Hangs；这不代表真实网络会话或新生产夹具通过。
+- BUG-19 当前已有高置信内部草稿隔离与一次正式答案重试；旧邮件早于该实现。新增修复 null/空 canonical reasoning 字段的厂商别名归一。原始邮件无 SSE，不能宣称已经证明是提示词问题，也不擅自扩大启发式过滤正常正文。
+- 最终 `make verify`：727 项 XCTest、7 项 Swift Testing 全部通过；Server 39 项通过、1 项数据库测试因未配置测试库跳过。最终测试夹具调整后再次完整通过，日志 `build/fifth-round-delivery-verify.log`。
+- 双机新生产链路夹具：39 轮虚构历史、240 段 Markdown，75 秒采样；完成后各 40 次 Tab 切换，17 Pro Max p95 76.942ms/max 83.124ms，14 Pro Max p95 86.040ms/max 106.247ms，均无大于 250ms Hangs。不能视为真实网络、个人会话或锁屏恢复已通过。
+- Release 0.0.18 (22) 已安装到两机并在采样后恢复正常启动；二进制/dSYM UUID `78BD3F7D-90B9-3721-B010-25BE21EFA42B` 匹配。安装和启动日志在 `build/fifth-round-release-*`、`build/fifth-round-normal-launch-*`。
+- 长流 UI 8 项：7 项首轮通过，历史分页测试因 12 次上滑不足以穿过 73 屏长尾失败；改用同样 39 轮历史的短尾测试场景后，10→20 条分页断言独立复跑通过（`build/fifth-round-pagination-retest.log`）。App 分页行为未改，未跳过任何用例。
 
 ### 第四轮（历史阶段证据）
 

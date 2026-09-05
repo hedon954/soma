@@ -65,6 +65,13 @@ extension ConversationProcessingService {
     ) {
         guard let scenario = PerformanceTestFixture.requestedStreamScenario else { return }
         guard !scenario.usesStaticAgentStage else { return }
+        if scenario == .productionCompletion {
+            startProductionStreamFixture(
+                dataSpace: dataSpace, sessionID: sessionID,
+                responseMessageID: responseMessageID, modelContext: modelContext
+            )
+            return
+        }
         performanceFixtureTask?.cancel()
         performanceFixturePhase = "streaming"
         isProcessing = true
@@ -220,12 +227,12 @@ extension ConversationProcessingService {
     func pendingLiveTextSnapshot(
         for event: AgentTraceEvent
     ) -> LiveAgentTextSnapshot? {
-        guard let snapshot = liveAssistantTextSnapshot else { return nil }
         switch event {
         case let .assistantTextCompleted(itemID, _):
-            return itemID == snapshot.itemID ? snapshot : nil
+            guard itemID == liveAssistantItemID else { return nil }
+            return liveAssistantTextSnapshot
         case .completed, .failed:
-            return snapshot
+            return liveAssistantTextSnapshot
         case .assistantTextDelta, .assistantTextDiscarded,
              .reasoningDelta, .reasoningCompleted, .span:
             return nil

@@ -11,6 +11,7 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0053](0053-stream-executor-and-production-fixture-gap.md) | 双机虚构链路通过，真实会话待复验 | 修订 [0024](0024-streaming-cross-actor-swiftdata-crash.md)/[0036](0036-long-stream-continuous-text-and-completion-cliff.md)：原始流误入主线程，简化夹具未覆盖生产边界 | 执行器回归、真实持久化长流、完成后交互与真机 Trace |
 | [0001](0001-widget-configuration-metadata-crash.md) | 已修复，待真机界面确认 | 动态 Widget 配置文本导致扩展崩溃并从组件库消失 | `make check` 禁止 Widget 配置元数据使用 `Text` 重载 |
 | [0002](0002-video-frame-extraction-silent-fallback.md) | 已修复，待真机媒体验收 | 视频抽帧失败后仍以无画面的纯文本请求调用模型 | 稳定副本抽帧、零帧阻断、直接视频降级与首次/重试媒体一致性 |
 | [0003](0003-gym-photo-lost-after-name-followup.md) | 已修复，待真机媒体验收 | 下一轮补充健身房名称时，上一轮图片只留在聊天 | 紧邻同 Session 归档、禁止跨 Turn 回捞与单张解绑测试 |
@@ -34,7 +35,7 @@
 | [0021](0021-unique-optional-projection-key-blocks-launch-migration.md) | 已修复，待真机复验 | 可空唯一 projectionKey 让多条旧训练记录在启动迁移时失败或丢行 | 当前 schema 上预修复与 nil-key 回填；失败诊断含堆栈、SQLite 结构和训练样例 |
 | [0022](0022-installed-v5-schema-checksum-blocks-container-open.md) | 已修复，待真机复验 | 已安装 store 上改当前 schema 后容器无法打开 | 只打开当前 SomaDataSchema、不带 migrationPlan；真机只点重试迁移 |
 | [0023](0023-same-turn-multi-exercise-merged-into-one.md) | 已修复，待真机复验 | 同一条消息的多个动作被合并成一条训练记录，Event Cards 被结果卡替换 | create 每次新增独立记录；原位卡不隐藏 Tool Event；保存有确认 |
-| [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 已修复，待真机连续对话复验 | 流式回复期间在非主线程投影 Event，写 SwiftData 与 AttributeGraph 导致频繁闪退 | chunk 回调保持 `@MainActor`、投影主 actor 断言、文字增量合批与 segment 身份唯一 |
+| [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 部分要求由 [0053](0053-stream-executor-and-production-fixture-gap.md) 修订 | 非主线程投影 Event 导致 SwiftData 与 AttributeGraph 闪退 | 合批投影保持 MainActor、运行时断言与 segment 身份唯一 |
 | [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 首次修复不足，后续见 0026 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因 |
 | [0026](0026-guided-auto-recording-still-stops-without-reason.md) | 已修复，待真机复验 | 开组换预览宿主并自动放大取景仍会掐断自动录像，极短文件被当成正常保存 | 倒计时只取景、开组后放大再写文件；录像中不重建连接；非目标组无预览 |
 | [0027](0027-meal-aggregate-overrides-item-facts.md) | 已修复，待真机 Agent 交互确认 | 创建饮食时顶层营养可覆盖菜品派生事实 | 菜品优先写入、总糖完整性与 Tool 结果回归测试 |
