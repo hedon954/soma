@@ -14,12 +14,23 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
             record(5, .workout, "虚构训练", 300)
         ])
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .intake).rows
-        XCTAssertEqual(rows.map(\.label), ["早餐", "晚餐", "已记录摄入"])
+        XCTAssertEqual(rows.map(\.label), ["餐次未记录 · 早餐", "餐次未记录 · 晚餐", "已记录摄入"])
         XCTAssertEqual(rows[0].value, "400 kcal")
-        XCTAssertEqual(rows[1].value, "0 kcal")
+        XCTAssertEqual(rows[1].value, "未估算")
         XCTAssertEqual(snapshot.days.first?.intake.missingCount, 1)
         XCTAssertEqual(rows.last?.value, "400 kcal")
         XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
+    }
+
+    func testMealTypesHaveExplicitPrefixesAndDistinctTones() {
+        let records = MealType.allCases.enumerated().map { index, type in
+            ProgressHistoryRecord(activity: .init(id: UUID(), kind: .meal, date: date(5).addingTimeInterval(Double(index)),
+                                                  title: "虚构餐食", detail: type.rawValue, metric: nil), calories: 100)
+        }
+        let rows = ProgressEnergyBreakdown(snapshot: make(.day, records: records), kind: .intake).rows
+        XCTAssertEqual(rows.dropLast().map(\.label), MealType.allCases.map { $0.rawValue + " · 虚构餐食" })
+        XCTAssertEqual(rows.dropLast().map(\.tone), MealType.allCases.map { .mealType($0) })
+        XCTAssertEqual(rows.last?.tone, .intakeTotal)
     }
 
     func testPeriodIntakeUsesSameCompletedRecordedDaysAsDashboard() {

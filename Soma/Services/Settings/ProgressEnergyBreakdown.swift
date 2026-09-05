@@ -5,8 +5,9 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         case intake, expenditure
     }
 
-    enum Tone: Sendable {
-        case meal, resting, activity, factor, total
+    enum Tone: Equatable, Sendable {
+        case meal, resting, activity, factor, total, intakeTotal
+        case mealType(MealType)
     }
 
     struct Row: Identifiable, Equatable, Sendable {
@@ -28,9 +29,12 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             if daily, let day = days.first {
                 items = day.records.filter { $0.activity.kind == .meal }.map { record in
                     let calories = record.calories.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+                    let mealType = MealType(rawValue: record.activity.detail)
                     return Row(
-                        id: record.activity.id.uuidString, label: record.activity.title,
-                        value: Self.energy(calories ?? 0), tone: .meal
+                        id: record.activity.id.uuidString,
+                        label: (mealType?.rawValue ?? "餐次未记录") + " · " + record.activity.title,
+                        value: calories.map(Self.energy) ?? "未估算",
+                        tone: mealType.map(Tone.mealType) ?? .meal
                     )
                 }
             } else {
@@ -43,7 +47,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             }
             items.append(Row(
                 id: "summary", label: daily ? "已记录摄入" : "日均摄入",
-                value: Self.energy(daily ? days.first?.intake.value ?? 0 : snapshot.averageIntake ?? 0), tone: .meal
+                value: Self.energy(daily ? days.first?.intake.value ?? 0 : snapshot.averageIntake ?? 0), tone: .intakeTotal
             ))
             rows = items
         case .expenditure:

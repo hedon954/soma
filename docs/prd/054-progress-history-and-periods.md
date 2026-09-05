@@ -1,6 +1,7 @@
 # PRD 054：进展历史与四周期统计
 
 - 状态：已采纳，实施中
+- 后续修订：[PRD 055](055-exercise-facets-and-meal-breakdown.md) 增加餐次文字与固定配色
 - 日期：2026-09-05
 - 修订自：[PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md) 的固定月度总览、[PRD 050](050-lightweight-progress-disclosure-and-coach-controls.md) 的目标驱动首页层级
 - 部分替代：[PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) 的进展浮层；依据移入周期详情，Tool 参数规则不变

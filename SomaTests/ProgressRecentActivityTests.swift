@@ -11,7 +11,7 @@ final class ProgressRecentActivityTests: XCTestCase {
             setEntries: (1 ... 5).map { index in
                 WorkoutSetEvidence(
                     logicalSetIndex: index,
-                    side: .none,
+                    side: nil,
                     targetKind: .repetitions,
                     reps: 5,
                     externalWeightKG: 50,

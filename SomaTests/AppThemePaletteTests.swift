@@ -24,6 +24,20 @@ final class AppThemePaletteTests: XCTestCase {
         }
     }
 
+    func testMealTypeColorsAreDistinctAndReadableOnBreakdownSurface() {
+        let colors = MealType.allCases.map(MealTypePresentation.palette)
+        for pair in colors {
+            XCTAssertGreaterThanOrEqual(contrast(pair.light, AppThemePalette.lightCard), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(pair.dark, AppThemePalette.darkCard), 4.5)
+        }
+        for index in colors.indices {
+            for other in colors.indices where other > index {
+                XCTAssertNotEqual(colors[index].light, colors[other].light)
+                XCTAssertNotEqual(colors[index].dark, colors[other].dark)
+            }
+        }
+    }
+
     func testDarkSemanticColorsMeetTextContrastOnCardSurface() {
         let foregrounds = [
             AppThemePalette.darkAccent,

@@ -90,6 +90,8 @@ private struct ProgressEnergyBreakdownPopover: View {
     private func accent(_ tone: ProgressEnergyBreakdown.Tone) -> Color {
         switch tone {
         case .meal: AppTheme.mealAccent
+        case let .mealType(type): MealTypePresentation.accent(type)
+        case .intakeTotal: AppTheme.accent
         case .resting: AppMetricRole.body.accent
         case .activity: AppMetricRole.consistency.accent
         case .factor: AppMetricRole.performance.accent

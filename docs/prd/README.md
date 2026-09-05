@@ -38,6 +38,8 @@
 | [053：动态能量估算与可解释的进展展示](053-adaptive-energy-estimation-and-progress.md) | 0.0.19 | 已采纳；ADR 0115 补充默认参考估算 |
 | [054：进展历史与四周期统计](054-progress-history-and-periods.md) | 0.0.19 | 已采纳；ADR 0115 恢复指标明细，0116 按四周期区分信息重点 |
 
+| [055：动作分类与餐次明细](055-exercise-facets-and-meal-breakdown.md) | Unreleased | 已采纳 |
+
 ## 阅读约定
 
 - 「修订自」是活链前驱，「后续修订」是活链后继。

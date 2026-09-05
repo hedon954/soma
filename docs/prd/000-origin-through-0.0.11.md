@@ -5,6 +5,7 @@
 - 覆盖版本：0.0.1–0.0.17
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续修订：
+  - [PRD 055](055-exercise-facets-and-meal-breakdown.md)（动作库多维筛选）
   - [PRD 049](049-foreground-responsiveness-and-readable-monthly-progress.md)（修订前台恢复、进展时间窗与全天消耗）
   - [PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md)（修订 Tool 参数错误恢复）
 - 下游落地：

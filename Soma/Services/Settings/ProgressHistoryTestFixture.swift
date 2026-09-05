@@ -37,6 +37,7 @@ enum ProgressHistoryTestFixture {
                     context.insert(BodyEntry(date: day, weight: 70 + Double(abs(offset)) / 100, bodyFat: 18, waist: 80))
                 }
             }
+            LibraryAndMealTestFixture.seedIfRequested(in: context)
             try context.save()
         } catch {
             context.rollback()

@@ -38,7 +38,7 @@ final class ProgressHistoryUITests: XCTestCase {
             intake.tap()
             let popover = app.scrollViews["progress-energy-breakdown-list"]
             XCTAssertTrue(popover.waitForExistence(timeout: 5))
-            XCTAssertTrue(popover.staticTexts["进展夹具餐食 0"].exists)
+            XCTAssertTrue(popover.staticTexts["午餐 · 进展夹具餐食 0"].exists)
             XCTAssertFalse(app.navigationBars["能量依据"].exists)
             keep(app, "energy-intake-breakdown-\(appearance)")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()

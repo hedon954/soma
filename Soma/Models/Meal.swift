@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum MealType: String, Codable, CaseIterable, Identifiable {
+enum MealType: String, Codable, CaseIterable, Identifiable, Sendable {
     case breakfast = "早餐"
     case lunch = "午餐"
     case afternoonSnack = "下午点心"

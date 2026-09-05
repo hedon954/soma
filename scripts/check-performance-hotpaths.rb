@@ -35,7 +35,8 @@ ceilings = {
   ["Soma/Views/HistoryViews.swift", /@Query/] => 0,
   ["Soma/Views/RecordDetailViews.swift", /@Query/] => 0,
   ["Soma/Views/ConversationSessionViews.swift", /@Query/] => 0,
-  ["Soma/Views/ExerciseViews.swift", /@Query/] => 1,
+  ["Soma/Views/ExerciseViews.swift", /@Query/] => 0,
+  ["Soma/Views/ExerciseLibraryView.swift", /@Query/] => 1,
   ["Soma/Views/CoachView.swift", /UIImage\(data:/] => 0,
   ["Soma/Views/FeedbackView.swift", /UIImage\(data:/] => 0,
   ["Soma/Components/DesignSystem.swift", /MediaStore\.image\(at:/] => 0,
@@ -665,7 +666,8 @@ end
 unless session_source.include?("latestMessageDescriptor.fetchLimit = 1")
   fail_check("conversation entry no longer resolves from a bounded latest message")
 end
-if exercise_detail_source.include?("private struct ExerciseLibraryRow: View {\n    @Query")
+exercise_library_source = File.read(File.join(ROOT, "Soma/Views/ExerciseLibraryView.swift"))
+if exercise_library_source.include?("private struct ExerciseLibraryRow: View {\n    @Query")
   fail_check("exercise library restored one live workout query per row")
 end
 
