@@ -3,7 +3,7 @@
 - 状态：已采纳，已实施；待真机交互验收
 - 日期：2026-09-02
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0105](0105-root-aware-tab-reselection.md) 中“教练再选永远无操作”的双击子行为
+- 部分替代：[ADR 0105](../archive/0.0.16/adr/0105-root-aware-tab-reselection.md) 中“教练再选永远无操作”的双击子行为
 - 后续替代：暂无
 - 上游依据：
   - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
