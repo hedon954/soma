@@ -16,7 +16,7 @@ struct InsightsView: View {
     @State private var calendarDate = Date.now
     @State private var followsCurrentPeriod: Bool
 
-    init(initialPeriod: ProgressPeriod = .week, initialDate: Date = .now) {
+    init(initialPeriod: ProgressPeriod = .day, initialDate: Date = .now) {
         _period = State(initialValue: initialPeriod)
         _anchorDate = State(initialValue: initialDate)
         _followsCurrentPeriod = State(initialValue: Calendar.current.isDateInToday(initialDate))
@@ -43,7 +43,9 @@ struct InsightsView: View {
                 }
                 if let snapshot, snapshot.window == window {
                     ProgressEnergyHistoryCard(snapshot: snapshot) { showingSources = true }
-                    ProgressTrainingBodyCards(snapshot: snapshot)
+                    if period != .day {
+                        ProgressTrainingBodyCards(snapshot: snapshot)
+                    }
                     if period == .day, let day = snapshot.days.first, !day.isFuture {
                         ProgressDayRecordSections(day: day)
                     }

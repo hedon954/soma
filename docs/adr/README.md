@@ -36,8 +36,9 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0112](0112-coach-scroll-and-session-behavior.md) | Unreleased | 已采纳 | 教练尾随滚动、双击回尾与 Session 日期命名 |
 | [0113](0113-capture-and-foreground-lifecycle.md) | Unreleased | 已采纳 | 根层快捷相机状态机、首帧后前台恢复与稳定 SwiftData ID |
 
-| [0114](0114-progress-periods-and-adaptive-energy.md) | Unreleased | 部分已替代 | 四周期与动态校准仍有效；0115 修订默认参考及指标披露 |
+| [0114](0114-progress-periods-and-adaptive-energy.md) | Unreleased | 部分已替代 | 动态校准仍有效；0115 修订默认参考与披露，0116 区分周期信息重点 |
 | [0115](0115-energy-default-reference-and-compact-details.md) | Unreleased | 已采纳 | 有效静息默认估算、数值独立点击的彩色浮层与紧凑依据 |
+| [0116](0116-progress-period-specific-focus.md) | Unreleased | 已采纳 | 默认日看记录，周看执行频率，月看变化，年看长期积累 |
 
 新决策使用 [ADR 模板](template.md)。
 

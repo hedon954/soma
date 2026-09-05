@@ -6,16 +6,22 @@ final class ProgressHistoryUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testDayShowsEstimatedCalorieDeficitInBothThemes() {
+    func testDefaultDayShowsEstimatedCalorieDeficitInBothThemes() {
         for appearance in ["light", "dark"] {
             let app = launch(appearance)
             let picker = app.segmentedControls["progress-period-picker"]
             XCTAssertTrue(picker.waitForExistence(timeout: 15))
-            picker.buttons["日"].tap()
+            XCTAssertTrue(picker.buttons["日"].isSelected, "首次进入应默认显示今天")
             XCTAssertTrue(app.staticTexts["445 kcal"].waitForExistence(timeout: 5), "缺口应为预估消耗 2345 减去已记录摄入 1900")
+            XCTAssertFalse(app.buttons["progress-training-summary"].exists)
+            XCTAssertFalse(app.buttons["progress-body-summary"].exists)
             XCTAssertTrue(app.staticTexts["预估热量缺口"].exists)
             XCTAssertFalse(app.staticTexts["与预估的差值"].exists)
             keep(app, "progress-calorie-deficit-\(appearance)")
+            picker.buttons["周"].tap()
+            app.tabBars.buttons["教练"].tap()
+            app.tabBars.buttons["进展"].tap()
+            XCTAssertTrue(picker.buttons["周"].isSelected, "返回页面应保留手动选择的周期")
             app.terminate()
         }
     }
@@ -36,8 +42,11 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertFalse(app.navigationBars["能量依据"].exists)
             keep(app, "energy-intake-breakdown-\(appearance)")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: popover)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
             let expenditure = app.buttons["progress-expenditure-breakdown"]
             XCTAssertTrue(expenditure.waitForExistence(timeout: 5))
+            XCTAssertTrue(expenditure.isHittable)
             expenditure.tap()
             XCTAssertTrue(popover.waitForExistence(timeout: 5))
             XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
@@ -110,6 +119,7 @@ final class ProgressHistoryUITests: XCTestCase {
         let app = launch("dark")
         let picker = app.segmentedControls["progress-period-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        picker.buttons["周"].tap()
         XCTAssertTrue(app.staticTexts["日均预估总消耗"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["下一周"].isEnabled)
         keep(app, "progress-week-dark")
@@ -142,6 +152,7 @@ final class ProgressHistoryUITests: XCTestCase {
         let app = launch("light")
         let picker = app.segmentedControls["progress-period-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        picker.buttons["周"].tap()
         let original = app.staticTexts["progress-date-range"].label
         let drill = app.buttons["progress-selected-period"]
         XCTAssertTrue(drill.waitForExistence(timeout: 10))
@@ -162,6 +173,7 @@ final class ProgressHistoryUITests: XCTestCase {
 
     func testTrainingAndBodyDetailMetricsAndRecordNavigation() {
         let app = launch("light")
+        selectPeriod("周", in: app)
         let training = app.buttons["progress-training-summary"]
         reveal(training, in: app)
         training.tap()
@@ -183,6 +195,9 @@ final class ProgressHistoryUITests: XCTestCase {
 
     func testChartTapSelectsDayWithoutChangingPeriod() {
         let app = launch("light")
+        let picker = app.segmentedControls["progress-period-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        picker.buttons["周"].tap()
         XCTAssertTrue(app.buttons["progress-selected-period"].waitForExistence(timeout: 10))
         let window = app.staticTexts["progress-date-range"].label
         let before = app.buttons["progress-selected-period"].label
@@ -227,13 +242,58 @@ final class ProgressHistoryUITests: XCTestCase {
         XCTAssertTrue(app.segmentedControls["progress-period-picker"].waitForExistence(timeout: 10))
         app.segmentedControls["progress-period-picker"].buttons["日"].tap()
         XCTAssertTrue(app.staticTexts["蛋白质"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["progress-training-summary"].exists)
         keep(app, "progress-day-accessibility-dark")
+        selectPeriod("周", in: app)
         let training = app.buttons["progress-training-summary"]
         reveal(training, in: app)
         XCTAssertTrue(training.isHittable)
         XCTAssertGreaterThanOrEqual(training.frame.height, 44)
         training.tap()
         XCTAssertTrue(app.segmentedControls["progress-detail-metric"].waitForExistence(timeout: 10))
+    }
+
+    func testPeriodsShowDifferentTrainingAndBodyFocus() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance)
+            let picker = app.segmentedControls["progress-period-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 15))
+            XCTAssertTrue(picker.buttons["日"].isSelected)
+            XCTAssertTrue(app.staticTexts["饮食记录"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["progress-training-summary"].exists)
+            XCTAssertFalse(app.buttons["progress-body-summary"].exists)
+            keep(app, "focus-day-\(appearance)")
+            for (period, trainingText, bodyText) in [("周", "训练 ", "周均体重"), ("月", "总容量", "最新体重"), ("年", "累计训练", "最新月均体重")] {
+                selectPeriod(period, in: app)
+                if period == "月" {
+                    app.buttons["上一月"].tap()
+                }
+                let training = app.buttons["progress-training-summary"]
+                reveal(training, in: app)
+                XCTAssertTrue(training.label.contains(trainingText))
+                let body = app.buttons["progress-body-summary"]
+                reveal(body, in: app)
+                XCTAssertTrue(body.label.contains(bodyText))
+                if period == "月" {
+                    XCTAssertTrue(body.label.contains("月内变化"))
+                }
+                if period == "年" {
+                    XCTAssertTrue(body.label.contains("月均变化"))
+                }
+                keep(app, "focus-\(period)-\(appearance)")
+            }
+            app.terminate()
+        }
+    }
+
+    private func selectPeriod(_ period: String, in app: XCUIApplication) {
+        let picker = app.segmentedControls["progress-period-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        for _ in 0 ..< 8 where !picker.isHittable {
+            app.swipeDown()
+        }
+        XCTAssertTrue(picker.isHittable)
+        picker.buttons[period].tap()
     }
 
     private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false) -> XCUIApplication {

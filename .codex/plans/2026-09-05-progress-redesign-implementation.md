@@ -9,8 +9,10 @@
 ## 页面与交互
 
 - [x] P01 日／周／月／年共用日期状态；自然周从周一开始，支持闰年、跨年、夏令时。
+- [x] P12 首次进入默认「日」和今天；手动切换后的返回状态仍保留。默认态回归及双机安装完成，14 Pro Max 本轮因锁屏未确认启动。
+- [x] P13 按 ADR 0116 区分周期关注点：日页直达记录，周看频率，月看容量与月内体重变化，年看月度积累；真实日期、缺测、分享、返回和浅深色回归通过。
 - [x] P02 上一周期／下一周期、日历选日、回到当前周期；未来日期不可选，超出当前周期的下一步置灰；切 Tab、返回详情保持选择与位置。
-- [x] P03 首页固定为饮食与能量主图、训练卡、身体卡；保留资源入口的可达路径。
+- [x] P03 首页饮食与能量优先；日页直接列原记录，周月年显示分周期摘要；保留资源入口的可达路径。
 - [x] P04 日页：摄入、全天预估消耗、预估热量缺口、三大营养素、饮食／训练／身体记录。缺口 = 预估总消耗 − 已记录摄入，负值表示盈余。
 - [x] P05 周／月按天绘制摄入柱、消耗虚线；同 kcal 坐标，点选不改变时间窗口。
 - [x] P06 年按月汇总；均值按有效天数加权，不能平均每月均值。
@@ -77,3 +79,11 @@
 - 12 项 UI 首批 11 项通过，四周期导航被已打开的浮层阻挡；移到独立 iPhone 16e 后该项通过。无障碍大字号改用可滚动 Sheet，最终高度和数值可达性测试通过，截图在 `build/energy-accessibility-final/`。
 - 最终 `build/energy-ready-verify.log`：`make verify` 通过，738 项 XCTest、7 项 Swift Testing；真实设备能量覆盖与流畅度不以这些测试替代。
 - Release 0.0.18 (22) 已更新安装到两机：17 Pro Max 已启动，14 Pro Max 因锁屏未确认启动。分别见 `build/energy-ready-install-17pm.log`、`build/energy-ready-install-14pm.log`。
+
+### 2026-09-05 默认日与周期关注点
+
+- 默认周的失败断言见 `build/progress-default-day-red.log`；改为默认日后，首次状态与切 Tab 保留手动周期均通过。日页原记录、当天分享和大字号导航回归通过。
+- 新增 9 项确定性测试，覆盖训练日去重、自然周裁剪、相邻月份排除、每日代表体重、月内变化与年内月均；不增加持久字段，不补造缺测体重。
+- `build/progress-period-focus-ui.log` 的 13 项 UI 首批通过 12 项；明细浮层连续切换发生一次时序失败。测试补充等待前一个浮层真正关闭后，独立浅深色复测通过，见 `build/progress-period-focus-popover-retest.log`。八张四周期截图及大字号截图在 `build/progress-period-focus-ui/`。
+- 最终 `build/progress-period-focus-verify.log`：`make verify` 通过，747 项 XCTest、7 项 Swift Testing；Server 39 项通过、1 项测试库未配置而跳过。
+- 本轮 Release 0.0.18 (22) 已安装两机：17 Pro Max 正常启动；14 Pro Max 首次连接中断后重装成功，因锁屏未确认启动。见 `build/progress-period-focus-install-17pm.log` 和 `build/progress-period-focus-install-14pm-retry.log`。真实 HealthKit、VoiceOver 与全场景性能仍单独跟踪，不以安装或模拟器代替。

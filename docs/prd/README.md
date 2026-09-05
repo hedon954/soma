@@ -38,7 +38,7 @@
 | [051：可自愈工具参数与宽幅进展明细](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) | Unreleased | Tool 规则有效；进展浮层由 054 部分替代 |
 | [052：教练、训练与生命周期可靠性](052-coach-training-and-lifecycle-reliability.md) | Unreleased | 活增量 |
 | [053：动态能量估算与可解释的进展展示](053-adaptive-energy-estimation-and-progress.md) | Unreleased | 已采纳；ADR 0115 补充默认参考估算 |
-| [054：进展历史与四周期统计](054-progress-history-and-periods.md) | Unreleased | 已采纳；ADR 0115 恢复指标彩色明细浮层，其余周期规则不变 |
+| [054：进展历史与四周期统计](054-progress-history-and-periods.md) | Unreleased | 已采纳；ADR 0115 恢复指标明细，0116 按四周期区分信息重点 |
 
 ## 阅读约定
 

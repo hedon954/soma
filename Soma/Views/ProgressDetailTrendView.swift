@@ -10,7 +10,7 @@ struct ProgressDetailTrendView: View {
     init(snapshot: ProgressHistorySnapshot, kind: ProgressRecentActivity.Kind) {
         self.snapshot = snapshot
         self.kind = kind
-        _metric = State(initialValue: kind == .workout ? .sets : .weight)
+        _metric = State(initialValue: kind == .workout ? ProgressPeriodSummary.defaultTrainingMetric(for: snapshot.window.period) : .weight)
     }
 
     private var points: [ProgressDetailTrendPoint] {

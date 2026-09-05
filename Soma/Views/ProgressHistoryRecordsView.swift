@@ -7,74 +7,61 @@ struct ProgressTrainingBodyCards: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(spacing: 14) {
-            NavigationLink {
-                ProgressPeriodRecordsView(snapshot: snapshot, kind: .workout)
-            } label: {
-                HStack(spacing: 14) {
-                    Image(systemName: "dumbbell.fill").foregroundStyle(AppTheme.trainingAccent)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("训练").font(.headline)
-                        Text("\(snapshot.trainingDayCount) 天 · \(snapshot.logicalSets) 组").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 6)
-                    if !dynamicTypeSize.isAccessibilitySize, ProgressDetailTrend.showsMiniChart(snapshot: snapshot, metric: .sets) {
-                        Chart(snapshot.energyBuckets) { bucket in
-                            RectangleMark(
-                                xStart: .value("开始", bucket.start.addingTimeInterval(bucket.end.timeIntervalSince(bucket.start) * 0.2)),
-                                xEnd: .value("结束", bucket.end.addingTimeInterval(-bucket.end.timeIntervalSince(bucket.start) * 0.2)),
-                                yStart: .value("基线", 0),
-                                yEnd: .value("逻辑组数", snapshot.days.filter { $0.date >= bucket.start && $0.date < bucket.end }.reduce(0) { $0 + $1.logicalSets })
-                            )
-                            .foregroundStyle(AppMetricRole.consistency.accent)
-                        }.chartXAxis(.hidden).chartYAxis(.hidden).frame(width: 115, height: 42)
-                            .accessibilityIdentifier("progress-training-mini-chart")
-                    }
-                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                }.padding(18).background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 18))
-            }.buttonStyle(.plain).accessibilityIdentifier("progress-training-summary")
-            NavigationLink {
-                ProgressPeriodRecordsView(snapshot: snapshot, kind: .body)
-            } label: {
-                HStack(spacing: 14) {
-                    Image(systemName: "scalemass.fill").foregroundStyle(AppTheme.bodyAccent)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("身体").font(.headline)
-                        Text(lastWeight?.weight.map { "最近体重 \($0.formatted()) kg" } ?? "未记录体重")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        if let lastWeight {
-                            Text(lastWeight.activity.date.formatted(.dateTime.month().day())).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer(minLength: 6)
-                    if !dynamicTypeSize.isAccessibilitySize, ProgressDetailTrend.showsMiniChart(snapshot: snapshot, metric: .weight) {
-                        Chart(weightPoints) { point in
-                            LineMark(x: .value("日期", point.date), y: .value("体重", point.value)).foregroundStyle(AppTheme.bodyAccent)
-                            PointMark(x: .value("日期", point.date), y: .value("体重", point.value)).foregroundStyle(AppTheme.bodyAccent)
-                        }.chartXAxis(.hidden).chartYAxis(.hidden).chartYScale(domain: weightRange).frame(width: 115, height: 42)
-                            .accessibilityIdentifier("progress-body-mini-chart")
-                    }
-                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                }.padding(18).background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 18))
-            }.buttonStyle(.plain).accessibilityIdentifier("progress-body-summary")
+        if let summary = ProgressPeriodSummary.make(snapshot: snapshot) {
+            VStack(spacing: 14) {
+                summaryLink(summary.training, kind: .workout)
+                summaryLink(summary.body, kind: .body)
+            }
         }
     }
 
-    private var weightRecords: [ProgressHistoryRecord] {
-        snapshot.days.compactMap(\.latestWeight)
+    private func summaryLink(_ summary: ProgressPeriodSummary.Metric, kind: ProgressRecentActivity.Kind) -> some View {
+        let isTraining = kind == .workout
+        return NavigationLink {
+            ProgressPeriodRecordsView(snapshot: snapshot, kind: kind)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: isTraining ? "dumbbell.fill" : "scalemass.fill")
+                    .foregroundStyle(isTraining ? AppTheme.trainingAccent : AppTheme.bodyAccent)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(isTraining ? "训练" : "身体").font(.headline)
+                    Text(summary.value).font(.subheadline).foregroundStyle(.secondary)
+                    if let detail = summary.detail {
+                        Text(detail).font(.caption).foregroundStyle(.secondary)
+                    }
+                }.fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+                Spacer(minLength: 6)
+                if !dynamicTypeSize.isAccessibilitySize, summary.showsChart {
+                    miniChart(summary)
+                        .accessibilityIdentifier(isTraining ? "progress-training-mini-chart" : "progress-body-mini-chart")
+                }
+                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+            }.padding(18).background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 18))
+        }.buttonStyle(.plain).accessibilityIdentifier(isTraining ? "progress-training-summary" : "progress-body-summary")
     }
 
-    private var lastWeight: ProgressHistoryRecord? {
-        weightRecords.last
-    }
-
-    private var weightPoints: [ProgressDetailTrendPoint] {
-        ProgressDetailTrend.points(snapshot: snapshot, metric: .weight)
-    }
-
-    private var weightRange: ClosedRange<Double> {
-        let values = weightPoints.map(\.value)
-        return max(0, (values.min() ?? 0) - 1) ... ((values.max() ?? 1) + 1)
+    private func miniChart(_ summary: ProgressPeriodSummary.Metric) -> some View {
+        let accent = summary.metric.isBody ? AppTheme.bodyAccent
+            : summary.metric == .volume ? AppMetricRole.trainingLoad.accent : AppMetricRole.consistency.accent
+        let values = summary.points.map(\.value)
+        let range = summary.metric.isBody
+            ? max(0, (values.min() ?? 0) - 1) ... ((values.max() ?? 1) + 1)
+            : 0 ... max(1, values.max() ?? 1)
+        return Chart(summary.points) { point in
+            if let end = point.end {
+                RectangleMark(
+                    xStart: .value("开始", point.date.addingTimeInterval(end.timeIntervalSince(point.date) * 0.2)),
+                    xEnd: .value("结束", end.addingTimeInterval(-end.timeIntervalSince(point.date) * 0.2)),
+                    yStart: .value("基线", 0), yEnd: .value(summary.metric.title, point.value)
+                ).foregroundStyle(accent)
+            } else {
+                LineMark(x: .value("日期", point.date), y: .value(summary.metric.title, point.value)).foregroundStyle(accent)
+                PointMark(x: .value("日期", point.date), y: .value(summary.metric.title, point.value)).foregroundStyle(accent)
+            }
+        }
+        .chartXAxis(.hidden).chartYAxis(.hidden).chartYScale(domain: range)
+        .frame(width: 95, height: 42)
+        .accessibilityLabel("\(summary.chartLabel)，单位\(summary.metric.unit)")
     }
 }
 
