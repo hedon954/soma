@@ -112,6 +112,11 @@ enum AgentToolExposurePolicy {
             }
             .map(\.rawValue)
     }
+
+    static func toolNames(for tools: [AgentToolName]) -> [String] {
+        let selected = Set(tools)
+        return orderedTools.filter { selected.contains($0) }.map(\.rawValue)
+    }
 }
 
 extension AgentToolName {

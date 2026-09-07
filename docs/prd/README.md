@@ -35,8 +35,10 @@
 | [052：教练、训练与生命周期可靠性](052-coach-training-and-lifecycle-reliability.md) | 0.0.19 | 活增量 |
 | [053：动态能量估算与可解释的进展展示](053-adaptive-energy-estimation-and-progress.md) | 0.0.19 | 已采纳；ADR 0115 补充默认参考估算 |
 | [054：进展历史与四周期统计](054-progress-history-and-periods.md) | 0.0.19 | 已采纳；ADR 0115 恢复指标明细，0116 按四周期区分信息重点 |
-| [055：动作分类与餐次明细](055-exercise-facets-and-meal-breakdown.md) | 0.0.21 | 已采纳 |
-| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | Unreleased | 已采纳 |
+| [055：动作分类与餐次明细](055-exercise-facets-and-meal-breakdown.md) | 0.0.21 | 分类轴与明细汇总由 057 部分修订 |
+| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | Unreleased | 听写呈现由 057 部分修订 |
+| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | Unreleased | 已采纳 |
+| [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | Unreleased | 已采纳 |
 
 ## 阅读约定
 

@@ -11,6 +11,7 @@
   - [ADR 0114](0114-progress-periods-and-adaptive-energy.md)（四周期与历史能量估算）
   - [ADR 0117](0117-workout-share-editorial-poster.md)（仅训练分享导出采用固定白底与橙黄色主视觉，App 双主题不变）
   - [ADR 0109](0109-schema-guided-tool-argument-recovery.md)（部分替代 Tool 参数失败处理）
+  - [ADR 0124](0124-smtp-feedback-failure-taxonomy.md)（反馈失败分类与 IPv4 优先，仍用本机 QQ SMTP）
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
 - 下游落地：
   - [PRD 053](../prd/053-adaptive-energy-estimation-and-progress.md)（动态能量估算）
@@ -20,6 +21,7 @@
   - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
   - [验收矩阵](../acceptance.md)
 - 后续替代：[ADR 0119](0119-full-video-and-append-only-dictation.md)（仅视频、语音或分享明细相关部分）
+- 后续替代：[ADR 0120](0120-focused-shortcut-prompt.md)（选中快捷按钮后不再注入全量 Skill 目录；工具白名单规则不变）
 
 本文是活 ADR 链的起点。只记录 0.0.18 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
 0.0.19 起的修订见后续活 ADR。

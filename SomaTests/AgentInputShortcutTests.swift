@@ -14,7 +14,7 @@ final class AgentInputShortcutTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let shortcuts = AgentInputShortcutStore.shortcuts(defaults: defaults)
-        XCTAssertEqual(shortcuts.map(\.title), ["饮食分析", "训练记录", "近期分析"])
+        XCTAssertEqual(shortcuts.map(\.title), ["记录饮食", "训练记录", "近期分析"])
         XCTAssertEqual(
             AgentInputShortcutStore.visibleShortcuts(defaults: defaults).count,
             3
@@ -40,7 +40,7 @@ final class AgentInputShortcutTests: XCTestCase {
         let tools = AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
         XCTAssertTrue(tools.contains(.createWorkout))
         XCTAssertTrue(tools.contains(.searchExercises))
-        XCTAssertTrue(tools.contains(.loadSkill))
+        XCTAssertFalse(tools.contains(.loadSkill))
         XCTAssertFalse(tools.contains(.createMeal))
         XCTAssertFalse(tools.contains(.submitFeedback))
     }
@@ -113,6 +113,43 @@ final class AgentInputShortcutTests: XCTestCase {
             AgentToolExposurePolicy.tools(selectedShortcut: shortcut),
             AgentToolExposurePolicy.orderedTools
         )
+    }
+
+    func testStoredDefaultNutritionTitleMigratesToRecordMeal() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let legacy = AgentInputShortcut(
+            id: "shortcut_nutrition",
+            title: "饮食分析",
+            iconSystemName: "fork.knife",
+            skillID: AgentSkill.nutritionAnalysis.rawValue,
+            toolNames: AgentToolExposurePolicy.toolNames(for: [.core, .meals])
+        )
+        AgentInputShortcutStore.replaceAll([legacy], defaults: defaults)
+        let migrated = try XCTUnwrap(
+            AgentInputShortcutStore.shortcut(id: "shortcut_nutrition", defaults: defaults)
+        )
+        XCTAssertEqual(migrated.title, "记录饮食")
+    }
+
+    func testDefaultRecentReviewShortcutIsReadOnlyAndHasPrompt() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let shortcut = try XCTUnwrap(AgentInputShortcutStore.shortcut(
+            id: "shortcut_recent_review",
+            defaults: defaults
+        ))
+        let tools = AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
+        XCTAssertEqual(
+            shortcut.suggestedPrompt,
+            "请帮我分析一下最近的饮食和训练情况"
+        )
+        XCTAssertTrue(tools.contains(.listMeals))
+        XCTAssertTrue(tools.contains(.listWorkouts))
+        XCTAssertFalse(tools.contains(.createMeal))
+        XCTAssertFalse(tools.contains(.loadSkill))
     }
 
     func testNewShortcutDefaultsToEveryTool() {

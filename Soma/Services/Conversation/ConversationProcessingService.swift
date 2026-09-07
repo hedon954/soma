@@ -149,7 +149,10 @@ final class ConversationProcessingService {
             userText: text,
             hasCurrentMedia: !persistedAttachments.isEmpty,
             turnSentAt: submittedAt,
-            businessSummary: context.structuredContext(for: businessDate),
+            businessSummary: context.structuredContext(
+                for: businessDate,
+                selectedSkillID: selectedShortcut?.skillID
+            ),
             effectiveBusinessDate: businessDate,
             sessionID: context.session.id,
             in: context.modelContext

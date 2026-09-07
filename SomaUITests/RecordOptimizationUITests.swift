@@ -149,7 +149,7 @@ final class RecordOptimizationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已记录摄入"].exists)
         XCTAssertTrue(app.staticTexts["预估总消耗"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["基础 + 训练"].exists)
-        XCTAssertTrue(app.staticTexts["预估热量缺口"].exists)
+        XCTAssertTrue(app.otherElements["progress-nutrition-rings"].exists)
         keepScreenshot(of: app, named: "progress-daily-energy-projection")
     }
 
@@ -331,7 +331,7 @@ final class RecordOptimizationUITests: XCTestCase {
             3,
             "动作名、目标、侧别、保存和删除必须位于同一条水平中线"
         )
-        XCTAssertEqual(app.textFields["时长"].value as? String, "20 秒")
+        XCTAssertEqual(app.textFields["时长"].value as? String, "20秒")
         XCTAssertEqual(app.textFields["外部重量"].value as? String, "自重")
         XCTAssertEqual(app.textFields["间歇"].value as? String, "30 秒")
         XCTAssertTrue(

@@ -32,22 +32,18 @@ enum ReActAgentPrompt {
         system(defaults: .standard)
     }
 
-    static func system(defaults: UserDefaults) -> String {
-        """
-        [SOMA SYSTEM v2]
-        ## 固定身份
-        \(fixedIdentity)
-
-        ## 用户教练人格
-        \(ReActPromptSection.role.text(in: defaults))
-
-        ## 固定安全、真实性与授权契约
-        \(fixedContract)
-
-        \(capabilityCatalog)
-
-        \(AgentSkill.catalogPrompt(defaults: defaults))
-        """
+    static func system(defaults: UserDefaults, selectedSkillID: String? = nil) -> String {
+        var sections = [
+            "[SOMA SYSTEM v2]",
+            "## 固定身份\n\(fixedIdentity)",
+            "## 用户教练人格\n\(ReActPromptSection.role.text(in: defaults))",
+            "## 固定安全、真实性与授权契约\n\(fixedContract)"
+        ]
+        if selectedSkillID == nil {
+            sections.append(capabilityCatalog)
+            sections.append(AgentSkill.catalogPrompt(defaults: defaults))
+        }
+        return sections.joined(separator: "\n\n")
     }
 
     static func user(

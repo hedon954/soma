@@ -32,11 +32,16 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0112](0112-coach-scroll-and-session-behavior.md) | 0.0.19 | 已采纳 | 教练尾随滚动、双击回尾与 Session 日期命名 |
 | [0113](0113-capture-and-foreground-lifecycle.md) | 0.0.19 | 已采纳 | 根层快捷相机状态机、首帧后前台恢复与稳定 SwiftData ID |
 | [0114](0114-progress-periods-and-adaptive-energy.md) | 0.0.19 | 部分已替代 | 动态校准仍有效；0115 修订默认参考与披露，0116 区分周期信息重点 |
-| [0115](0115-energy-default-reference-and-compact-details.md) | 0.0.19 | 已采纳 | 有效静息默认估算、数值独立点击的彩色浮层与紧凑依据 |
-| [0116](0116-progress-period-specific-focus.md) | 0.0.19 | 已采纳 | 默认日看记录，周看执行频率，月看变化，年看长期积累 |
+| [0115](0115-energy-default-reference-and-compact-details.md) | 0.0.19 | 部分已替代 | 默认估算与浮层仍有效；日页宏量呈现由 [0122](0122-nutrition-rings-and-period-deficit.md) 修订 |
+| [0116](0116-progress-period-specific-focus.md) | 0.0.19 | 已采纳 | 日、周、月、年训练与身体信息重点 |
 | [0117](0117-workout-share-editorial-poster.md) | 0.0.21 | 已采纳 | 部分替代 [0000](0000-origin-through-0.0.11.md) 的分享导出外观：固定白底、橙黄色主视觉与连续逻辑组压缩 |
-| [0118](0118-exercise-facets-and-meal-colors.md) | 0.0.21 | 已采纳 | 动作部位／模式／肌群派生筛选、餐次文字与固定双主题配色 |
-| [0119](0119-full-video-and-append-only-dictation.md) | Unreleased | 已采纳 | 完整视频、当前草稿追加和分享同值组卡 |
+| [0118](0118-exercise-facets-and-meal-colors.md) | 0.0.21 | 部分已替代 | 部位映射与餐次配色仍有效；分类轴由 [0123](0123-exercise-movement-kinds.md) 修订 |
+| [0119](0119-full-video-and-append-only-dictation.md) | Unreleased | 部分已替代 | 完整视频与追加-only 草稿仍有效；听写预览由 [0121](0121-live-dictation-preview.md) 修订 |
+| [0120](0120-focused-shortcut-prompt.md) | Unreleased | 已采纳 | 选中快捷按钮后省略 Skill 目录并收窄上下文 |
+| [0121](0121-live-dictation-preview.md) | Unreleased | 已采纳 | 未确认听写片段只作输入框预览，确认后才写入草稿 |
+| [0122](0122-nutrition-rings-and-period-deficit.md) | Unreleased | 已采纳 | 日页营养圆环与推荐摄入；周月年不展示环或周期跳转 |
+| [0123](0123-exercise-movement-kinds.md) | Unreleased | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
+| [0124](0124-smtp-feedback-failure-taxonomy.md) | Unreleased | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
 
 新决策使用 [ADR 模板](template.md)。
 

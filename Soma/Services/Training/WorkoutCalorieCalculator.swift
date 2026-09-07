@@ -272,17 +272,20 @@ enum WorkoutCalorieCalculator {
     @MainActor
     static func refreshStoredEstimate(
         _ entry: WorkoutEntry,
-        in context: ModelContext
+        in context: ModelContext,
+        calorieOverride: Int? = nil
     ) {
         refreshStoredEstimate(
             entry,
-            weightKG: latestRecordedWeight(at: entry.date, in: context)
+            weightKG: latestRecordedWeight(at: entry.date, in: context),
+            calorieOverride: calorieOverride
         )
     }
 
     static func refreshStoredEstimate(
         _ entry: WorkoutEntry,
-        weightKG: Double?
+        weightKG: Double?,
+        calorieOverride: Int? = nil
     ) {
         let estimate = estimateWorkout(
             exercise: entry.exercise,
@@ -292,7 +295,7 @@ enum WorkoutCalorieCalculator {
             fallbackRestSeconds: entry.restSeconds,
             weightKG: weightKG
         )
-        entry.estimatedCalories = estimate?.calories
+        entry.estimatedCalories = calorieOverride ?? estimate?.calories
         entry.calorieMET = estimate?.met
         entry.calorieDurationMinutes = estimate?.durationMinutes
         entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false

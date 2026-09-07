@@ -21,6 +21,8 @@
 | destructive | system red | system red | 删除和失败 |
 
 业务 View 只使用 `AppTheme` 语义成员，不重新硬编码色值或用任意 opacity 混出近似表面。
+Widget 扩展不编译 `DesignSystem.swift`，必须使用 `Shared` 里与 `AppThemePalette` 同值的明确浅／深色，
+不能填 `UIColor.systemBackground` 再写 `.primary`。着色模式去掉不透明底板。
 
 ## 色彩规则
 

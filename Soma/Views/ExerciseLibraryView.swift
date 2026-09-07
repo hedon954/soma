@@ -21,15 +21,15 @@ struct ExerciseLibraryView: View {
 
     var body: some View {
         let sections = visibleSections()
-        VStack(spacing: 0) {
-            searchBar
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    ExerciseLibrarySidebar(filter: $filter, classifications: Array(classifications.values)) {
-                        searchIsFocused = false
-                    }
-                    .frame(width: min(156, max(108, geometry.size.width * 0.28)))
-                    Divider()
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ExerciseLibrarySidebar(filter: $filter, classifications: Array(classifications.values)) {
+                    searchIsFocused = false
+                }
+                .frame(width: min(156, max(108, geometry.size.width * 0.28)))
+                Divider()
+                VStack(spacing: 0) {
+                    searchBar
                     resultList(sections)
                 }
             }
@@ -92,7 +92,7 @@ struct ExerciseLibraryView: View {
         .padding(.leading, 14)
         .frame(minHeight: 44)
         .background(AppTheme.insetBackground, in: RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .padding(.vertical, 10)
     }
 

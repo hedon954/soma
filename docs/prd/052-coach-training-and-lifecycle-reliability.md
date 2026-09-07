@@ -5,7 +5,7 @@
 - 修订自：
   - [PRD 047](../archive/0.0.16/prd/047-root-aware-tab-reselection.md) 的教练 Tab 再选行为
   - [PRD 000](000-origin-through-0.0.11.md) 的前台恢复响应边界
-- 后续修订：暂无
+- 后续修订：[PRD 058](058-feedback-duration-and-editable-calories.md)（时长时分秒展示与可编辑预计消耗）
 - 上游依据：
   - 维护者提供的十七项严重 Bug、界面截图与崩溃报告
   - [BUG 0045](../bugs/0045-guided-workout-coredata-abort.md)

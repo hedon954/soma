@@ -3,6 +3,7 @@ import SwiftUI
 struct ProgressEnergyBreakdownDisclosure<Label: View>: View {
     let snapshot: ProgressHistorySnapshot
     let kind: ProgressEnergyBreakdown.Kind
+    var disclosureIdentifier = ""
     @ViewBuilder let label: () -> Label
     @State private var isPresented = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -29,7 +30,11 @@ struct ProgressEnergyBreakdownDisclosure<Label: View>: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("progress-\(kind.rawValue)-breakdown")
+        .accessibilityIdentifier(
+            disclosureIdentifier.isEmpty
+                ? "progress-\(kind.rawValue)-breakdown"
+                : disclosureIdentifier
+        )
         .accessibilityHint("查看组成明细")
     }
 }
@@ -41,8 +46,11 @@ private struct ProgressEnergyBreakdownPopover: View {
     @State private var contentHeight: CGFloat = 0
 
     var body: some View {
+        let maxHeight: CGFloat = dynamicTypeSize.isAccessibilitySize ? 480 : 380
+        let measured = contentHeight > 0 ? contentHeight : CGFloat(max(source.rows.count, 1)) * rowHeight + 16
+        let height = min(measured, maxHeight)
         ScrollView {
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(source.rows) { row in
                     rowView(row)
                     if row.id != source.rows.last?.id {
@@ -52,18 +60,26 @@ private struct ProgressEnergyBreakdownPopover: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
-            .background {
+            .overlay {
                 GeometryReader { geometry in
                     Color.clear.preference(key: EnergyBreakdownHeightKey.self, value: geometry.size.height)
                 }
             }
         }
-        .onPreferenceChange(EnergyBreakdownHeightKey.self) { contentHeight = $0 }
+        .scrollBounceBehavior(.basedOnSize)
+        .onPreferenceChange(EnergyBreakdownHeightKey.self) { reported in
+            let estimate = CGFloat(max(source.rows.count, 1)) * rowHeight + 16
+            if reported > 0, reported <= max(estimate * 2, estimate) {
+                contentHeight = reported
+            }
+        }
         .accessibilityIdentifier("progress-energy-breakdown-list")
         .frame(
             width: min(400, max(260, UIScreen.main.bounds.width - 32)),
-            height: min(contentHeight > 0 ? contentHeight : CGFloat(source.rows.count) * rowHeight + 16, dynamicTypeSize.isAccessibilitySize ? 480 : 380)
+            height: height,
+            alignment: .top
         )
         .background(AppTheme.cardBackground)
     }
@@ -96,6 +112,9 @@ private struct ProgressEnergyBreakdownPopover: View {
         case .activity: AppMetricRole.consistency.accent
         case .factor: AppMetricRole.performance.accent
         case .total: AppMetricRole.trainingLoad.accent
+        case .protein: AppTheme.vitalAccent
+        case .carbs: AppTheme.trainingAccent
+        case .fat: AppTheme.trendAccent
         }
     }
 }

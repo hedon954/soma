@@ -172,6 +172,13 @@ App → Views → Services → Models
 - 顶层固定为“教练、训练、进展、设置”四个 Tab，并各自保留导航栈；根标题使用紧凑居中样式。
   再点教练或任一根 Tab 不产生反应；训练、进展、设置只有处于详情页时，再点当前 Tab 才回根。
 - 主视觉使用黑白：深色纯黑页面与深灰卡，浅色纯白页面与浅灰分组卡；彩色只点缀少量语义图标或状态。
+- **表面对比度必检（Widget、浮层、自定义底板都算）：**
+  1. 先定表面，再定字色。文字和图标必须相对**实际画出来的那块底板**对比，不能假设 `.primary` 会自动配对。
+  2. 只用 `AppTheme` 语义色。禁止 `UIColor.systemBackground` / `secondarySystemBackground` 当自定义底板，禁止遗留品牌绿当主色。
+  3. 浅色页面 `#FFFFFF`、卡 `#F7F7F7`、内嵌 `#EFEFEF`；深色页面 `#000000`、卡 `#191919`、内嵌 `#232323`。正常字号 ≥ 4.5:1。
+  4. 同一改动必须同时做浅色和深色。主屏幕 Widget 还要覆盖着色模式：`widgetRenderingMode == .accented` 时去掉不透明自绘底板，内容标 `.widgetAccentable()`。
+  5. `.primary` / `.secondary` / `.tertiary` 只能用在系统材料上；自己画了底板就改用 `AppTheme.accent` 或明确 ink 色。
+  常见失败：`containerBackground` 填 `systemBackground` 再写语义字色；着色 Widget 不透明底板把内容吃掉；深色模式把浅色系统底和深色字叠在一起。
 - 训练分享导出按 [ADR 0117](docs/adr/0117-workout-share-editorial-poster.md) 使用固定白底黑字、橙黄色主视觉与窄体大号容量；承载分享的原生弹层仍适配双主题。
 - 浅色语义色适度提高明度与饱和度，抵消纯白背景的灰雾感并保持至少 4.5:1 对比度；暗色语义色不随浅色
   校准改变。

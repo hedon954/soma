@@ -45,23 +45,25 @@ frontmatter 字段的 Markdown，支持本地 override 和用户自定义：
 - 健身房分析
 - 用户健身计划制定
 - 动作分析
-- 饮食分析
+- 记录饮食
 - 体态分析
 - 运动趋势分析
 - 运动量分析
 - 运动热量估算
 
 未选快捷按钮时，Agent 可调用本地只读 `load_skill` 按需加载，过程形成独立 Skill Span。
-用户在输入框上方单选一个快捷按钮后，若该按钮绑定 Skill，首轮直接注入完整 Markdown 与专属上下文，
-省去一次加载调用。设置页支持内置 override、自定义 Skill、Markdown 预览与恢复；Skill 只描述专业
-方法，工具权限由快捷按钮持有，固定 Tool 协议不能被扩权。
+用户在输入框上方单选一个快捷按钮后，若该按钮绑定 Skill，首轮直接注入完整 Markdown 与收口上下文，
+System 省略能力目录和其他 Skill 元数据，默认不再暴露 `load_skill`。设置页支持内置 override、自定义
+Skill、Markdown 预览与恢复；Skill 只描述专业方法，工具权限由快捷按钮持有，固定 Tool 协议不能被扩权。
 
 ## 输入框快捷按钮
 
 快捷按钮是可完整增删改的本机实体：名称、图标、绑定 Skill（可为空）、工具白名单、是否显示与排序，
-以 JSON 存 UserDefaults，不进入 SwiftData。默认可见三个：饮食分析、训练记录、近期分析；聊天输入区
-最多显示六个。工具默认全选，可按分组删减，也可让小模型推荐一份清单与理由后一键采纳。详见
-[ADR 0082](archive/0.0.7/adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md)。
+以 JSON 存 UserDefaults，不进入 SwiftData。默认可见三个：记录饮食、训练记录、近期分析；聊天输入区
+最多显示六个。点选且输入框为空时填入该按钮建议句。工具默认全选，可按分组删减，也可让小模型推荐一份
+清单与理由后一键采纳。详见
+[ADR 0082](archive/0.0.7/adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md) 与
+[ADR 0120](adr/0120-focused-shortcut-prompt.md)。
 
 ## 本地工具
 

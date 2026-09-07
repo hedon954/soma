@@ -99,11 +99,14 @@ enum WorkoutHistoryFormatter {
         let groups = draft.groups.sorted { $0.sourceOrder < $1.sourceOrder }
         var priorInterval: Int?
         let formatted = groups.enumerated().map { index, group in
-            let explicit = group.restPresentation.afterGroupSeconds
+            let explicit = WorkoutRestPropagation.recorded(
+                group.restPresentation.afterGroupSeconds
+            )
             let isFinal = index == groups.indices.last
-            let displayRest = isFinal ? nil : (explicit ?? fallbackRestSeconds)
+            let workoutRest = WorkoutRestPropagation.recorded(fallbackRestSeconds)
+            let displayRest = isFinal ? nil : (explicit ?? workoutRest)
             let comparisonRest = displayRest
-                ?? fallbackRestSeconds
+                ?? workoutRest
                 ?? priorInterval
             if let displayRest {
                 priorInterval = displayRest
@@ -188,7 +191,9 @@ enum WorkoutHistoryFormatter {
                 values.append("\(run.count)组")
             }
         }
-        if let between = group.restPresentation.betweenSidesSeconds {
+        if let between = WorkoutRestPropagation.recorded(
+            group.restPresentation.betweenSidesSeconds
+        ) {
             values.append("换侧\(durationText(seconds: between))")
         }
         if let rest = run.displayedRestSeconds {
@@ -206,7 +211,9 @@ enum WorkoutHistoryFormatter {
         case .repetitions:
             return effort.reps.map { "\(prefix)\($0)" }
         case .duration:
-            return effort.durationSeconds.map { "\(prefix)\($0)秒" }
+            return effort.durationSeconds.map {
+                "\(prefix)\(DurationSecondsFormat.display($0))"
+            }
         }
     }
 

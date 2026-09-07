@@ -169,7 +169,7 @@ struct CoachComposer: View {
                 ForEach(shortcuts) { shortcut in
                     let isSelected = state.selectedShortcutID == shortcut.id
                     Button {
-                        state.selectedShortcutID = isSelected ? nil : shortcut.id
+                        state.toggleShortcut(shortcut)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: shortcut.iconSystemName)
@@ -266,17 +266,26 @@ struct CoachComposer: View {
     }
 
     var composerTextField: some View {
-        TextField("说点什么，或添加照片与视频…", text: $state.draft, axis: .vertical)
-            .accessibilityIdentifier("coach-message-input")
-            .lineLimit(1 ... 5)
-            .focused($focused)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .frame(minHeight: AppTheme.minimumTapTarget)
-            .background(
-                AppTheme.insetBackground,
-                in: RoundedRectangle(cornerRadius: 19)
-            )
+        let preview = state.displayedSpeechDraft
+        return TextField(
+            "说点什么，或添加照片与视频…",
+            text: Binding(
+                get: { preview },
+                set: { state.replaceDraftFromSpeechPreview($0) }
+            ),
+            axis: .vertical
+        )
+        .accessibilityIdentifier("coach-message-input")
+        .lineLimit(1 ... 5)
+        .focused($focused)
+        .allowsHitTesting(!isListening)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .frame(minHeight: AppTheme.minimumTapTarget)
+        .background(
+            AppTheme.insetBackground,
+            in: RoundedRectangle(cornerRadius: 19)
+        )
     }
 
     var voiceButton: some View {

@@ -18,6 +18,8 @@ struct AgentInputShortcut: Codable, Identifiable, Equatable, Sendable {
     var toolNames: [String]
     var isVisible: Bool
     var order: Int
+    /// 点选且输入框为空时填入；空表示不自动填充。
+    var suggestedPrompt: String?
 
     init(
         id: String = "shortcut_\(UUID().uuidString.prefix(8).lowercased())",
@@ -26,7 +28,8 @@ struct AgentInputShortcut: Codable, Identifiable, Equatable, Sendable {
         skillID: String? = nil,
         toolNames: [String] = AgentToolName.allToolNames,
         isVisible: Bool = true,
-        order: Int = 0
+        order: Int = 0,
+        suggestedPrompt: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -35,6 +38,7 @@ struct AgentInputShortcut: Codable, Identifiable, Equatable, Sendable {
         self.toolNames = toolNames
         self.isVisible = isVisible
         self.order = order
+        self.suggestedPrompt = suggestedPrompt
     }
 
     static let defaultIconSystemName = "sparkles"
@@ -86,18 +90,16 @@ enum AgentInputShortcutStore {
     static let maximumVisibleCount = 6
     private static let cache = AgentInputShortcutMemoryCache()
 
-    /// 默认只保留三个：饮食分析、训练记录、近期分析。其余内置 Skill 仍可在设置里绑定，
+    /// 默认只保留三个：记录饮食、训练记录、近期分析。其余内置 Skill 仍可在设置里绑定，
     /// 但不占用聊天输入区。
     static var defaultShortcuts: [AgentInputShortcut] {
         [
             AgentInputShortcut(
                 id: "shortcut_nutrition",
-                title: "饮食分析",
+                title: "记录饮食",
                 iconSystemName: "fork.knife",
                 skillID: AgentSkill.nutritionAnalysis.rawValue,
-                toolNames: AgentToolExposurePolicy.toolNames(
-                    for: [.core, .meals]
-                ),
+                toolNames: AgentToolExposurePolicy.toolNames(for: [.meals]),
                 isVisible: true,
                 order: 0
             ),
@@ -106,22 +108,34 @@ enum AgentInputShortcutStore {
                 title: "训练记录",
                 iconSystemName: "dumbbell",
                 skillID: AgentSkill.workoutLogging.rawValue,
-                toolNames: AgentToolExposurePolicy.toolNames(
-                    for: [.core, .exercises, .workouts]
-                ),
+                toolNames: AgentToolExposurePolicy.toolNames(for: [
+                    .searchExercises,
+                    .createExercise,
+                    .listWorkouts,
+                    .getWorkout,
+                    .createWorkout,
+                    .updateWorkout
+                ]),
                 isVisible: true,
-                order: 1
+                order: 1,
+                suggestedPrompt: "请帮我记录这次训练"
             ),
             AgentInputShortcut(
                 id: "shortcut_recent_review",
                 title: "近期分析",
                 iconSystemName: "chart.line.uptrend.xyaxis",
                 skillID: AgentSkill.trendAnalysis.rawValue,
-                toolNames: AgentToolExposurePolicy.toolNames(
-                    for: [.core, .workouts, .meals, .body]
-                ),
+                toolNames: AgentToolExposurePolicy.toolNames(for: [
+                    .listWorkouts,
+                    .getWorkout,
+                    .listMeals,
+                    .getMeal,
+                    .listBodyEntries,
+                    .getBodyEntry
+                ]),
                 isVisible: true,
-                order: 2
+                order: 2,
+                suggestedPrompt: "请帮我分析一下最近的饮食和训练情况"
             )
         ]
     }
@@ -146,7 +160,7 @@ enum AgentInputShortcutStore {
             }
             return fallback
         }
-        let sorted = stored.sorted { $0.order < $1.order }
+        let sorted = migrated(stored.sorted { $0.order < $1.order })
         if defaults === UserDefaults.standard {
             cache.replace(with: sorted)
         }
@@ -216,6 +230,22 @@ enum AgentInputShortcutStore {
                     object: nil
                 )
             }
+        }
+    }
+
+    /// 只改仍等于出厂文案的默认按钮，用户改过的标题和自定义建议句保持不动。
+    static func migrated(_ values: [AgentInputShortcut]) -> [AgentInputShortcut] {
+        values.map { shortcut in
+            var value = shortcut
+            if value.id == "shortcut_nutrition", value.title == "饮食分析" {
+                value.title = "记录饮食"
+            }
+            if value.suggestedPrompt == nil {
+                value.suggestedPrompt = defaultShortcuts.first {
+                    $0.id == value.id
+                }?.suggestedPrompt
+            }
+            return value
         }
     }
 

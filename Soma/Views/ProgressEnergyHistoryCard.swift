@@ -4,7 +4,6 @@ import SwiftUI
 struct ProgressEnergyHistoryCard: View {
     let snapshot: ProgressHistorySnapshot
     let showsSources: () -> Void
-    @State private var selectedDate: Date?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var metricLayout: AnyLayout {
@@ -16,7 +15,7 @@ struct ProgressEnergyHistoryCard: View {
             Button(action: showsSources) {
                 HStack {
                     Image(systemName: "fork.knife").foregroundStyle(AppTheme.mealAccent)
-                    Text("饮食与能量").font(.title3.weight(.semibold))
+                    Text("饮食与能量").font(.title3.weight(.medium))
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(.secondary)
                 }
@@ -31,10 +30,13 @@ struct ProgressEnergyHistoryCard: View {
             } else {
                 metricLayout {
                     ProgressEnergyBreakdownDisclosure(snapshot: snapshot, kind: .intake) {
-                        metric("已记录摄入", value: snapshot.window.period == .day ? snapshot.days.first?.intake.value : snapshot.averageIntake, estimated: false)
-                    }
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        Divider().frame(height: 58)
+                        metric(
+                            "已记录摄入",
+                            value: snapshot.window.period == .day
+                                ? snapshot.days.first?.intake.value
+                                : snapshot.averageIntake,
+                            estimated: false
+                        )
                     }
                     ProgressEnergyBreakdownDisclosure(snapshot: snapshot, kind: .expenditure) {
                         metric("预估总消耗", value: snapshot.averageEstimate, estimated: true)
@@ -45,37 +47,11 @@ struct ProgressEnergyHistoryCard: View {
                         .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
                     chart
                     legend
-                    if let bucket = selectedBucket {
-                        NavigationLink {
-                            InsightsView(initialPeriod: snapshot.window.period == .year ? .month : .day, initialDate: bucket.start)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text(bucket.start.formatted(snapshot.window.period == .year ? .dateTime.year().month() : .dateTime.month().day().weekday()))
-                                        .fontWeight(.semibold)
-                                    Spacer()
-                                    Text(snapshot.window.period == .year ? "查看该月" : "查看当天")
-                                    Image(systemName: "chevron.right")
-                                }
-                                Text("摄入 \(energyText(bucket.intake, missing: "未记录")) · 消耗 \(energyText(bucket.estimate, missing: "待估算"))")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .font(.subheadline)
-                            .padding(14)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                            .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 14))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("progress-selected-period")
-                    }
-                } else if let day = snapshot.days.first {
-                    metricLayout {
-                        Text("预估热量缺口").foregroundStyle(.secondary)
-                        if !dynamicTypeSize.isAccessibilitySize {
-                            Spacer()
-                        }
-                        Text(deficitText(day))
-                    }.font(.subheadline)
+                }
+                if snapshot.window.period == .day, let rings = snapshot.nutritionRings {
+                    ProgressNutritionRingsView(rings: rings, snapshot: snapshot)
+                        .accessibilityIdentifier("progress-nutrition-rings")
+                } else if snapshot.window.period == .day, let day = snapshot.days.first {
                     metricLayout {
                         nutrient("蛋白质", day.protein.value)
                         nutrient("碳水", day.carbs.value)
@@ -84,28 +60,56 @@ struct ProgressEnergyHistoryCard: View {
                 }
             }
         }
-        .onChange(of: snapshot.window) { selectedDate = nil }
+        .padding(18)
+        .background(
+            AppTheme.cardBackground,
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
     }
 
     private func metric(_ title: String, value: Double?, estimated: Bool) -> some View {
-        VStack(spacing: 9) {
-            Text((snapshot.window.period == .day ? "" : "日均") + title).font(.caption).foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value.map { (estimated ? "约 " : "") + text($0) } ?? (estimated ? "待估算" : "未记录"))
-                    .font(.title2.weight(.semibold).monospacedDigit())
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                if value != nil {
-                    Text("kcal").font(.caption).fixedSize()
+        let tint = estimated ? AppTheme.mealSoftTint : AppTheme.trainingSoftTint
+        let accent = estimated ? AppTheme.mealAccent : AppTheme.trainingAccent
+        return HStack(alignment: .center, spacing: 10) {
+            Image(systemName: estimated ? "target" : "flame.fill")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(accent)
+                .frame(width: 22, height: 22)
+                .background(AppTheme.insetBackground, in: Circle())
+                .background {
+                    Circle()
+                        .fill(tint)
+                        .padding(-4)
+                }
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text((snapshot.window.period == .day ? "" : "日均") + title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(value.map { (estimated ? "约 " : "") + text($0) } ?? (estimated ? "待估算" : "未记录"))
+                        .font(.title3.weight(.medium).monospacedDigit())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if value != nil {
+                        Text("kcal")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
                 }
             }
-        }.frame(maxWidth: .infinity)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(AppTheme.insetBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func nutrient(_ title: String, _ value: Double) -> some View {
         VStack(spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text("\(text(value)) g").font(.subheadline.monospacedDigit())
-        }.frame(maxWidth: .infinity).padding(.vertical, 12).background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 12))
+        }.frame(maxWidth: .infinity).padding(.vertical, 12).background(AppTheme.insetBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var chart: some View {
@@ -128,10 +132,6 @@ struct ProgressEnergyHistoryCard: View {
                         .symbolSize(10).foregroundStyle(AppTheme.mealAccent)
                 }
             }
-            if let bucket = selectedBucket {
-                RuleMark(x: .value("所选日期", center(bucket)))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3])).foregroundStyle(.secondary)
-            }
         }
         .chartXScale(domain: snapshot.window.start ... snapshot.window.end)
         .chartYScale(domain: 0 ... max(1000, maximum * 1.12))
@@ -150,10 +150,6 @@ struct ProgressEnergyHistoryCard: View {
                 AxisValueLabel()
             }
         }
-        .chartXSelection(value: $selectedDate)
-        .chartGesture { proxy in
-            SpatialTapGesture().onEnded { proxy.selectXValue(at: $0.location.x) }
-        }
         .frame(height: 225)
         .accessibilityLabel("摄入与预估总消耗，单位千卡")
         .accessibilityIdentifier("progress-energy-chart")
@@ -164,13 +160,6 @@ struct ProgressEnergyHistoryCard: View {
             Label { Text("已记录摄入") } icon: { RoundedRectangle(cornerRadius: 2).fill(AppTheme.mealAccent).frame(width: 16, height: 8) }
             Label { Text("预估总消耗") } icon: { Text("┄").foregroundStyle(AppTheme.mealAccent) }
         }.font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-    }
-
-    private var selectedBucket: ProgressEnergyChartBucket? {
-        if let selectedDate {
-            return snapshot.energyBuckets.first { selectedDate >= $0.start && selectedDate < $0.end && $0.start <= Date.now }
-        }
-        return snapshot.energyBuckets.last { $0.intake != nil || $0.estimate != nil }
     }
 
     private var maximum: Double {
@@ -201,15 +190,5 @@ struct ProgressEnergyHistoryCard: View {
 
     private func text(_ value: Double?) -> String {
         value?.formatted(.number.precision(.fractionLength(0))) ?? "未记录"
-    }
-
-    private func energyText(_ value: Double?, missing: String) -> String {
-        value.map { text($0) + " kcal" } ?? missing
-    }
-
-    private func deficitText(_ day: ProgressDailyMetrics) -> String {
-        guard let estimate = day.energy.estimate else { return "待估算" }
-        let deficit = estimate.totalKilocalories - day.intake.value
-        return text(deficit) + " kcal"
     }
 }

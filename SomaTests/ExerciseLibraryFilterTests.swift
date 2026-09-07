@@ -6,7 +6,7 @@ final class ExerciseLibraryFilterTests: XCTestCase {
         let item = ExerciseLibraryClassification(name: "虚构推举", primary: ["胸大肌"], secondary: ["肱三头肌"], patterns: ["水平推"])
         var filter = ExerciseLibraryFilter()
         filter.region = .chest
-        filter.pattern = "水平推"
+        filter.pattern = ExerciseMovementKind.compound.rawValue
         filter.muscle = "肱三头肌"
         XCTAssertTrue(filter.matches(item, search: " 推举 "))
         XCTAssertFalse(filter.matches(item, search: "深蹲"))
@@ -21,6 +21,7 @@ final class ExerciseLibraryFilterTests: XCTestCase {
         let item = ExerciseLibraryClassification(name: "虚构蹲", primary: ["股四头肌", "臀大肌"], secondary: [], patterns: [" 蹲 ", "蹲", ""])
         XCTAssertEqual(item.regions, [.legs, .glutes])
         XCTAssertEqual(item.patterns, ["蹲"])
+        XCTAssertEqual(item.kinds, [.compound])
         let unknown = ExerciseLibraryClassification(name: "自定义", primary: ["尚未确认的肌群"], secondary: [], patterns: [])
         XCTAssertEqual(unknown.regions, [.unclassified])
         XCTAssertEqual(unknown.primary, ["尚未确认的肌群"])
@@ -28,6 +29,26 @@ final class ExerciseLibraryFilterTests: XCTestCase {
         filter.pattern = ExerciseLibraryClassification.unspecified
         XCTAssertTrue(filter.matches(unknown, search: ""))
         XCTAssertFalse(filter.matches(item, search: ""))
+    }
+
+    func testMovementKindsMapCompoundIsolationAndUnknown() {
+        let press = ExerciseLibraryClassification(
+            name: "虚构推举",
+            primary: ["胸大肌"],
+            secondary: ["肱三头肌"],
+            patterns: ["水平推", "肘伸"]
+        )
+        XCTAssertEqual(press.kinds, [.compound, .isolation])
+        let custom = ExerciseLibraryClassification(
+            name: "自定义",
+            primary: ["尚未确认的肌群"],
+            secondary: [],
+            patterns: ["自制标签"]
+        )
+        XCTAssertEqual(custom.kinds, [.unclassified])
+        XCTAssertEqual(ExerciseMovementKind.resolve("抗旋转"), .core)
+        XCTAssertEqual(ExerciseMovementKind.resolve("爆发"), .power)
+        XCTAssertEqual(ExerciseMovementKind.resolve("体能"), .cardio)
     }
 
     func testMuscleLabelsPreserveAnatomicalIdentity() {

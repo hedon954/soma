@@ -29,7 +29,7 @@ struct WorkoutRecordHeaderChips: View {
     }
 }
 
-/// 聊天中的已保存记录优先表达完成结果，不沿用详情编辑器的分栏表单。
+/// 聊天已保存记录：各组都相同时为 `60 秒 · 自重 · 间歇 60 秒`，右侧 `× 3`。
 struct WorkoutCompactRecordRunView: View {
     let target: String
     let weight: String
@@ -37,25 +37,13 @@ struct WorkoutCompactRecordRunView: View {
     let runCount: Int
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            inlineSummary
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 0) {
-                    Text(target)
-                    compactMetricDivider
-                    Text(weight)
-                }
-                HStack(spacing: 0) {
-                    WorkoutCompactGroupCountLabel(count: runCount)
-                    if let rest {
-                        compactMetricDivider
-                        Text(rest)
-                    }
-                }
-            }
+        HStack(alignment: .center, spacing: 8) {
+            Text(summary)
+                .font(.subheadline.monospacedDigit())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            WorkoutRunCountLabel(count: runCount)
         }
-        .font(.subheadline.monospacedDigit())
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget)
@@ -68,34 +56,23 @@ struct WorkoutCompactRecordRunView: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("workout-compact-inline-run")
+        .accessibilityLabel(summary)
     }
 
-    private var inlineSummary: some View {
-        HStack(spacing: 0) {
-            Text(target)
-            compactMetricDivider
-            Text(weight)
-            compactMetricDivider
-            WorkoutCompactGroupCountLabel(count: runCount)
-            if let rest {
-                compactMetricDivider
-                Text(rest)
-            }
+    private var summary: String {
+        var parts = [target, weight]
+        if let rest {
+            parts.append(rest)
         }
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var compactMetricDivider: some View {
-        WorkoutCompactMetricDivider()
+        return parts.joined(separator: " · ")
     }
 }
 
 struct WorkoutCompactMetricDivider: View {
     var body: some View {
-        Rectangle()
-            .fill(AppTheme.separator)
-            .frame(width: 0.5, height: 18)
-            .padding(.horizontal, 4)
+        Text("·")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
             .accessibilityHidden(true)
     }
 }
@@ -104,11 +81,7 @@ struct WorkoutCompactGroupCountLabel: View {
     let count: Int
 
     var body: some View {
-        Text("\(count) 组")
-            .font(.subheadline.monospacedDigit())
-            .fixedSize()
-            .accessibilityLabel("连续 \(count) 组")
-            .accessibilityIdentifier("workout-run-count-\(count)")
+        WorkoutRunCountLabel(count: count)
     }
 }
 

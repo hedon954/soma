@@ -2,6 +2,26 @@ import Foundation
 import SwiftData
 
 /// ADR 0047：确定性上下文包，替代两行 structuredContext。
+enum AgentContextPackFocus: Sendable {
+    case full
+    case meals
+    case workouts
+    case trends
+
+    init(skillID: String?) {
+        switch skillID {
+        case AgentSkill.nutritionAnalysis.rawValue:
+            self = .meals
+        case AgentSkill.workoutLogging.rawValue:
+            self = .workouts
+        case AgentSkill.trendAnalysis.rawValue:
+            self = .trends
+        default:
+            self = .full
+        }
+    }
+}
+
 enum AgentContextPackBuilder {
     static let maximumCharacters = 2800
 
@@ -11,7 +31,8 @@ enum AgentContextPackBuilder {
         in context: ModelContext,
         sessionID: UUID? = nil,
         businessDate: Date = .now,
-        timeZone: TimeZone = .current
+        timeZone: TimeZone = .current,
+        focus: AgentContextPackFocus = .full
     ) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -64,38 +85,46 @@ enum AgentContextPackBuilder {
 
         var sections: [String] = []
         sections.append(profileLine(profiles.first, latestBody: latestWeightBody))
-        sections.append(gymLine(gyms: gyms, equipment: equipment))
-        sections.append(dayWorkoutLine(
-            workouts: workouts,
-            businessDate: businessDate,
-            calendar: calendar,
-            definitions: definitions
-        ))
-        sections.append(dayMealLine(
-            meals: meals,
-            businessDate: businessDate,
-            calendar: calendar
-        ))
-        sections.append(trainingFrequencyLine(workouts: workouts, since: day7, label: "近7天"))
-        sections.append(trainingFrequencyLine(workouts: workouts, since: day28, label: "近28天"))
-        if let muscle = muscleDistribution(
-            workouts: workouts,
-            since: day28,
-            definitions: definitions
-        ) {
-            sections.append(muscle)
+        if focus == .full || focus == .workouts {
+            sections.append(gymLine(gyms: gyms, equipment: equipment))
+            sections.append(dayWorkoutLine(
+                workouts: workouts,
+                businessDate: businessDate,
+                calendar: calendar,
+                definitions: definitions
+            ))
         }
-        if let recentDays = recentTrainingDays(workouts: workouts, limit: 3) {
-            sections.append(recentDays)
+        if focus == .full || focus == .meals || focus == .trends {
+            sections.append(dayMealLine(
+                meals: meals,
+                businessDate: businessDate,
+                calendar: calendar
+            ))
         }
-        if let plan = activePlanLine(programs: programs, sessions: sessions, in: context) {
-            sections.append(plan)
+        if focus == .full || focus == .trends {
+            sections.append(trainingFrequencyLine(workouts: workouts, since: day7, label: "近7天"))
+            sections.append(trainingFrequencyLine(workouts: workouts, since: day28, label: "近28天"))
+            if let muscle = muscleDistribution(
+                workouts: workouts,
+                since: day28,
+                definitions: definitions
+            ) {
+                sections.append(muscle)
+            }
+            if let recentDays = recentTrainingDays(workouts: workouts, limit: 3) {
+                sections.append(recentDays)
+            }
+            if let weight = weightTrendLine(bodies: bodies) {
+                sections.append(weight)
+            }
         }
-        if let guided = activeGuidedLine(sessions: sessions) {
-            sections.append(guided)
-        }
-        if let weight = weightTrendLine(bodies: bodies) {
-            sections.append(weight)
+        if focus == .full || focus == .workouts {
+            if let plan = activePlanLine(programs: programs, sessions: sessions, in: context) {
+                sections.append(plan)
+            }
+            if let guided = activeGuidedLine(sessions: sessions) {
+                sections.append(guided)
+            }
         }
         if let sessionID,
            let writes = recentSessionWrites(

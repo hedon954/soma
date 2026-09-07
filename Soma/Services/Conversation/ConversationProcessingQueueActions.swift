@@ -131,6 +131,7 @@ extension ConversationProcessingService {
 
         let submittedAt = Date.now
         let retryTurnID = userMessage.turnID ?? UUID()
+        let previousJob = existingJobs.first { $0.userMessageID == userMessage.id }
         let businessDate = context.businessDate(
             for: userMessage.text,
             turnSentAt: userMessage.date
@@ -140,7 +141,10 @@ extension ConversationProcessingService {
             userText: userMessage.text,
             hasCurrentMedia: !userMessage.mediaAttachments.isEmpty,
             turnSentAt: userMessage.date,
-            businessSummary: context.structuredContext(for: businessDate),
+            businessSummary: context.structuredContext(
+                for: businessDate,
+                selectedSkillID: previousJob?.selectedSkillID
+            ),
             effectiveBusinessDate: businessDate,
             sessionID: context.session.id,
             in: context.modelContext

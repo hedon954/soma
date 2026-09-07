@@ -37,6 +37,7 @@ DEVELOPMENT_TEAM=6C6NQVDA4M make install-device
 `hedonwang@gmail.com`。
 
 使用虚构文字和演示媒体发送一次反馈，确认 QQ 邮箱“已发送”和 Gmail 收件箱都出现邮件。
+蜂窝网络常拦截 `465/587` SMTP；本机凭据有效时，5G 下失败应提示改用 Wi-Fi，而不是笼统的「稍后重试」。
 
 ## 对外开放前
 

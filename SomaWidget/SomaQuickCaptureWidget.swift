@@ -132,24 +132,31 @@ private struct SomaQuickCaptureProvider: TimelineProvider {
 }
 
 private struct SomaQuickCaptureEntryView: View {
-    private let tint = Color(red: 0.08, green: 0.73, blue: 0.39)
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    private var isAccented: Bool {
+        renderingMode == .accented
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(spacing: 7) {
                 Image(systemName: "waveform.path.ecg")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(isAccented ? Color.primary : SomaWidgetPalette.meal)
+                    .widgetAccentable()
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Soma")
                         .font(.headline.weight(.semibold))
+                        .foregroundStyle(isAccented ? Color.primary : SomaWidgetPalette.ink)
                     Text("快速记录")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(isAccented ? Color.secondary : SomaWidgetPalette.secondaryInk)
                 }
                 Spacer()
                 Text("Your body, understood.")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(isAccented ? Color.secondary : SomaWidgetPalette.secondaryInk)
             }
 
             HStack(spacing: 10) {
@@ -159,14 +166,7 @@ private struct SomaQuickCaptureEntryView: View {
             }
         }
         .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: [
-                    Color(uiColor: .systemBackground),
-                    tint.opacity(0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            isAccented ? Color.clear : SomaWidgetPalette.page
         }
     }
 
@@ -175,16 +175,17 @@ private struct SomaQuickCaptureEntryView: View {
             VStack(spacing: 7) {
                 Image(systemName: action.systemImage)
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(isAccented ? Color.primary : SomaWidgetPalette.meal)
+                    .widgetAccentable()
                 Text(action.homeTitle)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isAccented ? Color.primary : SomaWidgetPalette.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
-                Color(uiColor: .secondarySystemBackground).opacity(0.9),
+                isAccented ? Color.clear : SomaWidgetPalette.card,
                 in: RoundedRectangle(cornerRadius: 15, style: .continuous)
             )
         }
@@ -215,18 +216,19 @@ private struct SomaAgentJobLiveActivity: Widget {
             HStack(spacing: 12) {
                 Image(systemName: context.state.symbolName)
                     .font(.title2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SomaWidgetPalette.meal)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(context.state.phaseTitle)
                         .font(.headline)
+                        .foregroundStyle(SomaWidgetPalette.ink)
                     Text(statusDetail(context.state))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SomaWidgetPalette.secondaryInk)
                 }
                 Spacer()
             }
             .padding()
-            .activityBackgroundTint(Color(uiColor: .secondarySystemBackground))
+            .activityBackgroundTint(SomaWidgetPalette.card)
             .widgetURL(
                 URL(string: "soma://agent/turn/\(context.attributes.turnID.uuidString)")
             )
@@ -234,7 +236,7 @@ private struct SomaAgentJobLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Image(systemName: context.state.symbolName)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SomaWidgetPalette.meal)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     Text(context.state.phaseTitle)
@@ -247,13 +249,13 @@ private struct SomaAgentJobLiveActivity: Widget {
                 }
             } compactLeading: {
                 Image(systemName: context.state.symbolName)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SomaWidgetPalette.meal)
             } compactTrailing: {
                 Text("\(context.state.operationCount)")
                     .monospacedDigit()
             } minimal: {
                 Image(systemName: context.state.symbolName)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SomaWidgetPalette.meal)
             }
             .widgetURL(
                 URL(string: "soma://agent/turn/\(context.attributes.turnID.uuidString)")
@@ -281,18 +283,19 @@ private struct SomaWorkoutLiveActivity: Widget {
             HStack(spacing: 12) {
                 Image(systemName: context.state.symbolName)
                     .font(.title2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SomaWidgetPalette.training)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(context.state.phaseTitle)
                         .font(.headline)
+                        .foregroundStyle(SomaWidgetPalette.ink)
                     workoutStatus(context.state)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SomaWidgetPalette.secondaryInk)
                 }
                 Spacer()
             }
             .padding()
-            .activityBackgroundTint(Color(uiColor: .secondarySystemBackground))
+            .activityBackgroundTint(SomaWidgetPalette.card)
             .widgetURL(
                 URL(string: "soma://workout/session/\(context.attributes.sessionID.uuidString)")
             )
@@ -300,7 +303,7 @@ private struct SomaWorkoutLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Image(systemName: context.state.symbolName)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SomaWidgetPalette.training)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     Text(context.state.phaseTitle)
@@ -313,13 +316,13 @@ private struct SomaWorkoutLiveActivity: Widget {
                 }
             } compactLeading: {
                 Image(systemName: context.state.symbolName)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SomaWidgetPalette.training)
             } compactTrailing: {
                 Text("\(context.state.completedSetCount)/\(context.state.totalSetCount)")
                     .font(.caption2.monospacedDigit())
             } minimal: {
                 Image(systemName: context.state.symbolName)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SomaWidgetPalette.training)
             }
             .widgetURL(
                 URL(string: "soma://workout/session/\(context.attributes.sessionID.uuidString)")

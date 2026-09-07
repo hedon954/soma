@@ -329,7 +329,8 @@ enum WorkoutSharePosterBuilder {
         }
         let target: String = switch effort.targetKind {
         case .repetitions: effort.reps.map { "\($0)次" } ?? "次数未记录"
-        case .duration: effort.durationSeconds.map { "\($0)秒" } ?? "时长未记录"
+        case .duration:
+            effort.durationSeconds.map(DurationSecondsFormat.display) ?? "时长未记录"
         }
         return prefix.joined(separator: " ") + " · " + target
     }

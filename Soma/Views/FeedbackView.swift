@@ -2,13 +2,15 @@ import SwiftUI
 import UIKit
 
 enum FeedbackSuccessPresentationAction: Equatable {
-    case collapseEmbeddedEditor
-    case showConfirmation
+    case acknowledgeThenCollapse
+    case acknowledgeInPlace
 }
 
 enum FeedbackSuccessPresentationPolicy {
+    static let acknowledgementHold: Duration = .milliseconds(1000)
+
     static func action(isEmbedded: Bool) -> FeedbackSuccessPresentationAction {
-        isEmbedded ? .collapseEmbeddedEditor : .showConfirmation
+        isEmbedded ? .acknowledgeThenCollapse : .acknowledgeInPlace
     }
 }
 
@@ -28,6 +30,7 @@ struct FeedbackView: View {
     @State private var alert: FeedbackAlert?
     @State private var rating: Int?
     @State private var submissionTask: Task<Void, Never>?
+    @State private var showsSuccess = false
     @FocusState private var editorFocused: Bool
 
     var body: some View {
@@ -151,7 +154,7 @@ struct FeedbackView: View {
             )
             .lineLimit(isCompact ? 3 ... 8 : 5 ... 12)
             .focused($editorFocused)
-            .disabled(isSending)
+            .disabled(isSending || showsSuccess)
             .accessibilityLabel("反馈内容")
 
             Divider()
@@ -174,6 +177,36 @@ struct FeedbackView: View {
             )
             .stroke(AppTheme.separator, lineWidth: AppTheme.inputBorderWidth)
         }
+        .overlay {
+            if showsSuccess {
+                successAcknowledgement
+                    .transition(.scale(scale: 0.86).combined(with: .opacity))
+            }
+        }
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: AppTheme.cardRadius,
+                style: .continuous
+            )
+        )
+        .animation(.easeInOut(duration: 0.28), value: showsSuccess)
+        .sensoryFeedback(.success, trigger: showsSuccess)
+    }
+
+    private var successAcknowledgement: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.largeTitle)
+                .foregroundStyle(AppTheme.success)
+                .symbolEffect(.bounce, value: showsSuccess)
+            Text("已发送")
+                .font(.subheadline.weight(.medium))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppTheme.insetBackground.opacity(0.94))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("反馈已发送")
+        .accessibilityIdentifier("feedback-success-acknowledgement")
     }
 
     @ViewBuilder
@@ -206,6 +239,7 @@ struct FeedbackView: View {
         }
         .disabled(
             isSending
+                || showsSuccess
                 || attachments.count
                 >= FeedbackSubmissionPolicy.maximumAttachmentCount
         )
@@ -236,7 +270,7 @@ struct FeedbackView: View {
             }
         }
         .appPrimaryButtonStyle()
-        .disabled(isSending || isEmpty)
+        .disabled(isSending || showsSuccess || isEmpty)
         .accessibilityHint("提交当前文字和附件")
     }
 
@@ -297,16 +331,19 @@ struct FeedbackView: View {
                 attachments = []
                 rating = nil
                 draftID = UUID()
-                switch FeedbackSuccessPresentationPolicy.action(
+                showsSuccess = true
+                try await Task.sleep(
+                    for: FeedbackSuccessPresentationPolicy.acknowledgementHold
+                )
+                guard !Task.isCancelled else { return }
+                if FeedbackSuccessPresentationPolicy.action(
                     isEmbedded: isEmbedded
-                ) {
-                case .collapseEmbeddedEditor:
+                ) == .acknowledgeThenCollapse {
                     onSubmitted()
-                case .showConfirmation:
-                    alert = FeedbackAlert(
-                        title: "反馈已发送",
-                        message: "谢谢，你的反馈已经送达。"
-                    )
+                } else {
+                    withAnimation(.easeOut(duration: 0.32)) {
+                        showsSuccess = false
+                    }
                 }
             } catch is CancellationError {
                 return

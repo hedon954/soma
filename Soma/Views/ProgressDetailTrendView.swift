@@ -67,9 +67,7 @@ struct ProgressDetailTrendView: View {
                     if let activity = selected.record {
                         NavigationLink { ProgressRecentActivityDestination(activity: activity) } label: { selectionLabel(selected) }
                     } else {
-                        NavigationLink {
-                            InsightsView(initialPeriod: snapshot.window.period == .year ? .month : .day, initialDate: selected.date)
-                        } label: { selectionLabel(selected) }
+                        selectionLabel(selected)
                     }
                 }
             }

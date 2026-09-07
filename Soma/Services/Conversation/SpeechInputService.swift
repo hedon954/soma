@@ -159,6 +159,11 @@ final class SpeechInputService {
         statusMessage = ""
     }
 
+    func discardPending() {
+        pendingText = ""
+        pendingPause = 0
+    }
+
     private func commitPending() {
         let text = pendingText
         pendingText = ""

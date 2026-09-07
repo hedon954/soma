@@ -10,10 +10,12 @@
   - [PRD 054](054-progress-history-and-periods.md)（四周期历史）
   - [PRD 055](055-exercise-facets-and-meal-breakdown.md)（动作库多维筛选）
   - [PRD 051](051-self-healing-tool-arguments-and-wide-progress-disclosure.md)（修订 Tool 参数错误恢复）
+  - [PRD 058](058-feedback-duration-and-editable-calories.md)（反馈失败分类、时长时分秒、可编辑训练热量）
 - 下游落地：
   - [ADR 0000](../adr/0000-origin-through-0.0.11.md)
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
 - 后续修订：[PRD 056](056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
+- 后续修订：[PRD 057](057-coach-focus-progress-rings-and-library-clarity.md)（快捷按钮聚焦、记录饮食与听写预览）
 
 本文是活 PRD 链的起点，对应对话压缩后的滚动摘要：只保留 0.0.18 收口时仍然成立的要求，
 不含 0.0.1 到 0.0.18 沿途被替代的过渡方案。0.0.19 起的增量见后续活 PRD。

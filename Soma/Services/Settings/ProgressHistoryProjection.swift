@@ -39,6 +39,7 @@ struct ProgressProfileFacts: Sendable {
     var height: Double?
     var biologicalSex: BiologicalSex
     var baselines: [EnergyLifestyleBaseline]
+    var fitnessGoal: FitnessGoal?
 }
 
 struct ProgressDailyMetrics: Sendable, Identifiable {
@@ -95,6 +96,9 @@ struct ProgressHistorySnapshot: Sendable {
     let trainingDayCount: Int
     let logicalSets: Int
     let volume: Double
+    let latestWeightKG: Double?
+    let fitnessGoal: FitnessGoal?
+    let nutritionRings: ProgressNutritionRings?
 }
 
 enum ProgressHistoryProjection {
@@ -153,11 +157,29 @@ enum ProgressHistoryProjection {
                 intakeDayCount: intake.count, estimateDayCount: estimates.count
             )
         }
+        let latestWeight = weights.last { $0.activity.date <= now }?.weight
+        let goal = profile?.fitnessGoal
+        let nutritionRings: ProgressNutritionRings? = if window.period == .day, let day = days.first, !day.isFuture {
+            .day(
+                intake: day.intake.value,
+                protein: day.protein.value,
+                carbs: day.carbs.value,
+                fat: day.fat.value,
+                estimate: day.energy.estimate?.totalKilocalories,
+                weightKG: latestWeight,
+                fitnessGoal: goal
+            )
+        } else {
+            nil
+        }
         return .init(
             window: window, days: days, energyBuckets: buckets,
             averageIntake: mean(intake), averageEstimate: mean(estimates), intakeDayCount: intake.count, estimateDayCount: estimates.count,
             trainingDayCount: days.count(where: \.hasTraining), logicalSets: days.reduce(0) { $0 + $1.logicalSets },
-            volume: days.reduce(0) { $0 + $1.volume.value }
+            volume: days.reduce(0) { $0 + $1.volume.value },
+            latestWeightKG: latestWeight,
+            fitnessGoal: goal,
+            nutritionRings: nutritionRings
         )
     }
 

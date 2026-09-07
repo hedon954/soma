@@ -62,7 +62,8 @@ actor ProgressHistoryLoader {
         let profile = try modelContext.fetch(profileQuery).first.map { profile in
             try ProgressProfileFacts(
                 updatedAt: profile.updatedAt, birthDate: profile.birthDate, height: profile.height, biologicalSex: profile.biologicalSex,
-                baselines: EnergyLifestyleStorage.decode(profile.energyBaselinesData)
+                baselines: EnergyLifestyleStorage.decode(profile.energyBaselinesData),
+                fitnessGoal: FitnessGoal(rawValue: profile.fitnessGoal)
             )
         }
         return ProgressHistoryFacts(records: workouts + meals + body, profile: profile)

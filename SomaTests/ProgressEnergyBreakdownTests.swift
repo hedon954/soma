@@ -14,11 +14,11 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
             record(5, .workout, "虚构训练", 300)
         ])
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .intake).rows
-        XCTAssertEqual(rows.map(\.label), ["餐次未记录 · 早餐", "餐次未记录 · 晚餐", "已记录摄入"])
+        XCTAssertEqual(rows.map(\.label), ["餐次未记录 · 早餐", "餐次未记录 · 晚餐"])
         XCTAssertEqual(rows[0].value, "400 kcal")
         XCTAssertEqual(rows[1].value, "未估算")
         XCTAssertEqual(snapshot.days.first?.intake.missingCount, 1)
-        XCTAssertEqual(rows.last?.value, "400 kcal")
+        XCTAssertFalse(rows.contains { $0.id == "summary" })
         XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
     }
 
@@ -28,9 +28,8 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
                                                   title: "虚构餐食", detail: type.rawValue, metric: nil), calories: 100)
         }
         let rows = ProgressEnergyBreakdown(snapshot: make(.day, records: records), kind: .intake).rows
-        XCTAssertEqual(rows.dropLast().map(\.label), MealType.allCases.map { $0.rawValue + " · 虚构餐食" })
-        XCTAssertEqual(rows.dropLast().map(\.tone), MealType.allCases.map { .mealType($0) })
-        XCTAssertEqual(rows.last?.tone, .intakeTotal)
+        XCTAssertEqual(rows.map(\.label), MealType.allCases.map { $0.rawValue + " · 虚构餐食" })
+        XCTAssertEqual(rows.map(\.tone), MealType.allCases.map { .mealType($0) })
     }
 
     func testPeriodIntakeUsesSameCompletedRecordedDaysAsDashboard() {
@@ -40,43 +39,83 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
             record(6, .meal, "未来", 9000)
         ])
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .intake).rows
-        XCTAssertEqual(rows.count, 3)
-        XCTAssertEqual(rows.last?.label, "日均摄入")
-        XCTAssertEqual(rows.last?.value, "1,500 kcal")
+        XCTAssertEqual(rows.map(\.value), ["1,000 kcal", "2,000 kcal"])
+        XCTAssertFalse(rows.contains { $0.label.contains("日均") })
         XCTAssertEqual(snapshot.averageIntake, 1500)
     }
 
-    func testExpenditureComponentsAddUpWithoutAddingTrainingAgain() throws {
+    func testExpenditureComponentsAddUpWithoutAddingTrainingAgain() {
         let snapshot = make(.day, records: [record(5, .workout, "训练", 800)], hasProfile: true)
-        let estimate = try XCTUnwrap(snapshot.days.first?.energy.estimate)
         let breakdown = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure)
-        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "活动等消耗", "活动系数", "预估总消耗"])
+        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "活动等消耗", "活动系数"])
         XCTAssertEqual(breakdown.rows[0].value, "1,618 kcal")
         XCTAssertEqual(breakdown.rows[1].value, "647 kcal")
         XCTAssertEqual(breakdown.rows[2].value, "1.40")
-        XCTAssertEqual(breakdown.rows.last?.value, estimate.totalKilocalories.formatted(.number.precision(.fractionLength(0))) + " kcal")
-        XCTAssertFalse(breakdown.rows.contains { $0.label.contains("训练") })
+        XCTAssertFalse(breakdown.rows.contains { $0.label.contains("训练") || $0.label.contains("预估总消耗") })
     }
 
-    func testPeriodExpenditureUsesSameEstimateDaysAndWeightedComponents() throws {
+    func testPeriodExpenditureUsesSameEstimateDaysAndWeightedComponents() {
         let snapshot = make(.month, records: [], hasProfile: true)
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure).rows
         XCTAssertEqual(snapshot.estimateDayCount, 4)
-        XCTAssertEqual(rows.last?.label, "日均预估总消耗")
-        XCTAssertEqual(rows.last?.value, try XCTUnwrap(snapshot.averageEstimate?.formatted(.number.precision(.fractionLength(0)))) + " kcal")
+        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均活动等消耗", "综合活动系数"])
+        XCTAssertFalse(rows.contains { $0.label.contains("预估总消耗") })
     }
 
     func testEmptyAndUnavailableHaveSmallHonestLists() {
         let snapshot = make(.day, records: [])
         let intake = ProgressEnergyBreakdown(snapshot: snapshot, kind: .intake)
-        XCTAssertEqual(intake.rows.count, 1)
-        XCTAssertEqual(intake.rows.first?.value, "0 kcal")
+        XCTAssertTrue(intake.rows.isEmpty)
         let expenditure = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure)
         XCTAssertEqual(expenditure.rows.count, 1)
         XCTAssertEqual(expenditure.rows.first?.value, "缺少静息资料")
+        let protein = ProgressEnergyBreakdown(snapshot: snapshot, kind: .protein)
+        XCTAssertTrue(protein.rows.isEmpty)
     }
 
-    func testPeriodFactorUsesWeightedRestingAndSameDailyEstimates() throws {
+    func testDailyProteinListsMealGramsAndPreservesMissingEvidence() {
+        let snapshot = make(.day, records: [
+            record(5, .meal, "早餐", 400, protein: 38),
+            record(5, .meal, "晚餐", 500),
+            record(5, .workout, "虚构训练", 300, protein: 99)
+        ])
+        let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .protein).rows
+        XCTAssertEqual(rows.map(\.label), ["餐次未记录 · 早餐", "餐次未记录 · 晚餐"])
+        XCTAssertEqual(rows[0].value, "38 g")
+        XCTAssertEqual(rows[1].value, "未记录")
+        XCTAssertEqual(rows.map(\.tone), [.protein, .protein])
+        XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
+    }
+
+    func testDailyCarbsAndFatUseTheirOwnSummaries() {
+        let snapshot = make(.day, records: [
+            record(5, .meal, "午餐", 600, carbs: 72, fat: 18)
+        ])
+        let carbs = ProgressEnergyBreakdown(snapshot: snapshot, kind: .carbs).rows
+        XCTAssertEqual(carbs.map(\.label), ["餐次未记录 · 午餐"])
+        XCTAssertEqual(carbs[0].value, "72 g")
+        XCTAssertEqual(carbs.map(\.tone), [.carbs])
+        let fat = ProgressEnergyBreakdown(snapshot: snapshot, kind: .fat).rows
+        XCTAssertEqual(fat.map(\.label), ["餐次未记录 · 午餐"])
+        XCTAssertEqual(fat[0].value, "18 g")
+        XCTAssertEqual(fat.map(\.tone), [.fat])
+    }
+
+    func testPeriodProteinUsesSameCompletedRecordedDaysAsDashboard() {
+        let snapshot = make(.month, records: [
+            record(1, .meal, "A", 1000, protein: 40),
+            record(2, .meal, "B", 2000, protein: 80),
+            record(3, .meal, "缺项", nil),
+            record(5, .meal, "今天", 500, protein: 20),
+            record(6, .meal, "未来", 9000, protein: 999)
+        ])
+        let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .protein).rows
+        XCTAssertEqual(rows.map(\.value), ["40 g", "80 g"])
+        XCTAssertFalse(rows.contains { $0.label.contains("日均") })
+        XCTAssertEqual(rows.map(\.tone), [.protein, .protein])
+    }
+
+    func testPeriodFactorUsesWeightedRestingAndSameDailyEstimates() {
         let weights = [
             ProgressHistoryRecord(activity: .init(id: UUID(), kind: .body, date: date(1), title: "A", detail: "", metric: nil), weight: 60),
             ProgressHistoryRecord(activity: .init(id: UUID(), kind: .body, date: date(2), title: "B", detail: "", metric: nil), weight: 90)
@@ -94,7 +133,7 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         let estimates = snapshot.days.filter(\.isCompleteDay).compactMap(\.energy.estimate)
         let ratio = estimates.reduce(0) { $0 + $1.totalKilocalories } / estimates.reduce(0) { $0 + $1.restingKilocalories }
         XCTAssertEqual(rows[2].value, ratio.formatted(.number.precision(.fractionLength(2))))
-        XCTAssertEqual(rows.last?.value, try XCTUnwrap(snapshot.averageEstimate).formatted(.number.precision(.fractionLength(0))) + " kcal")
+        XCTAssertEqual(rows.last?.label, "综合活动系数")
     }
 
     private func make(_ period: ProgressPeriod, records: [ProgressHistoryRecord], hasProfile: Bool = false) -> ProgressHistorySnapshot {
@@ -109,8 +148,22 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         )
     }
 
-    private func record(_ day: Int, _ kind: ProgressRecentActivity.Kind, _ title: String, _ calories: Double?) -> ProgressHistoryRecord {
-        .init(activity: .init(id: UUID(), kind: kind, date: date(day), title: title, detail: "", metric: nil), calories: calories)
+    private func record(
+        _ day: Int,
+        _ kind: ProgressRecentActivity.Kind,
+        _ title: String,
+        _ calories: Double?,
+        protein: Double? = nil,
+        carbs: Double? = nil,
+        fat: Double? = nil
+    ) -> ProgressHistoryRecord {
+        .init(
+            activity: .init(id: UUID(), kind: kind, date: date(day), title: title, detail: "", metric: nil),
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat
+        )
     }
 
     private func date(_ day: Int) -> Date {

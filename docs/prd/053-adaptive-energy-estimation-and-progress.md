@@ -6,6 +6,7 @@
 - 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md)
 - 下游落地：[ADR 0114](../adr/0114-progress-periods-and-adaptive-energy.md)、[PRD 054](054-progress-history-and-periods.md)
 - 后续修订：[ADR 0115](../adr/0115-energy-default-reference-and-compact-details.md) 增加默认起步参考，不再要求先手动配置
+- 后续修订：[PRD 057](057-coach-focus-progress-rings-and-library-clarity.md) 日页用圆环对照推荐摄入；周月年保持日均图，不展示环或周期跳转
 - 跟踪：[BUG-20](../../.codex/plans/2026-09-02-coach-training-critical-bugfixes.md)、[实施 TODO](../../.codex/plans/2026-09-05-progress-redesign-implementation.md)
 
 ## 我们的目标是什么

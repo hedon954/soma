@@ -52,14 +52,15 @@ extension ConversationProcessingContext {
         )
     }
 
-    func structuredContext(for businessDate: Date) -> String {
+    func structuredContext(for businessDate: Date, selectedSkillID: String? = nil) -> String {
         AgentContextPackBuilder.build(
             gyms: gyms,
             equipment: equipment,
             in: modelContext,
             sessionID: session.id,
             businessDate: businessDate,
-            timeZone: session.businessTimeZone
+            timeZone: session.businessTimeZone,
+            focus: AgentContextPackFocus(skillID: selectedSkillID)
         )
     }
 }

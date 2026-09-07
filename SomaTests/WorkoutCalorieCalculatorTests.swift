@@ -260,5 +260,13 @@ final class WorkoutCalorieCalculatorTests: XCTestCase {
 
         XCTAssertEqual(workout.estimatedCalories, expected.calories)
         XCTAssertTrue(workout.calorieDurationEstimated)
+
+        WorkoutCalorieCalculator.refreshStoredEstimate(
+            workout,
+            in: context,
+            calorieOverride: 321
+        )
+        XCTAssertEqual(workout.estimatedCalories, 321)
+        XCTAssertEqual(workout.calorieMET, expected.met)
     }
 }

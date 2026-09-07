@@ -295,9 +295,11 @@ private struct WorkoutRecordEditor: View {
             // PRD 020：热量估算、AI 解析与原始记录默认折叠，展开后仍可完整编辑。
             Section {
                 DisclosureGroup(isExpanded: $caloriesExpanded) {
-                    LabeledContent(
+                    numericField(
                         "预计消耗",
-                        value: EditorValue.int(estimatedCalories).map { "约 \($0) kcal" } ?? "无法计算"
+                        unit: "kcal",
+                        text: $estimatedCalories,
+                        keyboard: .numberPad
                     )
                     LabeledContent(
                         "MET",
@@ -340,7 +342,7 @@ private struct WorkoutRecordEditor: View {
                 }
             } footer: {
                 if caloriesExpanded {
-                    Text("MET × 最近体重记录 × 计算时长。推算时长只用于热量估算，不会填入上方的实际训练时长。")
+                    Text("MET × 最近体重记录 × 计算时长。可改写预计消耗，清空后按公式重算。推算时长只用于热量估算，不会填入上方的实际训练时长。")
                 }
             }
 
@@ -407,6 +409,7 @@ private struct WorkoutRecordEditor: View {
             && EditorValue.validInt(restSeconds, range: 0 ... 3600)
             && EditorValue.validInt(durationMinutes, range: 0 ... 1440)
             && EditorValue.validInt(formScore, range: 0 ... 100)
+            && EditorValue.validInt(estimatedCalories, range: 0 ... 20000)
     }
 
     private var isDirty: Bool {
@@ -416,6 +419,7 @@ private struct WorkoutRecordEditor: View {
             || EditorValue.int(restSeconds) != workout.restSeconds
             || EditorValue.int(durationMinutes) != workout.durationMinutes
             || EditorValue.int(formScore) != workout.formScore
+            || EditorValue.int(estimatedCalories) != workout.estimatedCalories
             || EditorValue.optionalText(intensity) != workout.intensity
             || EditorValue.optionalText(feedback) != workout.feedback
             || notes.trimmingCharacters(in: .whitespacesAndNewlines) != workout.notes
@@ -496,7 +500,11 @@ private struct WorkoutRecordEditor: View {
         workout.intensity = EditorValue.optionalText(intensity)
         workout.feedback = EditorValue.optionalText(feedback)
         workout.notes = normalizedNotes
-        WorkoutCalorieCalculator.refreshStoredEstimate(workout, in: modelContext)
+        WorkoutCalorieCalculator.refreshStoredEstimate(
+            workout,
+            in: modelContext,
+            calorieOverride: EditorValue.int(estimatedCalories)
+        )
         estimatedCalories = EditorValue.string(workout.estimatedCalories)
         calorieMET = EditorValue.string(workout.calorieMET)
         calorieDurationMinutes = EditorValue.string(workout.calorieDurationMinutes)

@@ -195,8 +195,10 @@ enum PerformanceTestFixture {
         // 回归真机大会话故障：最后一条回复引用一份十项饮食记录。旧实现会在页面
         // 出现时一次性创建几十个 TextField，并由 ViewThatFits 重复构建候选布局。
         let mealTurnID = UUID()
-        let mealItems = (1 ... 10).map { index in
-            MealItem(
+        var mealItems: [MealItem] = []
+        mealItems.reserveCapacity(10)
+        for index in 1 ... 10 {
+            let item = MealItem(
                 name: "虚构菜品 \(index)",
                 portionDescription: "虚构份量",
                 calories: 50 + index,
@@ -204,6 +206,7 @@ enum PerformanceTestFixture {
                 carbs: Double(index * 2),
                 fat: Double(index) / 2
             )
+            mealItems.append(item)
         }
         let meal = MealEntry(
             date: olderSession.startedAt.addingTimeInterval(1),
@@ -486,20 +489,25 @@ enum PerformanceTestFixture {
             ))
         }
 
+        var durationSetEntries: [WorkoutSetEvidence] = []
+        durationSetEntries.reserveCapacity(3)
+        for index in 1 ... 3 {
+            let evidence = WorkoutSetEvidence(
+                logicalSetIndex: index,
+                side: recordedSide,
+                targetKind: .duration,
+                durationSeconds: 20,
+                externalWeightKG: 0,
+                restSeconds: index < 3 ? 30 : nil
+            )
+            durationSetEntries.append(evidence)
+        }
+
         let workout = WorkoutEntry(
             date: startedAt.addingTimeInterval(2),
             exercise: definition.canonicalName,
             exerciseID: definition.id,
-            setEntries: (1 ... 3).map { index in
-                WorkoutSetEvidence(
-                    logicalSetIndex: index,
-                    side: recordedSide,
-                    targetKind: .duration,
-                    durationSeconds: 20,
-                    externalWeightKG: 0,
-                    restSeconds: index < 3 ? 30 : nil
-                )
-            },
+            setEntries: durationSetEntries,
             restSeconds: 30,
             sourceTurnID: turnID,
             sourceSessionID: session.id
@@ -654,20 +662,25 @@ enum PerformanceTestFixture {
         context.insert(session)
         context.insert(performance)
 
+        var repetitionSetEntries: [WorkoutSetEvidence] = []
+        repetitionSetEntries.reserveCapacity(5)
+        for index in 1 ... 5 {
+            let evidence = WorkoutSetEvidence(
+                logicalSetIndex: index,
+                side: WorkoutEffortSide.none,
+                targetKind: .repetitions,
+                reps: 5,
+                externalWeightKG: 50,
+                restSeconds: index < 5 ? 60 : nil
+            )
+            repetitionSetEntries.append(evidence)
+        }
+
         let entry = WorkoutEntry(
             date: session.startedAt,
             exercise: definition.canonicalName,
             exerciseID: definition.id,
-            setEntries: (1 ... 5).map { index in
-                WorkoutSetEvidence(
-                    logicalSetIndex: index,
-                    side: WorkoutEffortSide.none,
-                    targetKind: .repetitions,
-                    reps: 5,
-                    externalWeightKG: 50,
-                    restSeconds: index < 5 ? 60 : nil
-                )
-            },
+            setEntries: repetitionSetEntries,
             restSeconds: 60,
             sourceWorkoutSessionID: session.id,
             sourcePerformanceID: performance.id,

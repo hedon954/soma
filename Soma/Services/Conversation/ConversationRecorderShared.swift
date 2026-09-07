@@ -77,29 +77,38 @@ extension ConversationRecorder {
         exercise: ExerciseDefinition? = nil
     ) -> [WorkoutSetEvidence]? {
         if let entries = arguments.setEntries {
-            return entries.map {
-                let targetKind = $0.targetKind
-                    ?? arguments.targetKind
-                    ?? ExerciseLoggingProfile.resolvedTargetKind(
-                        exercise: exercise,
-                        reps: $0.reps,
-                        durationSeconds: $0.durationSeconds
+            return WorkoutRestPropagation.propagate(
+                entries.map {
+                    let targetKind = $0.targetKind
+                        ?? arguments.targetKind
+                        ?? ExerciseLoggingProfile.resolvedTargetKind(
+                            exercise: exercise,
+                            reps: $0.reps,
+                            durationSeconds: $0.durationSeconds
+                        )
+                    return WorkoutSetEvidence(
+                        logicalSetIndex: $0.logicalSetIndex,
+                        side: $0.side,
+                        targetKind: targetKind,
+                        reps: targetKind == .repetitions ? $0.reps : nil,
+                        durationSeconds: targetKind == .duration ? $0.durationSeconds : nil,
+                        externalWeightKG: $0.externalWeightKG,
+                        restSeconds: $0.restSeconds
                     )
-                return WorkoutSetEvidence(
-                    logicalSetIndex: $0.logicalSetIndex,
-                    side: $0.side,
-                    targetKind: targetKind,
-                    reps: targetKind == .repetitions ? $0.reps : nil,
-                    durationSeconds: targetKind == .duration ? $0.durationSeconds : nil,
-                    externalWeightKG: $0.externalWeightKG,
-                    restSeconds: $0.restSeconds
-                )
-            }
+                },
+                workoutRestSeconds: arguments.restSeconds
+            )
         }
-        return legacyWorkoutSetEntries(
+        guard let legacy = legacyWorkoutSetEntries(
             sets: arguments.sets,
             reps: arguments.reps,
             weight: arguments.weight
+        ) else {
+            return nil
+        }
+        return WorkoutRestPropagation.propagate(
+            legacy,
+            workoutRestSeconds: arguments.restSeconds
         )
     }
 

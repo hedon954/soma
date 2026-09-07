@@ -26,6 +26,15 @@ extension EnvironmentValues {
         get { self[CoachTabIsActiveKey.self] }
         set { self[CoachTabIsActiveKey.self] = newValue }
     }
+
+    var insightsTabIsActive: Bool {
+        get { self[InsightsTabIsActiveKey.self] }
+        set { self[InsightsTabIsActiveKey.self] = newValue }
+    }
+}
+
+private struct InsightsTabIsActiveKey: EnvironmentKey {
+    static let defaultValue = true
 }
 
 extension Notification.Name {
@@ -127,6 +136,7 @@ final class CoachComposerState {
     var attachments: [PendingAttachment] = []
     var useLocalForNextMessage = false
     var selectedShortcutID: String?
+    var autofilledPrompt: String?
     var selectedExerciseSuggestion: ExerciseInputSuggestion?
     var isPersistingSubmission = false
     var focusRequest = UUID()
@@ -154,6 +164,7 @@ final class CoachComposerState {
         useLocalForNextMessage = false
         selectedExerciseSuggestion = nil
         selectedShortcutID = nil
+        autofilledPrompt = nil
         dismissKeyboard()
     }
 
@@ -198,6 +209,48 @@ final class CoachComposerState {
 
     func appendSpeechSegment(_ segment: String, pause: TimeInterval = 0) {
         draft = SpeechDraftAppend.append(segment, to: draft, pause: pause)
+    }
+
+    func toggleShortcut(_ shortcut: AgentInputShortcut) {
+        if selectedShortcutID == shortcut.id {
+            if draft == shortcut.suggestedPrompt || draft == autofilledPrompt {
+                draft = ""
+            }
+            selectedShortcutID = nil
+            autofilledPrompt = nil
+            return
+        }
+        selectedShortcutID = shortcut.id
+        guard trimmedDraft.isEmpty,
+              let prompt = shortcut.suggestedPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty
+        else {
+            return
+        }
+        draft = prompt
+        autofilledPrompt = prompt
+    }
+
+    var displayedSpeechDraft: String {
+        guard let speechInput,
+              speechInput.isListening,
+              !speechInput.pendingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return draft
+        }
+        return SpeechDraftAppend.append(speechInput.pendingText, to: draft, pause: 0)
+    }
+
+    func replaceDraftFromSpeechPreview(_ value: String) {
+        if value == displayedSpeechDraft {
+            return
+        }
+        // 听写进行中 TextField 常把上一帧预览回写进来；那不是用户改字。
+        if speechInput?.isListening == true {
+            return
+        }
+        draft = value
+        speechInput?.discardPending()
     }
 
     /// 草稿一旦偏离所选建议文本，精确快捷记录立即失效，

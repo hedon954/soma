@@ -37,6 +37,10 @@ final class SpeechInputSessionTests: XCTestCase {
         await fulfillment(of: [started], timeout: 2)
         session.result?("错误猜测", false, 0)
         XCTAssertEqual(state.draft, "手动输入")
+        XCTAssertEqual(state.displayedSpeechDraft, "手动输入错误猜测")
+        state.replaceDraftFromSpeechPreview("手动输入")
+        XCTAssertEqual(state.draft, "手动输入")
+        XCTAssertEqual(state.displayedSpeechDraft, "手动输入错误猜测")
         state.draft = "改过的输入，"
         session.result?("准确结果", true, 0)
         XCTAssertEqual(state.draft, "改过的输入，准确结果")

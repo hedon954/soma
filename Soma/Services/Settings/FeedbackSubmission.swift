@@ -10,12 +10,12 @@ enum FeedbackMailConfiguration {
             forResource: "FeedbackCredentials",
             withExtension: "plist"
         ) else {
-            throw FeedbackSubmissionError.deliveryUnavailable
+            throw FeedbackSubmissionError.configurationMissing
         }
         do {
             return try credentials(plistData: Data(contentsOf: url))
         } catch {
-            throw FeedbackSubmissionError.deliveryUnavailable
+            throw FeedbackSubmissionError.configurationMissing
         }
     }
 
@@ -34,7 +34,7 @@ enum FeedbackMailConfiguration {
                 plist["SMTPAuthorizationCode"]
             )
         else {
-            throw FeedbackSubmissionError.deliveryUnavailable
+            throw FeedbackSubmissionError.configurationMissing
         }
         return FeedbackQQMailCredentials(
             senderAddress: senderAddress,
@@ -210,6 +210,9 @@ enum FeedbackSubmissionError: LocalizedError, Equatable {
     case tooManyAttachments
     case attachmentsTooLarge
     case attachmentUnavailable
+    case configurationMissing
+    case authenticationFailed
+    case networkUnavailable
     case deliveryUnavailable
 
     var errorDescription: String? {
@@ -224,6 +227,12 @@ enum FeedbackSubmissionError: LocalizedError, Equatable {
             "附件总大小不能超过 25 MB，请移除较大的视频后重试。"
         case .attachmentUnavailable:
             "一项照片或视频已无法读取，请移除后重新添加。"
+        case .configurationMissing:
+            "本机尚未配置反馈邮箱，请填写 FeedbackCredentials.plist 后重新安装。"
+        case .authenticationFailed:
+            "反馈邮箱授权已失效，请更新本机 QQ SMTP 授权码后重试。"
+        case .networkUnavailable:
+            "当前网络无法连接邮件服务。蜂窝网络常会拦截 SMTP，请改用 Wi-Fi 后重试。"
         case .deliveryUnavailable:
             "反馈暂时无法发送，请稍后重试。"
         }

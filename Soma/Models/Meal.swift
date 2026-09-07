@@ -186,6 +186,7 @@ final class MealEntry: BusinessIdentifiedModel {
     }
 
     func replaceItemsAndDeriveTotals(_ newItems: [MealItem]) {
+        let previous = items
         items = newItems
         nutritionSource = .derivedFromItems
         let totals = MealNutritionTotals.derive(from: newItems)
@@ -193,6 +194,7 @@ final class MealEntry: BusinessIdentifiedModel {
         protein = totals.protein
         carbs = totals.carbs
         fat = totals.fat
+        guard previous != newItems else { return }
         // 菜品或份量变化后，旧的定性判断不再可靠；Agent 或用户可显式重新填写。
         glycemicSpeed = nil
         glycemicAssessment = ""

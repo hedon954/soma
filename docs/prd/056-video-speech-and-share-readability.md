@@ -8,6 +8,7 @@
 - 版本：Unreleased
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)、[PRD 052](052-coach-training-and-lifecycle-reliability.md)
 - 下游落地：[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)
+- 后续修订：[PRD 057](057-coach-focus-progress-rings-and-library-clarity.md) 未确认听写片段实时预览，草稿仍只接受确认片段
 
 ## 背景
 

@@ -67,4 +67,26 @@ final class AgentPromptCustomizationTests: XCTestCase {
             AgentSkill.movementAnalysis.defaultText
         )
     }
+
+    func testSelectedSkillOmitsCatalogAndKeepsSafetyContract() throws {
+        let suiteName = "SomaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let focused = ReActAgentPrompt.system(
+            defaults: defaults,
+            selectedSkillID: AgentSkill.nutritionAnalysis.rawValue
+        )
+        XCTAssertTrue(focused.contains(ReActAgentPrompt.fixedIdentity))
+        XCTAssertTrue(focused.contains(ReActAgentPrompt.fixedContract))
+        XCTAssertFalse(focused.contains("可用 Skills"))
+        XCTAssertFalse(focused.contains("能力范围"))
+        XCTAssertFalse(focused.contains(AgentSkill.movementAnalysis.rawValue))
+
+        let snapshots = AgentSkill.snapshots(
+            defaults: defaults,
+            selectedSkillID: AgentSkill.nutritionAnalysis.rawValue
+        )
+        XCTAssertEqual(snapshots.map(\.id), [AgentSkill.nutritionAnalysis.rawValue])
+    }
 }

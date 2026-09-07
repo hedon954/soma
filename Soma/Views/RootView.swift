@@ -497,6 +497,7 @@ struct RootView: View {
     private var insightsTab: some View {
         InsightsRootTab(transition: tabTransition, navigation: tabNavigation)
             .id(tabStackIDs[.insights])
+            .environment(\.insightsTabIsActive, selectedTab == .insights)
     }
 
     private var settingsTab: some View {

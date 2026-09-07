@@ -9,8 +9,7 @@ struct ExerciseLibrarySidebar: View {
 
     private enum Axis: String {
         case body = "身体部位"
-        case pattern = "动作模式"
-        case muscle = "受力肌群"
+        case kind = "动作类型"
     }
 
     var body: some View {
@@ -41,23 +40,16 @@ struct ExerciseLibrarySidebar: View {
                         }
                     }
                 }
-                heading(.pattern)
-                if expandedAxis == .pattern {
-                    ForEach(patterns, id: \.self) { pattern in
-                        item(pattern, selected: filter.pattern == pattern, id: "pattern-\(pattern)", depth: 1) {
-                            filter = ExerciseLibraryFilter(pattern: pattern)
-                        }
-                    }
-                }
-                heading(.muscle)
-                if expandedAxis == .muscle {
-                    Text("主要与辅助").font(.system(size: 11)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 12).padding(.vertical, 4)
-                    ForEach(allMuscles, id: \.self) { muscle in
-                        item(muscle, selected: filter.region == nil && filter.muscle == muscle,
-                             id: "muscle-\(muscle)", depth: 1)
-                        {
-                            filter = ExerciseLibraryFilter(muscle: muscle)
+                heading(.kind)
+                if expandedAxis == .kind {
+                    ForEach(ExerciseMovementKind.allCases) { kind in
+                        item(
+                            kind.rawValue,
+                            selected: filter.pattern == kind.rawValue,
+                            id: "kind-\(kind.rawValue)",
+                            depth: 1
+                        ) {
+                            filter = ExerciseLibraryFilter(pattern: kind.rawValue)
                         }
                     }
                 }
@@ -131,17 +123,6 @@ struct ExerciseLibrarySidebar: View {
             result.formUnion(item.primary.filter { ExerciseBodyRegion.resolve($0) == region })
         }
         return sorted(values)
-    }
-
-    private var patterns: [String] {
-        sorted(classifications.reduce(into: Set<String>()) { $0.formUnion($1.patterns) })
-            + [ExerciseLibraryClassification.unspecified]
-    }
-
-    private var allMuscles: [String] {
-        sorted(classifications.reduce(into: Set<String>()) {
-            $0.formUnion($1.primary.union($1.secondary))
-        }) + [ExerciseLibraryClassification.unspecified]
     }
 
     private func sorted(_ values: Set<String>) -> [String] {

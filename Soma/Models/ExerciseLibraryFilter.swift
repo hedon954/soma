@@ -7,6 +7,7 @@ struct ExerciseLibraryClassification: Equatable {
     let primary: Set<String>
     let secondary: Set<String>
     let patterns: Set<String>
+    let kinds: Set<ExerciseMovementKind>
     let regions: Set<ExerciseBodyRegion>
 
     init(name: String, primary: [String], secondary: [String], patterns: [String]) {
@@ -14,12 +15,49 @@ struct ExerciseLibraryClassification: Equatable {
         self.primary = Self.cleaned(primary)
         self.secondary = Self.cleaned(secondary)
         self.patterns = Self.cleaned(patterns)
+        let mappedKinds = Set(self.patterns.map(ExerciseMovementKind.resolve))
+            .subtracting([.unclassified])
+        kinds = mappedKinds.isEmpty ? [.unclassified] : mappedKinds
         let mapped = Set(self.primary.compactMap(ExerciseBodyRegion.resolve))
         regions = mapped.isEmpty ? [.unclassified] : mapped
     }
 
     private static func cleaned(_ values: [String]) -> Set<String> {
         Set(values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+    }
+}
+
+enum ExerciseMovementKind: String, CaseIterable, Identifiable {
+    case compound = "复合力量"
+    case isolation = "孤立训练"
+    case core = "核心"
+    case power = "爆发表现"
+    case cardio = "有氧体能"
+    case unclassified = "未标注"
+
+    var id: String {
+        rawValue
+    }
+
+    static func resolve(_ pattern: String) -> Self {
+        switch pattern.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "蹲", "单腿蹲", "弓步", "髋铰链", "水平推", "垂直推", "水平拉", "垂直拉",
+             "负重行走", "全身", "臀桥", "拉", "单腿":
+            .compound
+        case "爆发", "三关节伸展":
+            .power
+        case "体能":
+            .cardio
+        case "躯干屈曲", "旋转", "抗旋转", "抗伸展", "核心稳定", "核心":
+            .core
+        case "膝伸", "膝屈", "髋伸", "髋屈", "髋外展", "髋内收", "肘伸", "肘屈",
+             "肩外展", "肩前屈", "肩伸展", "跖屈", "腕屈伸", "肩胛后缩", "肩胛上提",
+             "水平内收", "水平外展", "器械孤立", "手臂孤立", "肩部孤立", "胸部孤立",
+             "背部孤立", "小腿孤立", "前臂孤立", "前臂", "握力", "颈屈伸":
+            .isolation
+        default:
+            .unclassified
+        }
     }
 }
 
@@ -81,8 +119,11 @@ struct ExerciseLibraryFilter: Equatable {
         if let region, !item.regions.contains(region) {
             return false
         }
-        if let pattern, !matches(pattern, values: item.patterns) {
-            return false
+        if let pattern {
+            let kinds = Set(item.kinds.map(\.rawValue))
+            if !matches(pattern, values: kinds) {
+                return false
+            }
         }
         let muscles = primaryOnly ? item.primary : item.primary.union(item.secondary)
         if let muscle, !matches(muscle, values: muscles) {
@@ -92,6 +133,6 @@ struct ExerciseLibraryFilter: Equatable {
     }
 
     private func matches(_ selection: String, values: Set<String>) -> Bool {
-        selection == ExerciseLibraryClassification.unspecified ? values.isEmpty : values.contains(selection)
+        values.contains(selection)
     }
 }

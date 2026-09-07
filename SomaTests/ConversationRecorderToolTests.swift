@@ -45,6 +45,7 @@ final class ConversationRecorderToolTests: XCTestCase {
         XCTAssertEqual(records.count, 1)
         XCTAssertEqual(records.first?.exercise, "杠铃深蹲")
         XCTAssertEqual(records.first?.setCount, 4)
+        XCTAssertEqual(records.first?.setEntries.map(\.restSeconds), [90, 90, 90, nil])
         XCTAssertEqual(records.first?.representativeWeight, 62.5)
         XCTAssertNil(records.first?.durationMinutes)
         XCTAssertEqual(records.first?.estimatedCalories, 39)

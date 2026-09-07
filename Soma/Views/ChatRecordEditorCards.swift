@@ -4,6 +4,7 @@ import SwiftUI
 private struct WorkoutAutosaveValue: Equatable {
     var exercise: String
     var draft: WorkoutRecordDraft
+    var calories: String
 }
 
 private struct BodyAutosaveValue: Equatable {
@@ -239,6 +240,7 @@ private struct InlineWorkoutCard: View {
     let isEditable: Bool
     @State private var exercise: String
     @State private var workoutDraft: WorkoutRecordDraft
+    @State private var caloriesText: String
     @State private var showsDelete = false
     @State private var saveState: InlineRecordSaveState = .idle
 
@@ -258,6 +260,9 @@ private struct InlineWorkoutCard: View {
                 evidence: workout.setEntries,
                 loggingProfile: loggingProfile
             )
+        )
+        _caloriesText = State(
+            initialValue: workout.estimatedCalories.map(String.init) ?? ""
         )
     }
 
@@ -288,7 +293,7 @@ private struct InlineWorkoutCard: View {
                 density: .chatCompact,
                 showsAddButton: false
             )
-            if isEditable || workout.estimatedCalories != nil {
+            if isEditable || workout.estimatedCalories != nil || !caloriesText.isEmpty {
                 HStack(spacing: 12) {
                     if isEditable {
                         Button {
@@ -308,7 +313,22 @@ private struct InlineWorkoutCard: View {
 
                     Spacer(minLength: 8)
 
-                    if let calories = workout.estimatedCalories {
+                    if isEditable {
+                        HStack(spacing: 4) {
+                            Image(systemName: "flame.fill")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.trainingAccent)
+                            InlineTextValue(
+                                placeholder: "kcal",
+                                text: $caloriesText,
+                                font: .caption.monospacedDigit(),
+                                keyboard: .numberPad,
+                                suffix: caloriesText.isEmpty ? nil : "kcal",
+                                accessibilityTitle: "预计消耗，千卡"
+                            )
+                        }
+                        .accessibilityIdentifier("inline-workout-calories")
+                    } else if let calories = workout.estimatedCalories {
                         Label("约 \(calories) kcal", systemImage: "flame.fill")
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
@@ -323,7 +343,11 @@ private struct InlineWorkoutCard: View {
             Button("删除记录", role: .destructive, action: deleteRecord)
         }
         .inlineRecordAutosave(
-            value: WorkoutAutosaveValue(exercise: exercise, draft: workoutDraft),
+            value: WorkoutAutosaveValue(
+                exercise: exercise,
+                draft: workoutDraft,
+                calories: caloriesText
+            ),
             isEnabled: isEditable,
             state: $saveState,
             save: save
@@ -359,7 +383,14 @@ private struct InlineWorkoutCard: View {
             )
         }
         workout.setEntries = workoutDraft.evidence
-        WorkoutCalorieCalculator.refreshStoredEstimate(workout, in: modelContext)
+        WorkoutCalorieCalculator.refreshStoredEstimate(
+            workout,
+            in: modelContext,
+            calorieOverride: Int(
+                caloriesText.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        )
+        caloriesText = workout.estimatedCalories.map(String.init) ?? ""
         sourceMessage?.recordManualCorrection(
             "训练记录 \(workout.id.uuidString) 已修改，动作 \(workout.exercise)，保留 \(workoutDraft.groups.count) 个逻辑组的逐组事实"
         )

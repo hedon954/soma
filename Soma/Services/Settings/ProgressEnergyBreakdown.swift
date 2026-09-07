@@ -2,12 +2,13 @@ import Foundation
 
 struct ProgressEnergyBreakdown: Equatable, Sendable {
     enum Kind: String, Sendable {
-        case intake, expenditure
+        case intake, expenditure, protein, carbs, fat
     }
 
     enum Tone: Equatable, Sendable {
         case meal, resting, activity, factor, total, intakeTotal
         case mealType(MealType)
+        case protein, carbs, fat
     }
 
     struct Row: Identifiable, Equatable, Sendable {
@@ -45,10 +46,6 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                     )
                 }
             }
-            items.append(Row(
-                id: "summary", label: daily ? "已记录摄入" : "日均摄入",
-                value: Self.energy(daily ? days.first?.intake.value ?? 0 : snapshot.averageIntake ?? 0), tone: .intakeTotal
-            ))
             rows = items
         case .expenditure:
             let estimates = days.compactMap(\.energy.estimate)
@@ -66,13 +63,69 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                 Row(
                     id: "factor", label: daily ? "活动系数" : "综合活动系数",
                     value: (total / resting).formatted(.number.precision(.fractionLength(2))), tone: .factor
-                ),
-                Row(id: "summary", label: prefix + "预估总消耗", value: Self.energy(total), tone: .total)
+                )
             ]
+        case .protein:
+            rows = Self.nutrientRows(
+                days: days,
+                daily: daily,
+                grams: \.protein,
+                dayTotal: \.protein,
+                tone: .protein
+            )
+        case .carbs:
+            rows = Self.nutrientRows(
+                days: days,
+                daily: daily,
+                grams: \.carbs,
+                dayTotal: \.carbs,
+                tone: .carbs
+            )
+        case .fat:
+            rows = Self.nutrientRows(
+                days: days,
+                daily: daily,
+                grams: \.fat,
+                dayTotal: \.fat,
+                tone: .fat
+            )
+        }
+    }
+
+    private static func nutrientRows(
+        days: [ProgressDailyMetrics],
+        daily: Bool,
+        grams: (ProgressHistoryRecord) -> Double?,
+        dayTotal: (ProgressDailyMetrics) -> ProgressRecordedTotal,
+        tone: Tone
+    ) -> [Row] {
+        if daily, let day = days.first {
+            return day.records.filter { $0.activity.kind == .meal }.map { record in
+                let mealType = MealType(rawValue: record.activity.detail)
+                let value = grams(record).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+                return Row(
+                    id: record.activity.id.uuidString,
+                    label: (mealType?.rawValue ?? "餐次未记录") + " · " + record.activity.title,
+                    value: value.map(gramsText) ?? "未记录",
+                    tone: tone
+                )
+            }
+        }
+        return days.filter { dayTotal($0).knownCount > 0 }.map { day in
+            Row(
+                id: "day-\(day.date.timeIntervalSinceReferenceDate)",
+                label: day.date.formatted(.dateTime.month().day()),
+                value: gramsText(dayTotal(day).value),
+                tone: tone
+            )
         }
     }
 
     private static func energy(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0))) + " kcal"
+    }
+
+    private static func gramsText(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0))) + " g"
     }
 }

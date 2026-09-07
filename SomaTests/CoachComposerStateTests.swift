@@ -55,6 +55,29 @@ final class CoachComposerStateTests: XCTestCase {
         )
     }
 
+    func testShortcutAutofillOnlyWhenDraftIsEmpty() throws {
+        let recent = try XCTUnwrap(AgentInputShortcutStore.defaultShortcuts.first {
+            $0.id == "shortcut_recent_review"
+        })
+        let nutrition = try XCTUnwrap(AgentInputShortcutStore.defaultShortcuts.first {
+            $0.id == "shortcut_nutrition"
+        })
+        let state = CoachComposerState()
+        state.toggleShortcut(recent)
+        XCTAssertEqual(state.selectedShortcutID, recent.id)
+        XCTAssertEqual(state.draft, recent.suggestedPrompt)
+        state.toggleShortcut(recent)
+        XCTAssertNil(state.selectedShortcutID)
+        XCTAssertTrue(state.draft.isEmpty)
+
+        state.draft = "已经写了"
+        state.toggleShortcut(recent)
+        XCTAssertEqual(state.draft, "已经写了")
+        state.toggleShortcut(nutrition)
+        XCTAssertEqual(state.draft, "已经写了")
+        XCTAssertNil(nutrition.suggestedPrompt)
+    }
+
     func testSpeechAppendsToCurrentManualEdit() {
         let state = CoachComposerState()
         state.draft = "深蹲五组"

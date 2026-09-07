@@ -44,7 +44,7 @@ struct AgentInputShortcutListView: View {
                     confirmsReset = true
                 }
             } footer: {
-                Text("恢复后只保留饮食分析、训练记录、近期分析三个默认按钮。")
+                Text("恢复后只保留记录饮食、训练记录、近期分析三个默认按钮。")
             }
         }
         .navigationTitle("输入框快捷按钮")

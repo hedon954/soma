@@ -5,6 +5,7 @@ struct InsightsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(DataSpaceController.self) private var dataSpace
+    @Environment(\.insightsTabIsActive) private var isTabActive
     @State private var period: ProgressPeriod
     @State private var anchorDate: Date
     @State private var revision = 0
@@ -15,6 +16,8 @@ struct InsightsView: View {
     @State private var showingSources = false
     @State private var calendarDate = Date.now
     @State private var followsCurrentPeriod: Bool
+    @State private var insightsAreDirty = false
+    @State private var pendingReload: Task<Void, Never>?
 
     init(initialPeriod: ProgressPeriod = .day, initialDate: Date = .now) {
         _period = State(initialValue: initialPeriod)
@@ -102,7 +105,18 @@ struct InsightsView: View {
         .task(id: request) { await load(request) }
         .refreshable { revision += 1 }
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
-            if ModelContextSaveImpact.affectsInsights(notification, in: modelContext) {
+            guard ModelContextSaveImpact.affectsInsights(notification, in: modelContext) else {
+                return
+            }
+            if isTabActive {
+                scheduleReload()
+            } else {
+                insightsAreDirty = true
+            }
+        }
+        .onChange(of: isTabActive) { _, active in
+            if active, insightsAreDirty {
+                insightsAreDirty = false
                 revision += 1
             }
         }
@@ -129,18 +143,29 @@ struct InsightsView: View {
                 Button { move(by: -1) } label: {
                     Image(systemName: "chevron.left").dynamicTypeSize(...DynamicTypeSize.xxxLarge).frame(width: 44, height: 44)
                 }.accessibilityLabel("上一\(period.title)")
-                Text(window.title()).font(.subheadline.weight(.medium)).frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("progress-date-range")
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    Text(window.title())
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityIdentifier("progress-date-range")
+                    if window != period.window(containing: .now) {
+                        Button(period.returnTitle) { anchorDate = .now; followsCurrentPeriod = true }
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minHeight: 44)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
                 Button { move(by: 1) } label: {
                     Image(systemName: "chevron.right").dynamicTypeSize(...DynamicTypeSize.xxxLarge).frame(width: 44, height: 44)
                 }
                 .disabled(!window.canMoveForward())
                 .accessibilityLabel("下一\(period.title)")
             }.buttonStyle(.plain)
-            if window != period.window(containing: .now) {
-                Button(period.returnTitle) { anchorDate = .now; followsCurrentPeriod = true }
-                    .font(.subheadline).frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
-            }
         }
     }
 
@@ -201,6 +226,15 @@ struct InsightsView: View {
             } else {
                 errorMessage = "进展暂时无法加载"
             }
+        }
+    }
+
+    private func scheduleReload() {
+        pendingReload?.cancel()
+        pendingReload = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            revision += 1
         }
     }
 }

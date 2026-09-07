@@ -34,7 +34,7 @@ final class FeedbackSubmissionTests: XCTestCase {
         ) { error in
             XCTAssertEqual(
                 error as? FeedbackSubmissionError,
-                .deliveryUnavailable
+                .configurationMissing
             )
         }
     }
@@ -167,14 +167,14 @@ final class FeedbackSubmissionTests: XCTestCase {
         )
     }
 
-    func testSuccessfulReplyFeedbackCollapsesButSettingsFeedbackConfirms() {
+    func testSuccessfulReplyFeedbackAcknowledgesThenCollapses() {
         XCTAssertEqual(
             FeedbackSuccessPresentationPolicy.action(isEmbedded: true),
-            .collapseEmbeddedEditor
+            .acknowledgeThenCollapse
         )
         XCTAssertEqual(
             FeedbackSuccessPresentationPolicy.action(isEmbedded: false),
-            .showConfirmation
+            .acknowledgeInPlace
         )
     }
 
@@ -374,6 +374,20 @@ final class FeedbackSubmissionTests: XCTestCase {
                 .attachmentsTooLarge
             )
         }
+    }
+
+    func testSMTPReplyWaitsForTerminatingLine() {
+        XCTAssertNil(
+            FeedbackSMTPReply(data: Data("250-smtp.qq.com\r\n250-PIPELINING\r\n".utf8))
+        )
+        XCTAssertEqual(
+            FeedbackSMTPReply(
+                data: Data("250-smtp.qq.com\r\n250 AUTH LOGIN PLAIN\r\n".utf8)
+            )?.code,
+            250
+        )
+        XCTAssertEqual(FeedbackSMTPReply.error(for: 535), .authenticationFailed)
+        XCTAssertEqual(FeedbackSMTPReply.error(for: 421), .networkUnavailable)
     }
 }
 

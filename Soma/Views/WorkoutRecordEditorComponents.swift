@@ -17,6 +17,14 @@ struct WorkoutLogicalGroupsEditor: View {
         draft.displayRuns
     }
 
+    private var resolvedFallbackRest: Int? {
+        WorkoutRestPropagation.recorded(fallbackRestSeconds)
+    }
+
+    private var groupsAreUniform: Bool {
+        runs.count <= 1
+    }
+
     var body: some View {
         VStack(
             alignment: .leading,
@@ -29,8 +37,13 @@ struct WorkoutLogicalGroupsEditor: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 18)
             } else {
-                ForEach(Array(runs.enumerated()), id: \.element.id) { position, run in
-                    logicalGroupCard(run, position: position)
+                VStack(spacing: 0) {
+                    ForEach(Array(runs.enumerated()), id: \.element.id) { position, run in
+                        logicalGroupCard(run, position: position)
+                        if !groupsAreUniform {
+                            afterGroupRest(run, surface: AppTheme.cardBackground)
+                        }
+                    }
                 }
             }
 
@@ -77,8 +90,7 @@ struct WorkoutLogicalGroupsEditor: View {
                 }
             }
 
-            if density == .chatCompact,
-               !dynamicTypeSize.isAccessibilitySize,
+            if !dynamicTypeSize.isAccessibilitySize,
                let effort = group.efforts.first,
                effortCount == 1
             {
@@ -87,15 +99,10 @@ struct WorkoutLogicalGroupsEditor: View {
                         run,
                         effort: effort,
                         representativeGroupID: group.id,
-                        groupIDs: groupIDs,
-                        finalGroupID: draft.finalGroupID
+                        groupIDs: groupIDs
                     )
                 } else {
-                    compactRecordRun(
-                        run,
-                        effort: effort,
-                        finalGroupID: draft.finalGroupID
-                    )
+                    compactRecordRun(run, effort: effort)
                 }
             } else {
                 VStack(spacing: 0) {
@@ -112,7 +119,7 @@ struct WorkoutLogicalGroupsEditor: View {
                         )
                         let displayRest = evidenceRest
                             ?? (effortIndex == effortCount - 1
-                                ? fallbackRestSeconds
+                                ? resolvedFallbackRest
                                 : nil)
                         effortRow(
                             group.efforts[effortIndex],
@@ -128,23 +135,29 @@ struct WorkoutLogicalGroupsEditor: View {
                             effortCount: effortCount,
                             sideMode: group.sideMode
                         )
-                        if shouldShowRest(
-                            evidenceRest,
-                            effortIndex: effortIndex,
-                            effortCount: effortCount,
-                            hasTargets: !restGroupIDs.isEmpty
-                        ) {
-                            restRow(
-                                restLabel,
-                                groupIDs: restGroupIDs,
+                        if effortIndex < effortCount - 1 {
+                            if shouldShowRest(
+                                evidenceRest,
                                 effortIndex: effortIndex,
-                                value: displayRest,
-                                fallbackValue: displayRest
-                            )
-                        } else if effortIndex < effortCount - 1 {
-                            Divider()
-                                .overlay(AppTheme.separator)
+                                effortCount: effortCount,
+                                hasTargets: !restGroupIDs.isEmpty
+                            ) {
+                                restRow(
+                                    restLabel,
+                                    groupIDs: restGroupIDs,
+                                    effortIndex: effortIndex,
+                                    value: displayRest,
+                                    fallbackValue: displayRest,
+                                    surface: AppTheme.insetBackground
+                                )
+                            } else {
+                                Divider()
+                                    .overlay(AppTheme.separator)
+                            }
                         }
+                    }
+                    if groupsAreUniform {
+                        afterGroupRest(run, surface: AppTheme.insetBackground)
                     }
                 }
                 .padding(.horizontal, density == .chatCompact ? 9 : 14)
@@ -196,21 +209,25 @@ struct WorkoutLogicalGroupsEditor: View {
 
             if isEditable {
                 WorkoutNumericField(
-                    text: intBinding(
-                        groupIDs: groupIDs,
-                        effortIndex: effortIndex,
-                        keyPath: effort.targetKind == .duration
-                            ? \.durationSeconds
-                            : \.reps
-                    ),
+                    text: effort.targetKind == .duration
+                        ? durationBinding(
+                            groupIDs: groupIDs,
+                            effortIndex: effortIndex
+                        )
+                        : intBinding(
+                            groupIDs: groupIDs,
+                            effortIndex: effortIndex,
+                            keyPath: \.reps
+                        ),
                     accessibilityLabel: metricAccessibilityLabel(
                         effort: effort,
                         sideMode: sideMode,
                         metric: effort.targetKind == .duration ? "时长" : "次数"
                     ),
-                    unit: effort.targetKind == .duration ? "秒" : "次",
+                    unit: effort.targetKind == .duration ? "" : "次",
                     decimal: false,
-                    flat: density == .chatCompact,
+                    inline: true,
+                    parsesDuration: effort.targetKind == .duration,
                     validRange: effort.targetKind == .duration
                         ? 1 ... 86400
                         : 1 ... 1000
@@ -225,10 +242,10 @@ struct WorkoutLogicalGroupsEditor: View {
                         sideMode: sideMode,
                         metric: "外部重量"
                     ),
-                    unit: "kg",
+                    unit: effort.externalWeightKG == 0 ? "" : "kg",
                     decimal: true,
                     emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
-                    flat: density == .chatCompact,
+                    inline: true,
                     validRange: 0 ... 1000
                 )
             } else {
@@ -285,42 +302,79 @@ struct WorkoutLogicalGroupsEditor: View {
         .accessibilityLabel("逻辑组操作")
     }
 
+    private func afterGroupRest(_ run: WorkoutLogicalGroupRun, surface: Color) -> some View {
+        let effortCount = max(run.representative.efforts.count, 1)
+        let restGroupIDs = run.restTargetGroupIDs(
+            effortIndex: effortCount - 1,
+            effortCount: effortCount,
+            finalGroupID: draft.finalGroupID
+        )
+        let evidenceRest = storedRest(
+            in: run,
+            groupIDs: restGroupIDs,
+            effortIndex: effortCount - 1
+        )
+        let displayRest = evidenceRest ?? resolvedFallbackRest
+        let label = restLabel(
+            at: effortCount - 1,
+            effortCount: effortCount,
+            sideMode: run.representative.sideMode
+        )
+        return Group {
+            if shouldShowRest(
+                evidenceRest,
+                effortIndex: effortCount - 1,
+                effortCount: effortCount,
+                hasTargets: !restGroupIDs.isEmpty
+            ) {
+                restRow(
+                    label,
+                    groupIDs: restGroupIDs,
+                    effortIndex: effortCount - 1,
+                    value: displayRest,
+                    fallbackValue: displayRest,
+                    surface: surface
+                )
+            }
+        }
+    }
+
     private func restRow(
         _ label: String,
         groupIDs: Set<UUID>,
         effortIndex: Int,
         value: Int?,
-        fallbackValue: Int?
+        fallbackValue: Int?,
+        surface: Color
     ) -> some View {
-        HStack(spacing: 8) {
+        ZStack {
             Rectangle()
                 .fill(AppTheme.separator)
                 .frame(height: 0.5)
-            if isEditable {
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                WorkoutNumericField(
-                    text: intBinding(
-                        groupIDs: groupIDs,
-                        effortIndex: effortIndex,
-                        keyPath: \.restSeconds,
-                        fallbackValue: fallbackValue
-                    ),
-                    accessibilityLabel: label,
-                    unit: "秒",
-                    decimal: false,
-                    compact: true,
-                    validRange: 0 ... 3600
-                )
-            } else if let value {
-                Text("\(label) \(value) 秒")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+            Group {
+                if isEditable {
+                    WorkoutNumericField(
+                        text: intBinding(
+                            groupIDs: groupIDs,
+                            effortIndex: effortIndex,
+                            keyPath: \.restSeconds,
+                            fallbackValue: fallbackValue
+                        ),
+                        accessibilityLabel: label,
+                        unit: "秒",
+                        decimal: false,
+                        prefix: label,
+                        inline: true,
+                        validRange: 0 ... 3600
+                    )
+                } else if let value {
+                    Text("\(label) \(value) 秒")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
-            Rectangle()
-                .fill(AppTheme.separator)
-                .frame(height: 0.5)
+            .padding(.horizontal, 8)
+            .background(surface)
         }
         .frame(minHeight: 28)
     }
@@ -344,7 +398,7 @@ struct WorkoutLogicalGroupsEditor: View {
         hasTargets: Bool
     ) -> Bool {
         hasTargets && (isEditable || restSeconds != nil
-            || (effortIndex == effortCount - 1 && fallbackRestSeconds != nil))
+            || (effortIndex == effortCount - 1 && resolvedFallbackRest != nil))
     }
 
     private func storedRest(
@@ -358,38 +412,54 @@ struct WorkoutLogicalGroupsEditor: View {
             .filter { groupIDs.contains($0.id) }
             .compactMap { group in
                 guard group.efforts.indices.contains(effortIndex) else { return nil }
-                return group.efforts[effortIndex].restSeconds
+                return WorkoutRestPropagation.recorded(
+                    group.efforts[effortIndex].restSeconds
+                )
             }
             .first
     }
 
+    private struct InlineRest {
+        let ids: Set<UUID>
+        let display: Int?
+    }
+
+    private func inlineRest(for run: WorkoutLogicalGroupRun) -> InlineRest? {
+        guard groupsAreUniform else {
+            return nil
+        }
+        let ids = run.restTargetGroupIDs(
+            effortIndex: 0,
+            effortCount: 1,
+            finalGroupID: draft.finalGroupID
+        )
+        guard !ids.isEmpty else {
+            return nil
+        }
+        let evidence = storedRest(in: run, groupIDs: ids, effortIndex: 0)
+        guard shouldShowRest(
+            evidence,
+            effortIndex: 0,
+            effortCount: 1,
+            hasTargets: true
+        ) else {
+            return nil
+        }
+        return InlineRest(ids: ids, display: evidence ?? resolvedFallbackRest)
+    }
+
+    private func inlineRestText(for run: WorkoutLogicalGroupRun) -> String? {
+        inlineRest(for: run)?.display.map { "间歇 \($0) 秒" }
+    }
+
     private func compactRecordRun(
         _ run: WorkoutLogicalGroupRun,
-        effort: WorkoutEffortDraft,
-        finalGroupID: UUID?
+        effort: WorkoutEffortDraft
     ) -> some View {
-        let restGroupIDs = run.restTargetGroupIDs(
-            effortIndex: 0,
-            effortCount: 1,
-            finalGroupID: finalGroupID
-        )
-        let evidenceRest = storedRest(
-            in: run,
-            groupIDs: restGroupIDs,
-            effortIndex: 0
-        )
-        let displayRest = evidenceRest ?? fallbackRestSeconds
-        let showsRest = shouldShowRest(
-            evidenceRest,
-            effortIndex: 0,
-            effortCount: 1,
-            hasTargets: !restGroupIDs.isEmpty
-        )
-
-        return WorkoutCompactRecordRunView(
+        WorkoutCompactRecordRunView(
             target: targetText(effort),
             weight: weightText(effort.externalWeightKG),
-            rest: showsRest ? displayRest.map { "间歇 \($0) 秒" } : nil,
+            rest: inlineRestText(for: run),
             runCount: run.count
         )
     }
@@ -398,86 +468,64 @@ struct WorkoutLogicalGroupsEditor: View {
         _ run: WorkoutLogicalGroupRun,
         effort: WorkoutEffortDraft,
         representativeGroupID: UUID,
-        groupIDs: Set<UUID>,
-        finalGroupID: UUID?
+        groupIDs: Set<UUID>
     ) -> some View {
-        let restGroupIDs = run.restTargetGroupIDs(
-            effortIndex: 0,
-            effortCount: 1,
-            finalGroupID: finalGroupID
-        )
-        let evidenceRest = storedRest(
-            in: run,
-            groupIDs: restGroupIDs,
-            effortIndex: 0
-        )
-        let displayRest = evidenceRest ?? fallbackRestSeconds
-
-        return HStack(spacing: 0) {
-            WorkoutNumericField(
-                text: intBinding(
-                    groupIDs: groupIDs,
-                    effortIndex: 0,
-                    keyPath: effort.targetKind == .duration
-                        ? \.durationSeconds
-                        : \.reps
-                ),
-                accessibilityLabel: effort.targetKind == .duration ? "时长" : "次数",
-                unit: effort.targetKind == .duration ? "秒" : "次",
-                decimal: false,
-                compact: true,
-                flat: true,
-                validRange: effort.targetKind == .duration
-                    ? 1 ... 86400
-                    : 1 ... 1000
-            )
-            .frame(width: 58)
-            WorkoutCompactMetricDivider()
-            WorkoutNumericField(
-                text: weightBinding(groupIDs: groupIDs, effortIndex: 0),
-                accessibilityLabel: "外部重量",
-                unit: effort.externalWeightKG == 0 ? "" : "kg",
-                decimal: true,
-                emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
-                compact: true,
-                flat: true,
-                validRange: 0 ... 1000
-            )
-            .frame(width: 55)
-            WorkoutCompactMetricDivider()
-            WorkoutCompactGroupCountLabel(count: run.count)
-            if !restGroupIDs.isEmpty {
+        HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                WorkoutNumericField(
+                    text: effort.targetKind == .duration
+                        ? durationBinding(groupIDs: groupIDs, effortIndex: 0)
+                        : intBinding(
+                            groupIDs: groupIDs,
+                            effortIndex: 0,
+                            keyPath: \.reps
+                        ),
+                    accessibilityLabel: effort.targetKind == .duration ? "时长" : "次数",
+                    unit: effort.targetKind == .duration ? "" : "次",
+                    decimal: false,
+                    inline: true,
+                    parsesDuration: effort.targetKind == .duration,
+                    validRange: effort.targetKind == .duration
+                        ? 1 ... 86400
+                        : 1 ... 1000
+                )
                 WorkoutCompactMetricDivider()
-                HStack(spacing: 0) {
-                    Text("间歇")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
+                WorkoutNumericField(
+                    text: weightBinding(groupIDs: groupIDs, effortIndex: 0),
+                    accessibilityLabel: "外部重量",
+                    unit: effort.externalWeightKG == 0 ? "" : "kg",
+                    decimal: true,
+                    emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
+                    inline: true,
+                    validRange: 0 ... 1000
+                )
+                if groupsAreUniform, let rest = inlineRest(for: run) {
+                    WorkoutCompactMetricDivider()
                     WorkoutNumericField(
                         text: intBinding(
-                            groupIDs: restGroupIDs,
+                            groupIDs: rest.ids,
                             effortIndex: 0,
                             keyPath: \.restSeconds,
-                            fallbackValue: displayRest
+                            fallbackValue: rest.display
                         ),
                         accessibilityLabel: "间歇",
                         unit: "秒",
                         decimal: false,
-                        compact: true,
-                        flat: true,
+                        prefix: "间歇",
+                        inline: true,
                         validRange: 0 ... 3600
                     )
-                    .frame(width: 54)
                 }
             }
-            WorkoutCompactMetricDivider()
+            Spacer(minLength: 8)
+            WorkoutRunCountLabel(count: run.count)
             groupMenu(
                 representativeGroupID: representativeGroupID,
                 groupIDs: groupIDs,
                 runCount: run.count
             )
         }
-        .padding(.leading, 4)
+        .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget)
         .background(
             AppTheme.insetBackground,
@@ -525,13 +573,38 @@ struct WorkoutLogicalGroupsEditor: View {
         case .repetitions:
             effort.reps.map { "\($0) 次" } ?? "— 次"
         case .duration:
-            effort.durationSeconds.map { "\($0) 秒" } ?? "— 秒"
+            effort.durationSeconds.map(DurationSecondsFormat.display) ?? "—"
         }
     }
 
     private func weightText(_ value: Double?) -> String {
         guard let value else { return "— kg" }
         return value == 0 ? "自重" : "\(value.formatted()) kg"
+    }
+
+    private func durationBinding(
+        groupIDs: Set<UUID>,
+        effortIndex: Int
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                guard let group = draft.groups.first(where: { groupIDs.contains($0.id) }),
+                      group.efforts.indices.contains(effortIndex),
+                      let value = group.efforts[effortIndex].durationSeconds
+                else {
+                    return ""
+                }
+                return DurationSecondsFormat.display(value)
+            },
+            set: { text in
+                draft.updateEffortValue(
+                    in: groupIDs,
+                    effortIndex: effortIndex,
+                    keyPath: \.durationSeconds,
+                    value: DurationSecondsFormat.parse(text)
+                )
+            }
+        )
     }
 
     private func intBinding(
@@ -543,10 +616,15 @@ struct WorkoutLogicalGroupsEditor: View {
         Binding(
             get: {
                 guard let group = draft.groups.first(where: { groupIDs.contains($0.id) }),
-                      group.efforts.indices.contains(effortIndex),
-                      let value = group.efforts[effortIndex][keyPath: keyPath]
-                      ?? fallbackValue
+                      group.efforts.indices.contains(effortIndex)
                 else {
+                    return ""
+                }
+                let stored = group.efforts[effortIndex][keyPath: keyPath]
+                let value = keyPath == \.restSeconds
+                    ? (WorkoutRestPropagation.recorded(stored) ?? fallbackValue)
+                    : (stored ?? fallbackValue)
+                guard let value else {
                     return ""
                 }
                 return String(value)

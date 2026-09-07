@@ -126,12 +126,18 @@ extension ConversationProcessingService {
             }
         )
         let modelInput = try AgentModelInputBuilder.build(
-            systemPrompt: ReActAgentPrompt.system(defaults: context.ai.defaults),
+            systemPrompt: ReActAgentPrompt.system(
+                defaults: context.ai.defaults,
+                selectedSkillID: selectedSkill?.id
+            ),
             history: preparedHistory.history,
             userPrompt: userPrompt,
             currentImages: media.frames,
             currentVideos: media.videos,
-            skills: AgentSkill.snapshots(defaults: context.ai.defaults),
+            skills: AgentSkill.snapshots(
+                defaults: context.ai.defaults,
+                selectedSkillID: selectedSkill?.id
+            ),
             tools: AgentToolExposurePolicy.tools(selectedShortcut: selectedShortcut),
             selectedSkillID: selectedSkill?.id,
             maxSteps: ReActAgentPreference.maxSteps(defaults: context.ai.defaults),

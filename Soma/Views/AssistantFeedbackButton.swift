@@ -72,7 +72,9 @@ struct AssistantFeedbackButton: View {
                         assistantMessageID: messageID,
                         isCompact: true,
                         onSubmitted: {
-                            isExpanded = false
+                            withAnimation(.easeInOut(duration: 0.32)) {
+                                isExpanded = false
+                            }
                         }
                     )
                     .padding(.bottom, 4)

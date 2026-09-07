@@ -1,8 +1,9 @@
 # ADR 0118：派生动作筛选与固定餐次配色
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-09-05
 - 上游依据：[PRD 055](../prd/055-exercise-facets-and-meal-breakdown.md)
+- 后续替代：[ADR 0123](0123-exercise-movement-kinds.md) 去掉受力肌群轴，原始模式标签改为封闭动作类型
 - 部分替代：[ADR 0115](0115-energy-default-reference-and-compact-details.md) 的摄入分项呈现，估算与周期口径不变
 
 ## 背景

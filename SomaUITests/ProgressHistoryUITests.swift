@@ -12,13 +12,15 @@ final class ProgressHistoryUITests: XCTestCase {
             let picker = app.segmentedControls["progress-period-picker"]
             XCTAssertTrue(picker.waitForExistence(timeout: 15))
             XCTAssertTrue(picker.buttons["日"].isSelected, "首次进入应默认显示今天")
-            XCTAssertTrue(app.staticTexts["445 kcal"].waitForExistence(timeout: 5), "缺口应为预估消耗 2345 减去已记录摄入 1900")
+            XCTAssertTrue(app.otherElements["progress-nutrition-rings"].waitForExistence(timeout: 5))
             XCTAssertFalse(app.buttons["progress-training-summary"].exists)
             XCTAssertFalse(app.buttons["progress-body-summary"].exists)
-            XCTAssertTrue(app.staticTexts["预估热量缺口"].exists)
+            XCTAssertFalse(app.staticTexts["预估热量缺口"].exists)
             XCTAssertFalse(app.staticTexts["与预估的差值"].exists)
             keep(app, "progress-calorie-deficit-\(appearance)")
             picker.buttons["周"].tap()
+            XCTAssertFalse(app.otherElements["progress-nutrition-rings"].exists)
+            XCTAssertFalse(app.buttons["progress-selected-period"].exists)
             app.tabBars.buttons["教练"].tap()
             app.tabBars.buttons["进展"].tap()
             XCTAssertTrue(picker.buttons["周"].isSelected, "返回页面应保留手动选择的周期")
@@ -54,9 +56,22 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertFalse(popover.staticTexts["个人静息公式"].exists)
             XCTAssertFalse(popover.staticTexts["默认参考"].exists)
             XCTAssertFalse(popover.staticTexts["个人设置"].exists)
-            XCTAssertLessThanOrEqual(popover.frame.height, 190, "四行内容不应留下空行")
+            XCTAssertLessThanOrEqual(popover.frame.height, 160, "三行组成不应留下空行")
             XCTAssertFalse(popover.staticTexts["已记录摄入"].exists)
             keep(app, "energy-expenditure-breakdown-\(appearance)")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+            let expenditureDismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: popover)
+            XCTAssertEqual(XCTWaiter.wait(for: [expenditureDismissed], timeout: 5), .completed)
+            let protein = app.buttons["progress-protein-ring-breakdown"]
+            reveal(protein, in: app)
+            protein.tap()
+            XCTAssertTrue(popover.waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["午餐 · 进展夹具餐食 0"].exists)
+            XCTAssertTrue(popover.staticTexts["110 g"].exists)
+            XCTAssertFalse(popover.staticTexts["已记录蛋白质"].exists)
+            XCTAssertFalse(popover.staticTexts["已记录摄入"].exists)
+            XCTAssertFalse(app.buttons["progress-calorie-remaining"].exists)
+            keep(app, "energy-protein-breakdown-\(appearance)")
             app.terminate()
         }
     }
@@ -67,7 +82,7 @@ final class ProgressHistoryUITests: XCTestCase {
             let picker = app.segmentedControls["progress-period-picker"]
             XCTAssertTrue(picker.waitForExistence(timeout: 15))
             picker.buttons["日"].tap()
-            XCTAssertTrue(app.staticTexts["预估热量缺口"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.otherElements["progress-nutrition-rings"].waitForExistence(timeout: 10))
             XCTAssertFalse(app.staticTexts["待估算"].exists)
             app.buttons["饮食与能量，查看估算依据"].tap()
             XCTAssertTrue(app.navigationBars["能量依据"].waitForExistence(timeout: 5))
@@ -153,16 +168,11 @@ final class ProgressHistoryUITests: XCTestCase {
         let picker = app.segmentedControls["progress-period-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 15))
         picker.buttons["周"].tap()
-        let original = app.staticTexts["progress-date-range"].label
-        let drill = app.buttons["progress-selected-period"]
-        XCTAssertTrue(drill.waitForExistence(timeout: 10))
-        for _ in 0 ..< 3 where !drill.isHittable {
-            app.swipeUp()
-        }
-        drill.tap()
-        XCTAssertTrue(app.staticTexts["蛋白质"].waitForExistence(timeout: 10))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertEqual(app.staticTexts["progress-date-range"].label, original)
+        XCTAssertFalse(app.buttons["progress-selected-period"].exists)
+        XCTAssertFalse(app.otherElements["progress-nutrition-rings"].exists)
+        picker.buttons["年"].tap()
+        XCTAssertFalse(app.buttons["progress-selected-period"].exists)
+        XCTAssertFalse(app.otherElements["progress-nutrition-rings"].exists)
         app.buttons["选择日期"].tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         app.buttons["完成"].tap()
@@ -193,21 +203,24 @@ final class ProgressHistoryUITests: XCTestCase {
         metrics.buttons["体重"].tap()
     }
 
-    func testChartTapSelectsDayWithoutChangingPeriod() {
+    func testChartTapDoesNotSwitchPeriod() {
         let app = launch("light")
         let picker = app.segmentedControls["progress-period-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 15))
         picker.buttons["周"].tap()
-        XCTAssertTrue(app.buttons["progress-selected-period"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["progress-selected-period"].exists)
         let window = app.staticTexts["progress-date-range"].label
-        let before = app.buttons["progress-selected-period"].label
         let chart = app.descendants(matching: .any)["progress-energy-chart"].firstMatch
         XCTAssertTrue(chart.exists)
         chart.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)).tap()
-        let changed = NSPredicate(format: "label != %@", before)
-        expectation(for: changed, evaluatedWith: app.buttons["progress-selected-period"])
-        waitForExpectations(timeout: 5)
+        XCTAssertTrue(picker.buttons["周"].isSelected)
+        XCTAssertFalse(app.buttons["progress-selected-period"].exists)
         XCTAssertEqual(app.staticTexts["progress-date-range"].label, window)
+        picker.buttons["年"].tap()
+        XCTAssertFalse(app.buttons["progress-selected-period"].exists)
+        app.descendants(matching: .any)["progress-energy-chart"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)).tap()
+        XCTAssertTrue(picker.buttons["年"].isSelected)
+        XCTAssertFalse(app.buttons["progress-selected-period"].exists)
     }
 
     func testEnergyHeaderWholeRowOpensSourcesAfterPeriodChange() {

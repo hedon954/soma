@@ -386,7 +386,9 @@ extension AgentToolName {
                 "reps": integer("该组明确完成的次数"),
                 "duration_seconds": integer("按时长动作该组明确完成的秒数；与 reps 二选一"),
                 "external_weight_kg": number("该组外部负重 kg；明确自重时填 0"),
-                "rest_seconds": integer("该 effort 之后实际或明确提供的间歇秒数")
+                "rest_seconds": integer(
+                    "该 effort 之后的组间或换侧间歇秒数。用户只给一个组间间歇时写在每个非最后逻辑组；最后一组不要写组后间歇；未知不要写 0"
+                )
             ], required: ["logical_set_index", "side", "target_kind"]),
             description: description
         )

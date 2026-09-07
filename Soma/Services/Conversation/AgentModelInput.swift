@@ -175,8 +175,11 @@ enum AgentModelInputBuilder {
 }
 
 extension AgentSkill {
-    static func snapshots(defaults: UserDefaults) -> [AgentModelSkillSnapshot] {
-        AgentSkillRegistry.allDescriptors(defaults: defaults).map {
+    static func snapshots(
+        defaults: UserDefaults,
+        selectedSkillID: String? = nil
+    ) -> [AgentModelSkillSnapshot] {
+        let all = AgentSkillRegistry.allDescriptors(defaults: defaults).map {
             AgentModelSkillSnapshot(
                 id: $0.id,
                 name: $0.title,
@@ -185,6 +188,10 @@ extension AgentSkill {
                 content: $0.markdown
             )
         }
+        if let selectedSkillID {
+            return all.filter { $0.id == selectedSkillID }
+        }
+        return all
     }
 }
 

@@ -81,6 +81,12 @@ final class ProgressHistoryProjectionTests: XCTestCase {
         XCTAssertEqual(snapshot.logicalSets, 5)
     }
 
+    func testWeekAndMonthDoNotBuildNutritionRings() {
+        let meals = [meal(date(8, 31), 1800), meal(date(9, 1), 2200)]
+        XCTAssertNil(build(.week, date(9, 2), meals, now: date(9, 3)).nutritionRings)
+        XCTAssertNil(build(.month, date(9, 2), meals, now: date(9, 3)).nutritionRings)
+    }
+
     private func build(_ period: ProgressPeriod, _ anchor: Date, _ records: [ProgressHistoryRecord], now: Date) -> ProgressHistorySnapshot {
         ProgressHistoryProjection.build(window: period.window(containing: anchor, calendar: calendar), records: records, profile: nil, now: now, calendar: calendar)
     }

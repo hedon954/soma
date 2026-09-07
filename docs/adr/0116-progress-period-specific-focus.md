@@ -3,6 +3,7 @@
 - 状态：已采纳
 - 日期：2026-09-05
 - 部分替代：[ADR 0114](0114-progress-periods-and-adaptive-energy.md) 的四周期共用摘要层级；日期边界、能量估算和原始记录规则不变
+- 后续替代：暂无
 - 上游依据：[PRD 054](../prd/054-progress-history-and-periods.md)，维护者确认日看记录、周看执行、月看变化、年看长期积累
 
 ## 背景

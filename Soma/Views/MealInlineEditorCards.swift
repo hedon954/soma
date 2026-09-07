@@ -149,7 +149,6 @@ struct InlineMealCards: View {
         meal.mealType = mealType
         meal.title = MealItemDraft.title(for: items)
         meal.replaceItemsAndDeriveTotals(items)
-        drafts = MealItemDraft.drafts(for: meal)
         sourceMessage?.recordManualCorrection(
             "饮食记录 \(meal.id.uuidString) 已改为 \(mealType.rawValue)，"
                 + "\(items.count) 项菜品：\(MealItemDraft.summary(for: items))"
@@ -231,7 +230,7 @@ struct MealItemDraftRow: View {
         )
     }
 
-    /// 一行排不下时先把份量单独提一行，辅助字号下每项各占一行，避免数字被压成省略号。
+    /// 辅助字号下每项各占一行；常规字号保持单行，避免 ViewThatFits 复制整行布局。
     @ViewBuilder
     private var metrics: some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -242,17 +241,9 @@ struct MealItemDraftRow: View {
                 macro("脂肪", $draft.fat)
             }
         } else {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    portion
-                    macros
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    portion
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        macros
-                    }
-                }
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                portion
+                macros
             }
         }
     }
@@ -450,6 +441,7 @@ private struct MealTotalsCard: View {
     let glycemicSpeed: MealGlycemicSpeed?
     let glycemicAssessment: String
     let recommendedEatingOrder: String
+    @State private var showsDetail = false
 
     var body: some View {
         InlineRecordShell(
@@ -523,8 +515,8 @@ private struct MealTotalsCard: View {
                 Text("基于食物组成的定性估算，不代表你的实际血糖反应。")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                NavigationLink {
-                    MealRecordDetailView(meal: meal)
+                Button {
+                    showsDetail = true
                 } label: {
                     Text("查看详情")
                         .font(.caption.weight(.semibold))
@@ -537,6 +529,9 @@ private struct MealTotalsCard: View {
                         .foregroundStyle(AppTheme.mealAccent)
                 }
                 .buttonStyle(.plain)
+                .navigationDestination(isPresented: $showsDetail) {
+                    MealRecordDetailView(meal: meal)
+                }
             }
         }
     }
@@ -590,11 +585,9 @@ private struct MealTotalsCard: View {
 private struct ExpandableMealAssessment: View {
     let text: String
     @State private var isExpanded = false
-    @State private var fullHeight: CGFloat = 0
-    @State private var collapsedHeight: CGFloat = 0
 
     private var needsExpansion: Bool {
-        fullHeight > collapsedHeight + 1
+        text.split(whereSeparator: \.isNewline).count > 5 || text.count > 140
     }
 
     var body: some View {
@@ -603,28 +596,6 @@ private struct ExpandableMealAssessment: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(isExpanded ? nil : 5)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: CollapsedMealAssessmentHeightKey.self,
-                            value: proxy.size.height
-                        )
-                    }
-                }
-                .background {
-                    Text(text)
-                        .font(.caption2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .hidden()
-                        .background {
-                            GeometryReader { proxy in
-                                Color.clear.preference(
-                                    key: FullMealAssessmentHeightKey.self,
-                                    value: proxy.size.height
-                                )
-                            }
-                        }
-                }
             if needsExpansion {
                 Button(isExpanded ? "收起" : "展开") {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -637,25 +608,5 @@ private struct ExpandableMealAssessment: View {
                 .accessibilityHint(isExpanded ? "收起到五行" : "显示完整饮食评价")
             }
         }
-        .onPreferenceChange(FullMealAssessmentHeightKey.self) { fullHeight = $0 }
-        .onPreferenceChange(CollapsedMealAssessmentHeightKey.self) { height in
-            if !isExpanded {
-                collapsedHeight = height
-            }
-        }
-    }
-}
-
-private struct FullMealAssessmentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
-private struct CollapsedMealAssessmentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

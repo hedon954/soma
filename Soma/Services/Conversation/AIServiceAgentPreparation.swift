@@ -71,7 +71,10 @@ extension AIService {
                 model: route.model
             )
         }
-        let systemPrompt = ReActAgentPrompt.system(defaults: defaults)
+        let systemPrompt = ReActAgentPrompt.system(
+            defaults: defaults,
+            selectedSkillID: request.selectedSkillID
+        )
         let selectedSkill = request.selectedSkillID
             .flatMap { AgentSkillRegistry.descriptor(id: $0, defaults: defaults) }
         let userPrompt = ReActAgentPrompt.user(
@@ -107,7 +110,10 @@ extension AIService {
             userPrompt: userPrompt,
             currentImages: request.images,
             currentVideos: request.videos,
-            skills: AgentSkill.snapshots(defaults: defaults),
+            skills: AgentSkill.snapshots(
+                defaults: defaults,
+                selectedSkillID: selectedSkill?.id
+            ),
             tools: exposedTools,
             selectedSkillID: selectedSkill?.id,
             maxSteps: maxSteps,

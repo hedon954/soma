@@ -20,7 +20,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .gymAnalysis: "健身房分析"
         case .trainingPlan: "用户健身计划制定"
         case .movementAnalysis: "动作分析"
-        case .nutritionAnalysis: "饮食分析"
+        case .nutritionAnalysis: "记录饮食"
         case .postureAnalysis: "体态分析"
         case .trendAnalysis: "运动趋势分析"
         case .trainingVolumeAnalysis: "运动量分析"
@@ -34,7 +34,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .gymAnalysis: "识别环境与器械，区分可见证据和推断，并更新电子健身房。"
         case .trainingPlan: "结合目标、历史、身体状态和当前器械制定可执行训练计划。"
         case .movementAnalysis: "基于图片或完整视频评估动作、负荷与安全边界。"
-        case .nutritionAnalysis: "识别食物与份量，给出带不确定性的营养与餐食组成升糖速度估算。"
+        case .nutritionAnalysis: "把餐食写成可审查记录，并给出带不确定性的营养与餐食组成升糖速度估算。"
         case .postureAnalysis: "以中性、非诊断方式记录体态与标准化照片的可比变化。"
         case .trendAnalysis: "分析训练、体重和饮食的周期趋势，区分信号、噪声和缺失数据。"
         case .trainingVolumeAnalysis: "按可验证记录计算训练容量，并支持不同时间粒度的可比分析。"
@@ -48,7 +48,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .gymAnalysis: "用户上传或描述健身房、器械、场馆切换时"
         case .trainingPlan: "用户希望制定、调整、查看或开始训练计划时"
         case .movementAnalysis: "用户要求分析动作照片、视频、技术或负荷时"
-        case .nutritionAnalysis: "用户记录、识别或分析餐食与营养时"
+        case .nutritionAnalysis: "用户要记录餐食，或识别食物照片时"
         case .postureAnalysis: "用户记录或比较体态、体重、体脂、腰围时"
         case .trendAnalysis: "用户询问跨日或跨周期的训练、饮食、身体趋势时"
         case .trainingVolumeAnalysis: "用户询问训练量、容量、频率或周期对比时"
@@ -108,9 +108,9 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             """
         case .nutritionAnalysis:
             """
-            # 饮食分析
+            # 记录饮食
 
-            目标：从文字和食物照片中提取可记录的餐食信息，并提供诚实的营养与餐食组成升糖速度估算。
+            目标：把文字和食物照片写成可审查的饮食记录。分析只服务于写入记录；没有可记录食物时明确说明并询问，不要只做分析。
 
             执行规则：
             1. 识别可见食物、烹饪方式和可判断的份量；餐具尺寸未知、食物被遮挡或混合时说明不确定性。
@@ -189,7 +189,9 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             1. 先 search_exercises 复用已有动作；确实没有时才 create_exercise，然后用返回的
                exercise_id 一次 create_workout 写入本次全部动作，不要一个动作调用一次。
             2. 组数、次数、重量、间歇、时长、RIR 只写用户明确给出或图片明确可读的值。没提到的字段
-               必须省略，不能用常见值补齐，也不能写 0 代替未知。
+               必须省略，不能用常见值补齐，也不能写 0 代替未知。用户只说一个组间间歇时，写入
+               create_workout.rest_seconds，并写到每个非最后逻辑组的 set_entries.rest_seconds；
+               最后一组不要写组后间歇。
             3. 自重动作不要编造外部重量；单侧动作按用户表述记录，不自行折算左右合计。
             4. 用户在纠正已有训练时，先 list_workouts 或 get_workout 找到目标记录，再用
                update_workout 修改，不要新建重复记录。
