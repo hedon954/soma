@@ -34,6 +34,7 @@ struct ChatRecordEditorCard: View {
     let reference: AgentRecordReference
     let sourceMessage: CoachMessage?
     let isEditable: Bool
+    var allowsDeferredLoad = false
 
     var body: some View {
         switch reference.recordType {
@@ -41,25 +42,29 @@ struct ChatRecordEditorCard: View {
             WorkoutRecordCardLookup(
                 recordID: reference.recordID,
                 sourceMessage: sourceMessage,
-                isEditable: isEditable
+                isEditable: isEditable,
+                allowsDeferredLoad: allowsDeferredLoad
             )
         case ConversationIntent.meal.rawValue:
             MealRecordCardLookup(
                 recordID: reference.recordID,
                 sourceMessage: sourceMessage,
-                isEditable: isEditable
+                isEditable: isEditable,
+                allowsDeferredLoad: allowsDeferredLoad
             )
         case ConversationIntent.body.rawValue:
             BodyRecordCardLookup(
                 recordID: reference.recordID,
                 sourceMessage: sourceMessage,
-                isEditable: isEditable
+                isEditable: isEditable,
+                allowsDeferredLoad: allowsDeferredLoad
             )
         case ConversationIntent.gym.rawValue:
             GymRecordCardLookup(
                 recordID: reference.recordID,
                 sourceMessage: sourceMessage,
-                isEditable: isEditable
+                isEditable: isEditable,
+                allowsDeferredLoad: allowsDeferredLoad
             )
         default:
             EmptyView()
@@ -71,27 +76,42 @@ private struct WorkoutRecordCardLookup: View {
     @Environment(\.modelContext) private var modelContext
     let sourceMessage: CoachMessage?
     let isEditable: Bool
+    let allowsDeferredLoad: Bool
     private let recordID: Int64
     @State private var record: WorkoutEntry?
     @State private var loggingProfile: ExerciseLoggingProfileSnapshot?
 
-    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+    init(
+        recordID: Int64,
+        sourceMessage: CoachMessage?,
+        isEditable: Bool,
+        allowsDeferredLoad: Bool
+    ) {
         self.recordID = recordID
         self.sourceMessage = sourceMessage
         self.isEditable = isEditable
+        self.allowsDeferredLoad = allowsDeferredLoad
     }
 
     var body: some View {
-        if let record {
+        if let current = resolved {
             InlineWorkoutCard(
-                workout: record,
-                loggingProfile: loggingProfile,
+                workout: current.entry,
+                loggingProfile: current.profile,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
+        } else if allowsDeferredLoad {
+            Color.clear.frame(height: 0)
+                .task(id: recordID) { await loadRecord() }
         }
-        Color.clear.frame(height: record == nil ? 1 : 0)
-            .task(id: recordID) { await loadRecord() }
+    }
+
+    private var resolved: (entry: WorkoutEntry, profile: ExerciseLoggingProfileSnapshot?)? {
+        if let record {
+            return (record, loggingProfile)
+        }
+        return ChatRecordCardCache.workout(recordID, in: modelContext)
     }
 
     private func loadRecord() async {
@@ -104,13 +124,9 @@ private struct WorkoutRecordCardLookup: View {
         guard !Task.isCancelled,
               let loaded = try? modelContext.fetch(descriptor).first
         else { return }
-        let definition = try? ExerciseLibraryStore.linkedExercise(
-            for: loaded,
-            in: modelContext,
-            persist: false,
-            allowCreate: false
-        )
-        loggingProfile = definition.map(ExerciseLoggingProfileSnapshot.init)
+        let profile = ChatRecordCardCache.linkedProfile(for: loaded, in: modelContext)
+        ChatRecordCardCache.store(workout: loaded, profile: profile, in: modelContext)
+        loggingProfile = profile
         record = loaded
     }
 }
@@ -119,25 +135,33 @@ private struct MealRecordCardLookup: View {
     @Environment(\.modelContext) private var modelContext
     let sourceMessage: CoachMessage?
     let isEditable: Bool
+    let allowsDeferredLoad: Bool
     private let recordID: Int64
     @State private var record: MealEntry?
 
-    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+    init(
+        recordID: Int64,
+        sourceMessage: CoachMessage?,
+        isEditable: Bool,
+        allowsDeferredLoad: Bool
+    ) {
         self.recordID = recordID
         self.sourceMessage = sourceMessage
         self.isEditable = isEditable
+        self.allowsDeferredLoad = allowsDeferredLoad
     }
 
     var body: some View {
-        if let record {
+        if let meal = record ?? ChatRecordCardCache.meal(recordID, in: modelContext) {
             InlineMealCards(
-                meal: record,
+                meal: meal,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
+        } else if allowsDeferredLoad {
+            Color.clear.frame(height: 0)
+                .task(id: recordID) { await loadRecord() }
         }
-        Color.clear.frame(height: record == nil ? 1 : 0)
-            .task(id: recordID) { await loadRecord() }
     }
 
     private func loadRecord() async {
@@ -150,6 +174,7 @@ private struct MealRecordCardLookup: View {
         guard !Task.isCancelled,
               let loaded = try? modelContext.fetch(descriptor).first
         else { return }
+        ChatRecordCardCache.store(meal: loaded, in: modelContext)
         record = loaded
     }
 }
@@ -158,25 +183,33 @@ private struct BodyRecordCardLookup: View {
     @Environment(\.modelContext) private var modelContext
     let sourceMessage: CoachMessage?
     let isEditable: Bool
+    let allowsDeferredLoad: Bool
     private let recordID: Int64
     @State private var record: BodyEntry?
 
-    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+    init(
+        recordID: Int64,
+        sourceMessage: CoachMessage?,
+        isEditable: Bool,
+        allowsDeferredLoad: Bool
+    ) {
         self.recordID = recordID
         self.sourceMessage = sourceMessage
         self.isEditable = isEditable
+        self.allowsDeferredLoad = allowsDeferredLoad
     }
 
     var body: some View {
-        if let record {
+        if let entry = record ?? ChatRecordCardCache.body(recordID, in: modelContext) {
             InlineBodyCard(
-                entry: record,
+                entry: entry,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
+        } else if allowsDeferredLoad {
+            Color.clear.frame(height: 0)
+                .task(id: recordID) { await loadRecord() }
         }
-        Color.clear.frame(height: record == nil ? 1 : 0)
-            .task(id: recordID) { await loadRecord() }
     }
 
     private func loadRecord() async {
@@ -189,6 +222,7 @@ private struct BodyRecordCardLookup: View {
         guard !Task.isCancelled,
               let loaded = try? modelContext.fetch(descriptor).first
         else { return }
+        ChatRecordCardCache.store(body: loaded, in: modelContext)
         record = loaded
     }
 }
@@ -197,25 +231,33 @@ private struct GymRecordCardLookup: View {
     @Environment(\.modelContext) private var modelContext
     let sourceMessage: CoachMessage?
     let isEditable: Bool
+    let allowsDeferredLoad: Bool
     private let recordID: Int64
     @State private var record: GymProfile?
 
-    init(recordID: Int64, sourceMessage: CoachMessage?, isEditable: Bool) {
+    init(
+        recordID: Int64,
+        sourceMessage: CoachMessage?,
+        isEditable: Bool,
+        allowsDeferredLoad: Bool
+    ) {
         self.recordID = recordID
         self.sourceMessage = sourceMessage
         self.isEditable = isEditable
+        self.allowsDeferredLoad = allowsDeferredLoad
     }
 
     var body: some View {
-        if let record {
+        if let gym = record ?? ChatRecordCardCache.gym(recordID, in: modelContext) {
             InlineGymCard(
-                gym: record,
+                gym: gym,
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
+        } else if allowsDeferredLoad {
+            Color.clear.frame(height: 0)
+                .task(id: recordID) { await loadRecord() }
         }
-        Color.clear.frame(height: record == nil ? 1 : 0)
-            .task(id: recordID) { await loadRecord() }
     }
 
     private func loadRecord() async {
@@ -228,6 +270,7 @@ private struct GymRecordCardLookup: View {
         guard !Task.isCancelled,
               let loaded = try? modelContext.fetch(descriptor).first
         else { return }
+        ChatRecordCardCache.store(gym: loaded, in: modelContext)
         record = loaded
     }
 }

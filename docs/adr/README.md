@@ -29,7 +29,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0109](0109-schema-guided-tool-argument-recovery.md) | 0.0.19 | 部分替代 | Schema 驱动数字归一化与错误回路仍有效；进展浮层由 [0114](0114-progress-periods-and-adaptive-energy.md) 修订 |
 | [0110](0110-workout-tool-and-calorie-evidence.md) | 0.0.19 | 已采纳 | 训练 Tool v4 与普通/带练热量共用逐组证据 |
 | [0111](0111-agent-response-identity-and-manual-recovery.md) | 0.0.19 | 已采纳 | 入队预建响应，等待、失败与人工重试复用同一消息 |
-| [0112](0112-coach-scroll-and-session-behavior.md) | 0.0.19 | 已采纳 | 教练尾随滚动、双击回尾与 Session 日期命名 |
+| [0112](0112-coach-scroll-and-session-behavior.md) | 0.0.19 | 部分已替代 | 尾随与双击回尾仍有效；已加载页排版由 [0125](0125-eager-loaded-coach-messages.md) 修订 |
 | [0113](0113-capture-and-foreground-lifecycle.md) | 0.0.19 | 已采纳 | 根层快捷相机状态机、首帧后前台恢复与稳定 SwiftData ID |
 | [0114](0114-progress-periods-and-adaptive-energy.md) | 0.0.19 | 部分已替代 | 动态校准仍有效；0115 修订默认参考与披露，0116 区分周期信息重点 |
 | [0115](0115-energy-default-reference-and-compact-details.md) | 0.0.19 | 部分已替代 | 默认估算与浮层仍有效；日页宏量呈现由 [0122](0122-nutrition-rings-and-period-deficit.md) 修订 |
@@ -42,6 +42,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0122](0122-nutrition-rings-and-period-deficit.md) | Unreleased | 已采纳 | 日页营养圆环与推荐摄入；周月年不展示环或周期跳转 |
 | [0123](0123-exercise-movement-kinds.md) | Unreleased | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
 | [0124](0124-smtp-feedback-failure-taxonomy.md) | Unreleased | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
+| [0125](0125-eager-loaded-coach-messages.md) | Unreleased | 已采纳 | 已加载聊天页即时排版并常驻缓存；切 Tab／Session 不重画，分页按 30 条 |
 
 新决策使用 [ADR 模板](template.md)。
 

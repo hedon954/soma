@@ -269,10 +269,10 @@ struct RootView: View {
                 Task {
                     await ImagePipeline.shared.removeAllCachedImages()
                 }
-                CoachTextRenderCache.removeAll()
                 CoachMessageRenderPayloadCache.retainCurrentSession(
                     conversationSessions.activeSessionID
                 )
+                ChatRecordCardCache.retainRecent()
                 TrainingIntelligenceService.removeCachedPerformanceFingerprints()
             }
             .task {

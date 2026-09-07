@@ -205,8 +205,14 @@ unless coach_response_source.include?("CoachTextRenderCache.completedText(for: m
        incremental_chat_text_source.include?("render.storeMeasuredHeight(") &&
        selectable_chat_source.include?("CoachTextRenderCache.attributedText(for: content)") &&
        coach_response_source.include?("totalCostLimit") &&
-       root_source.include?("CoachTextRenderCache.removeAll()")
+       coach_response_source.include?("State(initialValue: CoachTextRenderCache.completedText(for: markdown))")
   fail_check("completed chat text no longer reuses bounded render projections")
+end
+if root_source.include?("CoachTextRenderCache.removeAll()")
+  fail_check("memory warning wipes completed chat text and forces a full redraw")
+end
+unless root_source.include?("ChatRecordCardCache.retainRecent()")
+  fail_check("memory warning no longer keeps painted record cards")
 end
 if coach_source.include?("recentExerciseCapacities") || coach_source.include?("@Query(sort: \\ExerciseDefinition")
   fail_check("CoachView restored render-path exercise aggregation")
@@ -224,20 +230,47 @@ unless coach_source.include?(
          "messageLimit = CoachMessagePagePolicy.nextLimit(after: messageLimit)"
        ) &&
        coach_source.include?(".id(conversationSessions.activeSessionID)") &&
-       coach_support_source.include?("static let pageSize = 10")
+       coach_support_source.include?("static let pageSize = 30")
   fail_check("Coach message paging no longer matches the stable product baseline")
+end
+message_list = coach_source[/private func messageList\([\s\S]*?\n    \}/]
+if message_list.to_s.include?("LazyVStack")
+  fail_check("Coach message list restored LazyVStack and remounts cells while scrolling")
+end
+unless message_list.to_s.include?("VStack(spacing: 14)")
+  fail_check("Coach message list no longer eagerly stacks the loaded page")
+end
+unless coach_support_source.match?(/static func usesLazyStack[\s\S]*?false/)
+  fail_check("Coach message stack policy can again switch the loaded page to LazyVStack")
+end
+if coach_support_source.match?(/\.onAppear\(perform: onVisible\)/)
+  fail_check("older-message sentinel can again fire onAppear for off-screen eager rows")
+end
+if coach_support_source.include?("defaultScrollAnchor(.top, for: .alignment)") ||
+   coach_support_source.match?(/defaultScrollAnchor\(\.top\)/)
+  fail_check("Coach scroll restored an alignment anchor that repositions during size changes")
 end
 unless coach_support_source.include?("jobByResponseMessageID")
   fail_check("Coach message rows no longer share one AgentJob index per render")
 end
 unless coach_bubble_source.include?("CoachMessageRenderPayloadCache.payload(for: message)") &&
        !coach_source.include?("CoachMessageRenderPayloadCache.payload(for:") &&
-       coach_support_source.include?("private static let countLimit = 64")
-  fail_check("Coach render cache no longer stays bounded to bubbles the user actually viewed")
+       coach_support_source.include?("private static let countLimit = 256")
+  fail_check("Coach render cache no longer keeps painted payloads across sessions")
 end
-unless chat_record_source.include?(".task(id: recordID)") &&
+unless chat_record_source.include?("ChatRecordCardCache.meal(") &&
+       chat_record_source.include?("allowsDeferredLoad") &&
        chat_record_source.include?("await Task.yield()")
-  fail_check("chat record cards no longer defer their bounded lookup until a visible card appears")
+  fail_check("chat record cards no longer paint from the session-surviving cache")
+end
+unless coach_source.include?("schedulePagePaint(for: projection, key: key)") &&
+       coach_actions_source.include?("ChatRecordCardCache.prefetch(")
+  fail_check("Coach no longer paints a page from cache before showing historical rows")
+end
+unless coach_support_source.include?("CoachOpenedSessionPinPolicy") &&
+       coach_actions_source.include?("pinOpenedSessionIfNeeded(") &&
+       coach_actions_source.include?("proxy.scrollTo(lastMessageID, anchor: .bottom)")
+  fail_check("Opening a coach session no longer pins to the last message after paint")
 end
 if coach_source.include?("ConversationTurnProjection.canRetry(")
   fail_check("Coach message rows restored one full turn scan per bubble")

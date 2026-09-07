@@ -167,7 +167,7 @@ final class LongStreamPerformanceUITests: XCTestCase {
         XCTAssertEqual(selectedLargeSession.value as? String, "当前对话")
     }
 
-    func testCoachStartsWithTenMessagesAndPagesUpByTen() {
+    func testCoachStartsWithThirtyMessagesAndPagesUpByThirty() {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         // 同样保留 39 轮历史，但使用短尾消息，确保手势确实到达分页边界。
@@ -178,21 +178,21 @@ final class LongStreamPerformanceUITests: XCTestCase {
         let messageList = app.scrollViews["coach-message-list"]
         XCTAssertTrue(messageList.waitForExistence(timeout: 15))
         XCTAssertTrue(
-            (messageList.value as? String ?? "").hasPrefix("count=10"),
-            "初始只应查询并渲染最近 10 条：\(messageList.value as? String ?? "nil")"
+            (messageList.value as? String ?? "").hasPrefix("count=30"),
+            "初始只应查询并渲染最近 30 条：\(messageList.value as? String ?? "nil")"
         )
 
-        for _ in 0 ..< 12 where !(messageList.value as? String ?? "").hasPrefix("count=20") {
+        for _ in 0 ..< 36 where !(messageList.value as? String ?? "").hasPrefix("count=60") {
             messageList.swipeDown()
         }
         let loadedNextPage = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value BEGINSWITH %@", "count=20"),
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "count=60"),
             object: messageList
         )
         XCTAssertEqual(
             XCTWaiter.wait(for: [loadedNextPage], timeout: 5),
             .completed,
-            "上滑到顶部后应自动再加载 10 条消息：\(messageList.value as? String ?? "nil")"
+            "上滑到顶部后应自动再加载 30 条消息：\(messageList.value as? String ?? "nil")"
         )
     }
 
@@ -270,7 +270,7 @@ final class LongStreamPerformanceUITests: XCTestCase {
         XCTAssertTrue(phase.waitForExistence(timeout: 15))
         XCTAssertTrue(waitForValuePrefix("completed", on: phase, timeout: 20))
         let list = app.scrollViews["coach-message-list"]
-        XCTAssertTrue((list.value as? String ?? "").hasPrefix("count=10"))
+        XCTAssertTrue((list.value as? String ?? "").hasPrefix("count=30"))
         for _ in 0 ..< 3 {
             for label in ["训练", "进展", "设置", "教练"] {
                 app.tabBars.buttons[label].tap()

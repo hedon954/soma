@@ -17,7 +17,7 @@ struct CoachView: View {
             dataSpace: dataSpace.activeSpace,
             sessionTransition: sessionTransition
         )
-        // Session 身份变化时在查询创建前同步回到 10 条，不能先拿上一条
+        // Session 身份变化时在查询创建前同步回到 30 条，不能先拿上一条
         // Session 的分页上限构造一次重视图，再在 onChange 里补救。
         .id(conversationSessions.activeSessionID)
     }
@@ -84,6 +84,8 @@ struct CoachSessionView: View {
     @State var paginationAnchorMessageID: UUID?
     @State var paginationTriggerID = UUID()
     @State var hasUserInteractedWithMessageList = false
+    @State var didPrepareVisiblePage = false
+    @State var pagePaintKey = ""
     @State var messageListPosition = CoachMessageScrollPosition(
         isAtTop: false,
         isNearBottom: false,
@@ -356,14 +358,30 @@ struct CoachSessionView: View {
                 .safeAreaInset(edge: .bottom) {
                     composer(pendingCount: projection.pendingJobCount)
                 }
+                .onChange(of: pagePaintSignature(for: projection), initial: true) { _, key in
+                    schedulePagePaint(for: projection, key: key) {
+                        if isLoadingEarlier {
+                            restorePositionAfterLoadingEarlier(
+                                using: proxy,
+                                projection: projection
+                            )
+                            return
+                        }
+                        pinOpenedSessionIfNeeded(
+                            using: proxy,
+                            projection: projection
+                        )
+                    }
+                }
                 .onChange(of: projection.messages.last?.id, initial: true) { _, messageID in
                     guard let messageID else { return }
-                    visibility.tailMessageID = projection.latestAssistantMessageID
-                        ?? messageID
                     if !didFinishInitialScroll {
+                        visibility.tailMessageID = messageID
                         _ = visibility.autoScrollGate.shouldScroll(to: messageID)
                         return
                     }
+                    visibility.tailMessageID = projection.latestAssistantMessageID
+                        ?? messageID
                     guard visibility.autoScrollGate.shouldScroll(to: messageID) else {
                         return
                     }
@@ -373,7 +391,19 @@ struct CoachSessionView: View {
                     )
                 }
                 .onChange(of: messageListPosition) {
-                    finishInitialScrollSetup(using: proxy)
+                    pinOpenedSessionIfNeeded(
+                        using: proxy,
+                        projection: projection
+                    )
+                }
+                .onChange(of: projection.messages.count) { oldCount, newCount in
+                    if oldCount == 0, newCount > 0 {
+                        didFinishInitialScroll = false
+                    }
+                    pinOpenedSessionIfNeeded(
+                        using: proxy,
+                        projection: projection
+                    )
                 }
                 .onChange(of: projection.messages.first?.id) {
                     restorePositionAfterLoadingEarlier(
@@ -437,28 +467,16 @@ struct CoachSessionView: View {
             && processor.dataSpace == dataSpace.activeSpace
             && processor.sessionID == conversationSessions.activeSessionID
         return ScrollView {
-            Group {
-                if CoachMessageStackPolicy.usesLazyStack(
-                    messageCount: projection.messages.count
-                ) {
-                    LazyVStack(spacing: 14) {
-                        coachMessageRows(
-                            scrollProxy: proxy,
-                            projection: projection,
-                            processorIsProcessing: processorIsProcessing,
-                            processingHere: processingHere
-                        )
-                    }
-                } else {
-                    VStack(spacing: 14) {
-                        coachMessageRows(
-                            scrollProxy: proxy,
-                            projection: projection,
-                            processorIsProcessing: processorIsProcessing,
-                            processingHere: processingHere
-                        )
-                    }
-                }
+            // 已加载页用即时 VStack：懒栈会在滑动时卸载气泡，丢掉卡片 @State，
+            // 再以 1pt 占位重新出现并撑开，内容高度抖动还会把整页 body 打满。
+            // 窗口仍由 30 条分页封顶，不在 body 里同步查库。
+            VStack(spacing: 14) {
+                coachMessageRows(
+                    scrollProxy: proxy,
+                    projection: projection,
+                    processorIsProcessing: processorIsProcessing,
+                    processingHere: processingHere
+                )
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
@@ -474,7 +492,14 @@ struct CoachSessionView: View {
         .onPreferenceChange(CoachMessageContentHeightPreferenceKey.self) { height in
             let didGrow = visibility.tailScroll.recordContentHeight(height)
             updateLegacyMessageMeasurement()
-            guard didGrow, didFinishInitialScroll else { return }
+            if !didFinishInitialScroll {
+                pinOpenedSessionIfNeeded(
+                    using: proxy,
+                    projection: projection
+                )
+                return
+            }
+            guard didGrow else { return }
             if let pendingMessageID = visibility.tailScroll.consumePendingMessageID() {
                 requestTailScroll(
                     proxy,
@@ -497,7 +522,9 @@ struct CoachSessionView: View {
         }
         .modifier(CoachMessageTopPagingModifier())
         .modifier(CoachMessageScrollTrackingModifier { position in
-            messageListPosition = position
+            if messageListPosition != position {
+                messageListPosition = position
+            }
             guard hasUserInteractedWithMessageList, position.isAtTop else {
                 return
             }
@@ -557,7 +584,7 @@ struct CoachSessionView: View {
             }
             .font(.caption.weight(.medium))
             .buttonStyle(.borderless)
-            .accessibilityHint("上滑到这里会自动再加载 10 条")
+            .accessibilityHint("到顶后会再加载 30 条，也可以点这里加载")
             .disabled(isLoadingEarlier)
             .id(paginationTriggerID)
             .modifier(CoachOlderMessageVisibilityModifier {
@@ -575,7 +602,9 @@ struct CoachSessionView: View {
             )
         }
 
-        ForEach(projection.messages) { message in
+        ForEach(
+            displayedMessages(from: projection, processingHere: processingHere)
+        ) { message in
             // `.equatable()` 让父层 state 变化（输入草稿、处理标志、滚动位置）
             // 不再重排历史气泡；消息内容变化仍由 SwiftData Observation 精确失效。
             CoachBubble(
@@ -604,6 +633,17 @@ struct CoachSessionView: View {
             )
             .equatable()
             .id(message.id)
+            .onAppear {
+                guard !didFinishInitialScroll,
+                      message.id == projection.messages.last?.id
+                else {
+                    return
+                }
+                pinOpenedSessionIfNeeded(
+                    using: proxy,
+                    projection: projection
+                )
+            }
         }
     }
 

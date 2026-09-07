@@ -8,6 +8,7 @@ struct AgentTurnTranscript: View, Equatable {
     var sourceMessage: CoachMessage?
     var isEditable = false
     var canRetry = false
+    var allowsDeferredLoad = false
     var onRetry: () -> Void = {}
 
     static func == (lhs: AgentTurnTranscript, rhs: AgentTurnTranscript) -> Bool {
@@ -17,6 +18,7 @@ struct AgentTurnTranscript: View, Equatable {
             && lhs.sourceMessage === rhs.sourceMessage
             && lhs.isEditable == rhs.isEditable
             && lhs.canRetry == rhs.canRetry
+            && lhs.allowsDeferredLoad == rhs.allowsDeferredLoad
     }
 
     private var visibleItems: [AgentTurnItem] {
@@ -49,7 +51,8 @@ struct AgentTurnTranscript: View, Equatable {
                     ChatRecordEditorCard(
                         reference: reference,
                         sourceMessage: sourceMessage,
-                        isEditable: isEditable
+                        isEditable: isEditable,
+                        allowsDeferredLoad: allowsDeferredLoad
                     )
                 }
             }
@@ -92,6 +95,7 @@ struct LiveAgentTurnTranscriptContent: View {
                     sourceMessage: sourceMessage,
                     isEditable: isEditable,
                     canRetry: canRetry,
+                    allowsDeferredLoad: true,
                     onRetry: onRetry
                 )
                 .equatable()

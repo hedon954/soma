@@ -65,6 +65,7 @@ struct CoachBubble: View, Equatable {
                             sourceMessage: message,
                             isEditable: isLatestAssistantMessage,
                             canRetry: canRetry,
+                            allowsDeferredLoad: isLatestAssistantMessage,
                             onRetry: onRetry
                         )
                     }

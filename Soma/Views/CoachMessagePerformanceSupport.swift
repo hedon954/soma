@@ -57,12 +57,11 @@ struct CoachTabActivationDriver: View {
 struct CoachMessageTopPagingModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
-            content
-                .defaultScrollAnchor(.bottom, for: .initialOffset)
-                .defaultScrollAnchor(.top, for: .alignment)
+            // 只定首次偏移。`.alignment` 在内容高度变化时会把视口重新钉住，
+            // 分页或卡片回填时和用户手势抢位置。
+            content.defaultScrollAnchor(.bottom, for: .initialOffset)
         } else {
             content
-                .defaultScrollAnchor(.top)
         }
     }
 }
@@ -76,6 +75,48 @@ struct CoachMessageScrollPosition: Equatable {
 enum CoachTailScrollPolicy {
     static func shouldScroll(contentFitsViewport: Bool?) -> Bool {
         contentFitsViewport == false
+    }
+}
+
+/// 打开 Session 的首次贴底：等页面画完、最后一条进列表、并量到真实高度后
+/// 才 `scrollTo`；滚到近底或内容不足视口才结束。空查询不能提前结束。
+enum CoachOpenedSessionPinAction: Equatable {
+    case wait
+    case scrollToLastMessage
+    case scrollToLastMessageAndFinish
+    case finish
+}
+
+struct CoachOpenedSessionPinSnapshot: Equatable {
+    var didPrepareVisiblePage: Bool
+    var messageCount: Int
+    var lastMessageIsDisplayed: Bool
+    var contentFitsViewport: Bool?
+    var isNearBottom: Bool
+    var contentHeight: CGFloat
+    var canObserveNearBottom = true
+}
+
+enum CoachOpenedSessionPinPolicy {
+    static func nextAction(
+        _ snapshot: CoachOpenedSessionPinSnapshot
+    ) -> CoachOpenedSessionPinAction {
+        if snapshot.messageCount == 0 {
+            return snapshot.didPrepareVisiblePage ? .finish : .wait
+        }
+        guard snapshot.didPrepareVisiblePage, snapshot.lastMessageIsDisplayed else {
+            return .wait
+        }
+        guard snapshot.contentHeight > 0, snapshot.contentFitsViewport != nil else {
+            return .wait
+        }
+        if snapshot.contentFitsViewport == true || snapshot.isNearBottom {
+            return .finish
+        }
+        if !snapshot.canObserveNearBottom {
+            return .scrollToLastMessageAndFinish
+        }
+        return .scrollToLastMessage
     }
 }
 
@@ -172,14 +213,15 @@ struct CoachOlderMessageVisibilityModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
+            // 即时栈里 `onAppear` 对屏外「加载更早」也会立刻触发，会一页接一页
+            // 把整段历史拉进来。只在哨兵真正进入视口时分页。
             content
-                .onAppear(perform: onVisible)
                 .onScrollVisibilityChange(threshold: 0.01) { isVisible in
                     guard isVisible else { return }
                     onVisible()
                 }
         } else {
-            content.onAppear(perform: onVisible)
+            content
         }
     }
 }
@@ -195,15 +237,13 @@ struct CoachMessageAutoScrollGate {
 }
 
 enum CoachMessageStackPolicy {
-    static let eagerUpperBound = CoachMessagePagePolicy.pageSize - 1
-
-    static func usesLazyStack(messageCount: Int) -> Bool {
-        messageCount > eagerUpperBound
+    static func usesLazyStack(messageCount _: Int) -> Bool {
+        false
     }
 }
 
 enum CoachMessagePagePolicy {
-    static let pageSize = 10
+    static let pageSize = 30
 
     static func nextLimit(after currentLimit: Int) -> Int {
         max(currentLimit, pageSize) + pageSize
@@ -310,7 +350,7 @@ enum CoachMessageRenderPayloadCache {
         }
     }
 
-    private static let countLimit = 64
+    private static let countLimit = 256
     private static var entries: [UUID: Entry] = [:]
     private static var insertionOrder: [UUID] = []
 
@@ -367,23 +407,32 @@ enum CoachMessageRenderPayloadCache {
         insertionOrder.removeAll(keepingCapacity: false)
     }
 
-    /// 内存压力下只保留当前会话最近的不可变渲染 DTO。Entry 不持有任何
-    /// SwiftData `@Model`，业务事实仍以数据库为准，命中时也会核对原始 revision。
+    /// 内存压力下按最近使用保留已画过的消息 DTO，不丢掉其他 Session。
+    /// Entry 不持有 SwiftData `@Model`，命中时仍核对原始 revision。
     static func retainCurrentSession(
         _ sessionID: UUID?,
-        maxCount: Int = 10,
+        maxCount: Int = 64,
         maxCost: Int = 2 * 1024 * 1024
     ) {
-        guard let sessionID else {
-            removeAll()
-            return
-        }
         var retained: [UUID] = []
         var retainedCost = 0
+        if let sessionID {
+            for messageID in insertionOrder.reversed() {
+                guard retained.count < maxCount,
+                      let entry = entries[messageID],
+                      entry.sessionID == sessionID,
+                      retainedCost + entry.approximateCost <= maxCost
+                else {
+                    continue
+                }
+                retained.append(messageID)
+                retainedCost += entry.approximateCost
+            }
+        }
         for messageID in insertionOrder.reversed() {
             guard retained.count < maxCount,
                   let entry = entries[messageID],
-                  entry.sessionID == sessionID,
+                  !retained.contains(messageID),
                   retainedCost + entry.approximateCost <= maxCost
             else {
                 continue

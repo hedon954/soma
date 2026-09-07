@@ -302,6 +302,7 @@ struct CoachResponseView: View {
 
     init(_ markdown: String) {
         self.markdown = markdown
+        _completedText = State(initialValue: CoachTextRenderCache.completedText(for: markdown))
     }
 
     var body: some View {
@@ -336,7 +337,9 @@ struct CoachResponseView: View {
     @MainActor
     private func prepareText() async {
         if let cached = CoachTextRenderCache.completedText(for: markdown) {
-            completedText = cached
+            if completedText !== cached {
+                completedText = cached
+            }
             return
         }
         let interval = AppPerformance.begin(

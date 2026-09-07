@@ -1,13 +1,15 @@
 # ADR 0112：教练滚动与 Session 行为
 
-- 状态：已采纳，已实施；待真机交互验收
+- 状态：部分已替代
 - 日期：2026-09-02
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0105](../archive/0.0.16/adr/0105-root-aware-tab-reselection.md) 中“教练再选永远无操作”的双击子行为
+- 后续修订：[ADR 0125](0125-eager-loaded-coach-messages.md) 已加载页改为即时 VStack，取消滑动 alignment 顶锚
 - 后续替代：暂无
 - 上游依据：
   - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
   - [BUG 0046](../bugs/0046-coach-stream-scrolls-into-blank-space.md)
+  - [BUG 0055](../bugs/0055-coach-history-scroll-repositions.md)
 
 ## 背景
 

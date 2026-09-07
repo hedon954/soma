@@ -335,16 +335,65 @@ extension CoachSessionView {
         coordinator.install(task, generation: generation)
     }
 
-    func finishInitialScrollSetup(using proxy: ScrollViewProxy) {
-        guard !didFinishInitialScroll,
-              let contentFitsViewport = messageListPosition.contentFitsViewport
-        else {
-            return
+    func pinOpenedSessionIfNeeded(
+        using proxy: ScrollViewProxy,
+        projection: CoachMessageRenderProjection
+    ) {
+        guard !didFinishInitialScroll, !isLoadingEarlier else { return }
+        let lastMessageID = projection.messages.last?.id
+        visibility.tailMessageID = lastMessageID
+        let displayed = displayedMessages(
+            from: projection,
+            processingHere: isProcessingHere
+        )
+        let canObserveNearBottom = if #available(iOS 18.0, *) {
+            true
+        } else {
+            false
         }
-        if !contentFitsViewport, !messageListPosition.isNearBottom {
-            visibility.tailScroll.followState.resumeExplicitly()
-            scrollToBottom(proxy, animated: false)
-        } else if contentFitsViewport {
+        let action = CoachOpenedSessionPinPolicy.nextAction(
+            CoachOpenedSessionPinSnapshot(
+                didPrepareVisiblePage: didPrepareVisiblePage,
+                messageCount: projection.messages.count,
+                lastMessageIsDisplayed: lastMessageID.map { id in
+                    displayed.contains { $0.id == id }
+                } ?? false,
+                contentFitsViewport: visibility.tailScroll.contentFitsViewport
+                    ?? messageListPosition.contentFitsViewport,
+                isNearBottom: messageListPosition.isNearBottom,
+                contentHeight: visibility.tailScroll.contentHeight,
+                canObserveNearBottom: canObserveNearBottom
+            )
+        )
+        switch action {
+        case .wait:
+            return
+        case .scrollToLastMessage:
+            scrollOpenedSessionToLastMessage(lastMessageID, using: proxy)
+            Task { @MainActor in
+                await Task.yield()
+                guard !didFinishInitialScroll, !isLoadingEarlier else { return }
+                scrollOpenedSessionToLastMessage(lastMessageID, using: proxy)
+            }
+        case .scrollToLastMessageAndFinish:
+            scrollOpenedSessionToLastMessage(lastMessageID, using: proxy)
+            finishOpenedSessionPin()
+        case .finish:
+            finishOpenedSessionPin()
+        }
+    }
+
+    private func scrollOpenedSessionToLastMessage(
+        _ lastMessageID: UUID?,
+        using proxy: ScrollViewProxy
+    ) {
+        guard let lastMessageID else { return }
+        visibility.tailScroll.followState.resumeExplicitly()
+        proxy.scrollTo(lastMessageID, anchor: .bottom)
+    }
+
+    private func finishOpenedSessionPin() {
+        if visibility.tailScroll.contentFitsViewport == true {
             visibility.tailScroll.followState.userDidInteract()
         }
         didFinishInitialScroll = true
@@ -390,6 +439,7 @@ extension CoachSessionView {
         projection: CoachMessageRenderProjection
     ) {
         guard isLoadingEarlier,
+              pageCacheIsWarm(for: projection),
               let anchor = paginationAnchorMessageID,
               projection.messages.first?.id != anchor
         else {
@@ -405,5 +455,102 @@ extension CoachSessionView {
             isLoadingEarlier = false
             paginationTriggerID = UUID()
         }
+    }
+
+    func pagePaintSignature(for projection: CoachMessageRenderProjection) -> String {
+        projection.messages.map { message in
+            let live = isProcessingHere && message.agentStatus == .running
+            if live {
+                return message.id.uuidString
+            }
+            return "\(message.id.uuidString):\(message.agentTurnItemsData.count)"
+        }.joined(separator: "|")
+    }
+
+    func displayedMessages(
+        from projection: CoachMessageRenderProjection,
+        processingHere: Bool
+    ) -> [CoachMessage] {
+        if !didPrepareVisiblePage {
+            if processingHere, let last = projection.messages.last {
+                return [last]
+            }
+            return []
+        }
+        if pageCacheIsWarm(for: projection) {
+            return projection.messages
+        }
+        return projection.messages.filter { message in
+            messageIsPainted(message)
+                || (processingHere && message.id == projection.messages.last?.id)
+        }
+    }
+
+    func schedulePagePaint(
+        for projection: CoachMessageRenderProjection,
+        key: String,
+        onReady: @escaping () -> Void
+    ) {
+        guard key != pagePaintKey || !didPrepareVisiblePage else { return }
+        if pageCacheIsWarm(for: projection) {
+            pagePaintKey = key
+            markVisiblePagePrepared()
+            onReady()
+            return
+        }
+        pagePaintKey = key
+        let messages = projection.messages
+        let liveID = isProcessingHere ? projection.messages.last?.id : nil
+        Task { @MainActor in
+            await Task.yield()
+            guard pagePaintKey == key else { return }
+            ChatRecordCardCache.prefetch(
+                CoachMessagePagePaint.references(in: messages),
+                in: modelContext
+            )
+            await CoachMessagePagePaint.warmMarkdown(
+                CoachMessagePagePaint.settledMarkdowns(
+                    in: messages,
+                    liveMessageID: liveID
+                )
+            )
+            guard pagePaintKey == key else { return }
+            markVisiblePagePrepared()
+            onReady()
+        }
+    }
+
+    private func markVisiblePagePrepared() {
+        if !didPrepareVisiblePage {
+            visibility.tailScroll.contentHeight = 0
+            messageListPosition = CoachMessageScrollPosition(
+                isAtTop: false,
+                isNearBottom: false,
+                contentFitsViewport: nil
+            )
+        }
+        didPrepareVisiblePage = true
+    }
+
+    func pageCacheIsWarm(for projection: CoachMessageRenderProjection) -> Bool {
+        let liveID = isProcessingHere ? projection.messages.last?.id : nil
+        return ChatRecordCardCache.canRender(
+            CoachMessagePagePaint.references(in: projection.messages),
+            in: modelContext
+        ) && CoachMessagePagePaint.markdownsAreWarm(
+            CoachMessagePagePaint.settledMarkdowns(
+                in: projection.messages,
+                liveMessageID: liveID
+            )
+        )
+    }
+
+    private func messageIsPainted(_ message: CoachMessage) -> Bool {
+        let payload = CoachMessageRenderPayloadCache.payload(for: message)
+        let references = AgentTurnRecordReferences.make(from: payload.turnItems)
+        let textOK = !message.isFromCoach
+            || payload.visibleText.isEmpty
+            || CoachTextRenderCache.completedText(for: payload.visibleText) != nil
+        return ChatRecordCardCache.canRender(references, in: modelContext) && textOK
     }
 }

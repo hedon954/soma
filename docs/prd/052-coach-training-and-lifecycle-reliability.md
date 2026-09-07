@@ -6,10 +6,12 @@
   - [PRD 047](../archive/0.0.16/prd/047-root-aware-tab-reselection.md) 的教练 Tab 再选行为
   - [PRD 000](000-origin-through-0.0.11.md) 的前台恢复响应边界
 - 后续修订：[PRD 058](058-feedback-duration-and-editable-calories.md)（时长时分秒展示与可编辑预计消耗）
+- 后续修订：[ADR 0125](../adr/0125-eager-loaded-coach-messages.md)（已加载消息即时排版，滑动不再懒卸载）
 - 上游依据：
   - 维护者提供的十七项严重 Bug、界面截图与崩溃报告
   - [BUG 0045](../bugs/0045-guided-workout-coredata-abort.md)
   - [BUG 0046](../bugs/0046-coach-stream-scrolls-into-blank-space.md)
+  - [BUG 0055](../bugs/0055-coach-history-scroll-repositions.md)
   - [BUG 0047](../bugs/0047-terminal-failure-retry-leaves-stale-error.md)
   - [BUG 0048](../bugs/0048-speech-segment-overwrites-committed-text.md)
   - [BUG 0049](../bugs/0049-quick-camera-presentation-deadlock.md)
@@ -19,6 +21,7 @@
   - [ADR 0111](../adr/0111-agent-response-identity-and-manual-recovery.md)
   - [ADR 0112](../adr/0112-coach-scroll-and-session-behavior.md)
   - [ADR 0113](../adr/0113-capture-and-foreground-lifecycle.md)
+  - [ADR 0125](../adr/0125-eager-loaded-coach-messages.md)
 - 后续修订：[PRD 056](056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
 
 ## 背景
@@ -32,7 +35,9 @@
 1. 相同训练组以一段紧凑摘要呈现；记录卡保留完整动作名、正确侧别、自重语义和可审查逐组事实。
 2. Agent 收到请求后立即出现一个响应；等待、执行、失败和人工重试都在同一气泡原位变化。
 3. 模型只看到设备业务时区的权威本地时间；Session 默认以 `MM月dd日 - 周X` 命名。
-4. 教练首次进入、切回或发送时稳定跟随最后一条 AI 消息尾部；短内容贴顶，用户上滑后不抢位置，
+4. 教练首次进入、打开 Session、切回或发送时定位到最后一条消息末尾；短内容贴顶，用户上滑后不抢位置。流式增长仍跟随最后一条 AI 消息尾部。
+   已加载的一页消息一次排版，滑动过程不再因懒卸载改高度；只有到顶分页才增加 30 条。
+   画过的记录卡和完成态正文常驻缓存，切 Tab 或 Session 命中后不再重画。
    单次再选教练保持原位，只有系统双击回到尾部。
 5. 语音停顿形成已提交片段，继续说话只会追加；普通训练与带练在证据充分时显示推算热量。
 6. 带练保存、恢复、退出或删除失败时保留数据并提示，不以外围 `do/catch` 掩盖 `SIGABRT`。

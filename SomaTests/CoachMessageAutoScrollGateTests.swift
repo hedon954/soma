@@ -76,17 +76,6 @@ final class CoachMessageAutoScrollGateTests: XCTestCase {
         XCTAssertTrue(coordinator.owns(second))
     }
 
-    func testInitialPageUsesLazyStackForCompoundMessageRows() {
-        XCTAssertFalse(CoachMessageStackPolicy.usesLazyStack(messageCount: 9))
-        XCTAssertTrue(CoachMessageStackPolicy.usesLazyStack(messageCount: 10))
-    }
-
-    func testMessagePaginationStartsAtTenAndAdvancesByTen() {
-        XCTAssertEqual(CoachMessagePagePolicy.pageSize, 10)
-        XCTAssertEqual(CoachMessagePagePolicy.nextLimit(after: 10), 20)
-        XCTAssertEqual(CoachMessagePagePolicy.nextLimit(after: 20), 30)
-    }
-
     @MainActor
     func testRenderPayloadCacheInvalidatesWhenTurnItemsChange() {
         CoachMessageRenderPayloadCache.removeAll()
@@ -122,7 +111,7 @@ final class CoachMessageAutoScrollGateTests: XCTestCase {
     }
 
     @MainActor
-    func testMemoryPressureRetentionKeepsOnlyTenCurrentSessionDTOs() {
+    func testMemoryPressureRetentionKeepsRecentDTOsAcrossSessions() {
         CoachMessageRenderPayloadCache.removeAll()
         defer { CoachMessageRenderPayloadCache.removeAll() }
         let currentSessionID = UUID()
@@ -139,9 +128,12 @@ final class CoachMessageAutoScrollGateTests: XCTestCase {
             text: "其他会话"
         ))
 
-        CoachMessageRenderPayloadCache.retainCurrentSession(currentSessionID)
+        CoachMessageRenderPayloadCache.retainCurrentSession(
+            currentSessionID,
+            maxCount: 8
+        )
 
-        XCTAssertEqual(CoachMessageRenderPayloadCache.cachedCount, 10)
+        XCTAssertEqual(CoachMessageRenderPayloadCache.cachedCount, 8)
     }
 
     @MainActor

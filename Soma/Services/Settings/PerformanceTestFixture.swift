@@ -263,9 +263,9 @@ enum PerformanceTestFixture {
             )
         }
 
-        // Markdown 完成态场景专门压单条 18k 正文，保持消息页在 eager 边界内，
-        // 避免把外层历史分页的惰性实例化混入后台解析断言。其余场景继续保留
-        // 39 轮大会话，覆盖消息级 LazyVStack 与分页。
+        // Markdown 完成态场景专门压单条 18k 正文，避免把外层历史分页混入
+        // 后台解析断言。其余场景继续保留 39 轮大会话，覆盖 30 条分页与
+        // 已加载页的即时 VStack。
         let historicalTurnCount = switch scenario {
         case .markdownCompletion: 3
         case .recordOptimizations, .agentStages: 0
