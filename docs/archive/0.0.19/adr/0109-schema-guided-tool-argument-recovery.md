@@ -4,13 +4,13 @@
 - 日期：2026-08-28
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 的 Tool 参数失败处理与进展明细布局
+  - [ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的 Tool 参数失败处理与进展明细布局
 - 后续替代：[ADR 0114](0114-progress-periods-and-adaptive-energy.md) 的四周期能量依据替代进展浮层；Tool 参数恢复仍有效
 - 上游依据：
   - [PRD 051](../prd/051-self-healing-tool-arguments-and-wide-progress-disclosure.md)
-  - [BUG 0044](../bugs/0044-tool-argument-type-mismatch-aborts-react.md)
+  - [BUG 0044](../../../bugs/0044-tool-argument-type-mismatch-aborts-react.md)
 - 下游落地：
-  - [验收矩阵](../acceptance.md)
+  - [验收矩阵](../../../acceptance.md)
 
 ## 背景
 

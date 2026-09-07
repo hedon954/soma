@@ -3,26 +3,26 @@
 - 状态：已实施；待 Release 真机验收
 - 日期：2026-09-02
 - 修订自：
-  - [PRD 047](../archive/0.0.16/prd/047-root-aware-tab-reselection.md) 的教练 Tab 再选行为
-  - [PRD 000](000-origin-through-0.0.11.md) 的前台恢复响应边界
-- 后续修订：[PRD 058](058-feedback-duration-and-editable-calories.md)（时长时分秒展示与可编辑预计消耗）
-- 后续修订：[ADR 0125](../adr/0125-eager-loaded-coach-messages.md)（已加载消息即时排版，滑动不再懒卸载）
+  - [PRD 047](../../0.0.16/prd/047-root-aware-tab-reselection.md) 的教练 Tab 再选行为
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的前台恢复响应边界
+- 后续修订：[PRD 058](../../../prd/058-feedback-duration-and-editable-calories.md)（时长时分秒展示与可编辑预计消耗）
+- 后续修订：[ADR 0125](../../../adr/0125-eager-loaded-coach-messages.md)（已加载消息即时排版，滑动不再懒卸载）
 - 上游依据：
   - 维护者提供的十七项严重 Bug、界面截图与崩溃报告
-  - [BUG 0045](../bugs/0045-guided-workout-coredata-abort.md)
-  - [BUG 0046](../bugs/0046-coach-stream-scrolls-into-blank-space.md)
-  - [BUG 0055](../bugs/0055-coach-history-scroll-repositions.md)
-  - [BUG 0047](../bugs/0047-terminal-failure-retry-leaves-stale-error.md)
-  - [BUG 0048](../bugs/0048-speech-segment-overwrites-committed-text.md)
-  - [BUG 0049](../bugs/0049-quick-camera-presentation-deadlock.md)
-  - [BUG 0050](../bugs/0050-coach-foreground-recovery-freezes-again.md)
+  - [BUG 0045](../../../bugs/0045-guided-workout-coredata-abort.md)
+  - [BUG 0046](../../../bugs/0046-coach-stream-scrolls-into-blank-space.md)
+  - [BUG 0055](../../../bugs/0055-coach-history-scroll-repositions.md)
+  - [BUG 0047](../../../bugs/0047-terminal-failure-retry-leaves-stale-error.md)
+  - [BUG 0048](../../../bugs/0048-speech-segment-overwrites-committed-text.md)
+  - [BUG 0049](../../../bugs/0049-quick-camera-presentation-deadlock.md)
+  - [BUG 0050](../../../bugs/0050-coach-foreground-recovery-freezes-again.md)
 - 下游落地：
   - [ADR 0110](../adr/0110-workout-tool-and-calorie-evidence.md)
   - [ADR 0111](../adr/0111-agent-response-identity-and-manual-recovery.md)
   - [ADR 0112](../adr/0112-coach-scroll-and-session-behavior.md)
   - [ADR 0113](../adr/0113-capture-and-foreground-lifecycle.md)
-  - [ADR 0125](../adr/0125-eager-loaded-coach-messages.md)
-- 后续修订：[PRD 056](056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
+  - [ADR 0125](../../../adr/0125-eager-loaded-coach-messages.md)
+- 后续修订：[PRD 056](../../../prd/056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
 
 ## 背景
 

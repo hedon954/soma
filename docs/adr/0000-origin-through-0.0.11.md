@@ -1,30 +1,30 @@
-# ADR 0000：0.0.18 及更早收口（压缩起点）
+# ADR 0000：0.0.19 及更早收口（压缩起点）
 
-- 状态：压缩起点；0.0.18 及更早滑出窗口后仍有效的架构收口
-- 日期：2026-09-05
+- 状态：压缩起点；0.0.19 及更早滑出窗口后仍有效的架构收口
+- 日期：2026-09-08
 - 维护者：Soma maintainers
-- 覆盖版本：0.0.1–0.0.18
+- 覆盖版本：0.0.1–0.0.19
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
-  - [ADR 0113](0113-capture-and-foreground-lifecycle.md)（前台首帧与 generation 恢复）
-  - [ADR 0114](0114-progress-periods-and-adaptive-energy.md)（四周期与历史能量估算）
   - [ADR 0117](0117-workout-share-editorial-poster.md)（仅训练分享导出采用固定白底与橙黄色主视觉，App 双主题不变）
-  - [ADR 0109](0109-schema-guided-tool-argument-recovery.md)（部分替代 Tool 参数失败处理）
+  - [ADR 0118](0118-exercise-facets-and-meal-colors.md)（摄入分项呈现；估算与周期口径仍由本收口约束）
+  - [ADR 0119](0119-full-video-and-append-only-dictation.md)（仅视频、语音或分享明细相关部分）
+  - [ADR 0120](0120-focused-shortcut-prompt.md)（选中快捷按钮后不再注入全量 Skill 目录；工具白名单规则不变）
+  - [ADR 0122](0122-nutrition-rings-and-period-deficit.md)（日页营养圆环与推荐摄入；Mifflin／PAL 估算不变）
   - [ADR 0124](0124-smtp-feedback-failure-taxonomy.md)（反馈失败分类与 IPv4 优先，仍用本机 QQ SMTP）
+  - [ADR 0125](0125-eager-loaded-coach-messages.md)（已加载页即时排版与常驻缓存；尾随与双击回尾仍有效）
+  - [PRD 058](../prd/058-feedback-duration-and-editable-calories.md)（仅补充预计消耗可被用户改写，公式仍是默认填充）
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
 - 下游落地：
-  - [PRD 053](../prd/053-adaptive-energy-estimation-and-progress.md)（动态能量估算）
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
   - [数据库结构与 ER 图](../engineering/database-schema.md)
   - [全 App 性能审计报告](../engineering/performance-audit-2026-08-24.md)
   - [性能优化经验教训（2026-08-26）](../engineering/performance-optimization-lessons-2026-08-26.md)
   - [验收矩阵](../acceptance.md)
-- 后续替代：[ADR 0119](0119-full-video-and-append-only-dictation.md)（仅视频、语音或分享明细相关部分）
-- 后续替代：[ADR 0120](0120-focused-shortcut-prompt.md)（选中快捷按钮后不再注入全量 Skill 目录；工具白名单规则不变）
 
-本文是活 ADR 链的起点。只记录 0.0.18 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
-0.0.19 起的修订见后续活 ADR。
+本文是活 ADR 链的起点。只记录 0.0.19 收口时仍然约束实现的决策，不保留沿途已被替代的方案史。
+0.0.20 起的修订见后续活 ADR。
 
 ## 背景
 
@@ -68,7 +68,8 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 ### Agent 运行时
 
 12. 原生流式 Tool Calling；Skills 可编辑，Tool 协议固定。一条远程 Attempt 一条 Trace，
-    Event 流式更新 UI。thinking 不展示、不持久化、不执行。
+    Event 流式更新 UI。thinking 不展示、不持久化、不执行。数字参数按注册 Schema 归一化无单位
+    数字与简单分数；仍不合法的值以 retryable `role: tool` 返回，同一 Loop 内由模型修正。
 13. 持久 Job、语义 Event Log 与独立投影。本地 step 检查点同气泡续跑且不递增 attemptNumber。
 14. 规范化幂等签名与 pending 账本。create 每次新增，update 按 ID 纠正。
 15. 未选快捷按钮注册当前协议全部 Tool；选中后只暴露按钮白名单。Skill 不持有工具权限。
@@ -84,9 +85,10 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 20. 十轮外滚动压缩可审查。可信时间、选择性媒体、按能力直传视频，失败后抽帧并诚实降级。
     provider、地址和模型名都不是多模态证据；只接受模型目录明确字段或远程部署显式开关，未知时
     允许真实请求验证。视频能力不能从图片能力推导。
-21. 一次 AI 回复始终是一条 `CoachMessage`；流式正文用单一 TextKit 文本面只追加已确认后缀，
-    内部块不是展示结构。无换行尾部必须有界，投影 pump 合并主线程积压；完成态 Markdown 在后台准备不可变
-    属性文本，流式期间始终跟随当前消息 ID 的真实底部。
+21. 一次 AI 回复始终是一条 `CoachMessage`；入队事务预绑定响应身份，等待、失败与人工重试复用
+    同一气泡。流式正文用单一 TextKit 文本面只追加已确认后缀，内部块不是展示结构。无换行尾部必须
+    有界，投影 pump 合并主线程积压；完成态 Markdown 在后台准备不可变属性文本，流式期间始终跟随
+    当前消息 ID 的真实底部。Session 默认标题由 `startedAt` 与业务时区格式化为 `MM月dd日 - 周X`。
 
 ### 带练、媒体与界面
 
@@ -95,10 +97,14 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 23. 有序混合媒体为一等数据。原位审查卡不得替换 Event Cards；卡跟在产生它的步骤之后。
     饮食为菜品清单加派生汇总。
 24. 语义双主题；无损有序训练证据编辑。训练是一级 Tab，辅助肌群不重分类，不建立无个体依据的
-    达标阈值。进展记录在 ModelActor 内按有界时间窗投影成不可变 DTO，View 不逐次查询或聚合模型；
-    单项指标可审查来源与公式。当前周期层级与能量估算由后续 ADR 0114 定义。
+    达标阈值。进展按日、周、月、年投影：日看当天记录，周看训练频率，月看容量与体重变化，年看
+    按月积累。记录在 ModelActor 内按有界时间窗投影成不可变 DTO，View 不逐次查询或聚合模型。
+    全天消耗 = 有效静息 × 动态活动系数；系数优先充分设备历史，其次个人设置，再默认参考 1.4
+    （不写入个人设置）。累计缺项按 0 加总并保留未知数。能量依据用紧凑数值列表，摄入与总消耗可
+    点开彩色分项浮层。单项指标可审查来源与公式。
     全产品 Switch 保持系统外形与统一状态色，免费签名 Widget 保持静态入口。Session 倒序分页读取
-    最近 30 条及更早哨兵，向上到顶后追加并保持视觉位置；短内容顶部对齐，超过一屏时首次贴底。
+    最近 30 条及更早哨兵，向上到顶后追加并保持视觉位置；短内容顶部对齐，打开 Session 停在最后
+    一条末尾。单次再选教练 no-op，系统双击回尾。
 25. 应用内反馈经认证边界投递；每条 AI 回复可在原位提交文字、媒体和评分。只在发送时按消息 ID
     定向组装当前 Turn 的有界脱敏 Job/Trace 摘要，禁止全聊天或完整 Trace 扫描。只有 MetricKit
     `MXCrashDiagnostic` 能成立自动崩溃报告；启动哨兵只补上下文，不独立判定崩溃。
@@ -119,12 +125,16 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
     `targetKind` 由动作定义投影。用户中断复用可见失败的持久状态、同气泡人工恢复与 FIFO 屏障，
     已成功 Tool 不回滚。设置与消息元信息只保留用户可理解的紧凑入口。
 
-31. 回前台不重选可见 Session，仅恢复可能挂起的 FIFO 队首 Job；发送前继续执行跨日门禁。
-    后续 ADR 0113 规定真实首帧、可取消 generation 和有界恢复执行顺序。
+31. 回前台不重选可见 Session。Scene active 后先画出缓存首帧，再恢复可能挂起的 FIFO 队首 Job；
+    远程撤销和网络等待在首帧之后可取消执行。快捷相机由根层状态机独占 `fullScreenCover`。
+    带练异步边界只传稳定 ID，不跨 Context 持有 `@Model`。发送前继续执行跨日门禁。
 32. Composer 的发送键在处理中复用为暂停，不增加第二个进行中停止入口。Trace 与反馈各保留独立
     44 pt 槽位并相向对齐。`MealEntry.recommendedEatingOrder` 与 Tool、幂等签名、查询、编辑、备份
     和导出共用同一字段；菜品变化后与升糖评估一起失效。字符串空默认值兼容旧库，便携格式 4 的
     可选字段兼容旧备份；不新增远程业务事实来源。
+33. 训练 Tool 使用 Schema v4：目标类型、侧别、逻辑组、effort 与逐组间歇。普通训练与带练共用
+    同一热量计算器；真实时长优先，否则每次约 4 秒加已记录间歇并标推算。缺体重或不完整证据时
+    保持未知，不显示 `0 kcal`。
 
 ## 未选择的方案
 
@@ -139,7 +149,7 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 ### 正向影响
 
 - Agent 先读本收口，再读三个活版本增量，即可得到当前产品与架构边界。
-- 0.0.18 及更早的过渡方案不再占用活上下文。
+- 0.0.19 及更早的过渡方案不再占用活上下文。
 
 ### 成本与限制
 
@@ -148,5 +158,5 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 
 ## 验证
 
-- 活 PRD/ADR README 以本文件为链起点，0.0.19 文档的修订自/部分替代指向本文件。
+- 活 PRD/ADR README 以本文件为链起点，0.0.21 文档的修订自/部分替代指向本文件。
 - `scripts/check-document-lifecycle-links.rb` 验证活文档互链；归档原文不要求与活文档互链。

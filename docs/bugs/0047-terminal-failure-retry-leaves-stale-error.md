@@ -5,8 +5,8 @@
 - 影响范围：Agent 终态失败、手动重试和消息元信息
 - 上游依据：维护者截图与重复反馈
 - 下游落地：
-  - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
-  - [ADR 0111](../adr/0111-agent-response-identity-and-manual-recovery.md)
+  - [PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
+  - [ADR 0111](../archive/0.0.19/adr/0111-agent-response-identity-and-manual-recovery.md)
 
 ## 症状
 

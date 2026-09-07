@@ -7,7 +7,7 @@
 - 后续替代：暂无
 - 上游依据：
   - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
-  - [BUG 0047](../bugs/0047-terminal-failure-retry-leaves-stale-error.md)
+  - [BUG 0047](../../../bugs/0047-terminal-failure-retry-leaves-stale-error.md)
 
 ## 背景
 

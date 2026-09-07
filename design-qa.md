@@ -71,7 +71,7 @@ final result: passed
 ## 范围
 
 - 参考：[选定稿与四周期细化](docs/assets/ui/2026-09-05/progress-refinement/README.md)
-- 实现：[PRD 054](docs/prd/054-progress-history-and-periods.md)；进展首页、训练／身体详情、能量依据。
+- 实现：[PRD 054](docs/archive/0.0.19/prd/054-progress-history-and-periods.md)；进展首页、训练／身体详情、能量依据。
 - 数据：`ProgressHistoryTestFixture` 的虚构餐食、体重、训练；未使用真实健康数据截图。
 - 主视口：iPhone 17 Pro，402×874pt / 1206×2622px，iOS Simulator 26.3。
 

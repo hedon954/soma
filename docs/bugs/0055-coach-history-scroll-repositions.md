@@ -5,9 +5,9 @@
 - 影响范围：教练消息列表上滑阅读、分页加载、含原位记录卡的历史气泡
 - 上游依据：维护者复现：上滑过程中列表不断跳，滑不到目标位置
 - 下游落地：
-  - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
+  - [PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
   - [ADR 0125](../adr/0125-eager-loaded-coach-messages.md)
-  - [ADR 0112](../adr/0112-coach-scroll-and-session-behavior.md)
+  - [ADR 0112](../archive/0.0.19/adr/0112-coach-scroll-and-session-behavior.md)
 
 ## 症状
 

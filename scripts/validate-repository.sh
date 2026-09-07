@@ -49,6 +49,10 @@ required_files=(
   docs/archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md
   docs/archive/0.0.18/prd/049-foreground-responsiveness-and-readable-monthly-progress.md
   docs/archive/0.0.18/prd/050-lightweight-progress-disclosure-and-coach-controls.md
+  docs/archive/0.0.19/prd/051-self-healing-tool-arguments-and-wide-progress-disclosure.md
+  docs/archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md
+  docs/archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md
+  docs/archive/0.0.19/prd/054-progress-history-and-periods.md
   docs/adr/0000-origin-through-0.0.11.md
   docs/archive/0.0.13/adr/0099-behavior-preserving-modernization-and-three-version-docs.md
   docs/archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md
@@ -60,6 +64,14 @@ required_files=(
   docs/archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md
   docs/archive/0.0.18/adr/0107-foreground-recovery-and-progress-evidence-projection.md
   docs/archive/0.0.18/adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md
+  docs/archive/0.0.19/adr/0109-schema-guided-tool-argument-recovery.md
+  docs/archive/0.0.19/adr/0110-workout-tool-and-calorie-evidence.md
+  docs/archive/0.0.19/adr/0111-agent-response-identity-and-manual-recovery.md
+  docs/archive/0.0.19/adr/0112-coach-scroll-and-session-behavior.md
+  docs/archive/0.0.19/adr/0113-capture-and-foreground-lifecycle.md
+  docs/archive/0.0.19/adr/0114-progress-periods-and-adaptive-energy.md
+  docs/archive/0.0.19/adr/0115-energy-default-reference-and-compact-details.md
+  docs/archive/0.0.19/adr/0116-progress-period-specific-focus.md
   docs/archive/README.md
   docs/archive/0.0.10/README.md
   docs/archive/0.0.11/README.md
@@ -69,6 +81,8 @@ required_files=(
   docs/archive/0.0.15/README.md
   docs/archive/0.0.16/README.md
   docs/archive/0.0.17/README.md
+  docs/archive/0.0.18/README.md
+  docs/archive/0.0.19/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md

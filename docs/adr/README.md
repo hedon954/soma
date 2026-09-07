@@ -1,7 +1,7 @@
 # Soma 架构决策记录
 
 活 ADR 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.21`、`0.0.20`、`0.0.19`。0.0.18 及更早的**原文**在 [文档归档](../archive/README.md)，
+`0.0.22`、`0.0.21`、`0.0.20`。0.0.19 及更早的**原文**在 [文档归档](../archive/README.md)，
 仅供人类考古；Agent 默认不要读取归档。
 
 ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答一个问题：当时有哪些选择、最终选了什么、为什么，以及这一选择带来的约束。
@@ -11,7 +11,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 阅读顺序：
 
 ```text
-[ADR 0000 压缩起点] → 0.0.19 → 0.0.20 → 0.0.21
+[ADR 0000 压缩起点] → 0.0.20 → 0.0.21 → 0.0.22
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后仍然成立的最终决策。窗口内最旧活 ADR 的
@@ -25,24 +25,17 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | ADR | 版本 | 状态 | 决策 |
 | --- | --- | --- | --- |
-| [0000](0000-origin-through-0.0.11.md) | ≤0.0.18 | 压缩起点 | 0.0.18 收口后仍约束实现的架构决策 |
-| [0109](0109-schema-guided-tool-argument-recovery.md) | 0.0.19 | 部分替代 | Schema 驱动数字归一化与错误回路仍有效；进展浮层由 [0114](0114-progress-periods-and-adaptive-energy.md) 修订 |
-| [0110](0110-workout-tool-and-calorie-evidence.md) | 0.0.19 | 已采纳 | 训练 Tool v4 与普通/带练热量共用逐组证据 |
-| [0111](0111-agent-response-identity-and-manual-recovery.md) | 0.0.19 | 已采纳 | 入队预建响应，等待、失败与人工重试复用同一消息 |
-| [0112](0112-coach-scroll-and-session-behavior.md) | 0.0.19 | 部分已替代 | 尾随与双击回尾仍有效；已加载页排版由 [0125](0125-eager-loaded-coach-messages.md) 修订 |
-| [0113](0113-capture-and-foreground-lifecycle.md) | 0.0.19 | 已采纳 | 根层快捷相机状态机、首帧后前台恢复与稳定 SwiftData ID |
-| [0114](0114-progress-periods-and-adaptive-energy.md) | 0.0.19 | 部分已替代 | 动态校准仍有效；0115 修订默认参考与披露，0116 区分周期信息重点 |
-| [0115](0115-energy-default-reference-and-compact-details.md) | 0.0.19 | 部分已替代 | 默认估算与浮层仍有效；日页宏量呈现由 [0122](0122-nutrition-rings-and-period-deficit.md) 修订 |
-| [0116](0116-progress-period-specific-focus.md) | 0.0.19 | 已采纳 | 日、周、月、年训练与身体信息重点 |
+| [0000](0000-origin-through-0.0.11.md) | ≤0.0.19 | 压缩起点 | 0.0.19 收口后仍约束实现的架构决策 |
+| （无独立 ADR） | 0.0.20 | — | Changelog 仅修复 Xcode 26.3 类型检查超时 |
 | [0117](0117-workout-share-editorial-poster.md) | 0.0.21 | 已采纳 | 部分替代 [0000](0000-origin-through-0.0.11.md) 的分享导出外观：固定白底、橙黄色主视觉与连续逻辑组压缩 |
 | [0118](0118-exercise-facets-and-meal-colors.md) | 0.0.21 | 部分已替代 | 部位映射与餐次配色仍有效；分类轴由 [0123](0123-exercise-movement-kinds.md) 修订 |
-| [0119](0119-full-video-and-append-only-dictation.md) | Unreleased | 部分已替代 | 完整视频与追加-only 草稿仍有效；听写预览由 [0121](0121-live-dictation-preview.md) 修订 |
-| [0120](0120-focused-shortcut-prompt.md) | Unreleased | 已采纳 | 选中快捷按钮后省略 Skill 目录并收窄上下文 |
-| [0121](0121-live-dictation-preview.md) | Unreleased | 已采纳 | 未确认听写片段只作输入框预览，确认后才写入草稿 |
-| [0122](0122-nutrition-rings-and-period-deficit.md) | Unreleased | 已采纳 | 日页营养圆环与推荐摄入；周月年不展示环或周期跳转 |
-| [0123](0123-exercise-movement-kinds.md) | Unreleased | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
-| [0124](0124-smtp-feedback-failure-taxonomy.md) | Unreleased | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
-| [0125](0125-eager-loaded-coach-messages.md) | Unreleased | 已采纳 | 已加载聊天页即时排版并常驻缓存；切 Tab／Session 不重画，分页按 30 条 |
+| [0119](0119-full-video-and-append-only-dictation.md) | 0.0.22 | 部分已替代 | 完整视频与追加-only 草稿仍有效；听写预览由 [0121](0121-live-dictation-preview.md) 修订 |
+| [0120](0120-focused-shortcut-prompt.md) | 0.0.22 | 已采纳 | 选中快捷按钮后省略 Skill 目录并收窄上下文 |
+| [0121](0121-live-dictation-preview.md) | 0.0.22 | 已采纳 | 未确认听写片段只作输入框预览，确认后才写入草稿 |
+| [0122](0122-nutrition-rings-and-period-deficit.md) | 0.0.22 | 已采纳 | 日页营养圆环与推荐摄入；周月年不展示环或周期跳转 |
+| [0123](0123-exercise-movement-kinds.md) | 0.0.22 | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
+| [0124](0124-smtp-feedback-failure-taxonomy.md) | 0.0.22 | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
+| [0125](0125-eager-loaded-coach-messages.md) | 0.0.22 | 已采纳 | 已加载聊天页即时排版并常驻缓存；切 Tab／Session 不重画，分页按 30 条 |
 
 新决策使用 [ADR 模板](template.md)。
 

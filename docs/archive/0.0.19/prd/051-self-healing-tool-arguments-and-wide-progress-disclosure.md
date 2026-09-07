@@ -3,11 +3,11 @@
 - 状态：已采纳，已实施；待真机交互验收
 - 日期：2026-08-28
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的 Tool 参数、ReAct 错误回路与进展明细
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的 Tool 参数、ReAct 错误回路与进展明细
 - 后续替代：[PRD 054](054-progress-history-and-periods.md) 替代进展浮层；Tool 参数纠错规则保持有效
 - 上游依据：
   - 维护者提供的真机参数失败与进展浮层截图
-  - [BUG 0044](../bugs/0044-tool-argument-type-mismatch-aborts-react.md)
+  - [BUG 0044](../../../bugs/0044-tool-argument-type-mismatch-aborts-react.md)
 - 下游落地：[ADR 0109](../adr/0109-schema-guided-tool-argument-recovery.md)
 
 ## 背景

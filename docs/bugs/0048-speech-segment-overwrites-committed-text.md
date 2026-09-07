@@ -6,7 +6,7 @@
 - 发现日期：2026-09-02
 - 影响范围：教练输入框连续听写、停顿后继续与停止后重启
 - 上游依据：维护者复现描述
-- 下游落地：[PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
+- 下游落地：[PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
 
 ## 症状
 

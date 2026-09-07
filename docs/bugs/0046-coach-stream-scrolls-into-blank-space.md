@@ -5,8 +5,8 @@
 - 影响范围：发送消息、零 token 等待、首 token、Markdown 流式增长与键盘切换
 - 上游依据：维护者截图与复现描述
 - 下游落地：
-  - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
-  - [ADR 0112](../adr/0112-coach-scroll-and-session-behavior.md)
+  - [PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
+  - [ADR 0112](../archive/0.0.19/adr/0112-coach-scroll-and-session-behavior.md)
 
 ## 症状
 

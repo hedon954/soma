@@ -3,13 +3,13 @@
 - 状态：已采纳，代码已实施；待 Release 真机量化验收
 - 日期：2026-09-02
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的前台恢复执行顺序
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的前台恢复执行顺序
 - 后续替代：暂无
 - 上游依据：
   - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
-  - [BUG 0045](../bugs/0045-guided-workout-coredata-abort.md)
-  - [BUG 0049](../bugs/0049-quick-camera-presentation-deadlock.md)
-  - [BUG 0050](../bugs/0050-coach-foreground-recovery-freezes-again.md)
+  - [BUG 0045](../../../bugs/0045-guided-workout-coredata-abort.md)
+  - [BUG 0049](../../../bugs/0049-quick-camera-presentation-deadlock.md)
+  - [BUG 0050](../../../bugs/0050-coach-foreground-recovery-freezes-again.md)
 
 ## 背景
 

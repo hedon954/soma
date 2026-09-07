@@ -3,8 +3,8 @@
 - 状态：用户已确认四周期方向，按 PRD 054 实施中；设计稿不代表实现验收
 - 日期：2026-09-05
 - 修订自：[目标导向进展指标调研](2026-08-26-goal-directed-progress-metrics.md)；保留目标导向与来源可查，调整时间入口和指标层级
-- 配套方案：[动态能量估算 PRD 053](../prd/053-adaptive-energy-estimation-and-progress.md)
-- 下游落地：[PRD 054](../prd/054-progress-history-and-periods.md)
+- 配套方案：[动态能量估算 PRD 053](../archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md)
+- 下游落地：[PRD 054](../archive/0.0.19/prd/054-progress-history-and-periods.md)
 - 跟踪：[主 TODO / BUG-20](../../.codex/plans/2026-09-02-coach-training-critical-bugfixes.md)
 - 视觉稿：[选定方向的四周期细化](../assets/ui/2026-09-05/progress-refinement/README.md)
 
@@ -125,7 +125,7 @@
 历史每天都应能查到摄入、可获得的消耗与依据。全天估算使用该日及之前可用的资料和活动证据，
 不能把今天的体重、系数直接覆盖所有历史。旧数据补算标注“补算”；新同步或编辑引起的重算可追溯。
 全天估算与设备截至当前的能量分开，今天的部分摄入不能直接称为已经形成的全天热量缺口。
-详细估算边界继续由 [PRD 053](../prd/053-adaptive-energy-estimation-and-progress.md) 约束。
+详细估算边界继续由 [PRD 053](../archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md) 约束。
 
 - 记录小计没有值时显示 **已记录 0**；部分热量未知时先加已知部分，详情说明未计入条目。
 - “没有记录”与“实际为 0”保留区别。空白饮食日不当零摄入参与生理校准，缺体重也不画 0kg。

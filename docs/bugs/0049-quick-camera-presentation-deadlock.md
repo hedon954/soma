@@ -5,8 +5,8 @@
 - 影响范围：桌面 Widget、锁屏 Widget、App Shortcut 快速拍照
 - 上游依据：维护者真机反馈
 - 下游落地：
-  - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
-  - [ADR 0113](../adr/0113-capture-and-foreground-lifecycle.md)
+  - [PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
+  - [ADR 0113](../archive/0.0.19/adr/0113-capture-and-foreground-lifecycle.md)
 
 ## 症状
 

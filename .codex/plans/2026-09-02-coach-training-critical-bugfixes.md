@@ -49,7 +49,7 @@
   `reasoning_content`、`reasoning`、`analysis` 与正文、Tool Call 分流；进行中使用 Agent 过程样式展开并持续更新，结束后同一思考 Item 持久化且默认收起，用户可手动展开；不得把思考写进 `CoachMessage.text` 或最终正文。厂商把内部草稿错误塞进正文通道时先隔离为思考，再请求一次只输出最终答案；工具续跑、重连和 Worker 替换保留思考上下文。本地/远程/Server 投影与回放已实现，Server 39 项通过、1 项仅因无 PostgreSQL 跳过；App 单元测试和思考逐态 UI 回归通过。待真实支持 reasoning 的厂商流式验收。
 
 - [ ] BUG-20：进展页能量展示改为同口径、可追溯指标。
-  再次打开：用户要求累计未知项按 0 参与加法，并以动态活动证据形成全天消耗预估，不再仅展示“基础 + 训练”。[PRD 053](../../docs/prd/053-adaptive-energy-estimation-and-progress.md) 展开研究、方案与验证门禁；28/30 天为待验证候选，不是科学定律。第四轮旧能量 UI/单测只保留为阶段证据，不代表新方案已实现。
+  再次打开：用户要求累计未知项按 0 参与加法，并以动态活动证据形成全天消耗预估，不再仅展示“基础 + 训练”。[PRD 053](../../docs/archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md) 展开研究、方案与验证门禁；28/30 天为待验证候选，不是科学定律。第四轮旧能量 UI/单测只保留为阶段证据，不代表新方案已实现。
   - [x] 核实 Mifflin、FAO/WHO/UNU、NASEM、Hall 与 HealthKit 依据，区分科学结论和产品假设。
   - [x] 形成精简 PRD 053，仅保留目标、调研依据与结论；实现和验收 TODO 在本计划继续跟踪。
   - [x] 调研三类代表健身产品，形成[进展历史与图表重设计提议](../../docs/research/2026-09-05-progress-history-and-chart-design.md)，区分公开证据与使用情境假设。

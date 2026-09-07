@@ -2,7 +2,7 @@
 
 - 状态：代码、本地门禁、提交推送与双机安装完成；真实 HealthKit 验收继续跟踪
 - 用户目标：能查看任意一天，以及周、月、年的饮食、能量、训练、身体趋势
-- 上游依据：[PRD 053](../../docs/prd/053-adaptive-energy-estimation-and-progress.md)、[PRD 054](../../docs/prd/054-progress-history-and-periods.md)、[ADR 0114](../../docs/adr/0114-progress-periods-and-adaptive-energy.md)
+- 上游依据：[PRD 053](../../docs/archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md)、[PRD 054](../../docs/archive/0.0.19/prd/054-progress-history-and-periods.md)、[ADR 0114](../../docs/archive/0.0.19/adr/0114-progress-periods-and-adaptive-energy.md)
 - 设计：[四个周期设计稿](../../docs/assets/ui/2026-09-05/progress-refinement/README.md)
 - 总跟踪：[BUG-20](2026-09-02-coach-training-critical-bugfixes.md)
 

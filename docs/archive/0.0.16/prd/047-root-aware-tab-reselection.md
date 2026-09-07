@@ -3,7 +3,7 @@
 - 状态：已采纳，已实施；模拟器与真机回归通过
 - 日期：2026-08-26
 - 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的底部 Tab 再选规则
-- 后续修订：[PRD 052](../../../prd/052-coach-training-and-lifecycle-reliability.md) 增加“单击保持 no-op、仅系统双击回到 AI 消息尾部”的子行为
+- 后续修订：[PRD 052](../../0.0.19/prd/052-coach-training-and-lifecycle-reliability.md) 增加“单击保持 no-op、仅系统双击回到 AI 消息尾部”的子行为
 - 上游依据：维护者明确确认的唯一交互结论；[BUG 0040](../../../bugs/0040-hidden-coach-subtree-tab-invalidation.md)
 - 下游落地：[ADR 0105](../adr/0105-root-aware-tab-reselection.md)
 

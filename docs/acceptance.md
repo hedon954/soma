@@ -3,6 +3,7 @@
 - 后续修订：[ADR 0119](adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
 - 后续修订：[PRD 057](prd/057-coach-focus-progress-rings-and-library-clarity.md)（快捷聚焦、实时听写预览、营养圆环与动作类型）
 - 后续修订：[PRD 058](prd/058-feedback-duration-and-editable-calories.md)（反馈失败分类、时长时分秒、可编辑训练热量）
+- 后续修订：[ADR 0125](adr/0125-eager-loaded-coach-messages.md)（已加载聊天页即时排版与常驻缓存）
 
 - 上游依据：
   - [ADR 0000：压缩起点](adr/0000-origin-through-0.0.11.md) 收口的安装基线、性能预算与缓存失效规则
@@ -14,7 +15,7 @@
   - [ADR 0106：可审查派生记录与人工中断屏障](archive/0.0.17/adr/0106-reviewable-derived-records-and-manual-interruption.md)
   - [ADR 0107：前台恢复与进展证据投影](archive/0.0.18/adr/0107-foreground-recovery-and-progress-evidence-projection.md)
   - [ADR 0108：跟随式进展披露与可审查饮食顺序](archive/0.0.18/adr/0108-contextual-progress-disclosure-and-reviewable-meal-order.md)
-  - [ADR 0109：Schema 驱动的 Tool 参数恢复](adr/0109-schema-guided-tool-argument-recovery.md)
+  - [ADR 0109：Schema 驱动的 Tool 参数恢复](archive/0.0.19/adr/0109-schema-guided-tool-argument-recovery.md)
 
 本清单以当前 SwiftUI、SwiftData 实现和可重复运行的验证命令为准。自然语言与媒体事实由
 教练对话创建；训练计划可在专用 GUI 中确定性编排，带练可保存用户逐组确认的事实。其他列表
@@ -348,13 +349,13 @@ JSON 和有序媒体；设置密码备份后让 App 进入后台，再返回确�
 历史与 Tab 验收：打开训练历史，导航栏常驻「训练记录」标题与图标，其下是没有实心底条的「全部」和有数据的月份芯片，点日期折叠再展开当天；
 饮食历史同样按天分组。从进展进入一条饮食详情，切到训练 Tab 再切回进展，仍停在该详情；再点
 「进展」回到进展首页，再点根页「进展」不滚动也不刷新。教练在当前 Session、抽屉或健身房页
-再次点按均无反应。进展按 [PRD 054](prd/054-progress-history-and-periods.md) 检查日／周／月／年、日历任意选日、
+再次点按均无反应。进展按 [PRD 000](prd/000-origin-through-0.0.11.md) 与 [PRD 057](prd/057-coach-focus-progress-rings-and-library-clarity.md) 检查日／周／月／年、日历任意选日、
 箭头和回到当前周期；首次进入默认「日」和今天，手动选周后切 Tab 返回仍为周；点选图表不改变时间窗口、也不切换周期。柱图从零开始，虚线与柱使用同一 kcal 轴，年按有效天数加权。
 今日不混入完整日均值，未来不补零；累计未知项按零计入小计，原记录仍为空，缺失数在能量依据里可见。
-能量依据按 [ADR 0115](adr/0115-energy-default-reference-and-compact-details.md) 使用紧凑数值列表，公式、来源和诊断在计算明细内。
+能量依据按 [ADR 0000](adr/0000-origin-through-0.0.11.md) 使用紧凑数值列表，公式、来源和诊断在计算明细内。
 分别点击摄入／总消耗，原位显示餐食／消耗组成的彩色明细浮层；周月年分项与首页有效日均值一致，训练不重复叠加。
 有有效全天静息即用个人设置或默认参考 1.4 估算，充分的设备历史仍优先；只使用目标日前的设备历史，不把默认值写成用户事实。
-按 [ADR 0116](adr/0116-progress-period-specific-focus.md) 验证日页无重复训练／身体卡且原记录和分享可达；周显示训练频率与周均体重，月显示容量及月内体重变化，年显示按月训练天数与月均体重变化。缺测不补体重，单个测量日／月不生成变化值。
+按 [ADR 0000](adr/0000-origin-through-0.0.11.md) 与 [ADR 0122](adr/0122-nutrition-rings-and-period-deficit.md) 验证日页无重复训练／身体卡且原记录和分享可达；周显示训练频率与周均体重，月显示容量及月内体重变化，年显示按月训练天数与月均体重变化。缺测不补体重，单个测量日／月不生成变化值。
 训练详情切换天数／工作组／容量／时长，身体详情切换体重／体脂率／腰围，点击进入相同原记录详情；修改、删除后统计刷新，分享复用当日聚合。
 HealthKit 真机验证同源静息／活动、覆盖不足、拒绝权限、撤销、后台取消；安装、模拟器通过与真实估算精度分别记录。
 

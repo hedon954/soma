@@ -4,7 +4,7 @@
 - 日期：2026-09-02
 - 维护者：Soma maintainers
 - 部分替代：无
-- 后续替代：[PRD 058](../prd/058-feedback-duration-and-editable-calories.md) 仅补充预计消耗可被用户改写，公式仍是默认填充
+- 后续替代：[PRD 058](../../../prd/058-feedback-duration-and-editable-calories.md) 仅补充预计消耗可被用户改写，公式仍是默认填充
 - 上游依据：[PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
 
 ## 背景

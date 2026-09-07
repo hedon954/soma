@@ -6,8 +6,8 @@
 - 修订自：[BUG 0043](0043-coach-foreground-recovery-main-thread-stall.md) 的首次修复
 - 上游依据：维护者真机反馈
 - 下游落地：
-  - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
-  - [ADR 0113](../adr/0113-capture-and-foreground-lifecycle.md)
+  - [PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
+  - [ADR 0113](../archive/0.0.19/adr/0113-capture-and-foreground-lifecycle.md)
 
 ## 症状
 

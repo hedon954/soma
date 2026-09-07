@@ -4,12 +4,13 @@
 - 日期：2026-09-08
 - 维护者：Soma maintainers
 - 上游依据：
-  - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)
+  - [PRD 000](../prd/000-origin-through-0.0.11.md)
   - [BUG 0055](../bugs/0055-coach-history-scroll-repositions.md)
 - 部分替代：
-  - [ADR 0112](0112-coach-scroll-and-session-behavior.md) 仅消息列表懒栈与
+  - [ADR 0000](0000-origin-through-0.0.11.md) 仅消息列表懒栈与
     `defaultScrollAnchor` alignment；尾随、双击回尾和 Session 日期标题不变
 - 后续替代：暂无
+- 下游落地：[验收](../acceptance.md)
 
 ## 背景
 

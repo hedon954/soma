@@ -2,7 +2,7 @@
 
 - 状态：已采纳
 - 日期：2026-09-05
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的动作库浏览、[PRD 054](054-progress-history-and-periods.md) 的日摄入明细
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的动作库浏览与日摄入明细
 - 下游落地：[ADR 0118](../adr/0118-exercise-facets-and-meal-colors.md)
 - 后续修订：[PRD 057](057-coach-focus-progress-rings-and-library-clarity.md) 去掉受力肌群轴，动作模式改为类型，搜索改到右侧；摄入／消耗／宏量明细不再重复卡面已有汇总
 

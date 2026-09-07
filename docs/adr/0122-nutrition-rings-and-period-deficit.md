@@ -5,7 +5,7 @@
 - 维护者：Soma maintainers
 - 上游依据：[PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
 - 部分替代：
-  - [ADR 0115](0115-energy-default-reference-and-compact-details.md) 的日页线性宏量与缺口文案呈现；Mifflin／PAL 估算不变
+  - [ADR 0000](0000-origin-through-0.0.11.md) 的日页线性宏量与缺口文案呈现；Mifflin／PAL 估算不变
 - 后续替代：暂无
 
 ## 背景
@@ -58,4 +58,4 @@
 ## 参考
 
 - ISSN 蛋白质范围作为产品取点依据，不声称个体处方。
-- [PRD 053](../prd/053-adaptive-energy-estimation-and-progress.md)
+- [PRD 000](../prd/000-origin-through-0.0.11.md)

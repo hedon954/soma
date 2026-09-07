@@ -5,15 +5,15 @@
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的集中说明入口与仅展示截至当前总消耗
 - 后续替代：
-  - [ADR 0114](../../../adr/0114-progress-periods-and-adaptive-energy.md) 的四周期投影与历史动态能量估算；仅替代本页决策 2 的固定窗口及决策 4
+  - [ADR 0114](../../0.0.19/adr/0114-progress-periods-and-adaptive-energy.md) 的四周期投影与历史动态能量估算；仅替代本页决策 2 的固定窗口及决策 4
   - [ADR 0108](0108-contextual-progress-disclosure-and-reviewable-meal-order.md) 的跟随式进展明细与目标直选
-  - [ADR 0113](../../../adr/0113-capture-and-foreground-lifecycle.md) 的真实首帧门禁、可取消 generation 与有界渲染快照
+  - [ADR 0113](../../0.0.19/adr/0113-capture-and-foreground-lifecycle.md) 的真实首帧门禁、可取消 generation 与有界渲染快照
 - 上游依据：
   - [PRD 049](../prd/049-foreground-responsiveness-and-readable-monthly-progress.md)
   - [BUG 0043](../../../bugs/0043-coach-foreground-recovery-main-thread-stall.md)
 - 下游落地：
   - [验收矩阵](../../../acceptance.md)
-  - [PRD 053](../../../prd/053-adaptive-energy-estimation-and-progress.md) 的动态能量估算
+  - [PRD 053](../../0.0.19/prd/053-adaptive-energy-estimation-and-progress.md) 的动态能量估算
 
 ## 背景
 

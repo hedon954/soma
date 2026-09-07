@@ -5,6 +5,11 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-09-08
+
+本版本让教练已加载消息一次排版并常驻缓存，进展日页改为营养圆环对照推荐摄入，并收紧快捷聚焦、
+完整视频、听写预览与记录审查。
+
 ### Fixed
 
 - 教练已加载消息改为一次排版并常驻缓存：上滑不再边滑边画，切 Tab／Session 命中缓存也不重画；按 30 条分页。打开 Session 停在最后一条消息末尾。
@@ -31,7 +36,7 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 ### Data, privacy and compatibility
 
 - 不新增持久字段、数据库迁移或最低 iOS 变化；语音音频留在设备，首次系统模型下载需要网络。视频沿用户主动发送/引用的现有模型通道传输。
-
+- 真机安装完成后由维护者手动启动 App。GitHub Release 仅发布源码和变更说明，不包含 TestFlight 分发。
 
 ## [0.0.21] - 2026-09-05
 

@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.21`、`0.0.20`、`0.0.19`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.22`、`0.0.21`、`0.0.20`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.18 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.19 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.19 → 0.0.20 → 0.0.21
+[PRD 000 压缩起点] → 0.0.20 → 0.0.21 → 0.0.22
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,15 +30,12 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.18 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.18 | 压缩起点 |
-| [051：可自愈工具参数与宽幅进展明细](051-self-healing-tool-arguments-and-wide-progress-disclosure.md) | 0.0.19 | Tool 规则有效；进展浮层由 054 部分替代 |
-| [052：教练、训练与生命周期可靠性](052-coach-training-and-lifecycle-reliability.md) | 0.0.19 | 活增量 |
-| [053：动态能量估算与可解释的进展展示](053-adaptive-energy-estimation-and-progress.md) | 0.0.19 | 已采纳；ADR 0115 补充默认参考估算 |
-| [054：进展历史与四周期统计](054-progress-history-and-periods.md) | 0.0.19 | 已采纳；ADR 0115 恢复指标明细，0116 按四周期区分信息重点 |
+| [000：0.0.19 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.19 | 压缩起点 |
+| （无独立 PRD） | 0.0.20 | Changelog 仅修复 Xcode 26.3 类型检查超时 |
 | [055：动作分类与餐次明细](055-exercise-facets-and-meal-breakdown.md) | 0.0.21 | 分类轴与明细汇总由 057 部分修订 |
-| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | Unreleased | 听写呈现由 057 部分修订 |
-| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | Unreleased | 已采纳 |
-| [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | Unreleased | 已采纳 |
+| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | 0.0.22 | 听写呈现由 057 部分修订 |
+| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | 0.0.22 | 已采纳 |
+| [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | 0.0.22 | 已采纳 |
 
 ## 阅读约定
 

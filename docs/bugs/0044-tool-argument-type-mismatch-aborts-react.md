@@ -5,8 +5,8 @@
 - 影响范围：教练中涉及记录纠正的本地与远程 Tool 调用
 - 上游依据：维护者真机反馈
 - 下游落地：
-  - [PRD 051](../prd/051-self-healing-tool-arguments-and-wide-progress-disclosure.md)
-  - [ADR 0109](../adr/0109-schema-guided-tool-argument-recovery.md)
+  - [PRD 051](../archive/0.0.19/prd/051-self-healing-tool-arguments-and-wide-progress-disclosure.md)
+  - [ADR 0109](../archive/0.0.19/adr/0109-schema-guided-tool-argument-recovery.md)
 
 ## 症状
 
