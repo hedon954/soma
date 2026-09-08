@@ -15,7 +15,9 @@
   - [ADR 0126](../adr/0126-workout-share-pro-max-canvas.md)
   - [ADR 0127](../adr/0127-agent-workout-weight-and-rest-zero.md)
   - [验收](../acceptance.md)
-- 后续修订：[PRD 060](060-remove-healthkit-until-redesign.md)（仅撤回设备能量来源；训练 MET 不累加仍有效）
+- 后续修订：
+  - [PRD 060](060-remove-healthkit-until-redesign.md)（仅撤回设备能量来源）
+  - [PRD 061](061-daily-energy-net-training.md)（仅日总计加入去重后的训练增量；进展列表同时显示容量与热量仍有效）
 
 ## 背景
 
@@ -26,8 +28,8 @@
 ## 用户结果
 
 1. 本机上下文直接给出当日饮食/训练的 Int64 `record_id`，纠正不必试错。
-2. 进展日列表每条训练同时给出容量与已估算热量；预估总消耗仍是静息 × 活动系数，并写明训练
-   kcal 已含在系数中、不再累加。
+2. 进展日列表每条训练同时给出容量与已估算热量；预估总消耗由 [PRD 061](061-daily-energy-net-training.md)
+   在静息 × 系数上加入去重后的训练增量。
 3. 训练分享贴合 iPhone 17 Pro Max 纸面；计划里的训练统计能打开复盘。
 4. 教练页写入训练/饮食后，进展当日列表立即一致。
 5. Agent 写入的重量与组间间歇未说明时为 0：0kg 是自重，0 秒是没有休息。
@@ -38,7 +40,7 @@
 ## 产品规则
 
 - Agent 上下文与跨轮引用只暴露 Int64 `record_id` / `exercise_id` / `program_id` / `session_id`。
-- 预估总消耗公式不变。已记录训练消耗只作对照，不加入 TDEE。
+- 进展日列表同时给出容量与已估算热量。日总计公式见 [PRD 061](061-daily-energy-net-training.md)。
 - 「训练记录」默认不预填；「近期分析」仍可预填。用户自定义建议句保留。
 
 ## 数据与隐私
@@ -47,7 +49,7 @@
 
 ## 明确不在范围
 
-把训练 MET 加进预估总消耗；UUID 到 Int64 的猜测映射。
+UUID 到 Int64 的猜测映射。
 
 ## 验收
 

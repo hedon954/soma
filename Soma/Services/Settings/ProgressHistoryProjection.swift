@@ -18,6 +18,7 @@ struct ProgressRecordedTotal: Equatable, Sendable {
 struct ProgressHistoryRecord: Sendable {
     let activity: ProgressRecentActivity
     var calories: Double?
+    var calorieMET: Double?
     var protein: Double?
     var carbs: Double?
     var fat: Double?
@@ -138,7 +139,16 @@ enum ProgressHistoryProjection {
                 logicalSets: workouts.reduce(0) { $0 + max(0, $1.logicalSets) },
                 energy: AdaptiveEnergyEstimator.estimate(
                     for: cursor, now: now, restingEstimate: resting,
-                    baselines: profile?.baselines ?? [], calendar: calendar
+                    baselines: profile?.baselines ?? [],
+                    trainingNetKilocalories: workouts.reduce(0) { partial, workout in
+                        partial + (TrainingEnergyNetIncrement.kilocalories(
+                            gross: workout.calories,
+                            met: workout.calorieMET,
+                            durationMinutes: workout.durationSeconds.map { $0 / 60 },
+                            dailyResting: resting
+                        ) ?? 0)
+                    },
+                    calendar: calendar
                 ),
                 restingFormula: formula, usesLaterProfile: (profile?.updatedAt ?? .distantPast) >= next
             ))

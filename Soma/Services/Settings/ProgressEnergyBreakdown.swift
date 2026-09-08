@@ -56,13 +56,17 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             let count = Double(estimates.count)
             let resting = estimates.reduce(0) { $0 + $1.restingKilocalories } / count
             let total = estimates.reduce(0) { $0 + $1.totalKilocalories } / count
+            let restingSum = estimates.reduce(0) { $0 + $1.restingKilocalories }
+            let factor = restingSum > 0
+                ? estimates.reduce(0) { $0 + $1.restingKilocalories * $1.factor } / restingSum
+                : estimates[0].factor
             let prefix = daily ? "" : "日均"
             rows = [
                 Row(id: "resting", label: prefix + "静息消耗", value: Self.energy(resting), tone: .resting),
                 Row(id: "activity", label: prefix + "活动等消耗", value: Self.energy(total - resting), tone: .activity),
                 Row(
                     id: "factor", label: daily ? "活动系数" : "综合活动系数",
-                    value: (total / resting).formatted(.number.precision(.fractionLength(2))), tone: .factor
+                    value: factor.formatted(.number.precision(.fractionLength(2))), tone: .factor
                 )
             ]
         case .protein:

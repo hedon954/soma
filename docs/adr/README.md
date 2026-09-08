@@ -32,21 +32,14 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0119](0119-full-video-and-append-only-dictation.md) | 0.0.22 | 部分已替代 | 完整视频与追加-only 草稿仍有效；听写预览由 [0121](0121-live-dictation-preview.md) 修订 |
 | [0120](0120-focused-shortcut-prompt.md) | 0.0.22 | 已采纳 | 选中快捷按钮后省略 Skill 目录并收窄上下文 |
 | [0121](0121-live-dictation-preview.md) | 0.0.22 | 已采纳 | 未确认听写片段只作输入框预览，确认后才写入草稿 |
-| [0122](0122-nutrition-rings-and-period-deficit.md) | 0.0.22 | 已采纳 | 日页营养圆环与推荐摄入；周月年不展示环或周期跳转 |
+| [0122](0122-nutrition-rings-and-period-deficit.md) | 0.0.22 | 部分已替代 | 日页圆环仍有效；估算由 [0129](0129-daily-energy-net-training-increment.md) 加入训练净增量 |
 | [0123](0123-exercise-movement-kinds.md) | 0.0.22 | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
 | [0124](0124-smtp-feedback-failure-taxonomy.md) | 0.0.22 | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
 | [0125](0125-eager-loaded-coach-messages.md) | 0.0.22 | 已采纳 | 已加载聊天页即时排版并常驻缓存；切 Tab／Session 不重画，分页按 30 条 |
 | [0126](0126-workout-share-pro-max-canvas.md) | 0.0.22 | 已采纳 | 训练分享导出固定 440×956 pt Pro Max 纸面，明细压缩进同一画布 |
 | [0127](0127-agent-workout-weight-and-rest-zero.md) | 0.0.22 | 已采纳 | Agent 训练重量与组间间歇未说明时写 0；0kg 为自重 |
-| [0128](0128-remove-healthkit-until-redesign.md) | 0.0.22 | 已采纳 | 当前不接入 HealthKit；进展估算只用 Mifflin × 活动系数 |
-| [0118](0118-exercise-facets-and-meal-colors.md) | 0.0.21 | 部分已替代 | 部位映射与餐次配色仍有效；分类轴由 [0123](0123-exercise-movement-kinds.md) 修订 |
-| [0119](0119-full-video-and-append-only-dictation.md) | 0.0.22 | 部分已替代 | 完整视频与追加-only 草稿仍有效；听写预览由 [0121](0121-live-dictation-preview.md) 修订 |
-| [0120](0120-focused-shortcut-prompt.md) | 0.0.22 | 已采纳 | 选中快捷按钮后省略 Skill 目录并收窄上下文 |
-| [0121](0121-live-dictation-preview.md) | 0.0.22 | 已采纳 | 未确认听写片段只作输入框预览，确认后才写入草稿 |
-| [0122](0122-nutrition-rings-and-period-deficit.md) | 0.0.22 | 已采纳 | 日页营养圆环与推荐摄入；周月年不展示环或周期跳转 |
-| [0123](0123-exercise-movement-kinds.md) | 0.0.22 | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
-| [0124](0124-smtp-feedback-failure-taxonomy.md) | 0.0.22 | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
-| [0125](0125-eager-loaded-coach-messages.md) | 0.0.22 | 已采纳 | 已加载聊天页即时排版并常驻缓存；切 Tab／Session 不重画，分页按 30 条 |
+| [0128](0128-remove-healthkit-until-redesign.md) | 0.0.22 | 部分已替代 | 当前不接入 HealthKit；日总计公式由 [0129](0129-daily-energy-net-training-increment.md) 修订 |
+| [0129](0129-daily-energy-net-training-increment.md) | 0.0.22 | 已采纳 | 日总计 = Mifflin × 日常系数 + 去重后的训练增量 |
 
 新决策使用 [ADR 模板](template.md)。
 

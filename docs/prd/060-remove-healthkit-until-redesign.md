@@ -5,12 +5,12 @@
 - 版本：0.0.22
 - 修订自：
   - [PRD 000](000-origin-through-0.0.11.md) 的 Apple 健康导入、设备历史活动系数、Keep/COROS 经健康读取
-  - [PRD 059](059-coach-ids-progress-and-required-zeros.md) 仅进展估算的设备能量来源；训练 MET 不累加仍有效
+  - [PRD 059](059-coach-ids-progress-and-required-zeros.md) 仅进展估算的设备能量来源
 - 上游依据：[日消耗统计：本地公式不含手表](../research/2026-09-08-daily-energy-expenditure-methods.md) 的「当前不读手表与 HealthKit」
 - 下游落地：
   - [ADR 0128](../adr/0128-remove-healthkit-until-redesign.md)
   - [验收](../acceptance.md)
-- 后续修订：暂无
+- 后续修订：[PRD 061](061-daily-energy-net-training.md)（仅日总计加入去重训练增量；不接入 HealthKit 仍有效）
 
 ## 背景
 
@@ -20,17 +20,16 @@
 ## 用户结果
 
 设置不再出现「健康数据与设备」。App 不请求健康权限，不读体重、训练或能量样本。体重和训练
-只来自 Soma 记录与身体资料。进展预估总消耗在资料齐全时用 Mifflin 静息 × 个人活动系数或默认
-1.4。缺资料时不显示总消耗为 0。
+只来自 Soma 记录与身体资料。进展预估总消耗在资料齐全时用 Mifflin 静息与活动系数，训练日再按
+[PRD 061](061-daily-energy-net-training.md) 加入去重增量。缺资料时不显示总消耗为 0。
 
 已由健康导入、仍留在库里的训练或体重记录继续当普通 Soma 记录，不自动删除。
 
 ## 产品规则
 
 - 当前产品不接入 HealthKit、Apple Watch、Keep 或 COROS。
-- 全天消耗 = 有效静息 × 活动系数；系数优先本人确认的生活方式，再默认参考 1.4（不写入个人设置）。
 - 不读取设备基础/活动能量，也不用设备历史校准系数。
-- 已记录训练 kcal 仍只作对照，不加入预估总消耗，直到日消耗公式的后续 PRD 授权。
+- 日总计公式由 [PRD 061](061-daily-energy-net-training.md) 修订。
 
 ## 数据与隐私
 
@@ -41,7 +40,6 @@
 ## 明确不在范围
 
 - 重新设计手表热量、HealthKit 覆盖率、样本去重或设置同步页
-- 把训练 MET 加进预估总消耗
 - 体重趋势反推 TDEE
 - 删除用户库里已经存在的导入记录
 

@@ -44,12 +44,12 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         XCTAssertEqual(snapshot.averageIntake, 1500)
     }
 
-    func testExpenditureComponentsAddUpWithoutAddingTrainingAgain() {
-        let snapshot = make(.day, records: [record(5, .workout, "训练", 800)], hasProfile: true)
+    func testExpenditureKeepsLifestyleFactorWhenTrainingNetIsAdded() {
+        let snapshot = make(.day, records: [record(5, .workout, "训练", 800, calorieMET: 5)], hasProfile: true)
         let breakdown = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure)
         XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "活动等消耗", "活动系数"])
         XCTAssertEqual(breakdown.rows[0].value, "1,618 kcal")
-        XCTAssertEqual(breakdown.rows[1].value, "647 kcal")
+        XCTAssertEqual(breakdown.rows[1].value, "1,287 kcal")
         XCTAssertEqual(breakdown.rows[2].value, "1.40")
         XCTAssertFalse(breakdown.rows.contains { $0.label.contains("训练") || $0.label.contains("预估总消耗") })
     }
@@ -155,11 +155,13 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         _ calories: Double?,
         protein: Double? = nil,
         carbs: Double? = nil,
-        fat: Double? = nil
+        fat: Double? = nil,
+        calorieMET: Double? = nil
     ) -> ProgressHistoryRecord {
         .init(
             activity: .init(id: UUID(), kind: kind, date: date(day), title: title, detail: "", metric: nil),
             calories: calories,
+            calorieMET: calorieMET,
             protein: protein,
             carbs: carbs,
             fat: fat

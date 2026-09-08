@@ -38,6 +38,7 @@
 | [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | 0.0.22 | 已采纳 |
 | [059：教练 ID、训练卡 0 与进展一致性](059-coach-ids-progress-and-required-zeros.md) | 0.0.22 | 已采纳 |
 | [060：撤回 Apple 健康接入](060-remove-healthkit-until-redesign.md) | 0.0.22 | 已采纳 |
+| [061：日消耗加入去重训练增量](061-daily-energy-net-training.md) | 0.0.22 | 已采纳 |
 
 ## 阅读约定
 

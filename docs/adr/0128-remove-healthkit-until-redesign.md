@@ -1,6 +1,6 @@
 # ADR 0128：当前产品不接入 HealthKit
 
-- 状态：已采纳
+- 状态：部分已替代
 - 日期：2026-09-09
 - 维护者：Soma maintainers
 - 部分替代：
@@ -8,7 +8,7 @@
 - 上游依据：
   - [PRD 060](../prd/060-remove-healthkit-until-redesign.md)
   - [日消耗统计：本地公式不含手表](../research/2026-09-08-daily-energy-expenditure-methods.md)
-- 后续替代：暂无
+- 后续替代：[ADR 0129](0129-daily-energy-net-training-increment.md)（仅日总计加入去重训练增量；不接入 HealthKit 仍有效）
 - 下游落地：[验收](../acceptance.md)
 
 ## 背景
@@ -37,7 +37,7 @@ entitlement。进展估算只使用身体资料上的 Mifflin 静息，乘以用
 ### 成本与限制
 
 - 有表用户不能从 Soma 同步健康样本，直到后续设计落地。
-- 默认 1.4 仍是习惯粗估，训练日不会因课次自动升高。
+- 默认 1.4 仍是日常粗估；训练日是否升高见 [ADR 0129](0129-daily-energy-net-training-increment.md)。
 
 ## 验证
 

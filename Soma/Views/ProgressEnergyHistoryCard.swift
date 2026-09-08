@@ -46,11 +46,9 @@ struct ProgressEnergyHistoryCard: View {
                    let day = snapshot.days.first,
                    day.trainingCalories.knownCount > 0
                 {
-                    Text(
-                        "已记录训练约 \(text(day.trainingCalories.value)) kcal，已含在活动系数中，不再累加。"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text(trainingCaption(day))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if snapshot.window.period != .day {
                     Text("摄入 \(snapshot.intakeDayCount) 天 · 估算 \(snapshot.estimateDayCount) 天")
@@ -200,5 +198,14 @@ struct ProgressEnergyHistoryCard: View {
 
     private func text(_ value: Double?) -> String {
         value?.formatted(.number.precision(.fractionLength(0))) ?? "未记录"
+    }
+
+    private func trainingCaption(_ day: ProgressDailyMetrics) -> String {
+        let recorded = text(day.trainingCalories.value)
+        let net = text(day.energy.estimate?.trainingNetKilocalories)
+        if let netValue = day.energy.estimate?.trainingNetKilocalories, netValue > 0 {
+            return "已记录训练约 \(recorded) kcal，计入总消耗 \(net) kcal。"
+        }
+        return "已记录训练约 \(recorded) kcal，缺少强度或时长，未计入总消耗。"
     }
 }

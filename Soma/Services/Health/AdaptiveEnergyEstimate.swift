@@ -19,8 +19,9 @@ struct AdaptiveEnergyEstimate: Equatable, Sendable {
     let sourceName: String
     let effectiveFrom: Date
     var restingSourceName = "个人静息公式"
+    var trainingNetKilocalories: Double = 0
     var totalKilocalories: Double {
-        restingKilocalories * factor
+        restingKilocalories * factor + trainingNetKilocalories
     }
 }
 
@@ -35,6 +36,7 @@ enum AdaptiveEnergyEstimator {
         now: Date = .now,
         restingEstimate: Double?,
         baselines: [EnergyLifestyleBaseline] = [],
+        trainingNetKilocalories: Double = 0,
         calendar: Calendar = .current
     ) -> AdaptiveEnergyOutcome {
         let targetDay = calendar.startOfDay(for: targetDate)
@@ -49,8 +51,9 @@ enum AdaptiveEnergyEstimator {
                 : $0.effectiveFrom < $1.effectiveFrom
         }
         let factor = baseline?.factor ?? 1.4
+        let trainingNet = validEnergy(trainingNetKilocalories) ? max(0, trainingNetKilocalories) : 0
         guard let resting = restingEstimate.flatMap({ validEnergy($0) && $0 > 0 ? $0 : nil }),
-              validEnergy(resting * factor)
+              validEnergy(resting * factor + trainingNet)
         else {
             return .init(estimate: nil, missingReason: "缺少有效静息消耗，请补充身体资料")
         }
@@ -60,7 +63,8 @@ enum AdaptiveEnergyEstimator {
                 restingKilocalories: resting,
                 factor: factor,
                 sourceName: baseline?.label ?? "默认参考",
-                effectiveFrom: baseline?.effectiveFrom ?? targetDay
+                effectiveFrom: baseline?.effectiveFrom ?? targetDay,
+                trainingNetKilocalories: trainingNet
             ),
             missingReason: nil
         )

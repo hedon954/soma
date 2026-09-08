@@ -15,9 +15,11 @@ actor ProgressHistoryLoader {
             predicate: #Predicate { $0.date >= start && $0.date < end }, sortBy: [SortDescriptor(\.date)]
         )) { workout in
             ProgressHistoryRecord(
-                activity: .workout(workout), calories: workout.estimatedCalories.map(Double.init), volume: workout.estimatedVolume,
+                activity: .workout(workout), calories: workout.estimatedCalories.map(Double.init),
+                calorieMET: workout.calorieMET, volume: workout.estimatedVolume,
                 logicalSets: Self.workingSetCount(workout), exerciseID: workout.exerciseID,
-                durationSeconds: workout.durationMinutes.map { Double($0) * 60 }
+                durationSeconds: (workout.calorieDurationMinutes ?? workout.durationMinutes.map(Double.init))
+                    .map { $0 * 60 }
             )
         }
         var definitions: [UUID: ExerciseContent] = [:]

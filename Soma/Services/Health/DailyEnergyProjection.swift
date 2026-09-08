@@ -46,3 +46,24 @@ enum RestingEnergyCalculator {
         return result.isFinite && result > 0 ? result : nil
     }
 }
+
+enum TrainingEnergyNetIncrement {
+    /// 记录卡是完整消耗；日总计只加相对 1 MET 的增量，避免和当天静息重叠。
+    static func kilocalories(
+        gross: Double?,
+        met: Double?,
+        durationMinutes: Double? = nil,
+        dailyResting: Double? = nil
+    ) -> Double? {
+        guard let gross, gross.isFinite, gross >= 0 else { return nil }
+        if let met, met.isFinite, met > 0 {
+            return met <= 1 ? 0 : gross * (met - 1) / met
+        }
+        guard let durationMinutes, durationMinutes > 0, durationMinutes.isFinite,
+              let dailyResting, dailyResting > 0, dailyResting.isFinite
+        else {
+            return nil
+        }
+        return max(0, gross - dailyResting * durationMinutes / (24 * 60))
+    }
+}

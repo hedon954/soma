@@ -34,6 +34,9 @@ struct ProgressEnergySourcesView: View {
                     LabeledContent("已记录摄入", value: energy(day.intake.value))
                     LabeledContent("预估热量缺口", value: energy(day.energy.estimate.map { $0.totalKilocalories - day.intake.value }))
                     LabeledContent("已记录训练消耗", value: energy(day.trainingCalories.value))
+                    if let net = day.energy.estimate?.trainingNetKilocalories, net > 0 || day.trainingCalories.knownCount > 0 {
+                        LabeledContent("计入总消耗的训练", value: energy(net))
+                    }
                     if day.energy.estimate == nil {
                         NavigationLink("补充身体资料") { PersonalBodyInfoView() }
                     }
@@ -60,7 +63,8 @@ struct ProgressEnergySourcesView: View {
             if estimate.method == .confirmedLifestyle {
                 LabeledContent("参考生效", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
             }
-            Text("已包含日常活动，训练消耗不再累加。").foregroundStyle(.secondary)
+            Text("记录写整段训练；总消耗只加去掉与静息重叠后的部分。系数不含当天训练。")
+                .foregroundStyle(.secondary)
         } else {
             Text(day.energy.missingReason ?? "缺少静息资料").foregroundStyle(.secondary)
         }
@@ -97,6 +101,10 @@ struct ProgressEnergySourcesView: View {
         let resting = estimate.restingKilocalories.formatted(.number.precision(.fractionLength(0)))
         let factor = estimate.factor.formatted(.number.precision(.fractionLength(2)))
         let total = estimate.totalKilocalories.formatted(.number.precision(.fractionLength(0)))
+        if estimate.trainingNetKilocalories > 0 {
+            let net = estimate.trainingNetKilocalories.formatted(.number.precision(.fractionLength(0)))
+            return "\(resting) × \(factor) + \(net) ≈ \(total) kcal"
+        }
         return "\(resting) × \(factor) ≈ \(total) kcal"
     }
 }
@@ -123,7 +131,7 @@ private struct ProgressLifestyleEditor: View {
                         .accessibilityLabel("有效活动系数")
                 }
                 DatePicker("生效日期", selection: $effectiveFrom, in: ...Date.now, displayedComponents: .date)
-                Text("默认参考 1.4；已确认的个人设置优先。")
+                Text("只描述日常怎么过，不含当天训练。默认参考 1.4；已确认的个人设置优先。")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if let errorMessage {
