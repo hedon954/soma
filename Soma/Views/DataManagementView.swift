@@ -62,7 +62,7 @@ struct DataManagementView: View {
                 restoreConfirmation = nil
             }
         } message: {
-            Text("恢复会替换当前个人空间。演示数据、AI API Key、系统相册和 Apple 健康不会改变。")
+            Text("恢复会替换当前个人空间。演示数据、AI API Key 和系统相册不会改变。")
         }
         .confirmationDialog(
             "清除个人数据？",
@@ -211,7 +211,7 @@ struct DataManagementView: View {
         } header: {
             Text("清除数据")
         } footer: {
-            Text("只清除 Soma 个人空间和专属沙盒媒体。演示数据、AI API Key、系统相册、Apple 健康源数据以及外部导出与备份不会删除。")
+            Text("只清除 Soma 个人空间和专属沙盒媒体。演示数据、AI API Key、系统相册以及外部导出与备份不会删除。")
         }
     }
 

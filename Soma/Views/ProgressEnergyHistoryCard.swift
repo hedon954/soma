@@ -42,6 +42,16 @@ struct ProgressEnergyHistoryCard: View {
                         metric("预估总消耗", value: snapshot.averageEstimate, estimated: true)
                     }
                 }
+                if snapshot.window.period == .day,
+                   let day = snapshot.days.first,
+                   day.trainingCalories.knownCount > 0
+                {
+                    Text(
+                        "已记录训练约 \(text(day.trainingCalories.value)) kcal，已含在活动系数中，不再累加。"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
                 if snapshot.window.period != .day {
                     Text("摄入 \(snapshot.intakeDayCount) 天 · 估算 \(snapshot.estimateDayCount) 天")
                         .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)

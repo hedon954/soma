@@ -483,10 +483,101 @@ final class AgentReliabilityTests: XCTestCase {
             equipment: [],
             in: context
         )
-        XCTAssertTrue(pack.isEmpty)
+        XCTAssertTrue(pack.contains("Int64 record_id"))
         XCTAssertFalse(pack.contains("未填写"))
         XCTAssertFalse(pack.contains("健身房：无"))
         XCTAssertFalse(pack.contains("70kg"))
+    }
+
+    @MainActor
+    func testContextPackExposesInt64RecordIDsInsteadOfUUIDs() throws {
+        let context = try makeContext()
+        let sessionID = UUID()
+        let now = Date(timeIntervalSince1970: 1_788_883_200)
+        let meal = MealEntry(
+            date: now,
+            mealType: .snack,
+            title: "猕猴桃",
+            calories: 80,
+            sourceSessionID: sessionID
+        )
+        meal.businessID = 54
+        context.insert(meal)
+        let workout = WorkoutEntry(
+            date: now,
+            exercise: "虚构深蹲",
+            sourceSessionID: sessionID
+        )
+        workout.businessID = 12
+        context.insert(workout)
+        let olderMeal = MealEntry(
+            date: now.addingTimeInterval(-6 * 24 * 3600),
+            mealType: .snack,
+            title: "猕猴桃",
+            calories: 90,
+            sourceSessionID: sessionID
+        )
+        olderMeal.businessID = 7
+        context.insert(olderMeal)
+        try context.save()
+
+        let pack = AgentContextPackBuilder.build(
+            gyms: [],
+            equipment: [],
+            in: context,
+            sessionID: sessionID,
+            businessDate: now,
+            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
+        )
+        XCTAssertTrue(pack.contains("record_id: 54"))
+        XCTAssertTrue(pack.contains("Int64 record_id"))
+        XCTAssertTrue(pack.contains("record_id: 12"))
+        XCTAssertTrue(pack.contains("[record_id:54]"))
+        XCTAssertFalse(pack.contains(meal.id.uuidString))
+        XCTAssertFalse(pack.contains(workout.id.uuidString))
+
+        let facts = try XCTUnwrap(
+            AgentCrossTurnFactSummary.recentMutationFacts(
+                sessionID: sessionID,
+                excludingTurnID: UUID(),
+                in: context
+            )
+        )
+        XCTAssertTrue(facts.contains("record_id=54"))
+        XCTAssertTrue(facts.contains("record_id=7"))
+        XCTAssertFalse(facts.contains(meal.id.uuidString.lowercased()))
+    }
+
+    @MainActor
+    func testContextPackAssignsMissingInt64RecordIDsInsteadOfPlaceholders() throws {
+        let context = try makeContext()
+        let now = Date(timeIntervalSince1970: 1_788_883_200)
+        let meal = MealEntry(date: now, mealType: .snack, title: "猕猴桃", calories: 80)
+        context.insert(meal)
+        try context.save()
+        XCTAssertNil(meal.businessID)
+
+        let pack = AgentContextPackBuilder.build(
+            gyms: [],
+            equipment: [],
+            in: context,
+            businessDate: now,
+            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
+        )
+        XCTAssertNotNil(meal.businessID)
+        XCTAssertTrue(pack.contains("record_id: \(meal.businessID!)"))
+        XCTAssertFalse(pack.contains(meal.id.uuidString))
+    }
+
+    @MainActor
+    func testMealItemJSONOmitsUUIDSoModelsCannotTreatItAsRecordID() {
+        let item = MealItem(id: UUID(), name: "猕猴桃", calories: 80, protein: 1)
+        let json = ConversationRecorder.mealItemJSON(item, includeNutrition: true)
+        guard case let .object(object) = json else {
+            return XCTFail("meal item JSON must be an object")
+        }
+        XCTAssertNil(object["id"])
+        XCTAssertEqual(object["name"], .string("猕猴桃"))
     }
 
     @MainActor

@@ -21,7 +21,8 @@ enum ModelContextSaveImpact {
         ExerciseDefinition.self,
         ExercisePerformance.self,
         WorkoutSession.self,
-        WorkoutSet.self
+        WorkoutSet.self,
+        WorkoutEffort.self
     ])
     private static let exerciseHistoryEntities: Set<String> = entityNames([
         WorkoutEntry.self,

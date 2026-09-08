@@ -101,9 +101,9 @@ private struct WorkoutRecordCardLookup: View {
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
-        } else if allowsDeferredLoad {
+        } else {
             Color.clear.frame(height: 0)
-                .task(id: recordID) { await loadRecord() }
+                .task(id: "\(allowsDeferredLoad)-\(recordID)") { await loadRecord() }
         }
     }
 
@@ -158,9 +158,9 @@ private struct MealRecordCardLookup: View {
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
-        } else if allowsDeferredLoad {
+        } else {
             Color.clear.frame(height: 0)
-                .task(id: recordID) { await loadRecord() }
+                .task(id: "\(allowsDeferredLoad)-\(recordID)") { await loadRecord() }
         }
     }
 
@@ -206,9 +206,9 @@ private struct BodyRecordCardLookup: View {
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
-        } else if allowsDeferredLoad {
+        } else {
             Color.clear.frame(height: 0)
-                .task(id: recordID) { await loadRecord() }
+                .task(id: "\(allowsDeferredLoad)-\(recordID)") { await loadRecord() }
         }
     }
 
@@ -254,9 +254,9 @@ private struct GymRecordCardLookup: View {
                 sourceMessage: sourceMessage,
                 isEditable: isEditable
             )
-        } else if allowsDeferredLoad {
+        } else {
             Color.clear.frame(height: 0)
-                .task(id: recordID) { await loadRecord() }
+                .task(id: "\(allowsDeferredLoad)-\(recordID)") { await loadRecord() }
         }
     }
 
@@ -435,14 +435,16 @@ private struct InlineWorkoutCard: View {
         )
         caloriesText = workout.estimatedCalories.map(String.init) ?? ""
         sourceMessage?.recordManualCorrection(
-            "训练记录 \(workout.id.uuidString) 已修改，动作 \(workout.exercise)，保留 \(workoutDraft.groups.count) 个逻辑组的逐组事实"
+            "训练记录 \(AgentFacingRecordID.correctionToken(workout.businessID)) 已修改，动作 \(workout.exercise)，保留 \(workoutDraft.groups.count) 个逻辑组的逐组事实"
         )
         try? modelContext.save()
         return true
     }
 
     private func deleteRecord() {
-        sourceMessage?.recordManualCorrection("训练记录 \(workout.id.uuidString) 已由用户删除")
+        sourceMessage?.recordManualCorrection(
+            "训练记录 \(AgentFacingRecordID.correctionToken(workout.businessID)) 已由用户删除"
+        )
         modelContext.delete(workout)
         try? modelContext.save()
     }
@@ -524,14 +526,16 @@ private struct InlineBodyCard: View {
         entry.waist = Double(waist)
         entry.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         sourceMessage?.recordManualCorrection(
-            "身体记录 \(entry.id.uuidString) 已改为体重\(weight)kg、体脂\(bodyFat)%、腰围\(waist)cm"
+            "身体记录 \(AgentFacingRecordID.correctionToken(entry.businessID)) 已改为体重\(weight)kg、体脂\(bodyFat)%、腰围\(waist)cm"
         )
         try? modelContext.save()
         return true
     }
 
     private func deleteRecord() {
-        sourceMessage?.recordManualCorrection("身体记录 \(entry.id.uuidString) 已由用户删除")
+        sourceMessage?.recordManualCorrection(
+            "身体记录 \(AgentFacingRecordID.correctionToken(entry.businessID)) 已由用户删除"
+        )
         modelContext.delete(entry)
         try? modelContext.save()
     }

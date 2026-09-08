@@ -71,19 +71,24 @@ final class SpeechInputService {
     private var generation = UUID()
     private var isReady = false
     private var onCommit: ((String, TimeInterval) -> Void)?
+    private var onPreview: ((String) -> Void)?
     private var pendingPause: TimeInterval = 0
     private(set) var pendingText = ""
     private(set) var isListening = false
     private(set) var statusMessage = ""
     var errorMessage: String?
 
-    func start(onCommit: @escaping (String, TimeInterval) -> Void) {
+    func start(
+        onPreview: @escaping (String) -> Void = { _ in },
+        onCommit: @escaping (String, TimeInterval) -> Void
+    ) {
         guard !isListening else { return }
         stop()
+        self.onPreview = onPreview
         self.onCommit = onCommit
         errorMessage = nil
         isListening = true
-        statusMessage = "正在准备本地听写…"
+        statusMessage = ""
         let token = generation
         startTask = Task { [weak self] in
             guard let self else { return }
@@ -99,6 +104,7 @@ final class SpeechInputService {
                     guard let self, generation == token, isListening else { return }
                     pendingText = text
                     pendingPause = pause
+                    onPreview(text)
                     if isFinal {
                         commitPending()
                     }
@@ -110,7 +116,7 @@ final class SpeechInputService {
                 try Task.checkCancellation()
                 guard generation == token else { return }
                 isReady = true
-                statusMessage = "正在本地听写…"
+                statusMessage = ""
             } catch is CancellationError {
                 return
             } catch {
@@ -128,7 +134,7 @@ final class SpeechInputService {
         guard isListening else { return }
         guard isReady else { stop(); return }
         let token = generation
-        statusMessage = "正在完成听写…"
+        statusMessage = ""
         let task = Task { [weak self] in
             guard let self else { return }
             if let startTask {
@@ -154,6 +160,7 @@ final class SpeechInputService {
         session?.cancel()
         session = nil
         onCommit = nil
+        onPreview = nil
         isListening = false
         isReady = false
         statusMessage = ""

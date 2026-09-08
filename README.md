@@ -89,7 +89,6 @@ flowchart TD
 | **饮食与身体记录** | 从自然语言或照片形成可编辑记录；未知营养保持未知，已知小计与完整总计明确区分。 |
 | **场馆与器械** | 用照片建立自己的电子健身房，维护多个场馆、器械和当前训练环境。 |
 | **目标导向进展** | 减脂关注可解释的能量收支，增肌关注训练天数、可计算容量和主要肌群工作组覆盖。 |
-| **健康数据** | 经授权只读 Apple 健康中的体重、训练与活动能量，归一化后去重进入本地视图。 |
 | **数据所有权** | 开放导出饮食与训练记录，加密备份完整个人空间，并可主动清除本地个人数据。 |
 | **可选模型服务** | 支持 OpenAI、DeepSeek、阿里云百炼、火山引擎、腾讯云、opencode，以及其他 OpenAI-compatible 服务。 |
 
@@ -133,13 +132,11 @@ flowchart TB
         Store[(SwiftData 业务记录与会话)]
         Media[(App 沙盒媒体)]
         Keychain["ThisDeviceOnly Keychain"]
-        Health["Apple 健康 · 只读授权"]
 
         UI --> Runtime
         Runtime --> Tools
         Tools --> Store
         Tools --> Media
-        Tools --> Health
         Runtime --> Keychain
     end
 

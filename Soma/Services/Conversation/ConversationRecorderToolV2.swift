@@ -307,7 +307,7 @@ extension ConversationRecorder {
 
     static func mealResultData(_ entry: MealEntry) -> AgentJSONValue {
         .object([
-            "record_id": .number(Double(entry.businessID ?? 0)),
+            "record_id": businessIDValue(entry.businessID),
             "meal_type": .string(entry.mealType.rawValue),
             "title": .string(entry.title),
             "date": .string(entry.date.ISO8601Format()),
@@ -321,14 +321,7 @@ extension ConversationRecorder {
                 ? .null : .string(entry.glycemicAssessment),
             "recommended_eating_order": entry.recommendedEatingOrder.isEmpty
                 ? .null : .string(entry.recommendedEatingOrder),
-            "items": .array(entry.items.map { item in
-                .object([
-                    "id": .string(item.id.uuidString),
-                    "name": .string(item.name),
-                    "portion_description": item.portionDescription
-                        .map(AgentJSONValue.string) ?? .null
-                ])
-            })
+            "items": .array(entry.items.map { mealItemJSON($0, includeNutrition: false) })
         ])
     }
 }

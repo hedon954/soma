@@ -104,7 +104,7 @@ struct ProgressHistorySnapshot: Sendable {
 enum ProgressHistoryProjection {
     static func build(
         window: ProgressPeriodWindow, records: [ProgressHistoryRecord], profile: ProgressProfileFacts?,
-        history: [EnergyHistoryDay] = [], now: Date = .now, calendar: Calendar = .current
+        now: Date = .now, calendar: Calendar = .current
     ) -> ProgressHistorySnapshot {
         let today = calendar.startOfDay(for: now)
         let visible = records.filter { $0.activity.date <= now && window.contains($0.activity.date) }
@@ -137,7 +137,7 @@ enum ProgressHistoryProjection {
                 trainingCalories: .init(workouts.map(\.calories)), volume: .init(workouts.map(\.volume)),
                 logicalSets: workouts.reduce(0) { $0 + max(0, $1.logicalSets) },
                 energy: AdaptiveEnergyEstimator.estimate(
-                    for: cursor, now: now, history: history, restingEstimate: resting,
+                    for: cursor, now: now, restingEstimate: resting,
                     baselines: profile?.baselines ?? [], calendar: calendar
                 ),
                 restingFormula: formula, usesLaterProfile: (profile?.updatedAt ?? .distantPast) >= next

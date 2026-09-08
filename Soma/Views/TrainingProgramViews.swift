@@ -179,7 +179,7 @@ struct TrainingProgramLibraryView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(completedSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
                         NavigationLink {
-                            WorkoutSessionReviewView(session: session)
+                            WorkoutSessionReviewDestination(sessionID: session.id)
                         } label: {
                             TrainingSessionHomeRow(
                                 session: session,
@@ -276,6 +276,7 @@ private struct TrainingProgramDetailView: View {
     @State private var statsExpanded = false
     @State private var statsSnapshot = TrainingProgramStatsSnapshot.empty
     @State private var isLoadingStats = false
+    @State private var reviewSessionID: UUID?
     @State private var adviceExpanded = false
     @State private var prescriptions: [TemplateExercisePrescription]
 
@@ -421,9 +422,9 @@ private struct TrainingProgramDetailView: View {
                         .frame(height: 160)
                         .accessibilityLabel("该计划近几次训练的有效容量趋势")
                     }
-                    ForEach(sessions.prefix(5)) { session in
-                        NavigationLink {
-                            WorkoutSessionReviewView(session: session)
+                    ForEach(Array(sessions.prefix(5))) { session in
+                        Button {
+                            reviewSessionID = session.id
                         } label: {
                             WorkoutSessionHistoryRow(
                                 session: session,
@@ -431,6 +432,7 @@ private struct TrainingProgramDetailView: View {
                                 summary: statsSnapshot.summariesBySessionID[session.id]
                             )
                         }
+                        .buttonStyle(.plain)
                     }
                 } label: {
                     Text("训练统计")
@@ -521,6 +523,9 @@ private struct TrainingProgramDetailView: View {
             }
         }
         .navigationTitle(program.name)
+        .navigationDestination(item: $reviewSessionID) { sessionID in
+            WorkoutSessionReviewDestination(sessionID: sessionID)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -1094,6 +1099,36 @@ private struct WorkoutSessionHistoryRow: View {
         .accessibilityLabel(
             "\(planLabel)，\(session.startedAt.formatted(date: .abbreviated, time: .shortened))"
         )
+    }
+}
+
+private struct WorkoutSessionReviewDestination: View {
+    let sessionID: UUID
+    @Environment(\.modelContext) private var modelContext
+    @State private var session: WorkoutSession?
+    @State private var didLoad = false
+
+    var body: some View {
+        Group {
+            if let session {
+                WorkoutSessionReviewView(session: session)
+            } else if didLoad {
+                ContentUnavailableView(
+                    "训练记录已不存在",
+                    systemImage: "figure.strengthtraining.traditional"
+                )
+            } else {
+                ProgressView("正在打开训练复盘…")
+            }
+        }
+        .task(id: sessionID) {
+            var descriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { $0.id == sessionID }
+            )
+            descriptor.fetchLimit = 1
+            session = try? modelContext.fetch(descriptor).first
+            didLoad = true
+        }
     }
 }
 

@@ -11,6 +11,8 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0057](0057-coach-cold-cache-hides-assistant-messages.md) | 已修复，待真机杀进程复验 | 冷启动后教练页只渲染用户消息，助手气泡要等再次拉取 | 已准备页不再用渲染缓存过滤；`CoachMessageVisibilityTests` |
+| [0056](0056-plan-stats-session-navigation-crash.md) | 已修复，待真机点进复盘确认 | 计划训练统计点击历史 Session 导致进程退出 | 按 Session ID 导航；Button + `navigationDestination(item:)` |
 | [0055](0055-coach-history-scroll-repositions.md) | 已修复，待真机长会话复验 | 上滑历史时懒栈卸载气泡导致视口持续重定位 | 即时 VStack、记录卡/正文常驻缓存、禁止 alignment 顶锚与哨兵 onAppear、`perf-check` |
 | [0054](0054-full-video-playback-and-dictation-regressions.md) | 自动回归通过，真机待验收 | 修订 0002/0012/0048：完整视频、可靠播放、直接追加听写与分享组卡 | 完整请求/重试、合成视频播放、实时草稿编辑、分享分组与 UI |
 | [0053](0053-stream-executor-and-production-fixture-gap.md) | 双机虚构链路通过，真实会话待复验 | 修订 [0024](0024-streaming-cross-actor-swiftdata-crash.md)/[0036](0036-long-stream-continuous-text-and-completion-cliff.md)：原始流误入主线程，简化夹具未覆盖生产边界 | 执行器回归、真实持久化长流、完成后交互与真机 Trace |

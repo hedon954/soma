@@ -3,7 +3,6 @@ import SwiftUI
 
 struct ProgressEnergySourcesView: View {
     let snapshot: ProgressHistorySnapshot
-    let healthError: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedDate: Date?
@@ -58,12 +57,10 @@ struct ProgressEnergySourcesView: View {
         if let estimate = day.energy.estimate {
             Text(formulaText(estimate)).monospacedDigit()
             LabeledContent("静息来源", value: estimate.restingSourceName)
-            if let first = estimate.evidenceDays.first, let last = estimate.evidenceDays.last {
-                LabeledContent("设备历史", value: "\(first.formatted(.dateTime.month().day()))—\(last.formatted(.dateTime.month().day())) · \(estimate.evidenceDays.count) 天")
-            } else if estimate.method == .confirmedLifestyle {
+            if estimate.method == .confirmedLifestyle {
                 LabeledContent("参考生效", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
             }
-            Text("已包含活动，训练消耗不再累加。").foregroundStyle(.secondary)
+            Text("已包含日常活动，训练消耗不再累加。").foregroundStyle(.secondary)
         } else {
             Text(day.energy.missingReason ?? "缺少静息资料").foregroundStyle(.secondary)
         }
@@ -80,9 +77,6 @@ struct ProgressEnergySourcesView: View {
         if day.intake.missingCount > 0 {
             LabeledContent("饮食能量缺项", value: "\(day.intake.missingCount) 条")
         }
-        if let healthError {
-            Text(healthError).font(.footnote).foregroundStyle(.secondary)
-        }
         NavigationLink("身体资料") { PersonalBodyInfoView() }
     }
 
@@ -93,7 +87,6 @@ struct ProgressEnergySourcesView: View {
     private func factorText(_ estimate: AdaptiveEnergyEstimate?) -> String {
         guard let estimate else { return "默认参考 1.40" }
         let source = switch estimate.method {
-        case .deviceHistory: "动态估算"
         case .confirmedLifestyle: "个人设置"
         case .defaultReference: "默认参考"
         }
@@ -130,7 +123,7 @@ private struct ProgressLifestyleEditor: View {
                         .accessibilityLabel("有效活动系数")
                 }
                 DatePicker("生效日期", selection: $effectiveFrom, in: ...Date.now, displayedComponents: .date)
-                Text("默认参考 1.4；个人设置或充分的设备历史优先。")
+                Text("默认参考 1.4；已确认的个人设置优先。")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if let errorMessage {

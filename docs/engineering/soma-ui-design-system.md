@@ -216,7 +216,7 @@ Dynamic Type 负责字号缩放，Light 字重不通过固定字号实现。图�
 自动化覆盖主题映射、表面对比、日期时间、受控 Markdown、记录顺序、四种侧别、标题标签唯一性、
 单侧数据块不重复方向、次数/时长、压缩、缺失值、录像无损和暗色语义色稳定性。视觉 QA 必须把来源
 设计与同视口实现放入同一个比较输入，检查字体、气泡、Composer、Tab、卡片和语义色。工程门禁为
-`make format`、`make check` 和 `make verify`；相机、HealthKit、VoiceOver 手势等硬件交互按验收矩阵
+`make format`、`make check` 和 `make verify`；相机、VoiceOver 手势等硬件交互按验收矩阵
 单列。
 
 Coding Agent 同时使用 `soma-development` 和 `soma-ui-development`。新的视觉决定先复用 Token、

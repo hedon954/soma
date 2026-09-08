@@ -48,6 +48,10 @@ extension Notification.Name {
         "Soma.coachDoubleReselected"
     )
 
+    static let inlineRecordDidSave = Notification.Name(
+        "Soma.inlineRecordDidSave"
+    )
+
     static let focusCoachComposer = Notification.Name(
         "Soma.focusCoachComposer"
     )
@@ -143,6 +147,8 @@ final class CoachComposerState {
     var dismissRequest = UUID()
     /// 语音服务只在用户第一次点麦克风时创建。
     var speechInput: SpeechInputService?
+    /// 未确认听写片段。写在 Composer 上，避免嵌套 Observable 不刷新输入框。
+    var liveSpeechPreview = ""
 
     var trimmedDraft: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -192,14 +198,24 @@ final class CoachComposerState {
             Task { await speechInput.finish() }
             return
         }
-        let service = speechInput ?? SpeechInputService()
+        startSpeech(speechInput ?? SpeechInputService())
+    }
+
+    func startSpeech(_ service: SpeechInputService) {
         speechInput = service
-        service.start { [weak self] segment, pause in
-            self?.appendSpeechSegment(segment, pause: pause)
-        }
+        service.start(
+            onPreview: { [weak self] text in
+                self?.liveSpeechPreview = text
+            },
+            onCommit: { [weak self] segment, pause in
+                self?.liveSpeechPreview = ""
+                self?.appendSpeechSegment(segment, pause: pause)
+            }
+        )
     }
 
     func stopVoice() {
+        liveSpeechPreview = ""
         speechInput?.stop()
     }
 
@@ -232,13 +248,11 @@ final class CoachComposerState {
     }
 
     var displayedSpeechDraft: String {
-        guard let speechInput,
-              speechInput.isListening,
-              !speechInput.pendingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
+        let preview = liveSpeechPreview.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard speechInput?.isListening == true, !preview.isEmpty else {
             return draft
         }
-        return SpeechDraftAppend.append(speechInput.pendingText, to: draft, pause: 0)
+        return SpeechDraftAppend.append(liveSpeechPreview, to: draft, pause: 0)
     }
 
     func replaceDraftFromSpeechPreview(_ value: String) {

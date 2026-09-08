@@ -76,6 +76,24 @@ final class CoachComposerStateTests: XCTestCase {
         state.toggleShortcut(nutrition)
         XCTAssertEqual(state.draft, "已经写了")
         XCTAssertNil(nutrition.suggestedPrompt)
+        XCTAssertNil(
+            AgentInputShortcutStore.defaultShortcuts.first { $0.id == "shortcut_workout_log" }?
+                .suggestedPrompt
+        )
+
+        let workout = try XCTUnwrap(AgentInputShortcutStore.defaultShortcuts.first {
+            $0.id == "shortcut_workout_log"
+        })
+        state.toggleShortcut(nutrition)
+        state.toggleShortcut(workout)
+        XCTAssertEqual(state.selectedShortcutID, workout.id)
+        XCTAssertEqual(state.draft, "已经写了")
+        state.toggleShortcut(workout)
+        XCTAssertNil(state.selectedShortcutID)
+        state.draft = ""
+        state.toggleShortcut(workout)
+        XCTAssertEqual(state.selectedShortcutID, workout.id)
+        XCTAssertTrue(state.draft.isEmpty)
     }
 
     func testSpeechAppendsToCurrentManualEdit() {

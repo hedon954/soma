@@ -5,7 +5,7 @@ import XCTest
 final class WorkoutSharePosterRenderingTests: XCTestCase {
     @MainActor
     func testSelectedPosterHasStableExportAcrossAppAppearances() throws {
-        XCTAssertNotNil(UIFont(name: "DINCondensed-Bold", size: 110))
+        XCTAssertNotNil(UIFont(name: "DINCondensed-Bold", size: 72))
         let model = referenceModel
         let light = try render(model, scheme: .light, name: "workout-share-selected-light")
         let dark = try render(model, scheme: .dark, name: "workout-share-selected-dark")
@@ -13,9 +13,12 @@ final class WorkoutSharePosterRenderingTests: XCTestCase {
     }
 
     @MainActor
-    func testLongAndMissingEvidenceExpandsInsteadOfClipping() throws {
+    func testPosterFitsIPhone17ProMaxCanvas() throws {
         var model = referenceModel
-        let reference = try render(model, scheme: .light, name: "workout-share-compact")
+        let compact = try render(model, scheme: .light, name: "workout-share-compact")
+        XCTAssertEqual(compact.size.width, WorkoutShareCanvas.width, accuracy: 0.5)
+        XCTAssertEqual(compact.size.height, WorkoutShareCanvas.height, accuracy: 0.5)
+
         model.title = "虚构的长名称训练计划：全身力量与核心稳定训练"
         model.volumeValue = "1,234,567"
         model.estimatedCalories = nil
@@ -23,10 +26,13 @@ final class WorkoutSharePosterRenderingTests: XCTestCase {
         model.failedSets = 1
         model.exercises[3].name = "虚构哑铃交替保加利亚分腿深蹲长名称"
         model.exercises[3].partialSetCount = 2
-        model.exercises[3].loadGroups = ["左 重量未记录 · 8次 / 右 10kg · 6次 × 1组", "左 12kg · 6次 / 右 10kg · 6次 × 1组"]
-        let expanded = try render(model, scheme: .dark, name: "workout-share-long-missing")
-        XCTAssertEqual(expanded.size.width, 390)
-        XCTAssertGreaterThan(expanded.size.height, reference.size.height)
+        model.exercises[3].loadGroups = [
+            "左 重量未记录 · 8次 / 右 10kg · 6次 × 1组",
+            "左 12kg · 6次 / 右 10kg · 6次 × 1组"
+        ]
+        let long = try render(model, scheme: .dark, name: "workout-share-long-missing")
+        XCTAssertEqual(long.size.width, WorkoutShareCanvas.width, accuracy: 0.5)
+        XCTAssertEqual(long.size.height, WorkoutShareCanvas.height, accuracy: 0.5)
     }
 
     @MainActor

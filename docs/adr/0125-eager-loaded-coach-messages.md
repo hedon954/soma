@@ -10,6 +10,7 @@
   - [ADR 0000](0000-origin-through-0.0.11.md) 仅消息列表懒栈与
     `defaultScrollAnchor` alignment；尾随、双击回尾和 Session 日期标题不变
 - 后续替代：暂无
+- 后续修订：[PRD 059](../prd/059-coach-ids-progress-and-required-zeros.md)（已排版页不再用渲染缓存过滤助手消息）
 - 下游落地：[验收](../acceptance.md)
 
 ## 背景

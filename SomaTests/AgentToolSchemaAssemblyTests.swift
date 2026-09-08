@@ -81,7 +81,9 @@ final class AgentToolSchemaAssemblyTests: XCTestCase {
         let encoded = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertTrue(encoded.contains("set_entries"))
         XCTAssertTrue(encoded.contains("external_weight_kg"))
+        XCTAssertTrue(encoded.contains("rest_seconds"))
         XCTAssertTrue(encoded.contains("JSON number"))
         XCTAssertTrue(encoded.contains("0.333"))
+        XCTAssertFalse(encoded.contains("稳定 UUID"))
     }
 }

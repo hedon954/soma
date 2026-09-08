@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SwiftData
 
 struct InsightsSnapshotCacheKey: Hashable, Sendable {
@@ -9,9 +10,10 @@ struct InsightsSnapshotCacheKey: Hashable, Sendable {
 
 /// 只管理快照版本，不持有 SwiftData 模型或 SwiftUI 状态。View 用返回的 key
 /// 启动可取消任务；旧请求完成时必须先通过 `acceptsCompletion`，不能覆盖新 revision。
+@Observable
 @MainActor
 final class InsightsSnapshotRevisionState {
-    private var dataRevision = 0
+    private(set) var dataRevision = 0
     private(set) var loadedKey: InsightsSnapshotCacheKey?
 
     func markDataChanged() {

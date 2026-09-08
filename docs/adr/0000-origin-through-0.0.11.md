@@ -15,6 +15,9 @@
   - [ADR 0124](0124-smtp-feedback-failure-taxonomy.md)（反馈失败分类与 IPv4 优先，仍用本机 QQ SMTP）
   - [ADR 0125](0125-eager-loaded-coach-messages.md)（已加载页即时排版与常驻缓存；尾随与双击回尾仍有效）
   - [PRD 058](../prd/058-feedback-duration-and-editable-calories.md)（仅补充预计消耗可被用户改写，公式仍是默认填充）
+  - [ADR 0126](0126-workout-share-pro-max-canvas.md)（仅分享导出画布改为 Pro Max 纸面，0117 的白底与橙黄主视觉仍有效）
+  - [ADR 0127](0127-agent-workout-weight-and-rest-zero.md)（仅 Agent 训练重量与组间间歇未说明时写 0）
+  - [ADR 0128](0128-remove-healthkit-until-redesign.md)（撤回 Apple 健康导入与设备历史活动系数）
 - 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)
 - 下游落地：
   - [训练领域模型与运行时协议](../engineering/training-domain-model.md)
@@ -99,8 +102,8 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
 24. 语义双主题；无损有序训练证据编辑。训练是一级 Tab，辅助肌群不重分类，不建立无个体依据的
     达标阈值。进展按日、周、月、年投影：日看当天记录，周看训练频率，月看容量与体重变化，年看
     按月积累。记录在 ModelActor 内按有界时间窗投影成不可变 DTO，View 不逐次查询或聚合模型。
-    全天消耗 = 有效静息 × 动态活动系数；系数优先充分设备历史，其次个人设置，再默认参考 1.4
-    （不写入个人设置）。累计缺项按 0 加总并保留未知数。能量依据用紧凑数值列表，摄入与总消耗可
+    全天消耗 = 有效静息 × 活动系数；系数优先个人设置，再默认参考 1.4
+    （不写入个人设置）。不读取设备基础/活动能量。累计缺项按 0 加总并保留未知数。能量依据用紧凑数值列表，摄入与总消耗可
     点开彩色分项浮层。单项指标可审查来源与公式。
     全产品 Switch 保持系统外形与统一状态色，免费签名 Widget 保持静态入口。Session 倒序分页读取
     最近 30 条及更早哨兵，向上到顶后追加并保持视觉位置；短内容顶部对齐，打开 Session 停在最后
@@ -113,7 +116,7 @@ Soma 从个人 AI 健身工具收敛为聊天优先、本地优先的私人身�
     辅助肌群重分类为主要。
 27. 异步页面快照使用显式 load phase、单调 revision 和 `ModelContainer` 边界失效；失败可重试，刷新失败
     保留旧值，只有当前 request key 可提交。根页面和详情查询使用稳定排序、谓词、`fetchLimit`
-    与 `fetchCount`；Job 领取保持 FIFO，业务与 HealthKit 去重只查可能命中的身份或窗口，不整表读入。
+    与 `fetchCount`；Job 领取保持 FIFO，业务去重只查可能命中的身份或窗口，不整表读入。
     iOS 17 不添加 `#Index` 也不直改 SwiftData SQLite；物理索引、版本化 schema 与回滚必须单独决策。
     PostgreSQL 索引只通过只向前 migration 增减，不为每列无差别建索引。图片缓存有 48 MB 成本上限。
 28. 120 Hz Release 真机目标为 warm 常用交互 p95 小于 100 ms、冷页首个有效内容 p95 小于

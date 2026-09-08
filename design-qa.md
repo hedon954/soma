@@ -105,5 +105,5 @@ final result: passed
 
 主视口自动化与截图阶段 **passed**；最终交付门禁仍进行中。
 小屏日页浅色及 iPad mini 周／日页、能量依据已通过目视复核；整行标题点击有自动化回归。
-Release 真机 HealthKit 历史覆盖和帧率尚未作为通过证据；不能用安装成功替代真实数据验收。
+Release 真机 VoiceOver 和帧率尚未作为通过证据；不能用安装成功替代真实数据验收。
 进度见 [TODO](.codex/plans/2026-09-05-progress-redesign-implementation.md)。

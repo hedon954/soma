@@ -32,8 +32,7 @@ final class SpeechInputSessionTests: XCTestCase {
         let state = CoachComposerState()
         state.draft = "手动输入"
         let service = SpeechInputService(sessionFactory: { session }, microphonePermission: { true })
-        state.speechInput = service
-        service.start { state.appendSpeechSegment($0, pause: $1) }
+        state.startSpeech(service)
         await fulfillment(of: [started], timeout: 2)
         session.result?("错误猜测", false, 0)
         XCTAssertEqual(state.draft, "手动输入")
@@ -60,8 +59,7 @@ final class SpeechInputSessionTests: XCTestCase {
         session.started = expectation(description: "started")
         let state = CoachComposerState()
         let service = SpeechInputService(sessionFactory: { session }, microphonePermission: { true })
-        state.speechInput = service
-        service.start { state.appendSpeechSegment($0, pause: $1) }
+        state.startSpeech(service)
         try await fulfillment(of: [XCTUnwrap(session.started)], timeout: 2)
         session.result?("旧会话尾句", false, 0)
         state.prepareForSessionChange()
@@ -96,8 +94,7 @@ final class SpeechInputSessionTests: XCTestCase {
         session.finalText = "完成训练。"
         let state = CoachComposerState()
         let service = SpeechInputService(sessionFactory: { session }, microphonePermission: { true })
-        state.speechInput = service
-        service.start { state.appendSpeechSegment($0, pause: $1) }
+        state.startSpeech(service)
         try await fulfillment(of: [XCTUnwrap(session.started)], timeout: 2)
         session.result?("完成寻", false, 0)
         state.draft = "今天，"

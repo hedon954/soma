@@ -471,19 +471,11 @@ extension CoachSessionView {
         from projection: CoachMessageRenderProjection,
         processingHere: Bool
     ) -> [CoachMessage] {
-        if !didPrepareVisiblePage {
-            if processingHere, let last = projection.messages.last {
-                return [last]
-            }
-            return []
-        }
-        if pageCacheIsWarm(for: projection) {
-            return projection.messages
-        }
-        return projection.messages.filter { message in
-            messageIsPainted(message)
-                || (processingHere && message.id == projection.messages.last?.id)
-        }
+        CoachMessageVisibility.displayed(
+            messages: projection.messages,
+            didPreparePage: didPrepareVisiblePage,
+            processingHere: processingHere
+        )
     }
 
     func schedulePagePaint(
@@ -544,13 +536,14 @@ extension CoachSessionView {
             )
         )
     }
+}
 
-    private func messageIsPainted(_ message: CoachMessage) -> Bool {
-        let payload = CoachMessageRenderPayloadCache.payload(for: message)
-        let references = AgentTurnRecordReferences.make(from: payload.turnItems)
-        let textOK = !message.isFromCoach
-            || payload.visibleText.isEmpty
-            || CoachTextRenderCache.completedText(for: payload.visibleText) != nil
-        return ChatRecordCardCache.canRender(references, in: modelContext) && textOK
+enum CoachMessageVisibility {
+    static func displayed(
+        messages: [CoachMessage],
+        didPreparePage _: Bool,
+        processingHere _: Bool
+    ) -> [CoachMessage] {
+        messages
     }
 }

@@ -23,3 +23,26 @@ struct RestingEnergyFormulaInput: Equatable, Sendable {
         return "10 × \(weightKG.formatted()) + 6.25 × \(heightCM.formatted()) − 5 × \(age) \(adjustment) = \(Int(dailyKilocalories.rounded())) kcal/天"
     }
 }
+
+enum RestingEnergyCalculator {
+    /// Mifflin–St Jeor 静息能量公式，返回完整 24 小时 kcal/day。
+    static func dailyKilocalories(
+        weightKG: Double?,
+        heightCM: Double?,
+        age: Int?,
+        biologicalSex: BiologicalSex
+    ) -> Double? {
+        guard let weightKG, weightKG.isFinite, weightKG > 0,
+              let heightCM, heightCM.isFinite, heightCM > 0,
+              let age, age > 0
+        else { return nil }
+        let sexAdjustment: Double
+        switch biologicalSex {
+        case .male: sexAdjustment = 5
+        case .female: sexAdjustment = -161
+        case .unspecified, .other: return nil
+        }
+        let result = 10 * weightKG + 6.25 * heightCM - 5 * Double(age) + sexAdjustment
+        return result.isFinite && result > 0 ? result : nil
+    }
+}

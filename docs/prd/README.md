@@ -34,8 +34,10 @@
 | （无独立 PRD） | 0.0.20 | Changelog 仅修复 Xcode 26.3 类型检查超时 |
 | [055：动作分类与餐次明细](055-exercise-facets-and-meal-breakdown.md) | 0.0.21 | 分类轴与明细汇总由 057 部分修订 |
 | [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | 0.0.22 | 听写呈现由 057 部分修订 |
-| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | 0.0.22 | 已采纳 |
+| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | 0.0.22 | 听写呈现与快捷预填由 059 部分修订 |
 | [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | 0.0.22 | 已采纳 |
+| [059：教练 ID、训练卡 0 与进展一致性](059-coach-ids-progress-and-required-zeros.md) | 0.0.22 | 已采纳 |
+| [060：撤回 Apple 健康接入](060-remove-healthkit-until-redesign.md) | 0.0.22 | 已采纳 |
 
 ## 阅读约定
 

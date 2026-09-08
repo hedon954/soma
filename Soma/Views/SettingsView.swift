@@ -127,16 +127,6 @@ struct SettingsView: View {
                 )
             }
             .accessibilityIdentifier("settings-llm-configuration")
-
-            NavigationLink {
-                HealthDataIntegrationsView()
-            } label: {
-                SettingsSummaryRow(
-                    item: .healthDevices,
-                    title: "健康数据与设备",
-                    detail: "Apple 健康、Keep、COROS"
-                )
-            }
         } header: {
             settingsHomeSectionHeader("服务")
         }
@@ -364,113 +354,6 @@ private struct AppearanceSettingsView: View {
         .appPageBackground()
         .navigationTitle("外观")
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-private struct HealthDataIntegrationsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @AppStorage("healthkit.lastImportAt") private var lastImportAt = 0.0
-    @State private var isImporting = false
-    @State private var resultMessage: String?
-    @State private var errorMessage: String?
-    @State private var otherDevicesExpanded = false
-
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent {
-                    Text(healthStatus)
-                        .foregroundStyle(.secondary)
-                } label: {
-                    Label("Apple 健康", systemImage: "heart.fill")
-                        .foregroundStyle(.primary)
-                }
-
-                Button {
-                    importHealthData()
-                } label: {
-                    if isImporting {
-                        HStack {
-                            ProgressView()
-                            Text("正在同步…")
-                        }
-                    } else {
-                        Label("授权并同步", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .disabled(isImporting || !HealthKitImporter.isAvailable)
-
-                if let resultMessage {
-                    Label(resultMessage, systemImage: "checkmark.circle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(AppTheme.tint)
-                }
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(AppTheme.warning)
-                }
-            } header: {
-                Text("Apple 健康")
-            } footer: {
-                Text("只读取你明确授权的最近一年体重、训练和训练活动能量，并转换为 Soma 记录写入当前数据空间。每类数据分别保存增量游标，同时按 HealthKit 样本 ID 去重并同步来源删除；权限可随时在“健康”App 中撤销。")
-            }
-
-            // PRD 020：Keep/COROS 没有直连路径，说明折叠为「其他设备」。
-            Section {
-                DisclosureGroup("Keep 与 COROS", isExpanded: $otherDevicesExpanded) {
-                    LabeledContent("Keep 直接接入", value: "暂不可用")
-                    Text("Keep 暂无面向个人开发者的官方运动数据 API。若 Keep 已把数据写入 Apple 健康，可通过上方路径读取。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    LabeledContent("COROS 推荐方式", value: "经 Apple 健康")
-                    Text("COROS 支持把部分数据同步到 Apple 健康；更完整的云端直连需要开发者申请 OAuth API 凭据。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Link(
-                        "查看 COROS 与 Apple 健康同步说明",
-                        destination: URL(string: "https://support.coros.com/hc/en-us/articles/360041549551-Connecting-Apple-Health-with-COROS-App")!
-                    )
-                    Link(
-                        "申请 COROS API 接入",
-                        destination: URL(string: "https://support.coros.com/hc/en-us/articles/17085887816340-Submitting-an-API-Application")!
-                    )
-                }
-            } header: {
-                Text("其他设备")
-            } footer: {
-                Text("Keep 与 COROS 数据统一经 Apple 健康路径读取。")
-            }
-        }
-        .navigationTitle("健康数据与设备")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var healthStatus: String {
-        guard HealthKitImporter.isAvailable else { return "当前设备不可用" }
-        guard lastImportAt > 0 else { return "尚未同步" }
-        return Date(timeIntervalSince1970: lastImportAt)
-            .formatted(date: .abbreviated, time: .shortened)
-    }
-
-    private func importHealthData() {
-        isImporting = true
-        resultMessage = nil
-        errorMessage = nil
-        Task {
-            defer { isImporting = false }
-            do {
-                let result = try await HealthKitImporter.requestAuthorizationAndImport(
-                    into: modelContext
-                )
-                lastImportAt = Date.now.timeIntervalSince1970
-                resultMessage = result.summary
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
     }
 }
 

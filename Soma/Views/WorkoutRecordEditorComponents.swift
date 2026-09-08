@@ -105,69 +105,82 @@ struct WorkoutLogicalGroupsEditor: View {
                     compactRecordRun(run, effort: effort)
                 }
             } else {
-                VStack(spacing: 0) {
-                    ForEach(group.efforts.indices, id: \.self) { effortIndex in
-                        let restGroupIDs = run.restTargetGroupIDs(
-                            effortIndex: effortIndex,
-                            effortCount: effortCount,
-                            finalGroupID: draft.finalGroupID
-                        )
-                        let evidenceRest = storedRest(
-                            in: run,
-                            groupIDs: restGroupIDs,
-                            effortIndex: effortIndex
-                        )
-                        let displayRest = evidenceRest
-                            ?? (effortIndex == effortCount - 1
-                                ? resolvedFallbackRest
-                                : nil)
-                        effortRow(
-                            group.efforts[effortIndex],
-                            groupIDs: groupIDs,
-                            effortIndex: effortIndex,
-                            sideMode: group.sideMode,
-                            compactRunCount: effortIndex == 0 ? run.count : nil,
-                            representativeGroupID: group.id
-                        )
-
-                        let restLabel = restLabel(
-                            at: effortIndex,
-                            effortCount: effortCount,
-                            sideMode: group.sideMode
-                        )
-                        if effortIndex < effortCount - 1 {
-                            if shouldShowRest(
-                                evidenceRest,
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(spacing: 0) {
+                        ForEach(group.efforts.indices, id: \.self) { effortIndex in
+                            let restGroupIDs = run.restTargetGroupIDs(
                                 effortIndex: effortIndex,
                                 effortCount: effortCount,
-                                hasTargets: !restGroupIDs.isEmpty
-                            ) {
-                                restRow(
-                                    restLabel,
-                                    groupIDs: restGroupIDs,
+                                finalGroupID: draft.finalGroupID
+                            )
+                            let evidenceRest = storedRest(
+                                in: run,
+                                groupIDs: restGroupIDs,
+                                effortIndex: effortIndex
+                            )
+                            let displayRest = evidenceRest
+                                ?? (effortIndex == effortCount - 1
+                                    ? resolvedFallbackRest
+                                    : nil)
+                            effortRow(
+                                group.efforts[effortIndex],
+                                groupIDs: groupIDs,
+                                effortIndex: effortIndex,
+                                sideMode: group.sideMode,
+                                compactRunCount: nil,
+                                representativeGroupID: group.id
+                            )
+
+                            let restLabel = restLabel(
+                                at: effortIndex,
+                                effortCount: effortCount,
+                                sideMode: group.sideMode
+                            )
+                            if effortIndex < effortCount - 1 {
+                                if shouldShowRest(
+                                    evidenceRest,
                                     effortIndex: effortIndex,
-                                    value: displayRest,
-                                    fallbackValue: displayRest,
-                                    surface: AppTheme.insetBackground
-                                )
-                            } else {
-                                Divider()
-                                    .overlay(AppTheme.separator)
+                                    effortCount: effortCount,
+                                    hasTargets: !restGroupIDs.isEmpty
+                                ) {
+                                    restRow(
+                                        restLabel,
+                                        groupIDs: restGroupIDs,
+                                        effortIndex: effortIndex,
+                                        value: displayRest,
+                                        fallbackValue: displayRest,
+                                        surface: AppTheme.insetBackground
+                                    )
+                                } else {
+                                    Divider()
+                                        .overlay(AppTheme.separator)
+                                }
                             }
                         }
                     }
-                    if groupsAreUniform {
-                        afterGroupRest(run, surface: AppTheme.insetBackground)
+                    .padding(.horizontal, density == .chatCompact ? 9 : 14)
+                    .background(
+                        AppTheme.insetBackground,
+                        in: RoundedRectangle(
+                            cornerRadius: AppTheme.controlRadius,
+                            style: .continuous
+                        )
+                    )
+
+                    if density == .chatCompact {
+                        WorkoutRunCountLabel(count: run.count)
+                        if isEditable {
+                            groupMenu(
+                                representativeGroupID: group.id,
+                                groupIDs: groupIDs,
+                                runCount: run.count
+                            )
+                        }
                     }
                 }
-                .padding(.horizontal, density == .chatCompact ? 9 : 14)
-                .background(
-                    AppTheme.insetBackground,
-                    in: RoundedRectangle(
-                        cornerRadius: AppTheme.controlRadius,
-                        style: .continuous
-                    )
-                )
+                if groupsAreUniform {
+                    afterGroupRest(run, surface: AppTheme.cardBackground)
+                }
             }
         }
         .padding(density == .chatCompact ? 0 : 14)
@@ -203,7 +216,7 @@ struct WorkoutLogicalGroupsEditor: View {
             if sideMode.showsEffortSideLabel {
                 Text(sideLabel(effort.side, mode: sideMode))
                     .font(.subheadline.weight(.medium))
-                    .frame(width: 34, alignment: .leading)
+                    .frame(width: 22, alignment: .leading)
                     .accessibilityHidden(true)
             }
 
@@ -232,6 +245,7 @@ struct WorkoutLogicalGroupsEditor: View {
                         ? 1 ... 86400
                         : 1 ... 1000
                 )
+                .frame(maxWidth: .infinity, alignment: .leading)
                 WorkoutNumericField(
                     text: weightBinding(
                         groupIDs: groupIDs,
@@ -248,6 +262,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     inline: true,
                     validRange: 0 ... 1000
                 )
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(targetText(effort))
                     .font(.body.monospacedDigit())

@@ -35,7 +35,7 @@ extension ConversationRecorder {
                     .joined(separator: "、")
             }.flatMap(\.nilIfEmpty) ?? "无"
             let workout = workouts.first.map {
-                "[id:\($0.businessID ?? 0)] \(workoutSummary($0))"
+                AgentFacingRecordID.labeled($0.businessID, summary: workoutSummary($0))
             } ?? "暂无"
             let todayStart = Calendar.current.startOfDay(for: .now)
             let tomorrow = Calendar.current.date(
@@ -54,11 +54,14 @@ extension ConversationRecorder {
                 : "存在未估算记录"
             let weight = body.first.map {
                 let value = $0.weight.map { String(format: "%.1fkg", $0) } ?? "仅体态资料"
-                return "[id:\($0.businessID ?? 0)] \(value)"
+                return AgentFacingRecordID.labeled($0.businessID, summary: value)
             } ?? "暂无"
             let profile = fetchProfiles(in: context).first.map(profileSummary) ?? "暂无"
             let latestMeal = meals.first.map {
-                "[id:\($0.businessID ?? 0)] \($0.mealType.rawValue) \($0.title)"
+                AgentFacingRecordID.labeled(
+                    $0.businessID,
+                    summary: "\($0.mealType.rawValue) \($0.title)"
+                )
             } ?? "暂无"
             return .success(
                 "个人信息：\(profile)；当前健身房：\(selectedGym?.name ?? "无")；可用器械：\(equipmentNames)；最近训练：\(workout)；最近饮食：\(latestMeal)；今日摄入：\(todayCalories)；最近体重：\(weight)。"
@@ -98,18 +101,8 @@ extension ConversationRecorder {
                         .map(AgentJSONValue.string) ?? .null
                     value["note"] = entry.notes.nilIfEmpty
                         .map(AgentJSONValue.string) ?? .null
-                    let encodedItems: [AgentJSONValue] = entry.items.map { item in
-                        .object([
-                            "id": .string(item.id.uuidString),
-                            "name": .string(item.name),
-                            "portion_description": item.portionDescription
-                                .map(AgentJSONValue.string) ?? .null,
-                            "calories": item.calories
-                                .map { .number(Double($0)) } ?? .null,
-                            "protein": item.protein.map(AgentJSONValue.number) ?? .null,
-                            "carbs": item.carbs.map(AgentJSONValue.number) ?? .null,
-                            "fat": item.fat.map(AgentJSONValue.number) ?? .null
-                        ])
+                    let encodedItems: [AgentJSONValue] = entry.items.map {
+                        mealItemJSON($0, includeNutrition: true)
                     }
                     value["items"] = .array(encodedItems)
                 }

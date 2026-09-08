@@ -22,6 +22,7 @@ enum AgentContextPackFocus: Sendable {
     }
 }
 
+@MainActor
 enum AgentContextPackBuilder {
     static let maximumCharacters = 2800
 
@@ -34,6 +35,7 @@ enum AgentContextPackBuilder {
         timeZone: TimeZone = .current,
         focus: AgentContextPackFocus = .full
     ) -> String {
+        try? BusinessIDAllocator.assignMissingIDs(in: context)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let day7 = calendar.date(byAdding: .day, value: -7, to: businessDate)
@@ -83,7 +85,9 @@ enum AgentContextPackBuilder {
             in: context
         )
 
-        var sections: [String] = []
+        var sections = [
+            "工具只使用 Int64 record_id / exercise_id / program_id / session_id；不要使用 UUID，也不要跨类型套用。"
+        ]
         sections.append(profileLine(profiles.first, latestBody: latestWeightBody))
         if focus == .full || focus == .workouts {
             sections.append(gymLine(gyms: gyms, equipment: equipment))
@@ -244,15 +248,15 @@ enum AgentContextPackBuilder {
                 definition.businessID.map { (definition.id, $0) }
             }
         )
-        let rows = values.prefix(12).map { workout in
+        let rows = values.prefix(12).compactMap { workout -> String? in
+            guard let recordID = workout.businessID else { return nil }
             let detail = workout.setEvidenceSummary
                 ?? workout.durationMinutes.map { "\($0)分钟" }
                 ?? "仅动作"
-            let exerciseID = workout.exerciseID
+            let exercisePart = workout.exerciseID
                 .flatMap { exerciseBusinessIDs[$0] }
-                .map(String.init) ?? "待确认"
-            let recordID = workout.businessID.map(String.init) ?? "待确认"
-            return "\(workout.exercise)（\(detail)，record_id: \(recordID)，exercise_id: \(exerciseID)）"
+                .map { "，exercise_id: \($0)" } ?? ""
+            return "\(workout.exercise)（\(detail)，record_id: \(recordID)\(exercisePart)）"
         }
         return "Session 业务日训练：\(rows.joined(separator: "；"))"
     }
@@ -266,9 +270,11 @@ enum AgentContextPackBuilder {
             calendar.isDate($0.date, inSameDayAs: businessDate)
         }
         guard !values.isEmpty else { return "" }
-        let rows = values.prefix(12).map { meal in
-            let calories = meal.calories.map { "，\($0)kcal" } ?? ""
-            return "\(meal.mealType) \(meal.title)\(calories)"
+        let rows = values.prefix(12).compactMap { meal -> String? in
+            guard let recordID = meal.businessID else { return nil }
+            let calories = meal.calories.map { "\($0)kcal，" } ?? ""
+            let time = clockText(meal.date, calendar: calendar)
+            return "\(meal.mealType) \(meal.title)（\(calories)record_id: \(recordID)，\(time)）"
         }
         return "Session 业务日饮食：\(rows.joined(separator: "；"))"
     }
@@ -305,15 +311,18 @@ enum AgentContextPackBuilder {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "M/d"
-        let lines = days.map { day -> String in
-            let items = (grouped[day] ?? []).prefix(4).map { workout in
+        let lines = days.compactMap { day -> String? in
+            let items = (grouped[day] ?? []).prefix(4).compactMap { workout -> String? in
+                guard let recordID = workout.businessID else { return nil }
                 let weight = workout.representativeWeight
                     .map { " \($0.formatted(.number.precision(.fractionLength(0 ... 1))))kg" }
                     ?? ""
-                return "\(workout.exercise)\(weight)"
+                return "\(workout.exercise)\(weight) record_id:\(recordID)"
             }
+            guard !items.isEmpty else { return nil }
             return "\(formatter.string(from: day)) \(items.joined(separator: "、"))"
         }
+        guard !lines.isEmpty else { return nil }
         return "最近训练日：\(lines.joined(separator: "；"))"
     }
 
@@ -326,7 +335,8 @@ enum AgentContextPackBuilder {
         let last = sessions.first {
             $0.programID == program.id && $0.status == .completed
         }
-        var parts = ["当前计划：\(program.name)"]
+        guard let programID = program.businessID else { return nil }
+        var parts = ["当前计划：\(program.name)（program_id: \(programID)）"]
         if let last {
             let done = last.prescriptionSnapshot.count
             parts.append("上次完成 \(done) 个动作快照")
@@ -341,7 +351,8 @@ enum AgentContextPackBuilder {
             return nil
         }
         let name = active.programNameSnapshot ?? "未命名计划"
-        return "进行中带练：\(name) [session_id:\(active.id.uuidString)]"
+        guard let sessionID = active.businessID else { return nil }
+        return "进行中带练：\(name) [session_id:\(sessionID)]"
     }
 
     private static func weightTrendLine(bodies: [BodyEntry]) -> String? {
@@ -363,25 +374,35 @@ enum AgentContextPackBuilder {
     ) -> String? {
         var items: [String] = []
         for workout in workouts where workout.sourceSessionID == sessionID {
-            items.append("训练 \(workout.exercise) [id:\(workout.id.uuidString)]")
+            guard let recordID = workout.businessID else { continue }
+            items.append("训练 \(workout.exercise) [record_id:\(recordID)]")
             if items.count >= 5 {
                 break
             }
         }
         for meal in meals where meal.sourceSessionID == sessionID {
-            items.append("饮食 \(meal.title) [id:\(meal.id.uuidString)]")
+            guard let recordID = meal.businessID else { continue }
+            items.append("饮食 \(meal.title) [record_id:\(recordID)]")
             if items.count >= 5 {
                 break
             }
         }
         for body in bodies where body.sourceSessionID == sessionID {
-            items.append("身体 [id:\(body.id.uuidString)]")
+            guard let recordID = body.businessID else { continue }
+            items.append("身体 [record_id:\(recordID)]")
             if items.count >= 5 {
                 break
             }
         }
         guard !items.isEmpty else { return nil }
         return "本会话近期写入：\(items.joined(separator: "；"))"
+    }
+
+    private static func clockText(_ date: Date, calendar: Calendar) -> String {
+        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+            .locale(Locale(identifier: "zh_CN"))
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
     }
 
     private static func truncate(_ text: String) -> String {

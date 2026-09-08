@@ -4,20 +4,17 @@ import SwiftUI
 struct InsightsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(DataSpaceController.self) private var dataSpace
-    @Environment(\.insightsTabIsActive) private var isTabActive
+    @Environment(InsightsSnapshotRevisionState.self) private var insightsRevision
     @State private var period: ProgressPeriod
     @State private var anchorDate: Date
     @State private var revision = 0
     @State private var snapshot: ProgressHistorySnapshot?
     @State private var errorMessage: String?
-    @State private var healthError: String?
     @State private var showingCalendar = false
     @State private var showingSources = false
     @State private var calendarDate = Date.now
     @State private var followsCurrentPeriod: Bool
-    @State private var insightsAreDirty = false
-    @State private var pendingReload: Task<Void, Never>?
+    @State private var loadedRequest: ProgressHistoryRequest?
 
     init(initialPeriod: ProgressPeriod = .day, initialDate: Date = .now) {
         _period = State(initialValue: initialPeriod)
@@ -30,7 +27,15 @@ struct InsightsView: View {
     }
 
     private var request: ProgressHistoryRequest {
-        .init(window: window, revision: revision, timeZoneID: TimeZone.current.identifier)
+        .init(
+            window: window,
+            revision: revision &+ insightsRevision.dataRevision,
+            timeZoneID: TimeZone.current.identifier
+        )
+    }
+
+    private var showsCurrentSnapshot: Bool {
+        snapshot != nil && loadedRequest == request
     }
 
     var body: some View {
@@ -44,7 +49,7 @@ struct InsightsView: View {
                         Button("重试") { revision += 1 }.frame(minHeight: 44)
                     }
                 }
-                if let snapshot, snapshot.window == window {
+                if showsCurrentSnapshot, let snapshot {
                     ProgressEnergyHistoryCard(snapshot: snapshot) { showingSources = true }
                     if period != .day {
                         ProgressTrainingBodyCards(snapshot: snapshot)
@@ -99,27 +104,11 @@ struct InsightsView: View {
         }
         .sheet(isPresented: $showingSources) {
             if let snapshot {
-                ProgressEnergySourcesView(snapshot: snapshot, healthError: healthError)
+                ProgressEnergySourcesView(snapshot: snapshot)
             }
         }
         .task(id: request) { await load(request) }
         .refreshable { revision += 1 }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
-            guard ModelContextSaveImpact.affectsInsights(notification, in: modelContext) else {
-                return
-            }
-            if isTabActive {
-                scheduleReload()
-            } else {
-                insightsAreDirty = true
-            }
-        }
-        .onChange(of: isTabActive) { _, active in
-            if active, insightsAreDirty {
-                insightsAreDirty = false
-                revision += 1
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in refreshDate() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in refreshDate() }
         .onChange(of: period) {
@@ -184,57 +173,31 @@ struct InsightsView: View {
 
     private func load(_ key: ProgressHistoryRequest) async {
         errorMessage = nil
-        healthError = nil
         let container = modelContext.container
         let calendar = Calendar.current
         let now = Date.now
-        let personal = dataSpace.activeSpace == .personal && !AppTestRuntime.isRunning
         let loader = Task.detached(priority: .userInitiated) {
             try await ProgressHistoryLoader(modelContainer: container).load(window: key.window)
         }
-        var readingHealth = false
         do {
             let facts = try await withTaskCancellationHandler { try await loader.value } onCancel: { loader.cancel() }
             try Task.checkCancellation()
             guard request == key else { return }
             let local = Task.detached(priority: .userInitiated) {
-                ProgressHistoryProjection.build(window: key.window, records: facts.records, profile: facts.profile, now: now, calendar: calendar)
+                ProgressHistoryProjection.build(
+                    window: key.window, records: facts.records, profile: facts.profile, now: now, calendar: calendar
+                )
             }
             let projection = await withTaskCancellationHandler { await local.value } onCancel: { local.cancel() }
             try Task.checkCancellation()
             guard request == key else { return }
             snapshot = projection
-            guard personal else { return }
-            readingHealth = true
-            let healthTask = Task.detached(priority: .utility) {
-                let start = calendar.date(byAdding: .day, value: -30, to: key.window.start) ?? key.window.start
-                let health = try await HealthEnergyHistoryReader().read(from: start, to: min(key.window.end, now), calendar: calendar)
-                return ProgressHistoryProjection.build(
-                    window: key.window, records: facts.records, profile: facts.profile, history: health.days, now: now, calendar: calendar
-                )
-            }
-            let enriched = try await withTaskCancellationHandler { try await healthTask.value } onCancel: { healthTask.cancel() }
-            try Task.checkCancellation()
-            guard request == key else { return }
-            snapshot = enriched
+            loadedRequest = key
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled, request == key else { return }
-            if readingHealth {
-                healthError = "设备能量暂时无法读取"
-            } else {
-                errorMessage = "进展暂时无法加载"
-            }
-        }
-    }
-
-    private func scheduleReload() {
-        pendingReload?.cancel()
-        pendingReload = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled else { return }
-            revision += 1
+            errorMessage = "进展暂时无法加载"
         }
     }
 }

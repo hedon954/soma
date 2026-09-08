@@ -417,17 +417,18 @@ unless claim_next_source.include?("$0.dataSpaceRaw == dataSpaceRaw") &&
   fail_check("local job claiming again fetches the full AgentJob table before choosing one row")
 end
 
-health_import_source = File.read(File.join(ROOT, service_file("HealthKitImporter.swift")))
-if health_import_source.include?("existingWorkouts") ||
-   health_import_source.include?("existingBodyEntries")
-  fail_check("HealthKit import again loads every prior record from one source")
+healthkit_paths = %w[
+  Soma/Services/Media/HealthKitImporter.swift
+  Soma/Services/Health/HealthEnergyHistoryReader.swift
+  Soma/Services/Health/HealthEnergyReader.swift
+]
+if healthkit_paths.any? { |path| File.exist?(File.join(ROOT, path)) }
+  fail_check("HealthKit import or energy readers returned after PRD 060")
 end
-unless health_import_source.match?(/FetchDescriptor<WorkoutEntry>.*?externalSource == source.*?externalID == externalID/m) &&
-       health_import_source.match?(/FetchDescriptor<BodyEntry>.*?externalSource == source.*?externalID == externalID/m)
-  fail_check("HealthKit import no longer performs exact external-source identity lookups")
-end
-
 settings_source = File.read(File.join(ROOT, "Soma/Views/SettingsView.swift"))
+if settings_source.include?("HealthDataIntegrationsView") || settings_source.include?("健康数据与设备")
+  fail_check("Settings restored the HealthKit integrations page")
+end
 fail_check("SettingsView restored root trace counting") if settings_source.include?("AgentTraceCountLabel")
 if settings_source.include?("ai.hasRequiredAPIKey")
   fail_check("Settings root can again synchronously read Keychain on first selection")

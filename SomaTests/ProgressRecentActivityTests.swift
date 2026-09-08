@@ -28,4 +28,22 @@ final class ProgressRecentActivityTests: XCTestCase {
         XCTAssertEqual(activity.detail, "5组 × 5次 · 50kg")
         XCTAssertEqual(activity.metric, "1,250 kg")
     }
+
+    func testWorkoutMetricIncludesCaloriesBesideVolume() {
+        let entry = WorkoutEntry(
+            date: Date(timeIntervalSince1970: 1_788_280_000),
+            exercise: "虚构复盘深蹲",
+            setEntries: [
+                WorkoutSetEvidence(
+                    logicalSetIndex: 1,
+                    targetKind: .repetitions,
+                    reps: 5,
+                    externalWeightKG: 50
+                )
+            ],
+            estimatedCalories: 187
+        )
+        let activity = ProgressRecentActivity.workout(entry)
+        XCTAssertEqual(activity.metric, "250 kg\n约 187 kcal")
+    }
 }

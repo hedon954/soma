@@ -76,6 +76,16 @@ final class AgentChatPresentationTests: XCTestCase {
         XCTAssertEqual(presentation?.details, [String]())
     }
 
+    func testNumericRecordIDTokensAreHiddenFromFriendlySummary() {
+        let presentation = AgentToolResultPresentation.make(for: toolItem(
+            title: "更新饮食记录",
+            name: "update_meal",
+            observation: "已更新加餐：猕猴桃，120kcal。[record_id:54]"
+        ))
+
+        XCTAssertEqual(presentation?.summary, "已更新加餐：猕猴桃，120kcal。")
+    }
+
     func testLongGenericResultShowsTextWithExpandDisclosure() {
         let observation = String(repeating: "完整结果", count: 60)
         let presentation = AgentToolResultPresentation.make(for: toolItem(

@@ -99,13 +99,7 @@ struct CoachComposer: View {
                 EmptyView()
             }
 
-            if isListening {
-                Label(state.speechInput?.statusMessage ?? "正在本地听写…", systemImage: "waveform")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.tint)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
-            } else if let speechMessage = state.speechInput?.errorMessage {
+            if let speechMessage = state.speechInput?.errorMessage, !isListening {
                 Text(speechMessage)
                     .font(.caption)
                     .foregroundStyle(AppTheme.warning)
@@ -267,37 +261,56 @@ struct CoachComposer: View {
 
     var composerTextField: some View {
         let preview = state.displayedSpeechDraft
-        return TextField(
-            "说点什么，或添加照片与视频…",
-            text: Binding(
-                get: { preview },
-                set: { state.replaceDraftFromSpeechPreview($0) }
-            ),
-            axis: .vertical
-        )
-        .accessibilityIdentifier("coach-message-input")
-        .lineLimit(1 ... 5)
-        .focused($focused)
-        .allowsHitTesting(!isListening)
-        .padding(.horizontal, 13)
-        .padding(.vertical, 9)
-        .frame(minHeight: AppTheme.minimumTapTarget)
+        return Group {
+            if isListening {
+                Text(preview.isEmpty ? "说点什么，或添加照片与视频…" : preview)
+                    .font(.body)
+                    .foregroundStyle(preview.isEmpty ? Color.secondary : Color.primary)
+                    .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 9)
+                    .accessibilityLabel("听写预览")
+                    .accessibilityValue(preview)
+            } else {
+                TextField(
+                    "说点什么，或添加照片与视频…",
+                    text: Binding(
+                        get: { preview },
+                        set: { state.replaceDraftFromSpeechPreview($0) }
+                    ),
+                    axis: .vertical
+                )
+                .accessibilityIdentifier("coach-message-input")
+                .lineLimit(1 ... 5)
+                .focused($focused)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 9)
+                .frame(minHeight: AppTheme.minimumTapTarget)
+            }
+        }
         .background(
             AppTheme.insetBackground,
             in: RoundedRectangle(cornerRadius: 19)
         )
+        .onChange(of: isListening) { _, listening in
+            if listening {
+                focused = false
+            }
+        }
     }
 
     var voiceButton: some View {
         Button(action: state.toggleVoice) {
             Image(systemName: isListening ? "waveform" : "mic.fill")
                 .font(.body.weight(.semibold))
+                .symbolEffect(.pulse, isActive: isListening)
                 .frame(width: 36, height: 36)
                 .foregroundStyle(isListening ? AppTheme.onAccent : AppTheme.tint)
                 .background(
                     isListening ? AppTheme.accentEmphasis : AppTheme.insetBackground,
                     in: Circle()
                 )
+                .symbolEffect(.pulse, isActive: isListening)
                 .frame(
                     width: AppTheme.minimumTapTarget,
                     height: AppTheme.minimumTapTarget

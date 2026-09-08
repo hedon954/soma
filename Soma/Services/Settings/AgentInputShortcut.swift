@@ -117,8 +117,7 @@ enum AgentInputShortcutStore {
                     .updateWorkout
                 ]),
                 isVisible: true,
-                order: 1,
-                suggestedPrompt: "请帮我记录这次训练"
+                order: 1
             ),
             AgentInputShortcut(
                 id: "shortcut_recent_review",
@@ -240,7 +239,12 @@ enum AgentInputShortcutStore {
             if value.id == "shortcut_nutrition", value.title == "饮食分析" {
                 value.title = "记录饮食"
             }
-            if value.suggestedPrompt == nil {
+            if value.id == "shortcut_workout_log",
+               value.suggestedPrompt == "请帮我记录这次训练"
+            {
+                value.suggestedPrompt = nil
+            }
+            if value.suggestedPrompt == nil, value.id != "shortcut_workout_log" {
                 value.suggestedPrompt = defaultShortcuts.first {
                     $0.id == value.id
                 }?.suggestedPrompt

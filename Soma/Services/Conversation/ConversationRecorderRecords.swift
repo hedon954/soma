@@ -266,7 +266,7 @@ extension ConversationRecorder {
         try? context.save()
         let caloriesText = created.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
-            "已记录\(mealType.rawValue)：\(title)，\(caloriesText)。",
+            "已记录\(mealType.rawValue)：\(title)，\(caloriesText)。\(AgentFacingRecordID.trailing(created.businessID))",
             data: mealResultData(created),
             recordRefs: [mealReference(created)],
             recordType: .meal
@@ -448,7 +448,7 @@ extension ConversationRecorder {
         WorkoutCalorieCalculator.refreshStoredEstimate(entry, in: context)
         try? context.save()
         return .success(
-            "已更新训练 [id:\(entry.businessID ?? 0)]：\(workoutSummary(entry))。",
+            "已更新训练\(AgentFacingRecordID.trailing(entry.businessID))：\(workoutSummary(entry))。",
             recordRefs: [workoutReference(entry)],
             recordType: .workout
         )
@@ -545,7 +545,7 @@ extension ConversationRecorder {
         try? context.save()
         let caloriesText = entry.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
-            "已更新\(entry.mealType.rawValue)：\(entry.title)，\(caloriesText)。",
+            "已更新\(entry.mealType.rawValue)：\(entry.title)，\(caloriesText)。\(AgentFacingRecordID.trailing(entry.businessID))",
             data: mealResultData(entry),
             recordRefs: [mealReference(entry)],
             recordType: .meal
@@ -602,7 +602,7 @@ extension ConversationRecorder {
         )
         try? context.save()
         return .success(
-            "已更新身体记录 [id:\(entry.businessID ?? 0)]。",
+            "已更新身体记录\(AgentFacingRecordID.trailing(entry.businessID))。",
             recordRefs: [bodyReference(entry)],
             recordType: .body
         )

@@ -39,7 +39,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .trendAnalysis: "分析训练、体重和饮食的周期趋势，区分信号、噪声和缺失数据。"
         case .trainingVolumeAnalysis: "按可验证记录计算训练容量，并支持不同时间粒度的可比分析。"
         case .calorieEstimation: "用本地 MET 规则和可追溯时长估算训练消耗，不让模型自由计算。"
-        case .workoutLogging: "把自然语言或图片里的训练内容写成可审查的训练记录，缺失字段保持为空。"
+        case .workoutLogging: "把自然语言或图片里的训练内容写成可审查的训练记录；重量与间歇未说明时写 0。"
         }
     }
 
@@ -118,7 +118,9 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             3. 不把照片外不可见的油、酱料或配料当作确定事实，可作为可能的偏差来源提示。
             4. 只有餐食组成证据足够时，才同时写 glycemic_speed 与 glycemic_assessment：速度只能是 slow、moderate 或 fast，依据需说明精制碳水、纤维、蛋白质、脂肪、烹饪或形态等可见因素及不确定性。不得预测个体血糖峰值、曲线或作诊断；证据不足时两项都省略。
             5. 餐食组成足以支持建议时填写 recommended_eating_order，只使用实际识别到的菜品，用“蔬菜/高纤维食物 → 蛋白质与脂肪来源 → 主食或甜食”的思路写成一行；缺少对应食物或证据不足时省略，不凭空补菜。
-            6. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。纠正、补图或改已有餐必须先 list/get 再用 update_meal。无法识别核心食物或份量差异会显著影响结果时先询问用户。未知营养必须省略，不得写成 0。
+            6. 只有证据足够时调用 create_meal，按可见食物写入有序 items；一餐一张新记录，同一轮可记录多餐。
+               纠正、补图或改已有餐必须使用本机上下文里的 Int64 record_id 再 update_meal；不要猜测 UUID，
+               也不要把训练 record_id 用到饮食工具。只有上下文缺少目标餐时才 list/get。未知营养必须省略，不得写成 0。
                不要猜测用餐时间：用户没有明确说时间就省略 occurred_at，由 App 使用发送时刻（含钟点）；只有用户明确给出时间时才写带时区的完整 ISO-8601 时间，不要写只有日期的值。
             7. 调用 create_meal 或 update_meal 之前，先用一句话说明你识别到了什么（例如“我帮你识别到了以下食物信息。”）。这句话不列菜名、份量和数字，结果卡会显示它们。
             8. 记录成功后最多补充两句不重复结果卡数据的教练说明。提供平衡饮食建议，不使用羞辱性语言，不把估算当作医学或营养治疗结论。
@@ -188,15 +190,14 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             执行规则：
             1. 先 search_exercises 复用已有动作；确实没有时才 create_exercise，然后用返回的
                exercise_id 一次 create_workout 写入本次全部动作，不要一个动作调用一次。
-            2. 组数、次数、重量、间歇、时长、RIR 只写用户明确给出或图片明确可读的值。没提到的字段
-               必须省略，不能用常见值补齐，也不能写 0 代替未知。用户只说一个组间间歇时，写入
-               create_workout.rest_seconds，并写到每个非最后逻辑组的 set_entries.rest_seconds；
-               最后一组不要写组后间歇。
-            3. 自重动作不要编造外部重量；单侧动作按用户表述记录，不自行折算左右合计。
-            4. 用户在纠正已有训练时，先 list_workouts 或 get_workout 找到目标记录，再用
-               update_workout 修改，不要新建重复记录。
-            5. 写入成功后最多两句说明，只补充结果卡看不到的信息（例如省略了哪些字段、需要用户确认
-               什么），不复述已经在卡片里的数字。
+            2. 组数、次数、时长、RIR 只写用户明确给出或图片明确可读的值。没提到的这些字段必须省略，
+               不能用常见值补齐。外部重量和组间间歇除外：必须填写；未说明时填 0。0kg 表示自重，
+               0 秒表示没有休息。用户只说一个组间间歇时，写入 create_workout.rest_seconds，并写到
+               每个非最后逻辑组的 set_entries.rest_seconds；最后一组不要写组后间歇。
+            3. 自重动作的 external_weight_kg 填 0，不要省略该字段。单侧动作按用户表述记录，不自行折算左右合计。
+            4. 纠正已有训练时，优先使用本机上下文里的 Int64 record_id；不要猜测 UUID，
+               也不要把训练 record_id 用到饮食工具。只有上下文缺少目标记录时才 list/get。
+            5. 写入成功后最多两句说明，只补充结果卡看不到的信息，不复述已经在卡片里的数字。
             """
         }
     }

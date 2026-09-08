@@ -2,7 +2,7 @@ import SwiftUI
 
 enum ProgressRecentActivityViewport {
     static let maximumVisibleRows = 6
-    static let rowHeight: CGFloat = 64
+    static let rowHeight: CGFloat = 72
     static let dividerHeight: CGFloat = 1
 
     static func height(activityCount: Int) -> CGFloat {
@@ -27,22 +27,13 @@ struct ProgressRecentActivity: Identifiable, Sendable {
     let detail: String
     let metric: String?
 
-    static func workout(_ entry: WorkoutEntry) -> ProgressRecentActivity {
-        workout(
-            id: entry.id,
-            date: entry.date,
-            title: entry.exercise,
-            detail: entry.setEvidenceSummary,
-            volume: entry.estimatedVolume
-        )
-    }
-
     static func workout(
         id: UUID,
         date: Date,
         title: String,
         detail: String?,
-        volume: Double?
+        volume: Double?,
+        calories: Int? = nil
     ) -> ProgressRecentActivity {
         ProgressRecentActivity(
             id: id,
@@ -50,7 +41,33 @@ struct ProgressRecentActivity: Identifiable, Sendable {
             date: date,
             title: title,
             detail: detail ?? "训练记录",
-            metric: volume.map { "\($0.formatted()) kg" }
+            metric: workoutMetric(volume: volume, calories: calories)
+        )
+    }
+
+    private static func workoutMetric(volume: Double?, calories: Int?) -> String? {
+        let volumeText = volume.map { "\($0.formatted()) kg" }
+        let calorieText = calories.map { "约 \($0) kcal" }
+        switch (volumeText, calorieText) {
+        case let (volume?, calorie?):
+            return "\(volume)\n\(calorie)"
+        case let (volume?, nil):
+            return volume
+        case let (nil, calorie?):
+            return calorie
+        case (nil, nil):
+            return nil
+        }
+    }
+
+    static func workout(_ entry: WorkoutEntry) -> ProgressRecentActivity {
+        workout(
+            id: entry.id,
+            date: entry.date,
+            title: entry.exercise,
+            detail: entry.setEvidenceSummary,
+            volume: entry.estimatedVolume,
+            calories: entry.estimatedCalories
         )
     }
 
@@ -224,6 +241,8 @@ struct ProgressRecentActivityRow: View {
                     Text(metric)
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.primary)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(dateText)
                     .font(.caption2)
@@ -235,7 +254,7 @@ struct ProgressRecentActivityRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .frame(minHeight: 64)
+        .frame(minHeight: activity.metric?.contains("\n") == true ? 72 : 64)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }

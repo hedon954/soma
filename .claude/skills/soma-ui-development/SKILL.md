@@ -28,7 +28,7 @@ Use the current PRD and Accepted ADRs as the product contract. This skill suppli
 - Use `AppSemanticRole` and `SemanticIconBadge` for business-entry icons, and `AppMetricRole` with `MetricHeading` for metric titles. Each metric needs a specific SF Symbol; one generic training icon for every metric is a design failure.
 - Render every muscle map with the training semantic color: stronger orange for primary/high intensity and a lighter orange for secondary/low intensity. Never use the black/white interaction tint for active muscles.
 - Treat color as state information, not card decoration. Ordinary cards, message surfaces and navigation stay neutral; category colors belong on a small icon, progress mark or necessary warning.
-- Preserve native navigation, sheets, context menus, swipe actions, text selection, pickers, Charts, HealthKit, media and accessibility behavior.
+- Preserve native navigation, sheets, context menus, swipe actions, text selection, pickers, Charts, media and accessibility behavior.
 - Design both light and dark at the same time. Light is a pure-white page with light-gray grouped cards; dark is a pure-black page with two dark-gray surface levels.
 - Chat body and user messages use Dynamic Type Subheadline Light. Raise headings and explicit emphasis only to Medium, keep metadata Caption, and do not solve hierarchy with Bold/Semibold blocks.
 - User messages use the theme inset surface. Never place repeated white message bubbles on the dark page.

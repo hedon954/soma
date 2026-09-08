@@ -77,7 +77,7 @@ Soma 是无账户、本地优先、聊天驱动的 iOS 私人身体智能：
   不进入 Git。
 - `Soma/App` 负责根生命周期和依赖注入。
 - `Soma/Models` 负责 SwiftData 模型、值类型和纯派生属性。
-- `Soma/Services` 负责 Agent、HealthKit、Keychain、媒体与确定性业务服务。
+- `Soma/Services` 负责 Agent、Keychain、媒体与确定性业务服务。
 - `Soma/Views` 负责系统导航、状态呈现、查询和用户意图。
 - `Soma/Components` 负责可复用的 UI 与媒体边界。
 
@@ -121,10 +121,8 @@ App → Views → Services → Models
 
 ### External imports
 
-- 外部样本先转换为 Soma 模型，再进入列表和统计。
-- 每个数据空间、来源和数据流维护独立 cursor/anchor。
-- 外部 ID 去重；来源删除需要同步，重复导入不得改变统计。
-- Keep/COROS 没有稳定授权直连时只经用户授权的 Apple 健康读取。
+当前不接入 Apple 健康、手表或其他外部健康平台。记录上的 `externalSource` 与
+`ExternalSyncCursor` 保留给以后的导入设计；重新接入必须新 PRD/ADR。
 
 ### Sensitive data
 
@@ -162,7 +160,7 @@ App → Views → Services → Models
 - 明确 Task owner、取消点和生命周期；不要用固定 sleep 修复竞态。
 - 跨 actor 的值优先使用不可变 `Sendable` struct。
 - 不用 singleton 或无边界全局状态规避依赖传递。
-- 系统资源获取与释放必须成对：语音任务、视频文件、HealthKit query 和流式请求都要有
+- 系统资源获取与释放必须成对：语音任务、视频文件和流式请求都要有
   清理或取消路径。
 - 错误保留操作上下文，并映射为用户可理解的恢复建议。
 - 新文件以 500 行为软上限；现有超长文件是待偿技术债，不是继续扩张的许可。
@@ -198,7 +196,7 @@ App → Views → Services → Models
 - 教练输入区只保留加号、文本、语音和发送；快捷 Skill 视觉紧凑但触达区域不少于 44 pt。
 - AI 回复只通过本地受控 Markdown 布局呈现标题、段落、分隔线和列表，不能由模型注入任意 UI。
 - 详情进入即编辑，修改后出现保存；列表删除遵循系统左滑 destructive action。
-- 使用系统文本选择、语音、照片选择器、Charts 和 HealthKit 交互。
+- 使用系统文本选择、语音、照片选择器、Charts 交互。
 - 新交互提供 VoiceOver label，支持 Dynamic Type，并验证空态、错误态和长文本。
 - 不展示没有用户意义的内部置信度或 Agent 实现细节。
 - 所有肌群受力图使用训练语义色表达主次深浅，不使用黑色着色；计划总览必须保留动作库定义的
@@ -214,7 +212,7 @@ App → Views → Services → Models
 - 关键 Bug 在 `docs/bugs/` 单独复盘；能自动化的防复发规则必须进入测试或
   `make check`，不能只依赖文档提醒。
 - SwiftData 变更验证演示/个人空间隔离、旧数据兼容或明确的数据重建策略。
-- HealthKit 与真机权限无法完全自动化时，补充手工验收步骤。
+- 相机、麦克风、相册与真机权限无法完全自动化时，补充手工验收步骤。
 - 警告、格式、lint、脚本、文档链接、构建和测试都是质量门禁。
 - 开发与提交钩子使用快速静态门禁 `make check`。
 - 完成代码或基础设施变更前运行包含构建和模拟器测试的 `make verify`。

@@ -65,6 +65,21 @@ extension ConversationRecorder {
         id.map { .number(Double($0)) } ?? .null
     }
 
+    /// 食物项没有独立业务 ID；update_meal 整表替换 items。禁止把 SwiftData UUID 交给模型当 record_id。
+    static func mealItemJSON(_ item: MealItem, includeNutrition: Bool) -> AgentJSONValue {
+        var object: [String: AgentJSONValue] = [
+            "name": .string(item.name),
+            "portion_description": item.portionDescription.map(AgentJSONValue.string) ?? .null
+        ]
+        if includeNutrition {
+            object["calories"] = item.calories.map { .number(Double($0)) } ?? .null
+            object["protein"] = item.protein.map(AgentJSONValue.number) ?? .null
+            object["carbs"] = item.carbs.map(AgentJSONValue.number) ?? .null
+            object["fat"] = item.fat.map(AgentJSONValue.number) ?? .null
+        }
+        return .object(object)
+    }
+
     static func formatWeight(_ weight: Double?) -> String? {
         guard let weight else { return nil }
         return weight == 0
@@ -92,7 +107,7 @@ extension ConversationRecorder {
                         targetKind: targetKind,
                         reps: targetKind == .repetitions ? $0.reps : nil,
                         durationSeconds: targetKind == .duration ? $0.durationSeconds : nil,
-                        externalWeightKG: $0.externalWeightKG,
+                        externalWeightKG: $0.externalWeightKG ?? 0,
                         restSeconds: $0.restSeconds
                     )
                 },
@@ -119,7 +134,7 @@ extension ConversationRecorder {
     ) -> [WorkoutSetEvidence]? {
         guard let sets else { return nil }
         return (0 ..< max(sets, 0)).map { _ in
-            WorkoutSetEvidence(reps: reps, externalWeightKG: weight)
+            WorkoutSetEvidence(reps: reps, externalWeightKG: weight ?? 0)
         }
     }
 

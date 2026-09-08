@@ -160,10 +160,12 @@ struct RootView: View {
     @State private var didFinishInitialMaintenance = false
     @State private var capturePresentation = CapturePresentationCoordinator()
     @State private var foregroundRecovery = ForegroundRecoveryCoordinator()
+    @State private var insightsRevision = InsightsSnapshotRevisionState()
 
     var body: some View {
         @Bindable var capturePresentation = capturePresentation
         rootTabs
+            .environment(insightsRevision)
             .background {
                 RootTabReselectObserver(
                     onReselect: handleTabReselect,
@@ -245,6 +247,17 @@ struct RootView: View {
                     .rootVisible,
                     detail: "space=\(dataSpace.activeSpace.rawValue)"
                 )
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: ModelContext.didSave)
+            ) { notification in
+                guard ModelContextSaveImpact.affectsInsights(
+                    notification,
+                    in: modelContext
+                ) else {
+                    return
+                }
+                insightsRevision.markDataChanged()
             }
             .onReceive(
                 NotificationCenter.default.publisher(for: .prefillCoachDraft)

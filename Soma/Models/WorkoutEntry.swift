@@ -174,7 +174,8 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         if let reps = representativeReps,
            let weight = representativeWeight
         {
-            return "\(setCount ?? entries.count)组 × \(reps)次 · \(weight.formatted())kg"
+            let weightText = weight == 0 ? "自重" : "\(weight.formatted())kg"
+            return "\(setCount ?? entries.count)组 × \(reps)次 · \(weightText)"
         }
         return entries.enumerated().map { index, entry in
             var parts = ["第\(entry.logicalSetIndex ?? index + 1)组"]
@@ -187,7 +188,7 @@ final class WorkoutEntry: BusinessIdentifiedModel {
                 break
             }
             if let weight = entry.externalWeightKG {
-                parts.append("\(weight.formatted())kg")
+                parts.append(weight == 0 ? "自重" : "\(weight.formatted())kg")
             }
             if let reps = entry.reps {
                 parts.append("\(reps)次")

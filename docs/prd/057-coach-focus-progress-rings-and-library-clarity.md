@@ -13,6 +13,7 @@
   - [ADR 0122](../adr/0122-nutrition-rings-and-period-deficit.md)
   - [ADR 0123](../adr/0123-exercise-movement-kinds.md)
   - [验收](../acceptance.md)
+- 后续修订：[PRD 059](059-coach-ids-progress-and-required-zeros.md)（「训练记录」不预填；听写以录音按钮与持续预览为准）
 
 ## 背景
 

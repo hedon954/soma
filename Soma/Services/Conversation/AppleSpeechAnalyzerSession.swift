@@ -66,11 +66,13 @@ final class AppleSpeechAnalyzerSession: LocalSpeechSession {
                     try Task.checkCancellation()
                     let start = result.range.start.seconds
                     let end = CMTimeRangeGetEnd(result.range).seconds
-                    guard end > committedEnd else { continue }
                     let pause = committedEnd.isFinite ? max(0, start - committedEnd) : 0
-                    onResult(String(result.text.characters), result.isFinal, pause)
                     if result.isFinal {
+                        guard end > committedEnd else { continue }
+                        onResult(String(result.text.characters), true, pause)
                         committedEnd = end
+                    } else {
+                        onResult(String(result.text.characters), false, pause)
                     }
                 }
             } catch {

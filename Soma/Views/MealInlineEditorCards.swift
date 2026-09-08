@@ -150,7 +150,7 @@ struct InlineMealCards: View {
         meal.title = MealItemDraft.title(for: items)
         meal.replaceItemsAndDeriveTotals(items)
         sourceMessage?.recordManualCorrection(
-            "饮食记录 \(meal.id.uuidString) 已改为 \(mealType.rawValue)，"
+            "饮食记录 \(AgentFacingRecordID.correctionToken(meal.businessID)) 已改为 \(mealType.rawValue)，"
                 + "\(items.count) 项菜品：\(MealItemDraft.summary(for: items))"
         )
         try? modelContext.save()
@@ -159,7 +159,7 @@ struct InlineMealCards: View {
 
     private func deleteRecord() {
         sourceMessage?.recordManualCorrection(
-            "饮食记录 \(meal.id.uuidString) 已由用户删除"
+            "饮食记录 \(AgentFacingRecordID.correctionToken(meal.businessID)) 已由用户删除"
         )
         modelContext.delete(meal)
         try? modelContext.save()
@@ -204,7 +204,7 @@ struct MealItemDraftRow: View {
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 name
-                Spacer(minLength: 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 calories
             }
         }
@@ -215,6 +215,7 @@ struct MealItemDraftRow: View {
             placeholder: "菜品",
             text: $draft.name,
             font: .footnote.weight(.semibold),
+            allowsWrapping: true,
             accessibilityTitle: "菜品名称"
         )
     }
@@ -314,10 +315,13 @@ struct MealItemReadOnlyRow: View {
                 layout {
                     Text(item.name)
                         .font(.footnote.weight(.semibold))
-                    Spacer(minLength: 4)
+                        .lineLimit(1 ... 3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text(item.calories.map { "\($0) 千卡" } ?? "未估算")
                         .font(.footnote.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .fixedSize()
                 }
                 if !caption.isEmpty {
                     Text(caption)
@@ -353,6 +357,7 @@ struct InlineTextValue: View {
     var tint: Color = .primary
     var keyboard: UIKeyboardType = .default
     var suffix: String?
+    var allowsWrapping = false
     let accessibilityTitle: String
     var onCommit: (String, String) -> Void = { _, _ in }
 
@@ -386,7 +391,8 @@ struct InlineTextValue: View {
             }
             .font(font)
             .foregroundStyle(tint)
-            .fixedSize(horizontal: true, vertical: false)
+            .lineLimit(allowsWrapping ? 1 ... 3 : 1 ... 1)
+            .fixedSize(horizontal: !allowsWrapping, vertical: allowsWrapping)
             .frame(minWidth: 22, alignment: .leading)
             if let suffix, !text.isEmpty {
                 Text(suffix)

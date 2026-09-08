@@ -7,6 +7,7 @@
 - 下游落地：
   - [PRD 045](../archive/0.0.14/prd/045-performance-reliability-and-bounded-data-access.md)
   - [ADR 0100](../archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md)
+  - [PRD 059](../prd/059-coach-ids-progress-and-required-zeros.md)
 
 ## 症状
 

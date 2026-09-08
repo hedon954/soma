@@ -333,7 +333,7 @@ enum GuidedWorkoutRecordStore {
         let completedEfforts = efforts.filter { $0.status == .completed }
         guard !completed.isEmpty || !completedEfforts.isEmpty else { return nil }
 
-        let setByID = Dictionary(uniqueKeysWithValues: sets.map { ($0.id, $0) })
+        let setByID = Dictionary(sets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let orderedCompletedEfforts = completedEfforts
             .sorted { lhs, rhs in
                 let lhsSetOrder = setByID[lhs.workoutSetID]?.order ?? .max

@@ -47,8 +47,6 @@
 	<string>把本机渲染的训练分享海报保存到你的相册。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>把你的语音转成健身、饮食或身体记录文字。</string>
-    <key>NSHealthShareUsageDescription</key>
-    <string>读取你授权的体重、训练与活动能量，用于完善私人健身记录、趋势和热量分析。</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>在你发送消息时记录一次位置，用于个人足迹和识别本次健身房；Soma 不会持续或后台跟踪。</string>
     <key>UILaunchScreen</key>

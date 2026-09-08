@@ -1,12 +1,10 @@
 import Foundation
 
-/// 把用户明确给出的组间间歇落到非最后逻辑组。模型常把 120 写在训练级或最后一组，
-/// 却给前面的组写 0；卡片读的是逐组 evidence，所以会显示「间歇 0 秒」。
+/// 把用户明确给出的组间间歇落到非最后逻辑组。
+/// 0 是零秒休息；nil 才是未记录。模型若把正数写在训练级或最后一组，仍回填到非最后组。
 enum WorkoutRestPropagation {
-    /// 0 是模型常写的“未知”，不是用户说的零秒休息。
     static func recorded(_ seconds: Int?) -> Int? {
-        guard let seconds, seconds > 0 else { return nil }
-        return seconds
+        seconds
     }
 
     static func propagate(
@@ -17,25 +15,13 @@ enum WorkoutRestPropagation {
             return entries
         }
         var draft = WorkoutRecordDraft(evidence: entries)
-        guard draft.groups.count >= 2 else {
-            return entries
-        }
+        let workoutFill = workoutRestSeconds.flatMap { $0 > 0 ? $0 : nil }
+        let lastGroupRest = draft.groups.last?.efforts.last?.restSeconds
+        let lastPositive = lastGroupRest.flatMap { $0 > 0 ? $0 : nil }
         let nonFinalHasPositive = draft.groups.dropLast().contains { group in
             (group.efforts.last?.restSeconds ?? 0) > 0
         }
-        let fill: Int? = if let workoutRestSeconds, workoutRestSeconds > 0 {
-            workoutRestSeconds
-        } else if !nonFinalHasPositive,
-                  let last = draft.groups.last?.efforts.last?.restSeconds,
-                  last > 0
-        {
-            last
-        } else {
-            nil
-        }
-        guard let fill else {
-            return entries
-        }
+        let migratedLastRest = !nonFinalHasPositive ? lastPositive : nil
 
         for index in draft.groups.indices {
             guard let lastEffort = draft.groups[index].efforts.indices.last else {
@@ -43,16 +29,17 @@ enum WorkoutRestPropagation {
             }
             let isFinal = index == draft.groups.indices.last
             if isFinal {
-                if !nonFinalHasPositive,
-                   draft.groups[index].efforts[lastEffort].restSeconds == fill
-                {
-                    draft.groups[index].efforts[lastEffort].restSeconds = nil
-                }
+                draft.groups[index].efforts[lastEffort].restSeconds = nil
                 continue
             }
             let current = draft.groups[index].efforts[lastEffort].restSeconds
-            if current == nil || current == 0 {
+            if current != nil {
+                continue
+            }
+            if let fill = workoutFill ?? migratedLastRest {
                 draft.groups[index].efforts[lastEffort].restSeconds = fill
+            } else {
+                draft.groups[index].efforts[lastEffort].restSeconds = 0
             }
         }
         return draft.evidence

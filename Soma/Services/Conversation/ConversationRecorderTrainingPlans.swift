@@ -15,7 +15,7 @@ extension ConversationRecorder {
                 .prescriptions(for: program, in: context)
                 .count
             guard exerciseCount > 0 else { return nil }
-            return "[id:\(program.businessID ?? 0)] \(program.name)"
+            return AgentFacingRecordID.labeled(program.businessID, summary: program.name, key: "program_id")
                 + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
                 + "；动作：\(exerciseCount) 个"
         }
@@ -47,7 +47,7 @@ extension ConversationRecorder {
             return "\(prescription.order). \(prescription.exerciseName)（\(prescription.laterality.rawValue)）：\(sets)"
         }
         let overview = program.overview.isEmpty ? "未记录" : program.overview
-        let header = "[id:\(program.businessID ?? 0)] \(program.name)；概览：\(overview)"
+        let header = "\(AgentFacingRecordID.labeled(program.businessID, summary: program.name, key: "program_id"))；概览：\(overview)"
         return .success(
             "\(header)\n\(exercises.joined(separator: "\n"))",
             data: programData(
@@ -92,13 +92,13 @@ extension ConversationRecorder {
                             in: context
                         )
                         return .success(
-                            "已有内容相同的训练计划 [id:\(existing.businessID ?? 0)]："
+                            "已有内容相同的训练计划\(AgentFacingRecordID.trailing(existing.businessID, key: "program_id"))："
                                 + "\(existing.name)；并已把当日训练保存为一次完成记录 "
                                 + "[session_id:\(session.businessID ?? 0)]。"
                         )
                     }
                     return .success(
-                        "已有内容相同的训练计划 [id:\(existing.businessID ?? 0)]：\(existing.name)。"
+                        "已有内容相同的训练计划\(AgentFacingRecordID.trailing(existing.businessID, key: "program_id"))：\(existing.name)。"
                     )
                 }
             }
@@ -116,13 +116,13 @@ extension ConversationRecorder {
                     in: context
                 )
                 return .success(
-                    "已创建训练计划 [id:\(program.businessID ?? 0)]：\(program.name)；"
+                    "已创建训练计划\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)；"
                         + "并已把当日原始训练保存为一次完成记录 "
                         + "[session_id:\(session.businessID ?? 0)]。"
                 )
             }
             return .success(
-                "已创建训练计划 [id:\(program.businessID ?? 0)]：\(program.name)。"
+                "已创建训练计划\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -186,7 +186,7 @@ extension ConversationRecorder {
                 in: context
             )
             return .success(
-                "已更新训练计划 [id:\(program.businessID ?? 0)]：\(program.name)。"
+                "已更新训练计划\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -329,7 +329,7 @@ extension ConversationRecorder {
             analysisDescriptor.fetchLimit = 1
             if let existing = try? context.fetch(analysisDescriptor).first {
                 return .success(
-                    "该视频复盘已保存 [id:\(existing.businessID ?? 0)]。"
+                    "该视频复盘已保存\(AgentFacingRecordID.trailing(existing.businessID))。"
                 )
             }
             let sourceJobID = sourceTurnID.flatMap { turnID in
@@ -357,7 +357,7 @@ extension ConversationRecorder {
             )
             try context.save()
             return .success(
-                "已保存“\(performance.exerciseName)”视频复盘 [id:\(analysis.businessID ?? 0)]。"
+                "已保存“\(performance.exerciseName)”视频复盘\(AgentFacingRecordID.trailing(analysis.businessID))。"
             )
         } catch {
             return .failure(error.localizedDescription)

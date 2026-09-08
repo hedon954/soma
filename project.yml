@@ -33,7 +33,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: top.hedon.soma
-        CODE_SIGN_ENTITLEMENTS: Soma/Soma.entitlements
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Soma/Resources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

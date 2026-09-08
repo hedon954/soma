@@ -472,7 +472,7 @@ private enum AgentToolPresentationFormatter {
 
     private static func friendlyText(_ text: String) -> String {
         var value = text.replacingOccurrences(
-            of: #"\[id:[^\]]+\]\s*"#,
+            of: #"\[(?:id|record_id|program_id|exercise_id|session_id):[^\]]+\]\s*"#,
             with: "",
             options: .regularExpression
         )

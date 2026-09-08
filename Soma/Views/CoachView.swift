@@ -86,6 +86,7 @@ struct CoachSessionView: View {
     @State var hasUserInteractedWithMessageList = false
     @State var didPrepareVisiblePage = false
     @State var pagePaintKey = ""
+    @State private var recordSaveToast: String?
     @State var messageListPosition = CoachMessageScrollPosition(
         isAtTop: false,
         isNearBottom: false,
@@ -357,6 +358,15 @@ struct CoachSessionView: View {
                 }
                 .safeAreaInset(edge: .bottom) {
                     composer(pendingCount: projection.pendingJobCount)
+                }
+                .appToast(
+                    $recordSaveToast,
+                    duration: 2.8,
+                    systemImage: "checkmark.circle.fill",
+                    tint: AppTheme.success
+                )
+                .onReceive(NotificationCenter.default.publisher(for: .inlineRecordDidSave)) { _ in
+                    recordSaveToast = "已保存"
                 }
                 .onChange(of: pagePaintSignature(for: projection), initial: true) { _, key in
                     schedulePagePaint(for: projection, key: key) {

@@ -46,7 +46,6 @@ enum SettingsHomeIconTone: String, CaseIterable, Sendable {
     case body
     case training
     case intelligence
-    case health
     case data
     case notification
     case background
@@ -56,7 +55,6 @@ enum SettingsHomeIconTone: String, CaseIterable, Sendable {
         case .body: AppTheme.bodyAccent
         case .training: AppTheme.trainingAccent
         case .intelligence: AppTheme.trendAccent
-        case .health: AppTheme.vitalAccent
         case .data: AppTheme.consistencyAccent
         case .notification: AppTheme.warning
         case .background: AppTheme.recoveryAccent
@@ -69,7 +67,6 @@ enum SettingsHomeItem: String, CaseIterable, Sendable {
     case gym
     case voiceCues
     case llm
-    case healthDevices
     case dataBackup
     case taskProgress
     case backgroundProcessing
@@ -83,7 +80,6 @@ enum SettingsHomeItem: String, CaseIterable, Sendable {
         case .gym: "building.2"
         case .voiceCues: "speaker.wave.2"
         case .llm: "sparkles"
-        case .healthDevices: "heart.text.square"
         case .dataBackup: "externaldrive"
         case .taskProgress: "waveform.path.ecg"
         case .backgroundProcessing: "server.rack"
@@ -98,7 +94,6 @@ enum SettingsHomeItem: String, CaseIterable, Sendable {
         case .bodyInfo, .privacy: .body
         case .gym, .voiceCues: .training
         case .llm, .advanced: .intelligence
-        case .healthDevices: .health
         case .dataBackup, .appearance: .data
         case .taskProgress: .notification
         case .backgroundProcessing: .background

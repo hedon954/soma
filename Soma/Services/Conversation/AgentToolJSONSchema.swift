@@ -337,7 +337,6 @@ extension AgentToolName {
     private func mealItemArray() -> JSONSchema {
         array(
             object([
-                "id": string("更新已有食物项时使用的稳定 UUID"),
                 "name": string("食物名称"),
                 "portion_description": string("份量说明"),
                 "calories": integer("分项千卡"),
@@ -385,11 +384,11 @@ extension AgentToolName {
                 ),
                 "reps": integer("该组明确完成的次数"),
                 "duration_seconds": integer("按时长动作该组明确完成的秒数；与 reps 二选一"),
-                "external_weight_kg": number("该组外部负重 kg；明确自重时填 0"),
+                "external_weight_kg": number("必须填写；自重或无外负荷填 0，禁止省略"),
                 "rest_seconds": integer(
-                    "该 effort 之后的组间或换侧间歇秒数。用户只给一个组间间歇时写在每个非最后逻辑组；最后一组不要写组后间歇；未知不要写 0"
+                    "该 effort 之后的组间或换侧间歇秒数。必须填写；用户未说明时填 0，0 是零秒休息。用户只给一个组间间歇时写在每个非最后逻辑组；最后一组不要写组后间歇"
                 )
-            ], required: ["logical_set_index", "side", "target_kind"]),
+            ], required: ["logical_set_index", "side", "target_kind", "external_weight_kg"]),
             description: description
         )
     }
@@ -408,9 +407,9 @@ extension AgentToolName {
                 ),
                 "occurred_at": string("可选带时区 ISO-8601 发生时间；省略时使用 Job 冻结的默认记录时间"),
                 "set_entries": workoutSetEntries(
-                    "按实际顺序保存每组事实；次数或重量未知时省略对应字段"
+                    "按实际顺序保存每组事实；外部重量与非最后逻辑组间歇必须填写，未说明时填 0"
                 ),
-                "rest_seconds": integer("用户明确提供的组间休息秒数"),
+                "rest_seconds": integer("组间休息秒数；用户未说明时填 0"),
                 "duration_minutes": integer("用户明确提供的训练时长分钟数"),
                 "form_score": integer("有充分视频证据时的动作评分"),
                 "intensity": string("有证据的负荷判断"),

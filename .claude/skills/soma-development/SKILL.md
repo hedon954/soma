@@ -58,7 +58,7 @@ cohesive type when that can be done without mixing unrelated behavior.
 3. Run `make check` as the fast static gate while iterating.
 4. Run `make verify` before declaring completion.
 5. For UI changes, launch an iPhone simulator and inspect the affected flow.
-6. For media, speech, HealthKit, signing, or TestFlight changes, document the applicable manual
+6. For media, speech, signing, or TestFlight changes, document the applicable manual
    device scenario.
 7. Update PRD for product scope, ADR for durable decisions, and Changelog for shipped behavior;
    do not turn those files into implementation diaries.

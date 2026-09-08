@@ -60,7 +60,7 @@ Skill、Markdown 预览与恢复；Skill 只描述专业方法，工具权限由
 
 快捷按钮是可完整增删改的本机实体：名称、图标、绑定 Skill（可为空）、工具白名单、是否显示与排序，
 以 JSON 存 UserDefaults，不进入 SwiftData。默认可见三个：记录饮食、训练记录、近期分析；聊天输入区
-最多显示六个。点选且输入框为空时填入该按钮建议句。工具默认全选，可按分组删减，也可让小模型推荐一份
+最多显示六个。点选且输入框为空时，「近期分析」填入建议句，「记录饮食」和「训练记录」不预填。工具默认全选，可按分组删减，也可让小模型推荐一份
 清单与理由后一键采纳。详见
 [ADR 0082](archive/0.0.7/adr/0082-shortcut-owned-tool-bindings-and-method-only-skills.md) 与
 [ADR 0120](adr/0120-focused-shortcut-prompt.md)。

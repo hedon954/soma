@@ -15,46 +15,49 @@ enum AgentCrossTurnFactSummary {
             var line: String
         }
         var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate {
-                $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
-            },
+            predicate: #Predicate { $0.sourceSessionID == sessionID },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         workoutDescriptor.fetchLimit = limit
         let workouts = ((try? context.fetch(workoutDescriptor)) ?? [])
-            .map {
-                Fact(
-                    date: $0.date,
-                    line: "- write workout id=\($0.id.uuidString.lowercased()) title=\($0.exercise) time=\($0.date.ISO8601Format())"
-                )
+            .filter { $0.sourceTurnID != excludingTurnID }
+            .compactMap { workout -> Fact? in
+                AgentFacingRecordID.factLine(
+                    kind: "workout",
+                    businessID: workout.businessID,
+                    title: workout.exercise,
+                    date: workout.date
+                ).map { Fact(date: workout.date, line: $0) }
             }
         var mealDescriptor = FetchDescriptor<MealEntry>(
-            predicate: #Predicate {
-                $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
-            },
+            predicate: #Predicate { $0.sourceSessionID == sessionID },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         mealDescriptor.fetchLimit = limit
         let meals = ((try? context.fetch(mealDescriptor)) ?? [])
-            .map {
-                Fact(
-                    date: $0.date,
-                    line: "- write meal id=\($0.id.uuidString.lowercased()) title=\($0.title) time=\($0.date.ISO8601Format())"
-                )
+            .filter { $0.sourceTurnID != excludingTurnID }
+            .compactMap { meal -> Fact? in
+                AgentFacingRecordID.factLine(
+                    kind: "meal",
+                    businessID: meal.businessID,
+                    title: meal.title,
+                    date: meal.date
+                ).map { Fact(date: meal.date, line: $0) }
             }
         var bodyDescriptor = FetchDescriptor<BodyEntry>(
-            predicate: #Predicate {
-                $0.sourceSessionID == sessionID && $0.sourceTurnID != excludingTurnID
-            },
+            predicate: #Predicate { $0.sourceSessionID == sessionID },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         bodyDescriptor.fetchLimit = limit
         let bodies = ((try? context.fetch(bodyDescriptor)) ?? [])
-            .map {
-                Fact(
-                    date: $0.date,
-                    line: "- write body id=\($0.id.uuidString.lowercased()) time=\($0.date.ISO8601Format())"
-                )
+            .filter { $0.sourceTurnID != excludingTurnID }
+            .compactMap { body -> Fact? in
+                AgentFacingRecordID.factLine(
+                    kind: "body",
+                    businessID: body.businessID,
+                    title: nil,
+                    date: body.date
+                ).map { Fact(date: body.date, line: $0) }
             }
         let lines = (workouts + meals + bodies)
             .sorted { $0.date > $1.date }

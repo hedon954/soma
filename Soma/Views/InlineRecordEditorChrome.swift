@@ -44,19 +44,18 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
                     TextField("名称", text: titleText, axis: .vertical)
                         .font(.subheadline.weight(.semibold))
                         .textFieldStyle(.plain)
-                        .lineLimit(1...)
-                        .frame(minHeight: AppTheme.minimumTapTarget, alignment: .leading)
-                        .layoutPriority(10)
+                        .lineLimit(1 ... 3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
                         .accessibilityIdentifier("inline-record-title")
                 } else {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
+                        .lineLimit(1 ... 3)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(minHeight: AppTheme.minimumTapTarget, alignment: .leading)
-                        .layoutPriority(10)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
                         .accessibilityIdentifier("inline-record-title")
                 }
-                Spacer(minLength: 2)
                 HStack(spacing: 0) {
                     if !dynamicTypeSize.isAccessibilitySize {
                         accessory
@@ -80,6 +79,20 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
             RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
                 .stroke(AppTheme.separator, lineWidth: 0.5)
         }
+        .overlay(alignment: .top) {
+            if saveState.wrappedValue == .saved {
+                Text("已保存")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.onAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.success, in: Capsule())
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityLabel("已保存")
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: saveState.wrappedValue)
     }
 
     @ViewBuilder
@@ -217,8 +230,11 @@ struct InlineRecordActions: View {
         Task { @MainActor in
             await Task.yield()
             state = save() ? .saved : .failed
+            if state == .saved {
+                NotificationCenter.default.post(name: .inlineRecordDidSave, object: nil)
+            }
             guard state == .saved else { return }
-            try? await Task.sleep(for: .milliseconds(1200))
+            try? await Task.sleep(for: .milliseconds(2800))
             guard state == .saved else { return }
             state = .idle
         }
@@ -271,8 +287,11 @@ private struct InlineRecordAutosaveModifier<Value: Equatable>: ViewModifier {
                     guard !Task.isCancelled else { return }
                     state = save() ? .saved : .failed
                     hasPendingChanges = state == .failed
+                    if state == .saved {
+                        NotificationCenter.default.post(name: .inlineRecordDidSave, object: nil)
+                    }
                     guard state == .saved else { return }
-                    try? await Task.sleep(for: .milliseconds(1200))
+                    try? await Task.sleep(for: .milliseconds(2800))
                     guard !Task.isCancelled else { return }
                     state = .idle
                 }

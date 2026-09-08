@@ -86,12 +86,13 @@ final class ConversationRecorderToolTests: XCTestCase {
         XCTAssertTrue(result.ok)
         XCTAssertEqual(record.setCount, 4)
         XCTAssertEqual(record.representativeReps, 12)
+        XCTAssertEqual(record.setEntries.map(\.externalWeightKG), [0, 0, 0, 0])
+        XCTAssertEqual(record.setEntries.map(\.restSeconds), [0, 0, 0, nil])
         XCTAssertNil(record.weight)
         XCTAssertNil(record.restSeconds)
         XCTAssertNil(record.durationMinutes)
         XCTAssertNil(record.intensity)
         XCTAssertNil(record.feedback)
-        XCTAssertFalse(result.observation.contains("间歇"))
     }
 
     @MainActor

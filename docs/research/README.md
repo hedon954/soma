@@ -14,8 +14,9 @@
 | [持久 Agent Job、事件流与 Live Activities](2026-07-31-durable-agent-jobs-live-activities.md) | 已转化 | PRD 011、ADR 0031—0027、Agent Job 协议 |
 | [私人健身教练的情境化主屏组件](2026-08-04-contextual-private-coach-widgets.md) | 已转化 | PRD 017、ADR 0042 |
 | [全界面 GUI 精简与渐进披露审计](2026-08-05-ui-simplification-review.md) | 已转化 | PRD 020 |
-| [减脂与增肌目标导向进展指标](2026-08-26-goal-directed-progress-metrics.md) | 已转化 | PRD 046、ADR 0103；[历史与图表重设计提议](2026-09-05-progress-history-and-chart-design.md)拟修订时间入口和指标层级 |
+| [减脂与增肌目标导向进展指标](2026-08-26-goal-directed-progress-metrics.md) | 已转化 | PRD 046、ADR 0103；[历史与图表重设计](2026-09-05-progress-history-and-chart-design.md)修订时间入口；[日消耗本地公式](2026-09-08-daily-energy-expenditure-methods.md)去掉设备能量 |
 | [进展历史与图表逻辑重设计](2026-09-05-progress-history-and-chart-design.md) | 已转化，实施中 | [修订自目标导向研究](2026-08-26-goal-directed-progress-metrics.md)；落地 PRD 053／054 |
+| [日消耗统计：本地公式不含手表](2026-09-08-daily-energy-expenditure-methods.md) | 部分转化 | [PRD 060](../prd/060-remove-healthkit-until-redesign.md) 已删除 HealthKit；FAO/EFSA/NASEM 核对：官方需要量是习惯 PAL，日历台账才是职业析因 + 当日净训练；后者尚未授权 |
 
 ## 生命周期规则
 

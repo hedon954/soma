@@ -43,6 +43,7 @@ final class AgentInputShortcutTests: XCTestCase {
         XCTAssertFalse(tools.contains(.loadSkill))
         XCTAssertFalse(tools.contains(.createMeal))
         XCTAssertFalse(tools.contains(.submitFeedback))
+        XCTAssertNil(shortcut.suggestedPrompt)
     }
 
     func testCrudKeepsOrderContiguousAndHiddenShortcutsStayConfigured() throws {
@@ -131,6 +132,27 @@ final class AgentInputShortcutTests: XCTestCase {
             AgentInputShortcutStore.shortcut(id: "shortcut_nutrition", defaults: defaults)
         )
         XCTAssertEqual(migrated.title, "记录饮食")
+    }
+
+    func testStoredWorkoutFactoryPromptIsCleared() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let legacy = AgentInputShortcut(
+            id: "shortcut_workout_log",
+            title: "训练记录",
+            iconSystemName: "dumbbell",
+            skillID: AgentSkill.workoutLogging.rawValue,
+            toolNames: AgentToolExposurePolicy.toolNames(for: [
+                .searchExercises, .createExercise, .listWorkouts, .createWorkout
+            ]),
+            suggestedPrompt: "请帮我记录这次训练"
+        )
+        AgentInputShortcutStore.replaceAll([legacy], defaults: defaults)
+        let migrated = try XCTUnwrap(
+            AgentInputShortcutStore.shortcut(id: "shortcut_workout_log", defaults: defaults)
+        )
+        XCTAssertNil(migrated.suggestedPrompt)
     }
 
     func testDefaultRecentReviewShortcutIsReadOnlyAndHasPrompt() throws {

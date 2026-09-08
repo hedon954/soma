@@ -52,6 +52,7 @@ extension ConversationProcessingContext {
         )
     }
 
+    @MainActor
     func structuredContext(for businessDate: Date, selectedSkillID: String? = nil) -> String {
         AgentContextPackBuilder.build(
             gyms: gyms,

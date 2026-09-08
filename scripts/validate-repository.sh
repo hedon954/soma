@@ -91,7 +91,6 @@ required_files=(
   docs/engineering/implementation-sequence.md
   docs/research/README.md
   Soma/Resources/Info.plist
-  Soma/Soma.entitlements
 )
 
 for required_file in "${required_files[@]}"; do
@@ -303,16 +302,12 @@ for privacy_key in \
   NSCameraUsageDescription \
   NSMicrophoneUsageDescription \
   NSPhotoLibraryUsageDescription \
-  NSSpeechRecognitionUsageDescription \
-  NSHealthShareUsageDescription; do
+  NSSpeechRecognitionUsageDescription; do
   grep -q "<key>$privacy_key</key>" Soma/Resources/Info.plist ||
     fail "Info.plist is missing $privacy_key"
 done
 
-grep -q "<key>com.apple.developer.healthkit</key>" Soma/Soma.entitlements ||
-  fail "HealthKit entitlement is missing"
-
-plutil -lint Soma/Resources/Info.plist Soma/Soma.entitlements ExportOptions.plist >/dev/null
+plutil -lint Soma/Resources/Info.plist ExportOptions.plist >/dev/null
 ./scripts/check-markdown-links.rb
 ./scripts/check-document-lifecycle-links.rb
 ./scripts/check-secrets.sh

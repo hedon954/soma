@@ -3,6 +3,7 @@
 - 状态：用户已确认四周期方向，按 PRD 054 实施中；设计稿不代表实现验收
 - 日期：2026-09-05
 - 修订自：[目标导向进展指标调研](2026-08-26-goal-directed-progress-metrics.md)；保留目标导向与来源可查，调整时间入口和指标层级
+- 后续修订：[日消耗统计：本地公式不含手表](2026-09-08-daily-energy-expenditure-methods.md)（部分转化；进展估算不读 HealthKit）
 - 配套方案：[动态能量估算 PRD 053](../archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md)
 - 下游落地：[PRD 054](../archive/0.0.19/prd/054-progress-history-and-periods.md)
 - 跟踪：[主 TODO / BUG-20](../../.codex/plans/2026-09-02-coach-training-critical-bugfixes.md)
