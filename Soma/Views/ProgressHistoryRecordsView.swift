@@ -128,9 +128,9 @@ struct ProgressPeriodRecordsView: View {
                     Section("肌群工作组") { ProgressMuscleWorkloadView(rows: muscles) }
                 }
             }
-            ForEach(snapshot.days.filter { day in day.records.contains { $0.activity.kind == kind } }) { day in
+            ForEach(ProgressRecordSections.make(snapshot: snapshot, kind: kind)) { day in
                 Section {
-                    ForEach(day.records.filter { $0.activity.kind == kind }, id: \.activity.id) { record in
+                    ForEach(day.records, id: \.activity.id) { record in
                         NavigationLink { ProgressRecentActivityDestination(activity: record.activity) } label: {
                             ProgressRecentActivityRow(activity: record.activity, showsDisclosure: false)
                         }
@@ -138,6 +138,7 @@ struct ProgressPeriodRecordsView: View {
                 } header: {
                     HStack {
                         Text(day.date.formatted(.dateTime.month().day().weekday()))
+                            .accessibilityIdentifier("progress-record-day-\(Int(day.date.timeIntervalSince1970))")
                         Spacer()
                         if kind == .workout {
                             ProgressDayShareButton(day: day.date)

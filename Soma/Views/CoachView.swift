@@ -9,6 +9,8 @@ import UIKit
 struct CoachView: View {
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationSessionController.self) private var conversationSessions
+    @Environment(\.modelContext) private var historyContext
+    @State private var sessionHistory = ConversationSessionHistory()
     @State private var sessionTransition = CoachSessionTransitionCoordinator()
 
     var body: some View {
@@ -20,6 +22,10 @@ struct CoachView: View {
         // Session 身份变化时在查询创建前同步回到 30 条，不能先拿上一条
         // Session 的分页上限构造一次重视图，再在 onChange 里补救。
         .id(conversationSessions.activeSessionID)
+        .environment(sessionHistory)
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
+            sessionHistory.applySave(notification, in: historyContext)
+        }
     }
 }
 

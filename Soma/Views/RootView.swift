@@ -320,6 +320,7 @@ struct RootView: View {
                 let performanceSession = PerformanceTestFixture
                     .seedLongStreamIfRequested(in: modelContext)
                 ProgressHistoryTestFixture.seedIfRequested(in: modelContext)
+                ConversationSessionHistoryFixture.seedIfRequested(in: modelContext)
                 conversationSessions.resolveForEntry(
                     dataSpace: dataSpace.activeSpace,
                     in: modelContext

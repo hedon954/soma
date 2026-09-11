@@ -502,3 +502,12 @@ LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/mode
 自动化：`ProgressEnergyDeficitTests`；完整门禁：`make verify`。
 无记录日不保留空记录容器，能量卡与资源入口之间为正常 28 pt 间距；有记录时按原有分组展示。
 `ProgressHistoryUITests` 覆盖浅深色空记录布局，避免不可见容器重复累加间距。
+
+## 训练历史与会话分页（PRD 065）
+
+按 [PRD 065](prd/065-history-order-and-session-pages.md)、[ADR 0134](adr/0134-session-history-page-cache.md)：月/年训练明细按日期及同日时间倒序，图表仍正序。使用 35 个虚构会话验证首次 14 条、加载后 28 条、尾页 35 条；抽屉开关、选择旧会话和 Tab 往返保持缓存及查询次数。新建、改名、继续发送与删除局部同步，下一页无重复/漏项，另一数据空间不显示原缓存。读取失败保留已加载页并可重试。
+
+2026-09-12 本地验证：`make verify` 通过（833 XCTest、7 Swift Testing，Server 48 通过／1 跳过）。
+`SessionHistoryPaginationUITests` 浅/深主题验证 14→28 后抽屉、Session 和 Tab 往返查询次数仍为 2；
+`ProgressHistoryUITests/testMonthAndYearTrainingListStartsAtNewestDay` 浅/深主题各覆盖月/年，首个日期为最新训练日。
+证据来自 iPhone 17 Pro 模拟器；未进行真机安装或发布。

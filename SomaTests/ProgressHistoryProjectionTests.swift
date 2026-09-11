@@ -91,6 +91,25 @@ final class ProgressHistoryProjectionTests: XCTestCase {
         XCTAssertNil(build(.month, date(9, 2), meals, now: date(9, 3)).nutritionRings)
     }
 
+    func testMonthAndYearTrainingRecordsAreNewestFirstWithoutChangingCharts() {
+        let records = [
+            ProgressHistoryRecord(activity: activity(date(9, 1, hour: 8), .workout)),
+            ProgressHistoryRecord(activity: activity(date(9, 3, hour: 8), .workout)),
+            ProgressHistoryRecord(activity: activity(date(9, 3, hour: 18), .workout)),
+            meal(date(9, 2), 500)
+        ]
+        for period in [ProgressPeriod.month, .year] {
+            let snapshot = build(period, date(9, 5), records, now: date(9, 6))
+            let sections = ProgressRecordSections.make(snapshot: snapshot, kind: .workout)
+            XCTAssertEqual(sections.map(\.date), [date(9, 3), date(9, 1)])
+            XCTAssertEqual(sections[0].records.map(\.activity.date), [date(9, 3, hour: 18), date(9, 3, hour: 8)])
+            XCTAssertEqual(snapshot.days.map(\.date), snapshot.days.map(\.date).sorted())
+            XCTAssertEqual(ProgressRecordSections.make(snapshot: snapshot, kind: .meal).count, 1)
+        }
+        let week = build(.week, date(9, 3), records, now: date(9, 6))
+        XCTAssertEqual(ProgressRecordSections.make(snapshot: week, kind: .workout).map(\.date), [date(9, 1), date(9, 3)])
+    }
+
     private func build(_ period: ProgressPeriod, _ anchor: Date, _ records: [ProgressHistoryRecord], now: Date) -> ProgressHistorySnapshot {
         ProgressHistoryProjection.build(window: period.window(containing: anchor, calendar: calendar), records: records, profile: nil, now: now, calendar: calendar)
     }

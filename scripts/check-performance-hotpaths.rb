@@ -671,8 +671,16 @@ unless exercise_editor_source.include?("mergeDescriptor.fetchLimit = 1")
 end
 
 conversation_sessions_source = File.read(File.join(ROOT, "Soma/Views/ConversationSessionViews.swift"))
-unless conversation_sessions_source.include?("descriptor.fetchLimit = sessionLimit + 1")
-  fail_check("conversation drawer no longer paginates session history")
+conversation_history_source = File.read(File.join(ROOT, "Soma/Services/Conversation/ConversationSessionHistory.swift"))
+unless conversation_history_source.include?("static let pageSize = 14") &&
+       conversation_history_source.include?("descriptor.fetchLimit = Self.pageSize") &&
+       conversation_history_source.include?("!cachedIDs.contains($0.id)") &&
+       conversation_history_source.include?("guard !didLoad else { return }") &&
+       coach_source.include?("@State private var sessionHistory = ConversationSessionHistory()") &&
+       coach_source.include?(".environment(sessionHistory)") &&
+       conversation_sessions_source.include?("history.loadIfNeeded(in: modelContext)") &&
+       !conversation_sessions_source.include?("FetchDescriptor<ConversationSession>")
+  fail_check("conversation drawer must retain cached sessions and fetch only 14 uncached sessions per page")
 end
 
 agent_projection_source = File.read(File.join(ROOT, "Soma/Views/AgentSystemProjectionHost.swift"))

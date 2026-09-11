@@ -66,3 +66,4 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0131](0131-explicit-video-rejection-frame-fallback.md) | 已采纳，已实现 | 部分替代 ADR 0119：明确视频拒绝后单次有界画面回退 |
 | [0132](0132-actionable-error-presentation.md) | 已采纳，已实现 | 用户错误与机器诊断分离，修订 BUG 0025 的技术标识呈现 |
 | [0133](0133-paired-day-total-energy-deficit.md) | 已采纳，已实现 | 同日配对累计缺口，日页与仍可摄入合为底部提示 |
+| [0134](0134-session-history-page-cache.md) | 已采纳 | 部分替代 ADR 0000：会话目录只查未缓存身份，跨 Tab/Session 保留 |

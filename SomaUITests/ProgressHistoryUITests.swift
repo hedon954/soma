@@ -6,6 +6,31 @@ final class ProgressHistoryUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testMonthAndYearTrainingListStartsAtNewestDay() {
+        for appearance in ["light", "dark"] {
+            for period in ["月", "年"] {
+                let app = launch(appearance)
+                selectPeriod(period, in: app)
+                let training = app.buttons["progress-training-summary"]
+                reveal(training, in: app)
+                training.tap()
+                let today = Int(Calendar.current.startOfDay(for: .now).timeIntervalSince1970)
+                let firstDay = app.staticTexts["progress-record-day-\(today)"]
+                for _ in 0 ..< 10 where !firstDay.isHittable {
+                    app.swipeUp()
+                }
+                XCTAssertTrue(firstDay.isHittable, "训练列表应先显示今天")
+                let headers = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "progress-record-day-"))
+                    .allElementsBoundByIndex.filter(\.isHittable).sorted { $0.frame.minY < $1.frame.minY }
+                let dates = headers.compactMap { Int($0.identifier.replacingOccurrences(of: "progress-record-day-", with: "")) }
+                XCTAssertEqual(dates.first, today)
+                XCTAssertEqual(dates, dates.sorted(by: >))
+                keep(app, "training-newest-first-\(period)-\(appearance)")
+                app.terminate()
+            }
+        }
+    }
+
     func testTotalDeficitInDayWeekMonthAndAbsentFromYear() {
         for (appearance, largeType) in [("light", false), ("dark", false), ("dark", true)] {
             let app = launch(appearance, largeType: largeType)

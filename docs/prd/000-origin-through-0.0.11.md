@@ -5,6 +5,7 @@
 - 覆盖版本：0.0.1–0.0.20
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续修订：
+  - [PRD 065](065-history-order-and-session-pages.md)（月/年训练明细倒序与会话目录 14 条分页缓存）
   - [PRD 055](055-exercise-facets-and-meal-breakdown.md)（动作库多维筛选）
   - [PRD 056](056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
   - [PRD 057](057-coach-focus-progress-rings-and-library-clarity.md)（快捷按钮聚焦、记录饮食、听写预览与日页营养圆环）

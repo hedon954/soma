@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct ConversationSessionDrawer: View {
-    private static let pageSize = 80
+    @Environment(ConversationSessionHistory.self) private var history
 
     @Environment(\.modelContext) private var modelContext
     let currentSessionID: UUID?
@@ -13,9 +13,10 @@ struct ConversationSessionDrawer: View {
     let onRestoreAutomaticTitle: (ConversationSession) -> Bool
     let onDeleteSession: (ConversationSession) -> Void
 
-    @State private var sessions: [ConversationSession] = []
-    @State private var sessionLimit = 80
-    @State private var hasMoreSessions = false
+    private var sessions: [ConversationSession] {
+        history.sessions
+    }
+
     @State private var renamingSessionID: UUID?
     @State private var renameDraft = ""
     @State private var showsRenameAlert = false
@@ -36,7 +37,14 @@ struct ConversationSessionDrawer: View {
             .padding(.horizontal, 18)
             .padding(.top, 18)
 
-            if sessions.isEmpty {
+            if let errorMessage = history.errorMessage {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(errorMessage).font(.callout)
+                    Button("重试") { history.loadNextPage(in: modelContext) }
+                }
+                .padding(.horizontal, 18)
+            }
+            if sessions.isEmpty, history.errorMessage == nil {
                 ContentUnavailableView(
                     "暂无对话",
                     systemImage: "bubble.left.and.bubble.right",
@@ -56,14 +64,18 @@ struct ConversationSessionDrawer: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                     }
-                    if hasMoreSessions {
+                    if history.hasMore, history.errorMessage == nil {
                         Button("加载更早对话") {
-                            sessionLimit += Self.pageSize
+                            history.loadNextPage(in: modelContext)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .listRowSeparator(.hidden)
                     }
                 }
+                .accessibilityIdentifier("coach-session-history")
+                .accessibilityValue(AppTestRuntime.isRunning
+                    ? "count=\(sessions.count),fetches=\(history.pageFetchCount)"
+                    : "已加载 \(sessions.count) 个对话")
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             }
@@ -77,8 +89,8 @@ struct ConversationSessionDrawer: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .task(id: sessionLimit) {
-            loadSessions()
+        .task {
+            history.loadIfNeeded(in: modelContext)
         }
         .alert("重命名对话", isPresented: $showsRenameAlert) {
             TextField("对话标题", text: $renameDraft)
@@ -147,7 +159,6 @@ struct ConversationSessionDrawer: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 onDeleteSession(session)
-                loadSessions()
             } label: {
                 Image(systemName: "trash")
             }
@@ -207,15 +218,5 @@ struct ConversationSessionDrawer: View {
             showsRenameFailureAlert = true
         }
         renamingSessionID = nil
-    }
-
-    private func loadSessions() {
-        var descriptor = FetchDescriptor<ConversationSession>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = sessionLimit + 1
-        let fetched = (try? modelContext.fetch(descriptor)) ?? []
-        hasMoreSessions = fetched.count > sessionLimit
-        sessions = Array(fetched.prefix(sessionLimit))
     }
 }

@@ -61,3 +61,4 @@
 | --- | --- | --- |
 | [063](063-video-compatibility-and-actionable-errors.md) | 已采纳，已实现 | 修订 PRD 056 的视频拒绝行为；有界画面回退与全 App 可操作错误 |
 | [064](064-progress-total-energy-deficit.md) | 已采纳，已实现 | 日、周、月缺口并入底部提示，按同日有效数据配对累计 |
+| [065](065-history-order-and-session-pages.md) | 已采纳 | 修订 PRD 000：月/年训练倒序，会话每页 14 条并保留缓存 |
