@@ -173,7 +173,7 @@ struct ProgressPeriodRecordsView: View {
             return
         } catch {
             guard !Task.isCancelled, generation == revision else { return }
-            errorMessage = "记录暂时无法刷新"
+            errorMessage = AppErrorMessage.message(for: error, operation: .load)
         }
     }
 }

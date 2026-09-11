@@ -465,7 +465,7 @@ final class LLMOutageStagingTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingQueueSupportsSingleDiscardAndClearAll() throws {
+    func testPendingQueueSupportsSingleDiscardAndClearAll() async throws {
         let suiteName = "LLMOutageStagingTests.queue.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -506,15 +506,29 @@ final class LLMOutageStagingTests: XCTestCase {
         )
         XCTAssertEqual(jobs.count, 3)
 
-        XCTAssertTrue(processor.discardPendingTurn(
+        let retainedPath = try MediaStore.saveRestoredMedia(Data("synthetic completed evidence".utf8), fileExtension: "bin")
+        let orphanPath = try MediaStore.saveRestoredMedia(Data("synthetic pending only".utf8), fileExtension: "bin")
+        defer {
+            MediaStore.removeStoredFile(at: retainedPath)
+            MediaStore.removeStoredFile(at: orphanPath)
+        }
+        let retainedMedia = MediaAttachmentReference(kind: .image, path: retainedPath)
+        jobs[0].mediaAttachments = [retainedMedia, .init(kind: .image, path: orphanPath)]
+        let recorded = WorkoutEntry(exercise: "虚构已保存训练", mediaAttachments: [retainedMedia], sourceTurnID: jobs[0].turnID)
+        modelContext.insert(recorded)
+        try modelContext.save()
+        try await processor.discardPendingTurn(
             turnID: jobs[0].turnID,
             context: processingContext,
             locationService: location
-        ))
+        )
         XCTAssertEqual(try modelContext.fetch(FetchDescriptor<AgentJob>()).count, 2)
         XCTAssertEqual(try modelContext.fetch(FetchDescriptor<CoachMessage>()).count, 4)
+        XCTAssertNotNil(MediaStore.url(at: retainedPath), "Deleting a failed reply must retain successful record evidence")
+        XCTAssertNil(MediaStore.url(at: orphanPath))
+        XCTAssertEqual(try modelContext.fetch(FetchDescriptor<WorkoutEntry>()).map(\.id), [recorded.id])
 
-        XCTAssertTrue(processor.clearPendingQueue(context: processingContext))
+        try await processor.clearPendingQueue(context: processingContext)
         XCTAssertTrue(try modelContext.fetch(FetchDescriptor<AgentJob>()).isEmpty)
         XCTAssertTrue(try modelContext.fetch(FetchDescriptor<CoachMessage>()).isEmpty)
         XCTAssertTrue(

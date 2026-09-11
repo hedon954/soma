@@ -42,50 +42,6 @@ private struct GuidedTimelineRevision: Hashable {
     let phaseDeadlineAt: Date?
 }
 
-private struct GuidedExerciseReplacementList: View {
-    @Environment(\.modelContext) private var modelContext
-    let onSelect: (UUID) -> Void
-    @State private var choices: [GuidedWorkoutExerciseChoice] = []
-    @State private var errorMessage: String?
-
-    var body: some View {
-        List {
-            if let errorMessage {
-                ContentUnavailableView(
-                    "无法载入动作",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(errorMessage)
-                )
-            } else {
-                ForEach(choices) { choice in
-                    Button {
-                        onSelect(choice.id)
-                    } label: {
-                        HStack(spacing: 12) {
-                            ExerciseArtworkView(reference: choice.artwork)
-                                .frame(width: 54, height: 54)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                            Text(choice.name)
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                }
-            }
-        }
-        .navigationTitle("替换当前动作")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            do {
-                choices = try GuidedWorkoutScreenSnapshotLoader
-                    .replacementChoices(from: modelContext.container)
-                errorMessage = nil
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-}
-
 struct GuidedWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -340,8 +296,8 @@ struct GuidedWorkoutView: View {
         }
         .sheet(isPresented: $showsReplacement) {
             NavigationStack {
-                GuidedExerciseReplacementList(
-                    onSelect: replaceCurrentExercise
+                GuidedExerciseReplacementPicker(
+                    sessionID: sessionID, onConfirm: replaceCurrentExercise
                 )
             }
         }
@@ -503,14 +459,16 @@ struct GuidedWorkoutView: View {
                 GuidedRestView(
                     nextTargetText: targetText,
                     nextEffortSide: snapshot.currentEffort?.side ?? .none,
-                    targetID: snapshot.currentEffort?.id
-                        ?? snapshot.currentSet?.id,
                     remainingSeconds: {
                         guard let target = snapshot.session.restTargetEndAt else {
                             return 0
                         }
-                        return max(Int(ceil(target.timeIntervalSinceNow)), 0)
+                        let reference = snapshot.session.status == .paused
+                            ? snapshot.session.phaseStartedAt ?? .now
+                            : .now
+                        return max(Int(ceil(target.timeIntervalSince(reference))), 0)
                     },
+                    isActive: snapshot.session.status == .active,
                     camera: phasePictureInPictureCamera,
                     isLandscape: isLandscape,
                     cameraErrorMessage: coordinator.recordingErrorMessage,
@@ -718,7 +676,7 @@ struct GuidedWorkoutView: View {
                 effortCompletionErrorMessage = nil
                 await refreshSnapshot()
             } catch {
-                effortCompletionErrorMessage = error.localizedDescription
+                effortCompletionErrorMessage = AppErrorMessage.message(for: error, operation: .save)
                 presentOperationError(error)
             }
         }
@@ -761,7 +719,7 @@ struct GuidedWorkoutView: View {
             if session.guidedPhase == .setInProgress,
                snapshot?.currentEffort?.targetKind == .duration
             {
-                effortCompletionErrorMessage = error.localizedDescription
+                effortCompletionErrorMessage = AppErrorMessage.message(for: error, operation: .save)
             }
             presentOperationError(error)
         }
@@ -814,23 +772,21 @@ struct GuidedWorkoutView: View {
                 )
             } catch {
                 isFinalizingSession = false
-                finalizationState = .failed(error.localizedDescription)
+                finalizationState = .failed(AppErrorMessage.message(for: error, operation: .general))
                 presentOperationError(error)
             }
         }
     }
 
-    private func replaceCurrentExercise(with exerciseID: UUID) {
-        do {
-            try coordinator.replaceCurrentExercise(
-                withExerciseID: exerciseID,
-                in: modelContext
-            )
-            showsReplacement = false
-            Task { await refreshSnapshot() }
-        } catch {
-            presentOperationError(error)
-        }
+    private func replaceCurrentExercise(
+        with exercise: ExerciseDefinition,
+        prescription: TemplateExercisePrescription
+    ) throws {
+        try coordinator.replaceCurrentExercise(
+            with: exercise, prescription: prescription, in: modelContext
+        )
+        showsReplacement = false
+        Task { await refreshSnapshot() }
     }
 
     private func run(
@@ -872,11 +828,11 @@ struct GuidedWorkoutView: View {
             guard !Task.isCancelled, generation == snapshotGeneration else {
                 return
             }
-            snapshotErrorMessage = error.localizedDescription
+            snapshotErrorMessage = AppErrorMessage.message(for: error, operation: .load)
             if snapshot != nil {
                 presentedAlert = GuidedWorkoutAlertItem(
                     kind: .operation,
-                    message: "训练状态刷新失败，已保留上一次画面。\(error.localizedDescription)"
+                    message: "训练状态刷新失败，已保留上一次画面。\(AppErrorMessage.message(for: error, operation: .general))"
                 )
             }
         }
@@ -885,7 +841,7 @@ struct GuidedWorkoutView: View {
     private func presentOperationError(_ error: Error) {
         presentedAlert = GuidedWorkoutAlertItem(
             kind: .operation,
-            message: error.localizedDescription
+            message: AppErrorMessage.message(for: error, operation: .general)
         )
     }
 

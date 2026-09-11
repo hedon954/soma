@@ -11,17 +11,17 @@ enum RemoteAgentError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .endpointMissing:
-            "请先在设置中填写 Soma 后台服务地址。"
+            "远程服务尚未配置完成。请在设置中发送反馈，以便检查服务配置。"
         case .identityUnavailable:
-            "无法创建本机设备身份，请检查设备安全设置。"
+            "暂时无法完成这台设备的服务验证。请重新打开 App 后重试；若仍失败，可在设置中发送反馈。"
         case .invalidResponse:
             "Soma 后台返回了无法识别的响应。"
         case .protocolMismatch:
             "App 与 Soma 后台协议版本不一致，请更新后重试。"
-        case let .server(_, message):
-            message
+        case let .server(code, message):
+            AppErrorMessage.remoteMessage(code: code, detail: message)
         case let .toolRejected(message):
-            message
+            AppErrorMessage.message(from: message, operation: .model)
         }
     }
 }

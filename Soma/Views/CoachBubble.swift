@@ -13,6 +13,7 @@ struct CoachBubble: View, Equatable {
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
     var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
+    @State private var showsPendingDeletionConfirmation = false
 
     static func == (lhs: CoachBubble, rhs: CoachBubble) -> Bool {
         lhs.message === rhs.message
@@ -99,8 +100,8 @@ struct CoachBubble: View, Equatable {
                         Label("已暂存，等待队首处理", systemImage: "tray.full")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
-                        if let onDiscardPending {
-                            Button(role: .destructive, action: onDiscardPending) {
+                        if onDiscardPending != nil {
+                            Button(role: .destructive) { showsPendingDeletionConfirmation = true } label: {
                                 Image(systemName: "trash")
                                     .frame(
                                         width: AppTheme.minimumTapTarget,
@@ -121,6 +122,11 @@ struct CoachBubble: View, Equatable {
             }
         }
         .frame(maxWidth: .infinity)
+        .confirmationDialog("删除这条暂存消息？", isPresented: $showsPendingDeletionConfirmation, titleVisibility: .visible) {
+            Button("删除", role: .destructive) { onDiscardPending?() }
+        } message: {
+            Text("这条消息会从对话中移除，已保存的记录及其附件会保留。")
+        }
     }
 
     /// PRD 033：时间与位置合并成一行 caption，位置不再单独占一个胶囊。

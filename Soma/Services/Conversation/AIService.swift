@@ -63,7 +63,7 @@ final class AIService {
             throw AIServiceError.invalidResponse
         }
         guard (200 ..< 300).contains(http.statusCode) else {
-            throw AIServiceError.remote(serviceErrorMessage(from: data, statusCode: http.statusCode))
+            throw ModelRequestFailure(statusCode: http.statusCode, data: data)
         }
 
         let identifiers = modelIdentifiers(from: data)
@@ -135,9 +135,7 @@ final class AIService {
             if imageGenerationErrorCode(from: data) == "moderation_blocked" {
                 throw AIServiceError.imageGenerationBlocked
             }
-            throw AIServiceError.remote(
-                serviceErrorMessage(from: data, statusCode: http.statusCode)
-            )
+            throw ModelRequestFailure(statusCode: http.statusCode, data: data)
         }
         guard let root = try? JSONSerialization.jsonObject(with: data)
             as? [String: Any],
@@ -152,10 +150,7 @@ final class AIService {
     }
 
     func agentErrorDescription(_ error: Error) -> String {
-        if let apiError = error as? APIError {
-            return apiError.displayDescription
-        }
-        return error.localizedDescription
+        AppErrorMessage.message(for: error, operation: .model)
     }
 
     private func modelIdentifiers(

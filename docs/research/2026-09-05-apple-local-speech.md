@@ -14,7 +14,11 @@ Apple 在 WWDC25 发布 SpeechAnalyzer 与 SpeechTranscriber，面向设备端�
 
 ## Soma 选择
 
-iOS 26 优先新模型，检查中文 locale 与硬件可用性；首次缺少资源时由系统下载，失败可恢复。旧系统或不支持的新设备组合继续使用 SFSpeechRecognizer，并强制 requiresOnDeviceRecognition，不退回云端。音频按模块支持格式转换，停止时排空转换器与最终结果。SpeechDetector 按实际静音区间请求确认，不靠重复的 partial 文本推测用户是否停顿。
+iOS 26 优先听写模块（`DictationTranscriber` 的 `progressiveShortDictation`），没有听写模块时再用
+`SpeechTranscriber` 的 `timeIndexedProgressiveTranscription`。检查中文 locale 与硬件可用性；首次缺少资源时由系统下载，失败可恢复。
+旧系统或不支持的新设备组合继续使用 SFSpeechRecognizer，并强制 requiresOnDeviceRecognition，不退回云端。
+音频按模块支持格式转换，停止时排空转换器与最终结果。SpeechDetector 按实际静音区间请求确认，不靠重复的
+partial 文本推测用户是否停顿。
 
 最终片段追加到编辑器当前内容，partial 仅保留在当前识别生命周期中；不缓存输入前草稿或累计历史句子。系统标点优先，片段间静音补充缺失标点，用户已有文本不被重写。
 

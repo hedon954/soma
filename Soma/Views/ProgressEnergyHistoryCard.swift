@@ -42,14 +42,6 @@ struct ProgressEnergyHistoryCard: View {
                         metric("预估总消耗", value: snapshot.averageEstimate, estimated: true)
                     }
                 }
-                if snapshot.window.period == .day,
-                   let day = snapshot.days.first,
-                   day.trainingCalories.knownCount > 0
-                {
-                    Text(trainingCaption(day))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 if snapshot.window.period != .day {
                     Text("摄入 \(snapshot.intakeDayCount) 天 · 估算 \(snapshot.estimateDayCount) 天")
                         .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
@@ -65,6 +57,9 @@ struct ProgressEnergyHistoryCard: View {
                         nutrient("碳水", day.carbs.value)
                         nutrient("脂肪", day.fat.value)
                     }
+                }
+                if let deficit = ProgressEnergyDeficit.make(snapshot: snapshot) {
+                    ProgressEnergyBalanceCaption(summary: deficit)
                 }
             }
         }
@@ -198,14 +193,5 @@ struct ProgressEnergyHistoryCard: View {
 
     private func text(_ value: Double?) -> String {
         value?.formatted(.number.precision(.fractionLength(0))) ?? "未记录"
-    }
-
-    private func trainingCaption(_ day: ProgressDailyMetrics) -> String {
-        let recorded = text(day.trainingCalories.value)
-        let net = text(day.energy.estimate?.trainingNetKilocalories)
-        if let netValue = day.energy.estimate?.trainingNetKilocalories, netValue > 0 {
-            return "已记录训练约 \(recorded) kcal，计入总消耗 \(net) kcal。"
-        }
-        return "已记录训练约 \(recorded) kcal，缺少强度或时长，未计入总消耗。"
     }
 }

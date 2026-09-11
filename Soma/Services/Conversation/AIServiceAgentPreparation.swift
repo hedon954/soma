@@ -33,6 +33,7 @@ struct PreparedAgentRun {
     var completedOperationCount: Int
     var clearedHistoryFrames: Bool
     var maxSteps: Int
+    var requiresVideoFrames: Bool
 }
 
 extension AIService {
@@ -51,11 +52,6 @@ extension AIService {
             baseURL: route.baseURL,
             model: route.model
         )
-        if (!request.videos.isEmpty || request.history.contains { !$0.videos.isEmpty }),
-           assessment.directVideoSupport == false
-        {
-            throw ConversationMediaPreparationError.fullVideoUnavailable
-        }
         let support = assessment.support
         let historicalImageCount = request.history.reduce(0) { $0 + $1.images.count }
         if request.history.contains(where: \.videoPreparationFailed) {
@@ -170,7 +166,8 @@ extension AIService {
             checkpointBatches: batches,
             completedOperationCount: request.checkpoint?.lastCompletedStep ?? 0,
             clearedHistoryFrames: request.checkpoint != nil,
-            maxSteps: maxSteps
+            maxSteps: maxSteps,
+            requiresVideoFrames: assessment.directVideoSupport == false
         )
     }
 

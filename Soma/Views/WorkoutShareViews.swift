@@ -202,7 +202,7 @@ struct WorkoutShareSheet: View {
             shareURL = url
         } catch {
             guard !Task.isCancelled, renderID == currentRenderID else { return }
-            errorMessage = "无法保存分享图片。"
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 
@@ -221,7 +221,7 @@ struct WorkoutShareSheet: View {
             }
             saveMessage = "已保存到相册。"
         } catch {
-            saveMessage = "保存失败，请稍后重试。"
+            saveMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 }

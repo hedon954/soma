@@ -5,6 +5,7 @@ import UserNotifications
 @MainActor
 final class WorkoutSystemProjectionCoordinator {
     static let shared = WorkoutSystemProjectionCoordinator()
+    private let updates = WorkoutProjectionSerialQueue()
 
     private init() {}
 
@@ -31,7 +32,24 @@ final class WorkoutSystemProjectionCoordinator {
         completedSetCount: Int,
         totalSetCount: Int
     ) async {
-        let state = contentState(
+        await updates.enqueue(sessionID: sessionID) { [self] in
+            await applyUpdate(
+                sessionID: sessionID, status: status, guidedPhase: guidedPhase,
+                restTargetEndAt: restTargetEndAt,
+                completedSetCount: completedSetCount, totalSetCount: totalSetCount
+            )
+        }.value
+    }
+
+    private func applyUpdate(
+        sessionID: UUID,
+        status: WorkoutSessionStatus,
+        guidedPhase: GuidedWorkoutPhase,
+        restTargetEndAt: Date?,
+        completedSetCount: Int,
+        totalSetCount: Int
+    ) async {
+        let state = Self.contentState(
             status: status,
             guidedPhase: guidedPhase,
             restTargetEndAt: restTargetEndAt,
@@ -40,7 +58,7 @@ final class WorkoutSystemProjectionCoordinator {
         )
         let content = ActivityContent(
             state: state,
-            staleDate: restTargetEndAt?.addingTimeInterval(60)
+            staleDate: state.restEndAt?.addingTimeInterval(60)
         )
 
         if let activity = Activity<SomaWorkoutActivityAttributes>.activities
@@ -66,8 +84,7 @@ final class WorkoutSystemProjectionCoordinator {
 
         await updateRestNotification(
             sessionID: sessionID,
-            guidedPhase: guidedPhase,
-            restEndAt: restTargetEndAt
+            restEndAt: state.restEndAt
         )
     }
 
@@ -88,6 +105,14 @@ final class WorkoutSystemProjectionCoordinator {
         completedSetCount: Int,
         totalSetCount: Int
     ) async {
+        await updates.enqueue(sessionID: sessionID) { [self] in
+            await applyEnd(
+                sessionID: sessionID, completedSetCount: completedSetCount, totalSetCount: totalSetCount
+            )
+        }.value
+    }
+
+    private func applyEnd(sessionID: UUID, completedSetCount: Int, totalSetCount: Int) async {
         let state = SomaWorkoutActivityAttributes.ContentState(
             phaseRaw: "completed",
             completedSetCount: completedSetCount,
@@ -108,7 +133,7 @@ final class WorkoutSystemProjectionCoordinator {
         )
     }
 
-    private func contentState(
+    static func contentState(
         status: WorkoutSessionStatus,
         guidedPhase: GuidedWorkoutPhase,
         restTargetEndAt: Date?,
@@ -126,7 +151,7 @@ final class WorkoutSystemProjectionCoordinator {
             phaseRaw: phase,
             completedSetCount: completedSetCount,
             totalSetCount: totalSetCount,
-            restEndAt: guidedPhase == .resting
+            restEndAt: status == .active && guidedPhase == .resting
                 ? restTargetEndAt
                 : nil
         )
@@ -134,14 +159,12 @@ final class WorkoutSystemProjectionCoordinator {
 
     private func updateRestNotification(
         sessionID: UUID,
-        guidedPhase: GuidedWorkoutPhase,
         restEndAt: Date?
     ) async {
         let center = UNUserNotificationCenter.current()
         let identifier = notificationID(for: sessionID)
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
-        guard guidedPhase == .resting,
-              let restEndAt,
+        guard !Task.isCancelled, let restEndAt,
               restEndAt > .now
         else {
             return
@@ -151,6 +174,7 @@ final class WorkoutSystemProjectionCoordinator {
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
         }
         let refreshed = await center.notificationSettings()
+        guard !Task.isCancelled, restEndAt > .now else { return }
         guard refreshed.authorizationStatus == .authorized
             || refreshed.authorizationStatus == .provisional
         else {
@@ -174,5 +198,28 @@ final class WorkoutSystemProjectionCoordinator {
 
     private func notificationID(for sessionID: UUID) -> String {
         "workout-rest-\(sessionID.uuidString)"
+    }
+}
+
+/// Serialize system writes even when cancellation cannot stop an in-flight system call.
+/// The newest update removes/replaces the previous notification only after it finishes.
+@MainActor
+final class WorkoutProjectionSerialQueue {
+    private var pending: [UUID: (token: UUID, task: Task<Void, Never>)] = [:]
+
+    func enqueue(sessionID: UUID, operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let previous = pending[sessionID]?.task
+        previous?.cancel()
+        let token = UUID()
+        let task = Task { [weak self] in
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await operation()
+            if self?.pending[sessionID]?.token == token {
+                self?.pending[sessionID] = nil
+            }
+        }
+        pending[sessionID] = (token, task)
+        return task
     }
 }

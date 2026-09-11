@@ -360,7 +360,7 @@ struct DataManagementView: View {
     private func showError(_ error: Error) {
         notice = DataManagementNotice(
             title: "操作未完成",
-            message: error.localizedDescription
+            message: AppErrorMessage.message(for: error, operation: .general)
         )
     }
 

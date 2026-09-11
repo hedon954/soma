@@ -116,7 +116,7 @@ struct ExerciseContentEditorView: View {
             exercise.targetKind = targetKind
             try modelContext.save()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 
@@ -147,7 +147,7 @@ struct ExerciseContentEditorView: View {
                 secondaryMuscles = content.secondaryMuscles.joined(separator: "、")
                 movementPatterns = content.movementPatterns.joined(separator: "、")
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .save)
             }
         }
     }
@@ -202,7 +202,7 @@ struct ExerciseManagementView: View {
                                     in: modelContext
                                 )
                             } catch {
-                                errorMessage = error.localizedDescription
+                                errorMessage = AppErrorMessage.message(for: error, operation: .save)
                             }
                         }
                     } else {
@@ -231,7 +231,7 @@ struct ExerciseManagementView: View {
                             )
                             dismiss()
                         } catch {
-                            errorMessage = error.localizedDescription
+                            errorMessage = AppErrorMessage.message(for: error, operation: .save)
                         }
                     }
                 }
@@ -270,7 +270,7 @@ struct ExerciseManagementView: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 }
@@ -480,7 +480,7 @@ struct ExerciseMediaEditorView: View {
                     in: modelContext
                 )
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .save)
             }
         }
     }
@@ -494,7 +494,7 @@ struct ExerciseMediaEditorView: View {
                     in: modelContext
                 )
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .save)
             }
         }
     }
@@ -529,7 +529,7 @@ struct ExerciseMediaEditorView: View {
                 for path in createdPaths {
                     _ = MediaStore.removeStoredFile(at: path)
                 }
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .save)
             }
         }
     }
@@ -546,7 +546,7 @@ struct ExerciseMediaEditorView: View {
         } catch {
             exercise.imageReferences = originalValues
             modelContext.rollback()
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 
@@ -558,7 +558,7 @@ struct ExerciseMediaEditorView: View {
                 in: modelContext
             )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 
@@ -587,7 +587,7 @@ struct ExerciseMediaEditorView: View {
             try modelContext.save()
         } catch {
             modelContext.rollback()
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 }

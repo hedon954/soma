@@ -250,7 +250,7 @@ struct TrainingProgramCreationView: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 }
@@ -331,7 +331,7 @@ struct TrainingTemplateEditor: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 }

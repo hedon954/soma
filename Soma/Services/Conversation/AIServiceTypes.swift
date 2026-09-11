@@ -24,7 +24,7 @@ enum AIServiceError: LocalizedError {
         switch self {
         case .invalidURL: "模型服务地址无效"
         case .invalidResponse: "模型返回了无法识别的响应"
-        case let .remote(message): message
+        case let .remote(message): AppErrorMessage.message(from: message, operation: .model)
         case let .missingAPIKey(provider): "请先在设置中保存 \(provider) 的 API Key"
         case let .imageGenerationUnsupported(provider):
             "\(provider) 尚未配置兼容的图片生成模型，请先在 AI 设置中填写图片生成模型 ID。"
@@ -32,8 +32,8 @@ enum AIServiceError: LocalizedError {
             "这次图片生成没有通过安全检查。请调整动作名称或肌群描述后重试。"
         case let .multimodalUnsupported(provider, model):
             "\(provider) 的 \(model) 不支持图片或视频分析。请切换到支持视觉的模型，文字对话仍可继续使用。"
-        case let .multimodalRequestFailed(provider, model, reason):
-            "\(provider) 的 \(model) 没能处理这次图片或视频：\(reason)"
+        case let .multimodalRequestFailed(_, _, reason):
+            AppErrorMessage.message(from: reason, operation: .model)
         }
     }
 }

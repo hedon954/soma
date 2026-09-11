@@ -102,8 +102,8 @@ final class BackgroundRemoteUploadCoordinator: NSObject,
             error
         } else if !(200 ... 299).contains(status) {
             RemoteAgentError.server(
-                code: "upload_failed",
-                message: "临时媒体上传失败（\(status)）。"
+                code: "upload_incomplete",
+                message: "附件未能上传完整，请检查网络并重新发送。"
             )
         } else {
             nil

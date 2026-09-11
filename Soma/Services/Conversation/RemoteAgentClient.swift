@@ -36,8 +36,9 @@ private struct DeletedEnvelope: Decodable {
     var deleted: Bool
 }
 
-private struct RemoteAgentCapabilitiesEnvelope: Decodable {
+struct RemoteAgentCapabilitiesEnvelope: Decodable {
     var directVideo: Bool
+    var videoFrameFallback: Bool? = nil
 }
 
 struct RemoteAgentClient: AgentExecutionBackend {
@@ -314,7 +315,7 @@ struct RemoteAgentClient: AgentExecutionBackend {
         return try await uploadFile(sourceURL, contentType: input.mimeType)
     }
 
-    private func capabilities() async throws -> RemoteAgentCapabilitiesEnvelope {
+    func capabilities() async throws -> RemoteAgentCapabilitiesEnvelope {
         let data = try await authenticatedRequest(
             method: "GET",
             path: "/v1/capabilities",

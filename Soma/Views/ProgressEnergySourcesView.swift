@@ -31,8 +31,9 @@ struct ProgressEnergySourcesView: View {
                         LabeledContent("活动系数", value: factorText(day.energy.estimate))
                     }
                     LabeledContent("预估总消耗", value: energy(day.energy.estimate?.totalKilocalories))
-                    LabeledContent("已记录摄入", value: energy(day.intake.value))
-                    LabeledContent("预估热量缺口", value: energy(day.energy.estimate.map { $0.totalKilocalories - day.intake.value }))
+                    LabeledContent("已记录摄入", value: day.intake.knownCount > 0 ? energy(day.intake.value) : "未记录")
+                    LabeledContent("预估热量缺口", value: day.estimatedEnergyDeficit.map { energy($0) }
+                        ?? day.energyDeficitMissingReason ?? "待估算")
                     LabeledContent("已记录训练消耗", value: energy(day.trainingCalories.value))
                     if let net = day.energy.estimate?.trainingNetKilocalories, net > 0 || day.trainingCalories.knownCount > 0 {
                         LabeledContent("计入总消耗的训练", value: energy(net))
@@ -147,7 +148,7 @@ private struct ProgressLifestyleEditor: View {
                 if let last = try EnergyLifestyleStorage.decode(profile?.energyBaselinesData).max(by: { $0.effectiveFrom < $1.effectiveFrom }) {
                     factorText = last.factor.formatted(.number.grouping(.never))
                 }
-            } catch { errorMessage = "生活方式参考暂时无法读取" }
+            } catch { errorMessage = AppErrorMessage.message(for: error, operation: .load) }
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -156,7 +157,7 @@ private struct ProgressLifestyleEditor: View {
                         guard let factor = Double(factorText.replacingOccurrences(of: ",", with: ".")) else { throw EnergyLifestyleError.invalidFactor }
                         try EnergyLifestyleStore.save(factor: factor, label: "本人确认的生活方式", effectiveFrom: effectiveFrom, in: context)
                         dismiss()
-                    } catch { errorMessage = error.localizedDescription }
+                    } catch { errorMessage = AppErrorMessage.message(for: error, operation: .save) }
                 }.disabled(factorText.isEmpty)
             }
         }

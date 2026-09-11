@@ -57,12 +57,12 @@ enum WorkoutCameraError: LocalizedError {
             "相机未能在限定时间内启动；请重试，训练仍可继续。"
         case .activationSuperseded:
             "本次相机启动已被新的请求替代。"
-        case let .recordingConnectionUnavailable(reason):
-            "相机录像连接不可用（\(reason)）；请重试，训练仍可继续。"
+        case .recordingConnectionUnavailable:
+            "相机录像连接尚未就绪。请关闭其他使用相机的 App 后重试；训练仍可继续。"
         case .insufficientStorage:
             "可用存储空间不足，已跳过本次录像。"
         case let .recordingFailed(message):
-            "录像失败：\(message)"
+            AppErrorMessage.message(from: message, operation: .recording)
         }
     }
 }

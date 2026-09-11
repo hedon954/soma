@@ -1,5 +1,7 @@
 # PRD 056：完整视频、连续听写与分享明细
 
+- 后续修订：[PRD 063](063-video-compatibility-and-actionable-errors.md)（明确拒绝视频后允许有界画面回退；原件保留不变）
+
 - 上游依据：[Apple 本地听写调研](../research/2026-09-05-apple-local-speech.md)
 - 下游落地：[BUG 0054](../bugs/0054-full-video-playback-and-dictation-regressions.md)
 

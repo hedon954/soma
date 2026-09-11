@@ -1447,7 +1447,7 @@ struct AgentTraceDetailView: View {
                 Label("错误详情", systemImage: "exclamationmark.triangle.fill")
                     .font(.headline)
                     .foregroundStyle(.red)
-                Text(errorMessage)
+                Text(AppErrorMessage.message(from: errorMessage, operation: .model))
                     .font(.subheadline)
                     .textSelection(.enabled)
                 if let diagnosticSpan {

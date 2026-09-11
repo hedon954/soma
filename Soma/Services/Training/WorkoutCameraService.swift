@@ -241,7 +241,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                 attemptID: pendingRecordingAttemptID,
                 error: error
             )
-            state = .unavailable(error.localizedDescription)
+            state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
             throw error
         }
         guard activationGenerationGate.isCurrent(generation) else {
@@ -287,7 +287,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             {
                 // A timed-out generation must not overwrite the newer retry.
             } else {
-                state = .unavailable(error.localizedDescription)
+                state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
             }
             throw error
         }
@@ -397,7 +397,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                 attemptID: attempt.id,
                 error: error
             )
-            state = .unavailable(error.localizedDescription)
+            state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
             completeRecordingAttempt(attempt, with: .failed(error))
         }
     }
@@ -433,7 +433,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
         if let resources {
             replaceCaptureResourcesIfCurrent(resources)
         }
-        state = .unavailable(error.localizedDescription)
+        state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
         completeRecordingAttempt(attempt, with: .failed(error))
     }
 
@@ -741,7 +741,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                     error: error
                 )
                 try? FileManager.default.removeItem(at: url)
-                state = .unavailable(error.localizedDescription)
+                state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
                 completeRecordingAttempt(
                     attempt,
                     with: .failed(error)
@@ -763,7 +763,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
                     error: error
                 )
                 try? FileManager.default.removeItem(at: url)
-                state = .unavailable(error.localizedDescription)
+                state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
                 completeRecordingAttempt(
                     attempt,
                     with: .failed(error)
@@ -788,7 +788,7 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
             } else {
                 WorkoutCameraError.recordingFailed(diagnosis.failureMessage)
             }
-            state = .unavailable(resolved.localizedDescription)
+            state = .unavailable(AppErrorMessage.message(for: resolved, operation: .recording))
             completeRecordingAttempt(
                 attempt,
                 with: .failed(resolved)

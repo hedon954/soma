@@ -7,6 +7,7 @@ struct TrainingPrescriptionEditorView: View {
     let exercise: ExerciseDefinition?
     let definitions: [ExerciseDefinition]
     let recent: RecentExercisePrescription?
+    let replacementPreview: GuidedExerciseReplacementPreview?
     let onSave: (TrainingPrescriptionDraft) throws -> Void
     @State private var draft: TrainingPrescriptionDraft
     @State private var expandedClusterIDs: Set<UUID> = []
@@ -17,11 +18,13 @@ struct TrainingPrescriptionEditorView: View {
         exercise: ExerciseDefinition?,
         definitions: [ExerciseDefinition],
         recent: RecentExercisePrescription?,
+        replacementPreview: GuidedExerciseReplacementPreview? = nil,
         onSave: @escaping (TrainingPrescriptionDraft) throws -> Void
     ) {
         self.exercise = exercise
         self.definitions = definitions
         self.recent = recent
+        self.replacementPreview = replacementPreview
         self.onSave = onSave
         var draft = initialDraft
         if let exercise {
@@ -50,6 +53,14 @@ struct TrainingPrescriptionEditorView: View {
     var body: some View {
         Form {
             exerciseHeader
+            if let replacementPreview {
+                Section("参数来源") {
+                    Text(replacementPreview.explanation)
+                    if let summary = replacementPreview.sourceSummary {
+                        Text(summary).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            }
             lateralitySection
             setBlocks
 
@@ -68,29 +79,31 @@ struct TrainingPrescriptionEditorView: View {
                 Text("相同组收成一句编辑。要改其中一组时再展开；保存后仍是互不绑定的独立组。")
             }
         }
-        .navigationTitle("编辑动作")
+        .navigationTitle(replacementPreview == nil ? "编辑动作" : "确认替换参数")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    NavigationLink {
-                        TrainingExercisePickerView(
-                            definitions: definitions,
-                            allowsMultipleSelection: false
-                        ) { exercises in
-                            guard let replacement = exercises.first else { return }
-                            draft.exerciseID = replacement.id
+            if replacementPreview == nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        NavigationLink {
+                            TrainingExercisePickerView(
+                                definitions: definitions,
+                                allowsMultipleSelection: false
+                            ) { exercises in
+                                guard let replacement = exercises.first else { return }
+                                draft.exerciseID = replacement.id
+                            }
+                        } label: {
+                            Label("更换动作", systemImage: "arrow.triangle.2.circlepath")
                         }
                     } label: {
-                        Label("更换动作", systemImage: "arrow.triangle.2.circlepath")
+                        Image(systemName: "ellipsis.circle")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                    .accessibilityLabel("更多操作")
                 }
-                .accessibilityLabel("更多操作")
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存", action: save)
+                Button(replacementPreview == nil ? "保存" : "替换动作", action: save)
                     .disabled(!hasValidTargets)
             }
         }
@@ -134,19 +147,24 @@ struct TrainingPrescriptionEditorView: View {
 
     private var lateralitySection: some View {
         Section("动作设定") {
-            Picker("完成方式", selection: targetKindBinding) {
-                ForEach(WorkoutTargetKind.allCases, id: \.self) { value in
-                    Text(value.displayName).tag(value)
+            if replacementPreview != nil {
+                LabeledContent("完成方式", value: exerciseTargetKind.displayName)
+                LabeledContent("左右方式", value: draft.laterality.displayName)
+            } else {
+                Picker("完成方式", selection: targetKindBinding) {
+                    ForEach(WorkoutTargetKind.allCases, id: \.self) { value in
+                        Text(value.displayName).tag(value)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
+                .pickerStyle(.segmented)
 
-            Picker("左右方式", selection: lateralityBinding) {
-                ForEach(ExerciseLaterality.allCases, id: \.self) { value in
-                    Text(value.displayName).tag(value)
+                Picker("左右方式", selection: lateralityBinding) {
+                    ForEach(ExerciseLaterality.allCases, id: \.self) { value in
+                        Text(value.displayName).tag(value)
+                    }
                 }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.menu)
 
             metric(
                 "组间歇时间（秒）",
@@ -609,7 +627,7 @@ struct TrainingPrescriptionEditorView: View {
             try onSave(draft)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .save)
         }
     }
 }

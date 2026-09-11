@@ -51,7 +51,9 @@ final class DataManagementCoordinator {
         self.backupBackgroundLease = backupBackgroundLease
             ?? UIKitBackgroundExecutionLease()
         lastBackupAt = defaults.object(forKey: DefaultsKey.lastBackupAt) as? Date
-        lastErrorMessage = defaults.string(forKey: DefaultsKey.lastError)
+        lastErrorMessage = defaults.string(forKey: DefaultsKey.lastError).map {
+            AppErrorMessage.message(from: $0, operation: .backup)
+        }
         backupDestinationName = defaults.string(forKey: DefaultsKey.destinationName)
     }
 
@@ -400,7 +402,7 @@ final class DataManagementCoordinator {
         if error is DataArchiveError {
             return error
         }
-        return DataManagementDisplayError(message: fallback)
+        return DataManagementDisplayError(message: fallback + AppErrorMessage.message(for: error))
     }
 
     private func withSecurityScopedAccess<T: Sendable>(

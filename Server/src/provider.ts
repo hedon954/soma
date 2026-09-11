@@ -1,3 +1,6 @@
+import { providerFailure } from "./provider-failure.js";
+import { boundedProviderError, checkedFallbackMedia, explicitlyRejectsVideo,
+  frameFallbackPrompt, parseVideoFallbacks, type VideoFrameFallback } from "./video-fallback.js";
 import type {
   AgentEvent,
   AgentJob,
@@ -80,25 +83,29 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     media: ProviderMedia[],
     onTextDelta?: (delta: string) => Promise<void>,
     onReasoningDelta?: (delta: string) => Promise<void>,
+    onVideoFallback?: (frameCount: number) => Promise<void>,
   ): Promise<ProviderStep> {
     if (job.input === undefined) {
       throw new ProtocolError("job_expired", "任务内容已清理。", 410);
     }
-    if (job.input.mediaMode === "keyframes") {
-      throw new ProtocolError("provider_unavailable", "该视频任务只有旧关键帧，请重新发送完整视频。", 422);
-    }
+    const manifests = parseVideoFallbacks(job.input.modelInput.videoFallbacks, job.input.modelInput.messages);
     const directVideo = this.directVideoEnabled;
-    const hasCompletedModelStep = events.some((event) =>
-      event.kind === "model" && event.phase === "completed"
-    );
+    const hasCompletedModelStep = events.some((event) => event.kind === "model" && event.phase === "completed");
     const referencedIDs = new Set(job.input.modelInput.messages.flatMap((message) => message.mediaIDs));
-    const hasVideo = media.some((item) =>
-      referencedIDs.has(item.id) && item.contentType.startsWith("video/")
-    );
-    const usesDirectVideo = directVideo && hasVideo;
-    if (!directVideo && hasVideo) {
-      throw new ProtocolError("provider_unavailable", "模型未开启完整视频输入。", 422);
+    if ([...referencedIDs].some((id) => !media.some((item) => item.id === id))) {
+      throw new ProtocolError("video_fallback_unavailable", "任务引用的媒体已不可用。请重新发送附件。", 422);
     }
+    const videoIDs = media.filter((item) => referencedIDs.has(item.id) && item.contentType.startsWith("video/")).map((item) => item.id);
+    const hasVideo = videoIDs.length > 0;
+    const persistedFallback = events.some((event) => event.kind === "model" &&
+      event.phase === "updated" && event.payload.fallbackReason === "video_input_unsupported");
+    let useFrames = persistedFallback || job.input.mediaMode === "keyframes" || (!directVideo && hasVideo);
+    let fallbackMap = new Map<string, VideoFrameFallback>();
+    if (useFrames) {
+      fallbackMap = checkedFallbackMedia(manifests, media, videoIDs);
+      if (!persistedFallback) await onVideoFallback?.(manifests.reduce((sum, item) => sum + item.frameIDs.length, 0));
+    }
+    let usesDirectVideo = directVideo && hasVideo && !useFrames;
     const appendCompletedModelEvents = (
       messages: Record<string, unknown>[],
     ): void => {
@@ -161,11 +168,12 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         reasoningSinceModelStart = undefined;
       }
     };
-    const messages = modelMessages(
+    let messages = modelMessages(
       job.input.modelInput.messages,
       media,
       usesDirectVideo,
       hasCompletedModelStep,
+      fallbackMap,
     );
     appendCompletedModelEvents(messages);
     const activeTools = effectiveAllowedDeviceTools(
@@ -191,7 +199,9 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     const maximumRequestAttempts = modelStepRetryDelaysSeconds.length + 1;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maximumRequestAttempts; attempt += 1) {
-      const mediaMode = usesDirectVideo
+      const mediaMode = useFrames
+        ? "keyframes"
+        : usesDirectVideo
         ? "direct_video"
         : hasImages
           ? "images"
@@ -231,11 +241,19 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
           },
         );
         if (!response.ok) {
-          throw new ProtocolError(
-            "provider_unavailable",
-            "模型服务暂时不可用。",
-            response.status,
-          );
+          const description = await boundedProviderError(response);
+          if (usesDirectVideo && !useFrames && explicitlyRejectsVideo(response.status, description)) {
+            fallbackMap = checkedFallbackMedia(manifests, media, videoIDs);
+            usesDirectVideo = false;
+            useFrames = true;
+            messages = modelMessages(job.input.modelInput.messages, media, false, hasCompletedModelStep, fallbackMap);
+            appendCompletedModelEvents(messages);
+            deadline.finish();
+            await onVideoFallback?.(manifests.reduce((sum, item) => sum + item.frameIDs.length, 0));
+            attempt -= 1;
+            continue;
+          }
+          throw providerFailure(response.status, description);
         }
         let step: ProviderStep;
         if (response.headers.get("content-type")?.includes("text/event-stream")) {
@@ -607,11 +625,19 @@ function modelMessages(
   media: ProviderMedia[],
   directVideo: boolean,
   clearHistoricalMedia: boolean,
+  fallbackMap: Map<string, VideoFrameFallback> = new Map(),
 ): Record<string, unknown>[] {
   const mediaByID = new Map(media.map((item) => [item.id, item]));
   return input.map((message, index) => {
     const clearImages = clearHistoricalMedia && index > 0 && index < input.length - 1;
+    const frameIDs = new Set([...fallbackMap.values()].flatMap((value) => value.frameIDs));
+    const messageFallbacks = message.mediaIDs.flatMap((id) => {
+      const value = fallbackMap.get(id);
+      return value === undefined ? [] : [value];
+    });
+    const text = [message.text, ...messageFallbacks.map(frameFallbackPrompt)].join("\n");
     const attachments = message.mediaIDs
+      .flatMap((id) => fallbackMap.get(id)?.frameIDs ?? [id])
       .map((id) => ({ id, item: mediaByID.get(id) }))
       .filter((entry): entry is { id: string; item: ProviderMedia } =>
         entry.item !== undefined
@@ -619,7 +645,7 @@ function modelMessages(
       .filter((entry) => directVideo
         ? !entry.id.startsWith("current-video-frame-")
         : !entry.item.contentType.startsWith("video/"))
-      .filter((entry) => !clearImages || entry.item.contentType.startsWith("video/"))
+      .filter((entry) => !clearImages || frameIDs.has(entry.id) || entry.item.contentType.startsWith("video/"))
       .map((entry) => entry.item);
     if (attachments.length === 0) {
       const text = clearImages && message.mediaIDs.length > 0
@@ -630,7 +656,7 @@ function modelMessages(
     return {
       role: message.role,
       content: [
-        { type: "text", text: message.text },
+        { type: "text", text },
         ...attachments.map((item) => {
           if (directVideo && item.contentType.startsWith("video/")) {
             return {
@@ -686,7 +712,7 @@ function parseResponseToolCalls(
   });
 }
 
-type ProviderMediaMode = "text" | "images" | "direct_video";
+type ProviderMediaMode = "text" | "images" | "keyframes" | "direct_video";
 type ProviderTimeoutPhase = "first_delta" | "total";
 
 class ProviderRequestDeadline {
@@ -765,7 +791,7 @@ export function explicitCapabilityFlag(value: string | undefined): boolean {
 
 function isRetryable(error: unknown): boolean {
   if (error instanceof ProtocolError) {
-    return error.code === "provider_timeout" ||
+    return error.code === "provider_timeout" || error.code === "provider_rate_limited" ||
       (
         error.code === "provider_unavailable" &&
         (

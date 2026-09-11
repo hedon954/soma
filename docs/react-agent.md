@@ -1,5 +1,7 @@
 # ReAct Agent
 
+- 后续修订：[ADR 0131](adr/0131-explicit-video-rejection-frame-fallback.md)（明确视频拒绝后单次画面回退）
+
 - 后续修订：[ADR 0119](adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
 
 本文描述当前持久 Job、本地 ReAct 与可选远程 Backend 运行时。产品范围
@@ -29,13 +31,15 @@ Soma 的聊天采用 OpenAI-compatible 原生 Tool Calling。本地 Backend 的�
 
 请求发出后按当前 ReAct 配置执行文字、图片、视频各自首增量、流空闲和总时限。首个非空文字
 或 Tool delta 才算响应，headers、heartbeat 与 reasoning 不算。瞬态失败在模型步骤内使用
-1/2/4 秒三次退避；完整视频在重试及后续步骤中保持完整，不再自动抽帧。超时取消底层请求。
+1/2/4 秒三次退避，保持当前媒体模式。明确视频能力拒绝且尚未输出时，按 ADR 0131 单次切换为有界画面；
+该切换独立于瞬态退避，不重新执行已完成工具。超时取消底层请求。
 
 图片和视频只在用户主动发送时按模型能力进入请求。SwiftData 数据库和业务 Tool 始终留在
 设备上；本地模式标准档没有 API Key 时，消息仍然落盘并进入暂存，首次遇到时同时打开「LLM 配置」，
 恢复后按发送顺序自动补偿消费（见 [ADR 0045](archive/0.0.3/adr/0045-llm-outage-staging-and-compensating-drain.md)）。用户明确启用
 远程持续模式后，当前图片或媒体能力注册允许的规范化视频可作为短期任务素材上传；用户 BYOK
-不上传。完整视频失败时明确报错，不再以关键帧替代其证据。
+不上传。明确视频拒绝可改用有时间标记的画面，并显示数量与静态抽样限制；其他失败不触发画面回退。
+原始视频与照片保留，抽帧失败不能继续为纯文本请求。
 
 ## 渐进式 Skills
 

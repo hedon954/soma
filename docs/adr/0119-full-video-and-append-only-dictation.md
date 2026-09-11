@@ -1,5 +1,7 @@
 # ADR 0119：完整视频与直接追加的本地听写
 
+- 后续替代：[ADR 0131](0131-explicit-video-rejection-frame-fallback.md)（仅明确拒绝视频后的回退策略；语音与其他边界不变）
+
 - 上游依据：[Apple 本地听写调研](../research/2026-09-05-apple-local-speech.md)
 - 下游落地：[BUG 0054](../bugs/0054-full-video-playback-and-dictation-regressions.md)、[验收](../acceptance.md)、[ReAct 协议](../react-agent.md)、[远程 Job 协议](../engineering/agent-job-protocol.md)
 

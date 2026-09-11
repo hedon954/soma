@@ -57,10 +57,16 @@ final class SpeechInputService {
     }
 
     private static func defaultSession() async -> any LocalSpeechSession {
-        if #available(iOS 26.0, *), SpeechTranscriber.isAvailable,
-           let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh-CN"))
-        {
-            return AppleSpeechAnalyzerSession(locale: locale)
+        if #available(iOS 26.0, *) {
+            let localeHint = Locale(identifier: "zh-CN")
+            if let locale = await DictationTranscriber.supportedLocale(equivalentTo: localeHint) {
+                return AppleSpeechAnalyzerSession(locale: locale, module: .dictation)
+            }
+            if SpeechTranscriber.isAvailable,
+               let locale = await SpeechTranscriber.supportedLocale(equivalentTo: localeHint)
+            {
+                return AppleSpeechAnalyzerSession(locale: locale, module: .transcription)
+            }
         }
         return LegacyLocalSpeechSession()
     }
@@ -111,7 +117,7 @@ final class SpeechInputService {
                 } onError: { [weak self] error in
                     guard let self, generation == token else { return }
                     stop()
-                    errorMessage = error.localizedDescription
+                    errorMessage = AppErrorMessage.message(for: error, operation: .speech)
                 }
                 try Task.checkCancellation()
                 guard generation == token else { return }
@@ -122,7 +128,7 @@ final class SpeechInputService {
             } catch {
                 guard generation == token else { return }
                 stop()
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .speech)
             }
         }
     }
@@ -169,6 +175,19 @@ final class SpeechInputService {
     func discardPending() {
         pendingText = ""
         pendingPause = 0
+    }
+
+    /// A manual edit makes the displayed phrase authoritative. Retire its recognition
+    /// generation so a late partial/final can never restore the pre-edit phrase.
+    func continueAfterManualEdit() {
+        guard isListening, let onCommit, let onPreview else {
+            discardPending()
+            return
+        }
+        discardPending()
+        onPreview("")
+        stop()
+        start(onPreview: onPreview, onCommit: onCommit)
     }
 
     private func commitPending() {

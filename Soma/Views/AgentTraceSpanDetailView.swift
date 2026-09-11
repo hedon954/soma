@@ -44,7 +44,7 @@ enum AgentTraceSpanPayloads {
         }
         if span.kind != .output, let error = span.errorMessage, !error.isEmpty {
             result.append(
-                AgentTraceSpanPayloadSection(title: "错误", value: error, isError: true)
+                AgentTraceSpanPayloadSection(title: "错误", value: AppErrorMessage.message(from: error, operation: .model), isError: true)
             )
         }
         return result
@@ -108,7 +108,7 @@ struct AgentTraceSpanRow: View {
                     if let error = span.errorMessage, !error.isEmpty,
                        [.failed, .cancelled].contains(span.status)
                     {
-                        Text(error)
+                        Text(AppErrorMessage.message(from: error, operation: .model))
                             .font(.caption2)
                             .foregroundStyle(.red)
                             .lineLimit(2)

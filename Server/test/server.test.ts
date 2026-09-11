@@ -1,3 +1,5 @@
+import type { AgentEvent } from "../src/domain.js";
+import { explicitlyRejectsVideo, parseVideoFallbacks } from "../src/video-fallback.js";
 import assert from "node:assert/strict";
 import {
   generateKeyPairSync,
@@ -1396,7 +1398,7 @@ test("explicit direct-video capability sends video without duplicate frames", as
   assert.doesNotMatch(JSON.stringify(captured), /"fps"/);
 });
 
-test("remote video retries preserve the complete file and never fall back", async () => {
+test("transient remote video errors preserve the complete file across retries", async () => {
   const store = new InMemorySomaStore();
   const directJob = await store.submitJob({
     deviceID: randomUUID(),
@@ -2049,3 +2051,190 @@ class CapturingFeedbackProvider implements FeedbackEmailProvider {
     this.inputs.push(input);
   }
 }
+
+test("explicit video rejection switches once to associated fallback images", async () => {
+  const store = new InMemorySomaStore();
+  const modelInput = makeModelInput(["current-video-0", "current-image-0"]);
+  Object.assign(modelInput, { videoFallbacks: [{
+    videoID: "current-video-0", frameIDs: Array.from({ length: 8 }, (_, index) => `backup-${index}`),
+    timestampsSeconds: Array.from({ length: 8 }, (_, index) => index * 1.96 / 7), durationSeconds: 2,
+  }] });
+  const job = await store.submitJob({
+    deviceID: randomUUID(), input: makeJobInput({ modelInput, mediaMode: "direct_video" }),
+    bodyDigest: sha256("fictional-fallback"), now: new Date(),
+  });
+  const requests: Record<string, unknown>[] = [];
+  const provider = new OpenAICompatibleManagedProvider(
+    "https://provider.invalid/v1", "fixture", "fixture", async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (requests.length === 1) return new Response(JSON.stringify({ error: {
+        message: "unknown variant `video_url`, expected `text`, `image_url`, `file`",
+      } }), { status: 400 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "虚构画面分析结果" } }] }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }, async () => assert.fail("capability rejection must not use transient backoff"), true,
+  );
+  const result = await provider.run(job, [], [
+    { id: "current-video-0", contentType: "video/mp4", url: "https://signed.invalid/clip.mp4" },
+    { id: "current-image-0", contentType: "image/jpeg", url: "https://signed.invalid/photo.jpg" },
+    ...Array.from({ length: 8 }, (_, index) => ({ id: `backup-${index}`, contentType: "image/jpeg",
+      url: `https://signed.invalid/frame${index}.jpg`, byteLength: 100 })),
+  ].map((value) => value));
+  assert.equal(result.kind, "completed");
+  assert.equal(requests.length, 2);
+  assert.match(JSON.stringify(requests[0]), /video_url/);
+  assert.doesNotMatch(JSON.stringify(requests[0]), /frame0.jpg/);
+  assert.doesNotMatch(JSON.stringify(requests[1]), /video_url/);
+  assert.match(JSON.stringify(requests[1]), /frame0.jpg/);
+  assert.match(JSON.stringify(requests[1]), /frame1.jpg/);
+  assert.match(JSON.stringify(requests[1]), /photo.jpg/);
+});
+
+test("video fallback classifier excludes transient, auth, size, and nonvideo errors", () => {
+  for (const status of [400, 415, 422]) assert.equal(explicitlyRejectsVideo(status, "unknown variant video_url"), true);
+  for (const status of [401, 403, 408, 429, 500, 503]) assert.equal(explicitlyRejectsVideo(status, "unsupported video_url"), false);
+  for (const text of ["invalid request", "video_url exceeds size limit", "unsupported image_url", "video_url must be a valid URL"]) {
+    assert.equal(explicitlyRejectsVideo(400, text), false);
+  }
+});
+
+test("fallback manifest rejects unrelated frames, duplicate IDs, invalid time and unbounded counts", () => {
+  const input = makeModelInput(["video", "photo"]);
+  const valid = { videoID: "video", frameIDs: Array.from({ length: 8 }, (_, index) => `frame${index}`),
+    timestampsSeconds: Array.from({ length: 8 }, (_, index) => index * 1.96 / 7), durationSeconds: 2 };
+  assert.equal(parseVideoFallbacks([valid], input.messages).length, 1);
+  for (const bad of [
+    { ...valid, videoID: "missing" }, { ...valid, frameIDs: ["photo", ...valid.frameIDs.slice(1)] },
+    { ...valid, frameIDs: ["frame1", ...valid.frameIDs.slice(1)] }, { ...valid, timestampsSeconds: [...valid.timestampsSeconds.slice(0, 7), 2] },
+    { ...valid, timestampsSeconds: [1, ...valid.timestampsSeconds.slice(1)] }, { ...valid, durationSeconds: Infinity },
+    { ...valid, frameIDs: ["frame0"] },
+  ]) assert.throws(() => parseVideoFallbacks([bad], input.messages));
+  assert.throws(() => parseVideoFallbacks([valid, valid], input.messages));
+});
+
+function fallbackFixtureInput(): AgentJobInput {
+  const modelInput = makeModelInput(["video"]);
+  modelInput.messages.push({ role: "assistant", text: "先前的回复", mediaIDs: [] },
+    { role: "user", text: "继续看之前的视频", mediaIDs: [] });
+  modelInput.videoFallbacks = [{ videoID: "video", frameIDs: Array.from({ length: 8 }, (_, index) => `f${index}`), timestampsSeconds: Array.from({ length: 8 }, (_, index) => index * 1.96 / 7), durationSeconds: 2 }];
+  return makeJobInput({ modelInput, mediaMode: "direct_video" });
+}
+
+function fallbackFixtureMedia() {
+  return [
+    { id: "video", contentType: "video/mp4", url: "https://signed.invalid/video.mp4", byteLength: 200 },
+    ...Array.from({ length: 8 }, (_, index) => ({ id: `f${index}`, contentType: "image/jpeg",
+      url: `https://signed.invalid/f${index}.jpg`, byteLength: 100 })),
+  ];
+}
+
+test("persisted video fallback survives provider restart with prior tool results intact", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({ deviceID: randomUUID(), input: fallbackFixtureInput(), bodyDigest: sha256("restore-frames"), now: new Date() });
+  let count = 0;
+  const provider = new OpenAICompatibleManagedProvider("https://provider.invalid/v1", "fixture", "fixture", async () => {
+    count += 1;
+    return count === 1 ? new Response("unsupported video_url", { status: 400 })
+      : new Response(JSON.stringify({ choices: [{ message: { content: "虚构结果" } }] }));
+  }, undefined, true);
+  let savedMode: AgentEvent | undefined;
+  await provider.run(job, [], fallbackFixtureMedia(), undefined, undefined, async (frameCount) => {
+    assert.equal(frameCount, 8);
+    savedMode = { id: randomUUID(), jobID: job.id, sequence: 1, kind: "model", phase: "updated",
+      payloadVersion: 1, payload: { mediaMode: "keyframes", fallbackReason: "video_input_unsupported", frameCount }, createdAt: new Date() };
+  });
+  assert.ok(savedMode);
+  const history: AgentEvent[] = [savedMode, {
+    id: randomUUID(), jobID: job.id, sequence: 2, kind: "model", phase: "completed", payloadVersion: 1,
+    payload: { assistantText: "已经保存", toolCalls: [{ id: "saved-call", type: "function", function: { name: "create_workout", arguments: "{}" } }] }, createdAt: new Date(),
+  }, {
+    id: randomUUID(), jobID: job.id, sequence: 3, kind: "tool", phase: "completed", payloadVersion: 1,
+    payload: { toolCallID: "saved-call", result: { record_id: 9, saved: true } }, createdAt: new Date(),
+  }];
+  let resumed = 0;
+  const restarted = new OpenAICompatibleManagedProvider("https://provider.invalid/v1", "fixture", "fixture", async (_url, init) => {
+    resumed += 1;
+    const body = String(init?.body);
+    assert.doesNotMatch(body, /video_url/);
+    assert.match(body, /f0.jpg/);
+    assert.match(body, /f1.jpg/);
+    assert.match(body, /saved-call/);
+    assert.match(body, /record_id/);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "继续解释已保存结果" } }] }));
+  }, undefined, true);
+  await restarted.run(job, history, fallbackFixtureMedia(), undefined, undefined, async () => assert.fail("fallback notice must not repeat"));
+  assert.equal(resumed, 1);
+});
+
+test("missing or oversized fallback never removes video and proceeds as text", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({ deviceID: randomUUID(), input: fallbackFixtureInput(), bodyDigest: sha256("missing-frames"), now: new Date() });
+  for (const media of [fallbackFixtureMedia().slice(0, 2), fallbackFixtureMedia().map((item) => ({ ...item, byteLength: 9 * 1024 * 1024 }))]) {
+    let count = 0;
+    const provider = new OpenAICompatibleManagedProvider("https://provider.invalid/v1", "fixture", "fixture", async () => {
+      count += 1;
+      return new Response("unsupported video_url", { status: 400 });
+    }, undefined, true);
+    await assert.rejects(provider.run(job, [], media), /备用画面/);
+    assert.equal(count, 1);
+  }
+});
+
+test("partial provider output prevents fallback and second image rejection stops", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({ deviceID: randomUUID(), input: fallbackFixtureInput(), bodyDigest: sha256("partial-frames"), now: new Date() });
+  let count = 0;
+  let partial = "";
+  const provider = new OpenAICompatibleManagedProvider("https://provider.invalid/v1", "fixture", "fixture", async () => {
+    count += 1;
+    let sent = false;
+    return new Response(new ReadableStream<Uint8Array>({ pull(controller) {
+      if (!sent) {
+        sent = true;
+        controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"部分结果"}}]}\n\n'));
+      } else controller.error(new Error("unsupported video_url"));
+    } }), { headers: { "content-type": "text/event-stream" } });
+  }, undefined, true);
+  await assert.rejects(provider.run(job, [], fallbackFixtureMedia(), async (text) => { partial += text; }));
+  assert.equal(count, 1);
+  assert.equal(partial, "部分结果");
+  let rejected = 0;
+  const noImages = new OpenAICompatibleManagedProvider("https://provider.invalid/v1", "fixture", "fixture", async () => {
+    rejected += 1;
+    return new Response(rejected === 1 ? "unsupported video_url" : "unsupported image_url", { status: 400 });
+  }, undefined, true);
+  await assert.rejects(noImages.run(job, [], fallbackFixtureMedia()));
+  assert.equal(rejected, 2);
+});
+
+test("provider failures preserve actionable categories without leaking raw response", async () => {
+  const { providerFailure } = await import("../src/provider-failure.js");
+  const cases = [
+    [401, "invalid_api_key", "provider_authentication_failed"],
+    [429, "insufficient_quota", "provider_quota_exhausted"],
+    [429, "rate limit", "provider_rate_limited"],
+    [413, "large", "provider_context_exceeded"],
+    [400, "context_length_exceeded", "provider_context_exceeded"],
+    [400, "unsupported image_url", "provider_vision_unsupported"],
+    [404, "model_not_found", "provider_configuration_invalid"],
+    [503, "upstream payload", "provider_unavailable"],
+  ] as const;
+  for (const [status, message, code] of cases) {
+    const failure = providerFailure(status, JSON.stringify({ error: message, request_id: "fictional-private-marker" }));
+    assert.equal(failure.code, code);
+    assert.doesNotMatch(failure.message, /fictional-private-marker|request_id|\{/);
+  }
+});
+
+test("quota exhaustion waits for user instead of repeating billable requests", async () => {
+  const store = new InMemorySomaStore();
+  const job = await store.submitJob({ deviceID: randomUUID(), input: makeJobInput(), bodyDigest: sha256("quota"), now: new Date() });
+  let count = 0;
+  const provider = new OpenAICompatibleManagedProvider("https://provider.invalid/v1", "fixture", "fixture", async () => {
+    count += 1;
+    return new Response('{"error":{"message":"insufficient_quota"}}', { status: 429 });
+  }, async () => assert.fail("quota is not a transient rate limit"));
+  await assert.rejects(provider.run(job, [], []), /额度/);
+  assert.equal(count, 1);
+});

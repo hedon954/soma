@@ -54,7 +54,7 @@ struct InsightsView: View {
                     if period != .day {
                         ProgressTrainingBodyCards(snapshot: snapshot)
                     }
-                    if period == .day, let day = snapshot.days.first, !day.isFuture {
+                    if period == .day, let day = snapshot.days.first, !day.isFuture, !day.records.isEmpty {
                         ProgressDayRecordSections(day: day)
                     }
                     ProgressResourceLinks()
@@ -197,7 +197,7 @@ struct InsightsView: View {
             return
         } catch {
             guard !Task.isCancelled, request == key else { return }
-            errorMessage = "进展暂时无法加载"
+            errorMessage = AppErrorMessage.message(for: error, operation: .load)
         }
     }
 }

@@ -377,7 +377,7 @@ struct LLMConfigurationView: View {
             extraConfigError = nil
             extraConfigSaved = true
         } catch {
-            extraConfigError = error.localizedDescription
+            extraConfigError = AppErrorMessage.message(for: error, operation: .configuration)
             extraConfigSaved = false
         }
     }
@@ -462,7 +462,7 @@ struct LLMConfigurationView: View {
         } catch {
             guard !Task.isCancelled, provider == requestedProvider else { return }
             models = []
-            modelError = error.localizedDescription
+            modelError = AppErrorMessage.message(for: error, operation: .configuration)
         }
     }
 }

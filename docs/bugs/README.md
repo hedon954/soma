@@ -11,10 +11,17 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0064](0064-raw-errors-without-recovery.md) | 定向回归通过，界面待验收 | 原始错误无恢复办法 | 全 App 分类、远程稳定原因、呈现层静态门禁 |
+| [0063](0063-explicit-video-rejection-has-no-compatible-input.md) | 定向回归通过，真机待验收 | 明确视频拒绝后无法继续分析画面 | 有界采样、原件保留、单次回退与持久恢复 |
+| [0062](0062-guided-replacement-retains-old-targets.md) | 定向回归中，完整门禁与交互待验收 | 更换动作只改名称，沿用旧组目标 | 最近实际参数、确认重建、缺失值和完成证据保护 |
+| [0061](0061-pending-delete-orphans-evidence-and-remote-job.md) | 定向回归中，完整门禁与交互待验收 | 单条删除难发现、误删已保存附件，远程任务未取消 | 可见删除入口、取消失败保留、共享附件保护与 FIFO 接续 |
+| [0060](0060-dictation-editor-replacement-and-manual-edit.md) | 修复中，完整门禁与真机待验收 | 听写替换编辑器导致高度变化并拒绝手改 | 原生编辑事件与渲染分离；真实宽度换行；旧识别 generation 不得恢复旧字 |
+| [0059](0059-rest-adjustment-stale-leaf-timer.md) | 定向回归通过，完整门禁与真机待验收 | 休息增减只更新主截止时间，子视图仍按旧截止时间直接推进 | 子视图不得自动结束；加减、旧 revision、暂停恢复与单次推进 |
+| [0058](0058-live-dictation-preview-stays-empty.md) | 已修复，真机中文听写待复验 | 说话时输入框不出字，点停才倒出缓存；听写态输入框扩成两行 | partial 立刻进入预览；空内容保持一行；真机短句边说边出字 |
 | [0057](0057-coach-cold-cache-hides-assistant-messages.md) | 已修复，待真机杀进程复验 | 冷启动后教练页只渲染用户消息，助手气泡要等再次拉取 | 已准备页不再用渲染缓存过滤；`CoachMessageVisibilityTests` |
 | [0056](0056-plan-stats-session-navigation-crash.md) | 已修复，待真机点进复盘确认 | 计划训练统计点击历史 Session 导致进程退出 | 按 Session ID 导航；Button + `navigationDestination(item:)` |
 | [0055](0055-coach-history-scroll-repositions.md) | 已修复，待真机长会话复验 | 上滑历史时懒栈卸载气泡导致视口持续重定位 | 即时 VStack、记录卡/正文常驻缓存、禁止 alignment 顶锚与哨兵 onAppear、`perf-check` |
-| [0054](0054-full-video-playback-and-dictation-regressions.md) | 自动回归通过，真机待验收 | 修订 0002/0012/0048：完整视频、可靠播放、直接追加听写与分享组卡 | 完整请求/重试、合成视频播放、实时草稿编辑、分享分组与 UI |
+| [0054](0054-full-video-playback-and-dictation-regressions.md) | 自动回归通过，真机待验收 | 修订 0002/0012/0048：完整视频、可靠播放、直接追加听写与分享组卡 | 完整请求/重试、合成视频播放、实时草稿编辑、分享分组与 UI；视频拒绝由 [0063](0063-explicit-video-rejection-has-no-compatible-input.md) 修订 |
 | [0053](0053-stream-executor-and-production-fixture-gap.md) | 双机虚构链路通过，真实会话待复验 | 修订 [0024](0024-streaming-cross-actor-swiftdata-crash.md)/[0036](0036-long-stream-continuous-text-and-completion-cliff.md)：原始流误入主线程，简化夹具未覆盖生产边界 | 执行器回归、真实持久化长流、完成后交互与真机 Trace |
 | [0001](0001-widget-configuration-metadata-crash.md) | 已修复，待真机界面确认 | 动态 Widget 配置文本导致扩展崩溃并从组件库消失 | `make check` 禁止 Widget 配置元数据使用 `Text` 重载 |
 | [0002](0002-video-frame-extraction-silent-fallback.md) | 已修复，待真机媒体验收 | 视频抽帧失败后仍以无画面的纯文本请求调用模型 | 完整视频规则由 [0054](0054-full-video-playback-and-dictation-regressions.md) 修订，准备失败阻断 |
@@ -40,7 +47,7 @@
 | [0022](0022-installed-v5-schema-checksum-blocks-container-open.md) | 已修复，待真机复验 | 已安装 store 上改当前 schema 后容器无法打开 | 只打开当前 SomaDataSchema、不带 migrationPlan；真机只点重试迁移 |
 | [0023](0023-same-turn-multi-exercise-merged-into-one.md) | 已修复，待真机复验 | 同一条消息的多个动作被合并成一条训练记录，Event Cards 被结果卡替换 | create 每次新增独立记录；原位卡不隐藏 Tool Event；保存有确认 |
 | [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 部分要求由 [0053](0053-stream-executor-and-production-fixture-gap.md) 修订 | 非主线程投影 Event 导致 SwiftData 与 AttributeGraph 闪退 | 合批投影保持 MainActor、运行时断言与 segment 身份唯一 |
-| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 首次修复不足，后续见 0026 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因 |
+| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 首次修复不足，后续见 0026 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因；技术标识呈现由 [ADR 0132](../adr/0132-actionable-error-presentation.md) 修订 |
 | [0026](0026-guided-auto-recording-still-stops-without-reason.md) | 已修复，待真机复验 | 开组换预览宿主并自动放大取景仍会掐断自动录像，极短文件被当成正常保存 | 倒计时只取景、开组后放大再写文件；录像中不重建连接；非目标组无预览 |
 | [0027](0027-meal-aggregate-overrides-item-facts.md) | 已修复，待真机 Agent 交互确认 | 创建饮食时顶层营养可覆盖菜品派生事实 | 菜品优先写入、总糖完整性与 Tool 结果回归测试 |
 | [0028](0028-remote-model-tool-list-missing-from-logs.md) | 已修复，待部署与真机复验 | 远程模型 Span 与诊断日志缺少每次调用的绑定工具清单 | Worker Event 工具清单与 iOS 远程 Span 摘要测试 |

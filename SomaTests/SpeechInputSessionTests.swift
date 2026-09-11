@@ -25,6 +25,27 @@ final class SpeechInputSessionTests: XCTestCase {
         }
     }
 
+    func testEmptyDraftShowsLivePreviewBeforeFinish() async {
+        let session = Session()
+        let started = expectation(description: "local session started")
+        session.started = started
+        let state = CoachComposerState()
+        let service = SpeechInputService(sessionFactory: { session }, microphonePermission: { true })
+        state.startSpeech(service)
+        await fulfillment(of: [started], timeout: 2)
+        session.result?("你好", false, 0)
+        XCTAssertEqual(state.draft, "")
+        XCTAssertEqual(state.displayedSpeechDraft, "你好")
+        XCTAssertTrue(service.isListening)
+        session.result?("你好你好", false, 0)
+        XCTAssertEqual(state.draft, "")
+        XCTAssertEqual(state.displayedSpeechDraft, "你好你好")
+        await service.finish()
+        XCTAssertEqual(state.draft, "你好你好")
+        XCTAssertEqual(state.displayedSpeechDraft, "你好你好")
+        XCTAssertFalse(service.isListening)
+    }
+
     func testFinalSegmentsAppendToLiveDraftAndLateCallbacksAreIgnored() async {
         let session = Session()
         let started = expectation(description: "local session started")
@@ -35,9 +56,6 @@ final class SpeechInputSessionTests: XCTestCase {
         state.startSpeech(service)
         await fulfillment(of: [started], timeout: 2)
         session.result?("错误猜测", false, 0)
-        XCTAssertEqual(state.draft, "手动输入")
-        XCTAssertEqual(state.displayedSpeechDraft, "手动输入错误猜测")
-        state.replaceDraftFromSpeechPreview("手动输入")
         XCTAssertEqual(state.draft, "手动输入")
         XCTAssertEqual(state.displayedSpeechDraft, "手动输入错误猜测")
         state.draft = "改过的输入，"
@@ -52,6 +70,37 @@ final class SpeechInputSessionTests: XCTestCase {
         service.stop()
         XCTAssertEqual(state.draft, "新输入")
         XCTAssertEqual(session.cancelCount, 1)
+    }
+
+    func testEditingLivePreviewKeepsUserTextAndRejectsOldRecognition() async {
+        let first = Session()
+        let firstStarted = expectation(description: "first recognition started")
+        first.started = firstStarted
+        let next = Session()
+        let nextStarted = expectation(description: "recognition restarts after manual correction")
+        next.started = nextStarted
+        var starts = 0
+        let service = SpeechInputService(sessionFactory: {
+            starts += 1
+            return starts == 1 ? first : next
+        }, microphonePermission: { true })
+        let state = CoachComposerState()
+        state.startSpeech(service)
+        await fulfillment(of: [firstStarted], timeout: 2)
+        first.result?("深吨五次", false, 0)
+        let lateResult = first.result
+
+        state.replaceDraftFromSpeechPreview("深蹲五次")
+        XCTAssertEqual(state.draft, "深蹲五次")
+        XCTAssertEqual(state.displayedSpeechDraft, "深蹲五次")
+        await fulfillment(of: [nextStarted], timeout: 2)
+        lateResult?("深吨五次。", true, 0)
+        XCTAssertEqual(state.draft, "深蹲五次")
+        next.result?("再做一组", false, 0)
+        XCTAssertEqual(state.displayedSpeechDraft, "深蹲五次再做一组")
+        await service.finish()
+        XCTAssertEqual(state.draft, "深蹲五次再做一组")
+        XCTAssertFalse(service.isListening)
     }
 
     func testSessionChangeClearsPendingSpeechAndRejectsOldResults() async throws {

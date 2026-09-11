@@ -259,12 +259,9 @@ final class CoachComposerState {
         if value == displayedSpeechDraft {
             return
         }
-        // 听写进行中 TextField 常把上一帧预览回写进来；那不是用户改字。
-        if speechInput?.isListening == true {
-            return
-        }
         draft = value
-        speechInput?.discardPending()
+        liveSpeechPreview = ""
+        speechInput?.continueAfterManualEdit()
     }
 
     /// 草稿一旦偏离所选建议文本，精确快捷记录立即失效，

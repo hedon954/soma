@@ -194,15 +194,14 @@ struct GuidedSetRecoveryView: View {
 struct GuidedRestView: View {
     let nextTargetText: String?
     var nextEffortSide: WorkoutEffortSide = .none
-    var targetID: UUID?
     let remainingSeconds: () -> Int
+    var isActive = true
     var camera: WorkoutCameraService?
     var isLandscape = false
     var cameraErrorMessage: String?
     let onTick: (Int) -> Void
     let onAdjust: (Int) -> Void
     let onFinish: () -> Void
-    @State private var automaticallyFinishedTargetID: UUID?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
@@ -240,28 +239,9 @@ struct GuidedRestView: View {
                 isLandscape: isLandscape,
                 recordingErrorMessage: cameraErrorMessage
             )
-        }
-        .task(id: targetID) {
-            var announced: Set<Int> = []
-            while !Task.isCancelled {
-                let value = remainingSeconds()
-                if value == 0 {
-                    guard automaticallyFinishedTargetID != targetID else {
-                        return
-                    }
-                    automaticallyFinishedTargetID = targetID
-                    onFinish()
-                    return
-                }
-                if (1 ... 3).contains(value), announced.insert(value).inserted {
+            .onChange(of: remainingSeconds(), initial: true) { _, value in
+                if isActive, (1 ... 3).contains(value) {
                     onTick(value)
-                }
-                do {
-                    try await Task.sleep(for: .milliseconds(200))
-                } catch is CancellationError {
-                    return
-                } catch {
-                    return
                 }
             }
         }

@@ -111,7 +111,7 @@ private struct ProgressEnergyBreakdownPopover: View {
         case .resting: AppMetricRole.body.accent
         case .activity: AppMetricRole.consistency.accent
         case .factor: AppMetricRole.performance.accent
-        case .total: AppMetricRole.trainingLoad.accent
+        case .total, .workout: AppMetricRole.trainingLoad.accent
         case .protein: AppTheme.vitalAccent
         case .carbs: AppTheme.trainingAccent
         case .fat: AppTheme.trendAccent

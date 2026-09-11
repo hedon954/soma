@@ -3,6 +3,17 @@ import Foundation
 import XCTest
 
 final class AppThemePaletteTests: XCTestCase {
+    func testEnergyCaptionNumbersAreDistinctAndReadableOnTheirActualSurface() {
+        for (deficit, remaining, surface) in [
+            (AppThemePalette.lightEnergyDeficit, AppThemePalette.lightEnergyRemaining, AppThemePalette.lightMealSoft),
+            (AppThemePalette.darkEnergyDeficit, AppThemePalette.darkEnergyRemaining, AppThemePalette.darkMealSoft)
+        ] {
+            XCTAssertNotEqual(deficit, remaining)
+            XCTAssertGreaterThanOrEqual(contrast(deficit, surface), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(remaining, surface), 4.5)
+        }
+    }
+
     func testLightSemanticColorsMeetTextContrastOnPageSurface() {
         let foregrounds = [
             AppThemePalette.lightAccent,

@@ -450,62 +450,11 @@ enum TrainingPlanStore {
                     targetKind: prescription.plannedSets.first?.targetKind
                 )
             }
-            let laterality = performance.exerciseDefinition?.hasExplicitLaterality == true
-                ? performance.exerciseDefinition?.laterality ?? prescription.laterality
-                : prescription.laterality
-            let orderedSets = prescription.plannedSets.sorted { $0.order < $1.order }
-            for (setIndex, planned) in orderedSets.enumerated() {
-                let targetKind = performance.exerciseDefinition?.hasExplicitTargetKind == true
-                    ? performance.exerciseDefinition?.targetKind ?? planned.targetKind
-                    : planned.targetKind
-                let set = WorkoutSet(
-                    performanceID: performance.id,
-                    order: planned.order,
-                    kind: planned.kind,
-                    laterality: laterality.rawValue,
-                    plannedTargetKind: targetKind,
-                    plannedReps: planned.targetReps,
-                    plannedDurationSeconds: planned.targetDurationSeconds,
-                    plannedWeightKG: planned.targetWeightKG,
-                    plannedRestSeconds: setIndex < orderedSets.count - 1
-                        ? prescription.targetRestSeconds
-                        : nil,
-                    restBetweenSidesSeconds: laterality == .both
-                        ? prescription.restBetweenSidesSeconds
-                        : nil
-                )
-                set.performance = performance
-                context.insert(set)
-                if firstSet == nil {
-                    firstSet = set
-                }
-                let sides: [WorkoutEffortSide] = switch laterality {
-                case .both:
-                    [.left, .right]
-                case .left:
-                    [.left]
-                case .right:
-                    [.right]
-                case .none:
-                    [.none]
-                }
-                for (index, side) in sides.enumerated() {
-                    let effort = WorkoutEffort(
-                        workoutSetID: set.id,
-                        order: index + 1,
-                        side: side,
-                        targetKind: targetKind,
-                        plannedReps: planned.targetReps,
-                        plannedDurationSeconds: planned.targetDurationSeconds,
-                        plannedWeightKG: planned.weight(for: side)
-                    )
-                    effort.workoutSet = set
-                    context.insert(effort)
-                    if firstEffort == nil {
-                        firstEffort = effort
-                    }
-                }
-            }
+            let runtime = WorkoutRuntimePrescriptionBuilder.build(
+                prescription: prescription, performance: performance, in: context
+            )
+            firstSet = firstSet ?? runtime.sets.first
+            firstEffort = firstEffort ?? runtime.efforts.first
         }
         session.currentPerformanceID = firstPerformance?.id
         session.currentSetID = firstSet?.id

@@ -103,6 +103,11 @@ enum AppThemePalette {
     static let darkMeal = AppThemeRGB(hex: 0x24D77A)
     static let lightMealSoft = AppThemeRGB(hex: 0xE4F8ED)
     static let darkMealSoft = AppThemeRGB(hex: 0x173025)
+    // Caption numbers need stronger light ink on the meal-tinted surface.
+    static let lightEnergyDeficit = lightTrainingEmphasis
+    static let darkEnergyDeficit = darkTraining
+    static let lightEnergyRemaining = AppThemeRGB(hex: 0x006F3D)
+    static let darkEnergyRemaining = darkMeal
     static let lightBody = AppThemeRGB(hex: 0x0072C6)
     static let darkBody = AppThemeRGB(hex: 0x66B8F0)
     static let lightBodySoft = AppThemeRGB(hex: 0xE6F3FC)
@@ -175,6 +180,14 @@ enum AppTheme {
     static let mealSoftTint = adaptiveColor(
         light: AppThemePalette.lightMealSoft,
         dark: AppThemePalette.darkMealSoft
+    )
+    static let energyDeficitText = adaptiveColor(
+        light: AppThemePalette.lightEnergyDeficit,
+        dark: AppThemePalette.darkEnergyDeficit
+    )
+    static let energyRemainingText = adaptiveColor(
+        light: AppThemePalette.lightEnergyRemaining,
+        dark: AppThemePalette.darkEnergyRemaining
     )
     static let bodyAccent = adaptiveColor(
         light: AppThemePalette.lightBody,

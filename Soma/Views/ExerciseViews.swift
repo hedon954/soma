@@ -333,7 +333,7 @@ struct ExerciseDetailView: View {
                     in: modelContext
                 )
             } catch {
-                demoVideoError = error.localizedDescription
+                demoVideoError = AppErrorMessage.message(for: error, operation: .media)
             }
         }
     }
@@ -346,7 +346,7 @@ struct ExerciseDetailView: View {
                 in: modelContext
             )
         } catch {
-            demoVideoError = error.localizedDescription
+            demoVideoError = AppErrorMessage.message(for: error, operation: .media)
         }
     }
 

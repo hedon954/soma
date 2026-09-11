@@ -12,12 +12,12 @@ struct WorkoutRecordingFailureDiagnosis: Equatable, Sendable {
 
     /// 已经拿到可用部分视频时的文案。
     var partialRecordingMessage: String {
-        "\(cause)；已保留可用的部分视频，训练数据不受影响。（\(technical)）"
+        "\(cause)；已保留可用的部分视频，训练数据不受影响。请检查相机与存储空间后重试。"
     }
 
     /// 完全没有可用视频时的文案。
     var failureMessage: String {
-        "\(cause)；训练数据不受影响。（\(technical)）"
+        "\(cause)；训练数据不受影响。请检查相机与存储空间后重试。"
     }
 }
 
@@ -73,7 +73,7 @@ extension WorkoutRecordingFailureDiagnosis {
         default:
             // 新系统会继续添加中断原因（例如敏感内容拦截）。最低支持 iOS 17，不能直接引用
             // 更高版本的 case，所以这里保留原始值让日志仍可定位。
-            "相机被系统中断（中断原因 \(reason.rawValue)）"
+            "相机被系统中断，未给出可确认的原因"
         }
     }
 
@@ -101,20 +101,28 @@ extension WorkoutRecordingFailureDiagnosis {
         .operationNotAllowed: "系统不允许本次录像操作",
         .applicationIsNotAuthorized: "系统未授权本次录像",
         .contentIsNotAuthorized: "系统未授权本次录像",
-        .unknown: "AVFoundation 报告了未指明的录像错误"
+        .unknown: "系统未说明录像失败的具体原因"
     ]
 
     private static func cause(for nsError: NSError) -> String {
+        if let file = AppFileFailure(nsError) {
+            return file.cause
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
+           let file = AppFileFailure(underlying)
+        {
+            return file.cause
+        }
         guard nsError.domain == AVFoundationErrorDomain else {
-            return nsError.localizedDescription
+            return "录像发生错误，系统没有提供可确认的原因"
         }
         guard let code = AVError.Code(rawValue: nsError.code) else {
-            return "AVFoundation 报告了未知错误 \(nsError.code)"
+            return "系统未说明录像失败的具体原因"
         }
         if let mapped = avErrorCauses[code] {
             return mapped
         }
-        return "AVFoundation 录像错误：\(nsError.localizedDescription)"
+        return "系统未说明录像失败的具体原因"
     }
 
     private static func technical(for nsError: NSError, stage: String) -> String {

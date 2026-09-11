@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.22`、`0.0.21`、`0.0.20`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.23`、`0.0.22`、`0.0.21`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.19 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.20 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.20 → 0.0.21 → 0.0.22
+[PRD 000 压缩起点] → 0.0.21 → 0.0.22 → 0.0.23
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,15 +30,15 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.19 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.19 | 压缩起点 |
-| （无独立 PRD） | 0.0.20 | Changelog 仅修复 Xcode 26.3 类型检查超时 |
+| [000：0.0.20 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.20 | 压缩起点 |
 | [055：动作分类与餐次明细](055-exercise-facets-and-meal-breakdown.md) | 0.0.21 | 分类轴与明细汇总由 057 部分修订 |
-| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | 0.0.22 | 听写呈现由 057 部分修订 |
-| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | 0.0.22 | 听写呈现与快捷预填由 059 部分修订 |
+| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | 0.0.22 | 听写呈现由 057、视频拒绝由 [063](063-video-compatibility-and-actionable-errors.md) 部分修订 |
+| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | 0.0.22 | 听写呈现与快捷预填由 059、能量总缺口由 [064](064-progress-total-energy-deficit.md) 部分修订 |
 | [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | 0.0.22 | 已采纳 |
-| [059：教练 ID、训练卡 0 与进展一致性](059-coach-ids-progress-and-required-zeros.md) | 0.0.22 | 已采纳 |
-| [060：撤回 Apple 健康接入](060-remove-healthkit-until-redesign.md) | 0.0.22 | 已采纳 |
-| [061：日消耗加入去重训练增量](061-daily-energy-net-training.md) | 0.0.22 | 已采纳 |
+| [059：教练 ID、训练卡 0 与进展一致性](059-coach-ids-progress-and-required-zeros.md) | 0.0.23 | 已采纳 |
+| [060：撤回 Apple 健康接入](060-remove-healthkit-until-redesign.md) | 0.0.23 | 已采纳 |
+| [061：日消耗加入去重训练增量](061-daily-energy-net-training.md) | 0.0.23 | 已采纳 |
+| [062：分享海报按动作数铺满或加高](062-workout-share-fill-or-grow.md) | 0.0.23 | 已采纳 |
 
 ## 阅读约定
 
@@ -54,3 +54,10 @@
 - 新 PRD 用“修订自”反向链接每一份被改变的旧 PRD。
 - 部分修订只改变明确段落，其余旧要求继续有效；索引阶段必须与文档头部状态一致。
 - 双向链接由 `make check` 自动验证活文档互链。归档原文是考古，不要求与活文档互链。
+
+## 0.0.23 新增决策
+
+| 文档 | 状态 | 决策 |
+| --- | --- | --- |
+| [063](063-video-compatibility-and-actionable-errors.md) | 已采纳，已实现 | 修订 PRD 056 的视频拒绝行为；有界画面回退与全 App 可操作错误 |
+| [064](064-progress-total-energy-deficit.md) | 已采纳，已实现 | 日、周、月缺口并入底部提示，按同日有效数据配对累计 |

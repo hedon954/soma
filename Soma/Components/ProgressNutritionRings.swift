@@ -64,9 +64,6 @@ struct ProgressNutritionRingsView: View {
                     accessibilityIdentifier: "progress-fat-ring-breakdown"
                 ))
             }
-            if let remaining = remainingCalories {
-                remainingCaption(remaining)
-            }
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
@@ -143,59 +140,6 @@ struct ProgressNutritionRingsView: View {
         .padding(18)
     }
 
-    private func remainingCaption(_ remaining: RemainingCaloriesCaption) -> some View {
-        HStack(spacing: 8) {
-            remainingIcon
-            (
-                Text(remaining.prefix)
-                    + Text(remaining.value).foregroundStyle(AppTheme.mealAccent)
-                    + Text(remaining.suffix)
-            )
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(AppTheme.accent)
-            .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 4)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-        .background {
-            Capsule(style: .continuous)
-                .fill(AppTheme.mealSoftTint)
-                .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(AppTheme.mealAccent.opacity(0.28), lineWidth: 0.6)
-                }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(remaining.accessibilityLabel)
-        .accessibilityIdentifier("progress-calorie-remaining")
-    }
-
-    private var remainingIcon: some View {
-        Image(systemName: "lightbulb.fill")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(AppTheme.mealAccent)
-            .frame(width: 22, height: 22)
-            .background(AppTheme.insetBackground, in: Circle())
-            .accessibilityHidden(true)
-    }
-
-    private var remainingCalories: RemainingCaloriesCaption? {
-        guard snapshot.window.period == .day,
-              let remaining = CalorieRingStatusCopy(progress: rings.calories).remainingKilocalories
-        else {
-            return nil
-        }
-        let value = text(remaining)
-        let isToday = snapshot.days.first.map { Calendar.current.isDateInToday($0.date) } ?? false
-        return RemainingCaloriesCaption(
-            prefix: isToday ? "今日热量仍可摄入约 " : "热量仍可摄入约 ",
-            value: value,
-            suffix: " kcal"
-        )
-    }
-
     private func ringAccessibilityLabel(
         _ title: String,
         _ progress: NutritionRingProgress,
@@ -234,16 +178,6 @@ private struct RingLayout {
 
     var canvas: CGFloat {
         size + glow.outset * 2
-    }
-}
-
-private struct RemainingCaloriesCaption {
-    let prefix: String
-    let value: String
-    let suffix: String
-
-    var accessibilityLabel: String {
-        prefix + value + suffix
     }
 }
 

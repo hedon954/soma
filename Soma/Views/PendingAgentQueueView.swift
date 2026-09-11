@@ -6,13 +6,18 @@ struct PendingAgentQueueView: View {
     let jobs: [AgentJob]
     let isBusy: Bool
     let onRetryAll: () -> Bool
-    let onDelete: (AgentJob) -> Bool
-    let onClear: () -> Bool
+    let onDelete: (AgentJob) async throws -> Void
+    let onClear: () async throws -> Void
     let onOpenLLMConfiguration: () -> Void
 
     @State private var deletionID: UUID?
     @State private var showsClearConfirmation = false
     @State private var actionError: String?
+    @State private var isDeleting = false
+
+    private var orderedJobs: [AgentJob] {
+        jobs.sorted { $0.createdAt < $1.createdAt }
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,21 +30,33 @@ struct PendingAgentQueueView: View {
                     )
                 } else {
                     Section {
-                        ForEach(jobs) { job in
-                            PendingAgentQueueRow(job: job)
-                                .swipeActions(allowsFullSwipe: false) {
-                                    Button("删除", role: .destructive) {
-                                        deletionID = job.id
-                                    }
+                        ForEach(orderedJobs) { job in
+                            HStack(alignment: .top, spacing: 12) {
+                                PendingAgentQueueRow(job: job)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Button(role: .destructive) { deletionID = job.id } label: {
+                                    Image(systemName: "trash")
+                                        .frame(width: AppTheme.minimumTapTarget, height: AppTheme.minimumTapTarget)
                                 }
-                                .accessibilityAction(named: "删除这条暂存信息") {
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("删除这条暂存消息")
+                                .accessibilityIdentifier("pending-delete-\(job.id.uuidString)")
+                                .disabled(isBusy || isDeleting)
+                            }
+                            .swipeActions(allowsFullSwipe: false) {
+                                Button("删除", role: .destructive) {
                                     deletionID = job.id
                                 }
+                                .disabled(isBusy || isDeleting)
+                            }
+                            .accessibilityAction(named: "删除这条暂存信息") {
+                                deletionID = job.id
+                            }
                         }
                     } header: {
                         Text("按发送顺序")
                     } footer: {
-                        Text("删除只影响这条尚未完成的本地消息和它明确选择的附件。")
+                        Text("可删除卡住的消息，让后面的消息继续。已保存的训练等记录及其附件会保留。")
                     }
                 }
 
@@ -53,7 +70,7 @@ struct PendingAgentQueueView: View {
                     } label: {
                         Label("按顺序重试全部", systemImage: "arrow.clockwise")
                     }
-                    .disabled(jobs.isEmpty || isBusy)
+                    .disabled(jobs.isEmpty || isBusy || isDeleting)
 
                     Button {
                         dismiss()
@@ -67,7 +84,7 @@ struct PendingAgentQueueView: View {
                     } label: {
                         Label("清空全部暂存", systemImage: "trash")
                     }
-                    .disabled(jobs.isEmpty || isBusy)
+                    .disabled(jobs.isEmpty || isBusy || isDeleting)
                 }
             }
             .navigationTitle("暂存管理")
@@ -75,6 +92,7 @@ struct PendingAgentQueueView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
+                        .disabled(isDeleting)
                 }
             }
         }
@@ -92,19 +110,27 @@ struct PendingAgentQueueView: View {
         ) {
             Button("删除", role: .destructive) {
                 guard let deletionID,
-                      let job = jobs.first(where: { $0.id == deletionID }),
-                      onDelete(job)
+                      let job = jobs.first(where: { $0.id == deletionID })
                 else {
                     actionError = "这条暂存信息当前无法删除，请稍后再试。"
                     return
                 }
-                self.deletionID = nil
+                Task {
+                    isDeleting = true
+                    defer { isDeleting = false }
+                    do {
+                        try await onDelete(job)
+                        self.deletionID = nil
+                    } catch {
+                        actionError = AppErrorMessage.message(for: error, operation: .delete)
+                    }
+                }
             }
             Button("取消", role: .cancel) {
                 deletionID = nil
             }
         } message: {
-            Text("这项操作不可撤销。")
+            Text("这条消息会从对话中移除，已保存的记录会保留。后台任务需要先停止；删除后其余消息继续按顺序处理。")
         }
         .confirmationDialog(
             "清空全部暂存信息？",
@@ -112,15 +138,20 @@ struct PendingAgentQueueView: View {
             titleVisibility: .visible
         ) {
             Button("清空全部", role: .destructive) {
-                guard onClear() else {
-                    actionError = "暂存队列当前无法清空，请稍后再试。"
-                    return
+                Task {
+                    isDeleting = true
+                    defer { isDeleting = false }
+                    do {
+                        try await onClear()
+                        dismiss()
+                    } catch {
+                        actionError = AppErrorMessage.message(for: error, operation: .delete)
+                    }
                 }
-                dismiss()
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("所有尚未完成的本地消息及其明确选择的附件都会删除，且不可撤销。")
+            Text("所有暂存消息都会从对话中移除，且不可撤销。已保存的训练等记录及其附件会保留。")
         }
         .alert(
             "操作失败",
@@ -137,6 +168,14 @@ struct PendingAgentQueueView: View {
         } message: {
             Text(actionError ?? "请稍后再试。")
         }
+        .overlay {
+            if isDeleting {
+                ProgressView("正在删除…")
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .interactiveDismissDisabled(isDeleting)
     }
 }
 

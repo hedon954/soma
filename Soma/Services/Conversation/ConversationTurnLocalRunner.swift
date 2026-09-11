@@ -159,21 +159,6 @@ extension ConversationProcessingService {
                 responseMessage: responseMessage
             )
             responseMessage.applyAgentEvent(.span(contextSpan))
-            if media.hasVideo {
-                let modeItemID = UUID()
-                let notice = "本次使用完整视频分析。\n\n"
-                PersistentAgentEventProjection.persistAndProject(
-                    .assistantTextCompleted(itemID: modeItemID, at: traceNow),
-                    job: job,
-                    responseMessage: responseMessage,
-                    trace: trace,
-                    liveText: LiveAgentTextSnapshot(
-                        itemID: modeItemID,
-                        text: notice
-                    ),
-                    in: context.modelContext
-                )
-            }
             try? context.modelContext.save()
 
             let resumeCheckpoint = resumable ? job.loopCheckpoint : nil
@@ -297,7 +282,7 @@ extension ConversationProcessingService {
             try? context.modelContext.save()
             return
         }
-        let reason = error.localizedDescription
+        let reason = AppErrorMessage.message(for: error, operation: .model)
         if backgroundLeaseExpired {
             let pausedText = job.hasResumableCheckpoint
                 ? "Soma 已保存进度，回到前台后会从中断处继续。"

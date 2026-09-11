@@ -67,7 +67,7 @@ final class WorkoutRecordingFailureDiagnosisTests: XCTestCase {
         XCTAssertEqual(diagnosis.technical, "no_error · finish-unexpected")
     }
 
-    func testNonAVFoundationErrorKeepsSystemDescriptionAndDomain() {
+    func testNonAVFoundationErrorExplainsStorageAndKeepsDiagnosticDomain() {
         let error = NSError(
             domain: NSPOSIXErrorDomain,
             code: 28,
@@ -78,7 +78,8 @@ final class WorkoutRecordingFailureDiagnosisTests: XCTestCase {
             stage: "persist"
         )
 
-        XCTAssertEqual(diagnosis.cause, "No space left on device")
+        XCTAssertTrue(diagnosis.cause.contains("存储空间不足"))
+        XCTAssertFalse(diagnosis.failureMessage.contains("No space left"))
         XCTAssertTrue(diagnosis.technical.contains(NSPOSIXErrorDomain))
         XCTAssertTrue(diagnosis.technical.contains("28"))
     }
@@ -128,13 +129,14 @@ final class WorkoutRecordingFailureDiagnosisTests: XCTestCase {
         XCTAssertTrue(diagnosis.technical.hasSuffix("session-interruption"))
     }
 
-    func testFutureInterruptionReasonStillReportsRawValue() {
+    func testFutureInterruptionReasonKeepsRawValueOnlyInDiagnostics() {
         let diagnosis = WorkoutRecordingFailureDiagnosis.interruption(
             reasonCode: 9999,
             stage: "session-interruption"
         )
 
-        XCTAssertEqual(diagnosis.cause, "相机被系统中断（中断原因 9999）")
+        XCTAssertEqual(diagnosis.cause, "相机被系统中断，未给出可确认的原因")
+        XCTAssertFalse(diagnosis.failureMessage.contains("9999"))
         XCTAssertTrue(diagnosis.technical.contains("9999"))
     }
 
@@ -148,7 +150,7 @@ final class WorkoutRecordingFailureDiagnosisTests: XCTestCase {
         XCTAssertTrue(diagnosis.technical.contains("interruption_reason=none"))
     }
 
-    func testPartialAndFailureMessagesDifferAndKeepTechnicalSuffix() {
+    func testPartialAndFailureMessagesDifferWithoutTechnicalSuffix() {
         let diagnosis = WorkoutRecordingFailureDiagnosis(
             cause: "摄像头被其它 App 占用",
             technical: "AVFoundationErrorDomain -11818 · finish"
@@ -156,11 +158,11 @@ final class WorkoutRecordingFailureDiagnosisTests: XCTestCase {
 
         XCTAssertEqual(
             diagnosis.partialRecordingMessage,
-            "摄像头被其它 App 占用；已保留可用的部分视频，训练数据不受影响。（AVFoundationErrorDomain -11818 · finish）"
+            "摄像头被其它 App 占用；已保留可用的部分视频，训练数据不受影响。请检查相机与存储空间后重试。"
         )
         XCTAssertEqual(
             diagnosis.failureMessage,
-            "摄像头被其它 App 占用；训练数据不受影响。（AVFoundationErrorDomain -11818 · finish）"
+            "摄像头被其它 App 占用；训练数据不受影响。请检查相机与存储空间后重试。"
         )
     }
 

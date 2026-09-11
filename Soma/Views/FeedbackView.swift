@@ -386,8 +386,7 @@ private struct FeedbackAlert: Identifiable {
 
     init(error: Error) {
         title = "发送失败"
-        message = (error as? LocalizedError)?.errorDescription
-            ?? "反馈暂时无法发送，请稍后重试。"
+        message = AppErrorMessage.message(for: error, operation: .feedback)
     }
 }
 

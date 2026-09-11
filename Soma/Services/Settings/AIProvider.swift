@@ -108,6 +108,7 @@ struct AgentVideoInput: Equatable, Sendable {
     var data: Data
     var mimeType: String
     var messageIndex: Int?
+    var frameFallback: VideoFrameSet?
 }
 
 enum AgentMediaMode: String, Codable, Equatable, Sendable {

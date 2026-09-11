@@ -1,5 +1,10 @@
 # Agent Job 与远程执行协议
 
+- 后续修订：[ADR 0132](../adr/0132-actionable-error-presentation.md)（远程失败稳定原因分类）
+- 后续修订：[ADR 0131](../adr/0131-explicit-video-rejection-frame-fallback.md)（视频备用画面、能力协商与恢复）
+
+- 下游落地：[BUG 0061](../bugs/0061-pending-delete-orphans-evidence-and-remote-job.md)（单条暂存删除、远程取消与记录附件保留）
+
 - 后续修订：[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
 
 - 状态：已实现协议
@@ -88,8 +93,9 @@ localRunning | waitingForForeground
 重试或删除屏障才能继续。`waitingForNetwork` 仅保留旧数据兼容，不能由 runner 自动领取。
 判定规则见 [ADR 0092](../archive/0.0.11/adr/0092-react-internal-retry-and-user-controlled-recovery.md)。
 
-远程 Worker 在单个 provider model-step 内只使用同一组三次退避；重试保持完整视频，
-不切换媒体模式。Worker 发出 terminal error event 后，App 不得创建自动 fallback Job。
+远程 Worker 在单个 provider model-step 内只使用同一组三次瞬态退避；重试保持当前媒体模式。
+明确视频能力拒绝且尚未输出时可按 ADR 0131 切换一次画面输入。Worker 发出 terminal error event 后，
+App 不得创建自动 fallback Job。
 
 ### 服务端 Job
 
@@ -314,10 +320,14 @@ Turn 级 Activity 与 Skill/Tool operation 分开；首段正文或操作卡出�
   机器处理必须明确标注且不得先于本地时间。人工重试复用原 Turn 时间，Loop 时间单独标识。
 - 会话压缩只在 ReAct Loop 前发生；小模型失败后回退标准模型，再失败使用确定性 digest。iOS 在
   本地和远程提交前都投影同样的压缩 Chat 事件，Worker 不重新压缩或改写 Prompt。
-- `GET /v1/capabilities` 在准备前确认远程 Provider 是否启用完整视频；上传规范化全时长 MP4，
-  不支持或准备失败则阻断，禁止上传替代帧。
-- 新 Job 的视频模式为 `direct_video`；保留 `keyframes` 和 `requestAttempt` 解码兼容，
-  旧关键帧 Job 要求重新发送完整视频。Worker 的瞬态重试保持同一完整文件与 Job，不创建降级任务。
+- `GET /v1/capabilities` 确认完整视频与 `videoFrameFallback` 能力。已有媒体授权内上传规范化 MP4；
+  声明回退能力时可带备用 JPEG 清单，包含原视频 ID、画面 ID、时点与时长。完整请求不同时发送备用画面。
+- 单段 8–24 张，所有视频共享 24 张且各至少 8 张，最多 3 段；最长边 768、总画面数据最多 8 MiB。
+  服务端验证消息引用、唯一性、时间顺序与字节预算，无有效清单的旧画面 Job 必须重新发送。
+- 明确拒绝后先持久化 `model.updated` 的 `keyframes` 模式和数量，再请求图片；恢复继续当前模式，
+  已完成工具及其结果保留。图片再次失败、已有输出、无有效画面时不重发为纯文本或新 Job。
+- Provider 失败按 ADR 0132 返回授权、额度、限流、长度、视觉能力、配置或临时故障的稳定分类；
+  仅在内存有界读取响应以分类，不把原始响应存入事件。额度不足不进入瞬态退避。
 - 需要最新数据库事实时请求分页设备 Tool，不静默上传整个数据库。
 - Provider request ID 可以进入非内容诊断；Authorization 和请求正文不得进入普通日志。
 - Provider background mode 只可作为纯分析适配器，不能取代 Soma Job 和 Tool 协议。

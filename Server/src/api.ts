@@ -1,3 +1,4 @@
+import { parseVideoFallbacks } from "./video-fallback.js";
 import { randomUUID } from "node:crypto";
 import {
   createServer,
@@ -130,6 +131,7 @@ async function route(
   if (method === "GET" && url.pathname === "/v1/capabilities") {
     sendJSON(response, 200, envelope(requestID, now, {
       directVideo: dependencies.directVideoEnabled ?? false,
+      videoFrameFallback: true,
     }));
     return;
   }
@@ -644,6 +646,9 @@ function parseJobInput(rawBody: Buffer): AgentJobInput {
     new Set(mediaBindings.map((binding) => binding.id)).size !== mediaBindings.length ||
     new Set(mediaBindings.map((binding) => binding.uploadID)).size !== mediaBindings.length ||
     mediaBindings.some((binding) => !uploadIDs.includes(binding.uploadID)) ||
+    (modelInput.videoFallbacks ?? []).some((fallback) =>
+      fallback.frameIDs.some((id) => !mediaBindings.some((binding) => binding.id === id))
+    ) ||
     modelInput.messages.some((message) =>
       message.mediaIDs.some((id) => !mediaBindings.some((binding) => binding.id === id))
     )
@@ -736,8 +741,10 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
     }
     return result;
   };
+  const videoFallbacks = parseVideoFallbacks(value.videoFallbacks, messages);
   return {
     schemaVersion: 2,
+    ...(videoFallbacks.length === 0 ? {} : { videoFallbacks }),
     messages,
     skills,
     tools,

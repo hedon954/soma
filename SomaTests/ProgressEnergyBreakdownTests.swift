@@ -47,11 +47,25 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
     func testExpenditureKeepsLifestyleFactorWhenTrainingNetIsAdded() {
         let snapshot = make(.day, records: [record(5, .workout, "训练", 800, calorieMET: 5)], hasProfile: true)
         let breakdown = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure)
-        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "活动等消耗", "活动系数"])
+        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "活动等消耗", "活动系数", "训练"])
         XCTAssertEqual(breakdown.rows[0].value, "1,618 kcal")
         XCTAssertEqual(breakdown.rows[1].value, "1,287 kcal")
         XCTAssertEqual(breakdown.rows[2].value, "1.40")
-        XCTAssertFalse(breakdown.rows.contains { $0.label.contains("训练") || $0.label.contains("预估总消耗") })
+        XCTAssertEqual(breakdown.rows[3].value, "800 kcal")
+        XCTAssertEqual(breakdown.rows[3].tone, .workout)
+        XCTAssertFalse(breakdown.rows.contains { $0.label.contains("预估总消耗") })
+    }
+
+    func testDailyExpenditureListsEachWorkoutRecord() {
+        let snapshot = make(.day, records: [
+            record(5, .workout, "深蹲", 350),
+            record(5, .workout, "跑步", nil)
+        ])
+        let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure).rows
+        XCTAssertEqual(rows.map(\.label), ["预估总消耗", "深蹲", "跑步"])
+        XCTAssertEqual(rows[1].value, "350 kcal")
+        XCTAssertEqual(rows[2].value, "未估算")
+        XCTAssertEqual(rows.suffix(2).map(\.tone), [.workout, .workout])
     }
 
     func testPeriodExpenditureUsesSameEstimateDaysAndWeightedComponents() {

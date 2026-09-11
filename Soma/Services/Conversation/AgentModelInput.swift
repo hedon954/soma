@@ -68,6 +68,7 @@ struct AgentModelInputEnvelope: Codable, Equatable, Sendable {
     var activeTools: [AgentToolName]
     var selectedSkillID: String? = nil
     var runtime: AgentModelRuntimeOptions
+    var videoFallbacks: [AgentModelVideoFallback]? = nil
 }
 
 enum AgentModelMediaPayload: Equatable, @unchecked Sendable {

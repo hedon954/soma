@@ -2,6 +2,8 @@
 
 - 状态：独立组、Effort、attempt 与自动收口实施中；SwiftData 打开路径见 ADR 0075，侧别与完成方式见 ADR 0076
 - 日期：2026-08-16
+- 下游落地：[BUG 0062](../bugs/0062-guided-replacement-retains-old-targets.md)（替换动作的最近参数确认与运行时重建）
+- 下游落地：[BUG 0059](../bugs/0059-rest-adjustment-stale-leaf-timer.md)（休息只由主状态机按持久截止时间推进）
 - 上游依据：
   - [ADR 0028](../archive/0.0.1/adr/0028-semantic-exercise-identity.md)
   - [ADR 0029](../archive/0.0.1/adr/0029-versioned-training-plans-and-session-facts.md)

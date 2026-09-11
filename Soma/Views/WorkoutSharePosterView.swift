@@ -1,37 +1,35 @@
 import SwiftUI
 
-enum WorkoutShareCanvas {
-    /// iPhone 17 Pro Max logical canvas (1320 × 2868 px @3x).
-    static let width: CGFloat = 440
-    static let height: CGFloat = 956
-}
-
-/// Fixed Pro Max paper. Long sessions compress into the same canvas instead of growing taller.
 struct WorkoutSharePosterView: View {
     let model: WorkoutSharePosterModel
 
+    private var metrics: WorkoutSharePosterLayout.Metrics {
+        WorkoutSharePosterLayout.metrics(exerciseCount: model.exercises.count)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-            VStack(alignment: .leading, spacing: 12) {
-                overview
-                details
-                Spacer(minLength: 0)
-                footer
-            }
+        WorkoutSharePosterPageLayout(spacing: metrics.sectionSpacing, minHeight: metrics.minBodyHeight) {
+            header(metrics)
+                .sharePosterSlot(.header)
+            overview(metrics)
+                .sharePosterSlot(.overview)
+            details(metrics)
+                .sharePosterSlot(.details)
+            footer
+                .sharePosterSlot(.footer)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
-        .padding(.bottom, 18)
-        .frame(width: WorkoutShareCanvas.width, height: WorkoutShareCanvas.height, alignment: .topLeading)
+        .padding(.horizontal, WorkoutShareCanvas.horizontalPadding)
+        .padding(.top, metrics.outerTop)
+        .padding(.bottom, metrics.outerBottom)
+        .frame(width: WorkoutShareCanvas.width, alignment: .topLeading)
         .foregroundStyle(WorkoutSharePalette.ink)
         .background(WorkoutSharePalette.paper)
         .environment(\.colorScheme, .light)
         .environment(\.dynamicTypeSize, .large)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func header(_ metrics: WorkoutSharePosterLayout.Metrics) -> some View {
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Soma")
                     .font(.system(size: 20, weight: .bold))
@@ -40,29 +38,27 @@ struct WorkoutSharePosterView: View {
                     .font(.system(size: 13))
             }
             Text(model.title)
-                .font(.system(size: 28, weight: .heavy))
+                .font(.system(size: metrics.titleSize, weight: .heavy))
                 .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(3)
             if !model.focusMuscles.isEmpty {
                 Text(model.focusMuscles.joined(separator: " · "))
                     .font(.system(size: 14, weight: .medium))
                     .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(2)
             }
         }
         .padding(.horizontal, 6)
     }
 
-    private var overview: some View {
-        VStack(spacing: 10) {
+    private func overview(_ metrics: WorkoutSharePosterLayout.Metrics) -> some View {
+        VStack(spacing: metrics.overviewSpacing) {
             HStack(alignment: .center, spacing: 8) {
-                volume
+                volume(metrics)
                     .frame(width: 168, alignment: .leading)
                 MuscleMapView(
                     intensities: model.intensities,
                     showsBothSides: true,
                     showsLabels: false,
-                    height: 132,
+                    height: metrics.muscleMapHeight,
                     presentation: .poster
                 )
                 .frame(maxWidth: .infinity)
@@ -79,11 +75,11 @@ struct WorkoutSharePosterView: View {
         .background(WorkoutSharePalette.hero, in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private var volume: some View {
+    private func volume(_ metrics: WorkoutSharePosterLayout.Metrics) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(model.volumeValue)
-                    .font(.custom("DINCondensed-Bold", size: 72))
+                    .font(.custom("DINCondensed-Bold", size: metrics.volumeSize))
                     .lineLimit(1)
                     .minimumScaleFactor(0.35)
                 Text("kg")
@@ -149,8 +145,8 @@ struct WorkoutSharePosterView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var details: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func details(_ metrics: WorkoutSharePosterLayout.Metrics) -> some View {
+        VStack(alignment: .leading, spacing: metrics.detailSpacing) {
             HStack(spacing: 12) {
                 Text("训练明细")
                     .font(.system(size: 16, weight: .bold))
@@ -163,49 +159,64 @@ struct WorkoutSharePosterView: View {
                 Text("暂无可分享的动作记录")
                     .font(.system(size: 13))
                     .foregroundStyle(WorkoutSharePalette.secondaryInk)
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: metrics.rowSpacing) {
                     ForEach(model.exercises) { exercise in
-                        exerciseRow(exercise)
+                        exerciseRow(exercise, metrics: metrics)
                     }
                 }
+                .frame(maxHeight: .infinity)
             }
         }
         .padding(.horizontal, 6)
     }
 
-    private func exerciseRow(_ exercise: WorkoutSharePosterModel.ExerciseLine) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+    private func exerciseRow(
+        _ exercise: WorkoutSharePosterModel.ExerciseLine,
+        metrics: WorkoutSharePosterLayout.Metrics
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(exercise.name)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: metrics.rowNameSize, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(2)
-                if exercise.loadGroups.isEmpty {
-                    Text("组次未记录")
-                        .font(.system(size: 12))
-                        .foregroundStyle(WorkoutSharePalette.secondaryInk)
-                } else {
-                    Text(exercise.loadGroups.joined(separator: " · "))
-                        .font(.system(size: 12).monospacedDigit())
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(3)
-                }
-                if exercise.partialSetCount > 0 {
-                    Text("含 \(exercise.partialSetCount) 组部分完成")
-                        .font(.system(size: 11))
-                        .foregroundStyle(WorkoutSharePalette.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(exercise.setCount) 组")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(WorkoutSharePalette.secondaryInk)
+                    .fixedSize()
+            }
+            if exercise.loadGroups.isEmpty {
+                Text("组次未记录")
+                    .font(.system(size: metrics.rowMetaSize))
+                    .foregroundStyle(WorkoutSharePalette.secondaryInk)
+            } else {
+                WorkoutShareGroupLayout(spacing: 5) {
+                    ForEach(Array(exercise.loadGroups.enumerated()), id: \.offset) { _, group in
+                        Text(group)
+                            .font(.system(size: metrics.rowMetaSize).monospacedDigit())
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 6)
+                            .background(WorkoutSharePalette.groupSurface, in: RoundedRectangle(cornerRadius: 7))
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(exercise.setCount)组")
-                .font(.system(size: 11))
-                .foregroundStyle(WorkoutSharePalette.secondaryInk)
-                .fixedSize()
+            if exercise.partialSetCount > 0 {
+                Text("含 \(exercise.partialSetCount) 组部分完成")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WorkoutSharePalette.secondaryInk)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color(white: 0.96), in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, metrics.rowVerticalPadding)
+        .frame(maxHeight: .infinity, alignment: .center)
+        .overlay {
+            RoundedRectangle(cornerRadius: metrics.rowCornerRadius)
+                .strokeBorder(WorkoutSharePalette.cardRule, lineWidth: 0.75)
+        }
         .accessibilityElement(children: .combine)
     }
 

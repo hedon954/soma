@@ -15,6 +15,7 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
     var legacyExposedGroups: [String]
     var nextModelStep: Int?
     var toolBatches: [AgentCheckpointToolBatch]?
+    var videoInputMode: AgentMediaMode? = nil
 
     init(
         lastCompletedStep: Int,
@@ -42,6 +43,7 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
         case legacyExposedGroups = "exposedGroups"
         case nextModelStep
         case toolBatches
+        case videoInputMode
     }
 
     init(from decoder: Decoder) throws {
@@ -63,6 +65,7 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
             [String].self,
             forKey: .legacyExposedGroups
         ) ?? []
+        videoInputMode = try container.decodeIfPresent(AgentMediaMode.self, forKey: .videoInputMode)
         nextModelStep = try container.decodeIfPresent(Int.self, forKey: .nextModelStep)
         toolBatches = try container.decodeIfPresent(
             [AgentCheckpointToolBatch].self,

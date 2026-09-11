@@ -6,6 +6,10 @@
 - 上游依据：[PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
 - 部分替代：[ADR 0119](0119-full-video-and-append-only-dictation.md) 的「最终片段才出现在输入框」呈现；追加-only 草稿边界不变
 - 后续替代：暂无
+- 下游落地：
+  - [BUG 0060](../bugs/0060-dictation-editor-replacement-and-manual-edit.md)
+  - [BUG 0058](../bugs/0058-live-dictation-preview-stays-empty.md)
+  - [验收](../acceptance.md)
 
 ## 背景
 
@@ -19,6 +23,7 @@
 - 用户在听写中改字：以改后的全文作为新草稿，丢弃当前未确认片段，避免回退覆盖编辑。
 - 片段变 final、停止、发送或切走教练时，仍按 ADR 0119 把未确认片段追加到当前草稿；过期回调忽略。
 - 不恢复草稿基线，不缓存历史转写。继续本地识别，不上传音频。
+- 点击麦克风开始或停止，始终保留同一个可编辑文本控件；不增加按住、上滑或自动发送。
 
 ## 未选择的方案
 

@@ -36,10 +36,7 @@ enum AgentToolRecommendationService {
     }
 
     static func failureMessage(_ error: Error) -> String {
-        if let localized = (error as? LocalizedError)?.errorDescription {
-            return localized
-        }
-        return "推荐失败：\(error.localizedDescription)"
+        AppErrorMessage.message(for: error, operation: .model)
     }
 
     static func prompt(

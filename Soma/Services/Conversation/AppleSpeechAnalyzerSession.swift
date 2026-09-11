@@ -4,7 +4,13 @@ import Speech
 @available(iOS 26.0, *)
 @MainActor
 final class AppleSpeechAnalyzerSession: LocalSpeechSession {
+    enum Module {
+        case dictation
+        case transcription
+    }
+
     private let locale: Locale
+    private let module: Module
     private let engine = AVAudioEngine()
     private var analyzer: SpeechAnalyzer?
     private var installation: AssetInstallationRequest?
@@ -15,22 +21,33 @@ final class AppleSpeechAnalyzerSession: LocalSpeechSession {
     private var ownsAudioSession = false
     private var cancelled = false
 
-    init(locale: Locale) {
+    init(locale: Locale, module: Module = .dictation) {
         self.locale = locale
+        self.module = module
     }
 
     func start(
         onResult: @escaping (String, Bool, TimeInterval) -> Void,
         onError: @escaping (Error) -> Void
     ) async throws {
-        let transcriber = SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [.volatileResults],
-            attributeOptions: [.audioTimeRange]
-        )
         let detector = SpeechDetector(detectionOptions: .init(sensitivityLevel: .medium), reportResults: true)
-        let modules: [any SpeechModule] = [transcriber, detector]
+        // progressive* presets enable live volatiles. Hand-rolled option sets can
+        // still hold partials until finalize, which looks like “text only after stop”.
+        let dictation = module == .dictation
+            ? DictationTranscriber(locale: locale, preset: .progressiveShortDictation)
+            : nil
+        let transcription = module == .transcription
+            ? SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+            : nil
+        let modules: [any SpeechModule] = {
+            if let dictation {
+                return [dictation, detector]
+            }
+            if let transcription {
+                return [transcription, detector]
+            }
+            return [detector]
+        }()
         do {
             if let installation = try await AssetInventory.assetInstallationRequest(supporting: modules) {
                 self.installation = installation
@@ -59,28 +76,12 @@ final class AppleSpeechAnalyzerSession: LocalSpeechSession {
         self.continuation = continuation
         let converter = try SpeechPCMConverter(from: inputFormat, to: format)
         self.converter = converter
-        tasks.append(Task {
-            do {
-                var committedEnd = -Double.infinity
-                for try await result in transcriber.results {
-                    try Task.checkCancellation()
-                    let start = result.range.start.seconds
-                    let end = CMTimeRangeGetEnd(result.range).seconds
-                    let pause = committedEnd.isFinite ? max(0, start - committedEnd) : 0
-                    if result.isFinal {
-                        guard end > committedEnd else { continue }
-                        onResult(String(result.text.characters), true, pause)
-                        committedEnd = end
-                    } else {
-                        onResult(String(result.text.characters), false, pause)
-                    }
-                }
-            } catch {
-                if !Task.isCancelled {
-                    onError(error)
-                }
-            }
-        })
+        if let dictation {
+            startResultLoop(dictation.results, onResult: onResult, onError: onError)
+        }
+        if let transcription {
+            startResultLoop(transcription.results, onResult: onResult, onError: onError)
+        }
         tasks.append(Task {
             do {
                 var lastSpeechEnd: TimeInterval?
@@ -100,7 +101,7 @@ final class AppleSpeechAnalyzerSession: LocalSpeechSession {
                 }
             } catch {
                 if !Task.isCancelled {
-                    onError(error)
+                    await MainActor.run { onError(error) }
                 }
             }
         })
@@ -109,7 +110,7 @@ final class AppleSpeechAnalyzerSession: LocalSpeechSession {
                 try await analyzer.start(inputSequence: stream)
             } catch {
                 if !Task.isCancelled {
-                    onError(error)
+                    await MainActor.run { onError(error) }
                 }
             }
         })
@@ -125,6 +126,46 @@ final class AppleSpeechAnalyzerSession: LocalSpeechSession {
         hasTap = true
         engine.prepare()
         try engine.start()
+    }
+
+    private func startResultLoop<Result: SpeechModuleResult>(
+        _ results: some AsyncSequence<Result, any Error>,
+        onResult: @escaping (String, Bool, TimeInterval) -> Void,
+        onError: @escaping (Error) -> Void
+    ) {
+        tasks.append(Task {
+            do {
+                var committedEnd = -Double.infinity
+                for try await result in results {
+                    try Task.checkCancellation()
+                    guard let text = transcriptionText(from: result) else { continue }
+                    let start = result.range.start.seconds
+                    let end = CMTimeRangeGetEnd(result.range).seconds
+                    let pause = committedEnd.isFinite ? max(0, start - committedEnd) : 0
+                    if result.isFinal {
+                        guard end > committedEnd else { continue }
+                        committedEnd = end
+                        await MainActor.run { onResult(text, true, pause) }
+                    } else {
+                        await MainActor.run { onResult(text, false, pause) }
+                    }
+                }
+            } catch {
+                if !Task.isCancelled {
+                    await MainActor.run { onError(error) }
+                }
+            }
+        })
+    }
+
+    private func transcriptionText<Result>(from result: Result) -> String? {
+        if let dictation = result as? DictationTranscriber.Result {
+            return String(dictation.text.characters)
+        }
+        if let transcription = result as? SpeechTranscriber.Result {
+            return String(transcription.text.characters)
+        }
+        return nil
     }
 
     func finish() async {

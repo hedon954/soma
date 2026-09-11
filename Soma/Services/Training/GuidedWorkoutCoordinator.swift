@@ -620,42 +620,6 @@ final class GuidedWorkoutCoordinator {
         try context.save()
     }
 
-    func replaceCurrentExercise(
-        with exercise: ExerciseDefinition,
-        in context: ModelContext
-    ) throws {
-        let session = try activeSession(in: context)
-        guard let performance = currentPerformance(for: session, in: context)
-        else {
-            throw GuidedWorkoutError.missingPerformance
-        }
-        performance.exerciseID = exercise.id
-        performance.exerciseDefinition = exercise
-        performance.exerciseName = exercise.canonicalName
-        if var prescription = performance.prescriptionSnapshot {
-            prescription.exerciseID = exercise.id
-            prescription.exerciseName = exercise.canonicalName
-            performance.prescriptionSnapshotData = TrainingPlanCoding.encode(
-                prescription
-            )
-        }
-        try context.save()
-    }
-
-    func replaceCurrentExercise(
-        withExerciseID exerciseID: UUID,
-        in context: ModelContext
-    ) throws {
-        var descriptor = FetchDescriptor<ExerciseDefinition>(
-            predicate: #Predicate { $0.id == exerciseID }
-        )
-        descriptor.fetchLimit = 1
-        guard let exercise = try context.fetch(descriptor).first else {
-            throw TrainingPlanError.missingExercise(exerciseID)
-        }
-        try replaceCurrentExercise(with: exercise, in: context)
-    }
-
     func finishRest(in context: ModelContext) throws {
         let session = try activeSession(in: context)
         guard session.guidedPhase == .resting else { return }

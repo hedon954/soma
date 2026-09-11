@@ -20,7 +20,7 @@ struct CoachComposer: View {
     let onSend: () -> Void
     let onInterrupt: () -> Void
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
-    @FocusState var focused: Bool
+    @State var focused = false
 
     var isSending: Bool {
         processorIsSending || state.isPersistingSubmission
@@ -260,32 +260,23 @@ struct CoachComposer: View {
     }
 
     var composerTextField: some View {
-        let preview = state.displayedSpeechDraft
-        return Group {
-            if isListening {
-                Text(preview.isEmpty ? "说点什么，或添加照片与视频…" : preview)
+        CoachDraftTextView(
+            text: state.displayedSpeechDraft,
+            isFocused: $focused,
+            onTextChange: state.replaceDraftFromSpeechPreview
+        )
+        .padding(.vertical, CoachDraftEditor.verticalInset)
+        .overlay(alignment: .topLeading) {
+            if state.displayedSpeechDraft.isEmpty {
+                Text("说点什么，或添加照片与视频…")
                     .font(.body)
-                    .foregroundStyle(preview.isEmpty ? Color.secondary : Color.primary)
-                    .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 9)
-                    .accessibilityLabel("听写预览")
-                    .accessibilityValue(preview)
-            } else {
-                TextField(
-                    "说点什么，或添加照片与视频…",
-                    text: Binding(
-                        get: { preview },
-                        set: { state.replaceDraftFromSpeechPreview($0) }
-                    ),
-                    axis: .vertical
-                )
-                .accessibilityIdentifier("coach-message-input")
-                .lineLimit(1 ... 5)
-                .focused($focused)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 9)
-                .frame(minHeight: AppTheme.minimumTapTarget)
+                    .foregroundStyle(AppTheme.accent.opacity(0.65))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, CoachDraftEditor.horizontalInset)
+                    .padding(.vertical, CoachDraftEditor.verticalInset)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
         .background(
@@ -310,7 +301,6 @@ struct CoachComposer: View {
                     isListening ? AppTheme.accentEmphasis : AppTheme.insetBackground,
                     in: Circle()
                 )
-                .symbolEffect(.pulse, isActive: isListening)
                 .frame(
                     width: AppTheme.minimumTapTarget,
                     height: AppTheme.minimumTapTarget

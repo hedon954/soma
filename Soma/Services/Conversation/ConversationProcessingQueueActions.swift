@@ -332,132 +332,62 @@ extension ConversationProcessingService {
         return true
     }
 
-    @discardableResult
     func discardPendingTurn(
         turnID: UUID,
         context: ConversationProcessingContext,
-        locationService: LocationContextService
-    ) -> Bool {
-        guard !isProcessing else { return false }
-        var jobDescriptor = FetchDescriptor<AgentJob>(
-            predicate: #Predicate { $0.turnID == turnID }
+        locationService: LocationContextService,
+        protectedMediaPaths: Set<String> = [],
+        cancelRemote: @MainActor (String) async throws -> Void = PendingConversationDeletion.cancelRemote
+    ) async throws {
+        try await deletePendingMessages(
+            turnID: turnID, context: context, protectedMediaPaths: protectedMediaPaths, cancelRemote: cancelRemote
         )
-        jobDescriptor.fetchLimit = 1
-        guard let job = try? context.modelContext.fetch(jobDescriptor).first,
-              [.staged, .waitingForUser, .queued, .waitingForNetwork]
-              .contains(job.state)
-        else {
-            return false
-        }
-        let attachments = job.mediaAttachments
-        let messageIDs = Set([job.userMessageID, job.responseMessageID].compactMap { $0 })
-        let jobID = job.id
-        let events = (try? context.modelContext.fetch(
-            FetchDescriptor<PersistentAgentEvent>(
-                predicate: #Predicate { $0.jobID == jobID }
-            )
-        )) ?? []
-        events.forEach(context.modelContext.delete)
-        for messageID in messageIDs {
-            var messageDescriptor = FetchDescriptor<CoachMessage>(
-                predicate: #Predicate { $0.id == messageID }
-            )
-            messageDescriptor.fetchLimit = 1
-            guard let message = try? context.modelContext.fetch(messageDescriptor).first else {
-                continue
-            }
-            if let traceID = message.agentTraceID {
-                var traceDescriptor = FetchDescriptor<AgentTrace>(
-                    predicate: #Predicate { $0.id == traceID }
-                )
-                traceDescriptor.fetchLimit = 1
-                if let trace = try? context.modelContext.fetch(traceDescriptor).first {
-                    context.modelContext.delete(trace)
-                }
-            }
-            context.modelContext.delete(message)
-        }
-        context.modelContext.delete(job)
-        do {
-            try context.modelContext.save()
-            for attachment in attachments {
-                _ = MediaStore.removeStoredFile(at: attachment.path)
-            }
-            _ = try ConversationTurnPersistence.releaseStagedJobs(
-                dataSpace: context.dataSpace,
-                in: context.modelContext
-            ) { queued in
-                self.isExecutionAvailable(queued, ai: context.ai)
-            }
-            startNextPendingJob(
-                dataSpace: context.dataSpace,
-                ai: context.ai,
-                modelContext: context.modelContext,
-                locationService: locationService
-            )
-            return true
-        } catch {
-            context.modelContext.rollback()
-            return false
-        }
+        _ = try? ConversationTurnPersistence.releaseStagedJobs(
+            dataSpace: context.dataSpace, in: context.modelContext
+        ) { self.isExecutionAvailable($0, ai: context.ai) }
+        startNextPendingJob(
+            dataSpace: context.dataSpace, ai: context.ai,
+            modelContext: context.modelContext, locationService: locationService
+        )
     }
 
-    @discardableResult
     func clearPendingQueue(
-        context: ConversationProcessingContext
-    ) -> Bool {
-        guard !isProcessing else { return false }
-        let dataSpaceRaw = context.dataSpace.rawValue
-        let candidates = (try? context.modelContext.fetch(FetchDescriptor<AgentJob>(
-            predicate: #Predicate { $0.dataSpaceRaw == dataSpaceRaw }
-        ))) ?? []
-        let targets = candidates.filter {
-            [.staged, .waitingForUser, .queued, .waitingForNetwork].contains($0.state)
-        }
-        guard !targets.isEmpty else { return false }
-        let messageIDs = Set(targets.flatMap {
-            [$0.userMessageID, $0.responseMessageID].compactMap { $0 }
-        })
-        let attachments = targets.flatMap(\.mediaAttachments)
-        for target in targets {
-            let targetID = target.id
-            let events = (try? context.modelContext.fetch(
-                FetchDescriptor<PersistentAgentEvent>(
-                    predicate: #Predicate { $0.jobID == targetID }
-                )
-            )) ?? []
-            events.forEach(context.modelContext.delete)
-        }
-        for messageID in messageIDs {
-            var messageDescriptor = FetchDescriptor<CoachMessage>(
-                predicate: #Predicate { $0.id == messageID }
-            )
-            messageDescriptor.fetchLimit = 1
-            guard let message = try? context.modelContext.fetch(messageDescriptor).first else {
-                continue
-            }
-            if let traceID = message.agentTraceID {
-                var traceDescriptor = FetchDescriptor<AgentTrace>(
-                    predicate: #Predicate { $0.id == traceID }
-                )
-                traceDescriptor.fetchLimit = 1
-                if let trace = try? context.modelContext.fetch(traceDescriptor).first {
-                    context.modelContext.delete(trace)
+        context: ConversationProcessingContext,
+        protectedMediaPaths: Set<String> = [],
+        cancelRemote: @MainActor (String) async throws -> Void = PendingConversationDeletion.cancelRemote
+    ) async throws {
+        try await deletePendingMessages(
+            turnID: nil, context: context, protectedMediaPaths: protectedMediaPaths, cancelRemote: cancelRemote
+        )
+    }
+
+    private func deletePendingMessages(
+        turnID: UUID?,
+        context: ConversationProcessingContext,
+        protectedMediaPaths: Set<String>,
+        cancelRemote: @MainActor (String) async throws -> Void
+    ) async throws {
+        guard !isProcessing else { throw PendingConversationDeletionError.busy }
+        let targets = try PendingConversationDeletion.jobs(
+            dataSpace: context.dataSpace, turnID: turnID, in: context.modelContext
+        )
+        guard !targets.isEmpty else { throw PendingConversationDeletionError.unavailable }
+        isProcessing = true
+        defer { isProcessing = false }
+        for job in targets where job.backend == .remote {
+            if let remoteJobID = job.remoteJobID {
+                do {
+                    try await cancelRemote(remoteJobID)
+                } catch let error as PendingConversationDeletionError {
+                    throw error
+                } catch {
+                    throw PendingConversationDeletionError.remoteCancellationFailed
                 }
             }
-            context.modelContext.delete(message)
         }
-        targets.forEach(context.modelContext.delete)
-        do {
-            try context.modelContext.save()
-            for attachment in attachments {
-                _ = MediaStore.removeStoredFile(at: attachment.path)
-            }
-            return true
-        } catch {
-            context.modelContext.rollback()
-            return false
-        }
+        try PendingConversationDeletion.remove(
+            targets, in: context.modelContext, protectedMediaPaths: protectedMediaPaths
+        )
     }
 
     func runDeterministicWorkoutAttempt(

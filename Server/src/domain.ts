@@ -1,3 +1,4 @@
+import type { VideoFrameFallback } from "./video-fallback.js";
 export const protocolVersion = 1;
 
 export type JobState =
@@ -71,6 +72,7 @@ export interface AgentModelTool {
 }
 
 export interface AgentModelInput {
+  videoFallbacks?: VideoFrameFallback[];
   schemaVersion: 2;
   messages: AgentModelMessage[];
   skills: AgentModelSkillSnapshot[];
@@ -215,6 +217,13 @@ export class ProtocolError extends Error {
       | "idempotency_conflict"
       | "upload_incomplete"
       | "provider_unavailable"
+      | "provider_authentication_failed"
+      | "provider_quota_exhausted"
+      | "provider_rate_limited"
+      | "provider_context_exceeded"
+      | "provider_vision_unsupported"
+      | "provider_configuration_invalid"
+      | "video_fallback_unavailable"
       | "provider_timeout"
       | "waiting_for_device"
       | "tool_schema_unsupported"

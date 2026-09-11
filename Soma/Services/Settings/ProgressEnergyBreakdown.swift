@@ -6,7 +6,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
     }
 
     enum Tone: Equatable, Sendable {
-        case meal, resting, activity, factor, total, intakeTotal
+        case meal, resting, activity, factor, total, intakeTotal, workout
         case mealType(MealType)
         case protein, carbs, fat
     }
@@ -50,7 +50,11 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         case .expenditure:
             let estimates = days.compactMap(\.energy.estimate)
             guard !estimates.isEmpty else {
-                rows = [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
+                var items = [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
+                if daily, let day = days.first {
+                    items.append(contentsOf: Self.workoutRows(in: day))
+                }
+                rows = items
                 return
             }
             let count = Double(estimates.count)
@@ -61,7 +65,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                 ? estimates.reduce(0) { $0 + $1.restingKilocalories * $1.factor } / restingSum
                 : estimates[0].factor
             let prefix = daily ? "" : "日均"
-            rows = [
+            var items = [
                 Row(id: "resting", label: prefix + "静息消耗", value: Self.energy(resting), tone: .resting),
                 Row(id: "activity", label: prefix + "活动等消耗", value: Self.energy(total - resting), tone: .activity),
                 Row(
@@ -69,6 +73,10 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                     value: factor.formatted(.number.precision(.fractionLength(2))), tone: .factor
                 )
             ]
+            if daily, let day = days.first {
+                items.append(contentsOf: Self.workoutRows(in: day))
+            }
+            rows = items
         case .protein:
             rows = Self.nutrientRows(
                 days: days,
@@ -92,6 +100,19 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                 grams: \.fat,
                 dayTotal: \.fat,
                 tone: .fat
+            )
+        }
+    }
+
+    private static func workoutRows(in day: ProgressDailyMetrics) -> [Row] {
+        day.records.filter { $0.activity.kind == .workout }.map { record in
+            let calories = record.calories.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+            let title = record.activity.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Row(
+                id: record.activity.id.uuidString,
+                label: title.isEmpty ? "训练记录" : title,
+                value: calories.map(energy) ?? "未估算",
+                tone: .workout
             )
         }
     }

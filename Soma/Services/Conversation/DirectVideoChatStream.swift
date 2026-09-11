@@ -46,12 +46,7 @@ extension AIService {
                                 break
                             }
                         }
-                        throw AIServiceError.remote(
-                            Self.directVideoErrorMessage(
-                                data: data,
-                                statusCode: http.statusCode
-                            )
-                        )
+                        throw ModelRequestFailure(statusCode: http.statusCode, data: data)
                     }
                     let decoder = JSONDecoder()
                     for try await line in bytes.lines {
@@ -127,19 +122,6 @@ extension AIService {
         )
         try AIExtraConfig.merge(extraConfig, into: &body)
         return body
-    }
-
-    private nonisolated static func directVideoErrorMessage(
-        data: Data,
-        statusCode: Int
-    ) -> String {
-        if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let error = root["error"] as? [String: Any],
-           let message = error["message"] as? String
-        {
-            return message
-        }
-        return "模型请求失败（\(statusCode)）"
     }
 }
 

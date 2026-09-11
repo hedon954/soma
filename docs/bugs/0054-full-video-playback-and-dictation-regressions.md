@@ -1,5 +1,6 @@
 # BUG 0054：视频输入降级、播放生命周期与听写草稿覆盖
 
+- 后续修订：[BUG 0063](0063-explicit-video-rejection-has-no-compatible-input.md)（明确视频拒绝后的画面兼容路径）
 - 状态：已修复，自动回归通过；真实中文听写与真机声画待验收
 - 日期：2026-09-05
 - 修订自：[BUG 0002](0002-video-frame-extraction-silent-fallback.md)、[BUG 0012](0012-direct-video-and-first-delta-timeout.md)、[BUG 0048](0048-speech-segment-overwrites-committed-text.md)

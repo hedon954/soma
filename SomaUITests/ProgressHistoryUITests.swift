@@ -6,6 +6,54 @@ final class ProgressHistoryUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testTotalDeficitInDayWeekMonthAndAbsentFromYear() {
+        for (appearance, largeType) in [("light", false), ("dark", false), ("dark", true)] {
+            let app = launch(appearance, largeType: largeType)
+            for period in ["日", "周", "月"] {
+                selectPeriod(period, in: app)
+                let deficit = app.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
+                XCTAssertTrue(deficit.waitForExistence(timeout: 5))
+                reveal(deficit, in: app, fullyVisible: true)
+                XCTAssertEqual(deficit.label, "当前热量缺口")
+                XCTAssertFalse(app.descendants(matching: .any)["progress-total-energy-deficit"].firstMatch.exists)
+                let value = deficit.value as? String ?? ""
+                XCTAssertTrue(value.contains("千卡") || value.contains("待估算"))
+                if period == "日" {
+                    XCTAssertTrue(value.contains("仍可摄入"))
+                    let calories = app.buttons["progress-calories-ring-breakdown"]
+                    XCTAssertGreaterThan(deficit.frame.minY, calories.frame.maxY)
+                } else {
+                    XCTAssertTrue(value.contains("天") || value.contains("暂无已结束日期"))
+                    XCTAssertFalse(value.contains("仍可摄入"))
+                }
+                keep(app, "total-deficit-\(period)-\(appearance)-\(largeType)")
+            }
+            selectPeriod("年", in: app)
+            let removed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"),
+                object: app.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 5), .completed)
+            app.terminate()
+            if !largeType {
+                let empty = launch(appearance, hasRecords: false)
+                let caption = empty.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
+                XCTAssertTrue(caption.waitForExistence(timeout: 5))
+                reveal(caption, in: empty, fullyVisible: true)
+                let firstResource = empty.buttons["全部训练"].firstMatch
+                XCTAssertTrue(firstResource.waitForExistence(timeout: 5))
+                let gap = firstResource.frame.minY - caption.frame.maxY
+                // 18 pt 卡内留白 + 28 pt 页面间距；空记录容器不能再占一份页面间距。
+                XCTAssertGreaterThanOrEqual(gap, 44)
+                XCTAssertLessThanOrEqual(gap, 48)
+                XCTAssertFalse(empty.staticTexts["饮食记录"].exists)
+                XCTAssertFalse(empty.staticTexts["训练记录"].exists)
+                keep(empty, "energy-empty-spacing-\(appearance)")
+                empty.terminate()
+            }
+        }
+    }
+
     func testDefaultDayShowsEstimatedCalorieDeficitInBothThemes() {
         for appearance in ["light", "dark"] {
             let app = launch(appearance)
@@ -301,18 +349,22 @@ final class ProgressHistoryUITests: XCTestCase {
 
     private func selectPeriod(_ period: String, in app: XCUIApplication) {
         let picker = app.segmentedControls["progress-period-picker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 15))
-        for _ in 0 ..< 8 where !picker.isHittable {
+        for _ in 0 ..< 8 where !picker.exists || !picker.isHittable {
             app.swipeDown()
         }
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
         XCTAssertTrue(picker.isHittable)
         picker.buttons[period].tap()
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"), object: picker.buttons[period]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
-    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false) -> XCUIApplication {
+    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
-        app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = "1"
+        app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = hasRecords ? "1" : "0"
         app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] = appearance
         if noBaseline {
             app.launchEnvironment["SOMA_UI_PROGRESS_NO_BASELINE"] = "1"
@@ -326,14 +378,30 @@ final class ProgressHistoryUITests: XCTestCase {
         return app
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, fullyVisible: Bool = false) {
+        let tabBar = app.tabBars.firstMatch
+        let bottom = tabBar.exists && tabBar.frame.minY > app.frame.midY
+            ? tabBar.frame.minY - 8 : app.frame.maxY - 20
         for _ in 0 ..< 8 {
-            if element.exists, element.isHittable {
-                return
+            if element.exists {
+                if fullyVisible {
+                    let frame = element.frame
+                    if frame.height > 0, frame.minY >= 0, frame.maxY <= bottom {
+                        return
+                    }
+                } else if element.isHittable {
+                    return
+                }
             }
             app.swipeUp()
         }
-        XCTAssertTrue(element.isHittable)
+        if fullyVisible {
+            XCTAssertGreaterThan(element.frame.height, 0)
+            XCTAssertGreaterThanOrEqual(element.frame.minY, 0)
+            XCTAssertLessThanOrEqual(element.frame.maxY, bottom)
+        } else {
+            XCTAssertTrue(element.isHittable)
+        }
     }
 
     private func keep(_ app: XCUIApplication, _ name: String) {

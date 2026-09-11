@@ -2,7 +2,7 @@
 
 - 状态：已采纳
 - 日期：2026-09-09
-- 版本：0.0.22
+- 版本：0.0.23
 - 修订自：
   - [PRD 000](000-origin-through-0.0.11.md) 的 Apple 健康导入、设备历史活动系数、Keep/COROS 经健康读取
   - [PRD 059](059-coach-ids-progress-and-required-zeros.md) 仅进展估算的设备能量来源

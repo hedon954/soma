@@ -95,7 +95,7 @@ final class AgentSystemProjectionCoordinator {
             return try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
         } catch {
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = AppErrorMessage.message(for: error, operation: .general)
             return false
         }
     }
@@ -136,7 +136,7 @@ final class AgentSystemProjectionCoordinator {
             )
             observePushToken(for: activity, jobID: job.id)
         } catch {
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 
@@ -213,7 +213,7 @@ final class AgentSystemProjectionCoordinator {
                 )
             )
         } catch {
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 

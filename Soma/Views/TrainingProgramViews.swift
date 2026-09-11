@@ -228,7 +228,7 @@ struct TrainingProgramLibraryView: View {
             do {
                 try TrainingPlanStore.deleteSession(session, in: modelContext)
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .general)
             }
         }
     }
@@ -556,7 +556,7 @@ private struct TrainingProgramDetailView: View {
                                     in: modelContext
                                 )
                             } catch {
-                                errorMessage = error.localizedDescription
+                                errorMessage = AppErrorMessage.message(for: error, operation: .general)
                             }
                         }
                     } else if program.status == .archived {
@@ -567,7 +567,7 @@ private struct TrainingProgramDetailView: View {
                                     in: modelContext
                                 )
                             } catch {
-                                errorMessage = error.localizedDescription
+                                errorMessage = AppErrorMessage.message(for: error, operation: .general)
                             }
                         } label: {
                             Label("恢复计划", systemImage: "arrow.uturn.backward")
@@ -593,7 +593,7 @@ private struct TrainingProgramDetailView: View {
                     try TrainingPlanStore.deleteProgram(program, in: modelContext)
                     dismiss()
                 } catch {
-                    errorMessage = error.localizedDescription
+                    errorMessage = AppErrorMessage.message(for: error, operation: .general)
                 }
             }
             Button("取消", role: .cancel) {}
@@ -760,7 +760,7 @@ private struct TrainingProgramDetailView: View {
         } catch {
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(false)
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 
@@ -820,7 +820,7 @@ private struct TrainingProgramDetailView: View {
             )
             showsOverviewEditor = false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 
@@ -862,7 +862,7 @@ private struct TrainingProgramDetailView: View {
                     in: modelContext
                 )
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .general)
             }
         }
     }
@@ -1552,7 +1552,7 @@ struct PerformanceReviewView: View {
                 }
             } catch {
                 isAnalyzing = false
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .general)
             }
         }
     }
@@ -1579,7 +1579,7 @@ struct PerformanceReviewView: View {
         } catch {
             modelContext.rollback()
             loadAnalysis()
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 
@@ -1592,7 +1592,7 @@ struct PerformanceReviewView: View {
         } catch {
             modelContext.rollback()
             loadAnalysis()
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 
@@ -1623,7 +1623,7 @@ struct PerformanceReviewView: View {
                 if let newPath {
                     _ = MediaStore.removeStoredFile(at: newPath)
                 }
-                errorMessage = error.localizedDescription
+                errorMessage = AppErrorMessage.message(for: error, operation: .general)
             }
         }
     }
@@ -1642,7 +1642,7 @@ struct PerformanceReviewView: View {
         } catch {
             modelContext.rollback()
             loadAnalysis()
-            errorMessage = error.localizedDescription
+            errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
 }

@@ -465,7 +465,7 @@ private struct AgentTurnItemCard: View {
                 Text(item.title.isEmpty ? "执行失败" : item.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppTheme.vitalAccent)
-                Text(item.errorMessage ?? item.text)
+                Text(AppErrorMessage.message(from: item.errorMessage ?? item.text, operation: .model))
                     .font(.caption)
                     .foregroundStyle(AppTheme.vitalAccent)
                     .fixedSize(horizontal: false, vertical: true)
@@ -534,7 +534,7 @@ private struct AgentTurnItemCard: View {
         if let error = item.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
            !error.isEmpty
         {
-            return error
+            return AppErrorMessage.message(from: error, operation: .model)
         }
         if let summary = toolPresentation?.summary, !summary.isEmpty {
             return summary

@@ -1,5 +1,6 @@
 # ADR 0122：营养圆环、推荐摄入与日页对照
 
+- 后续替代：[ADR 0133](0133-paired-day-total-energy-deficit.md)（日、周、月缺口合入底部提示，圆环和年度保持）
 - 状态：部分已替代
 - 日期：2026-09-07
 - 维护者：Soma maintainers

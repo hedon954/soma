@@ -89,6 +89,11 @@ enum LLMOutageClassifier {
 
     static func signal(for error: Error) -> LLMFailureSignal {
         var signal = LLMFailureSignal()
+        if let failure = error as? ModelRequestFailure {
+            signal.httpStatusCode = failure.statusCode
+            signal.responseDescription = failure.responseMessage
+            return signal
+        }
 
         if let serviceError = error as? AIServiceError {
             switch serviceError {

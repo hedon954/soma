@@ -93,13 +93,12 @@ extension ConversationProcessingService {
             hasMedia: !attachments.isEmpty,
             hasVideo: true
         )
-        return ModelCapability.directVideoCapability(
-            assessment: context.ai.modelMultimodalAssessment(
-                provider: route.provider,
-                baseURL: route.baseURL,
-                model: route.model
-            )
+        let assessment = context.ai.modelMultimodalAssessment(
+            provider: route.provider,
+            baseURL: route.baseURL,
+            model: route.model
         )
+        return assessment.support == .unsupported ? nil : .standard
     }
 
     private nonisolated func balancedFrames(

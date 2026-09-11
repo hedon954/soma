@@ -36,6 +36,8 @@ struct AgentStreamStepRequest {
     var reasoningItemID: UUID = .init()
     var assistantReasoningByMessageIndex: [Int: String] = [:]
     var enforceFirstStepDeadline: Bool = false
+    var videoFallbackState: AgentVideoFallbackState?
+    var onVideoFallback: (() -> Void)?
 }
 
 struct AgentModelStepExecutionRequest {
@@ -160,7 +162,7 @@ extension AIService {
                     || request.clearedHistoryFrames
                     ? 0
                     : request.historicalImageCount,
-                directVideoCount: request.stream.videos.count,
+                directVideoCount: streamed.mediaMode == .directVideo ? request.stream.videos.count : 0,
                 route: request.start.route,
                 streamed: streamed,
                 exposedToolNames: request.start.exposedToolNames,
@@ -182,13 +184,44 @@ extension AIService {
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
         var requestAttempt = 0
-        let activeVideos = request.videos
-        let mediaMode = initialMediaMode(
+        var transientRetryCount = 0
+        var activeVideos = request.videos
+        let fallbackState = request.videoFallbackState ?? AgentVideoFallbackState()
+        var mediaMode = initialMediaMode(
             images: request.images,
             videos: activeVideos,
             hasVideo: request.hasVideo
         )
         while true {
+            if fallbackState.isActive, !activeVideos.isEmpty {
+                do {
+                    let frames: [VideoFrameSet]
+                    if let cached = fallbackState.frames {
+                        frames = cached
+                    } else {
+                        frames = try await VideoFrameFallbackPreparer.prepare(activeVideos)
+                        fallbackState.frames = frames
+                    }
+                    if !fallbackState.appliedToMessages {
+                        messages = try AgentVideoFrameProjection.applying(frames, videos: activeVideos, to: messages)
+                        fallbackState.appliedToMessages = true
+                        request.onVideoFallback?()
+                        let at = Date()
+                        trace?(.span(AgentTraceSpan(
+                            step: request.step, kind: .model,
+                            title: "改用 \(frames.reduce(0) { $0 + $1.frames.count }) 张画面分析",
+                            status: .succeeded, startedAt: at, endedAt: at,
+                            metadata: AgentTraceText.jsonObject([
+                                "media_mode": "keyframes", "fallback_reason": "video_input_unsupported"
+                            ])
+                        )))
+                    }
+                    activeVideos = []
+                    mediaMode = .keyframes
+                } catch {
+                    throw StreamingFailure.interrupted(error, passage: "", reasoning: "", receivedMeaningfulDelta: false)
+                }
+            }
             requestAttempt += 1
             do {
                 var streamed = try await consumeAgentStream(
@@ -213,6 +246,7 @@ extension AIService {
                 )
                 streamed.requestAttempt = requestAttempt
                 streamed.mediaMode = mediaMode
+                streamed.fallbackReason = mediaMode == .keyframes ? "video_input_unsupported" : nil
                 return streamed
             } catch let StreamingFailure.interrupted(
                 error,
@@ -220,8 +254,14 @@ extension AIService {
                 reasoning,
                 receivedMeaningfulDelta
             ) {
+                if !receivedMeaningfulDelta, !activeVideos.isEmpty, !fallbackState.isActive,
+                   VideoInputRejection.isExplicit(error)
+                {
+                    fallbackState.isActive = true
+                    continue
+                }
                 guard !receivedMeaningfulDelta,
-                      requestAttempt <= maximumRetryCount,
+                      transientRetryCount < maximumRetryCount,
                       shouldRetryStream(error)
                 else {
                     throw StreamingFailure.interrupted(
@@ -231,7 +271,8 @@ extension AIService {
                         receivedMeaningfulDelta: receivedMeaningfulDelta
                     )
                 }
-                let retryNumber = requestAttempt
+                transientRetryCount += 1
+                let retryNumber = transientRetryCount
                 let retryAt = Date()
                 trace?(.span(AgentTraceSpan(
                     step: request.step,
@@ -267,14 +308,19 @@ extension AIService {
         enforceFirstDelta: Bool,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
-        let stream = try await agentStream(
-            parameters: parameters,
-            videos: videos,
-            provider: route.provider,
-            baseURL: route.baseURL,
-            apiKey: apiKey,
-            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
-        )
+        let stream: AsyncThrowingStream<ChatCompletionChunkObject, Error>
+        do {
+            stream = try await agentStream(
+                parameters: parameters,
+                videos: videos,
+                provider: route.provider,
+                baseURL: route.baseURL,
+                apiKey: apiKey,
+                assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
+            )
+        } catch {
+            throw StreamingFailure.interrupted(error, passage: "", reasoning: "", receivedMeaningfulDelta: false)
+        }
         return try await AgentStreamWorker.consume(
             stream: stream,
             mediaMode: mediaMode,

@@ -29,6 +29,7 @@ export interface ProviderMedia {
   id: string;
   contentType: string;
   url: string;
+  byteLength?: number;
 }
 
 export interface JobMediaResolver {
@@ -42,6 +43,7 @@ export interface ManagedModelProvider {
     media: ProviderMedia[],
     onTextDelta?: (delta: string) => Promise<void>,
     onReasoningDelta?: (delta: string) => Promise<void>,
+    onVideoFallback?: (frameCount: number) => Promise<void>,
   ): Promise<ProviderStep>;
 }
 
@@ -167,6 +169,13 @@ export class AgentWorker {
             phase: "updated",
             payloadVersion: 1,
             payload: { itemID: reasoningItemID, delta },
+            createdAt: new Date(),
+          });
+        },
+        async (frameCount) => {
+          await this.store.appendEvent(job.id, lease.epoch, {
+            kind: "model", phase: "updated", payloadVersion: 1,
+            payload: { mediaMode: "keyframes", fallbackReason: "video_input_unsupported", frameCount },
             createdAt: new Date(),
           });
         },

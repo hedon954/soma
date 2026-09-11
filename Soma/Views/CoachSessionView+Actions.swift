@@ -162,13 +162,17 @@ extension CoachSessionView {
 
     func discardPending(_ message: CoachMessage) {
         guard let turnID = message.turnID else { return }
-        _ = discardPending(
-            turnID: turnID,
-            sessionID: message.sessionID ?? conversationSessions.activeSessionID ?? UUID()
-        )
+        let sessionID = message.sessionID ?? conversationSessions.activeSessionID ?? UUID()
+        Task {
+            do {
+                try await discardPending(turnID: turnID, sessionID: sessionID)
+            } catch {
+                pendingDeletionError = AppErrorMessage.message(for: error, operation: .delete)
+            }
+        }
     }
 
-    func discardPending(turnID: UUID, sessionID: UUID) -> Bool {
+    func discardPending(turnID: UUID, sessionID: UUID) async throws {
         guard let processingContext = ConversationProcessingContextFactory.make(
             sessionID: sessionID,
             dataSpace: dataSpace.activeSpace,
@@ -176,16 +180,20 @@ extension CoachSessionView {
             in: modelContext
         )
         else {
-            return false
+            throw PendingConversationDeletionError.unavailable
         }
-        return processor.discardPendingTurn(
+        let protectedPaths = try MediaReferenceStore.referencedPaths(
+            in: dataSpace.activeSpace == .personal ? dataSpace.demoContainer : dataSpace.personalContainer
+        )
+        try await processor.discardPendingTurn(
             turnID: turnID,
             context: processingContext,
-            locationService: locationContext
+            locationService: locationContext,
+            protectedMediaPaths: protectedPaths
         )
     }
 
-    func clearPendingQueue() -> Bool {
+    func clearPendingQueue() async throws {
         guard let sessionID = conversationSessions.activeSessionID,
               let processingContext = ConversationProcessingContextFactory.make(
                   sessionID: sessionID,
@@ -194,9 +202,12 @@ extension CoachSessionView {
                   in: modelContext
               )
         else {
-            return false
+            throw PendingConversationDeletionError.unavailable
         }
-        return processor.clearPendingQueue(context: processingContext)
+        let protectedPaths = try MediaReferenceStore.referencedPaths(
+            in: dataSpace.activeSpace == .personal ? dataSpace.demoContainer : dataSpace.personalContainer
+        )
+        try await processor.clearPendingQueue(context: processingContext, protectedMediaPaths: protectedPaths)
     }
 
     /// ADR 0045：缺配置不再阻止发送。队列里还没有暂存消息时说明用户是第一次遇到，

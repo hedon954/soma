@@ -543,7 +543,7 @@ extension WorkoutCameraService {
                 attemptID: attempt.id,
                 error: error
             )
-            state = .unavailable(error.localizedDescription)
+            state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
             recordingAttemptLifecycles[attempt.id]?.requestStop(
                 reason: .unexpected(
                     message: "系统没有确认录像启动；已保留可能生成的部分视频，训练数据不受影响。"
@@ -622,7 +622,7 @@ extension WorkoutCameraService {
                     discardCurrentRecording = true
                     recordingAttemptLifecycles[attempt.id]?
                         .failAfterFinishTimeout()
-                    state = .unavailable(error.localizedDescription)
+                    state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
                     completeRecordingAttempt(
                         attempt,
                         with: .failed(error)
@@ -637,7 +637,7 @@ extension WorkoutCameraService {
                 discardCurrentRecording = true
                 recordingAttemptLifecycles[attempt.id]?
                     .failAfterFinishTimeout()
-                state = .unavailable(error.localizedDescription)
+                state = .unavailable(AppErrorMessage.message(for: error, operation: .recording))
                 try? FileManager.default.removeItem(at: url)
                 completeRecordingAttempt(
                     attempt,

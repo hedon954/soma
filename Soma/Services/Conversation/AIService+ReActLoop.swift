@@ -35,6 +35,9 @@ extension AIService {
             checkpoint: checkpoint
         ))
         let videos = prepared.videos
+        let videoFallback = AgentVideoFallbackState(
+            isActive: checkpoint?.videoInputMode == .keyframes || prepared.requiresVideoFrames
+        )
         let selectedRoute = prepared.selectedRoute
         let provider = selectedRoute.provider
         let model = selectedRoute.model
@@ -54,13 +57,15 @@ extension AIService {
         let maxSteps = prepared.maxSteps
 
         func persistCheckpoint(nextModelStep: Int) {
-            onCheckpoint?(makeAgentCheckpoint(
+            var checkpoint = makeAgentCheckpoint(
                 completedOperationCount: completedOperationCount,
                 assistantPassages: assistantPassages,
                 state: toolState,
                 nextModelStep: nextModelStep,
                 batches: checkpointBatches
-            ))
+            )
+            checkpoint.videoInputMode = videoFallback.isActive ? .keyframes : nil
+            onCheckpoint?(checkpoint)
         }
 
         do {
@@ -109,7 +114,10 @@ extension AIService {
             while currentModelStep <= maxSteps, completedOperationCount < maxSteps {
                 try Task.checkCancellation()
                 if currentModelStep >= 2, !clearedHistoryFrames {
-                    clearHistoricalImageParts(in: &toolState.messages)
+                    clearHistoricalImageParts(
+                        in: &toolState.messages,
+                        preserving: Set(videos.compactMap(\.messageIndex))
+                    )
                     clearedHistoryFrames = true
                 }
                 let operationStep = completedOperationCount + 1
@@ -129,7 +137,7 @@ extension AIService {
                         ? 0
                         : historicalImageCount,
                     directVideoCount: videos.count,
-                    mediaMode: initialMediaMode(
+                    mediaMode: videoFallback.isActive ? .keyframes : initialMediaMode(
                         images: images,
                         videos: videos,
                         hasVideo: hasVideo
@@ -146,6 +154,11 @@ extension AIService {
                     )
                 )
 
+                var fallbackCheckpoint = makeAgentCheckpoint(
+                    completedOperationCount: completedOperationCount, assistantPassages: assistantPassages,
+                    state: toolState, nextModelStep: currentModelStep, batches: checkpointBatches
+                )
+                fallbackCheckpoint.videoInputMode = .keyframes
                 let streamedStep = try await executeAgentModelStep(
                     messages: &toolState.messages,
                     request: AgentModelStepExecutionRequest(
@@ -166,7 +179,9 @@ extension AIService {
                             assistantReasoningByMessageIndex: toolState
                                 .assistantReasoningByMessageIndex,
                             enforceFirstStepDeadline: firstStepDeadlineEnabled
-                                && currentModelStep == 1
+                                && currentModelStep == 1,
+                            videoFallbackState: videoFallback,
+                            onVideoFallback: { onCheckpoint?(fallbackCheckpoint) }
                         ),
                         history: history,
                         checkpointWasProvided: checkpoint != nil,
@@ -544,12 +559,13 @@ extension AIService {
 
     /// step ≥ 2 时去掉历史 user 消息中的图片 parts，只保留文字占位，降低重复 prefill。
     func clearHistoricalImageParts(
-        in messages: inout [ChatCompletionParameters.Message]
+        in messages: inout [ChatCompletionParameters.Message],
+        preserving indexes: Set<Int> = []
     ) {
         guard messages.count >= 3 else { return }
         // 保留 system(0) 与最后一条当前 user；中间历史 user 去掉图片。
         let lastIndex = messages.count - 1
-        for index in messages.indices where index > 0 && index < lastIndex {
+        for index in messages.indices where index > 0 && index < lastIndex && !indexes.contains(index) {
             guard messages[index].role == ChatCompletionParameters.Message.Role.user.rawValue
             else { continue }
             if case let .contentArray(parts) = messages[index].content {

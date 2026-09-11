@@ -90,7 +90,7 @@ final class DataSpaceController {
                 personalContainerPresent: false
             )
             migrationState = .failed(
-                "无法打开本地数据：\(error.localizedDescription)"
+                "无法打开本地数据：\(AppErrorMessage.message(for: error, operation: .startup))"
             )
         }
     }
@@ -147,7 +147,7 @@ final class DataSpaceController {
                 personalContainerPresent: personalContainer != nil
             )
             migrationState = .failed(
-                "无法打开本地数据：\(error.localizedDescription)"
+                "无法打开本地数据：\(AppErrorMessage.message(for: error, operation: .startup))"
             )
             return
         }
@@ -172,7 +172,7 @@ final class DataSpaceController {
                 demoContainerPresent: demoContainer != nil,
                 personalContainerPresent: personalContainer != nil
             )
-            migrationState = .failed(error.localizedDescription)
+            migrationState = .failed(AppErrorMessage.message(for: error, operation: .startup))
         }
     }
 
@@ -224,7 +224,7 @@ final class DataSpaceController {
                 demoContainerPresent: demoContainer != nil,
                 personalContainerPresent: personalContainer != nil
             )
-            migrationState = .failed("清理后重试失败：\(error.localizedDescription)")
+            migrationState = .failed("清理后重试失败：\(AppErrorMessage.message(for: error, operation: .startup))")
         }
     }
 
@@ -456,18 +456,17 @@ private struct DataMigrationGateView: View {
                     }
                     if let detail = dataSpace.migrationFailureDetail, !detail.isEmpty {
                         Divider()
-                        Text("完整诊断")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("可选择复制。含训练记录结构样例，不含身体测量、饮食原文和聊天正文。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(detail)
-                            .font(.system(.caption2, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityLabel("迁移诊断报告")
+                        DisclosureGroup("诊断信息") {
+                            Text("可选择复制。含训练记录结构样例，不含身体测量、饮食原文和聊天正文。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(detail)
+                                .font(.system(.caption2, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityLabel("迁移诊断报告")
+                        }
                     }
                     ShareLink(
                         item: {

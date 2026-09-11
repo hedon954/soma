@@ -75,6 +75,7 @@ const worker = new AgentWorker(
           return {
             id: binding.id,
             contentType: upload.contentType,
+            byteLength: upload.expectedBytes,
             url: await objects.createDownloadURL(
               upload.objectKey,
               expiresAt,

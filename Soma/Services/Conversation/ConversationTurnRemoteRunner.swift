@@ -246,7 +246,7 @@ extension ConversationProcessingService {
                 try? context.modelContext.save()
                 return
             }
-            let reason = error.localizedDescription
+            let reason = AppErrorMessage.message(for: error, operation: .model)
             let message = LLMOutageClassifier.disposition(for: error).message(
                 fallback: "这次后台任务没有处理成功：\(reason)"
             )
@@ -466,6 +466,11 @@ extension ConversationProcessingService {
             applyLiveAgentEvent(traceEvent)
             remoteTextCoalescer = AgentTextDeltaCoalescer()
             remoteTextItemID = nil
+        } else if event.kind == "model", event.phase == "updated",
+                  event.payload["fallbackReason"]?.stringValue == "video_input_unsupported"
+        {
+            projectRemoteVideoFallback(event, job: job, responseMessage: responseMessage,
+                                       trace: trace, context: context)
         } else if event.kind == "model", event.phase == "started" {
             remoteModelReceivedFirstDelta = false
             let exposedToolNames = event.payload["exposedToolNames"]?
@@ -564,7 +569,7 @@ extension ConversationProcessingService {
                 responseMessage: responseMessage
             )
             let code = event.payload["code"]?.stringValue ?? "remote_failed"
-            let message = "后台任务未完成（\(code)）。"
+            let message = AppErrorMessage.remoteMessage(code: code)
             trace.apply(.failed(
                 message: message,
                 cancelled: false,

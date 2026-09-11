@@ -19,18 +19,16 @@ extension ConversationProcessingService {
         client: RemoteAgentClient
     ) async throws -> PreparedRemoteAgentSubmission {
         let hasVideo = job.mediaAttachments.contains { $0.kind == .video }
-        let supportsDirectVideo = if hasVideo {
-            try await client.supportsDirectVideo()
-        } else {
-            false
-        }
-        if hasVideo, !supportsDirectVideo {
-            throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程模型未开启完整视频输入，请切换支持视频的模型后重试。")
+        var capabilities = hasVideo ? try await client.capabilities() : nil
+        var supportsDirectVideo = capabilities?.directVideo == true
+        var supportsFrameFallback = capabilities?.videoFrameFallback == true
+        if hasVideo, !supportsDirectVideo, !supportsFrameFallback {
+            throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程服务暂不支持视频分析。请更新远程服务，或关闭远程执行后使用本机的模型配置重试。")
         }
         let media = await prepareStoredMedia(
             job.mediaAttachments,
             frameLimit: Self.maximumAnalysisImageCount,
-            directVideoCapability: supportsDirectVideo
+            directVideoCapability: supportsDirectVideo || supportsFrameFallback
                 ? DirectVideoCapability(
                     maximumRawBytes: 7 * 1024 * 1024,
                     preferredMIMEType: "video/mp4"
@@ -66,8 +64,13 @@ extension ConversationProcessingService {
         if preparedHistory.history.contains(where: \.videoPreparationFailed) {
             throw ConversationMediaPreparationError.fullVideoUnavailable
         }
+        if preparedHistory.history.contains(where: { !$0.videos.isEmpty }), capabilities == nil {
+            capabilities = try await client.capabilities()
+            supportsDirectVideo = capabilities?.directVideo == true
+            supportsFrameFallback = capabilities?.videoFrameFallback == true
+        }
         if preparedHistory.history.contains(where: { !$0.videos.isEmpty }),
-           try await !(client.supportsDirectVideo())
+           !supportsDirectVideo, !supportsFrameFallback
         {
             throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程模型未开启完整视频输入。")
         }
@@ -125,7 +128,7 @@ extension ConversationProcessingService {
                 )
             }
         )
-        let modelInput = try AgentModelInputBuilder.build(
+        var modelInput = try AgentModelInputBuilder.build(
             systemPrompt: ReActAgentPrompt.system(
                 defaults: context.ai.defaults,
                 selectedSkillID: selectedSkill?.id
@@ -146,9 +149,20 @@ extension ConversationProcessingService {
                 defaults: context.ai.defaults
             )
         )
+        if supportsFrameFallback {
+            do {
+                modelInput = try await AgentModelVideoFallbackPreparation.adding(to: modelInput)
+            } catch {
+                try Task.checkCancellation()
+                if !supportsDirectVideo {
+                    throw error
+                }
+            }
+        }
+        let usesFrames = !supportsDirectVideo && modelInput.envelope.videoFallbacks?.isEmpty == false
         return PreparedRemoteAgentSubmission(
             modelInput: modelInput,
-            mediaMode: media.mode,
+            mediaMode: usesFrames ? .keyframes : media.mode,
             historyExchangeCount: preparedHistory.history.count,
             compactionSummary: compaction.didUpdate ? compaction.summary : nil,
             compactionStrategy: compaction.strategy
