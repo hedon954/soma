@@ -336,7 +336,7 @@ struct SomaApp: App { // 组合根：只装配依赖并注入 environment
     @UIApplicationDelegateAdaptor(SomaAppDelegate.self)
     private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
-    @State private var aiService = AIService()
+    @State private var aiService = AIService(apiKeyOverride: AgentQuestionFixture.isRequested ? "" : nil)
     @State private var dataSpace = DataSpaceController()
     @State private var conversationProcessor = ConversationProcessingService()
     @State private var conversationSessions = ConversationSessionController()

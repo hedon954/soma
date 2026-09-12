@@ -11,6 +11,7 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0065](0065-agent-workout-calories-ignored.md) | 已修复，完整本地门禁通过 | 训练工具丢弃用户提供热量 | 创建／修改有值、无值四路径；零、缺体重、幂等与远程 Schema |
 | [0064](0064-raw-errors-without-recovery.md) | 定向回归通过，界面待验收 | 原始错误无恢复办法 | 全 App 分类、远程稳定原因、呈现层静态门禁 |
 | [0063](0063-explicit-video-rejection-has-no-compatible-input.md) | 定向回归通过，真机待验收 | 明确视频拒绝后无法继续分析画面 | 有界采样、原件保留、单次回退与持久恢复 |
 | [0062](0062-guided-replacement-retains-old-targets.md) | 定向回归中，完整门禁与交互待验收 | 更换动作只改名称，沿用旧组目标 | 最近实际参数、确认重建、缺失值和完成证据保护 |

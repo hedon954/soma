@@ -177,7 +177,7 @@ App → Views → Services → Models
   4. 同一改动必须同时做浅色和深色。主屏幕 Widget 还要覆盖着色模式：`widgetRenderingMode == .accented` 时去掉不透明自绘底板，内容标 `.widgetAccentable()`。
   5. `.primary` / `.secondary` / `.tertiary` 只能用在系统材料上；自己画了底板就改用 `AppTheme.accent` 或明确 ink 色。
   常见失败：`containerBackground` 填 `systemBackground` 再写语义字色；着色 Widget 不透明底板把内容吃掉；深色模式把浅色系统底和深色字叠在一起。
-- 训练分享导出按 [ADR 0117](docs/adr/0117-workout-share-editorial-poster.md) 使用固定白底黑字、橙黄色主视觉与窄体大号容量；承载分享的原生弹层仍适配双主题。
+- 训练分享导出按 [ADR 0000](docs/adr/0000-origin-through-0.0.11.md) 使用固定白底黑字、橙黄色主视觉与窄体大号容量；承载分享的原生弹层仍适配双主题。
 - 浅色语义色适度提高明度与饱和度，抵消纯白背景的灰雾感并保持至少 4.5:1 对比度；暗色语义色不随浅色
   校准改变。
 - 语义图标保持清晰实色，不使用阴影、柔光或模糊。

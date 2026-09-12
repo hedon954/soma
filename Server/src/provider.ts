@@ -1,3 +1,4 @@
+import { canonicalJSON } from "./canonical-json.js";
 import { providerFailure } from "./provider-failure.js";
 import { boundedProviderError, checkedFallbackMedia, explicitlyRejectsVideo,
   frameFallbackPrompt, parseVideoFallbacks, type VideoFrameFallback } from "./video-fallback.js";
@@ -12,6 +13,7 @@ import type {
   ProviderMedia,
   ProviderStep,
   ProviderToolCall,
+  ProviderUsage,
 } from "./worker.js";
 import { effectiveAllowedDeviceTools } from "./tool-registry.js";
 
@@ -34,6 +36,7 @@ interface ChatCompletionResponse {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 }
 
@@ -57,6 +60,7 @@ interface ChatCompletionStreamChunk {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 }
 
@@ -161,7 +165,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
             messages.push({
               role: "tool",
               tool_call_id: call.id,
-              content: JSON.stringify(result.payload.result ?? {}),
+              content: canonicalJSON(result.payload.result ?? {}),
             });
           }
         }
@@ -315,8 +319,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         assistantText: message?.content ?? "",
         calls: parseResponseToolCalls(message?.tool_calls ?? [], toolSchemas),
         usage: {
-          input: payload.usage?.prompt_tokens ?? 0,
-          output: payload.usage?.completion_tokens ?? 0,
+          ...providerUsage(payload.usage),
         },
       };
     }
@@ -334,8 +337,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       kind: "completed",
       answer,
       usage: {
-        input: payload.usage?.prompt_tokens ?? 0,
-        output: payload.usage?.completion_tokens ?? 0,
+        ...providerUsage(payload.usage),
       },
     };
   }
@@ -358,7 +360,7 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
     const decoder = new TextDecoder();
     let buffer = "";
     let answer = "";
-    let usage = { input: 0, output: 0 };
+    let usage: ProviderUsage = {};
     let firstTextEmitted = false;
     let bufferedText = "";
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -457,8 +459,8 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
       }
       if (chunk.usage !== undefined) {
         usage = {
-          input: chunk.usage.prompt_tokens ?? usage.input,
-          output: chunk.usage.completion_tokens ?? usage.output,
+          ...usage,
+          ...providerUsage(chunk.usage),
         };
       }
     };
@@ -624,12 +626,12 @@ function modelMessages(
   input: AgentModelMessage[],
   media: ProviderMedia[],
   directVideo: boolean,
-  clearHistoricalMedia: boolean,
+  _clearHistoricalMedia: boolean,
   fallbackMap: Map<string, VideoFrameFallback> = new Map(),
 ): Record<string, unknown>[] {
   const mediaByID = new Map(media.map((item) => [item.id, item]));
-  return input.map((message, index) => {
-    const clearImages = clearHistoricalMedia && index > 0 && index < input.length - 1;
+  return input.map((message) => {
+    const clearImages = false;
     const frameIDs = new Set([...fallbackMap.values()].flatMap((value) => value.frameIDs));
     const messageFallbacks = message.mediaIDs.flatMap((id) => {
       const value = fallbackMap.get(id);
@@ -651,7 +653,13 @@ function modelMessages(
       const text = clearImages && message.mediaIDs.length > 0
         ? `${message.text}\n（历史图片已在后续步骤清除，仅保留文字上下文。）`
         : message.text;
-      return { role: message.role, content: text };
+      return {
+        role: message.role, content: text,
+        ...(message.toolCalls === undefined ? {} : { tool_calls: message.toolCalls.map(call => ({
+          id: call.id, type: "function", function: { name: call.name, arguments: call.arguments },
+        })) }),
+        ...(message.toolCallID === undefined ? {} : { tool_call_id: message.toolCallID }),
+      };
     }
     return {
       role: message.role,
@@ -670,6 +678,10 @@ function modelMessages(
           };
         }),
       ],
+      ...(message.toolCalls === undefined ? {} : { tool_calls: message.toolCalls.map(call => ({
+        id: call.id, type: "function", function: { name: call.name, arguments: call.arguments },
+      })) }),
+      ...(message.toolCallID === undefined ? {} : { tool_call_id: message.toolCallID }),
     };
   });
 }
@@ -801,4 +813,12 @@ function isRetryable(error: unknown): boolean {
       );
   }
   return error instanceof TypeError;
+}
+
+function providerUsage(usage: ChatCompletionResponse["usage"]): ProviderUsage {
+  return {
+    ...(usage?.prompt_tokens === undefined ? {} : { input: usage.prompt_tokens }),
+    ...(usage?.completion_tokens === undefined ? {} : { output: usage.completion_tokens }),
+    ...(usage?.prompt_tokens_details?.cached_tokens === undefined ? {} : { cachedInput: usage.prompt_tokens_details.cached_tokens }),
+  };
 }

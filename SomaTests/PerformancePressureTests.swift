@@ -470,8 +470,8 @@ final class PerformancePressureTests: XCTestCase {
             maximumEstimatedTokens: 100_000
         )
 
-        XCTAssertEqual(projection.exchanges.count, 10)
-        XCTAssertEqual(projection.exchanges.first?.userText, "虚构用户消息 4990")
+        XCTAssertEqual(projection.exchanges.count, 30)
+        XCTAssertEqual(projection.exchanges.first?.userText, "虚构用户消息 4970")
         XCTAssertEqual(projection.exchanges.last?.assistantText, "虚构回复 4999")
     }
 

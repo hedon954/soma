@@ -50,9 +50,10 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
     var formScore: Int? = nil
     var intensity: String? = nil
     var feedback: String? = nil
+    var calories: Int? = nil
 
     enum CodingKeys: String, CodingKey {
-        case intensity, feedback, laterality
+        case intensity, feedback, laterality, calories
         case exerciseID = "exercise_id"
         case targetKind = "target_kind"
         case occurredAt = "occurred_at"
@@ -73,7 +74,8 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
             durationMinutes: durationMinutes,
             formScore: formScore,
             intensity: intensity,
-            feedback: feedback
+            feedback: feedback,
+            calories: calories
         )
     }
 
@@ -91,7 +93,8 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
             durationMinutes: arguments.durationMinutes,
             formScore: arguments.formScore,
             intensity: arguments.intensity,
-            feedback: arguments.feedback
+            feedback: arguments.feedback,
+            calories: arguments.calories
         )
     }
 }
@@ -261,6 +264,7 @@ struct AgentTemplateExerciseInput: Codable, Equatable {
 }
 
 struct AgentToolArguments: Codable, Equatable {
+    var questions: [AgentUserQuestion]?
     var skillID: String?
     var scope: String?
     var query: String?
@@ -334,6 +338,7 @@ struct AgentToolArguments: Codable, Equatable {
     var workouts: [AgentWorkoutCreateInput]?
 
     enum CodingKeys: String, CodingKey {
+        case questions
         case scope, query, sort, limit, cursor, projection, fields, summary, equipment
         case exercise, laterality, sets, reps, weight, intensity, feedback, title, calories, protein
         case carbs, fat, note, items, waist, metric, operation, payload
@@ -444,8 +449,10 @@ struct AgentToolArguments: Codable, Equatable {
         autoRecordingPolicy: String? = nil,
         exerciseNames: [String]? = nil,
         exercises: [AgentExerciseCreateInput]? = nil,
-        workouts: [AgentWorkoutCreateInput]? = nil
+        workouts: [AgentWorkoutCreateInput]? = nil,
+        questions: [AgentUserQuestion]? = nil
     ) {
+        self.questions = questions
         self.skillID = skillID
         self.scope = scope
         self.query = query

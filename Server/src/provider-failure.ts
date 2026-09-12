@@ -10,10 +10,11 @@ export function providerFailure(status: number, raw: string): ProtocolError {
     return new ProtocolError("provider_quota_exhausted", "模型服务额度已用尽，请补充额度或更换服务。", status);
   }
   if (status === 429) return new ProtocolError("provider_rate_limited", "模型请求过多，请稍后重试。", status);
-  if (status === 413 || ["context_length", "context length", "maximum context", "too many tokens", "token limit"]
+  if (["context_length", "context length", "maximum context", "too many tokens", "token limit"]
     .some((value) => text.includes(value))) {
-    return new ProtocolError("provider_context_exceeded", "请求内容过长或过大，请减少附件并分开发送。", status);
+    return new ProtocolError("provider_context_exceeded", "对话超过模型上下文容量，请缩短内容或新建会话后分开发送。", status);
   }
+  if (status === 413) return new ProtocolError("provider_payload_too_large", "请求体积过大，请减少或缩小附件后重试。", status);
   if ([400, 415, 422].includes(status) &&
       ["unsupported", "not support", "unknown variant", "不支持"].some((value) => text.includes(value)) &&
       ["image_url", "image input", "vision"].some((value) => text.includes(value))) {

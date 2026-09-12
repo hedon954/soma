@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent, AgentJob, ToolRequest } from "./domain.js";
 import { isTerminal, ProtocolError } from "./domain.js";
 import type { SomaStore } from "./store-contract.js";
+import { completedQuestionAnswer } from "./user-questions.js";
 import {
   type DeviceToolDefinition,
   effectiveAllowedDeviceTools,
@@ -16,13 +17,19 @@ export interface ProviderToolCall {
   arguments: Record<string, unknown>;
 }
 
+export interface ProviderUsage {
+  input?: number;
+  output?: number;
+  cachedInput?: number;
+}
+
 export type ProviderStep =
-  | { kind: "completed"; answer: string; usage?: { input: number; output: number } }
+  | { kind: "completed"; answer: string; usage?: ProviderUsage }
   | {
       kind: "toolCalls";
       assistantText: string;
       calls: ProviderToolCall[];
-      usage?: { input: number; output: number };
+      usage?: ProviderUsage;
     };
 
 export interface ProviderMedia {
@@ -90,6 +97,14 @@ export class AgentWorker {
     const job = lease.job;
     if (isTerminal(job.state)) return job;
     const history = await this.store.events(job.id, 0, 500);
+    const questionAnswer = completedQuestionAnswer(history);
+    if (questionAnswer !== undefined) {
+      await this.store.appendEvent(job.id, lease.epoch, {
+        kind: "output", phase: "completed", payloadVersion: 1,
+        payload: { answer: questionAnswer }, createdAt: now,
+      });
+      return this.store.transition(job.id, "completed", now, lease.epoch);
+    }
     const exposedToolNames = effectiveAllowedDeviceTools(
       job.input?.modelInput.activeTools ?? [],
       history,

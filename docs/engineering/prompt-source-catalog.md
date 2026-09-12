@@ -13,7 +13,7 @@
 | Tool 名称、描述与参数 | `Soma/Services/Conversation/AgentToolJSONSchema.swift` → `AgentToolName.toolDescription/toolParameters` | `AgentToolName.chatTool` | 不可编辑，系统固定 |
 | Session businessDate 与可信 Turn/Loop 时间 | `Soma/Models/AgentTurnContext.swift` → `TrustedTurnContext.promptText` | `AgentTurnContextBuilder.build`、Job 创建时冻结 `effectiveBusinessDate/defaultOccurredAt`、首次 claim 冻结 `loopStartedAt` | 不可编辑；自然语言日期只影响当前 Turn，日期芯片才持久修改 Session |
 | 确定性业务上下文包 | `Soma/Services/Conversation/AgentContextPackBuilder.swift` | `ConversationProcessingContextFactory.make` | 不可编辑，本机事实派生 |
-| 最近十对原生历史、滚动摘要与媒体选择 | `Soma/Services/Conversation/ConversationCompactionMiddleware.swift`、`AgentTurnContextBuilder.swift`、`ConversationContextProjection.swift` | 每次 ReAct Loop 前压缩；Loop 内不压缩 | 不可编辑；小模型优先、标准模型回退、确定性 digest 兜底；压缩生成 Chat 事件卡 |
+| 最近 30 个完整来回 / 30k 历史文本、滚动摘要与媒体选择 | `Soma/Services/Conversation/ConversationCompactionMiddleware.swift`、`AgentTurnContextBuilder.swift`、`ConversationContextProjection.swift` | 每次 ReAct Loop 前压缩；Loop 内不压缩 | 不可编辑；小模型优先、标准模型回退、有界确定性摘要兜底；历史帧、时间和工具回执带稳定身份，压缩生成 Chat 事件卡 |
 | 位置、健身房和天气 Turn 上下文 | `Soma/Services/Conversation/ConversationProcessingService.swift` → `turnContext`；`WeatherContextProvider.swift` | `composePersistentContext` | 不可编辑，按授权临时生成 |
 | 版本化当前 Turn User Prompt | `Soma/Services/Conversation/ReActAgentPrompt.swift` → `ReActAgentPrompt.user`、`historicalUser` | `AgentModelInputBuilder.build` | 不可编辑；固定 v2 section 顺序，空事实块完全省略，动态输入与媒体位于后部 |
 | 本地/远程 Agent system/user/history 消息与媒体 ID | `Soma/Services/Conversation/AgentModelInput.swift` → `AgentModelInputBuilder` | `AIService.prepareAgentRun`、`ConversationProcessingService.prepareRemoteSubmission` | 不可编辑；两种 Backend 消费同一版本化 Envelope |

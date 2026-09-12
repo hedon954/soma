@@ -8,7 +8,8 @@ extension AIService {
         provider: AIProvider,
         baseURL: String,
         apiKey: String,
-        assistantReasoningByMessageIndex: [Int: String] = [:]
+        assistantReasoningByMessageIndex: [Int: String] = [:],
+        extraConfigJSON: String? = nil
     ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error> {
         guard let url = provider.endpoint(
             baseURL: baseURL,
@@ -20,11 +21,12 @@ extension AIService {
             parameters: parameters,
             videos: videos,
             baseURL: baseURL,
-            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
+            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex,
+            extraConfigJSON: extraConfigJSON
         )
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 180
@@ -79,7 +81,8 @@ extension AIService {
         parameters: ChatCompletionParameters,
         videos: [AgentVideoInput],
         baseURL: String,
-        assistantReasoningByMessageIndex: [Int: String] = [:]
+        assistantReasoningByMessageIndex: [Int: String] = [:],
+        extraConfigJSON: String? = nil
     ) throws -> [String: Any] {
         let encoded = try JSONEncoder().encode(parameters)
         guard var body = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
@@ -116,7 +119,7 @@ extension AIService {
         }
         body["stream"] = true
         let requestModel = body["model"] as? String ?? ""
-        let extraConfig = effectiveExtraConfig(
+        let extraConfig = extraConfigJSON ?? effectiveExtraConfig(
             baseURL: baseURL,
             model: requestModel
         )

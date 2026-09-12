@@ -314,7 +314,7 @@ Turn 级 Activity 与 Skill/Tool operation 分开；首段正文或操作卡出�
 - iOS 使用唯一 `AgentModelInputBuilder` 生成本地与远程模型输入。Server Provider 不保存任何
   Agent Prompt 文案，也不改写消息顺序、Skill 内容、Tool 描述或运行参数。
 - `AgentTurnContextEnvelope v3` 在设备冻结原始 Turn 时间、Session businessDate、时区和
-  `defaultOccurredAt`，并投影为条件业务上下文、最近十个完整 user-assistant 对、滚动替代摘要与
+  `defaultOccurredAt`，并投影为条件业务上下文、最近最多 30 个完整 Turn 或 30k 历史文本、滚动替代摘要与
   确定性媒体选择，再进入 `AgentModelInputEnvelope v2`；较早成功写入不重复长 Tool observation。
 - 模型自然语言时间只出现一个权威本地时间，包含日期、UTC offset、IANA 时区和时段；UTC 如需
   机器处理必须明确标注且不得先于本地时间。人工重试复用原 Turn 时间，Loop 时间单独标识。

@@ -147,6 +147,20 @@ struct RemoteAgentExecutionTests {
     }
 
     @Test
+    func remoteUsageCarriesCachedPromptTokens() {
+        var metadata: [String: Any] = [:]
+        applyRemoteUsage(.object([
+            "input": .number(1200),
+            "output": .number(80),
+            "cachedInput": .number(1024)
+        ]), to: &metadata)
+
+        #expect(metadata["prompt_tokens"] as? Int == 1200)
+        #expect(metadata["completion_tokens"] as? Int == 80)
+        #expect(metadata["cached_prompt_tokens"] as? Int == 1024)
+    }
+
+    @Test
     func directVideoContainsOnlyFullVideoAndSelectedImages() throws {
         let modelInput = try AgentModelInputBuilder.build(
             systemPrompt: "虚构系统提示",

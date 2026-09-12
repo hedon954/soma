@@ -52,9 +52,11 @@ export interface AgentJobInput {
 }
 
 export interface AgentModelMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   text: string;
   mediaIDs: string[];
+  toolCalls?: { id: string; name: string; arguments: string }[];
+  toolCallID?: string;
 }
 
 export interface AgentModelSkillSnapshot {
@@ -73,7 +75,7 @@ export interface AgentModelTool {
 
 export interface AgentModelInput {
   videoFallbacks?: VideoFrameFallback[];
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   messages: AgentModelMessage[];
   skills: AgentModelSkillSnapshot[];
   tools: AgentModelTool[];
@@ -221,6 +223,7 @@ export class ProtocolError extends Error {
       | "provider_quota_exhausted"
       | "provider_rate_limited"
       | "provider_context_exceeded"
+      | "provider_payload_too_large"
       | "provider_vision_unsupported"
       | "provider_configuration_invalid"
       | "video_fallback_unavailable"

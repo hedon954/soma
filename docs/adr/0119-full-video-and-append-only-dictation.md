@@ -10,7 +10,7 @@
 - 版本：0.0.22
 - 上游依据：[PRD 056](../prd/056-video-speech-and-share-readability.md)
 - 后续替代：[ADR 0121](0121-live-dictation-preview.md) 未确认片段进入输入框预览；确认后追加草稿的边界不变
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)、[ADR 0117](0117-workout-share-editorial-poster.md)
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)
 
 ## 背景
 

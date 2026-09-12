@@ -1,5 +1,7 @@
 # ReAct Agent
 
+- 后续修订：[ADR 0136](adr/0136-agent-user-questions.md)（受控提问与确定性按钮承接）
+
 - 后续修订：[ADR 0131](adr/0131-explicit-video-rejection-frame-fallback.md)（明确视频拒绝后单次画面回退）
 
 - 后续修订：[ADR 0119](adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
@@ -71,10 +73,14 @@ Skill、Markdown 预览与恢复；Skill 只描述专业方法，工具权限由
 
 ## 本地工具
 
-当前协议使用 32 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 7 个，另有
-`load_skill`、健身房 2 个、复盘和反馈各 1 个。未选快捷按钮时，本轮把这 32 个全部放入 API
-`tools` 参数；选中按钮时只放入该按钮工具白名单与当前协议的交集。未知名称解码失败。
+当前协议使用 33 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 7 个，另有
+`load_skill`、`ask_user_questions`、健身房 2 个、复盘和反馈各 1 个。未选快捷按钮时，本轮全部放入 API
+`tools` 参数；选中按钮时注册其工具白名单与当前协议的交集，并始终包含提问工具。未知名称解码失败。
 每次调用的工具名同时写入 Trace model span 与本机诊断日志。
+
+`ask_user_questions` 成功后结束本轮推理，显示固定问题、选项和可选输入框。普通选项和自定义回答
+产生新的用户 Turn；绑定完整工具参数的选项通过本机确定性 Job 执行，复用工具、事件与记录卡。
+当前 Session 发送新消息后收起旧问题，旧按钮不能再次执行。
 
 训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
 归档和合并。所有业务 ID 是 Int64。训练相关 Tool 当前使用 Schema v4：动作搜索/创建/更新显式
@@ -178,9 +184,11 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 
 每轮请求只暴露 Loop 开始时确定的 Tool 集，整轮固定。未选 Skill 时是当前协议全部工具；选中快捷 Skill 时只注册该 Skill 绑定的子集。
 供应商侧允许并行 `tool_calls`，本机仍顺序执行。`AgentContextPackBuilder` 提供确定性上下文包；
-历史始终保留最近十个完整 user-assistant 对。从第十一对开始，Loop 前用“已有摘要 + 新移出
-窗口的完整对”重新生成完整替代摘要，小模型优先、标准模型回退、确定性 digest 兜底；Loop 内
-不再次压缩，压缩会形成可展开 Chat 事件卡。
+历史保留最近最多 30 个完整 Turn，或最多约 30,000 个历史文本 tokens。任一门槛超过时，Loop
+前以“已有摘要 + 实际移出窗口的完整 Turn”重写替代摘要；最新单轮不切半。小模型优先、标准模型
+回退、有界确定性摘要兜底；Loop 内不再次压缩，压缩会形成可展开 Chat 事件卡。历史 Turn 保留其
+发送时间、原生 `assistant.tool_calls` 与匹配的 `role: tool` 回执；这些帧只在其来源未被修订且媒体
+被明确重新选择时复用。
 当前媒体优先，历史媒体只在明确回指或比较时选择最多一到两个匹配 Turn。
 
 ### 可选远程 Backend

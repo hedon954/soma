@@ -122,20 +122,20 @@ final class ConversationContextProjectionTests: XCTestCase {
     }
 
     @MainActor
-    func testProjectionKeepsTenLatestExchangesAndLatestAssistantAttempt() {
+    func testProjectionKeepsThirtyLatestExchangesAndLatestAssistantAttempt() {
         let sessionID = UUID()
         let otherSessionID = UUID()
         let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
         var messages: [CoachMessage] = []
 
-        for index in 1 ... 12 {
+        for index in 1 ... 32 {
             let turnID = UUID()
             let attachments: [MediaAttachmentReference] = switch index {
             case 2:
                 [.init(kind: .image, path: "outside-window.jpg")]
-            case 11:
+            case 31:
                 [.init(kind: .image, path: "recent.jpg")]
-            case 12:
+            case 32:
                 [.init(kind: .video, path: "recent.mov")]
             default:
                 []
@@ -157,12 +157,12 @@ final class ConversationContextProjectionTests: XCTestCase {
                 turnID: turnID,
                 attemptNumber: 1
             ))
-            if index == 12 {
+            if index == 32 {
                 messages.append(CoachMessage(
                     date: baseDate.addingTimeInterval(Double(index * 10 + 2)),
                     sessionID: sessionID,
                     isFromCoach: true,
-                    text: "最终回复 12",
+                    text: "最终回复 32",
                     agentStatus: .succeeded,
                     turnID: turnID,
                     attemptNumber: 2
@@ -184,10 +184,10 @@ final class ConversationContextProjectionTests: XCTestCase {
             excludingTurnID: nil
         )
 
-        XCTAssertEqual(projection.exchanges.count, 10)
+        XCTAssertEqual(projection.exchanges.count, 30)
         XCTAssertEqual(projection.exchanges.first?.userText, "用户 3")
-        XCTAssertEqual(projection.exchanges.last?.userText, "用户 12")
-        XCTAssertEqual(projection.exchanges.last?.assistantText, "最终回复 12")
+        XCTAssertEqual(projection.exchanges.last?.userText, "用户 32")
+        XCTAssertEqual(projection.exchanges.last?.assistantText, "最终回复 32")
         XCTAssertEqual(
             projection.exchanges.flatMap(\.mediaAttachments).map(\.path),
             ["recent.jpg", "recent.mov"]

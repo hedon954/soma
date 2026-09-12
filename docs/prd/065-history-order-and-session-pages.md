@@ -2,6 +2,7 @@
 
 - 状态：已采纳
 - 日期：2026-09-12
+- 版本：0.0.24
 - 修订自：[PRD 000](000-origin-through-0.0.11.md) 的进展明细和会话浏览
 - 下游落地：[ADR 0134](../adr/0134-session-history-page-cache.md)
 

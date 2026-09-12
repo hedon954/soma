@@ -1,5 +1,7 @@
 # Agent Tool 目录
 
+- 后续修订：[ADR 0136](../adr/0136-agent-user-questions.md)（固定提问工具与曝光例外）
+
 本文件维护当前代码实际支持的 Agent Tool、暴露策略和协议边界。它只做导航与审计，不复制
 完整 JSON Schema；可执行事实以源码和测试为准。
 
@@ -17,22 +19,24 @@
 
 ## 暴露策略
 
-运行时只解码当前协议 32 个名称。每次请求把当轮允许的集合放进 API `tools` 参数；System
+运行时只解码当前协议 33 个名称。每次请求把当轮允许的集合放进 API `tools` 参数；System
 Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，整轮固定。
 
-- 未选快捷按钮：注册当前协议全部 32 个 Tool，含 `load_skill`。Skill 目录完整可见。不做关键词或本机状态剪枝。
+- 未选快捷按钮：注册当前协议全部 33 个 Tool，含 `load_skill` 与 `ask_user_questions`。Skill 目录完整可见。不做关键词或本机状态剪枝。
 - 选中快捷按钮：只暴露该按钮 `toolNames` 与当前协议的交集；按钮绑定 Skill 时首轮直载完整
   Markdown 与专属上下文。ADR 0082 之后曝光边界由按钮持有，Skill 不再声明工具。
+- `ask_user_questions` 始终可用；按钮绑定的确定性操作仍须在当前业务工具曝光范围内。
 - 分组（`AgentToolGroup`）只是设置页里勾选工具的分类，不是运行时单位。
 - 已经预加载的事实足够时不得重复查询。
 - 未知 Tool 名称在保存快捷按钮与运行时都被丢弃，解码失败不能执行。
 - 每次模型调用都把本轮工具名写进 Trace model span 与诊断日志（ADR 0083）。
 
-## 当前 32 个 Tool
+## 当前 33 个 Tool
 
 | 组 | Tool | 用途 |
 | --- | --- | --- |
 | core | `load_skill` | 未预选 Skill 时按 ID 读取当前生效 Markdown |
+| core | `ask_user_questions` | 提问后结束本轮；文本选项、固定工具操作或自定义输入承接用户回答 |
 | exercises | `search_exercises`、`create_exercise`、`update_exercise`、`archive_exercise`、`merge_exercises` | 动作搜索、创建、修正、归档和合并 |
 | workouts | `list_workouts`、`get_workout`、`create_workout`、`update_workout`、`delete_workout` | 训练记录单一职责 CRUD |
 | meals | `list_meals`、`get_meal`、`create_meal`、`update_meal`、`delete_meal` | 饮食记录单一职责 CRUD |
@@ -44,6 +48,9 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 
 ## 输入契约
 
+- `ask_user_questions` Schema v1 接收 1–3 个问题，每题最多 6 个选项。`text` 是用户口吻的完整句子；
+  可选 `action` 绑定当前已开放工具及完整 `arguments_json`，`allows_custom_input` 控制自由输入。
+  提问不执行绑定操作；用户点击后重新校验并执行，不需要模型续跑。递归提问、Skill 加载、反馈外发和媒体复盘不能绑定。
 - 业务 `record_id`、`exercise_id`、`program_id`、计划动作 ID 均为正 `Int64`；UUID 只留给
   Session、Turn、Job、Trace、Event、媒体、外部来源和旧备份映射。
 - 训练域当前为 Schema v4：`search_exercises` 返回动作 ID、`target_kind` 与 `laterality`；动作

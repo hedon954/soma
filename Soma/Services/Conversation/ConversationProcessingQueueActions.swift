@@ -174,6 +174,11 @@ extension ConversationProcessingService {
             })?.selectedShortcutID,
             createdAt: submittedAt
         )
+        if previousJob?.executionKind == .deterministicQuestion {
+            job.backend = .local
+            job.executionKind = .deterministicQuestion
+            job.deterministicQuestionAction = previousJob?.deterministicQuestionAction
+        }
         do {
             if let previous = existingJobs.first(where: {
                 $0.userMessageID == userMessage.id && $0.state.isTerminal

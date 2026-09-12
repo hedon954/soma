@@ -35,6 +35,12 @@ private struct AgentToolSignatureArguments {
     private(set) var values: [String: Any] = [:]
 
     init(_ arguments: AgentToolArguments) {
+        if let questions = arguments.questions,
+           let data = try? JSONEncoder().encode(questions),
+           let object = try? JSONSerialization.jsonObject(with: data)
+        {
+            values["questions"] = object
+        }
         appendScalarArguments(arguments)
         appendFields(arguments.fields)
         appendPayload(arguments.payload)
@@ -254,6 +260,9 @@ private struct AgentToolSignatureArguments {
         }
         if let duration = item.durationMinutes {
             row["duration_minutes"] = duration
+        }
+        if let calories = item.calories {
+            row["calories"] = calories
         }
         if let score = item.formScore {
             row["form_score"] = score

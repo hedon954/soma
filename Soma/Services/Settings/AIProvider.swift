@@ -1,6 +1,6 @@
 import Foundation
 
-enum AIProvider: String, CaseIterable, Identifiable {
+enum AIProvider: String, CaseIterable, Identifiable, Codable, Sendable {
     case openAI
     case deepSeek
     case bailian
@@ -80,7 +80,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     }
 }
 
-enum AIModelTier: String, CaseIterable, Identifiable {
+enum AIModelTier: String, CaseIterable, Identifiable, Codable, Sendable {
     case small
     case standard
 
@@ -96,7 +96,7 @@ enum AIModelTier: String, CaseIterable, Identifiable {
     }
 }
 
-struct AIModelRoute: Equatable {
+struct AIModelRoute: Equatable, Codable, Sendable {
     var tier: AIModelTier
     var provider: AIProvider
     var baseURL: String

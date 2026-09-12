@@ -46,6 +46,7 @@ extension ConversationProcessingService {
         let compaction = await ConversationCompactionMiddleware.prepare(
             sessionID: job.sessionID,
             excludingTurnID: turnID,
+            projection: projection,
             ai: context.ai,
             in: context.modelContext
         )
@@ -65,8 +66,7 @@ extension ConversationProcessingService {
         } else {
             nil
         }
-        let compactionContext = compaction.summary.map { "更早对话的可审查滚动摘要：\n\($0)" }
-        let agentContext = [persistentContext, compactionContext, weatherGuidance]
+        let agentContext = [persistentContext, weatherGuidance]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
@@ -191,6 +191,9 @@ extension ConversationProcessingService {
                     selectedSkillID: job.selectedSkillID,
                     selectedShortcutID: job.selectedShortcutID,
                     checkpoint: resumeCheckpoint,
+                    configuration: job.contextSnapshot?.configuration,
+                    turnID: turnID,
+                    historySummary: compaction.summary,
                     firstStepDeadlineEnabled: firstStepDeadlineEnabled,
                     onCheckpoint: { checkpoint in
                         job.loopCheckpoint = checkpoint
@@ -235,6 +238,16 @@ extension ConversationProcessingService {
             }
 
             responseMessage.text = outcome.finalAnswer
+            if let checkpoint = job.loopCheckpoint {
+                var snapshot = job.contextSnapshot
+                snapshot?.canonicalTurn = AgentCanonicalTurn.make(
+                    checkpoint: checkpoint, user: userMessage.text, answer: outcome.finalAnswer
+                )
+                job.contextSnapshot = snapshot
+                var completed = checkpoint
+                completed.initialInput = nil
+                job.loopCheckpoint = completed
+            }
             performedRecordType = outcome.primaryRecordType ?? performedRecordType
             responseMessage.recordType = performedRecordType
             responseMessage.agentStatus = .succeeded
@@ -397,19 +410,32 @@ extension ConversationProcessingService {
         resolution: GymContextResolution,
         context: ConversationProcessingContext
     ) -> String {
-        let snapshotContext = job.contextSnapshot?.envelope?
-            .promptText(at: .now) ?? context.structuredContext
-        return [
-            snapshotContext,
-            turnContext(
-                location: userMessage.location,
-                gym: effectiveGym,
-                source: resolution.source
-            )
-        ]
-        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-        .joined(separator: "\n")
+        if let existing = job.contextSnapshot?.executionContext {
+            return existing
+        }
+        let observedAt = Date.now
+        let time = job.contextSnapshot?.envelope?.trustedTime.promptText
+            ?? "发送时间：\(userMessage.date.ISO8601Format())；历史时区信息未知。"
+        let businessDate = job.effectiveBusinessDate ?? context.session.effectiveBusinessDate
+        let snapshotContext = [
+            "[TURN \(turnID.uuidString.lowercased())]",
+            time,
+            "[执行前本机业务快照 observed_at=\(observedAt.ISO8601Format())]",
+            context.structuredContext(for: businessDate, selectedSkillID: job.selectedSkillID),
+            AgentCrossTurnFactSummary.recentMutationFacts(
+                sessionID: job.sessionID, excludingTurnID: turnID, in: context.modelContext
+            ),
+            turnContext(location: userMessage.location, gym: effectiveGym, source: resolution.source)
+        ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+        var snapshot = job.contextSnapshot ?? AgentJobContextSnapshot(
+            structuredContext: context.structuredContext, includeLocation: false
+        )
+        snapshot.executionContext = snapshotContext
+        snapshot.executionObservedAt = observedAt
+        job.contextSnapshot = snapshot
+        try? context.modelContext.save()
+        return snapshotContext
     }
 
     func turnContext(
@@ -442,12 +468,16 @@ extension ConversationProcessingService {
     ) async -> PreparedAgentHistory {
         let startedAt = Date.now
         let projection = ConversationContextProjection.make(
-            messages: ConversationTurnPersistence.recentMessages(
+            messages: ConversationContextHistory.messages(
                 sessionID: context.session.id,
                 in: context.modelContext
             ),
             sessionID: context.session.id,
-            excludingTurnID: turnID
+            excludingTurnID: turnID,
+            turnContexts: ConversationContextHistory.trustedTimes(
+                sessionID: context.session.id, in: context.modelContext
+            ),
+            canonicalTurns: ConversationContextHistory.canonicalTurns(sessionID: context.session.id, in: context.modelContext)
         )
         let selectedTurnIDs = Set(
             selectedHistoricalTurnIDs
@@ -492,6 +522,10 @@ extension ConversationProcessingService {
 
         return exchanges.map { exchange in
             AgentConversationExchange(
+                turnID: exchange.turnID,
+                sentAt: exchange.date,
+                trustedTime: exchange.trustedTime,
+                canonicalMessages: exchange.canonicalMessages,
                 userText: exchange.userText,
                 assistantText: exchange.assistantText,
                 images: mediaByTurnID[exchange.turnID]?.frames ?? [],

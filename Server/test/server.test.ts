@@ -1180,7 +1180,7 @@ test("managed provider streams reasoning separately from answer text", async () 
   assert.deepEqual(step, {
     kind: "completed",
     answer: "答案。",
-    usage: { input: 0, output: 0 },
+    usage: {},
   });
 });
 
@@ -1450,7 +1450,7 @@ test("transient remote video errors preserve the complete file across retries", 
   assert.deepEqual(step, {
     kind: "completed",
     answer: "完整视频结果",
-    usage: { input: 0, output: 0 },
+    usage: {},
   });
   assert.match(JSON.stringify(capturedBodies[0]), /video\.mp4/);
   assert.doesNotMatch(JSON.stringify(capturedBodies[0]), /frame\.jpg/);
@@ -1793,6 +1793,7 @@ function makeModelInput(
 }
 
 function testToolSchemaVersion(name: string): number {
+  if (name === "ask_user_questions") return 1;
   if ([
     "get_program",
     "create_program",
@@ -1806,6 +1807,7 @@ function testToolSchemaVersion(name: string): number {
 }
 
 function testToolParameters(name: string): Record<string, unknown> {
+  if (name === "ask_user_questions") return deviceToolRegistry.get(name)!.parameters;
   if (name === "get_program") {
     return {
       type: "object",
@@ -2214,7 +2216,7 @@ test("provider failures preserve actionable categories without leaking raw respo
     [401, "invalid_api_key", "provider_authentication_failed"],
     [429, "insufficient_quota", "provider_quota_exhausted"],
     [429, "rate limit", "provider_rate_limited"],
-    [413, "large", "provider_context_exceeded"],
+    [413, "large", "provider_payload_too_large"],
     [400, "context_length_exceeded", "provider_context_exceeded"],
     [400, "unsupported image_url", "provider_vision_unsupported"],
     [404, "model_not_found", "provider_configuration_invalid"],
@@ -2237,4 +2239,32 @@ test("quota exhaustion waits for user instead of repeating billable requests", a
   }, async () => assert.fail("quota is not a transient rate limit"));
   await assert.rejects(provider.run(job, [], []), /额度/);
   assert.equal(count, 1);
+});
+
+test("answered question tool finishes after device handoff without another provider call", async () => {
+  const store = new InMemorySomaStore();
+  const deviceID = randomUUID();
+  const input = makeJobInput({ allowedDeviceTools: ["ask_user_questions"] });
+  const job = await store.submitJob({ deviceID, input, bodyDigest: sha256(JSON.stringify(input)), now: new Date() });
+  let calls = 0;
+  const provider = {
+    async run() {
+      calls += 1;
+      return {
+        kind: "toolCalls" as const, assistantText: "", calls: [{
+          toolName: "ask_user_questions", schemaVersion: 1, arguments: {
+            questions: [{ id: "goal", question: "想做什么？", options: [{ id: "talk", text: "聊聊恢复" }], allows_custom_input: true }],
+          },
+        }],
+      };
+    },
+  };
+  assert.equal((await new AgentWorker(store, provider).runOnce())?.state, "waitingForDevice");
+  const request = (await store.pendingToolRequests(deviceID))[0];
+  assert.ok(request);
+  const result = { ok: true, code: "user_questions", message: "想做什么？\n- 聊聊恢复" };
+  await store.submitToolResult(deviceID, job.id, { toolCallID: request.toolCallID, digest: sha256(JSON.stringify(result)), result }, new Date());
+  assert.equal((await new AgentWorker(store, provider, "replacement").runOnce())?.state, "completed");
+  assert.equal(calls, 1);
+  assert.equal((await store.events(job.id, 0, 100)).at(-1)?.payload.answer, result.message);
 });

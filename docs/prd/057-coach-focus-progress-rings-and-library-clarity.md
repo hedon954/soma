@@ -1,12 +1,13 @@
 # PRD 057：快捷聚焦、实时听写与进展圆环
 
+- 后续修订：[PRD 066](066-agent-user-questions.md)（快捷聚焦时仍支持结构化提问与按钮回答）
 - 后续修订：[PRD 064](064-progress-total-energy-deficit.md)（日、周、月缺口合入底部提示，日页同时显示仍可摄入）
 - 状态：已采纳
 - 日期：2026-09-07
 - 版本：0.0.22
 - 修订自：
   - [PRD 000](000-origin-through-0.0.11.md) 的快捷按钮、摄入／消耗对照、四周期口径与图表跳转
-  - [PRD 055](055-exercise-facets-and-meal-breakdown.md) 的动作库三轴分类与搜索布局
+  - [PRD 000](000-origin-through-0.0.11.md) 的动作库分类与搜索布局
   - [PRD 056](056-video-speech-and-share-readability.md) 的确认片段才入框听写
 - 下游落地：
   - [ADR 0120](../adr/0120-focused-shortcut-prompt.md)

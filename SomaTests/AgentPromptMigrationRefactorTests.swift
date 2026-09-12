@@ -146,7 +146,7 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertTrue(tools.contains(.submitFeedback))
     }
 
-    func testSelectedShortcutUsesExactCheckedTools() {
+    func testSelectedShortcutUsesCheckedBusinessToolsAndQuestions() {
         let shortcut = AgentInputShortcut(
             title: "饮食分析",
             skillID: AgentSkill.nutritionAnalysis.rawValue,
@@ -154,7 +154,7 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         )
         let tools = AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
         XCTAssertEqual(Set(tools), [
-            .listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal
+            .listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal, .askUserQuestions
         ])
         XCTAssertFalse(tools.contains(.loadSkill))
     }
@@ -353,14 +353,14 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
     }
 
     @MainActor
-    func testRollingCompactionKeepsNewestTenPairsAndReplacesOlderSummary() async throws {
+    func testRollingCompactionKeepsNewestThirtyPairsAndReplacesOlderSummary() async throws {
         let (context, container, defaults, suiteName) = try makeContext()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defer { withExtendedLifetime(container) {} }
         let session = ConversationSession()
         context.insert(session)
         var turnIDs: [UUID] = []
-        for index in 1 ... 11 {
+        for index in 1 ... 31 {
             let turnID = UUID()
             turnIDs.append(turnID)
             context.insert(CoachMessage(
@@ -393,21 +393,21 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         XCTAssertTrue(first.summary?.contains(turnIDs[0].uuidString.lowercased()) == true)
         XCTAssertFalse(first.summary?.contains(turnIDs[1].uuidString.lowercased()) == true)
 
-        let twelfthTurnID = UUID()
+        let nextTurnID = UUID()
         context.insert(CoachMessage(
-            date: Date(timeIntervalSince1970: 24),
+            date: Date(timeIntervalSince1970: 64),
             sessionID: session.id,
             isFromCoach: false,
-            text: "用户事实 12",
-            turnID: twelfthTurnID
+            text: "用户事实 32",
+            turnID: nextTurnID
         ))
         context.insert(CoachMessage(
-            date: Date(timeIntervalSince1970: 25),
+            date: Date(timeIntervalSince1970: 65),
             sessionID: session.id,
             isFromCoach: true,
-            text: "教练回复 12",
+            text: "教练回复 32",
             agentStatus: .succeeded,
-            turnID: twelfthTurnID
+            turnID: nextTurnID
         ))
         try context.save()
         let second = await ConversationCompactionMiddleware.prepare(

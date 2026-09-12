@@ -131,7 +131,7 @@ extension ConversationRecorder {
             formScore: arguments.formScore,
             intensity: arguments.intensity?.trimmed.nilIfEmpty,
             feedback: arguments.feedback?.trimmed.nilIfEmpty,
-            estimatedCalories: calorieEstimate?.calories,
+            estimatedCalories: arguments.calories ?? calorieEstimate?.calories,
             calorieMET: calorieEstimate?.met,
             calorieDurationMinutes: calorieEstimate?.durationMinutes,
             calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
@@ -164,7 +164,7 @@ extension ConversationRecorder {
         if let rest = arguments.restSeconds {
             summary.append("间歇 \(rest) 秒")
         }
-        let calorieSummary = calorieEstimate.map {
+        let calorieSummary = arguments.calories.map { "；用户提供消耗 \($0) kcal" } ?? calorieEstimate.map {
             let durationSource = $0.durationWasEstimated
                 ? "由组次、间歇和每次约 4 秒动作节奏推算 \($0.durationMinutes.formatted(.number.precision(.fractionLength(0 ... 1)))) 分钟"
                 : "按实际记录 \($0.durationMinutes.formatted(.number.precision(.fractionLength(0 ... 1)))) 分钟"
@@ -445,7 +445,11 @@ extension ConversationRecorder {
                 legacyPath: mediaPath
             )
         )
-        WorkoutCalorieCalculator.refreshStoredEstimate(entry, in: context)
+        WorkoutCalorieCalculator.refreshStoredEstimate(
+            entry,
+            in: context,
+            calorieOverride: arguments.calories
+        )
         try? context.save()
         return .success(
             "已更新训练\(AgentFacingRecordID.trailing(entry.businessID))：\(workoutSummary(entry))。",

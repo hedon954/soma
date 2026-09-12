@@ -14,9 +14,13 @@ struct AgentRunPreparationRequest {
     var selectedSkillID: String?
     var selectedShortcutID: String?
     var checkpoint: AgentLoopCheckpoint?
+    var configuration: AgentPromptConfiguration?
+    var turnID: UUID?
+    var historySummary: String?
 }
 
 struct PreparedAgentRun {
+    var extraConfigJSON: String
     var videos: [AgentVideoInput]
     var selectedRoute: AIModelRoute
     var apiKey: String
@@ -41,7 +45,7 @@ extension AIService {
         _ request: AgentRunPreparationRequest
     ) throws -> PreparedAgentRun {
         let routing = try resolvedRoute(
-            requested: request.requestedRoute,
+            requested: request.checkpoint?.route ?? request.requestedRoute,
             text: request.text,
             hasMedia: !request.images.isEmpty || request.history.contains { !$0.images.isEmpty || !$0.videos.isEmpty },
             hasVideo: request.hasVideo || request.history.contains { !$0.videos.isEmpty }
@@ -67,13 +71,23 @@ extension AIService {
                 model: route.model
             )
         }
-        let systemPrompt = ReActAgentPrompt.system(
-            defaults: defaults,
-            selectedSkillID: request.selectedSkillID
+        let restoredConfiguration = request.checkpoint?.initialInput.map {
+            AgentPromptConfiguration(systemPrompt: $0.messages.first?.text ?? "", skills: $0.skills,
+                                     tools: $0.tools, selectedSkillID: $0.selectedSkillID)
+        }
+        var configuration = try restoredConfiguration ?? request.configuration ?? AgentPromptConfiguration.capture(
+            defaults: defaults, selectedSkillID: request.selectedSkillID,
+            selectedShortcutID: request.selectedShortcutID
         )
-        let selectedSkill = request.selectedSkillID
-            .flatMap { AgentSkillRegistry.descriptor(id: $0, defaults: defaults) }
-        let userPrompt = ReActAgentPrompt.user(
+        if request.checkpoint?.initialInput == nil, let checkpoint = request.checkpoint,
+           !checkpoint.restoredToolNames.isEmpty
+        {
+            let names = Set(exposedTools(request))
+            configuration.tools = configuration.tools.filter { names.contains($0.name) }
+        }
+        let systemPrompt = configuration.systemPrompt
+        let selectedSkill = configuration.skills.first { $0.id == configuration.selectedSkillID }
+        let userPrompt = request.checkpoint?.initialInput?.messages.last?.text ?? ReActAgentPrompt.user(
             text: request.text,
             context: request.context,
             imageCount: request.images.count,
@@ -81,40 +95,34 @@ extension AIService {
             directVideoCount: request.videos.count,
             imageAttachmentCount: request.imageAttachmentCount,
             videoAttachmentCount: request.videoAttachmentCount,
-            selectedSkill: selectedSkill.map {
-                AgentModelSkillSnapshot(
-                    id: $0.id,
-                    name: $0.title,
-                    description: $0.summary,
-                    whenToUse: $0.whenToUse,
-                    content: $0.markdown
-                )
-            }
+            selectedSkill: selectedSkill
         )
-        let historyForPrompt = request.checkpoint == nil
-            ? request.history
-            : request.history.map(removingImages)
-        let exposedTools = exposedTools(request)
-        let maxSteps = ReActAgentPreference.maxSteps(defaults: defaults)
+        let historyForPrompt = request.history
+        let exposedTools = configuration.tools.map(\.name)
+        let maxSteps = request.checkpoint?.initialInput?.runtime.maxSteps
+            ?? ReActAgentPreference.maxSteps(defaults: defaults)
         let deadlinePolicy = ReActAgentPreference.deadlinePolicy(
             streamDeadlinePolicy,
             defaults: defaults
         )
-        let modelInput = try AgentModelInputBuilder.build(
+        var modelInput = try AgentModelInputBuilder.build(
             systemPrompt: systemPrompt,
+            currentTurnID: request.turnID,
+            historySummary: request.historySummary,
             history: historyForPrompt,
             userPrompt: userPrompt,
             currentImages: request.images,
             currentVideos: request.videos,
-            skills: AgentSkill.snapshots(
-                defaults: defaults,
-                selectedSkillID: selectedSkill?.id
-            ),
+            skills: configuration.skills,
             tools: exposedTools,
             selectedSkillID: selectedSkill?.id,
             maxSteps: maxSteps,
             deadlinePolicy: deadlinePolicy
         )
+        modelInput.envelope.tools = configuration.tools
+        if let initial = request.checkpoint?.initialInput {
+            modelInput.envelope = initial
+        }
         var messages = chatMessages(from: modelInput)
         let isLegacyCheckpoint = request.checkpoint != nil
             && request.checkpoint?.toolBatches == nil
@@ -127,10 +135,11 @@ extension AIService {
                 content: .text(compactedCheckpointPrompt(checkpoint))
             ))
         }
-        var toolState = AgentToolLoopState(
+        var toolState = try AgentToolLoopState(
             messages: messages,
-            tools: exposedTools.map(\.chatTool),
-            exposedToolNames: exposedTools.map(\.rawValue)
+            tools: configuration.nativeTools,
+            exposedToolNames: exposedTools.map(\.rawValue),
+            skillSnapshots: configuration.skills
         )
         let batches = request.checkpoint?.toolBatches ?? []
         restoreCheckpointBatches(batches, state: &toolState)
@@ -146,6 +155,8 @@ extension AIService {
             }
         }
         return PreparedAgentRun(
+            extraConfigJSON: request.checkpoint?.extraConfigJSON
+                ?? effectiveExtraConfig(baseURL: route.baseURL, model: route.model),
             videos: indexedVideos,
             selectedRoute: route,
             apiKey: routing.apiKey,
@@ -165,7 +176,7 @@ extension AIService {
             assistantPassages: request.checkpoint?.assistantPassages ?? [],
             checkpointBatches: batches,
             completedOperationCount: request.checkpoint?.lastCompletedStep ?? 0,
-            clearedHistoryFrames: request.checkpoint != nil,
+            clearedHistoryFrames: false,
             maxSteps: maxSteps,
             requiresVideoFrames: assessment.directVideoSupport == false
         )
@@ -225,25 +236,11 @@ extension AIService {
     ) -> [AgentToolName] {
         let restored = request.checkpoint?.restoredToolNames ?? []
         if !restored.isEmpty {
-            return AgentToolExposurePolicy.tools(names: restored)
+            return AgentToolExposurePolicy.tools(names: restored + [AgentToolName.askUserQuestions.rawValue])
         }
         let shortcut = request.selectedShortcutID.flatMap {
             AgentInputShortcutStore.shortcut(id: $0, defaults: defaults)
         }
         return AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
-    }
-
-    private func removingImages(
-        _ exchange: AgentConversationExchange
-    ) -> AgentConversationExchange {
-        AgentConversationExchange(
-            userText: exchange.userText,
-            assistantText: exchange.assistantText,
-            images: [],
-            videos: exchange.videos,
-            videoPreparationFailed: exchange.videoPreparationFailed,
-            imageAttachmentCount: exchange.imageAttachmentCount,
-            videoAttachmentCount: exchange.videoAttachmentCount
-        )
     }
 }

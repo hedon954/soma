@@ -4,7 +4,7 @@
 - 日期：2026-09-07
 - 维护者：Soma maintainers
 - 上游依据：[PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
-- 部分替代：[ADR 0118](0118-exercise-facets-and-meal-colors.md) 的三条分类轴与原始模式标签侧栏；部位映射、餐次配色与「不改写元数据」不变
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的三条分类轴与原始模式标签侧栏；部位映射、餐次配色与「不改写元数据」不变
 - 后续替代：暂无
 
 ## 背景
@@ -49,7 +49,3 @@
 
 `ExerciseLibraryFilterTests` 覆盖映射、多类型、未标注和部位主要肌群。`LibraryAndMealsUITests`
 更新分类标识。`make verify`。
-
-## 参考
-
-- [ADR 0118](0118-exercise-facets-and-meal-colors.md)

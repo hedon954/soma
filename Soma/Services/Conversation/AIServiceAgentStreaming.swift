@@ -33,6 +33,7 @@ struct AgentStreamStepRequest {
     var apiKey: String
     var userPrompt: String
     var textItemID: UUID
+    var extraConfigJSON: String?
     var reasoningItemID: UUID = .init()
     var assistantReasoningByMessageIndex: [Int: String] = [:]
     var enforceFirstStepDeadline: Bool = false
@@ -241,6 +242,7 @@ extension AIService {
                     textItemID: request.textItemID,
                     reasoningItemID: request.reasoningItemID,
                     assistantReasoningByMessageIndex: request.assistantReasoningByMessageIndex,
+                    extraConfigJSON: request.extraConfigJSON,
                     enforceFirstDelta: request.enforceFirstStepDeadline,
                     trace: trace
                 )
@@ -305,6 +307,7 @@ extension AIService {
         textItemID: UUID,
         reasoningItemID: UUID,
         assistantReasoningByMessageIndex: [Int: String] = [:],
+        extraConfigJSON: String? = nil,
         enforceFirstDelta: Bool,
         trace: ((AgentTraceEvent) -> Void)?
     ) async throws -> AgentStreamOutcome {
@@ -316,7 +319,8 @@ extension AIService {
                 provider: route.provider,
                 baseURL: route.baseURL,
                 apiKey: apiKey,
-                assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
+                assistantReasoningByMessageIndex: assistantReasoningByMessageIndex,
+                extraConfigJSON: extraConfigJSON
             )
         } catch {
             throw StreamingFailure.interrupted(error, passage: "", reasoning: "", receivedMeaningfulDelta: false)
@@ -431,7 +435,8 @@ extension AIService {
         provider: AIProvider,
         baseURL: String,
         apiKey: String,
-        assistantReasoningByMessageIndex: [Int: String] = [:]
+        assistantReasoningByMessageIndex: [Int: String] = [:],
+        extraConfigJSON: String? = nil
     ) async throws -> AsyncThrowingStream<ChatCompletionChunkObject, Error> {
         if let agentStreamLoader {
             return try await agentStreamLoader(parameters, provider, baseURL, apiKey)
@@ -444,7 +449,8 @@ extension AIService {
             provider: provider,
             baseURL: baseURL,
             apiKey: apiKey,
-            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex
+            assistantReasoningByMessageIndex: assistantReasoningByMessageIndex,
+            extraConfigJSON: extraConfigJSON
         )
     }
 

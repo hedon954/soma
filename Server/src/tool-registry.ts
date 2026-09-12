@@ -1,5 +1,6 @@
 import { ProtocolError } from "./domain.js";
 import type { AgentEvent } from "./domain.js";
+import { userQuestionsParameters, validateQuestionActions } from "./user-questions.js";
 
 export interface DeviceToolDefinition {
   name: string;
@@ -247,6 +248,12 @@ function recordDomainDefinitions(): DeviceToolDefinition[] {
 
 const definitions: DeviceToolDefinition[] = [
   {
+    name: "ask_user_questions",
+    schemaVersion: 1,
+    mutation: false,
+    parameters: userQuestionsParameters,
+  },
+  {
     name: "search_exercises",
     schemaVersion: 2,
     mutation: false,
@@ -402,6 +409,7 @@ const definitions: DeviceToolDefinition[] = [
               set_entries: setEntriesV4,
               rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
               duration_minutes: { type: "integer", minimum: 0, maximum: 1_440 },
+              calories: integerValue,
               form_score: { type: "integer", minimum: 0, maximum: 100 },
               intensity: stringValue,
               feedback: stringValue,
@@ -551,6 +559,7 @@ const definitions: DeviceToolDefinition[] = [
         set_entries: setEntriesV4,
         rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
         duration_minutes: { type: "integer", minimum: 0, maximum: 1_440 },
+        calories: integerValue,
         form_score: { type: "integer", minimum: 0, maximum: 100 },
         intensity: stringValue,
         feedback: stringValue,
@@ -692,6 +701,13 @@ export function validateDeviceTool(input: {
     );
   }
   validateSchema(input.arguments, definition.parameters, input.name);
+  if (input.name === "ask_user_questions") {
+    validateQuestionActions(input.arguments, (name, args) => {
+      const target = deviceToolRegistry.get(name);
+      if (target === undefined) invalidSchema("按钮绑定的工具不存在。");
+      validateDeviceTool({ name, schemaVersion: target.schemaVersion, arguments: args, allowedNames: input.allowedNames });
+    });
+  }
   if (input.parameters !== undefined) {
     validateSchema(input.arguments, input.parameters, input.name);
   }

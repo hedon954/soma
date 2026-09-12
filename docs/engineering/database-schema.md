@@ -102,7 +102,7 @@ schema version 7 marker 是当前唯一安装基线。启动先用 `key + schema
 | <!-- schema-model: AgentMutationReceipt | key,turnID,signature,resultData,createdAt,statusRaw --> `AgentMutationReceipt` | `key: String [unique]`、`turnID: UUID`、`signature: String`、`resultData: Data`、`createdAt: Date`、`statusRaw: String` | 本地业务 Tool 写入的幂等回执。 |
 | <!-- schema-model: AgentJob | clientJobKey,id,turnID,sessionID,userMessageID,responseMessageID,dataSpaceRaw,backendRaw,stateRaw,userText,mediaAttachmentsData,contextSnapshotData,createdAt,updatedAt,completedAt,activeAttemptNumber,submissionAttemptCount,nextRetryAt,lastError,remoteJobID,remoteEventCursor,remoteRequestAttempt,leaseOwner,leaseExpiresAt,leaseEpoch,lastEventSequence,chatProjectionCursor,traceProjectionCursor,liveActivityProjectionCursor,notificationProjectionCursor,responseTextSnapshot,lastCompletedStep,loopCheckpointData,loopStartedAt,loopActiveDuration,loopActiveStartedAt,firstStepDeadlineConsumed,executionKindRaw,deterministicPayloadData,turnSentAt,effectiveBusinessDate,businessTimeZoneIdentifier,defaultOccurredAt,selectedSkillID,selectedShortcutID --> `AgentJob` | durable ReAct Job 字段，以及冻结的 `turnSentAt`、`effectiveBusinessDate`、时区、`defaultOccurredAt`、`selectedSkillID` 与 `selectedShortcutID` | `responseMessageID` 在入队事务中绑定唯一响应；排队、恢复、失败和人工重试原位更新。跨午夜重试复用原始 Turn 默认发生时间；快捷按钮决定本 Turn 的工具曝光。 |
 | <!-- schema-model: PersistentAgentEvent | eventKey,id,jobID,turnID,sequence,attemptNumber,kindRaw,payloadData,createdAt --> `PersistentAgentEvent` | `eventKey: String [unique]`、`id: UUID`、`jobID: UUID`、`turnID: UUID`、`sequence: Int`、`attemptNumber: Int`、`kindRaw: String`、`payloadData: Data`、`createdAt: Date` | Job 的语义事件日志；`jobID + sequence` 形成消费顺序，`eventKey` 负责幂等。 |
-| <!-- schema-model: ConversationCompactionSummary | sessionKey,id,sessionID,summary,coveredTurnIDsData,strategyRaw,updatedAt --> `ConversationCompactionSummary` | `sessionKey: String [unique]`、摘要、覆盖 Turn 和策略 | Loop 前滚动替代更早对话；最近 10 对保持原生消息。 |
+| <!-- schema-model: ConversationCompactionSummary | sessionKey,id,sessionID,summary,coveredTurnIDsData,strategyRaw,updatedAt --> `ConversationCompactionSummary` | `sessionKey: String [unique]`、摘要、版本化覆盖 Turn / 内容指纹和策略 | Loop 前滚动替代超出最近 30 个完整来回或 30k 历史文本的内容；原生帧仍在 Job 上下文编码字段中。 |
 | <!-- schema-model: DataMigrationMarker | key,schemaVersion,completedAt --> `DataMigrationMarker` | `key: String [unique]`、`schemaVersion: Int`、`completedAt: Date` | 每个数据空间独立的启动迁移完成证明。 |
 | <!-- schema-model: BusinessIDSequence | namespace,nextValue,updatedAt --> `BusinessIDSequence` | `namespace: String [unique]`、`nextValue: Int64`、`updatedAt: Date` | 每实体、每数据空间独立分配 Int64 业务 ID。 |
 
@@ -127,8 +127,8 @@ schema version 7 marker 是当前唯一安装基线。启动先用 `key + schema
 | `CoachMessage.locationData` | `LocationSnapshot` |
 | `AgentTrace.spansData` | `[AgentTraceSpan]` |
 | `AgentMutationReceipt.resultData` | `AgentToolResult` |
-| `AgentJob.contextSnapshotData` | `AgentJobContextSnapshot` |
-| `AgentJob.loopCheckpointData` | `AgentLoopCheckpoint` |
+| `AgentJob.contextSnapshotData` | `AgentJobContextSnapshot`：发送时 envelope、冻结 Prompt / Skill / Tool 配置、执行前业务快照，以及完成后可复用的原生 Turn 帧；不含密钥、媒体字节或 thinking。 |
+| `AgentJob.loopCheckpointData` | `AgentLoopCheckpoint`：未完成 Loop 的初始版本化输入、路由、厂商扩展配置及已完成 Tool 批次；恢复后清除。 |
 | `AgentJob.deterministicPayloadData` | `ExerciseQuickRecordDraft` |
 | `PersistentAgentEvent.payloadData` | `PersistentAgentEventPayload` |
 

@@ -20,8 +20,11 @@ extension AppErrorMessage {
             return "模型密钥无效或已过期。请在设置的「LLM 配置」中更新 API Key 后重试。"
         }
         let context = ["context_length", "context length", "maximum context", "too many tokens", "token limit"]
-        if status == 413 || context.contains(where: text.contains) {
-            return "这次内容超过模型可处理的长度或大小。请减少附件、缩短描述，或新建一个会话后分开发送。"
+        if context.contains(where: text.contains) {
+            return "这次对话超过模型的上下文容量。请缩短描述，或新建一个会话后分开发送；已经保存的记录仍保留。"
+        }
+        if status == 413 || text.contains("provider_payload_too_large") {
+            return "这次请求的体积过大。请减少或缩小附件后重试；原附件和已经保存的记录仍保留。"
         }
         let unsupported = ["unknown variant", "unsupported", "not support", "doesn't support", "not allowed", "不支持"]
             .contains(where: text.contains)

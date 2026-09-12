@@ -77,6 +77,7 @@ extension ConversationProcessingService {
         let compaction = await ConversationCompactionMiddleware.prepare(
             sessionID: job.sessionID,
             excludingTurnID: turnID,
+            projection: preparedHistory.projection,
             ai: context.ai,
             in: context.modelContext
         )
@@ -96,20 +97,15 @@ extension ConversationProcessingService {
         } else {
             nil
         }
-        let compactionContext = compaction.summary.map {
-            "更早对话的可审查滚动摘要：\n\($0)"
-        }
-        let agentContext = [persistentContext, compactionContext, weatherGuidance]
+        let agentContext = [persistentContext, weatherGuidance]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
-        let selectedSkill = job.selectedSkillID.flatMap {
-            AgentSkillRegistry.descriptor(id: $0, defaults: context.ai.defaults)
-        }
-        // ADR 0082：远程执行仍由设备决定曝光边界，服务器只收到已经收窄的工具清单。
-        let selectedShortcut = job.selectedShortcutID.flatMap {
-            AgentInputShortcutStore.shortcut(id: $0, defaults: context.ai.defaults)
-        }
+        let configuration = try job.contextSnapshot?.configuration ?? AgentPromptConfiguration.capture(
+            defaults: context.ai.defaults, selectedSkillID: job.selectedSkillID,
+            selectedShortcutID: job.selectedShortcutID
+        )
+        let selectedSkill = configuration.skills.first { $0.id == configuration.selectedSkillID }
         let userPrompt = ReActAgentPrompt.user(
             text: userMessage.text,
             context: agentContext,
@@ -118,30 +114,18 @@ extension ConversationProcessingService {
             directVideoCount: media.videos.count,
             imageAttachmentCount: media.imageCount,
             videoAttachmentCount: media.videoCount,
-            selectedSkill: selectedSkill.map {
-                AgentModelSkillSnapshot(
-                    id: $0.id,
-                    name: $0.title,
-                    description: $0.summary,
-                    whenToUse: $0.whenToUse,
-                    content: $0.markdown
-                )
-            }
+            selectedSkill: selectedSkill
         )
         var modelInput = try AgentModelInputBuilder.build(
-            systemPrompt: ReActAgentPrompt.system(
-                defaults: context.ai.defaults,
-                selectedSkillID: selectedSkill?.id
-            ),
+            systemPrompt: configuration.systemPrompt,
+            currentTurnID: turnID,
+            historySummary: compaction.summary,
             history: preparedHistory.history,
             userPrompt: userPrompt,
             currentImages: media.frames,
             currentVideos: media.videos,
-            skills: AgentSkill.snapshots(
-                defaults: context.ai.defaults,
-                selectedSkillID: selectedSkill?.id
-            ),
-            tools: AgentToolExposurePolicy.tools(selectedShortcut: selectedShortcut),
+            skills: configuration.skills,
+            tools: configuration.tools.map(\.name),
             selectedSkillID: selectedSkill?.id,
             maxSteps: ReActAgentPreference.maxSteps(defaults: context.ai.defaults),
             deadlinePolicy: ReActAgentPreference.deadlinePolicy(
@@ -149,6 +133,7 @@ extension ConversationProcessingService {
                 defaults: context.ai.defaults
             )
         )
+        modelInput.envelope.tools = configuration.tools
         if supportsFrameFallback {
             do {
                 modelInput = try await AgentModelVideoFallbackPreparation.adding(to: modelInput)
@@ -160,6 +145,15 @@ extension ConversationProcessingService {
             }
         }
         let usesFrames = !supportsDirectVideo && modelInput.envelope.videoFallbacks?.isEmpty == false
+        if job.contextSnapshot?.remoteCanonicalFrames == nil,
+           let currentFrame = modelInput.envelope.messages.last,
+           currentFrame.role == .user
+        {
+            var snapshot = job.contextSnapshot
+            snapshot?.remoteCanonicalFrames = [currentFrame]
+            job.contextSnapshot = snapshot
+            try? context.modelContext.save()
+        }
         return PreparedRemoteAgentSubmission(
             modelInput: modelInput,
             mediaMode: usesFrames ? .keyframes : media.mode,

@@ -1,7 +1,7 @@
 # ADR 0115：能量估算默认参考与紧凑明细
 
 - 状态：部分已替代
-- 后续替代：[ADR 0118](../../../adr/0118-exercise-facets-and-meal-colors.md) 细化摄入餐次与未知值呈现
+- 后续替代：[ADR 0118](../../0.0.21/adr/0118-exercise-facets-and-meal-colors.md) 细化摄入餐次与未知值呈现
 - 后续替代：[ADR 0122](../../../adr/0122-nutrition-rings-and-period-deficit.md) 日页宏量与缺口改为圆环对照，估算公式不变
 - 日期：2026-09-05
 - 部分替代：[ADR 0114](0114-progress-periods-and-adaptive-energy.md) 的无手动配置则停止估算、指标仅经依据页披露规则；动态校准、历史因果与去重不变

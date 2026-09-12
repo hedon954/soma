@@ -334,6 +334,9 @@ enum PerformanceTestFixture {
             turnID: liveTurnID
         )
         context.insert(responseMessage)
+        if let request = AgentUserQuestionRequest.from(items: responseMessage.agentTurnItems) {
+            responseMessage.text = request.historyText
+        }
         try? context.save()
         return LongStreamSeed(
             session: session,
@@ -370,7 +373,7 @@ enum PerformanceTestFixture {
 
     private static var agentStageStatus: AgentTraceStatus {
         switch requestedAgentStage {
-        case "completed", "reasoning-completed": .succeeded
+        case "completed", "reasoning-completed", "questions", "questions-long": .succeeded
         case "failed": .failed
         default: .running
         }
@@ -380,6 +383,8 @@ enum PerformanceTestFixture {
         guard requestedStreamScenario == .agentStages else { return [] }
         let operationID = "fixture-operation"
         switch requestedAgentStage {
+        case "questions", "questions-long":
+            return AgentQuestionFixture.items(long: requestedAgentStage == "questions-long", at: startedAt)
         case "model":
             return [AgentTurnItem(
                 kind: .activity,

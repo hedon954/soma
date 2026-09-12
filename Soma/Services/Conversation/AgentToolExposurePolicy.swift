@@ -16,7 +16,7 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
     var tools: [AgentToolName] {
         switch self {
         case .core:
-            [.loadSkill]
+            [.loadSkill, .askUserQuestions]
         case .exercises:
             [
                 .searchExercises,
@@ -71,7 +71,7 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
     }
 }
 
-/// ADR 0082：默认全量曝光；选中快捷按钮时只曝光该按钮勾选的工具。
+/// ADR 0082 / 0136：默认全量曝光；快捷按钮限制业务工具，提问工具始终可用。
 enum AgentToolExposurePolicy {
     /// 工具目录顺序，作为所有曝光结果的稳定排序。
     static let orderedTools: [AgentToolName] = {
@@ -92,7 +92,7 @@ enum AgentToolExposurePolicy {
         guard let selectedShortcut else { return orderedTools }
         let selected = Set(selectedShortcut.toolNames)
         guard !selected.isEmpty else { return orderedTools }
-        return orderedTools.filter { selected.contains($0.rawValue) }
+        return orderedTools.filter { selected.contains($0.rawValue) || $0 == .askUserQuestions }
     }
 
     static func tools(names: [String]) -> [AgentToolName] {

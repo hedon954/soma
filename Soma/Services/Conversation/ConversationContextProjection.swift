@@ -1,12 +1,14 @@
 import Foundation
 
 struct ConversationContextProjection {
-    static let defaultMaximumExchangeCount = 10
-    static let defaultMaximumEstimatedTokens = 6000
+    static let defaultMaximumExchangeCount = 30
+    static let defaultMaximumEstimatedTokens = 30000
 
     struct Exchange {
         var turnID: UUID
         var date: Date = .distantPast
+        var trustedTime: TrustedTurnContext?
+        var canonicalMessages: [AgentModelMessage]?
         var userText: String
         var assistantText: String?
         var mediaAttachments: [MediaAttachmentReference]
@@ -21,26 +23,28 @@ struct ConversationContextProjection {
     }
 
     var exchanges: [Exchange]
+    var evictedExchanges: [Exchange] = []
+    var estimatedHistoryTokens: Int = 0
+    var isOverBudget = false
 
     static func make(
         messages: [CoachMessage],
         sessionID: UUID,
         excludingTurnID: UUID?,
+        turnContexts: [UUID: TrustedTurnContext] = [:],
+        canonicalTurns: [UUID: AgentCanonicalTurn] = [:],
         maximumExchangeCount: Int = defaultMaximumExchangeCount,
         maximumEstimatedTokens: Int = defaultMaximumEstimatedTokens
     ) -> ConversationContextProjection {
-        guard maximumExchangeCount > 0 else {
-            return ConversationContextProjection(exchanges: [])
-        }
-
         let sessionMessages = messages
             .filter { $0.sessionID == sessionID }
             .sorted { $0.date < $1.date }
+        let currentDate = sessionMessages.first { !$0.isFromCoach && $0.turnID == excludingTurnID }?.date
         let candidates = sessionMessages
             .filter { message in
                 !message.isFromCoach && message.turnID != excludingTurnID
+                    && (currentDate == nil || message.date < currentDate!)
             }
-            .suffix(maximumExchangeCount)
         let assistantsByTurnID = sessionMessages.reduce(
             into: [UUID: CoachMessage]()
         ) { result, message in
@@ -70,9 +74,16 @@ struct ConversationContextProjection {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
+            let saved = userMessage.turnID.flatMap { canonicalTurns[$0] }
+            let revision = AgentCanonicalTurn.fingerprint(
+                user: userMessage.text, assistant: assistantMessage?.text,
+                correction: assistantMessage?.manualCorrectionSummary
+            )
             return Exchange(
                 turnID: userMessage.turnID ?? userMessage.id,
                 date: userMessage.date,
+                trustedTime: userMessage.turnID.flatMap { turnContexts[$0] },
+                canonicalMessages: saved?.sourceFingerprint == revision ? saved?.messages : nil,
                 userText: userMessage.text,
                 assistantText: assistantText.isEmpty ? nil : assistantText,
                 mediaAttachments: userMessage.mediaAttachments
@@ -81,9 +92,13 @@ struct ConversationContextProjection {
         var selected: [Exchange] = []
         var tokenCount = 0
         for exchange in exchanges.reversed() {
-            let exchangeTokens = estimatedTokens(
-                exchange.userText + "\n" + (exchange.assistantText ?? "")
-            )
+            guard selected.count < max(0, maximumExchangeCount) else { break }
+            let actualText = exchange.canonicalMessages.map {
+                $0.map { frame in
+                    frame.text + (frame.toolCalls ?? []).map { $0.name + $0.arguments }.joined()
+                }.joined(separator: "\n")
+            } ?? (exchange.userText + "\n" + (exchange.assistantText ?? ""))
+            let exchangeTokens = estimatedTokens(actualText)
             if !selected.isEmpty,
                tokenCount + exchangeTokens > maximumEstimatedTokens
             {
@@ -92,10 +107,15 @@ struct ConversationContextProjection {
             selected.append(exchange)
             tokenCount += exchangeTokens
         }
-        return ConversationContextProjection(exchanges: Array(selected.reversed()))
+        return ConversationContextProjection(
+            exchanges: Array(selected.reversed()),
+            evictedExchanges: Array(exchanges.dropLast(selected.count)),
+            estimatedHistoryTokens: tokenCount,
+            isOverBudget: tokenCount > maximumEstimatedTokens
+        )
     }
 
-    private static func estimatedTokens(_ text: String) -> Int {
+    static func estimatedTokens(_ text: String) -> Int {
         var tokens = 0
         var asciiRun = 0
         func flushASCII() {

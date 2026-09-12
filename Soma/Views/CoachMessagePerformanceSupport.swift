@@ -256,6 +256,7 @@ struct CoachMessageRenderProjection {
     let messages: [CoachMessage]
     let hasEarlierMessages: Bool
     let latestAssistantMessageID: UUID?
+    let latestUserTurnID: UUID?
     let stagedTurnIDs: Set<UUID>
     let retryableMessageIDs: Set<UUID>
     let pendingJobCount: Int
@@ -267,6 +268,7 @@ struct CoachMessageRenderProjection {
     ) {
         let messages = Array(recentMessages.prefix(messageLimit).reversed())
         self.messages = messages
+        latestUserTurnID = messages.last(where: { !$0.isFromCoach })?.turnID
         hasEarlierMessages = recentMessages.count > messageLimit
         latestAssistantMessageID = ChatRecordEditPolicy
             .latestEditableAssistantMessageID(in: messages)
@@ -306,6 +308,7 @@ struct CoachMessageRenderProjection {
 /// 再次解析每个 Tool 输出。这里按消息 ID 和原始 Data 做有界缓存，数据一变即失效。
 @MainActor
 struct CoachMessageRenderPayload {
+    let userQuestions: AgentUserQuestionRequest?
     let visibleText: String
     let turnItems: [AgentTurnItem]
     let transcriptSegments: [AgentTurnTranscriptSegment]
@@ -361,12 +364,21 @@ enum CoachMessageRenderPayloadCache {
 
         AppPerformance.event(.coachRenderCache, detail: "result=rebuild")
 
-        let items = message.agentTurnItems
+        let storedItems = message.agentTurnItems
+        let questions = AgentUserQuestionRequest.from(items: storedItems)
+        let items = storedItems.filter { item in
+            if item.kind == .text, item.text == questions?.historyText {
+                return false
+            }
+            // 问题由固定组件呈现；避免再显示一张重复问题文字的工具卡。
+            return AgentUserQuestionRequest.from(items: [item]) == nil
+        }
         let attachments = message.mediaAttachments
         let turnItemsWithoutActivity = items.filter { $0.kind != .activity }
         let payload = CoachMessageRenderPayload(
+            userQuestions: questions,
             visibleText: message.isFromCoach
-                ? AgentVisibleTextSanitizer.sanitize(message.text)
+                ? (questions == nil ? AgentVisibleTextSanitizer.sanitize(message.text) : "")
                 : message.text,
             turnItems: items,
             transcriptSegments: AgentTurnTranscriptSegments.make(from: items),

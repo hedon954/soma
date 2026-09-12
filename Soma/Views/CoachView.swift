@@ -647,6 +647,12 @@ struct CoachSessionView: View {
                 ) ?? false,
                 canRetry: !processorIsProcessing
                     && projection.retryableMessageIDs.contains(message.id),
+                showsUserQuestions: message.isFromCoach && message.turnID != nil
+                    && message.turnID == projection.latestUserTurnID
+                    && message.id == projection.latestAssistantMessageID,
+                onQuestionAnswer: { questionID, optionID, text in
+                    try submitQuestionAnswer(message, questionID: questionID, optionID: optionID, text: text)
+                },
                 onRetry: { retry(message) },
                 onDiscardPending: message.turnID.map(
                     projection.stagedTurnIDs.contains

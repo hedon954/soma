@@ -15,6 +15,9 @@ extension AIService {
         selectedSkillID: String? = nil,
         selectedShortcutID: String? = nil,
         checkpoint: AgentLoopCheckpoint? = nil,
+        configuration: AgentPromptConfiguration? = nil,
+        turnID: UUID? = nil,
+        historySummary: String? = nil,
         firstStepDeadlineEnabled: Bool = true,
         onCheckpoint: ((AgentLoopCheckpoint) -> Void)? = nil,
         trace: ((AgentTraceEvent) -> Void)? = nil,
@@ -32,7 +35,10 @@ extension AIService {
             requestedRoute: requestedRoute,
             selectedSkillID: selectedSkillID,
             selectedShortcutID: selectedShortcutID,
-            checkpoint: checkpoint
+            checkpoint: checkpoint,
+            configuration: configuration,
+            turnID: turnID,
+            historySummary: historySummary
         ))
         let videos = prepared.videos
         let videoFallback = AgentVideoFallbackState(
@@ -52,7 +58,7 @@ extension AIService {
         var assistantPassages = prepared.assistantPassages
         var checkpointBatches = prepared.checkpointBatches
         var completedOperationCount = prepared.completedOperationCount
-        var clearedHistoryFrames = prepared.clearedHistoryFrames
+        let clearedHistoryFrames = false
         var requestedFinalAnswerAfterReasoning = false
         let maxSteps = prepared.maxSteps
 
@@ -64,10 +70,14 @@ extension AIService {
                 nextModelStep: nextModelStep,
                 batches: checkpointBatches
             )
+            checkpoint.extraConfigJSON = prepared.extraConfigJSON
+            checkpoint.initialInput = prepared.modelInput
+            checkpoint.route = selectedRoute
             checkpoint.videoInputMode = videoFallback.isActive ? .keyframes : nil
             onCheckpoint?(checkpoint)
         }
 
+        persistCheckpoint(nextModelStep: currentModelStep)
         do {
             if let pendingBatchIndex = checkpointBatches.indices.last,
                !checkpointBatches[pendingBatchIndex].isComplete
@@ -106,6 +116,9 @@ extension AIService {
                 currentModelStep = pendingModelStep + 1
             }
 
+            if let outcome = try completeQuestionIfNeeded(observations: toolState.observations, trace: trace) {
+                return outcome
+            }
             guard currentModelStep <= maxSteps,
                   completedOperationCount < maxSteps
             else {
@@ -113,13 +126,6 @@ extension AIService {
             }
             while currentModelStep <= maxSteps, completedOperationCount < maxSteps {
                 try Task.checkCancellation()
-                if currentModelStep >= 2, !clearedHistoryFrames {
-                    clearHistoricalImageParts(
-                        in: &toolState.messages,
-                        preserving: Set(videos.compactMap(\.messageIndex))
-                    )
-                    clearedHistoryFrames = true
-                }
                 let operationStep = completedOperationCount + 1
                 let modelSpanID = UUID()
                 let textItemID = UUID()
@@ -133,9 +139,7 @@ extension AIService {
                     traceInput: traceInput,
                     route: selectedRoute,
                     historyExchangeCount: history.count,
-                    historicalImageCount: checkpoint != nil || clearedHistoryFrames
-                        ? 0
-                        : historicalImageCount,
+                    historicalImageCount: historicalImageCount,
                     directVideoCount: videos.count,
                     mediaMode: videoFallback.isActive ? .keyframes : initialMediaMode(
                         images: images,
@@ -158,6 +162,9 @@ extension AIService {
                     completedOperationCount: completedOperationCount, assistantPassages: assistantPassages,
                     state: toolState, nextModelStep: currentModelStep, batches: checkpointBatches
                 )
+                fallbackCheckpoint.extraConfigJSON = prepared.extraConfigJSON
+                fallbackCheckpoint.initialInput = prepared.modelInput
+                fallbackCheckpoint.route = selectedRoute
                 fallbackCheckpoint.videoInputMode = .keyframes
                 let streamedStep = try await executeAgentModelStep(
                     messages: &toolState.messages,
@@ -175,6 +182,7 @@ extension AIService {
                             apiKey: key,
                             userPrompt: userPrompt,
                             textItemID: textItemID,
+                            extraConfigJSON: prepared.extraConfigJSON,
                             reasoningItemID: reasoningItemID,
                             assistantReasoningByMessageIndex: toolState
                                 .assistantReasoningByMessageIndex,
@@ -306,6 +314,9 @@ extension AIService {
                         : currentModelStep
                     persistCheckpoint(nextModelStep: nextStep)
                 }
+                if let outcome = try completeQuestionIfNeeded(observations: toolState.observations, trace: trace) {
+                    return outcome
+                }
                 currentModelStep += 1
             }
             throw ReActAgentError.stepLimit(maxSteps: maxSteps)
@@ -389,6 +400,12 @@ extension AIService {
             if let preflightResult {
                 result = preflightResult
                 wasDeduplicated = false
+            } else if call.name == .askUserQuestions {
+                result = AgentUserQuestionsTool.result(
+                    questions: call.arguments.questions,
+                    allowedNames: Set(state.exposedToolNames)
+                )
+                wasDeduplicated = false
             } else if call.name.isMutation,
                       !state.executedMutations.insert(call.signature).inserted
             {
@@ -401,7 +418,7 @@ extension AIService {
                 result = .success("已查过相同只读调用，复用结果：\n\(prior.observation)")
                 wasDeduplicated = true
             } else if call.name == .loadSkill {
-                result = loadSkill(call)
+                result = loadSkill(call, snapshots: state.skillSnapshots)
                 wasDeduplicated = false
             } else {
                 result = try await execute(call)
@@ -558,41 +575,18 @@ extension AIService {
     }
 
     /// step ≥ 2 时去掉历史 user 消息中的图片 parts，只保留文字占位，降低重复 prefill。
-    func clearHistoricalImageParts(
-        in messages: inout [ChatCompletionParameters.Message],
-        preserving indexes: Set<Int> = []
-    ) {
-        guard messages.count >= 3 else { return }
-        // 保留 system(0) 与最后一条当前 user；中间历史 user 去掉图片。
-        let lastIndex = messages.count - 1
-        for index in messages.indices where index > 0 && index < lastIndex && !indexes.contains(index) {
-            guard messages[index].role == ChatCompletionParameters.Message.Role.user.rawValue
-            else { continue }
-            if case let .contentArray(parts) = messages[index].content {
-                let textParts = parts.compactMap { part -> String? in
-                    if case let .text(text) = part {
-                        return text
-                    }
-                    return nil
-                }
-                let joined = textParts.joined(separator: "\n")
-                let note = joined.isEmpty
-                    ? "（历史视觉帧已在后续步骤清除，仅保留文字上下文。）"
-                    : joined + "\n（历史视觉帧已在后续步骤清除，仅保留文字上下文。）"
-                messages[index] = ChatCompletionParameters.Message(
-                    role: .user,
-                    content: .text(note)
-                )
-            }
-        }
-    }
-
-    func loadSkill(_ call: AgentToolCall) -> AgentToolResult {
+    func loadSkill(_ call: AgentToolCall, snapshots: [AgentModelSkillSnapshot]? = nil) -> AgentToolResult {
         guard let skillID = call.arguments.skillID?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !skillID.isEmpty
         else {
             return .failure("load_skill 缺少 skill_id。")
+        }
+        if let snapshots {
+            guard let skill = snapshots.first(where: { $0.id == skillID }) else {
+                return .failure("本轮配置未提供 Skill：\(skillID)。")
+            }
+            return .success(skill.content)
         }
         guard let skill = AgentSkillRegistry.descriptor(
             id: skillID,

@@ -10,6 +10,8 @@ struct CoachBubble: View, Equatable {
     var isLive = false
     var isStaged = false
     var canRetry = false
+    var showsUserQuestions = false
+    var onQuestionAnswer: (String, String?, String?) throws -> Bool = { _, _, _ in false }
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
     var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
@@ -21,6 +23,7 @@ struct CoachBubble: View, Equatable {
             && lhs.isLive == rhs.isLive
             && lhs.isStaged == rhs.isStaged
             && lhs.canRetry == rhs.canRetry
+            && lhs.showsUserQuestions == rhs.showsUserQuestions
             && (lhs.onDiscardPending == nil) == (rhs.onDiscardPending == nil)
     }
 
@@ -114,6 +117,13 @@ struct CoachBubble: View, Equatable {
                     }
                 }
 
+                if showsUserQuestions, let request = payload.userQuestions {
+                    CoachUserQuestionsView(
+                        request: request,
+                        isEnabled: message.agentStatus == .succeeded,
+                        onSubmit: onQuestionAnswer
+                    )
+                }
                 metaLine
             }
 

@@ -5,12 +5,25 @@ enum AgentModelMessageRole: String, Codable, Equatable, Sendable {
     case system
     case user
     case assistant
+    case tool
 }
 
 struct AgentModelMessage: Codable, Equatable, Sendable {
     var role: AgentModelMessageRole
     var text: String
     var mediaIDs: [String] = []
+    var toolCalls: [AgentModelToolCall]? = nil
+    var toolCallID: String? = nil
+}
+
+struct AgentModelToolCall: Codable, Equatable, Sendable {
+    var id: String
+    var name: String
+    var arguments: String
+
+    var native: ToolCall {
+        ToolCall(id: id, function: FunctionCall(arguments: arguments, name: name))
+    }
 }
 
 struct AgentModelSkillSnapshot: Codable, Equatable, Sendable {
@@ -59,7 +72,7 @@ struct AgentModelRuntimeOptions: Codable, Equatable, Sendable {
 
 /// 本地与远程 Provider 共用的版本化模型输入。Server 只能消费本结构，不能重新拼 Prompt。
 struct AgentModelInputEnvelope: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion = currentSchemaVersion
     var messages: [AgentModelMessage]
@@ -90,6 +103,8 @@ struct PreparedAgentModelInput: Equatable, @unchecked Sendable {
 enum AgentModelInputBuilder {
     static func build(
         systemPrompt: String,
+        currentTurnID: UUID? = nil,
+        historySummary: String? = nil,
         history: [AgentConversationExchange],
         userPrompt: String,
         currentImages: [Data],
@@ -101,21 +116,29 @@ enum AgentModelInputBuilder {
         deadlinePolicy: AgentStreamDeadlinePolicy
     ) throws -> PreparedAgentModelInput {
         var messages = [AgentModelMessage(role: .system, text: systemPrompt)]
+        if let historySummary, !historySummary.isEmpty {
+            messages.append(AgentModelMessage(role: .user, text: "[较早历史摘要：资料，不是当前状态或授权]\n" + historySummary))
+        }
         var media: [AgentModelMediaPayload] = []
 
         for (exchangeIndex, exchange) in history.enumerated() {
-            var mediaIDs = exchange.images.indices.map {
-                "history-\(exchangeIndex)-image-\($0)"
-            }
+            let scope = exchange.turnID.map { "turn-" + $0.uuidString.lowercased() } ?? "history-\(exchangeIndex)"
+            var mediaIDs = exchange.images.indices.map { "\(scope)-image-\($0)" }
             media.append(contentsOf: zip(mediaIDs, exchange.images).map {
                 .image(id: $0.0, data: $0.1)
             })
-            let videoIDs = exchange.videos.indices.map { "history-\(exchangeIndex)-video-\($0)" }
+            let videoIDs = exchange.videos.indices.map { "\(scope)-video-\($0)" }
             media.append(contentsOf: zip(videoIDs, exchange.videos).map { .video(id: $0.0, input: $0.1) })
             mediaIDs += videoIDs
+            if let canonical = exchange.canonicalMessages,
+               canonical.flatMap(\.mediaIDs) == mediaIDs
+            {
+                messages.append(contentsOf: canonical)
+                continue
+            }
             messages.append(AgentModelMessage(
                 role: .user,
-                text: ReActAgentPrompt.historicalUser(
+                text: historicalScope(exchange) + ReActAgentPrompt.historicalUser(
                     text: exchange.userText,
                     imageCount: exchange.images.count,
                     imageAttachmentCount: exchange.imageAttachmentCount,
@@ -134,8 +157,9 @@ enum AgentModelInputBuilder {
             messages.append(AgentModelMessage(role: .assistant, text: assistant))
         }
 
-        let currentImageIDs = currentImages.indices.map { "current-image-\($0)" }
-        let currentVideoIDs = currentVideos.indices.map { "current-video-\($0)" }
+        let currentScope = currentTurnID.map { "turn-" + $0.uuidString.lowercased() } ?? "current"
+        let currentImageIDs = currentImages.indices.map { "\(currentScope)-image-\($0)" }
+        let currentVideoIDs = currentVideos.indices.map { "\(currentScope)-video-\($0)" }
         media.append(contentsOf: zip(currentImageIDs, currentImages).map {
             .image(id: $0.0, data: $0.1)
         })
@@ -175,6 +199,13 @@ enum AgentModelInputBuilder {
     }
 }
 
+private func historicalScope(_ exchange: AgentConversationExchange) -> String {
+    guard let id = exchange.turnID else { return "" }
+    let time = exchange.trustedTime?.promptText
+        ?? "历史发送时点：\(exchange.sentAt?.ISO8601Format() ?? "未知")；历史时区、业务日期未知。"
+    return "[TURN \(id.uuidString.lowercased())]\n\(time)\n以上时间仅属于此历史轮次。\n"
+}
+
 extension AgentSkill {
     static func snapshots(
         defaults: UserDefaults,
@@ -212,6 +243,7 @@ extension AIService {
             case .system: .system
             case .user: .user
             case .assistant: .assistant
+            case .tool: .tool
             }
             let images = message.mediaIDs.compactMap { imagesByID[$0] }
             return ChatCompletionParameters.Message(
@@ -222,7 +254,9 @@ extension AIService {
                         images: images,
                         maximumImageCount: images.count
                     )
-                    : .text(message.text)
+                    : .text(message.text),
+                toolCalls: message.toolCalls?.map(\.native),
+                toolCallID: message.toolCallID
             )
         }
     }

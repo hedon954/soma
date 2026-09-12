@@ -1,4 +1,5 @@
 # Soma 验收清单
+- 后续修订：[PRD 066](prd/066-agent-user-questions.md)、[ADR 0136](adr/0136-agent-user-questions.md)（提问按钮与确定性回答）
 
 - 后续修订：[PRD 064](prd/064-progress-total-energy-deficit.md)、[ADR 0133](adr/0133-paired-day-total-energy-deficit.md)（日、周、月按同日配对累计总热量缺口）
 - 后续修订：[ADR 0132](adr/0132-actionable-error-presentation.md)、[BUG 0063](bugs/0063-explicit-video-rejection-has-no-compatible-input.md)、[BUG 0064](bugs/0064-raw-errors-without-recovery.md)（视频回退及错误呈现回归）
@@ -27,6 +28,7 @@
 - 后续修订：[ADR 0128](adr/0128-remove-healthkit-until-redesign.md)（当前不接入 HealthKit）
 - 后续修订：[PRD 061](prd/061-daily-energy-net-training.md)（日总计加入去重后的训练增量）
 - 后续修订：[ADR 0129](adr/0129-daily-energy-net-training-increment.md)（记录写完整热量，日总计只加净增量）
+- 后续修订：[ADR 0135](adr/0135-agent-workout-calories.md)（训练工具优先采用用户提供的热量）
 
 - 上游依据：
   - [ADR 0000：压缩起点](adr/0000-origin-through-0.0.11.md) 收口的安装基线、性能预算与缓存失效规则
@@ -68,7 +70,7 @@
 | 底部 Tab | 教练、训练、进展、设置四个 Tab 各自保留导航栈；换 Tab 不 pop。教练单次再选 no-op，只有系统双击教练回到最后 AI 消息尾部；训练、进展、设置仅在详情页再点回根。首次进入、切换 Session 和从其他 Tab 返回都在布局完成后定位最后 AI 尾部，短内容贴顶。 |
 | 时间粒度与拖动 | 体重和容量都支持周、双周、月、季，并允许横向拖动历史窗口。 |
 | 身体信息 | 保存可选出生日期、生理性别、身高、目标和备注；称呼与出生日期直接位于基本信息，不使用“更多（可选）”或“填写出生日期”开关，未选择日期保持 `nil`。年龄动态计算，体重只读取体重记录的最新有效值，体态图通过身体记录历史回溯。昵称、性别、年龄、身高、最新体重、目标和限制进入有界 Agent 上下文。 |
-| 训练热量 | 普通训练与带练共用本地 MET 计算器；真实总时长优先，否则使用逐 effort 实际时长或每次约 4 秒并加明确记录的间歇，保存推算标记。体重只取训练发生前最近有效 BodyEntry；创建、更新、聊天卡编辑和带练投影都重算，启动迁移幂等回填证据充分的历史记录。缺体重/证据保持 `nil`，不写 `0 kcal`。聊天卡与详情的预计消耗可编辑；详情改热量后出现保存；清空后按公式重算。详情仍展示 MET、时长、推算状态或缺失事实。逐组时长按秒存储，界面用时分秒省略零单位。 |
+| 训练热量 | 普通训练与带练共用本地 MET 计算器；真实总时长优先，否则使用逐 effort 实际时长或每次约 4 秒并加明确记录的间歇，保存推算标记。体重只取训练发生前最近有效 BodyEntry；创建／修改工具收到用户在文字或图片中明确提供的 `calories` 时直接保存，省略参数时按公式重算；聊天卡编辑和带练投影沿用现有计算规则，启动迁移幂等回填证据充分的历史记录。未提供热量且缺体重/证据时保持 `nil`，不补 `0 kcal`。聊天卡与详情的预计消耗可编辑；详情改热量后出现保存；清空后按公式重算。详情仍展示 MET、时长、推算状态或缺失事实。逐组时长按秒存储，界面用时分秒省略零单位。 |
 | 外部健康数据 | 当前不接入 HealthKit。体重与训练只来自 Soma 记录；已存在的导入记录当普通记录保留。进展估算用 Mifflin 静息 × 个人活动系数或默认 1.4，再加上当天去重后的训练增量，不读设备能量。 |
 | 位置与天气上下文 | 位置只在用户开启后随发送获取一次；天气相关文本才向 Open-Meteo 发送小数点后两位的公里级坐标，只在内存中派生一般风险提示，失败不阻塞 Agent，关于页提供数据归属。 |
 | 应用内反馈 | 设置底部继续提供通用反馈；每条已完成 AI 回复的时间、执行记录和 `text.bubble` 反馈入口放在同一紧凑操作行，两个图标分别贴近相邻触达区边缘，并在当前消息下方原位展开支持文字、照片、视频和 1–5 星评分的紧凑 `FeedbackView`，布局完成后自动平滑滚到当前编辑器底部，不创建页面或 Sheet，手动收起也不强制滚动。逐回复反馈投递成功先打钩再渐进收起，失败保持展开并保留文字、评分和附件；设置页通用反馈同样先打钩再淡出。失败区分未配置、授权失效和网络拦截（含蜂窝 SMTP 提示）。编辑器不显示上下文提示；逐回复反馈只在用户主动发送时附带当前 Turn 的可见问答和脱敏 Job/Trace 摘要，不附原消息媒体、位置、Key、原始模型上下文、完整日志或其他会话。页面不出现 Base URL、Server、邮箱或 SMTP；客户端限制 5,000 字、10 项和 25 MB，外部分发前 `make online-check` 继续阻止客户端凭据。 |
@@ -234,12 +236,12 @@
 | --- | --- |
 | 确定性上下文包 | `AgentContextPackBuilder` 生成有预算摘要；缺失字段不写、超预算确定性截断（`AgentReliabilityTests` 空态用例）。 |
 | 领域查询 | 训练、饮食、身体与计划分别使用 list/get Tool；上下文已预加载的当日事实不再重复查询，趋势仍由 `AgentUserDataAggregator` 本地确定性聚合后注入。 |
-| 跨轮事实 | 最近十对保持原生角色；`ConversationCompactionMiddleware` 将已有摘要与新移出窗口的完整对重写为替代摘要，小模型、标准模型、确定性 digest 三级回退；`AgentJobStore.events` 带谓词拉取。 |
+| 跨轮事实 | 最近最多 30 个完整 Turn 或 30k 历史文本保持原生帧；`ConversationCompactionMiddleware` 将已有摘要与实际移出窗口重写为替代摘要，来源内容指纹变化即重建，小模型、标准模型、有界确定性摘要三级回退；`AgentJobStore.events` 带谓词拉取。 |
 | 规范化幂等 | `AgentToolCallSignature` 归一 trim/同义字段/数值/nil；`set_entries` 保序；失败 receipt 可重试（`AgentReliabilityTests`）。 |
 | 业务级疑似重复 | 同日同动作同组指纹命中返回既有 ID +「疑似重复」，不静默合并（`AgentBusinessKeyDeduper`）。 |
 | 同气泡续跑 | Job 持久化 `lastCompletedStep`/`loopCheckpoint`；有检查点时复用 `responseMessageID` 且不递增 `attemptNumber`；`DataIntegrityRepair` 不把可恢复中断标为 failed。 |
 | 工具曝光与并行 | `AgentToolExposurePolicy`：未选快捷按钮注册当前协议 32 个 Tool；选中按钮使用该按钮 `toolNames` 与协议的交集，恢复时沿用 checkpoint 的 `exposedToolNames`。`parallelToolCalls=true` 且本机顺序执行。 |
-| 延迟辅助 | 流式滚动约 10Hz 非动画节流，后续步骤可释放历史图片；瞬态重试保持媒体模式，明确视频拒绝仅按 ADR 0131 单次回退。Trace 可观测首增量、投影与缓存 token。 |
+| 延迟辅助 | 流式滚动约 10Hz 非动画节流，后续步骤保留已提供图片；瞬态重试保持媒体模式，明确视频拒绝仅按 ADR 0131 单次回退。Trace 可观测首增量、投影与缓存 token。 |
 | 红线不破坏 | LLM 摘要只替换更早对话且有确定性兜底，不静默跨轮合并业务记录；Tool Schema 仍固定；本地/远程共用版本化 Envelope。 |
 
 ## 可靠高效 ReAct 与原位审查
@@ -306,7 +308,7 @@
 | Tab 再选 | `RootTabReselectObserver` 只旁听原生 Tab Bar 上触摸开始时已选中的 item；`AppTabNavigationState` 从设置 path 和训练/进展根显隐维护非 Observation 根状态。`AppTabReselect.effect` 将每次点击限定为一个效果：普通切换只写一次 selection，教练与任一根页 `.noAction`，训练、进展、设置仅在非根时 `.resetStack`。旧 `.restoreCoachRoot` 通知已删除。教练根仍只持有稳定入参，Tab 激活态经 `\.coachTabIsActive` 只送达实时转写与切回滚底叶子；`AppTabTransitionCoordinator` 只记录隐私安全 signpost。`AppTabReselectTests`、`CoachTabBehaviorUITests` 与 `perf-check` 覆盖根感知行为。 |
 | 自动录像宿主 | `beginCurrentSet` 先进入 `.setInProgress` 并打开放大取景，`waitUntilPreviewHostSettled` 后再 `startRecording`。已有预览连接时换宿主不重建、不因 `session-interruption` 停掉 Session；`prepare()` 复用仍在跑的 Session。录像中可缩小。非目标组不显示取景。`GuidedWorkoutCoordinatorTests` / `WorkoutCameraServiceTests` / `GuidedWorkoutLayoutTests` 覆盖时序与居中；`validate-repository.sh` 静态守卫。 |
 | 预览 fill | `WorkoutCameraSurface` 与 `CameraPreviewView` 默认 `.resizeAspectFill`；历史录像缩略按取景比例 `scaledToFill`。 |
-| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。海报固定白底黑字，橙黄色主视觉内展示大号容量、肌群图和三列统计；分享弹层适配双主题。动作名和数据优先单行、长内容自适应换行；明细复用逻辑组连续压缩并保留所有异构段；同值左右合并、异值分列、未知重量不作自重。导出宽 440 pt、高至少 956 pt，短会话铺满、超出才加高。见 [ADR 0117](adr/0117-workout-share-editorial-poster.md)、[ADR 0130](adr/0130-workout-share-fill-or-grow.md)。 |
+| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。海报固定白底黑字，橙黄色主视觉内展示大号容量、肌群图和三列统计；分享弹层适配双主题。动作名和数据优先单行、长内容自适应换行；明细复用逻辑组连续压缩并保留所有异构段；同值左右合并、异值分列、未知重量不作自重。导出宽 440 pt、高至少 956 pt，短会话铺满、超出才加高。见 [ADR 0000](adr/0000-origin-through-0.0.11.md)、[ADR 0130](adr/0130-workout-share-fill-or-grow.md)。 |
 | 计划执行复盘 | 按 Session 的 Performance 顺序和 `sourcePerformanceID` 加载对应训练记录，直接复用进展页 `ProgressRecentActivityRow`，显示动作名、压缩组次、可计算容量和训练时间，并进入同一 `WorkoutRecordDetailView`。完成但投影缺失时只在未设置删除抑制的情况下幂等修复；用户已删除时显示“训练记录已删除”。 |
 
 ## 会话标题与输入上下文单行布局
@@ -355,7 +357,7 @@ JSON 和有序媒体；设置密码备份后让 App 进入后台，再返回确�
 
 历史媒体验收使用虚构图片和视频：在同一 Session 先发送媒体，收到回复后再发送不带附件的
 追问，确认 Agent 能引用前一轮画面；新建或切换到另一个 Session 后发送相同追问，确认不会
-携带旧 Session 媒体。构造十一轮以上对话，确认远程请求只包含最近十个完整来回。
+携带旧 Session 媒体。构造 31 轮以上对话，确认远程请求保留最近 30 个完整 Turn，早期内容只经摘要出现；再构造不足 30 轮但超过 30k 历史文本的对话，确认完整 Turn 边界与摘要覆盖一致。
 
 教练页手工验收：点击左上角时间按钮打开会话抽屉，再关闭并从左边界右滑打开同一抽屉；新建两个非空 Session 后分别点击标题外的行尾空白切换、长按标题重命名并继续发送；确认每次进入只出现最近 30 条，已加载页滑动过程高度不变、不跳；到顶再增加 30 条且当前位置不跳；切 Session 或 Tab 回来时已画过的气泡第一帧就是终态，不再从占位或 Incremental 重画；短对话顶部对齐，打开 Session 时长对话停在最后一条消息末尾；长流期间向上阅读不会被自动拉回底部；持续流式至少 35 秒后继续滚动、切 Session 和切 Tab，确认没有随正文增长而逐渐加重的卡顿或发热；从其他 Tab 切回教练时列表自动回到最新消息；在长对话中先上滑再点「教练」Tab，确认页面、抽屉、健身房页、滚动位置和分页数量均不变化；教练长对话存在时连续在训练、进展、设置之间切换，确认切换动画不掉帧；在长对话中连续快速输入、删改文字并使用听写，确认输入区跟手、消息列表无联动卡顿；
 首次发送分别验证允许和拒绝位置都只出现一次确认；准备 0、1、2 个健身房验证只有两馆时
@@ -466,7 +468,7 @@ LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/mode
 
 ## 动作库分类与餐次明细（PRD 055／057）
 
-按 [PRD 055](prd/055-exercise-facets-and-meal-breakdown.md) 与 [PRD 057](prd/057-coach-focus-progress-rings-and-library-clarity.md)：左侧常驻身体部位及下级主要肌群、动作类型（复合力量／孤立训练／核心／爆发表现／有氧体能／未标注），搜索只与右侧卡片同宽；右侧即时更新，名称搜索与分类路径取交集；详情返回保留选择，空结果可重置。不再提供独立「受力肌群」轴。日摄入明细显示餐次前缀和固定双主题配色，未知热量显示未估算，不重复卡面已有汇总。确定性测试、正常字号双主题、小屏键盘／滚动与 iPad 检查已通过；不涉及数据库迁移。
+按 [PRD 000](prd/000-origin-through-0.0.11.md) 与 [PRD 057](prd/057-coach-focus-progress-rings-and-library-clarity.md)：左侧常驻身体部位及下级主要肌群、动作类型（复合力量／孤立训练／核心／爆发表现／有氧体能／未标注），搜索只与右侧卡片同宽；右侧即时更新，名称搜索与分类路径取交集；详情返回保留选择，空结果可重置。不再提供独立「受力肌群」轴。日摄入明细显示餐次前缀和固定双主题配色，未知热量显示未估算，不重复卡面已有汇总。确定性测试、正常字号双主题、小屏键盘／滚动与 iPad 检查已通过；不涉及数据库迁移。
 
 ## 快捷聚焦、实时听写与进展圆环（PRD 057）
 
@@ -511,3 +513,7 @@ LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/mode
 `SessionHistoryPaginationUITests` 浅/深主题验证 14→28 后抽屉、Session 和 Tab 往返查询次数仍为 2；
 `ProgressHistoryUITests/testMonthAndYearTrainingListStartsAtNewestDay` 浅/深主题各覆盖月/年，首个日期为最新训练日。
 证据来自 iPhone 17 Pro 模拟器；未进行真机安装或发布。
+
+## 结构化提问与回答
+
+Agent 通过固定 `ask_user_questions` 展示问题，每个选项按钮独占一行，下方提供可选自定义输入。普通选项和自由输入发送后进入正常 Agent；确定性选项无需 Key 或模型，保留同构 Event、结果卡及幂等。用户任意新消息使旧问题隐藏并失效，重启、迟到回复和连点不得恢复旧按钮副作用。

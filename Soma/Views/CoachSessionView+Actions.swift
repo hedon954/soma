@@ -5,6 +5,29 @@ import SwiftUI
 import UIKit
 
 extension CoachSessionView {
+    func submitQuestionAnswer(
+        _ message: CoachMessage,
+        questionID: String,
+        optionID: String?,
+        text: String?
+    ) throws -> Bool {
+        guard !composer.isPersistingSubmission,
+              let sessionID = conversationSessions.activeSessionID,
+              let context = ConversationProcessingContextFactory.make(
+                  sessionID: sessionID, dataSpace: dataSpace.activeSpace, ai: ai, in: modelContext
+              )
+        else { return false }
+        visibility.tailScroll.followState.resumeExplicitly()
+        let accepted = try processor.submitQuestionAnswer(
+            from: message, questionID: questionID, optionID: optionID, customText: text,
+            context: context, locationService: locationContext, includeLocation: locationPreference == .enabled
+        )
+        if accepted {
+            scrollRequest = UUID()
+        }
+        return accepted
+    }
+
     func submitCurrentDraft(
         quickRecordOverride: ExerciseInputSuggestion? = nil
     ) {

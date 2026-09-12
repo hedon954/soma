@@ -15,6 +15,9 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
     var legacyExposedGroups: [String]
     var nextModelStep: Int?
     var toolBatches: [AgentCheckpointToolBatch]?
+    var extraConfigJSON: String? = nil
+    var initialInput: AgentModelInputEnvelope? = nil
+    var route: AIModelRoute? = nil
     var videoInputMode: AgentMediaMode? = nil
 
     init(
@@ -43,7 +46,7 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
         case legacyExposedGroups = "exposedGroups"
         case nextModelStep
         case toolBatches
-        case videoInputMode
+        case videoInputMode, initialInput, route, extraConfigJSON
     }
 
     init(from decoder: Decoder) throws {
@@ -65,6 +68,9 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
             [String].self,
             forKey: .legacyExposedGroups
         ) ?? []
+        extraConfigJSON = try container.decodeIfPresent(String.self, forKey: .extraConfigJSON)
+        initialInput = try container.decodeIfPresent(AgentModelInputEnvelope.self, forKey: .initialInput)
+        route = try container.decodeIfPresent(AIModelRoute.self, forKey: .route)
         videoInputMode = try container.decodeIfPresent(AgentMediaMode.self, forKey: .videoInputMode)
         nextModelStep = try container.decodeIfPresent(Int.self, forKey: .nextModelStep)
         toolBatches = try container.decodeIfPresent(
@@ -151,6 +157,10 @@ struct AgentCheckpointObservation: Codable, Equatable, Sendable {
 }
 
 struct AgentConversationExchange: Sendable {
+    var turnID: UUID?
+    var sentAt: Date?
+    var trustedTime: TrustedTurnContext?
+    var canonicalMessages: [AgentModelMessage]?
     var userText: String
     var assistantText: String?
     var images: [Data]

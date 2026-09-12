@@ -9,6 +9,7 @@ enum AgentExecutionBackendKind: String, Codable, CaseIterable, Sendable {
 enum AgentJobExecutionKind: String, Codable, Sendable {
     case react
     case deterministicWorkout
+    case deterministicQuestion
 }
 
 enum AgentJobState: String, Codable, CaseIterable, Sendable {
@@ -139,6 +140,13 @@ struct AgentJobContextSnapshot: Codable, Equatable, Sendable {
     var includeLocation: Bool
     var createdAt: Date
     var envelope: AgentTurnContextEnvelope?
+    var canonicalTurn: AgentCanonicalTurn? = nil
+    /// 远程 Job 在等待设备 Tool 时不保证仍在进程内；将已经确认的原生帧放在
+    /// 现有上下文 JSON，终态才封装为可跨 Turn 复用的 canonicalTurn。
+    var remoteCanonicalFrames: [AgentModelMessage]? = nil
+    var configuration: AgentPromptConfiguration? = nil
+    var executionContext: String? = nil
+    var executionObservedAt: Date? = nil
 
     init(
         structuredContext: String,

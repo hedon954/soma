@@ -1,3 +1,4 @@
+import { parseModelMessages } from "./model-messages.js";
 import { parseVideoFallbacks } from "./video-fallback.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -680,7 +681,7 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
   const runtime = requiredObject(value, "runtime");
   const deadlines = requiredObject(runtime, "deadlines");
   if (
-    schemaVersion !== 2 ||
+    (schemaVersion !== 2 && schemaVersion !== 3) ||
     !Array.isArray(rawMessages) ||
     rawMessages.length < 2 ||
     !Array.isArray(rawSkills) ||
@@ -690,21 +691,7 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
   ) {
     throw new ProtocolError("invalid_request", "模型输入协议无效。", 400);
   }
-  const messages = rawMessages.map((raw) => {
-    const message = asObject(raw, "模型消息");
-    const role = requiredString(message, "role");
-    if (!['system', 'user', 'assistant'].includes(role)) {
-      throw new ProtocolError("invalid_request", "模型消息角色无效。", 400);
-    }
-    return {
-      role: role as "system" | "user" | "assistant",
-      text: requiredString(message, "text"),
-      mediaIDs: requiredStringArray(message, "mediaIDs"),
-    };
-  });
-  if (messages[0]?.role !== "system" || messages.at(-1)?.role !== "user") {
-    throw new ProtocolError("invalid_request", "模型消息顺序无效。", 400);
-  }
+  const messages = parseModelMessages(rawMessages, schemaVersion);
   const skills = rawSkills.map((raw) => {
     const skill = asObject(raw, "Skill 快照");
     return {
@@ -743,7 +730,7 @@ function parseModelInput(value: Record<string, unknown>): AgentModelInput {
   };
   const videoFallbacks = parseVideoFallbacks(value.videoFallbacks, messages);
   return {
-    schemaVersion: 2,
+    schemaVersion: schemaVersion as 2 | 3,
     ...(videoFallbacks.length === 0 ? {} : { videoFallbacks }),
     messages,
     skills,

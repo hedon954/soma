@@ -19,6 +19,16 @@ func remoteModelSpanMetadata(_ event: RemoteAgentEvent) -> String {
     ])
 }
 
+func applyRemoteUsage(
+    _ usage: RemoteJSONValue?,
+    to metadata: inout [String: Any]
+) {
+    guard let usage = usage?.objectValue else { return }
+    metadata["prompt_tokens"] = usage["input"]?.intValue ?? NSNull()
+    metadata["completion_tokens"] = usage["output"]?.intValue ?? NSNull()
+    metadata["cached_prompt_tokens"] = usage["cachedInput"]?.intValue ?? NSNull()
+}
+
 extension ConversationProcessingService {
     func applyRemoteEvents(
         _ events: [RemoteAgentEvent],
@@ -100,6 +110,7 @@ extension ConversationProcessingService {
         firstDeltaAt: Date?,
         completedAt: Date?,
         status: AgentTraceStatus?,
+        usage: RemoteJSONValue? = nil,
         trace: AgentTrace,
         responseMessage: CoachMessage
     ) {
@@ -126,6 +137,7 @@ extension ConversationProcessingService {
                 completedAt.timeIntervalSince(span.startedAt) * 1000
             )
         }
+        applyRemoteUsage(usage, to: &metadata)
         if let status {
             span.statusRaw = status.rawValue
         }

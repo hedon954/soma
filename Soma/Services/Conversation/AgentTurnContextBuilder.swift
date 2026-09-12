@@ -15,12 +15,7 @@ enum AgentTurnContextBuilder {
         timeZone: TimeZone = .current,
         calendar: Calendar = .current
     ) -> AgentTurnContextEnvelope {
-        var messageDescriptor = FetchDescriptor<CoachMessage>(
-            predicate: #Predicate { $0.sessionID == sessionID },
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        messageDescriptor.fetchLimit = 80
-        let messages = (try? context.fetch(messageDescriptor)) ?? []
+        let messages = ConversationContextHistory.messages(sessionID: sessionID, in: context)
         var sessionDescriptor = FetchDescriptor<ConversationSession>(
             predicate: #Predicate { $0.id == sessionID }
         )
@@ -36,7 +31,9 @@ enum AgentTurnContextBuilder {
         let projection = ConversationContextProjection.make(
             messages: messages,
             sessionID: sessionID,
-            excludingTurnID: turnID
+            excludingTurnID: turnID,
+            turnContexts: ConversationContextHistory.trustedTimes(sessionID: sessionID, in: context),
+            canonicalTurns: ConversationContextHistory.canonicalTurns(sessionID: sessionID, in: context)
         )
         let selectedTurnIDs = HistoricalMediaSelectionPolicy.selectedTurnIDs(
             currentText: userText,
@@ -66,11 +63,7 @@ enum AgentTurnContextBuilder {
                 excludingTurnID: turnID,
                 in: context
             ),
-            olderDigest: AgentCrossTurnFactSummary.olderTurnDigest(
-                messages: messages,
-                sessionID: sessionID,
-                excludingTurnID: turnID
-            ),
+            olderDigest: nil,
             selectedHistoricalTurnIDs: selectedTurnIDs
         )
     }

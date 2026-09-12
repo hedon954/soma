@@ -123,17 +123,18 @@ final class ConversationProcessingService {
         )
     }
 
-    private func submitPersisted(
+    func submitPersisted(
         text: String,
         attachments persistedAttachments: [MediaAttachmentReference],
         context: ConversationProcessingContext,
         includeLocation: Bool,
         locationService: LocationContextService,
         selectedShortcutID: String?,
-        forceLocal: Bool
+        forceLocal: Bool,
+        questionAction: AgentQuestionAction? = nil
     ) -> Bool {
         // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
-        let useRemote = !forceLocal && RemoteAgentPreference.isEnabled()
+        let useRemote = questionAction == nil && !forceLocal && RemoteAgentPreference.isEnabled()
         let selectedShortcut = selectedShortcutID.flatMap {
             AgentInputShortcutStore.shortcut(id: $0)
         }
@@ -190,6 +191,18 @@ final class ConversationProcessingService {
             createdAt: submittedAt
         )
 
+        var frozenContext = job.contextSnapshot
+        frozenContext?.configuration = try? AgentPromptConfiguration.capture(
+            defaults: context.ai.defaults,
+            selectedSkillID: job.selectedSkillID,
+            selectedShortcutID: job.selectedShortcutID
+        )
+        job.contextSnapshot = frozenContext
+
+        if let questionAction {
+            job.executionKind = .deterministicQuestion
+            job.deterministicQuestionAction = questionAction
+        }
         do {
             context.session.recordUserMessage(displayText, at: submittedAt)
             try ConversationTurnPersistence.enqueue(
@@ -273,7 +286,7 @@ final class ConversationProcessingService {
     }
 
     func isExecutionAvailable(_ job: AgentJob, ai: AIService) -> Bool {
-        job.executionKind == .deterministicWorkout
+        job.executionKind != .react
             || isBackendAvailable(job.backend, ai: ai)
     }
 
@@ -386,6 +399,14 @@ final class ConversationProcessingService {
             {
                 userMessage.location = await locationService.requestSnapshot()
                 try? context.modelContext.save()
+            }
+            if job.executionKind == .deterministicQuestion {
+                await runDeterministicQuestionAttempt(job: job, userMessage: userMessage, context: context)
+                finishProcessing()
+                if let locationService {
+                    startNextPendingJob(dataSpace: context.dataSpace, ai: context.ai, modelContext: context.modelContext, locationService: locationService)
+                }
+                return
             }
             if job.executionKind == .deterministicWorkout {
                 await runDeterministicWorkoutAttempt(

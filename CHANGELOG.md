@@ -5,10 +5,32 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.24] - 2026-09-12
+
+### Added
+
+- 教练可用问题按钮收集回答，并提供自定义输入。普通回答直接发送给 Agent；绑定完整参数的选项直接执行本机规则，保留处理事件和记录卡。发送新消息后旧问题自动收起。
+
+### Fixed
+
+- 教练创建或修改训练时直接采用用户在文字或图片中明确提供的热量；未提供时由现有 MET 公式计算，记录与工具回执保持一致。
+
 ### Changed
 
 - 进展「月」「年」训练记录按日期与同日发生时间倒序展示。
 - 教练历史会话每页查询 14 条，已加载页保留缓存，重新打开抽屉或切换 Tab／Session 不再重复查询。
+- 教练跨轮上下文保留最近 30 个完整来回与 30k 历史文本预算；较早消息按实际移出窗口滚动压缩，历史日期、配置和 Tool 回执各自保留所属 Turn 的边界。
+
+### Data, privacy and compatibility
+
+- 不新增 SwiftData 持久字段或 PostgreSQL migration，不重建用户数据；既有 Job 与摘要 JSON 增加可选、版本化的上下文快照字段。
+- 历史媒体仍只在用户明确回指时发送；冻结 Prompt、Skill、Tool 定义不含 API Key，私有 thinking 不持久化。
+- 远程 Agent 模型输入升级为 schema 3，以原生 Tool 调用与回执保持跨轮连续性；部署远程执行时需同步 Server 源码。
+
+### Known limitations
+
+- 缓存 token 仅在 Provider 返回用量时记录；未返回时保持未知，自动化验证不能证明实际缓存命中率或回答质量。
+- 本机当前没有可用的 Xcode Apple Team 账号，TestFlight Archive 与两台真机安装待维护者重新认证签名账号后复验。
 
 ## [0.0.23] - 2026-09-11
 

@@ -29,11 +29,17 @@ final class ConversationCompactionSummary {
 
     var coveredTurnIDs: [UUID] {
         get {
-            (try? JSONDecoder().decode([UUID].self, from: coveredTurnIDsData)) ?? []
+            coverage?.turnIDs
+                ?? (try? JSONDecoder().decode([UUID].self, from: coveredTurnIDsData)) ?? []
         }
         set {
             coveredTurnIDsData = (try? JSONEncoder().encode(newValue)) ?? Data()
         }
+    }
+
+    var coverage: ConversationSummaryCoverage? {
+        get { try? JSONDecoder().decode(ConversationSummaryCoverage.self, from: coveredTurnIDsData) }
+        set { coveredTurnIDsData = (try? JSONEncoder().encode(newValue)) ?? Data() }
     }
 
     var strategy: ConversationCompactionStrategy {
@@ -46,4 +52,11 @@ enum ConversationCompactionStrategy: String, Codable, Sendable {
     case smallModel = "small_model"
     case standardModel = "standard_model"
     case deterministic
+}
+
+/// Versioned contents of the existing Data column; legacy UUID arrays remain readable.
+struct ConversationSummaryCoverage: Codable, Equatable {
+    var version = 1
+    var turnIDs: [UUID]
+    var fingerprints: [String]
 }
