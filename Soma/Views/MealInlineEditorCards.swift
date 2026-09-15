@@ -166,7 +166,7 @@ struct InlineMealCards: View {
     }
 }
 
-/// 一行菜品：左侧图标块，右侧名称与热量，份量按宽度换行，宏量另起一行。数值直接可点可改。
+/// 一行菜品：左侧图标块，右侧名称与热量；份量与宏量能同行就同行，放不下再拆行。
 struct MealItemDraftRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var draft: MealItemDraft
@@ -233,15 +233,19 @@ struct MealItemDraftRow: View {
         )
     }
 
-    /// 份量常带包装成分等长说明，先占满一行并换行；宏量另起一行，避免和份量抢宽度溢出。
+    /// 辅助字号下每项各占一行；常规字号优先同行，只有超出行宽才把宏量放下、份量换行。
+    @ViewBuilder
     private var metrics: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            portion
-            if dynamicTypeSize.isAccessibilitySize {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 3) {
+                portion
                 macro("蛋白", $draft.protein)
                 macro("碳水", $draft.carbs)
                 macro("脂肪", $draft.fat)
-            } else {
+            }
+        } else {
+            MealItemMetricsLayout(spacing: 4, lineSpacing: 3) {
+                portion
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     macros
                 }
@@ -295,6 +299,10 @@ struct MealItemReadOnlyRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let item: MealItem
 
+    private var portionCaption: String {
+        item.portionDescription ?? ""
+    }
+
     private var macrosCaption: String {
         [
             item.protein.map { "蛋白 \($0.formatted())" },
@@ -303,6 +311,44 @@ struct MealItemReadOnlyRow: View {
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var metricsCaption: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 2) {
+                if !portionCaption.isEmpty {
+                    Text(portionCaption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !macrosCaption.isEmpty {
+                    Text(macrosCaption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else if !portionCaption.isEmpty, !macrosCaption.isEmpty {
+            MealItemMetricsLayout(spacing: 4, lineSpacing: 2) {
+                Text(portionCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(macrosCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        } else if !portionCaption.isEmpty {
+            Text(portionCaption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if !macrosCaption.isEmpty {
+            Text(macrosCaption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     var body: some View {
@@ -324,17 +370,7 @@ struct MealItemReadOnlyRow: View {
                         .fixedSize()
                         .layoutPriority(1)
                 }
-                if let portion = item.portionDescription, !portion.isEmpty {
-                    Text(portion)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !macrosCaption.isEmpty {
-                    Text(macrosCaption)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                metricsCaption
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -410,21 +446,13 @@ struct InlineTextValue: View {
             .foregroundStyle(tint)
             .lineLimit(allowsWrapping ? nil : 1)
             .fixedSize(horizontal: !allowsWrapping, vertical: allowsWrapping)
-            .frame(
-                minWidth: 22,
-                maxWidth: allowsWrapping ? .infinity : nil,
-                alignment: .leading
-            )
+            .frame(minWidth: 22, alignment: .leading)
             if let suffix, !text.isEmpty {
                 Text(suffix)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(
-            maxWidth: allowsWrapping ? .infinity : nil,
-            alignment: .leading
-        )
         .padding(.horizontal, 5)
         .padding(.vertical, 3)
         .background(
