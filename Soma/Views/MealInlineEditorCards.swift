@@ -166,7 +166,7 @@ struct InlineMealCards: View {
     }
 }
 
-/// 一行菜品：左侧图标块，右侧名称与热量，第二行是份量与宏量。数值直接可点可改。
+/// 一行菜品：左侧图标块，右侧名称与热量，份量按宽度换行，宏量另起一行。数值直接可点可改。
 struct MealItemDraftRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var draft: MealItemDraft
@@ -180,6 +180,7 @@ struct MealItemDraftRow: View {
                 titleLine
                 metrics
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if showsDelete, let onDelete {
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "minus.circle")
@@ -206,6 +207,7 @@ struct MealItemDraftRow: View {
                 name
                     .frame(maxWidth: .infinity, alignment: .leading)
                 calories
+                    .layoutPriority(1)
             }
         }
     }
@@ -231,20 +233,18 @@ struct MealItemDraftRow: View {
         )
     }
 
-    /// 辅助字号下每项各占一行；常规字号保持单行，避免 ViewThatFits 复制整行布局。
-    @ViewBuilder
+    /// 份量常带包装成分等长说明，先占满一行并换行；宏量另起一行，避免和份量抢宽度溢出。
     private var metrics: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 3) {
-                portion
+        VStack(alignment: .leading, spacing: 3) {
+            portion
+            if dynamicTypeSize.isAccessibilitySize {
                 macro("蛋白", $draft.protein)
                 macro("碳水", $draft.carbs)
                 macro("脂肪", $draft.fat)
-            }
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                portion
-                macros
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    macros
+                }
             }
         }
     }
@@ -255,6 +255,7 @@ struct MealItemDraftRow: View {
             text: $draft.portion,
             font: .caption2,
             tint: .secondary,
+            allowsWrapping: true,
             accessibilityTitle: "份量",
             onCommit: { oldValue, newValue in
                 // TextField 会逐字符写 Binding；离开编辑态后再以完整的新旧份量缩放，
@@ -294,9 +295,8 @@ struct MealItemReadOnlyRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let item: MealItem
 
-    private var caption: String {
+    private var macrosCaption: String {
         [
-            item.portionDescription,
             item.protein.map { "蛋白 \($0.formatted())" },
             item.carbs.map { "碳水 \($0.formatted())" },
             item.fat.map { "脂肪 \($0.formatted())" }
@@ -322,13 +322,21 @@ struct MealItemReadOnlyRow: View {
                         .font(.footnote.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
                         .fixedSize()
+                        .layoutPriority(1)
                 }
-                if !caption.isEmpty {
-                    Text(caption)
+                if let portion = item.portionDescription, !portion.isEmpty {
+                    Text(portion)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !macrosCaption.isEmpty {
+                    Text(macrosCaption)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -366,24 +374,33 @@ struct InlineTextValue: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: 2) {
             Group {
                 if isEditing {
-                    TextField(placeholder, text: $text)
-                        .keyboardType(keyboard)
-                        .textFieldStyle(.plain)
-                        .focused($isFocused)
-                        .onSubmit(endEditing)
-                        .onChange(of: isFocused) { _, focused in
-                            if !focused {
-                                finishEditing()
-                            }
+                    TextField(
+                        placeholder,
+                        text: $text,
+                        axis: allowsWrapping ? .vertical : .horizontal
+                    )
+                    .keyboardType(keyboard)
+                    .textFieldStyle(.plain)
+                    .focused($isFocused)
+                    .onSubmit(endEditing)
+                    .onChange(of: isFocused) { _, focused in
+                        if !focused {
+                            finishEditing()
                         }
-                        .accessibilityIdentifier("meal-inline-value-editor")
+                    }
+                    .accessibilityIdentifier("meal-inline-value-editor")
                 } else {
                     Button(action: beginEditing) {
                         Text(text.isEmpty ? placeholder : text)
                             .foregroundStyle(text.isEmpty ? Color.secondary : tint)
+                            .multilineTextAlignment(.leading)
+                            .frame(
+                                maxWidth: allowsWrapping ? .infinity : nil,
+                                alignment: .leading
+                            )
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("meal-inline-value-display")
@@ -391,15 +408,23 @@ struct InlineTextValue: View {
             }
             .font(font)
             .foregroundStyle(tint)
-            .lineLimit(allowsWrapping ? 1 ... 3 : 1 ... 1)
+            .lineLimit(allowsWrapping ? nil : 1)
             .fixedSize(horizontal: !allowsWrapping, vertical: allowsWrapping)
-            .frame(minWidth: 22, alignment: .leading)
+            .frame(
+                minWidth: 22,
+                maxWidth: allowsWrapping ? .infinity : nil,
+                alignment: .leading
+            )
             if let suffix, !text.isEmpty {
                 Text(suffix)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(
+            maxWidth: allowsWrapping ? .infinity : nil,
+            alignment: .leading
+        )
         .padding(.horizontal, 5)
         .padding(.vertical, 3)
         .background(

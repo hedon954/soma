@@ -5,6 +5,10 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Fixed
+
+- 饮食可编辑卡与饮食记录食物项的长份量、菜名按宽度换行，不再和热量或宏量叠在一起。
+
 ## [0.0.24] - 2026-09-12
 
 ### Added
