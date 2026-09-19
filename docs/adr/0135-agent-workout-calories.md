@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-09-12
 - 版本：0.0.24
-- 上游依据：[PRD 058](../prd/058-feedback-duration-and-editable-calories.md)
+- 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md) 的可编辑训练热量
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的训练工具热量写入规则，MET 公式保持不变
 - 下游落地：[BUG 0065](../bugs/0065-agent-workout-calories-ignored.md)、[验收](../acceptance.md)
 

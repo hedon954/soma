@@ -163,6 +163,45 @@ final class GuidedExerciseReplacementTests: XCTestCase {
         XCTAssertEqual(fixture.session.prescriptionSnapshot[0].restBetweenSidesSeconds, 20)
     }
 
+    func testSameExerciseParameterEditRebuildsPendingSetsWithoutChangingIdentity() async throws {
+        let fixture = try GuidedWorkoutCoordinatorTests().makeFixture(
+            firstSetIsWarmup: false,
+            setCount: 2
+        )
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let exercise = try XCTUnwrap(fixture.performance.exerciseDefinition)
+        let coordinator = GuidedWorkoutCoordinator(
+            recorder: NoopWorkoutRecordingController(),
+            cues: Cues(),
+            now: { fixture.now }
+        )
+        await coordinator.activate(fixture.session, in: fixture.context)
+        try coordinator.introduceCurrentExercise(in: fixture.context)
+        var confirmed = try XCTUnwrap(fixture.performance.prescriptionSnapshot)
+        confirmed.plannedSets = [
+            .init(order: 1, targetReps: 6, targetWeightKG: 18),
+            .init(order: 2, targetReps: 6, targetWeightKG: 18),
+            .init(order: 3, targetReps: 4, targetWeightKG: 22)
+        ]
+        confirmed.targetRestSeconds = 75
+        try coordinator.replaceCurrentExercise(
+            with: exercise,
+            prescription: confirmed,
+            in: fixture.context
+        )
+        let performanceID = fixture.performance.id
+        let sets = try fixture.context.fetch(FetchDescriptor<WorkoutSet>(
+            predicate: #Predicate { $0.performanceID == performanceID },
+            sortBy: [SortDescriptor(\.order)]
+        ))
+        XCTAssertEqual(sets.count, 3)
+        XCTAssertEqual(sets.map(\.plannedReps), [6, 6, 4])
+        XCTAssertEqual(sets.map(\.plannedWeightKG), [18, 18, 22])
+        XCTAssertEqual(sets.map(\.plannedRestSeconds), [75, 75, nil])
+        XCTAssertEqual(fixture.performance.exerciseID, exercise.id)
+        XCTAssertEqual(fixture.performance.exerciseName, exercise.canonicalName)
+    }
+
     func testReplacementRejectsStartedEvidenceAndInvalidTargetsWithoutMutation() async throws {
         let fixture = try GuidedWorkoutCoordinatorTests().makeFixture(firstSetIsWarmup: false, setCount: 2)
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

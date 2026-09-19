@@ -4,8 +4,7 @@
 - 日期：2026-09-09
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 仅「全天消耗 = 有效静息 × 活动系数」；不读设备能量、缺资料不写 0 仍有效
-  - [ADR 0122](0122-nutrition-rings-and-period-deficit.md) 仅 Mifflin／PAL 不再排除训练净增量；日页圆环与周月年不展示环仍有效
+  - [ADR 0000](0000-origin-through-0.0.11.md) 仅「全天消耗 = 有效静息 × 活动系数」及 Mifflin／PAL 不再排除训练净增量；日页圆环、周月年不展示环、不读设备能量、缺资料不写 0 仍有效
   - [ADR 0128](0128-remove-healthkit-until-redesign.md) 仅「训练日不因课次升高」；不接入 HealthKit 仍有效
 - 上游依据：
   - [PRD 061](../prd/061-daily-energy-net-training.md)

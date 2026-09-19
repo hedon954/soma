@@ -4,12 +4,12 @@
 - 日期：2026-09-07
 - 版本：0.0.22
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的应用内反馈投递、训练卡热量与逐组时长
-- 部分替代：[ADR 0000](../adr/0000-origin-through-0.0.11.md) 仅补充预计消耗可被用户改写，公式仍是默认填充
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的应用内反馈投递、训练卡热量与逐组时长
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 仅补充预计消耗可被用户改写，公式仍是默认填充
 - 下游落地：
-  - [ADR 0135](../adr/0135-agent-workout-calories.md)（聊天创建／修改传入用户热量，省略时按公式计算）
+  - [ADR 0135](../../../adr/0135-agent-workout-calories.md)（聊天创建／修改传入用户热量，省略时按公式计算）
   - [ADR 0124](../adr/0124-smtp-feedback-failure-taxonomy.md)
-  - [验收](../acceptance.md)
+  - [验收](../../../acceptance.md)
 
 ## 背景
 

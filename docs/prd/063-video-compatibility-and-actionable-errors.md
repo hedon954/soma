@@ -4,7 +4,7 @@
 - 状态：已采纳，已实现
 - 日期：2026-09-10
 - 版本：0.0.23
-- 修订自：[PRD 056](056-video-speech-and-share-readability.md)（仅视频不支持时的行为）
+- 修订自：[PRD 000](000-origin-through-0.0.11.md)（仅视频不支持时的行为）
 - 下游落地：[ADR 0131](../adr/0131-explicit-video-rejection-frame-fallback.md)、[验收](../acceptance.md)
 
 ## 用户结果

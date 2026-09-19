@@ -53,6 +53,9 @@ required_files=(
   docs/archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md
   docs/archive/0.0.19/prd/053-adaptive-energy-estimation-and-progress.md
   docs/archive/0.0.19/prd/054-progress-history-and-periods.md
+  docs/archive/0.0.22/prd/056-video-speech-and-share-readability.md
+  docs/archive/0.0.22/prd/057-coach-focus-progress-rings-and-library-clarity.md
+  docs/archive/0.0.22/prd/058-feedback-duration-and-editable-calories.md
   docs/adr/0000-origin-through-0.0.11.md
   docs/archive/0.0.13/adr/0099-behavior-preserving-modernization-and-three-version-docs.md
   docs/archive/0.0.14/adr/0100-bounded-snapshots-continuous-stream-rendering-and-query-first-data-access.md
@@ -72,6 +75,13 @@ required_files=(
   docs/archive/0.0.19/adr/0114-progress-periods-and-adaptive-energy.md
   docs/archive/0.0.19/adr/0115-energy-default-reference-and-compact-details.md
   docs/archive/0.0.19/adr/0116-progress-period-specific-focus.md
+  docs/archive/0.0.22/adr/0119-full-video-and-append-only-dictation.md
+  docs/archive/0.0.22/adr/0120-focused-shortcut-prompt.md
+  docs/archive/0.0.22/adr/0121-live-dictation-preview.md
+  docs/archive/0.0.22/adr/0122-nutrition-rings-and-period-deficit.md
+  docs/archive/0.0.22/adr/0123-exercise-movement-kinds.md
+  docs/archive/0.0.22/adr/0124-smtp-feedback-failure-taxonomy.md
+  docs/archive/0.0.22/adr/0125-eager-loaded-coach-messages.md
   docs/archive/README.md
   docs/archive/0.0.10/README.md
   docs/archive/0.0.11/README.md
@@ -83,6 +93,7 @@ required_files=(
   docs/archive/0.0.17/README.md
   docs/archive/0.0.18/README.md
   docs/archive/0.0.19/README.md
+  docs/archive/0.0.22/README.md
   docs/adr/README.md
   docs/bugs/README.md
   docs/changelog/README.md

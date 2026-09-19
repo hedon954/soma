@@ -1,10 +1,10 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.24`、`0.0.23`、`0.0.22`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.25`、`0.0.24`、`0.0.23`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
-产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.20 及更早的**原文**在
+产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.22 及更早的**原文**在
 [文档归档](../archive/README.md)，仅供人类考古；Agent 默认不要读取归档。
 
 ## 活文档窗口规则
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.22 → 0.0.23 → 0.0.24
+[PRD 000 压缩起点] → 0.0.23 → 0.0.24 → 0.0.25
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -30,10 +30,7 @@
 
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
-| [000：0.0.21 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.21 | 压缩起点 |
-| [056：完整视频、连续听写与分享明细](056-video-speech-and-share-readability.md) | 0.0.22 | 听写呈现由 057、视频拒绝由 [063](063-video-compatibility-and-actionable-errors.md) 部分修订 |
-| [057：快捷聚焦、实时听写与进展圆环](057-coach-focus-progress-rings-and-library-clarity.md) | 0.0.22 | 听写呈现与快捷预填由 059、能量总缺口由 [064](064-progress-total-energy-deficit.md)、提问交互由 [066](066-agent-user-questions.md) 部分修订 |
-| [058：反馈失败、时长时分秒与可编辑热量](058-feedback-duration-and-editable-calories.md) | 0.0.22 | 已采纳；聊天热量写入由 [ADR 0135](../adr/0135-agent-workout-calories.md) 落地 |
+| [000：0.0.22 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.22 | 压缩起点 |
 | [059：教练 ID、训练卡 0 与进展一致性](059-coach-ids-progress-and-required-zeros.md) | 0.0.23 | 已采纳 |
 | [060：撤回 Apple 健康接入](060-remove-healthkit-until-redesign.md) | 0.0.23 | 已采纳 |
 | [061：日消耗加入去重训练增量](061-daily-energy-net-training.md) | 0.0.23 | 已采纳 |
@@ -43,6 +40,7 @@
 | [065：训练历史倒序与会话分页缓存](065-history-order-and-session-pages.md) | 0.0.24 | 已采纳，已实现 |
 | [066：教练结构化提问与确定性回答](066-agent-user-questions.md) | 0.0.24 | 已采纳，已实现 |
 | [067：会话上下文与跨轮连续性](067-agent-context-management.md) | 0.0.24 | 已采纳，已实现 |
+| [068：准备动作展示并调整本次分组](068-guided-intro-prescription-review.md) | 0.0.25 | 已采纳，已实现 |
 
 ## 阅读约定
 
@@ -63,7 +61,7 @@
 
 | 文档 | 状态 | 决策 |
 | --- | --- | --- |
-| [063](063-video-compatibility-and-actionable-errors.md) | 已采纳，已实现 | 修订 PRD 056 的视频拒绝行为；有界画面回退与全 App 可操作错误 |
+| [063](063-video-compatibility-and-actionable-errors.md) | 已采纳，已实现 | 修订压缩起点的视频拒绝行为；有界画面回退与全 App 可操作错误 |
 | [064](064-progress-total-energy-deficit.md) | 已采纳，已实现 | 日、周、月缺口并入底部提示，按同日有效数据配对累计 |
 
 ## 0.0.24 新增决策
@@ -73,3 +71,9 @@
 | [065](065-history-order-and-session-pages.md) | 已采纳，已实现 | 修订 PRD 000：月/年训练倒序，会话每页 14 条并保留缓存 |
 | [066](066-agent-user-questions.md) | 已采纳，已实现 | 结构化提问、普通回答与确定性按钮 |
 | [067](067-agent-context-management.md) | 已采纳，已实现 | 30 轮 / 30k、时间作用域与跨轮连续性 |
+
+## 0.0.25 新增决策
+
+| 文档 | 状态 | 决策 |
+| --- | --- | --- |
+| [068](068-guided-intro-prescription-review.md) | 已采纳，已实现 | 准备页展示并调整本次分组；替换列表用不可变候选 |

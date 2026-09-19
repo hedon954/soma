@@ -3,8 +3,7 @@
 - 状态：已采纳
 - 日期：2026-09-12
 - 版本：0.0.24
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的聊天交互
-- 修订自：[PRD 057](057-coach-focus-progress-rings-and-library-clarity.md) 的快捷聚焦工具曝光
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的聊天交互与快捷聚焦工具曝光
 - 下游落地：[ADR 0136](../adr/0136-agent-user-questions.md)、[验收](../acceptance.md)
 
 ## 用户结果

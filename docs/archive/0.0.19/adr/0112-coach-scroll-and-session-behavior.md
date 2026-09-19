@@ -4,7 +4,7 @@
 - 日期：2026-09-02
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0105](../../0.0.16/adr/0105-root-aware-tab-reselection.md) 中“教练再选永远无操作”的双击子行为
-- 后续修订：[ADR 0125](../../../adr/0125-eager-loaded-coach-messages.md) 已加载页改为即时 VStack，取消滑动 alignment 顶锚
+- 后续修订：[ADR 0125](../../0.0.22/adr/0125-eager-loaded-coach-messages.md) 已加载页改为即时 VStack，取消滑动 alignment 顶锚
 - 后续替代：暂无
 - 上游依据：
   - [PRD 052](../prd/052-coach-training-and-lifecycle-reliability.md)

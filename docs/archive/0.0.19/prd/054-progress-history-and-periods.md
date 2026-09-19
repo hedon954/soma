@@ -9,7 +9,7 @@
 - 下游落地：[ADR 0114](../adr/0114-progress-periods-and-adaptive-energy.md)
 - 后续修订：[ADR 0115](../adr/0115-energy-default-reference-and-compact-details.md) 恢复数值独立点击的彩色明细浮层，能量依据改为紧凑列表，公式与诊断默认收起
 - 后续修订：[ADR 0116](../adr/0116-progress-period-specific-focus.md) 日页直达记录，周、月、年按不同关注点组织训练与身体信息
-- 后续修订：[PRD 057](../../../prd/057-coach-focus-progress-rings-and-library-clarity.md) 日页宏量改为圆环；周月年不再展示营养环，图表也不再跳转周期
+- 后续修订：[PRD 057](../../0.0.22/prd/057-coach-focus-progress-rings-and-library-clarity.md) 日页宏量改为圆环；周月年不再展示营养环，图表也不再跳转周期
 - 跟踪：[TODO](../../../../.codex/plans/2026-09-05-progress-redesign-implementation.md)
 
 ## 目标

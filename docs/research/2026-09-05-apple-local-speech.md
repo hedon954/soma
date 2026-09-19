@@ -2,7 +2,7 @@
 
 - 日期：2026-09-05
 - 状态：已转化，准确率待真机对比
-- 下游落地：[PRD 056](../prd/056-video-speech-and-share-readability.md)、[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)
+- 下游落地：[PRD 056](../archive/0.0.22/prd/056-video-speech-and-share-readability.md)、[ADR 0119](../archive/0.0.22/adr/0119-full-video-and-append-only-dictation.md)
 
 ## 官方证据
 

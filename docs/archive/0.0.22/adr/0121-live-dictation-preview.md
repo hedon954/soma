@@ -7,9 +7,9 @@
 - 部分替代：[ADR 0119](0119-full-video-and-append-only-dictation.md) 的「最终片段才出现在输入框」呈现；追加-only 草稿边界不变
 - 后续替代：暂无
 - 下游落地：
-  - [BUG 0060](../bugs/0060-dictation-editor-replacement-and-manual-edit.md)
-  - [BUG 0058](../bugs/0058-live-dictation-preview-stays-empty.md)
-  - [验收](../acceptance.md)
+  - [BUG 0060](../../../bugs/0060-dictation-editor-replacement-and-manual-edit.md)
+  - [BUG 0058](../../../bugs/0058-live-dictation-preview-stays-empty.md)
+  - [验收](../../../acceptance.md)
 
 ## 背景
 
@@ -49,4 +49,4 @@ pending。真机中文听写单独验收。
 ## 参考
 
 - [ADR 0119](0119-full-video-and-append-only-dictation.md)
-- [BUG 0048](../bugs/0048-speech-segment-overwrites-committed-text.md)
+- [BUG 0048](../../../bugs/0048-speech-segment-overwrites-committed-text.md)

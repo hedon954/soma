@@ -6,7 +6,7 @@
 - 上游依据：维护者复现：上滑过程中列表不断跳，滑不到目标位置
 - 下游落地：
   - [PRD 052](../archive/0.0.19/prd/052-coach-training-and-lifecycle-reliability.md)
-  - [ADR 0125](../adr/0125-eager-loaded-coach-messages.md)
+  - [ADR 0125](../archive/0.0.22/adr/0125-eager-loaded-coach-messages.md)
   - [ADR 0112](../archive/0.0.19/adr/0112-coach-scroll-and-session-behavior.md)
 
 ## 症状

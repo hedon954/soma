@@ -155,4 +155,62 @@ final class WorkoutPrescriptionFormatterTests: XCTestCase {
             "右侧 · 12.5 kg · 30 秒"
         )
     }
+
+    func testIntroProjectionExpandsClustersAndKeepsMissingTargetsBlank() {
+        let first = TemplateSetPrescriptionValue(
+            order: 1,
+            kind: .warmup,
+            targetKind: .repetitions,
+            targetReps: 8,
+            leftWeightKG: 40,
+            rightWeightKG: 42
+        )
+        let working = TemplateSetPrescriptionValue(
+            order: 2,
+            targetKind: .repetitions,
+            targetReps: 6,
+            leftWeightKG: 60,
+            rightWeightKG: 60
+        )
+        let blank = TemplateSetPrescriptionValue(
+            order: 4,
+            targetKind: .duration,
+            targetDurationSeconds: nil
+        )
+        let prescription = TemplateExercisePrescription(
+            exerciseID: UUID(),
+            exerciseName: "虚构深蹲",
+            order: 1,
+            targetRestSeconds: 90,
+            restBetweenSidesSeconds: 20,
+            laterality: .both,
+            plannedSets: [
+                first,
+                working,
+                TemplateSetPrescriptionValue(
+                    order: 3,
+                    targetKind: .repetitions,
+                    targetReps: 6,
+                    leftWeightKG: 60,
+                    rightWeightKG: 60
+                ),
+                blank
+            ]
+        )
+
+        let projection = WorkoutPrescriptionFormatter.projection(prescription)
+        XCTAssertEqual(projection.lateralityLabel, "左右分开")
+        XCTAssertEqual(projection.clusters.map(\.title), [
+            "热身组",
+            "工作组 ×2",
+            "工作组"
+        ])
+        XCTAssertEqual(projection.clusters.map(\.detail), [
+            "8 次 · 左40kg · 右42kg",
+            "6 次 · 左60kg · 右60kg",
+            "—"
+        ])
+        XCTAssertEqual(projection.restBetweenSetsLabel, "组间歇 90 秒")
+        XCTAssertEqual(projection.restBetweenSidesLabel, "换侧间歇 20 秒")
+    }
 }

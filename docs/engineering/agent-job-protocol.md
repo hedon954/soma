@@ -5,7 +5,7 @@
 
 - 下游落地：[BUG 0061](../bugs/0061-pending-delete-orphans-evidence-and-remote-job.md)（单条暂存删除、远程取消与记录附件保留）
 
-- 后续修订：[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)（完整视频输入，禁止关键帧降级）
+- 后续修订：[ADR 0000](../adr/0000-origin-through-0.0.11.md)（完整视频输入，禁止关键帧降级）
 
 - 状态：已实现协议
 - 协议版本：1

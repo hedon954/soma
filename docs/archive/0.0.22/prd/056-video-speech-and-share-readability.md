@@ -1,14 +1,14 @@
 # PRD 056：完整视频、连续听写与分享明细
 
-- 后续修订：[PRD 063](063-video-compatibility-and-actionable-errors.md)（明确拒绝视频后允许有界画面回退；原件保留不变）
+- 后续修订：[PRD 063](../../../prd/063-video-compatibility-and-actionable-errors.md)（明确拒绝视频后允许有界画面回退；原件保留不变）
 
-- 上游依据：[Apple 本地听写调研](../research/2026-09-05-apple-local-speech.md)
-- 下游落地：[BUG 0054](../bugs/0054-full-video-playback-and-dictation-regressions.md)
+- 上游依据：[Apple 本地听写调研](../../../research/2026-09-05-apple-local-speech.md)
+- 下游落地：[BUG 0054](../../../bugs/0054-full-video-playback-and-dictation-regressions.md)
 
 - 状态：已实现，真机验收待补充
 - 日期：2026-09-05
 - 版本：0.0.22
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的视频、语音与分享明细
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的视频、语音与分享明细
 - 下游落地：[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)
 - 后续修订：[PRD 057](057-coach-focus-progress-rings-and-library-clarity.md) 未确认听写片段实时预览，草稿仍只接受确认片段
 

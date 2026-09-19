@@ -1,16 +1,16 @@
 # ADR 0119：完整视频与直接追加的本地听写
 
-- 后续替代：[ADR 0131](0131-explicit-video-rejection-frame-fallback.md)（仅明确拒绝视频后的回退策略；语音与其他边界不变）
+- 后续替代：[ADR 0131](../../../adr/0131-explicit-video-rejection-frame-fallback.md)（仅明确拒绝视频后的回退策略；语音与其他边界不变）
 
-- 上游依据：[Apple 本地听写调研](../research/2026-09-05-apple-local-speech.md)
-- 下游落地：[BUG 0054](../bugs/0054-full-video-playback-and-dictation-regressions.md)、[验收](../acceptance.md)、[ReAct 协议](../react-agent.md)、[远程 Job 协议](../engineering/agent-job-protocol.md)
+- 上游依据：[Apple 本地听写调研](../../../research/2026-09-05-apple-local-speech.md)
+- 下游落地：[BUG 0054](../../../bugs/0054-full-video-playback-and-dictation-regressions.md)、[验收](../../../acceptance.md)、[ReAct 协议](../../../react-agent.md)、[远程 Job 协议](../../../engineering/agent-job-protocol.md)
 
 - 状态：已采纳
 - 日期：2026-09-05
 - 版本：0.0.22
 - 上游依据：[PRD 056](../prd/056-video-speech-and-share-readability.md)
 - 后续替代：[ADR 0121](0121-live-dictation-preview.md) 未确认片段进入输入框预览；确认后追加草稿的边界不变
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md)
 
 ## 背景
 

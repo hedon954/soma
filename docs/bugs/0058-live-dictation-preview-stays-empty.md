@@ -3,7 +3,7 @@
 - 状态：已修复，真机中文听写待复验
 - 发现日期：2026-09-09
 - 影响范围：教练输入区听写预览与输入框高度
-- 上游依据：[ADR 0121](../adr/0121-live-dictation-preview.md)
+- 上游依据：[ADR 0121](../archive/0.0.22/adr/0121-live-dictation-preview.md)
 - 下游落地：[验收](../acceptance.md)
 
 ## 症状

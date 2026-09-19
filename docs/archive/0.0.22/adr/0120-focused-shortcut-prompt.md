@@ -4,10 +4,10 @@
 - 日期：2026-09-07
 - 维护者：Soma maintainers
 - 上游依据：[PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 第 15 条仅补充「选中后仍披露全量 Skill 目录」的隐含口径；工具白名单本身不变
-- 后续修订：[ADR 0136](0136-agent-user-questions.md)（提问工具始终可用，业务工具仍按快捷按钮收窄）
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 第 15 条仅补充「选中后仍披露全量 Skill 目录」的隐含口径；工具白名单本身不变
+- 后续修订：[ADR 0136](../../../adr/0136-agent-user-questions.md)（提问工具始终可用，业务工具仍按快捷按钮收窄）
 
-- 后续替代：[ADR 0137](0137-agent-context-management.md)（冻结实际配置；保留快捷聚焦与工具权限）
+- 后续替代：[ADR 0137](../../../adr/0137-agent-context-management.md)（冻结实际配置；保留快捷聚焦与工具权限）
 
 ## 背景
 
@@ -47,4 +47,4 @@ Skill。模型仍可能改去加载其他方法，轮次和误选都没有真正
 ## 参考
 
 - [PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
-- [ReAct 协议](../react-agent.md)
+- [ReAct 协议](../../../react-agent.md)

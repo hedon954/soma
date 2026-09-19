@@ -26,20 +26,16 @@ private struct GuidedWorkoutAlertItem: Identifiable {
     }
 }
 
-private struct GuidedProjectionRevision: Hashable {
-    let statusRaw: String
-    let phaseRaw: String
-    let currentSetID: UUID?
-    let currentEffortID: UUID?
-    let restTargetEndAt: Date?
-    let completedSetCount: Int
-}
-
 private struct GuidedTimelineRevision: Hashable {
     let statusRaw: String
     let phaseRaw: String
     let transitionRevision: Int
     let phaseDeadlineAt: Date?
+}
+
+private struct GuidedSessionPrescriptionEditorItem: Identifiable {
+    let id: UUID
+    let prescription: TemplateExercisePrescription
 }
 
 struct GuidedWorkoutView: View {
@@ -59,6 +55,7 @@ struct GuidedWorkoutView: View {
     @State private var showsActualEditor = false
     @State private var showsEndConfirmation = false
     @State private var showsReplacement = false
+    @State private var prescriptionEditor: GuidedSessionPrescriptionEditorItem?
     @State private var presentedAlert: GuidedWorkoutAlertItem?
     @State private var shareModel: WorkoutSharePosterModel?
     @State private var isFinalizingSession = false
@@ -80,18 +77,6 @@ struct GuidedWorkoutView: View {
                 ))
             }
         #endif
-    }
-
-    private var projectionKey: GuidedProjectionRevision? {
-        guard let snapshot else { return nil }
-        return GuidedProjectionRevision(
-            statusRaw: snapshot.session.statusRaw,
-            phaseRaw: snapshot.session.guidedPhaseRaw,
-            currentSetID: snapshot.session.currentSetID,
-            currentEffortID: snapshot.session.currentEffortID,
-            restTargetEndAt: snapshot.session.restTargetEndAt,
-            completedSetCount: snapshot.completedSetCount
-        )
     }
 
     private var timelineKey: GuidedTimelineRevision? {
@@ -195,17 +180,6 @@ struct GuidedWorkoutView: View {
                 finalizeSessionAndShare()
             }
         }
-        .task(id: projectionKey) {
-            guard let snapshot else { return }
-            await WorkoutSystemProjectionCoordinator.shared.update(
-                sessionID: snapshot.session.id,
-                status: snapshot.session.status,
-                guidedPhase: snapshot.session.guidedPhase,
-                restTargetEndAt: snapshot.session.restTargetEndAt,
-                completedSetCount: snapshot.completedSetCount,
-                totalSetCount: snapshot.sets.count
-            )
-        }
         .task(id: snapshot?.session.currentEffortID) {
             guard isCoordinatorActivated else { return }
             await coordinator.preflightAutomaticRecording(in: modelContext)
@@ -301,6 +275,15 @@ struct GuidedWorkoutView: View {
                 )
             }
         }
+        .sheet(item: $prescriptionEditor) { item in
+            NavigationStack {
+                GuidedSessionPrescriptionEditor(
+                    exerciseID: item.id,
+                    prescription: item.prescription,
+                    onSave: replaceCurrentExercise
+                )
+            }
+        }
         .sheet(item: $shareModel, onDismiss: {
             onFinishedReturnHome()
             dismiss()
@@ -391,11 +374,13 @@ struct GuidedWorkoutView: View {
                     exerciseName: snapshot.currentPerformance?.exerciseName,
                     artwork: snapshot.currentPerformance?.artwork
                         ?? BundledExerciseCatalog.fallbackActionIllustration,
+                    prescription: snapshot.currentPerformance?.prescription,
                     coachingNotes: snapshot.currentPerformance?.coachingNotes,
                     camera: phasePictureInPictureCamera,
                     isLandscape: isLandscape,
                     cameraErrorMessage: coordinator.recordingErrorMessage,
                     onPrepare: prepareCurrentSet,
+                    onAdjust: presentPrescriptionEditor,
                     onReplace: { showsReplacement = true },
                     onSkip: skipCurrentExercise
                 )
@@ -786,7 +771,18 @@ struct GuidedWorkoutView: View {
             with: exercise, prescription: prescription, in: modelContext
         )
         showsReplacement = false
+        prescriptionEditor = nil
         Task { await refreshSnapshot() }
+    }
+
+    private func presentPrescriptionEditor() {
+        guard let performance = snapshot?.currentPerformance,
+              let prescription = performance.prescription
+        else { return }
+        prescriptionEditor = GuidedSessionPrescriptionEditorItem(
+            id: performance.exerciseID,
+            prescription: prescription
+        )
     }
 
     private func run(
@@ -824,6 +820,15 @@ struct GuidedWorkoutView: View {
             }
             snapshot = loaded
             snapshotErrorMessage = nil
+            await WorkoutSystemProjectionCoordinator.shared.update(
+                sessionID: loaded.session.id,
+                status: loaded.session.status,
+                guidedPhase: loaded.session.guidedPhase,
+                restTargetEndAt: loaded.session.restTargetEndAt,
+                completedSetCount: loaded.completedSetCount,
+                totalSetCount: loaded.sets.count,
+                progressFraction: WorkoutLiveActivityProgress.fraction(from: loaded)
+            )
         } catch {
             guard !Task.isCancelled, generation == snapshotGeneration else {
                 return

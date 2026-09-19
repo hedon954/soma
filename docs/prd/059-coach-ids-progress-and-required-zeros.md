@@ -3,10 +3,7 @@
 - 状态：已采纳
 - 日期：2026-09-08
 - 版本：0.0.23
-- 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的缺事实保持空、训练热量与进展估算
-  - [PRD 057](057-coach-focus-progress-rings-and-library-clarity.md) 的快捷建议句与听写预览
-  - [ADR 0125](../adr/0125-eager-loaded-coach-messages.md) 仅助手消息可见性不得依赖渲染缓存
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的缺事实保持空、训练热量、进展估算、快捷建议句、听写预览与助手消息可见性
 - 上游依据：
   - [BUG 0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)
   - [BUG 0056](../bugs/0056-plan-stats-session-navigation-crash.md)

@@ -248,4 +248,55 @@ enum WorkoutPrescriptionFormatter {
     private static func number(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0 ... 2)))
     }
+
+    static func projection(
+        _ prescription: TemplateExercisePrescription
+    ) -> GuidedExercisePrescriptionProjection {
+        let sets = prescription.plannedSets.sorted { $0.order < $1.order }
+        let clusters = TrainingPrescriptionClustering.clusters(in: sets).map { cluster in
+            let sample = sets[cluster.startIndex]
+            let kind = kindTitle(sample.kind)
+            return GuidedExercisePrescriptionProjection.Cluster(
+                id: sample.id,
+                title: cluster.count == 1 ? kind : "\(kind) ×\(cluster.count)",
+                detail: clusterDetail(sample, laterality: prescription.laterality)
+            )
+        }
+        return GuidedExercisePrescriptionProjection(
+            lateralityLabel: lateralityToken(prescription.laterality).first,
+            clusters: clusters,
+            restBetweenSetsLabel: prescription.targetRestSeconds.map { "组间歇 \($0) 秒" },
+            restBetweenSidesLabel: prescription.laterality == .both
+                ? prescription.restBetweenSidesSeconds.map { "换侧间歇 \($0) 秒" }
+                : nil
+        )
+    }
+
+    private static func clusterDetail(
+        _ set: TemplateSetPrescriptionValue,
+        laterality: ExerciseLaterality
+    ) -> String {
+        var parts: [String] = []
+        switch set.targetKind {
+        case .repetitions:
+            parts.append(set.targetReps.map { "\($0) 次" } ?? "—")
+        case .duration:
+            parts.append(set.targetDurationSeconds.map { "\($0) 秒" } ?? "—")
+        }
+        parts.append(contentsOf: weightTokens(set, laterality: laterality))
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+struct GuidedExercisePrescriptionProjection: Equatable {
+    struct Cluster: Equatable, Identifiable {
+        let id: UUID
+        let title: String
+        let detail: String
+    }
+
+    let lateralityLabel: String?
+    let clusters: [Cluster]
+    let restBetweenSetsLabel: String?
+    let restBetweenSidesLabel: String?
 }

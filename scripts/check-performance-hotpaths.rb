@@ -743,6 +743,17 @@ unless guided_workout_source.include?("let sessionID: UUID") &&
        guided_snapshot_source.include?("$0.workoutSetID == setID")
   fail_check("guided workout no longer renders from a scalar-ID immutable snapshot")
 end
+
+replacement_picker_source = File.read(
+  File.join(ROOT, "Soma/Views/GuidedExerciseReplacementPicker.swift")
+)
+if replacement_picker_source.include?("isArchived")
+  fail_check("guided replacement picker used computed isArchived in a SwiftData predicate")
+end
+unless replacement_picker_source.include?("replacementChoices") &&
+       replacement_picker_source.include?("archivedAt == nil")
+  fail_check("guided replacement picker no longer loads immutable choices by archivedAt")
+end
 if training_source.include?("$0.performance?.sessionID == sessionID") ||
    training_source.include?("$0.workoutSet?.performance?.sessionID == sessionID")
   fail_check("training review restored a multi-relationship SwiftData predicate")

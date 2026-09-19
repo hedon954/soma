@@ -4,8 +4,7 @@
 - 日期：2026-09-12
 - 版本：0.0.24
 - 上游依据：[PRD 066](../prd/066-agent-user-questions.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的纯 Markdown 交互与工具曝光：新增固定提问组件及始终可用的提问工具
-- 部分替代：[ADR 0120](0120-focused-shortcut-prompt.md) 的工具曝光：为固定提问工具保留始终可用的入口
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的纯 Markdown 交互与快捷聚焦工具曝光：新增固定提问组件及始终可用的提问工具
 - 部分替代：[ReAct Agent](../react-agent.md)、[Tool 目录](../engineering/agent-tool-catalog.md) 的工具目录与循环停止规则
 - 下游落地：[验收](../acceptance.md)
 

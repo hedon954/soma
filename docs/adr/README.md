@@ -1,7 +1,7 @@
 # Soma 架构决策记录
 
 活 ADR 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.24`、`0.0.23`、`0.0.22`。0.0.21 及更早的**原文**在 [文档归档](../archive/README.md)，
+`0.0.25`、`0.0.24`、`0.0.23`。0.0.22 及更早的**原文**在 [文档归档](../archive/README.md)，
 仅供人类考古；Agent 默认不要读取归档。
 
 ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答一个问题：当时有哪些选择、最终选了什么、为什么，以及这一选择带来的约束。
@@ -11,7 +11,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 阅读顺序：
 
 ```text
-[ADR 0000 压缩起点] → 0.0.22 → 0.0.23 → 0.0.24
+[ADR 0000 压缩起点] → 0.0.23 → 0.0.24 → 0.0.25
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后仍然成立的最终决策。窗口内最旧活 ADR 的
@@ -25,14 +25,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | ADR | 版本 | 状态 | 决策 |
 | --- | --- | --- | --- |
-| [0000](0000-origin-through-0.0.11.md) | ≤0.0.21 | 压缩起点 | 0.0.21 收口后仍约束实现的架构决策 |
-| [0119](0119-full-video-and-append-only-dictation.md) | 0.0.22 | 部分已替代 | 原件保留与草稿保护仍有效；听写由 [0121](0121-live-dictation-preview.md)、明确视频拒绝由 [0131](0131-explicit-video-rejection-frame-fallback.md) 修订 |
-| [0120](0120-focused-shortcut-prompt.md) | 0.0.22 | 已采纳 | 选中快捷按钮后省略 Skill 目录并收窄上下文；提问工具曝光由 [0136](0136-agent-user-questions.md) 部分修订 |
-| [0121](0121-live-dictation-preview.md) | 0.0.22 | 已采纳 | 未确认听写片段只作输入框预览，确认后才写入草稿 |
-| [0122](0122-nutrition-rings-and-period-deficit.md) | 0.0.22 | 部分已替代 | 日页圆环仍有效；估算由 [0129](0129-daily-energy-net-training-increment.md) 加入训练净增量，总缺口由 [0133](0133-paired-day-total-energy-deficit.md) 新增 |
-| [0123](0123-exercise-movement-kinds.md) | 0.0.22 | 已采纳 | 动作库去掉受力肌群轴，模式映射为封闭动作类型 |
-| [0124](0124-smtp-feedback-failure-taxonomy.md) | 0.0.22 | 已采纳 | 反馈 SMTP 失败分类与 IPv4 优先 |
-| [0125](0125-eager-loaded-coach-messages.md) | 0.0.22 | 已采纳 | 已加载聊天页即时排版并常驻缓存；切 Tab／Session 不重画，分页按 30 条 |
+| [0000](0000-origin-through-0.0.11.md) | ≤0.0.22 | 压缩起点 | 0.0.22 收口后仍约束实现的架构决策 |
 | [0126](0126-workout-share-pro-max-canvas.md) | 0.0.23 | 部分已替代 | Pro Max 440×956 基准纸面仍有效；铺满与加高由 [0130](0130-workout-share-fill-or-grow.md) 修订 |
 | [0127](0127-agent-workout-weight-and-rest-zero.md) | 0.0.23 | 已采纳 | Agent 训练重量与组间间歇未说明时写 0；0kg 为自重 |
 | [0128](0128-remove-healthkit-until-redesign.md) | 0.0.23 | 部分已替代 | 当前不接入 HealthKit；日总计公式由 [0129](0129-daily-energy-net-training-increment.md) 修订 |
@@ -68,7 +61,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | 文档 | 状态 | 决策 |
 | --- | --- | --- |
-| [0131](0131-explicit-video-rejection-frame-fallback.md) | 已采纳，已实现 | 部分替代 ADR 0119：明确视频拒绝后单次有界画面回退 |
+| [0131](0131-explicit-video-rejection-frame-fallback.md) | 已采纳，已实现 | 部分替代 ADR 0000：明确视频拒绝后单次有界画面回退 |
 | [0132](0132-actionable-error-presentation.md) | 已采纳，已实现 | 用户错误与机器诊断分离，修订 BUG 0025 的技术标识呈现 |
 | [0133](0133-paired-day-total-energy-deficit.md) | 已采纳，已实现 | 同日配对累计缺口，日页与仍可摄入合为底部提示 |
 
@@ -77,6 +70,6 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | 文档 | 状态 | 决策 |
 | --- | --- | --- |
 | [0134](0134-session-history-page-cache.md) | 已采纳，已实现 | 部分替代 ADR 0000：会话目录只查未缓存身份，跨 Tab/Session 保留 |
-| [0135](0135-agent-workout-calories.md) | 已采纳，已实现 | 部分替代 ADR 0000，落地 PRD 058：训练工具传入用户热量，省略时仍按 MET 计算 |
+| [0135](0135-agent-workout-calories.md) | 已采纳，已实现 | 部分替代 ADR 0000：训练工具传入用户热量，省略时仍按 MET 计算 |
 | [0136](0136-agent-user-questions.md) | 已采纳，已实现 | 固定提问工具、选项权限与本机确定性 Job |
 | [0137](0137-agent-context-management.md) | 已采纳，已实现 | 统一窗口、稳定 Turn 帧、配置快照与可追溯摘要 |

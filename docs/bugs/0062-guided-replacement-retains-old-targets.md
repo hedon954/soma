@@ -2,6 +2,7 @@
 
 - 状态：定向回归中，完整门禁与交互待验收
 - 日期：2026-09-10
+- 后续修订：[BUG 0066](0066-guided-replacement-computed-predicate-crash.md)（替换列表计算属性 Predicate 闪退）
 - 上游依据：[训练领域协议](../engineering/training-domain-model.md)
 - 下游落地：[验收](../acceptance.md)
 

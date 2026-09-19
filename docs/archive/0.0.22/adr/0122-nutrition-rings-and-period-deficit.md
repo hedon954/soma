@@ -1,13 +1,13 @@
 # ADR 0122：营养圆环、推荐摄入与日页对照
 
-- 后续替代：[ADR 0133](0133-paired-day-total-energy-deficit.md)（日、周、月缺口合入底部提示，圆环和年度保持）
+- 后续替代：[ADR 0133](../../../adr/0133-paired-day-total-energy-deficit.md)（日、周、月缺口合入底部提示，圆环和年度保持）
 - 状态：部分已替代
 - 日期：2026-09-07
 - 维护者：Soma maintainers
 - 上游依据：[PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 的日页线性宏量与缺口文案呈现；Mifflin／PAL 估算不变
-- 后续替代：[ADR 0129](0129-daily-energy-net-training-increment.md)（仅估算加入训练净增量；圆环与周期规则仍有效）
+  - [ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的日页线性宏量与缺口文案呈现；Mifflin／PAL 估算不变
+- 后续替代：[ADR 0129](../../../adr/0129-daily-energy-net-training-increment.md)（仅估算加入训练净增量；圆环与周期规则仍有效）
 
 ## 背景
 
@@ -59,4 +59,4 @@
 ## 参考
 
 - ISSN 蛋白质范围作为产品取点依据，不声称个体处方。
-- [PRD 000](../prd/000-origin-through-0.0.11.md)
+- [PRD 000](../../../prd/000-origin-through-0.0.11.md)

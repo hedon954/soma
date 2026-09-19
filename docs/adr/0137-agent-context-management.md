@@ -4,7 +4,7 @@
 - 日期：2026-09-12
 - 版本：0.0.24
 - 上游依据：[PRD 067](../prd/067-agent-context-management.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（历史窗口、消息恢复与输入快照）；[ADR 0120](0120-focused-shortcut-prompt.md)（配置冻结时点，快捷聚焦和权限交集保持）
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（历史窗口、消息恢复、输入快照与配置冻结时点；快捷聚焦和权限交集保持）
 
 ## 背景
 

@@ -11,6 +11,8 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0067](0067-workout-live-activity-stale-progress.md) | 已修复，完整本地门禁通过，真机锁屏与灵动岛待验收 | 带练灵动岛和锁屏状态卡停在 0 组且呈搜索条 | 快照后投影、进度分数、复用 Activity、状态卡布局 |
+| [0066](0066-guided-replacement-computed-predicate-crash.md) | 已修复，完整本地门禁通过，真机交互待验收 | 替换动作用计算属性 Predicate 闪退 | 不可变候选、`archivedAt` 查询、同动作改目标重建、静态门禁 |
 | [0065](0065-agent-workout-calories-ignored.md) | 已修复，完整本地门禁通过 | 训练工具丢弃用户提供热量 | 创建／修改有值、无值四路径；零、缺体重、幂等与远程 Schema |
 | [0064](0064-raw-errors-without-recovery.md) | 定向回归通过，界面待验收 | 原始错误无恢复办法 | 全 App 分类、远程稳定原因、呈现层静态门禁 |
 | [0063](0063-explicit-video-rejection-has-no-compatible-input.md) | 定向回归通过，真机待验收 | 明确视频拒绝后无法继续分析画面 | 有界采样、原件保留、单次回退与持久恢复 |

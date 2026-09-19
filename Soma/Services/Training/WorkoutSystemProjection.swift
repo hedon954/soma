@@ -2,17 +2,29 @@ import ActivityKit
 import Foundation
 import UserNotifications
 
+enum WorkoutLiveActivityProgress {
+    static func fraction(from snapshot: GuidedWorkoutScreenSnapshot) -> Double {
+        let segments = snapshot.progressExercises.flatMap(\.sets)
+        guard !segments.isEmpty else { return 0 }
+        let total = segments.map(\.completionFraction).reduce(0, +)
+        return min(max(total / Double(segments.count), 0), 1)
+    }
+}
+
 @MainActor
 final class WorkoutSystemProjectionCoordinator {
     static let shared = WorkoutSystemProjectionCoordinator()
     private let updates = WorkoutProjectionSerialQueue()
+    private var cachedActivities: [UUID: Activity<SomaWorkoutActivityAttributes>] = [:]
+    private var updateSequences: [UUID: Int] = [:]
 
     private init() {}
 
     func update(
         session: WorkoutSession,
         completedSetCount: Int,
-        totalSetCount: Int
+        totalSetCount: Int,
+        progressFraction: Double = 0
     ) async {
         await update(
             sessionID: session.id,
@@ -20,7 +32,8 @@ final class WorkoutSystemProjectionCoordinator {
             guidedPhase: session.guidedPhase,
             restTargetEndAt: session.restTargetEndAt,
             completedSetCount: completedSetCount,
-            totalSetCount: totalSetCount
+            totalSetCount: totalSetCount,
+            progressFraction: progressFraction
         )
     }
 
@@ -30,13 +43,15 @@ final class WorkoutSystemProjectionCoordinator {
         guidedPhase: GuidedWorkoutPhase,
         restTargetEndAt: Date?,
         completedSetCount: Int,
-        totalSetCount: Int
+        totalSetCount: Int,
+        progressFraction: Double = 0
     ) async {
         await updates.enqueue(sessionID: sessionID) { [self] in
             await applyUpdate(
                 sessionID: sessionID, status: status, guidedPhase: guidedPhase,
                 restTargetEndAt: restTargetEndAt,
-                completedSetCount: completedSetCount, totalSetCount: totalSetCount
+                completedSetCount: completedSetCount, totalSetCount: totalSetCount,
+                progressFraction: progressFraction
             )
         }.value
     }
@@ -47,45 +62,83 @@ final class WorkoutSystemProjectionCoordinator {
         guidedPhase: GuidedWorkoutPhase,
         restTargetEndAt: Date?,
         completedSetCount: Int,
-        totalSetCount: Int
+        totalSetCount: Int,
+        progressFraction: Double
     ) async {
+        let sequence = nextSequence(for: sessionID)
         let state = Self.contentState(
             status: status,
             guidedPhase: guidedPhase,
             restTargetEndAt: restTargetEndAt,
             completedSetCount: completedSetCount,
-            totalSetCount: totalSetCount
+            totalSetCount: totalSetCount,
+            progressFraction: progressFraction,
+            updateSequence: sequence
         )
         let content = ActivityContent(
             state: state,
             staleDate: state.restEndAt?.addingTimeInterval(60)
+                ?? Date().addingTimeInterval(8 * 60 * 60),
+            relevanceScore: status == .paused ? 20 : 80
         )
 
-        if let activity = Activity<SomaWorkoutActivityAttributes>.activities
-            .first(where: { $0.attributes.sessionID == sessionID })
-        {
+        if let activity = resolvedActivity(for: sessionID) {
             if status == .completed || status == .abandoned {
                 await activity.end(
                     content,
                     dismissalPolicy: .after(.now.addingTimeInterval(60))
                 )
+                cachedActivities[sessionID] = nil
             } else {
                 await activity.update(content)
             }
         } else if status == .active || status == .paused,
                   ActivityAuthorizationInfo().areActivitiesEnabled
         {
-            _ = try? Activity.request(
-                attributes: SomaWorkoutActivityAttributes(sessionID: sessionID),
-                content: content,
-                pushType: nil
-            )
+            do {
+                let activity = try Activity.request(
+                    attributes: SomaWorkoutActivityAttributes(sessionID: sessionID),
+                    content: content,
+                    pushType: nil
+                )
+                cachedActivities[sessionID] = activity
+            } catch {
+                if let activity = resolvedActivity(for: sessionID) {
+                    await activity.update(content)
+                }
+            }
         }
 
         await updateRestNotification(
             sessionID: sessionID,
             restEndAt: state.restEndAt
         )
+    }
+
+    private func nextSequence(for sessionID: UUID) -> Int {
+        let next = (updateSequences[sessionID] ?? 0) + 1
+        updateSequences[sessionID] = next
+        return next
+    }
+
+    private func resolvedActivity(
+        for sessionID: UUID
+    ) -> Activity<SomaWorkoutActivityAttributes>? {
+        let live = Activity<SomaWorkoutActivityAttributes>.activities.filter {
+            $0.attributes.sessionID == sessionID
+        }
+        if let preferred = live.first(where: { $0.activityState == .active })
+            ?? live.first(where: { $0.activityState != .dismissed })
+        {
+            cachedActivities[sessionID] = preferred
+            return preferred
+        }
+        if let cached = cachedActivities[sessionID],
+           cached.activityState != .dismissed
+        {
+            return cached
+        }
+        return nil
     }
 
     func end(
@@ -113,6 +166,8 @@ final class WorkoutSystemProjectionCoordinator {
     }
 
     private func applyEnd(sessionID: UUID, completedSetCount: Int, totalSetCount: Int) async {
+        cachedActivities[sessionID] = nil
+        updateSequences[sessionID] = nil
         let state = SomaWorkoutActivityAttributes.ContentState(
             phaseRaw: "completed",
             completedSetCount: completedSetCount,
@@ -138,7 +193,9 @@ final class WorkoutSystemProjectionCoordinator {
         guidedPhase: GuidedWorkoutPhase,
         restTargetEndAt: Date?,
         completedSetCount: Int,
-        totalSetCount: Int
+        totalSetCount: Int,
+        progressFraction: Double = 0,
+        updateSequence: Int = 0
     ) -> SomaWorkoutActivityAttributes.ContentState {
         let phase: String = if status == .paused {
             "paused"
@@ -153,7 +210,9 @@ final class WorkoutSystemProjectionCoordinator {
             totalSetCount: totalSetCount,
             restEndAt: status == .active && guidedPhase == .resting
                 ? restTargetEndAt
-                : nil
+                : nil,
+            progressFraction: progressFraction,
+            updateSequence: updateSequence
         )
     }
 

@@ -2,7 +2,7 @@
 
 - 状态：修复中，定向回归与视觉验收分开记录
 - 日期：2026-09-10
-- 上游依据：[ADR 0121](../adr/0121-live-dictation-preview.md)
+- 上游依据：[ADR 0121](../archive/0.0.22/adr/0121-live-dictation-preview.md)
 - 下游落地：[验收](../acceptance.md)
 
 ## 症状

@@ -2,7 +2,10 @@
 
 - 状态：独立组、Effort、attempt 与自动收口实施中；SwiftData 打开路径见 ADR 0075，侧别与完成方式见 ADR 0076
 - 日期：2026-08-16
+- 上游依据：[PRD 068](../prd/068-guided-intro-prescription-review.md)（准备页展示并调整本次分组）
 - 下游落地：[BUG 0062](../bugs/0062-guided-replacement-retains-old-targets.md)（替换动作的最近参数确认与运行时重建）
+- 下游落地：[BUG 0066](../bugs/0066-guided-replacement-computed-predicate-crash.md)（替换列表不可变候选与 `archivedAt` 查询）
+- 下游落地：[BUG 0067](../bugs/0067-workout-live-activity-stale-progress.md)（带练 Live Activity 随进度更新）
 - 下游落地：[BUG 0059](../bugs/0059-rest-adjustment-stale-leaf-timer.md)（休息只由主状态机按持久截止时间推进）
 - 上游依据：
   - [ADR 0028](../archive/0.0.1/adr/0028-semantic-exercise-identity.md)
@@ -196,7 +199,8 @@ Effort 不被伪造成重量容量；逻辑组数按 Set 计算，不因 both �
 
 带练画面不直接观察上述 SwiftData 对象或 relationship。`GuidedWorkoutScreenSnapshot` 在独立读取
 Context 中按 `sessionID → performanceID → workoutSetID` 分段执行单层标量查询，输出 Session、
-Performance、Set、Effort 的不可变 DTO；SwiftUI 只渲染 DTO。动作替换和阶段操作只传稳定 ID，
+Performance、Set、Effort 的不可变 DTO；SwiftUI 只渲染 DTO。动作替换列表同样投影为不可变候选，
+查询只用 `archivedAt` 等持久字段。准备页展示本次处方分组，调整与替换都只传稳定 ID，
 回到 MainActor 当前 Context 后重新 fetch。快照刷新使用 generation 丢弃旧结果，失败保留最后成功
 画面。静态门禁禁止带练和复盘热路径恢复跨多层 relationship predicate。
 
@@ -397,8 +401,9 @@ Performance 终态、完成 Session、结束系统投影并进入本地分享预
 - Tool 创建/更新、聊天卡编辑和带练投影后都重算；schema version 7 启动迁移只幂等回填体重和
   训练证据充分的历史记录，缺事实不写 `0 kcal`。
 
-训练 Live Activity 与休息通知只保存 Session ID、通用阶段、完成/总组数和可选休息结束时间，
-不展示动作名称、重量、用户文字或媒体；点击后通过 `soma://workout/session/{id}` 回到对应 Session。
+训练 Live Activity 与休息通知只保存 Session ID、通用阶段、完成/总组数、一侧完成分数和可选休息结束时间，
+不展示动作名称、重量、用户文字或媒体；快照刷新后立即更新已有 Activity。锁屏状态卡带标题和进度条。
+点击后通过 `soma://workout/session/{id}` 回到对应 Session。
 
 ## AI 内容与复盘
 

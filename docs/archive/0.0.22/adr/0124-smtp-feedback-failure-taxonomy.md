@@ -4,7 +4,7 @@
 - 日期：2026-09-07
 - 维护者：Soma maintainers
 - 上游依据：[PRD 058](../prd/058-feedback-duration-and-editable-calories.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 第 25 条仅补充「失败一律暂时无法发送」的呈现；仍使用本机 QQ SMTP，不改收件人
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 第 25 条仅补充「失败一律暂时无法发送」的呈现；仍使用本机 QQ SMTP，不改收件人
 - 后续替代：暂无
 
 ## 背景

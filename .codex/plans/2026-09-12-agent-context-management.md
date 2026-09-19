@@ -4,7 +4,7 @@
 - 状态：方案已整理；30 轮 / 30k 门槛为维护者已确定目标，其余为建议设计与实施次序
 - 交付范围：方案文档；未修改运行时代码，也未验证模型效果或缓存收益
 - 当前基线：0.0.23 工作区，包含其他任务尚未提交的提问工具与热量改动
-- 现行依据：[PRD 000](../../docs/prd/000-origin-through-0.0.11.md)、[ADR 0000](../../docs/adr/0000-origin-through-0.0.11.md)、[ADR 0120](../../docs/adr/0120-focused-shortcut-prompt.md)、[Prompt 来源目录](../../docs/engineering/prompt-source-catalog.md)
+- 现行依据：[PRD 000](../../docs/prd/000-origin-through-0.0.11.md)、[ADR 0000](../../docs/adr/0000-origin-through-0.0.11.md)、[Prompt 来源目录](../../docs/engineering/prompt-source-catalog.md)
 
 ## 1. 目标与已确定边界
 

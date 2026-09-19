@@ -5,7 +5,7 @@
 - 日期：2026-09-10
 - 版本：0.0.23
 - 上游依据：[PRD 063](../prd/063-video-compatibility-and-actionable-errors.md)
-- 部分替代：[ADR 0119](0119-full-video-and-append-only-dictation.md)（视频不支持时拒绝抽帧；语音、原件保留与其他决策不变）
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（视频不支持时拒绝抽帧；语音、原件保留与其他决策不变）
 - 下游落地：[ReAct 协议](../react-agent.md)、[远程 Job 协议](../engineering/agent-job-protocol.md)、[验收](../acceptance.md)
 
 ## 背景

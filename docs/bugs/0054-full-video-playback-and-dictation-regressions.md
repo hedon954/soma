@@ -4,7 +4,7 @@
 - 状态：已修复，自动回归通过；真实中文听写与真机声画待验收
 - 日期：2026-09-05
 - 修订自：[BUG 0002](0002-video-frame-extraction-silent-fallback.md)、[BUG 0012](0012-direct-video-and-first-delta-timeout.md)、[BUG 0048](0048-speech-segment-overwrites-committed-text.md)
-- 上游依据：[PRD 056](../prd/056-video-speech-and-share-readability.md)、[ADR 0119](../adr/0119-full-video-and-append-only-dictation.md)
+- 上游依据：[PRD 056](../archive/0.0.22/prd/056-video-speech-and-share-readability.md)、[ADR 0119](../archive/0.0.22/adr/0119-full-video-and-append-only-dictation.md)
 
 ## 症状
 

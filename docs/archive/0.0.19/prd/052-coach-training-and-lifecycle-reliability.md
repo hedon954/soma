@@ -5,8 +5,8 @@
 - 修订自：
   - [PRD 047](../../0.0.16/prd/047-root-aware-tab-reselection.md) 的教练 Tab 再选行为
   - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的前台恢复响应边界
-- 后续修订：[PRD 058](../../../prd/058-feedback-duration-and-editable-calories.md)（时长时分秒展示与可编辑预计消耗）
-- 后续修订：[ADR 0125](../../../adr/0125-eager-loaded-coach-messages.md)（已加载消息即时排版，滑动不再懒卸载）
+- 后续修订：[PRD 058](../../0.0.22/prd/058-feedback-duration-and-editable-calories.md)（时长时分秒展示与可编辑预计消耗）
+- 后续修订：[ADR 0125](../../0.0.22/adr/0125-eager-loaded-coach-messages.md)（已加载消息即时排版，滑动不再懒卸载）
 - 上游依据：
   - 维护者提供的十七项严重 Bug、界面截图与崩溃报告
   - [BUG 0045](../../../bugs/0045-guided-workout-coredata-abort.md)
@@ -21,8 +21,8 @@
   - [ADR 0111](../adr/0111-agent-response-identity-and-manual-recovery.md)
   - [ADR 0112](../adr/0112-coach-scroll-and-session-behavior.md)
   - [ADR 0113](../adr/0113-capture-and-foreground-lifecycle.md)
-  - [ADR 0125](../../../adr/0125-eager-loaded-coach-messages.md)
-- 后续修订：[PRD 056](../../../prd/056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
+  - [ADR 0125](../../0.0.22/adr/0125-eager-loaded-coach-messages.md)
+- 后续修订：[PRD 056](../../0.0.22/prd/056-video-speech-and-share-readability.md)（仅视频、语音或分享明细相关部分）
 
 ## 背景
 

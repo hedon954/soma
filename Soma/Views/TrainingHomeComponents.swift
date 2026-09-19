@@ -157,6 +157,50 @@ struct TrainingProgramHomeCard: View {
     }
 }
 
+/// Same hidden-List overlay as `TrainingResumeSwipeContainer`: the training
+/// root is a ScrollView, so `swipeActions` only works on this one-row List.
+struct TrainingSessionHomeSwipeRow: View {
+    let session: WorkoutSession
+    let fallbackProgramName: String?
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        TrainingSessionHomeRow(
+            session: session,
+            fallbackProgramName: fallbackProgramName
+        )
+        .hidden()
+        .accessibilityHidden(true)
+        .overlay {
+            List {
+                Button(action: onOpen) {
+                    TrainingSessionHomeRow(
+                        session: session,
+                        fallbackProgramName: fallbackProgramName
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("查看这次训练")
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive, action: onDelete) {
+                        Image(systemName: "trash")
+                    }
+                    .accessibilityLabel("删除训练记录")
+                    .tint(.red)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.vertical, 0, for: .scrollContent)
+            .scrollDisabled(true)
+        }
+    }
+}
+
 struct TrainingSessionHomeRow: View {
     let session: WorkoutSession
     let fallbackProgramName: String?

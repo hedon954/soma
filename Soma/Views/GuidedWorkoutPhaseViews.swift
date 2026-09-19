@@ -3,45 +3,64 @@ import SwiftUI
 struct GuidedExerciseIntroductionView: View {
     let exerciseName: String?
     let artwork: ExerciseImageReference
+    let prescription: TemplateExercisePrescription?
     let coachingNotes: String?
     var camera: WorkoutCameraService?
     var isLandscape = false
     var cameraErrorMessage: String?
     let onPrepare: () -> Void
+    let onAdjust: () -> Void
     let onReplace: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(exerciseName ?? "准备动作")
-                    .font(.title2.weight(.semibold))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppTheme.groupSpacing) {
+                    Text(exerciseName ?? "准备动作")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(AppTheme.accent)
 
-                ExerciseArtworkView(
-                    reference: artwork
-                )
-                .aspectRatio(1, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 26))
-                .guidedPictureInPicture(
-                    camera: camera,
-                    isLandscape: isLandscape,
-                    recordingErrorMessage: cameraErrorMessage
-                )
+                    ExerciseArtworkView(
+                        reference: artwork
+                    )
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: 168, maxHeight: 168)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.controlRadius))
+                    .guidedPictureInPicture(
+                        camera: camera,
+                        isLandscape: isLandscape,
+                        recordingErrorMessage: cameraErrorMessage
+                    )
 
-                Label(
-                    coachingNotes?.nilIfBlank
-                        ?? "确认器械和动作空间，准备后开始第一组。",
-                    systemImage: "arrow.up.right.circle.fill"
-                )
-                .font(.body)
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    AppTheme.insetBackground,
-                    in: RoundedRectangle(cornerRadius: AppTheme.cardRadius)
-                )
+                    if let prescription {
+                        GuidedExercisePrescriptionCard(
+                            projection: WorkoutPrescriptionFormatter.projection(prescription),
+                            onAdjust: onAdjust
+                        )
+                    }
 
+                    Label(
+                        coachingNotes?.nilIfBlank
+                            ?? "确认器械和动作空间，准备后开始第一组。",
+                        systemImage: "arrow.up.right.circle.fill"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        AppTheme.insetBackground,
+                        in: RoundedRectangle(cornerRadius: AppTheme.controlRadius)
+                    )
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+            }
+
+            VStack(spacing: 10) {
                 Button(action: onPrepare) {
                     Text("准备本动作")
                         .font(.headline)
@@ -56,8 +75,12 @@ struct GuidedExerciseIntroductionView: View {
                     Button("跳过动作", action: onSkip)
                 }
                 .font(.subheadline)
+                .foregroundStyle(AppTheme.accent)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            .background(AppTheme.pageBackground)
         }
     }
 }
@@ -350,6 +373,77 @@ struct GuidedSetActualEditor: View {
     private var sectionTitle: String {
         let sideName = WorkoutPrescriptionFormatter.sideName(side)
         return sideName.isEmpty ? "本组实际完成" : "\(sideName)实际完成"
+    }
+}
+
+struct GuidedExercisePrescriptionCard: View {
+    let projection: GuidedExercisePrescriptionProjection
+    let onAdjust: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(headerTitle)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.accent)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Button("调整", action: onAdjust)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(minWidth: AppTheme.minimumTapTarget, minHeight: AppTheme.minimumTapTarget)
+                    .accessibilityLabel("调整本次目标")
+                    .accessibilityHint("修改这次还没开始的分组参数，不会改训练计划")
+            }
+
+            if projection.clusters.isEmpty {
+                Text("处方值未记录")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.accent)
+            } else {
+                ForEach(projection.clusters) { cluster in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(cluster.title)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.accent)
+                        Text(cluster.detail)
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.accent)
+                            .monospacedDigit()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(cluster.title)，\(cluster.detail)")
+                }
+            }
+
+            if !restLabels.isEmpty {
+                Text(restLabels.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.accent)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AppTheme.cardBackground,
+            in: RoundedRectangle(cornerRadius: AppTheme.controlRadius)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var headerTitle: String {
+        if let lateralityLabel = projection.lateralityLabel {
+            return "本次目标 · \(lateralityLabel)"
+        }
+        return "本次目标"
+    }
+
+    private var restLabels: [String] {
+        [projection.restBetweenSetsLabel, projection.restBetweenSidesLabel]
+            .compactMap { $0 }
     }
 }
 

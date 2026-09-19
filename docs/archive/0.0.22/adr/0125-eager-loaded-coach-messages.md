@@ -4,14 +4,14 @@
 - 日期：2026-09-08
 - 维护者：Soma maintainers
 - 上游依据：
-  - [PRD 000](../prd/000-origin-through-0.0.11.md)
-  - [BUG 0055](../bugs/0055-coach-history-scroll-repositions.md)
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md)
+  - [BUG 0055](../../../bugs/0055-coach-history-scroll-repositions.md)
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 仅消息列表懒栈与
+  - [ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 仅消息列表懒栈与
     `defaultScrollAnchor` alignment；尾随、双击回尾和 Session 日期标题不变
 - 后续替代：暂无
-- 后续修订：[PRD 059](../prd/059-coach-ids-progress-and-required-zeros.md)（已排版页不再用渲染缓存过滤助手消息）
-- 下游落地：[验收](../acceptance.md)
+- 后续修订：[PRD 059](../../../prd/059-coach-ids-progress-and-required-zeros.md)（已排版页不再用渲染缓存过滤助手消息）
+- 下游落地：[验收](../../../acceptance.md)
 
 ## 背景
 
@@ -58,5 +58,5 @@
 
 ## 参考
 
-- [BUG 0034](../bugs/0034-large-session-inline-editor-render-hang.md)
-- [BUG 0046](../bugs/0046-coach-stream-scrolls-into-blank-space.md)
+- [BUG 0034](../../../bugs/0034-large-session-inline-editor-render-hang.md)
+- [BUG 0046](../../../bugs/0046-coach-stream-scrolls-into-blank-space.md)

@@ -17,6 +17,7 @@ struct GuidedExerciseReplacementPreview {
 enum GuidedExerciseReplacementError: LocalizedError {
     case alreadyStarted
     case invalidPrescription
+    case missingExercise
 
     var errorDescription: String? {
         switch self {
@@ -24,6 +25,8 @@ enum GuidedExerciseReplacementError: LocalizedError {
             "当前动作已经开始，不能替换已产生的记录。请完成或跳过当前动作，在下一个动作开始前更换。"
         case .invalidPrescription:
             "替换参数与动作设定不一致。请重新选择动作，并填写每组的目标次数或时长后确认。"
+        case .missingExercise:
+            "找不到这个动作。请返回重试，或退出带练后重新进入。"
         }
     }
 }

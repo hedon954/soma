@@ -36,6 +36,7 @@ struct TrainingProgramLibraryView: View {
     @Query private var completedSessions: [WorkoutSession]
     @State private var showsCreation = false
     @State private var resumedSession: WorkoutSession?
+    @State private var reviewSessionID: UUID?
     @State private var errorMessage: String?
     init() {
         let activeStatus = TrainingProgramStatus.active.rawValue
@@ -118,6 +119,9 @@ struct TrainingProgramLibraryView: View {
                 GuidedWorkoutView(sessionID: session.id)
             }
         }
+        .navigationDestination(item: $reviewSessionID) { sessionID in
+            WorkoutSessionReviewDestination(sessionID: sessionID)
+        }
         .alert(
             "无法删除训练记录",
             isPresented: Binding(
@@ -178,24 +182,18 @@ struct TrainingProgramLibraryView: View {
             AppCard {
                 VStack(spacing: 0) {
                     ForEach(Array(completedSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                        NavigationLink {
-                            WorkoutSessionReviewDestination(sessionID: session.id)
-                        } label: {
-                            TrainingSessionHomeRow(
-                                session: session,
-                                fallbackProgramName: session.programID.flatMap {
-                                    projection.namesByID[$0]
-                                }
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
+                        TrainingSessionHomeSwipeRow(
+                            session: session,
+                            fallbackProgramName: session.programID.flatMap {
+                                projection.namesByID[$0]
+                            },
+                            onOpen: {
+                                reviewSessionID = session.id
+                            },
+                            onDelete: {
                                 deleteSession(session)
-                            } label: {
-                                Label("删除训练记录", systemImage: "trash")
                             }
-                        }
+                        )
 
                         if index < min(completedSessions.count, 3) - 1 {
                             Divider()
@@ -433,6 +431,15 @@ private struct TrainingProgramDetailView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                deleteSession(session)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .accessibilityLabel("删除训练记录")
+                            .tint(.red)
+                        }
                     }
                 } label: {
                     Text("训练统计")
@@ -760,6 +767,17 @@ private struct TrainingProgramDetailView: View {
         } catch {
             WorkoutInterfaceOrientationPolicy.shared
                 .setGuidedWorkoutActive(false)
+            errorMessage = AppErrorMessage.message(for: error, operation: .general)
+        }
+    }
+
+    private func deleteSession(_ session: WorkoutSession) {
+        do {
+            try TrainingPlanStore.deleteSession(session, in: modelContext)
+            if reviewSessionID == session.id {
+                reviewSessionID = nil
+            }
+        } catch {
             errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }

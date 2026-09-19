@@ -4,7 +4,7 @@
 - 日期：2026-09-07
 - 维护者：Soma maintainers
 - 上游依据：[PRD 057](../prd/057-coach-focus-progress-rings-and-library-clarity.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的三条分类轴与原始模式标签侧栏；部位映射、餐次配色与「不改写元数据」不变
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的三条分类轴与原始模式标签侧栏；部位映射、餐次配色与「不改写元数据」不变
 - 后续替代：暂无
 
 ## 背景
