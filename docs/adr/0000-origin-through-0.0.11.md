@@ -7,6 +7,7 @@
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
+  - [ADR 0139](0139-coach-timeline.md)（教练列表改为消息与无回合记录的时间投影；气泡与记录卡保持）
   - [ADR 0138](0138-training-course-name.md)（原训练计划的产品名改为训练课程；类型名与 Tool 名保持）
   - [ADR 0137](0137-agent-context-management.md)（上下文窗口、稳定消息与配置快照）
   - [ADR 0136](0136-agent-user-questions.md)（固定提问组件、始终曝光提问工具与确定性回答）

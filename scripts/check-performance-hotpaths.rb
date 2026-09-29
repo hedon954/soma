@@ -145,6 +145,7 @@ unless root_source.include?(".foregroundRecovery")
 end
 
 coach_source = File.read(File.join(ROOT, "Soma/Views/CoachView.swift"))
+coach_timeline_source = File.read(File.join(ROOT, "Soma/Views/CoachTimelineRows.swift"))
 coach_actions_source = File.read(File.join(ROOT, "Soma/Views/CoachSessionView+Actions.swift"))
 coach_screen_source = "#{coach_source}\n#{coach_actions_source}"
 if coach_source.include?(".scrollPosition(")
@@ -275,7 +276,7 @@ end
 if coach_source.include?("ConversationTurnProjection.canRetry(")
   fail_check("Coach message rows restored one full turn scan per bubble")
 end
-unless coach_source.include?("retryableMessageIDs.contains(message.id)") &&
+unless coach_timeline_source.include?("retryableMessageIDs.contains(message.id)") &&
        coach_support_source.include?("retryableMessageIDs")
   fail_check("Coach message rows no longer share one retryable-message set per render")
 end
@@ -340,7 +341,7 @@ end
 if coach_source.include?("isTabActive")
   fail_check("Coach screen again plumbs tab activity through view parameters instead of the leaf environment key")
 end
-unless coach_source.match?(/\.equatable\(\)\s*\n\s*\.id\(message\.id\)/m) &&
+unless coach_timeline_source.match?(/\.equatable\(\)\s*\n\s*\.id\(message\.id\)/m) &&
        coach_bubble_source.include?("struct CoachBubble: View, Equatable") &&
        coach_bubble_source.include?("static func == (lhs: CoachBubble, rhs: CoachBubble)")
   fail_check("message rows no longer skip parent-driven diffing through Equatable bubbles")

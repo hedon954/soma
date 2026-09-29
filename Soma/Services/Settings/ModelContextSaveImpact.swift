@@ -34,6 +34,11 @@ enum ModelContextSaveImpact {
     private static let exerciseLibraryRecentEntities: Set<String> = entityNames([
         WorkoutEntry.self
     ])
+    private static let coachTimelineEntities: Set<String> = entityNames([
+        WorkoutEntry.self,
+        MealEntry.self,
+        BodyEntry.self
+    ])
 
     static func affectsCoachSuggestions(
         _ notification: Notification,
@@ -78,6 +83,16 @@ enum ModelContextSaveImpact {
             // exercise history, but happen far less often than chat saves.
             return model is WorkoutSession
         }
+    }
+
+    static func affectsCoachTimeline(
+        _ notification: Notification,
+        in modelContext: ModelContext
+    ) -> Bool {
+        guard belongsToSameContainer(notification, as: modelContext) else {
+            return false
+        }
+        return affects(notification, entities: coachTimelineEntities)
     }
 
     static func affectsExerciseLibraryRecents(

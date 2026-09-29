@@ -80,6 +80,7 @@ struct CoachSessionView: View {
     /// 重新挂载时重复解码 UserDefaults JSON。
     @State private var inputShortcuts: [AgentInputShortcut] = []
     @State private var suggestionSnapshot = CoachSuggestionSnapshot.empty
+    @State private var timelineRecords: [CoachTimelineRecord] = []
     @State private var suggestionDataRevision = 0
     @State private var loadedSuggestionRevision = -1
     @State private var requestedSuggestionRevision: Int?
@@ -318,17 +319,23 @@ struct CoachSessionView: View {
                 object: modelContext
             )
         ) { notification in
-            guard ModelContextSaveImpact.affectsCoachSuggestions(
+            if ModelContextSaveImpact.affectsCoachSuggestions(
                 notification,
                 in: modelContext
-            ) else {
-                return
+            ) {
+                suggestionDataRevision &+= 1
+                requestSuggestionSnapshotIfNeeded()
             }
-            suggestionDataRevision &+= 1
-            requestSuggestionSnapshotIfNeeded()
+            if ModelContextSaveImpact.affectsCoachTimeline(
+                notification,
+                in: modelContext
+            ) {
+                refreshTimelineRecords()
+            }
         }
         .onAppear {
             visibility.isVisible = true
+            refreshTimelineRecords()
         }
         .task {
             // 先让 TabView 提交选中外观；次要快照请求不参与点击当帧。
@@ -624,61 +631,41 @@ struct CoachSessionView: View {
             })
         }
 
-        if ConversationStarterPolicy.shouldShow(for: projection.messages) {
+        let timeline = CoachTimelineBuilder.build(
+            messages: projection.messages.map {
+                CoachTimelineMessage(id: $0.id, date: $0.date)
+            },
+            records: timelineRecords,
+            hasEarlierMessages: projection.hasEarlierMessages
+        )
+        let messagesByID = Dictionary(
+            uniqueKeysWithValues: projection.messages.map { ($0.id, $0) }
+        )
+        let hasExternalRecord = timeline.contains {
+            if case .records = $0.payload {
+                return true
+            }
+            return false
+        }
+        if ConversationStarterPolicy.shouldShow(for: projection.messages),
+           !hasExternalRecord
+        {
             ConversationStarter(
                 suggestions: sessionStarterSuggestions,
                 onSelect: sendStarter
             )
         }
 
-        ForEach(
-            displayedMessages(from: projection, processingHere: processingHere)
-        ) { message in
-            // `.equatable()` 让父层 state 变化（输入草稿、处理标志、滚动位置）
-            // 不再重排历史气泡；消息内容变化仍由 SwiftData Observation 精确失效。
-            CoachBubble(
-                message: message,
-                isLatestAssistantMessage: message.id
-                    == projection.latestAssistantMessageID,
-                isLive: processingHere
-                    && message.agentStatus == .running,
-                isStaged: message.turnID.map(
-                    projection.stagedTurnIDs.contains
-                ) ?? false,
-                canRetry: !processorIsProcessing
-                    && projection.retryableMessageIDs.contains(message.id),
-                showsUserQuestions: message.isFromCoach && message.turnID != nil
-                    && message.turnID == projection.latestUserTurnID
-                    && message.id == projection.latestAssistantMessageID,
-                onQuestionAnswer: { questionID, optionID, text in
-                    try submitQuestionAnswer(message, questionID: questionID, optionID: optionID, text: text)
-                },
-                onRetry: { retry(message) },
-                onDiscardPending: message.turnID.map(
-                    projection.stagedTurnIDs.contains
-                ) == true
-                    ? { discardPending(message) }
-                    : nil,
-                onFeedbackExpanded: { target in
-                    AssistantFeedbackScroller.scrollAfterLayout(
-                        to: target,
-                        using: proxy
-                    )
-                }
+        ForEach(timeline) { item in
+            timelineRow(
+                item,
+                messagesByID: messagesByID,
+                scrollProxy: proxy,
+                projection: projection,
+                processorIsProcessing: processorIsProcessing,
+                processingHere: processingHere,
+                isTail: item.scrollID == timeline.last?.scrollID
             )
-            .equatable()
-            .id(message.id)
-            .onAppear {
-                guard !didFinishInitialScroll,
-                      message.id == projection.messages.last?.id
-                else {
-                    return
-                }
-                pinOpenedSessionIfNeeded(
-                    using: proxy,
-                    projection: projection
-                )
-            }
         }
     }
 
@@ -720,6 +707,18 @@ struct CoachSessionView: View {
         {
             composer.selectedShortcutID = nil
         }
+    }
+
+    private func refreshTimelineRecords() {
+        guard let session = currentSession else {
+            timelineRecords = []
+            return
+        }
+        timelineRecords = CoachTimelineLoader.records(
+            on: session.effectiveBusinessDate,
+            timeZone: session.businessTimeZone,
+            in: modelContext
+        )
     }
 
     private func requestSuggestionSnapshotIfNeeded() {

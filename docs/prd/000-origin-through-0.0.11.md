@@ -5,6 +5,7 @@
 - 覆盖版本：0.0.1–0.0.22
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续修订：
+  - [PRD 070](070-coach-timeline.md)（教练列表改为消息与无回合记录按发生时间投影）
   - [PRD 069](069-training-course-name.md)（原「训练计划」改称训练课程，为按日期排期的训练计划留出名字）
   - [PRD 068](068-guided-intro-prescription-review.md)（准备动作展示并调整本次分组参数；替换列表用不可变候选）
   - [PRD 067](067-agent-context-management.md)（30 轮 / 30k 上下文、时间与跨轮连续性）
