@@ -7,6 +7,7 @@
 
 - 后续修订：[PRD 069](prd/069-training-course-name.md)、[ADR 0138](adr/0138-training-course-name.md)（动作处方改称训练课程）
 - 后续修订：[PRD 070](prd/070-coach-timeline.md)、[ADR 0139](adr/0139-coach-timeline.md)（教练页按发生时间投影无回合记录，组件外观不变）
+- 后续修订：[PRD 071](prd/071-training-schedule.md)、[ADR 0140](adr/0140-training-schedule.md)（训练计划按锚定日排课程或休息，缺席只保留一堂，满一轮后停住）
 - 后续修订：[PRD 068](prd/068-guided-intro-prescription-review.md)、[BUG 0066](bugs/0066-guided-replacement-computed-predicate-crash.md)、[BUG 0067](bugs/0067-workout-live-activity-stale-progress.md)（准备页展示并调整本次分组；替换列表不可变候选；带练系统投影随进度更新）
 - 后续修订：[BUG 0062](bugs/0062-guided-replacement-retains-old-targets.md)（更换动作先确认最近实际参数，保留已完成证据）
 

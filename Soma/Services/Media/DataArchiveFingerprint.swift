@@ -15,6 +15,7 @@ extension PersonalDataSnapshot {
         normalized.exerciseMergeRecords?.sort(by: stableIDSort)
         normalized.workouts.sort(by: stableIDSort)
         normalized.trainingPrograms?.sort(by: stableIDSort)
+        normalized.trainingSchedules?.sort(by: stableIDSort)
         normalized.templateExercises?.sort(by: stableIDSort)
         normalized.templateSetPrescriptions?.sort(by: stableIDSort)
         normalized.workoutSessions?.sort(by: stableIDSort)
@@ -58,6 +59,7 @@ extension ExerciseDefinitionDTO: StableArchiveIdentifiable {}
 extension ExerciseMergeRecordDTO: StableArchiveIdentifiable {}
 extension WorkoutEntryDTO: StableArchiveIdentifiable {}
 extension TrainingProgramDTO: StableArchiveIdentifiable {}
+extension TrainingScheduleDTO: StableArchiveIdentifiable {}
 extension TemplateExerciseDTO: StableArchiveIdentifiable {}
 extension TemplateSetPrescriptionDTO: StableArchiveIdentifiable {}
 extension WorkoutSessionDTO: StableArchiveIdentifiable {}

@@ -50,6 +50,7 @@ enum SomaDataSchema {
             ExerciseMergeRecord.self,
             WorkoutEntry.self,
             TrainingProgram.self,
+            TrainingSchedule.self,
             TemplateExercise.self,
             TemplateSetPrescription.self,
             WorkoutSession.self,
@@ -496,6 +497,7 @@ enum BusinessIDAllocator {
         try assignAll(ExerciseDefinition.self, namespace: "exercise", in: context)
         try assignAll(ExerciseMergeRecord.self, namespace: "exercise_merge", in: context)
         try assignAll(TrainingProgram.self, namespace: "training_program", in: context)
+        try assignAll(TrainingSchedule.self, namespace: "training_schedule", in: context)
         try assignAll(TemplateExercise.self, namespace: "template_exercise", in: context)
         try assignAll(
             TemplateSetPrescription.self,
@@ -520,6 +522,7 @@ enum BusinessIDAllocator {
         try clearDuplicateIDs(ExerciseDefinition.self, in: context)
         try clearDuplicateIDs(ExerciseMergeRecord.self, in: context)
         try clearDuplicateIDs(TrainingProgram.self, in: context)
+        try clearDuplicateIDs(TrainingSchedule.self, in: context)
         try clearDuplicateIDs(TemplateExercise.self, in: context)
         try clearDuplicateIDs(TemplateSetPrescription.self, in: context)
         try clearDuplicateIDs(WorkoutSession.self, in: context)

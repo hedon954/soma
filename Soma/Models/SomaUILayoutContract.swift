@@ -24,6 +24,7 @@ enum SettingsHomeSection: String, CaseIterable, Identifiable, Sendable {
 
 enum TrainingHomeSection: String, CaseIterable, Identifiable, Sendable {
     case resume
+    case plans
     case programs
     case recent
     case archived
@@ -40,6 +41,7 @@ enum TrainingHomeSection: String, CaseIterable, Identifiable, Sendable {
         allCases.filter { section in
             switch section {
             case .resume: hasResumableSession
+            case .plans: true
             case .programs: true
             case .recent: hasRecentSessions
             case .archived: hasArchivedPrograms

@@ -17,6 +17,7 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
     var exerciseMergeRecords: [ExerciseMergeRecordDTO]?
     var workouts: [WorkoutEntryDTO]
     var trainingPrograms: [TrainingProgramDTO]?
+    var trainingSchedules: [TrainingScheduleDTO]? = nil
     var templateExercises: [TemplateExerciseDTO]?
     var templateSetPrescriptions: [TemplateSetPrescriptionDTO]?
     var workoutSessions: [WorkoutSessionDTO]?
@@ -115,6 +116,8 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
                 .map(WorkoutEntryDTO.init),
             trainingPrograms: context.fetch(FetchDescriptor<TrainingProgram>())
                 .map(TrainingProgramDTO.init),
+            trainingSchedules: context.fetch(FetchDescriptor<TrainingSchedule>())
+                .map(TrainingScheduleDTO.init),
             templateExercises: context.fetch(FetchDescriptor<TemplateExercise>())
                 .map(TemplateExerciseDTO.init),
             templateSetPrescriptions: context.fetch(
@@ -222,6 +225,9 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         }
         for program in trainingPrograms ?? [] {
             context.insert(program.makeModel())
+        }
+        for schedule in trainingSchedules ?? [] {
+            context.insert(schedule.makeModel())
         }
         for item in templateExercises ?? [] {
             context.insert(item.makeModel())

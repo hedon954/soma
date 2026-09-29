@@ -27,7 +27,7 @@ final class SomaUILayoutContractTests: XCTestCase {
                 hasRecentSessions: true,
                 hasArchivedPrograms: true
             ),
-            [.resume, .programs, .recent, .archived]
+            [.resume, .plans, .programs, .recent, .archived]
         )
         XCTAssertEqual(
             TrainingHomeSection.visible(
@@ -35,7 +35,7 @@ final class SomaUILayoutContractTests: XCTestCase {
                 hasRecentSessions: false,
                 hasArchivedPrograms: false
             ),
-            [.programs]
+            [.plans, .programs]
         )
     }
 }

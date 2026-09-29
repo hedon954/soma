@@ -1,5 +1,49 @@
 import Foundation
 
+struct TrainingScheduleDTO: Codable, Equatable, Sendable {
+    var id: UUID
+    var businessID: Int64?
+    var name: String
+    var statusRaw: String
+    var anchorDate: Date
+    var reanchorRequired: Bool
+    var slotsData: Data
+    var closuresData: Data
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(_ model: TrainingSchedule) {
+        id = model.id
+        businessID = model.businessID
+        name = model.name
+        statusRaw = model.statusRaw
+        anchorDate = model.anchorDate
+        reanchorRequired = model.reanchorRequired
+        slotsData = model.slotsData
+        closuresData = model.closuresData
+        createdAt = model.createdAt
+        updatedAt = model.updatedAt
+    }
+
+    func makeModel() -> TrainingSchedule {
+        let slots: [TrainingScheduleSlotValue] = TrainingScheduleCoding.decode(slotsData) ?? []
+        let closures: [TrainingScheduleClosureValue] = TrainingScheduleCoding.decode(closuresData) ?? []
+        let model = TrainingSchedule(
+            id: id,
+            name: name,
+            status: TrainingScheduleStatus(rawValue: statusRaw) ?? .active,
+            anchorDate: anchorDate,
+            reanchorRequired: reanchorRequired,
+            slots: slots,
+            closures: closures,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+        model.businessID = businessID
+        return model
+    }
+}
+
 struct TrainingProgramDTO: Codable, Equatable, Sendable {
     var id: UUID
     var businessID: Int64?

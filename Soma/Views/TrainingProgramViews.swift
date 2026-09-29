@@ -159,6 +159,8 @@ struct TrainingProgramLibraryView: View {
                     }
                 )
             }
+        case .plans:
+            TrainingScheduleHomeSection()
         case .programs:
             SectionHeading(title: "我的课程")
             if projection.active.isEmpty {
