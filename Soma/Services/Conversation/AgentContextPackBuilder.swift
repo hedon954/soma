@@ -336,7 +336,7 @@ enum AgentContextPackBuilder {
             $0.programID == program.id && $0.status == .completed
         }
         guard let programID = program.businessID else { return nil }
-        var parts = ["当前计划：\(program.name)（program_id: \(programID)）"]
+        var parts = ["当前课程：\(program.name)（program_id: \(programID)）"]
         if let last {
             let done = last.prescriptionSnapshot.count
             parts.append("上次完成 \(done) 个动作快照")
@@ -350,7 +350,7 @@ enum AgentContextPackBuilder {
         }) else {
             return nil
         }
-        let name = active.programNameSnapshot ?? "未命名计划"
+        let name = active.programNameSnapshot ?? "未命名课程"
         guard let sessionID = active.businessID else { return nil }
         return "进行中带练：\(name) [session_id:\(sessionID)]"
     }

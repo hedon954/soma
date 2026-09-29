@@ -185,10 +185,10 @@ struct TrainingProgramCreationView: View {
 
     var body: some View {
         Form {
-            Section("计划") {
-                TextField("计划名称", text: $name)
+            Section("课程") {
+                TextField("课程名称", text: $name)
                 TextField(
-                    "计划概览（可选）",
+                    "课程概览（可选）",
                     text: $overview,
                     axis: .vertical
                 )
@@ -208,12 +208,12 @@ struct TrainingProgramCreationView: View {
                     ContentUnavailableView(
                         "动作库为空",
                         systemImage: "figure.strengthtraining.traditional",
-                        description: Text("先在教练中记录一次训练，动作形成后即可在这里组合计划。")
+                        description: Text("先在教练中记录一次训练，动作形成后即可在这里组合成课程。")
                     )
                 }
             }
         }
-        .navigationTitle("新建训练计划")
+        .navigationTitle("新建训练课程")
         .navigationBarTitleDisplayMode(.inline)
         .environment(\.editMode, $editMode)
         .toolbar {
@@ -287,8 +287,8 @@ struct TrainingTemplateEditor: View {
 
     var body: some View {
         Form {
-            Section("计划") {
-                TextField("计划名称", text: $name)
+            Section("课程") {
+                TextField("课程名称", text: $name)
                 TextField("安排提示", text: $scheduleHint)
             }
 
@@ -297,7 +297,7 @@ struct TrainingTemplateEditor: View {
                 definitions: activeDefinitions
             )
         }
-        .navigationTitle("编辑训练计划")
+        .navigationTitle("编辑训练课程")
         .navigationBarTitleDisplayMode(.inline)
         .environment(\.editMode, $editMode)
         .toolbar {

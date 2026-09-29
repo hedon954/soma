@@ -19,7 +19,7 @@ extension ConversationRecorder {
                 + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
                 + "；动作：\(exerciseCount) 个"
         }
-        return .success(values.isEmpty ? "暂无可执行训练计划。" : values.joined(separator: "\n"))
+        return .success(values.isEmpty ? "暂无可执行训练课程。" : values.joined(separator: "\n"))
     }
 
     static func getTrainingProgram(
@@ -31,7 +31,7 @@ extension ConversationRecorder {
             return .failure("get_training_program 需要有效的 program_id。")
         }
         guard let program = trainingProgram(businessID: programID, in: context) else {
-            return .failure("没有找到训练计划，请重新查询。")
+            return .failure("没有找到训练课程，请重新查询。")
         }
         let prescriptions = TrainingPlanStore.prescriptions(for: program, in: context)
         let exercises = prescriptions.map { prescription in
@@ -92,13 +92,13 @@ extension ConversationRecorder {
                             in: context
                         )
                         return .success(
-                            "已有内容相同的训练计划\(AgentFacingRecordID.trailing(existing.businessID, key: "program_id"))："
+                            "已有内容相同的训练课程\(AgentFacingRecordID.trailing(existing.businessID, key: "program_id"))："
                                 + "\(existing.name)；并已把当日训练保存为一次完成记录 "
                                 + "[session_id:\(session.businessID ?? 0)]。"
                         )
                     }
                     return .success(
-                        "已有内容相同的训练计划\(AgentFacingRecordID.trailing(existing.businessID, key: "program_id"))：\(existing.name)。"
+                        "已有内容相同的训练课程\(AgentFacingRecordID.trailing(existing.businessID, key: "program_id"))：\(existing.name)。"
                     )
                 }
             }
@@ -116,13 +116,13 @@ extension ConversationRecorder {
                     in: context
                 )
                 return .success(
-                    "已创建训练计划\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)；"
+                    "已创建训练课程\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)；"
                         + "并已把当日原始训练保存为一次完成记录 "
                         + "[session_id:\(session.businessID ?? 0)]。"
                 )
             }
             return .success(
-                "已创建训练计划\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)。"
+                "已创建训练课程\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -175,7 +175,7 @@ extension ConversationRecorder {
             return .failure("update_program 需要有效的 program_id。")
         }
         guard let program = trainingProgram(businessID: programID, in: context) else {
-            return .failure("没有找到训练计划，请重新查询。")
+            return .failure("没有找到训练课程，请重新查询。")
         }
         do {
             try TrainingPlanStore.updateProgram(
@@ -186,7 +186,7 @@ extension ConversationRecorder {
                 in: context
             )
             return .success(
-                "已更新训练计划\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)。"
+                "已更新训练课程\(AgentFacingRecordID.trailing(program.businessID, key: "program_id"))：\(program.name)。"
             )
         } catch {
             return .failure(error.localizedDescription)
@@ -204,11 +204,11 @@ extension ConversationRecorder {
             )
         }
         guard let program = trainingProgram(businessID: programID, in: context) else {
-            return .failure("没有找到训练计划，请重新查询。")
+            return .failure("没有找到训练课程，请重新查询。")
         }
         do {
             try TrainingPlanStore.archive(program, in: context)
-            return .success("已归档训练计划：\(program.name)。")
+            return .success("已归档训练课程：\(program.name)。")
         } catch {
             return .failure(error.localizedDescription)
         }
@@ -223,11 +223,11 @@ extension ConversationRecorder {
             return .failure("delete_training_program 需要有效的 program_id。")
         }
         guard let program = trainingProgram(businessID: programID, in: context) else {
-            return .failure("没有找到训练计划，请重新查询。")
+            return .failure("没有找到训练课程，请重新查询。")
         }
         do {
             try TrainingPlanStore.deleteProgram(program, in: context)
-            return .success("已永久删除训练计划：\(program.name)；既有训练历史仍保留。")
+            return .success("已永久删除训练课程：\(program.name)；既有训练历史仍保留。")
         } catch {
             return .failure(error.localizedDescription)
         }
@@ -244,7 +244,7 @@ extension ConversationRecorder {
         guard let program = trainingProgram(businessID: programID, in: context),
               program.status == .active
         else {
-            return .failure("没有找到可执行的训练计划，请重新查询。")
+            return .failure("没有找到可执行的训练课程，请重新查询。")
         }
         let policy: AutoRecordingPolicy
         switch arguments.autoRecordingPolicy {

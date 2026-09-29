@@ -106,7 +106,7 @@ struct TrainingProgramLibraryView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("新建训练计划")
+                .accessibilityLabel("新建训练课程")
             }
         }
         .sheet(isPresented: $showsCreation) {
@@ -160,11 +160,11 @@ struct TrainingProgramLibraryView: View {
                 )
             }
         case .programs:
-            SectionHeading(title: "我的计划")
+            SectionHeading(title: "我的课程")
             if projection.active.isEmpty {
                 EmptyStateCard(
                     icon: "list.bullet.clipboard",
-                    title: "还没有训练计划",
+                    title: "还没有训练课程",
                     message: "点右上角＋选择动作组合，或在教练中描述目标让 Soma 帮你生成。"
                 )
             } else {
@@ -418,7 +418,7 @@ private struct TrainingProgramDetailView: View {
                             .foregroundStyle(AppTheme.trainingAccent.gradient)
                         }
                         .frame(height: 160)
-                        .accessibilityLabel("该计划近几次训练的有效容量趋势")
+                        .accessibilityLabel("该课程近几次训练的有效容量趋势")
                     }
                     ForEach(Array(sessions.prefix(5))) { session in
                         Button {
@@ -459,7 +459,7 @@ private struct TrainingProgramDetailView: View {
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
                         Text(program.overview.isEmpty
-                            ? "点击补充这份计划的整体思路与安排。"
+                            ? "点击补充这堂课程的整体思路与安排。"
                             : program.overview)
                             .font(.body)
                             .foregroundStyle(program.overview.isEmpty ? .secondary : .primary)
@@ -474,14 +474,14 @@ private struct TrainingProgramDetailView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(program.overview.isEmpty ? "编辑计划概览，当前未填写" : "编辑计划概览，\(program.overview)")
+                .accessibilityLabel(program.overview.isEmpty ? "编辑课程概览，当前未填写" : "编辑课程概览，\(program.overview)")
             }
 
             planOverviewSection
 
             Section {
                 if prescriptions.isEmpty {
-                    Text("这份计划还没有动作。")
+                    Text("这堂课程还没有动作。")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(prescriptions) { item in
@@ -556,7 +556,7 @@ private struct TrainingProgramDetailView: View {
 
                         Divider()
 
-                        Button("归档计划", role: .destructive) {
+                        Button("归档课程", role: .destructive) {
                             do {
                                 try TrainingPlanStore.archive(
                                     program,
@@ -577,25 +577,25 @@ private struct TrainingProgramDetailView: View {
                                 errorMessage = AppErrorMessage.message(for: error, operation: .general)
                             }
                         } label: {
-                            Label("恢复计划", systemImage: "arrow.uturn.backward")
+                            Label("恢复课程", systemImage: "arrow.uturn.backward")
                         }
                     }
 
-                    Button("删除计划", role: .destructive) {
+                    Button("删除课程", role: .destructive) {
                         confirmsDelete = true
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("计划管理")
+                .accessibilityLabel("课程管理")
             }
         }
         .confirmationDialog(
-            "删除训练计划？",
+            "删除训练课程？",
             isPresented: $confirmsDelete,
             titleVisibility: .visible
         ) {
-            Button("删除计划", role: .destructive) {
+            Button("删除课程", role: .destructive) {
                 do {
                     try TrainingPlanStore.deleteProgram(program, in: modelContext)
                     dismiss()
@@ -691,12 +691,12 @@ private struct TrainingProgramDetailView: View {
                     Section {
                         TextEditor(text: $overviewDraft)
                             .frame(minHeight: 180)
-                            .accessibilityLabel("计划概览")
+                            .accessibilityLabel("课程概览")
                     } footer: {
-                        Text("用于说明整份计划的训练思路、节奏与注意事项。")
+                        Text("用于说明整堂课程的训练思路、节奏与注意事项。")
                     }
                 }
-                .navigationTitle("编辑计划概览")
+                .navigationTitle("编辑课程概览")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -962,7 +962,7 @@ private struct TrainingProgramDetailView: View {
             Button {
                 showsEditor = true
             } label: {
-                Label("编辑计划", systemImage: "slider.horizontal.3")
+                Label("编辑课程", systemImage: "slider.horizontal.3")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
             }
@@ -1092,7 +1092,7 @@ private struct WorkoutSessionHistoryRow: View {
         {
             return preferredProgramName
         }
-        return "未关联训练计划"
+        return "未关联训练课程"
     }
 
     var body: some View {
@@ -1187,7 +1187,7 @@ private struct WorkoutSessionReviewView: View {
         List {
             Section("本地总结") {
                 if let planLabel {
-                    LabeledContent("训练计划", value: planLabel)
+                    LabeledContent("训练课程", value: planLabel)
                 }
                 Text(summary?.text ?? "正在载入训练总结…")
                 if session.status == .abandoned {
@@ -1257,7 +1257,7 @@ private struct WorkoutSessionReviewView: View {
                         )
                         NotificationCenter.default.post(
                             name: .prefillCoachDraft,
-                            object: "请总结 \(date) 开始的这次计划训练。请先查询 sessions，只做总结和建议，不要新增或修改训练记录。"
+                            object: "请总结 \(date) 开始的这次课程训练。请先查询 sessions，只做总结和建议，不要新增或修改训练记录。"
                         )
                     }
                 } label: {

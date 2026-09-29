@@ -139,7 +139,7 @@ struct TrainingProgramHomeCard: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityHint("查看训练计划")
+        .accessibilityHint("查看训练课程")
     }
 
     private var detailText: String {
@@ -153,7 +153,7 @@ struct TrainingProgramHomeCard: View {
         if parts.isEmpty, !program.overview.isEmpty {
             return program.overview
         }
-        return parts.isEmpty ? "尚未填写计划内容" : parts.joined(separator: " · ")
+        return parts.isEmpty ? "尚未填写课程内容" : parts.joined(separator: " · ")
     }
 }
 

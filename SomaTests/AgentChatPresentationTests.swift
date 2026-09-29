@@ -67,12 +67,12 @@ final class AgentChatPresentationTests: XCTestCase {
 
     func testMutationSummaryHidesInternalRecordIdentifier() {
         let presentation = AgentToolResultPresentation.make(for: toolItem(
-            title: "创建训练计划",
+            title: "创建训练课程",
             name: "create_program",
-            observation: "已创建训练计划 [id:888F4F29-7C5C-40DC-ACCB-A0AABC015F34]：基础力量训练。"
+            observation: "已创建训练课程 [id:888F4F29-7C5C-40DC-ACCB-A0AABC015F34]：基础力量训练。"
         ))
 
-        XCTAssertEqual(presentation?.summary, "已创建训练计划：基础力量训练。")
+        XCTAssertEqual(presentation?.summary, "已创建训练课程：基础力量训练。")
         XCTAssertEqual(presentation?.details, [String]())
     }
 

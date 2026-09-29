@@ -16,15 +16,15 @@ extension AgentToolName {
         case .askUserQuestions:
             "需要用户补充事实、选择或确认时提出问题，成功后结束本轮等待回答。每个选项以用户口吻发送；能用已开放工具及确定参数完成的选项绑定 action，否则省略 action 交给下一轮 Agent。选项不完整时允许自定义输入。不要与依赖回答的写入操作同批调用；不要为已授权且事实明确的操作重复确认。"
         case .searchExercises:
-            "按名称搜索未归档动作，返回 exercise_id、target_kind 与 laterality；记录训练或计划前使用。"
+            "按名称搜索未归档动作，返回 exercise_id、target_kind 与 laterality；记录训练或课程前使用。"
         case .createExercise:
             "仅在动作库没有语义等价项时批量创建标准动作，并明确 target_kind 与 laterality。左右各做用 both；双侧同时或不区分用 none。"
         case .updateExercise:
             "按 Int64 exercise_id 修正动作名称、完成方式或侧别；只提交有明确用户或本次训练证据的字段。"
         case .archiveExercise:
-            "按 Int64 exercise_id 归档动作；已有训练和计划关系保留。"
+            "按 Int64 exercise_id 归档动作；已有训练和课程关系保留。"
         case .mergeExercises:
-            "把重复动作合并到目标动作，并重绑已有训练与计划关系。"
+            "把重复动作合并到目标动作，并重绑已有训练与课程关系。"
         case .listWorkouts:
             "按可选日期范围读取训练摘要；已预加载的当日记录无需重复读取。"
         case .getWorkout:
@@ -50,17 +50,17 @@ extension AgentToolName {
         case .deleteBodyEntry:
             "删除指定 Int64 身体记录；仅在当前用户消息明确授权删除时使用。"
         case .listPrograms:
-            "读取可执行训练计划摘要。"
+            "读取可执行训练课程摘要。"
         case .getProgram:
-            "按 Int64 program_id 读取计划概览和独立逐组处方。"
+            "按 Int64 program_id 读取课程概览和独立逐组处方。"
         case .createProgram:
-            "创建训练计划；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。若计划由当日已有训练总结而来，必须传入这些记录的 source_workout_record_ids，让本机同时保存一次已完成的计划执行。"
+            "创建训练课程；每个动作必须使用有效 Int64 exercise_id，并以独立逐组处方表达左右、次数或时长。若课程由当日已有训练总结而来，必须传入这些记录的 source_workout_record_ids，让本机同时保存一次已完成的课程执行。"
         case .updateProgram:
-            "用完整独立逐组处方直接更新已有计划；已开始的 Session 继续使用自己的处方快照。"
+            "用完整独立逐组处方直接更新已有课程；已开始的 Session 继续使用自己的处方快照。"
         case .archiveProgram:
-            "归档训练计划，保留训练历史。"
+            "归档训练课程，保留训练历史。"
         case .deleteProgram:
-            "永久删除训练计划；仅在当前用户消息明确授权时使用，训练历史保留。"
+            "永久删除训练课程；仅在当前用户消息明确授权时使用，训练历史保留。"
         case .startProgram:
             "按 Int64 program_id 创建不可变训练 Session 并开始带练。"
         case .loadSkill:
@@ -169,7 +169,7 @@ extension AgentToolName {
             object([:])
         case .getProgram:
             object([
-                "program_id": integer("训练计划 Int64 ID")
+                "program_id": integer("训练课程 Int64 ID")
             ], required: ["program_id"])
         case .createWorkout:
             object([
@@ -276,33 +276,33 @@ extension AgentToolName {
             object(["gym_name": string("目标健身房名称")], required: ["gym_name"])
         case .createProgram:
             object([
-                "program_name": string("训练计划名称"),
-                "overview": string("用户明确提供、可编辑的计划概览"),
+                "program_name": string("训练课程名称"),
+                "overview": string("用户明确提供、可编辑的课程概览"),
                 "schedule_hint": string("用户明确提供的安排提示"),
                 "source_workout_record_ids": array(
                     integer("当日已有训练的 record_id"),
-                    description: "仅在基于当日已有训练总结计划时提供；按原训练顺序，至少一条"
+                    description: "仅在基于当日已有训练总结课程时提供；按原训练顺序，至少一条"
                 ),
                 "template_exercises": templateExerciseArrayV3()
             ], required: ["program_name", "template_exercises"])
         case .updateProgram:
             object([
-                "program_id": integer("训练计划 Int64 ID"),
-                "program_name": string("更新后的训练计划名称；省略则保持不变"),
+                "program_id": integer("训练课程 Int64 ID"),
+                "program_name": string("更新后的训练课程名称；省略则保持不变"),
                 "schedule_hint": string("用户明确提供的安排提示"),
                 "template_exercises": templateExerciseArrayV3()
             ], required: ["program_id", "template_exercises"])
         case .archiveProgram:
             object([
-                "program_id": integer("训练计划 Int64 ID")
+                "program_id": integer("训练课程 Int64 ID")
             ], required: ["program_id"])
         case .deleteProgram:
             object([
-                "program_id": integer("训练计划 Int64 ID")
+                "program_id": integer("训练课程 Int64 ID")
             ], required: ["program_id"])
         case .startProgram:
             object([
-                "program_id": integer("训练计划 Int64 ID"),
+                "program_id": integer("训练课程 Int64 ID"),
                 "auto_recording_policy": string(
                     "本次明确选择的录像策略；省略则关闭",
                     values: ["disabled", "one_per_exercise", "every_set"]

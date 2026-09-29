@@ -310,7 +310,7 @@ struct AgentToolResultPresentation: Equatable {
         case "gyms":
             ("健身房", "dumbbell.fill")
         case "programs":
-            ("训练计划", "list.bullet.clipboard")
+            ("训练课程", "list.bullet.clipboard")
         case "templates":
             ("训练模板", "doc.text")
         default:

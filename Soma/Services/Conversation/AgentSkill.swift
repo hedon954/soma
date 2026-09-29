@@ -18,7 +18,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .gymAnalysis: "健身房分析"
-        case .trainingPlan: "用户健身计划制定"
+        case .trainingPlan: "用户健身课程制定"
         case .movementAnalysis: "动作分析"
         case .nutritionAnalysis: "记录饮食"
         case .postureAnalysis: "体态分析"
@@ -32,7 +32,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .gymAnalysis: "识别环境与器械，区分可见证据和推断，并更新电子健身房。"
-        case .trainingPlan: "结合目标、历史、身体状态和当前器械制定可执行训练计划。"
+        case .trainingPlan: "结合目标、历史、身体状态和当前器械制定可执行训练课程。"
         case .movementAnalysis: "基于图片或完整视频评估动作、负荷与安全边界。"
         case .nutritionAnalysis: "把餐食写成可审查记录，并给出带不确定性的营养与餐食组成升糖速度估算。"
         case .postureAnalysis: "以中性、非诊断方式记录体态与标准化照片的可比变化。"
@@ -46,7 +46,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
     var whenToUse: String {
         switch self {
         case .gymAnalysis: "用户上传或描述健身房、器械、场馆切换时"
-        case .trainingPlan: "用户希望制定、调整、查看或开始训练计划时"
+        case .trainingPlan: "用户希望制定、调整、查看或开始训练课程时"
         case .movementAnalysis: "用户要求分析动作照片、视频、技术或负荷时"
         case .nutritionAnalysis: "用户要记录餐食，或识别食物照片时"
         case .postureAnalysis: "用户记录或比较体态、体重、体脂、腰围时"
@@ -82,16 +82,16 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             """
         case .trainingPlan:
             """
-            # 用户健身计划制定
+            # 用户健身课程制定
 
-            目标：依据用户目标、训练历史、身体状态、恢复情况与当前健身房器械，生成可以直接执行并能渐进调整的计划。
+            目标：依据用户目标、训练历史、身体状态、恢复情况与当前健身房器械，生成可以直接执行并能渐进调整的训练课程。
 
             执行规则：
             1. 优先使用首轮已注入的身体、健身房、当日记录和近期变化；只有缺少必要精确事实时才调用对应 list 工具。
             2. 目标、每周可训练次数、伤痛限制等关键约束缺失且会改变方案时，只追问最重要的一到两个问题。
-            3. 计划写清频率、动作模式、动作、组次、强度或 RIR、休息与进阶规则；只推荐当前场馆可用器械。
+            3. 课程写清动作、组次、强度或 RIR 与休息；只推荐当前场馆可用器械。频率留给之后的训练计划，不写进课程。
             4. 用用户近期可完成的训练作为起点，避免突然增加容量或负荷；同时安排恢复和降载条件。
-            5. 写计划前用 search_exercises 复用动作；不存在时先 create_exercise，再把返回的 exercise_id 交给 create_program。计划是训练建议而非医疗处方。
+            5. 写课程前用 search_exercises 复用动作；不存在时先 create_exercise，再把返回的 exercise_id 交给 create_program。课程是训练建议而非医疗处方。
             """
         case .movementAnalysis:
             """

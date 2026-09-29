@@ -80,12 +80,12 @@ enum TrainingIntelligenceService {
             "\($0.date.formatted(date: .numeric, time: .omitted)) · \($0.exercise) · \(ExerciseQuickFill.text(for: $0))"
         }.joined(separator: "\n")
         let prompt = """
-        用户主动请求优化训练计划“\(program.name)”。
+        用户主动请求优化训练课程“\(program.name)”。
         请只依据以下计划和真实历史，分别给出每个动作的建议重量、次数、组数与间歇；
-        缺少证据时明确说“保持原计划”或“暂无足够历史”，不要虚构能力或健康事实。
-        只输出面向用户的简洁建议，不调用任何工具，不改写计划。
+        缺少证据时明确说“保持原课程”或“暂无足够历史”，不要虚构能力或健康事实。
+        只输出面向用户的简洁建议，不调用任何工具，不改写课程。
 
-        [计划]
+        [课程]
         \(prescriptionText)
 
         [相关训练历史]
@@ -95,7 +95,7 @@ enum TrainingIntelligenceService {
             text: prompt,
             images: [],
             hasVideo: false,
-            context: "这是用户主动触发的一次训练计划优化。建议是一般训练信息，不构成医疗诊断。"
+            context: "这是用户主动触发的一次训练课程优化。建议是一般训练信息，不构成医疗诊断。"
         ) { _ in
             .failure("计划优化流程不执行 Tool；请直接返回建议。")
         }

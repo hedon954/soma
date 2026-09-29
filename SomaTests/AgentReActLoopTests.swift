@@ -359,7 +359,7 @@ final class AgentReActLoopTests: XCTestCase {
         var events: [AgentTraceEvent] = []
 
         let outcome = try await service.runAgent(
-            text: "帮我制定训练计划",
+            text: "帮我制定训练课程",
             images: [],
             hasVideo: false,
             context: "当前健身房：我的健身房",

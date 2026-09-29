@@ -15,7 +15,7 @@ enum TrainingPlanError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyName:
-            "计划名称不能为空。"
+            "课程名称不能为空。"
         case .emptyTemplate:
             "训练模板至少需要一个动作。"
         case let .missingExercise(id):
@@ -23,13 +23,13 @@ enum TrainingPlanError: LocalizedError, Equatable {
         case let .duplicateOrder(order):
             "动作顺序 \(order) 重复。"
         case .invalidSets:
-            "计划组数必须在 1 到 100 之间。"
+            "课程组数必须在 1 到 100 之间。"
         case let .invalidValue(field):
             "\(field) 超出合法范围。"
         case .missingTemplate:
             "当前训练模板不存在。"
         case .immutableSession:
-            "已开始或已结束的训练快照不能被计划修改。"
+            "已开始或已结束的训练快照不能被课程修改。"
         }
     }
 }

@@ -93,7 +93,7 @@ enum AppErrorMessage {
     private static func businessMessage(for error: Error, operation: AppErrorOperation) -> String? {
         if let plan = error as? TrainingPlanError {
             switch plan {
-            case .missingExercise: return "计划中的一个动作已不存在或已归档。请替换该动作后再开始训练。"
+            case .missingExercise: return "课程中的一个动作已不存在或已归档。请替换该动作后再开始训练。"
             default: return message(from: plan.errorDescription ?? "", operation: operation)
             }
         }

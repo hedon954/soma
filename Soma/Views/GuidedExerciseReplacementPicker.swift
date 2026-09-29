@@ -87,7 +87,7 @@ struct GuidedSessionPrescriptionEditor: View {
                     editorTitle: "调整本次目标",
                     saveTitle: "保存",
                     locksExerciseSettings: true,
-                    parameterSourceExplanation: "只改这次带练还没开始的组。训练计划和动作库保持不变。"
+                    parameterSourceExplanation: "只改这次带练还没开始的组。训练课程和动作库保持不变。"
                 ) { draft in
                     try onSave(
                         exercise,

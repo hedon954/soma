@@ -27,7 +27,7 @@ final class WorkoutSharePosterRenderingTests: XCTestCase {
         let seven = try render(referenceModel(exerciseCount: 7), scheme: .light, name: "workout-share-seven")
         XCTAssertEqual(seven.size.height, WorkoutShareCanvas.height, accuracy: 0.5)
 
-        model.title = "虚构的长名称训练计划：全身力量与核心稳定训练"
+        model.title = "虚构的长名称训练课程：全身力量与核心稳定训练"
         model.volumeValue = "1,234,567"
         model.estimatedCalories = nil
         model.partialSets = 2

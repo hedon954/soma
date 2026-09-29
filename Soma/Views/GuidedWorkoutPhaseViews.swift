@@ -393,7 +393,7 @@ struct GuidedExercisePrescriptionCard: View {
                     .foregroundStyle(AppTheme.accent)
                     .frame(minWidth: AppTheme.minimumTapTarget, minHeight: AppTheme.minimumTapTarget)
                     .accessibilityLabel("调整本次目标")
-                    .accessibilityHint("修改这次还没开始的分组参数，不会改训练计划")
+                    .accessibilityHint("修改这次还没开始的分组参数，不会改训练课程")
             }
 
             if projection.clusters.isEmpty {

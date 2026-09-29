@@ -63,7 +63,7 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
         case .workouts: "训练记录"
         case .meals: "饮食记录"
         case .body: "体重与体态"
-        case .plans: "训练计划与带练"
+        case .plans: "训练课程与带练"
         case .gym: "健身房"
         case .review: "动作复盘"
         case .feedback: "产品反馈"

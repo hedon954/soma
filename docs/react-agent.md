@@ -161,7 +161,7 @@ SwiftData；DEBUG 下投影入口断言主 actor 隔离（见
 - 持久 Job、Event 与投影：`Soma/Models/AgentJob.swift`、
   `Soma/Services/Conversation/ConversationProcessingService.swift`
 - 可选远程 Backend：`Soma/Services/Conversation/RemoteAgentClient.swift`、`Server/`
-- 动作与训练计划：`Soma/Models/ExerciseDefinition.swift`、
+- 动作与训练课程：`Soma/Models/ExerciseDefinition.swift`、
   `Soma/Models/TrainingPlan.swift`
 
 ## 持久运行时

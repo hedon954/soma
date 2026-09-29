@@ -1,6 +1,6 @@
 import Foundation
 
-/// 训练计划的确定性效果总览：由当前模板的处方（动作 × 肌群 × 组数）
+/// 训练课程的确定性效果总览：由当前模板的处方（动作 × 肌群 × 组数）
 /// 本地聚合生成，不依赖 AI，也不是个人受力测量。
 enum TrainingPlanOverview {
     struct ExerciseInput {

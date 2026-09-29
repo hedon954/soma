@@ -42,7 +42,7 @@ struct ExerciseDetailView: View {
 
         return Form {
             if let planPrescription {
-                Section("本计划目标") {
+                Section("本课程目标") {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("当前处方", systemImage: "scope")
                             .font(.subheadline.weight(.medium))

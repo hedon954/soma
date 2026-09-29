@@ -705,10 +705,10 @@ private struct AgentTurnWaitingCard: View {
                 AgentTurnItem(
                     kind: .tool,
                     status: .succeeded,
-                    title: "创建训练计划",
+                    title: "创建训练课程",
                     input: #"{"name":"create_program","arguments":{}}"#,
                     output: AgentTraceText.json(AgentToolResult.success(
-                        "已创建训练计划 [id:00000000-0000-0000-0000-000000000003]：基础力量训练。"
+                        "已创建训练课程 [id:00000000-0000-0000-0000-000000000003]：基础力量训练。"
                     ))
                 )
             ],

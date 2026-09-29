@@ -3,7 +3,8 @@
 - 状态：已采纳
 - 日期：2026-09-19
 - 版本：0.0.25
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的训练计划与带练
+- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的训练课程与带练
+- 后续修订：[PRD 069](069-training-course-name.md)（准备页不回写的对象改称训练课程）
 - 下游落地：[验收](../acceptance.md)、[训练领域协议](../engineering/training-domain-model.md)、[BUG 0066](../bugs/0066-guided-replacement-computed-predicate-crash.md)
 
 ## 背景
@@ -19,7 +20,7 @@
 重建本次待练组。
 
 已开始、已完成或已有实际数据/录像的当前动作不能改目标或替换。调整只写这次 Session
-快照，不改训练计划和动作库。无历史或缺失值保持空，不沿用其他动作的目标。
+快照，不改训练课程和动作库。无历史或缺失值保持空，不沿用其他动作的目标。
 
 ## 数据与隐私
 

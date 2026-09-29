@@ -65,7 +65,7 @@ extension ConversationRecorder {
         }
         return pagedResult(
             values,
-            noun: "训练计划",
+            noun: "训练课程",
             arguments: arguments,
             limit: limit
         )
