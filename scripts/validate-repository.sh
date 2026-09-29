@@ -82,6 +82,21 @@ required_files=(
   docs/archive/0.0.22/adr/0123-exercise-movement-kinds.md
   docs/archive/0.0.22/adr/0124-smtp-feedback-failure-taxonomy.md
   docs/archive/0.0.22/adr/0125-eager-loaded-coach-messages.md
+  docs/archive/0.0.23/prd/059-coach-ids-progress-and-required-zeros.md
+  docs/archive/0.0.23/prd/060-remove-healthkit-until-redesign.md
+  docs/archive/0.0.23/prd/061-daily-energy-net-training.md
+  docs/archive/0.0.23/prd/062-workout-share-fill-or-grow.md
+  docs/archive/0.0.23/prd/063-video-compatibility-and-actionable-errors.md
+  docs/archive/0.0.23/prd/064-progress-total-energy-deficit.md
+  docs/archive/0.0.23/adr/0126-workout-share-pro-max-canvas.md
+  docs/archive/0.0.23/adr/0127-agent-workout-weight-and-rest-zero.md
+  docs/archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md
+  docs/archive/0.0.23/adr/0129-daily-energy-net-training-increment.md
+  docs/archive/0.0.23/adr/0130-workout-share-fill-or-grow.md
+  docs/archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md
+  docs/archive/0.0.23/adr/0132-actionable-error-presentation.md
+  docs/archive/0.0.23/adr/0133-paired-day-total-energy-deficit.md
+  docs/archive/0.0.23/README.md
   docs/archive/README.md
   docs/archive/0.0.10/README.md
   docs/archive/0.0.11/README.md

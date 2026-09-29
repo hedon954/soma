@@ -1,7 +1,7 @@
 # Agent Job 与远程执行协议
 
-- 后续修订：[ADR 0132](../adr/0132-actionable-error-presentation.md)（远程失败稳定原因分类）
-- 后续修订：[ADR 0131](../adr/0131-explicit-video-rejection-frame-fallback.md)（视频备用画面、能力协商与恢复）
+- 后续修订：[ADR 0132](../archive/0.0.23/adr/0132-actionable-error-presentation.md)（远程失败稳定原因分类）
+- 后续修订：[ADR 0131](../archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)（视频备用画面、能力协商与恢复）
 
 - 下游落地：[BUG 0061](../bugs/0061-pending-delete-orphans-evidence-and-remote-job.md)（单条暂存删除、远程取消与记录附件保留）
 

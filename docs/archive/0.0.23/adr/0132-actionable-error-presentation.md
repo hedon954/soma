@@ -4,8 +4,8 @@
 - 日期：2026-09-10
 - 版本：0.0.23
 - 上游依据：[PRD 063](../prd/063-video-compatibility-and-actionable-errors.md)
-- 部分替代：[BUG 0025](../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)（普通录像提示附带技术标识的呈现要求）
-- 下游落地：[BUG 0064](../bugs/0064-raw-errors-without-recovery.md)、[错误呈现清单](../engineering/user-facing-errors.md)、[远程 Job 协议](../engineering/agent-job-protocol.md)、[验收](../acceptance.md)
+- 部分替代：[BUG 0025](../../../bugs/0025-guided-recording-terminated-by-connection-reconfiguration.md)（普通录像提示附带技术标识的呈现要求）
+- 下游落地：[BUG 0064](../../../bugs/0064-raw-errors-without-recovery.md)、[错误呈现清单](../../../engineering/user-facing-errors.md)、[远程 Job 协议](../../../engineering/agent-job-protocol.md)、[验收](../../../acceptance.md)
 
 ## 背景
 

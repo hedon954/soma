@@ -1,6 +1,6 @@
 # 用户错误呈现清单
 
-- 上游依据：[ADR 0132](../adr/0132-actionable-error-presentation.md)、[BUG 0064](../bugs/0064-raw-errors-without-recovery.md)
+- 上游依据：[ADR 0132](../archive/0.0.23/adr/0132-actionable-error-presentation.md)、[BUG 0064](../bugs/0064-raw-errors-without-recovery.md)
 
 | 入口 | 原因来源与显示边界 | 恢复路径 |
 | --- | --- | --- |

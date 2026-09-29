@@ -2,7 +2,7 @@
 
 - 后续修订：[ADR 0136](adr/0136-agent-user-questions.md)（受控提问与确定性按钮承接）
 
-- 后续修订：[ADR 0131](adr/0131-explicit-video-rejection-frame-fallback.md)（明确视频拒绝后单次画面回退）
+- 后续修订：[ADR 0131](archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)（明确视频拒绝后单次画面回退）
 
 - 后续修订：[ADR 0000](adr/0000-origin-through-0.0.11.md)（完整视频输入，禁止关键帧降级）
 

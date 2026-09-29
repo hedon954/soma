@@ -2,7 +2,7 @@
 
 - 状态：完整本地门禁通过，真机待验收
 - 日期：2026-09-10
-- 上游依据：[PRD 063](../prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0131](../adr/0131-explicit-video-rejection-frame-fallback.md)
+- 上游依据：[PRD 063](../archive/0.0.23/prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0131](../archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)
 - 部分替代：[BUG 0054](0054-full-video-playback-and-dictation-regressions.md)（明确视频拒绝时始终阻断的范围）
 - 下游落地：[验收](../acceptance.md)
 

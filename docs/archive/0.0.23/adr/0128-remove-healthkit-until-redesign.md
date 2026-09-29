@@ -4,12 +4,12 @@
 - 日期：2026-09-09
 - 维护者：Soma maintainers
 - 部分替代：
-  - [ADR 0000](0000-origin-through-0.0.11.md) 仅 Apple 健康导入、设备历史活动系数与 HealthKit 去重热路径；Mifflin × 活动系数公式、记录 `externalSource` 与 `ExternalSyncCursor` 模型仍有效
+  - [ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 仅 Apple 健康导入、设备历史活动系数与 HealthKit 去重热路径；Mifflin × 活动系数公式、记录 `externalSource` 与 `ExternalSyncCursor` 模型仍有效
 - 上游依据：
   - [PRD 060](../prd/060-remove-healthkit-until-redesign.md)
-  - [日消耗统计：本地公式不含手表](../research/2026-09-08-daily-energy-expenditure-methods.md)
+  - [日消耗统计：本地公式不含手表](../../../research/2026-09-08-daily-energy-expenditure-methods.md)
 - 后续替代：[ADR 0129](0129-daily-energy-net-training-increment.md)（仅日总计加入去重训练增量；不接入 HealthKit 仍有效）
-- 下游落地：[验收](../acceptance.md)
+- 下游落地：[验收](../../../acceptance.md)
 
 ## 背景
 
@@ -47,4 +47,4 @@ entitlement。进展估算只使用身体资料上的 Mifflin 静息，乘以用
 ## 参考
 
 - [PRD 060](../prd/060-remove-healthkit-until-redesign.md)
-- [日消耗调研](../research/2026-09-08-daily-energy-expenditure-methods.md)
+- [日消耗调研](../../../research/2026-09-08-daily-energy-expenditure-methods.md)

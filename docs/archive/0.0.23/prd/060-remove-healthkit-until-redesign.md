@@ -4,12 +4,12 @@
 - 日期：2026-09-09
 - 版本：0.0.23
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的 Apple 健康导入、设备历史活动系数、Keep/COROS 经健康读取
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的 Apple 健康导入、设备历史活动系数、Keep/COROS 经健康读取
   - [PRD 059](059-coach-ids-progress-and-required-zeros.md) 仅进展估算的设备能量来源
-- 上游依据：[日消耗统计：本地公式不含手表](../research/2026-09-08-daily-energy-expenditure-methods.md) 的「当前不读手表与 HealthKit」
+- 上游依据：[日消耗统计：本地公式不含手表](../../../research/2026-09-08-daily-energy-expenditure-methods.md) 的「当前不读手表与 HealthKit」
 - 下游落地：
   - [ADR 0128](../adr/0128-remove-healthkit-until-redesign.md)
-  - [验收](../acceptance.md)
+  - [验收](../../../acceptance.md)
 - 后续修订：[PRD 061](061-daily-energy-net-training.md)（仅日总计加入去重训练增量；不接入 HealthKit 仍有效）
 
 ## 背景

@@ -3,10 +3,10 @@
 - 状态：已采纳
 - 日期：2026-09-08
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 仅训练 Tool 的外部重量与组间间歇；其他缺事实仍为 `nil`
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 仅训练 Tool 的外部重量与组间间歇；其他缺事实仍为 `nil`
 - 上游依据：[PRD 059](../prd/059-coach-ids-progress-and-required-zeros.md)
 - 后续替代：暂无
-- 下游落地：[验收](../acceptance.md)
+- 下游落地：[验收](../../../acceptance.md)
 
 ## 背景
 

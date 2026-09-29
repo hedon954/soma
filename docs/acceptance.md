@@ -1,9 +1,9 @@
 # Soma 验收清单
 - 后续修订：[PRD 066](prd/066-agent-user-questions.md)、[ADR 0136](adr/0136-agent-user-questions.md)（提问按钮与确定性回答）
 
-- 后续修订：[PRD 064](prd/064-progress-total-energy-deficit.md)、[ADR 0133](adr/0133-paired-day-total-energy-deficit.md)（日、周、月按同日配对累计总热量缺口）
-- 后续修订：[ADR 0132](adr/0132-actionable-error-presentation.md)、[BUG 0063](bugs/0063-explicit-video-rejection-has-no-compatible-input.md)、[BUG 0064](bugs/0064-raw-errors-without-recovery.md)（视频回退及错误呈现回归）
-- 后续修订：[PRD 063](prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0131](adr/0131-explicit-video-rejection-frame-fallback.md)（视频兼容回退与可操作失败提示）
+- 后续修订：[PRD 064](archive/0.0.23/prd/064-progress-total-energy-deficit.md)、[ADR 0133](archive/0.0.23/adr/0133-paired-day-total-energy-deficit.md)（日、周、月按同日配对累计总热量缺口）
+- 后续修订：[ADR 0132](archive/0.0.23/adr/0132-actionable-error-presentation.md)、[BUG 0063](bugs/0063-explicit-video-rejection-has-no-compatible-input.md)、[BUG 0064](bugs/0064-raw-errors-without-recovery.md)（视频回退及错误呈现回归）
+- 后续修订：[PRD 063](archive/0.0.23/prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0131](archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)（视频兼容回退与可操作失败提示）
 
 - 后续修订：[PRD 069](prd/069-training-course-name.md)、[ADR 0138](adr/0138-training-course-name.md)（动作处方改称训练课程）
 - 后续修订：[PRD 070](prd/070-coach-timeline.md)、[ADR 0139](adr/0139-coach-timeline.md)（教练页按发生时间投影无回合记录，组件外观不变）
@@ -19,15 +19,15 @@
 
 - 后续修订：[PRD 000](prd/000-origin-through-0.0.11.md)、[ADR 0000](adr/0000-origin-through-0.0.11.md)（完整视频、听写预览、快捷聚焦、营养圆环、反馈失败分类与可编辑热量）
 - 后续修订：[BUG 0058](bugs/0058-live-dictation-preview-stays-empty.md)（听写边说边出字，空输入框保持一行）
-- 后续修订：[PRD 059](prd/059-coach-ids-progress-and-required-zeros.md)（教练 Int64 ID、训练卡 0、进展列表热量与缓存）
-- 后续修订：[ADR 0126](adr/0126-workout-share-pro-max-canvas.md)（训练分享 Pro Max 基准纸面）
-- 后续修订：[PRD 062](prd/062-workout-share-fill-or-grow.md)（分享海报按动作数铺满或加高）
-- 后续修订：[ADR 0130](adr/0130-workout-share-fill-or-grow.md)（短会话铺满 440×956，超出才加高）
-- 后续修订：[ADR 0127](adr/0127-agent-workout-weight-and-rest-zero.md)（Agent 训练重量与间歇未说明时写 0）
-- 后续修订：[PRD 060](prd/060-remove-healthkit-until-redesign.md)（撤回 Apple 健康接入）
-- 后续修订：[ADR 0128](adr/0128-remove-healthkit-until-redesign.md)（当前不接入 HealthKit）
-- 后续修订：[PRD 061](prd/061-daily-energy-net-training.md)（日总计加入去重后的训练增量）
-- 后续修订：[ADR 0129](adr/0129-daily-energy-net-training-increment.md)（记录写完整热量，日总计只加净增量）
+- 后续修订：[PRD 059](archive/0.0.23/prd/059-coach-ids-progress-and-required-zeros.md)（教练 Int64 ID、训练卡 0、进展列表热量与缓存）
+- 后续修订：[ADR 0126](archive/0.0.23/adr/0126-workout-share-pro-max-canvas.md)（训练分享 Pro Max 基准纸面）
+- 后续修订：[PRD 062](archive/0.0.23/prd/062-workout-share-fill-or-grow.md)（分享海报按动作数铺满或加高）
+- 后续修订：[ADR 0130](archive/0.0.23/adr/0130-workout-share-fill-or-grow.md)（短会话铺满 440×956，超出才加高）
+- 后续修订：[ADR 0127](archive/0.0.23/adr/0127-agent-workout-weight-and-rest-zero.md)（Agent 训练重量与间歇未说明时写 0）
+- 后续修订：[PRD 060](archive/0.0.23/prd/060-remove-healthkit-until-redesign.md)（撤回 Apple 健康接入）
+- 后续修订：[ADR 0128](archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md)（当前不接入 HealthKit）
+- 后续修订：[PRD 061](archive/0.0.23/prd/061-daily-energy-net-training.md)（日总计加入去重后的训练增量）
+- 后续修订：[ADR 0129](archive/0.0.23/adr/0129-daily-energy-net-training-increment.md)（记录写完整热量，日总计只加净增量）
 - 后续修订：[ADR 0135](adr/0135-agent-workout-calories.md)（训练工具优先采用用户提供的热量）
 
 - 上游依据：
@@ -308,7 +308,7 @@
 | Tab 再选 | `RootTabReselectObserver` 只旁听原生 Tab Bar 上触摸开始时已选中的 item；`AppTabNavigationState` 从设置 path 和训练/进展根显隐维护非 Observation 根状态。`AppTabReselect.effect` 将每次点击限定为一个效果：普通切换只写一次 selection，教练与任一根页 `.noAction`，训练、进展、设置仅在非根时 `.resetStack`。旧 `.restoreCoachRoot` 通知已删除。教练根仍只持有稳定入参，Tab 激活态经 `\.coachTabIsActive` 只送达实时转写与切回滚底叶子；`AppTabTransitionCoordinator` 只记录隐私安全 signpost。`AppTabReselectTests`、`CoachTabBehaviorUITests` 与 `perf-check` 覆盖根感知行为。 |
 | 自动录像宿主 | `beginCurrentSet` 先进入 `.setInProgress` 并打开放大取景，`waitUntilPreviewHostSettled` 后再 `startRecording`。已有预览连接时换宿主不重建、不因 `session-interruption` 停掉 Session；`prepare()` 复用仍在跑的 Session。录像中可缩小。非目标组不显示取景。`GuidedWorkoutCoordinatorTests` / `WorkoutCameraServiceTests` / `GuidedWorkoutLayoutTests` 覆盖时序与居中；`validate-repository.sh` 静态守卫。 |
 | 预览 fill | `WorkoutCameraSurface` 与 `CameraPreviewView` 默认 `.resizeAspectFill`；历史录像缩略按取景比例 `scaledToFill`。 |
-| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。海报固定白底黑字，橙黄色主视觉内展示大号容量、肌群图和三列统计；分享弹层适配双主题。动作名和数据优先单行、长内容自适应换行；明细复用逻辑组连续压缩并保留所有异构段；同值左右合并、异值分列、未知重量不作自重。导出宽 440 pt、高至少 956 pt，短会话铺满、超出才加高。见 [ADR 0000](adr/0000-origin-through-0.0.11.md)、[ADR 0130](adr/0130-workout-share-fill-or-grow.md)。 |
+| 完成后分享 | 计划执行结束（最后 Effort 收口或提前结束）后直接呈现 `WorkoutShareSheet`；关闭后回到训练主页。海报固定白底黑字，橙黄色主视觉内展示大号容量、肌群图和三列统计；分享弹层适配双主题。动作名和数据优先单行、长内容自适应换行；明细复用逻辑组连续压缩并保留所有异构段；同值左右合并、异值分列、未知重量不作自重。导出宽 440 pt、高至少 956 pt，短会话铺满、超出才加高。见 [ADR 0000](adr/0000-origin-through-0.0.11.md)、[ADR 0130](archive/0.0.23/adr/0130-workout-share-fill-or-grow.md)。 |
 | 计划执行复盘 | 按 Session 的 Performance 顺序和 `sourcePerformanceID` 加载对应训练记录，直接复用进展页 `ProgressRecentActivityRow`，显示动作名、压缩组次、可计算容量和训练时间，并进入同一 `WorkoutRecordDetailView`。完成但投影缺失时只在未设置删除抑制的情况下幂等修复；用户已删除时显示“训练记录已删除”。 |
 
 ## 会话标题与输入上下文单行布局
@@ -476,15 +476,15 @@ LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/mode
 
 ## 撤回 Apple 健康接入（PRD 060）
 
-按 [PRD 060](prd/060-remove-healthkit-until-redesign.md)、[ADR 0128](adr/0128-remove-healthkit-until-redesign.md)：设置无健康同步入口；进展快照不读设备能量；工程无 HealthKit entitlement 与健康用途说明。
+按 [PRD 060](archive/0.0.23/prd/060-remove-healthkit-until-redesign.md)、[ADR 0128](archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md)：设置无健康同步入口；进展快照不读设备能量；工程无 HealthKit entitlement 与健康用途说明。
 
 ## 日消耗去重训练增量（PRD 061）
 
-按 [PRD 061](prd/061-daily-energy-net-training.md)、[ADR 0129](adr/0129-daily-energy-net-training-increment.md)：无训练日预估总消耗等于静息 × 活动系数。有 MET 的训练日总消耗 = 该基线 + `完整热量 × (MET − 1) / MET`，且小于基线加完整热量。记录卡、聊天卡与详情仍显示完整热量。点预估总消耗明细列出各条训练的完整热量；日卡片外不另写训练说明。能量依据同时给出已记录训练与计入总消耗的增量。系数文案写明不含当天训练。
+按 [PRD 061](archive/0.0.23/prd/061-daily-energy-net-training.md)、[ADR 0129](archive/0.0.23/adr/0129-daily-energy-net-training-increment.md)：无训练日预估总消耗等于静息 × 活动系数。有 MET 的训练日总消耗 = 该基线 + `完整热量 × (MET − 1) / MET`，且小于基线加完整热量。记录卡、聊天卡与详情仍显示完整热量。点预估总消耗明细列出各条训练的完整热量；日卡片外不另写训练说明。能量依据同时给出已记录训练与计入总消耗的增量。系数文案写明不含当天训练。
 
 ## 教练 ID、训练卡 0 与进展一致性（PRD 059）
 
-按 [PRD 059](prd/059-coach-ids-progress-and-required-zeros.md)、[PRD 062](prd/062-workout-share-fill-or-grow.md)、[ADR 0126](adr/0126-workout-share-pro-max-canvas.md)、[ADR 0127](adr/0127-agent-workout-weight-and-rest-zero.md)、[ADR 0130](adr/0130-workout-share-fill-or-grow.md)：本机上下文与跨轮引用只暴露 Int64 `record_id` / `exercise_id` / `program_id` / `session_id`，饮食食物项不再给出 UUID。Agent 省略训练重量或非最后组间歇时落 0；0kg 显示自重。进展日列表每条训练同时给出容量与已估算热量。训练分享宽度 440 pt、高度至少 956 pt；4–7 个动作铺满纸面，更多动作在压不下时加高。计划训练统计按 Session ID 打开复盘。教练页写入后 RootView 递增进展 revision，隐藏的进展 Tab 再进入会重读当日快照。冷启动后已排版页展示全部消息，含助手气泡。可编辑卡保存后有「已保存」胶囊与教练 Toast。左右各做的组数 `×N` 在成对卡片右侧垂直居中。超长标题换行。
+按 [PRD 059](archive/0.0.23/prd/059-coach-ids-progress-and-required-zeros.md)、[PRD 062](archive/0.0.23/prd/062-workout-share-fill-or-grow.md)、[ADR 0126](archive/0.0.23/adr/0126-workout-share-pro-max-canvas.md)、[ADR 0127](archive/0.0.23/adr/0127-agent-workout-weight-and-rest-zero.md)、[ADR 0130](archive/0.0.23/adr/0130-workout-share-fill-or-grow.md)：本机上下文与跨轮引用只暴露 Int64 `record_id` / `exercise_id` / `program_id` / `session_id`，饮食食物项不再给出 UUID。Agent 省略训练重量或非最后组间歇时落 0；0kg 显示自重。进展日列表每条训练同时给出容量与已估算热量。训练分享宽度 440 pt、高度至少 956 pt；4–7 个动作铺满纸面，更多动作在压不下时加高。计划训练统计按 Session ID 打开复盘。教练页写入后 RootView 递增进展 revision，隐藏的进展 Tab 再进入会重读当日快照。冷启动后已排版页展示全部消息，含助手气泡。可编辑卡保存后有「已保存」胶囊与教练 Toast。左右各做的组数 `×N` 在成对卡片右侧垂直居中。超长标题换行。
 
 ## 带练替换动作回归
 

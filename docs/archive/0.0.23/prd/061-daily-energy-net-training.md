@@ -5,13 +5,13 @@
 - 日期：2026-09-09
 - 版本：0.0.23
 - 修订自：
-  - [PRD 000](000-origin-through-0.0.11.md) 的「全天消耗 = 有效静息 × 活动系数」
+  - [PRD 000](../../../prd/000-origin-through-0.0.11.md) 的「全天消耗 = 有效静息 × 活动系数」
   - [PRD 059](059-coach-ids-progress-and-required-zeros.md) 的「训练 kcal 不加入预估总消耗」
   - [PRD 060](060-remove-healthkit-until-redesign.md) 的「已记录训练 kcal 只作对照」
-- 上游依据：[日消耗统计：本地公式不含手表](../research/2026-09-08-daily-energy-expenditure-methods.md) 的日历析因算法
+- 上游依据：[日消耗统计：本地公式不含手表](../../../research/2026-09-08-daily-energy-expenditure-methods.md) 的日历析因算法
 - 下游落地：
   - [ADR 0129](../adr/0129-daily-energy-net-training-increment.md)
-  - [验收](../acceptance.md)
+  - [验收](../../../acceptance.md)
 - 后续修订：暂无
 
 ## 背景

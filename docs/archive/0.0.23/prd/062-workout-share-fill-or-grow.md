@@ -7,7 +7,7 @@
 - 上游依据：维护者要求 4–7 个动作铺满 Pro Max 纸面，不再在页脚上空出大块白边
 - 下游落地：
   - [ADR 0130](../adr/0130-workout-share-fill-or-grow.md)
-  - [验收](../acceptance.md)
+  - [验收](../../../acceptance.md)
 - 后续修订：暂无
 
 ## 背景

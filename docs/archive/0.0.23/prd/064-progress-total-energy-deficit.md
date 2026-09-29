@@ -3,9 +3,9 @@
 - 状态：已采纳，已实现
 - 日期：2026-09-11
 - 版本：0.0.23
-- 修订自：[PRD 000](000-origin-through-0.0.11.md)（能量卡总缺口与日页底部提示）
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md)（能量卡总缺口与日页底部提示）
 - 上游依据：[PRD 061](061-daily-energy-net-training.md)（日消耗使用去重后的训练增量）
-- 下游落地：[ADR 0133](../adr/0133-paired-day-total-energy-deficit.md)、[验收](../acceptance.md)
+- 下游落地：[ADR 0133](../adr/0133-paired-day-total-energy-deficit.md)、[验收](../../../acceptance.md)
 
 ## 用户结果
 

@@ -1,7 +1,7 @@
 # PRD 057：快捷聚焦、实时听写与进展圆环
 
 - 后续修订：[PRD 066](../../../prd/066-agent-user-questions.md)（快捷聚焦时仍支持结构化提问与按钮回答）
-- 后续修订：[PRD 064](../../../prd/064-progress-total-energy-deficit.md)（日、周、月缺口合入底部提示，日页同时显示仍可摄入）
+- 后续修订：[PRD 064](../../0.0.23/prd/064-progress-total-energy-deficit.md)（日、周、月缺口合入底部提示，日页同时显示仍可摄入）
 - 状态：已采纳
 - 日期：2026-09-07
 - 版本：0.0.22
@@ -15,7 +15,7 @@
   - [ADR 0122](../adr/0122-nutrition-rings-and-period-deficit.md)
   - [ADR 0123](../adr/0123-exercise-movement-kinds.md)
   - [验收](../../../acceptance.md)
-- 后续修订：[PRD 059](../../../prd/059-coach-ids-progress-and-required-zeros.md)（「训练记录」不预填；听写以录音按钮与持续预览为准）
+- 后续修订：[PRD 059](../../0.0.23/prd/059-coach-ids-progress-and-required-zeros.md)（「训练记录」不预填；听写以录音按钮与持续预览为准）
 
 ## 背景
 

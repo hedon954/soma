@@ -133,8 +133,11 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 
 ### 计划
 
-`TrainingProgram` 保存名称、可编辑 `overview`、状态、`scheduleHint` 与当前动作处方。旧 `goal`
-只作为迁移来源，不形成第二份事实。计划不保存版本号、版本来源、差异摘要或恢复链。
+`TrainingProgram` 是一堂训练课程：名称、可编辑 `overview`、状态、`scheduleHint` 与当前动作处方。
+旧 `goal` 只作为迁移来源，不形成第二份事实。课程不保存版本号、版本来源、差异摘要或恢复链。
+
+`TrainingSchedule` 是训练计划：开始日、周期槽（课程或休息）和明确休息/过期跳过。今天该练哪一堂
+由 `TrainingScheduleResolver` 从这些事实推导，不把完成记录再抄一份。
 
 `TemplateExercise` 保存动作关系、顺序、从 `ExerciseDefinition` 复制的 `lateralityRaw`、器械、动作
 备注、动作级组间歇 `targetRestSeconds` 与换侧间歇 `restBetweenSidesSeconds`。用户面对的侧别在动作

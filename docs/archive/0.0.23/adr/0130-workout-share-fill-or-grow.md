@@ -6,7 +6,7 @@
 - 部分替代：[ADR 0126](0126-workout-share-pro-max-canvas.md) 仅「不再加高纸面」；440×956 基准纸面、白底与橙黄主视觉仍有效
 - 上游依据：[PRD 062](../prd/062-workout-share-fill-or-grow.md)
 - 后续替代：暂无
-- 下游落地：[验收](../acceptance.md)
+- 下游落地：[验收](../../../acceptance.md)
 
 ## 背景
 

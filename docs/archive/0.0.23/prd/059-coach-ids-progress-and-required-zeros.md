@@ -3,15 +3,15 @@
 - 状态：已采纳
 - 日期：2026-09-08
 - 版本：0.0.23
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的缺事实保持空、训练热量、进展估算、快捷建议句、听写预览与助手消息可见性
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的缺事实保持空、训练热量、进展估算、快捷建议句、听写预览与助手消息可见性
 - 上游依据：
-  - [BUG 0037](../bugs/0037-insights-snapshot-stale-and-overfetch.md)
-  - [BUG 0056](../bugs/0056-plan-stats-session-navigation-crash.md)
-  - [BUG 0057](../bugs/0057-coach-cold-cache-hides-assistant-messages.md)
+  - [BUG 0037](../../../bugs/0037-insights-snapshot-stale-and-overfetch.md)
+  - [BUG 0056](../../../bugs/0056-plan-stats-session-navigation-crash.md)
+  - [BUG 0057](../../../bugs/0057-coach-cold-cache-hides-assistant-messages.md)
 - 下游落地：
   - [ADR 0126](../adr/0126-workout-share-pro-max-canvas.md)
   - [ADR 0127](../adr/0127-agent-workout-weight-and-rest-zero.md)
-  - [验收](../acceptance.md)
+  - [验收](../../../acceptance.md)
 - 后续修订：
   - [PRD 060](060-remove-healthkit-until-redesign.md)（仅撤回设备能量来源）
   - [PRD 061](061-daily-energy-net-training.md)（仅日总计加入去重后的训练增量；进展列表同时显示容量与热量仍有效）

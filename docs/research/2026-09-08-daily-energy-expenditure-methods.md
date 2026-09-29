@@ -1,16 +1,16 @@
 # 日消耗统计：本地公式，不含手表与 HealthKit
 
-- 状态：已转化。HealthKit 接入已按 [PRD 060](../prd/060-remove-healthkit-until-redesign.md) 删除；日历析因日总计已按 [PRD 061](../prd/061-daily-energy-net-training.md) 落地
+- 状态：已转化。HealthKit 接入已按 [PRD 060](../archive/0.0.23/prd/060-remove-healthkit-until-redesign.md) 删除；日历析因日总计已按 [PRD 061](../archive/0.0.23/prd/061-daily-energy-net-training.md) 落地
 - 日期：2026-09-09
 - 修订自：
   - [目标导向进展指标调研](2026-08-26-goal-directed-progress-metrics.md) 的「日消耗必须可审查、训练日应高于休息日」
   - [进展历史与图表逻辑重设计](2026-09-05-progress-history-and-chart-design.md) 的「不把未经校验的系数直接叠到当日数上」
 - 后续修订：暂无
 - 下游落地：
-  - [PRD 060](../prd/060-remove-healthkit-until-redesign.md)（仅撤回 HealthKit）
-  - [ADR 0128](../adr/0128-remove-healthkit-until-redesign.md)
-  - [PRD 061](../prd/061-daily-energy-net-training.md)
-  - [ADR 0129](../adr/0129-daily-energy-net-training-increment.md)
+  - [PRD 060](../archive/0.0.23/prd/060-remove-healthkit-until-redesign.md)（仅撤回 HealthKit）
+  - [ADR 0128](../archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md)
+  - [PRD 061](../archive/0.0.23/prd/061-daily-energy-net-training.md)
+  - [ADR 0129](../archive/0.0.23/adr/0129-daily-energy-net-training-increment.md)
 
 当前实现：预估总消耗 = Mifflin 静息 ×（个人活动系数或默认 1.4）+ 当天去重后的训练增量。训练记录仍保存完整 MET 热量。
 

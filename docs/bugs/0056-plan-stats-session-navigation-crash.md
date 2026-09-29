@@ -4,7 +4,7 @@
 - 发现日期：2026-09-08
 - 影响范围：训练计划详情「训练统计」里的历史 Session 行
 - 上游依据：维护者复现：点击计划内训练记录后进程退出
-- 下游落地：[PRD 059](../prd/059-coach-ids-progress-and-required-zeros.md)
+- 下游落地：[PRD 059](../archive/0.0.23/prd/059-coach-ids-progress-and-required-zeros.md)
 
 ## 症状
 

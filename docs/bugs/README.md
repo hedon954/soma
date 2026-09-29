@@ -50,7 +50,7 @@
 | [0022](0022-installed-v5-schema-checksum-blocks-container-open.md) | 已修复，待真机复验 | 已安装 store 上改当前 schema 后容器无法打开 | 只打开当前 SomaDataSchema、不带 migrationPlan；真机只点重试迁移 |
 | [0023](0023-same-turn-multi-exercise-merged-into-one.md) | 已修复，待真机复验 | 同一条消息的多个动作被合并成一条训练记录，Event Cards 被结果卡替换 | create 每次新增独立记录；原位卡不隐藏 Tool Event；保存有确认 |
 | [0024](0024-streaming-cross-actor-swiftdata-crash.md) | 部分要求由 [0053](0053-stream-executor-and-production-fixture-gap.md) 修订 | 非主线程投影 Event 导致 SwiftData 与 AttributeGraph 闪退 | 合批投影保持 MainActor、运行时断言与 segment 身份唯一 |
-| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 首次修复不足，后续见 0026 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因；技术标识呈现由 [ADR 0132](../adr/0132-actionable-error-presentation.md) 修订 |
+| [0025](0025-guided-recording-terminated-by-connection-reconfiguration.md) | 首次修复不足，后续见 0026 | 录像开始后预览交接重放几何改写视频连接；自动路径还会在 `isRecording` 仍为 false 时拆 PIP | `startingRecording`/`recording` 禁止改写 movieOutput；倒计时宿主先 `didStartRecordingTo` 再切组；错误码映射为具体原因；技术标识呈现由 [ADR 0132](../archive/0.0.23/adr/0132-actionable-error-presentation.md) 修订 |
 | [0026](0026-guided-auto-recording-still-stops-without-reason.md) | 已修复，待真机复验 | 开组换预览宿主并自动放大取景仍会掐断自动录像，极短文件被当成正常保存 | 倒计时只取景、开组后放大再写文件；录像中不重建连接；非目标组无预览 |
 | [0027](0027-meal-aggregate-overrides-item-facts.md) | 已修复，待真机 Agent 交互确认 | 创建饮食时顶层营养可覆盖菜品派生事实 | 菜品优先写入、总糖完整性与 Tool 结果回归测试 |
 | [0028](0028-remote-model-tool-list-missing-from-logs.md) | 已修复，待部署与真机复验 | 远程模型 Span 与诊断日志缺少每次调用的绑定工具清单 | Worker Event 工具清单与 iOS 远程 Span 摘要测试 |

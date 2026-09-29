@@ -2,7 +2,7 @@
 
 - 状态：完整本地门禁通过，界面待验收
 - 日期：2026-09-10
-- 上游依据：[PRD 063](../prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0132](../adr/0132-actionable-error-presentation.md)
+- 上游依据：[PRD 063](../archive/0.0.23/prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0132](../archive/0.0.23/adr/0132-actionable-error-presentation.md)
 - 下游落地：[错误呈现清单](../engineering/user-facing-errors.md)、[验收](../acceptance.md)
 
 ## 症状

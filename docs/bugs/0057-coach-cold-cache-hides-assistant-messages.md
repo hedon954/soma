@@ -4,7 +4,7 @@
 - 发现日期：2026-09-08
 - 影响范围：重新进入 App 或内存警告后的教练会话
 - 上游依据：维护者复现：回前台只剩自己发的气泡，发一条或重进 Session 才出现 AI 回复
-- 下游落地：[PRD 059](../prd/059-coach-ids-progress-and-required-zeros.md)
+- 下游落地：[PRD 059](../archive/0.0.23/prd/059-coach-ids-progress-and-required-zeros.md)
 
 ## 症状
 

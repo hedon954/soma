@@ -1,12 +1,12 @@
 # ADR 0131：明确拒绝视频后使用有界画面回退
 
-- 下游落地：[BUG 0063](../bugs/0063-explicit-video-rejection-has-no-compatible-input.md)
+- 下游落地：[BUG 0063](../../../bugs/0063-explicit-video-rejection-has-no-compatible-input.md)
 - 状态：已采纳，已实现
 - 日期：2026-09-10
 - 版本：0.0.23
 - 上游依据：[PRD 063](../prd/063-video-compatibility-and-actionable-errors.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（视频不支持时拒绝抽帧；语音、原件保留与其他决策不变）
-- 下游落地：[ReAct 协议](../react-agent.md)、[远程 Job 协议](../engineering/agent-job-protocol.md)、[验收](../acceptance.md)
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md)（视频不支持时拒绝抽帧；语音、原件保留与其他决策不变）
+- 下游落地：[ReAct 协议](../../../react-agent.md)、[远程 Job 协议](../../../engineering/agent-job-protocol.md)、[验收](../../../acceptance.md)
 
 ## 背景
 

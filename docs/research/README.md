@@ -16,7 +16,7 @@
 | [全界面 GUI 精简与渐进披露审计](2026-08-05-ui-simplification-review.md) | 已转化 | PRD 020 |
 | [减脂与增肌目标导向进展指标](2026-08-26-goal-directed-progress-metrics.md) | 已转化 | PRD 046、ADR 0103；[历史与图表重设计](2026-09-05-progress-history-and-chart-design.md)修订时间入口；[日消耗本地公式](2026-09-08-daily-energy-expenditure-methods.md)去掉设备能量 |
 | [进展历史与图表逻辑重设计](2026-09-05-progress-history-and-chart-design.md) | 已转化，实施中 | [修订自目标导向研究](2026-08-26-goal-directed-progress-metrics.md)；落地 PRD 053／054 |
-| [日消耗统计：本地公式不含手表](2026-09-08-daily-energy-expenditure-methods.md) | 已转化 | [PRD 060](../prd/060-remove-healthkit-until-redesign.md) 删除 HealthKit；[PRD 061](../prd/061-daily-energy-net-training.md) 按日历析因加入去重训练增量 |
+| [日消耗统计：本地公式不含手表](2026-09-08-daily-energy-expenditure-methods.md) | 已转化 | [PRD 060](../archive/0.0.23/prd/060-remove-healthkit-until-redesign.md) 删除 HealthKit；[PRD 061](../archive/0.0.23/prd/061-daily-energy-net-training.md) 按日历析因加入去重训练增量 |
 
 ## 生命周期规则
 

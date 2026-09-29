@@ -4,7 +4,7 @@
 - 日期：2026-09-05
 - 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 的语义双主题在训练分享导出中的适用范围；App 导航、普通页面和记录事实规则仍有效
 - 上游依据：维护者选定的白底黑字、橙黄色主视觉分享设计
-- 后续替代：[ADR 0119](../../0.0.22/adr/0119-full-video-and-append-only-dictation.md)（仅视频、语音或分享明细相关部分）；[ADR 0126](../../../adr/0126-workout-share-pro-max-canvas.md)（仅导出画布改为固定 440×956 pt，纸面配色与同值压缩仍有效）
+- 后续替代：[ADR 0119](../../0.0.22/adr/0119-full-video-and-append-only-dictation.md)（仅视频、语音或分享明细相关部分）；[ADR 0126](../../0.0.23/adr/0126-workout-share-pro-max-canvas.md)（仅导出画布改为固定 440×956 pt，纸面配色与同值压缩仍有效）
 
 ## 背景
 
