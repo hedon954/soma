@@ -1,12 +1,13 @@
 # ADR 0141：训练计划草稿确认后才写入
 
 - 状态：已采纳，已实现
+- 版本：0.0.27
 - 日期：2026-10-10
 - 维护者：Soma maintainers
 - 上游依据：[PRD 072](../prd/072-coach-training-schedule-draft.md)
 - 部分替代：
   - [ADR 0140](0140-training-schedule.md)（仅创建入口；周期、缺席、休息、停住和单份进行中计划不变）
-  - [ADR 0136](0136-agent-user-questions.md)（仅带 `selection` 的提问：点按改为选中，每题都有自填，一次发送；点按即发送的旧题不变）
+  - [ADR 0000](0000-origin-through-0.0.11.md)（仅带 `selection` 的提问：点按改为选中，每题都有自填，一次发送；点按即发送的旧题不变）
   - [ADR 0000](0000-origin-through-0.0.11.md)（仅 Tool 目录增加一个不落库的草稿工具；业务写入仍走固定 Tool）
 - 后续替代：暂无
 - 下游落地：
@@ -69,4 +70,4 @@
 
 - [PRD 072](../prd/072-coach-training-schedule-draft.md)
 - [ADR 0140](0140-training-schedule.md)
-- [ADR 0136](0136-agent-user-questions.md)
+- [ADR 0000](0000-origin-through-0.0.11.md)

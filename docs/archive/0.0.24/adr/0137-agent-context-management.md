@@ -4,7 +4,7 @@
 - 日期：2026-09-12
 - 版本：0.0.24
 - 上游依据：[PRD 067](../prd/067-agent-context-management.md)
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（历史窗口、消息恢复、输入快照与配置冻结时点；快捷聚焦和权限交集保持）
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md)（历史窗口、消息恢复、输入快照与配置冻结时点；快捷聚焦和权限交集保持）
 
 ## 背景
 
@@ -44,5 +44,5 @@
 
 ## 实施与验收
 
-[方案](../../.codex/plans/2026-09-12-agent-context-management.md) 定义 A–D 实施次序和验收矩阵。
+[方案](../../../../.codex/plans/2026-09-12-agent-context-management.md) 定义 A–D 实施次序和验收矩阵。
 先添加确定性复现，再修改实现，执行 make check 与 make verify；实际模型收益独立报告。

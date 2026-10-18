@@ -3,7 +3,7 @@
 - 状态：已采纳，已实现
 - 日期：2026-09-12
 - 版本：0.0.24
-- 修订自：[PRD 000](000-origin-through-0.0.11.md)（Agent 历史窗口与压缩）
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md)（Agent 历史窗口与压缩）
 - 下游落地：[ADR 0137](../adr/0137-agent-context-management.md)
 
 ## 用户结果
@@ -25,6 +25,6 @@
 
 ## 验收
 
-按 [实施方案](../../.codex/plans/2026-09-12-agent-context-management.md) 第 11 节验证轮数/token
+按 [实施方案](../../../../.codex/plans/2026-09-12-agent-context-management.md) 第 11 节验证轮数/token
 边界、跨日、排队、配置更新、恢复、摘要失效、媒体保留和缓存观测；执行 make verify。
 缓存收益需要实际供应商数据，测试通过不能代替命中率或回答质量验收。

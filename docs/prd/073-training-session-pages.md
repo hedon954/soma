@@ -1,11 +1,12 @@
 # PRD 073：训练页最近训练分页
 
 - 状态：已采纳，已实现
+- 版本：0.0.27
 - 日期：2026-10-10
 - 修订自：无
 - 上游依据：
-  - [PRD 065](065-history-order-and-session-pages.md)（历史列表按页查询，不一次截断成固定前缀）
-  - [ADR 0134](../adr/0134-session-history-page-cache.md)（按未缓存身份分页，避免偏移在增删后漏项）
+  - [PRD 000](000-origin-through-0.0.11.md)（历史列表按页查询，不一次截断成固定前缀）
+  - [ADR 0000](../adr/0000-origin-through-0.0.11.md)（按未缓存身份分页，避免偏移在增删后漏项）
 - 后续修订：暂无
 - 下游落地：[ADR 0142](../adr/0142-training-session-pages.md)、[验收](../acceptance.md)
 

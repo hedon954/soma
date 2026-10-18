@@ -1,11 +1,12 @@
 # ADR 0142：训练页最近训练按未缓存身份分页
 
 - 状态：已采纳，已实现
+- 版本：0.0.27
 - 日期：2026-10-10
 - 维护者：Soma maintainers
 - 上游依据：
   - [PRD 073](../prd/073-training-session-pages.md)
-  - [ADR 0134](0134-session-history-page-cache.md)（未缓存身份分页；本决策换到已结束的训练 Session）
+  - [ADR 0000](0000-origin-through-0.0.11.md)（未缓存身份分页；本决策换到已结束的训练 Session）
 - 部分替代：无
 - 后续替代：暂无
 - 下游落地：[验收](../acceptance.md)
@@ -51,4 +52,4 @@
 ## 参考
 
 - [PRD 073](../prd/073-training-session-pages.md)
-- [ADR 0134](0134-session-history-page-cache.md)
+- [ADR 0000](0000-origin-through-0.0.11.md)

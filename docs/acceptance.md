@@ -2,7 +2,7 @@
 - 后续修订：[PRD 072](prd/072-coach-training-schedule-draft.md)、[ADR 0141](adr/0141-coach-training-schedule-draft.md)（教练起草训练计划，确认后才保存）
 - 后续修订：[PRD 074](prd/074-composable-training.md)、[ADR 0143](adr/0143-composable-training.md)（直接动作、组合内容与最近参数推荐）
 - 后续修订：[PRD 073](prd/073-training-session-pages.md)、[ADR 0142](adr/0142-training-session-pages.md)（训练页最近训练按 14 条分页）
-- 后续修订：[PRD 066](prd/066-agent-user-questions.md)、[ADR 0136](adr/0136-agent-user-questions.md)（提问按钮与确定性回答）
+- 后续修订：[PRD 000](prd/000-origin-through-0.0.11.md)、[ADR 0000](adr/0000-origin-through-0.0.11.md)（提问按钮与确定性回答）
 
 - 后续修订：[PRD 064](archive/0.0.23/prd/064-progress-total-energy-deficit.md)、[ADR 0133](archive/0.0.23/adr/0133-paired-day-total-energy-deficit.md)（日、周、月按同日配对累计总热量缺口）
 - 后续修订：[ADR 0132](archive/0.0.23/adr/0132-actionable-error-presentation.md)、[BUG 0063](bugs/0063-explicit-video-rejection-has-no-compatible-input.md)、[BUG 0064](bugs/0064-raw-errors-without-recovery.md)（视频回退及错误呈现回归）
@@ -31,7 +31,7 @@
 - 后续修订：[ADR 0128](archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md)（当前不接入 HealthKit）
 - 后续修订：[PRD 061](archive/0.0.23/prd/061-daily-energy-net-training.md)（日总计加入去重后的训练增量）
 - 后续修订：[ADR 0129](archive/0.0.23/adr/0129-daily-energy-net-training-increment.md)（记录写完整热量，日总计只加净增量）
-- 后续修订：[ADR 0135](adr/0135-agent-workout-calories.md)（训练工具优先采用用户提供的热量）
+- 后续修订：[ADR 0000](adr/0000-origin-through-0.0.11.md)（训练工具优先采用用户提供的热量）
 
 - 上游依据：
   - [ADR 0000：压缩起点](adr/0000-origin-through-0.0.11.md) 收口的安装基线、性能预算与缓存失效规则
@@ -513,7 +513,7 @@ Predicate。确认才重建待练组与侧目标，当前会话快照同步，�
 
 ## 训练历史与会话分页（PRD 065）
 
-按 [PRD 065](prd/065-history-order-and-session-pages.md)、[ADR 0134](adr/0134-session-history-page-cache.md)：月/年训练明细按日期及同日时间倒序，图表仍正序。使用 35 个虚构会话验证首次 14 条、加载后 28 条、尾页 35 条；抽屉开关、选择旧会话和 Tab 往返保持缓存及查询次数。新建、改名、继续发送与删除局部同步，下一页无重复/漏项，另一数据空间不显示原缓存。读取失败保留已加载页并可重试。
+按 [PRD 000](prd/000-origin-through-0.0.11.md)、[ADR 0000](adr/0000-origin-through-0.0.11.md)：月/年训练明细按日期及同日时间倒序，图表仍正序。使用 35 个虚构会话验证首次 14 条、加载后 28 条、尾页 35 条；抽屉开关、选择旧会话和 Tab 往返保持缓存及查询次数。新建、改名、继续发送与删除局部同步，下一页无重复/漏项，另一数据空间不显示原缓存。读取失败保留已加载页并可重试。
 
 2026-09-12 本地验证：`make verify` 通过（833 XCTest、7 Swift Testing，Server 48 通过／1 跳过）。
 `SessionHistoryPaginationUITests` 浅/深主题验证 14→28 后抽屉、Session 和 Tab 往返查询次数仍为 2；

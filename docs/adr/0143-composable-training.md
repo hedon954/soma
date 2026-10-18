@@ -1,6 +1,7 @@
 # ADR 0143：训练内容统一按天展开
 
 - 状态：已采纳，已实现
+- 版本：0.0.27
 - 日期：2026-10-18
 - 上游依据：[PRD 074](../prd/074-composable-training.md)、[训练领域协议](../engineering/training-domain-model.md)（原周期与执行来源）
 - 部分替代：[ADR 0140](0140-training-schedule.md)（槽位内容和完成身份；周期缺席规则不变）

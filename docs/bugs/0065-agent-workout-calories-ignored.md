@@ -2,7 +2,7 @@
 
 - 状态：已修复，完整本地门禁通过
 - 日期：2026-09-12
-- 上游依据：[ADR 0135](../adr/0135-agent-workout-calories.md)
+- 上游依据：[ADR 0000](../adr/0000-origin-through-0.0.11.md)
 
 ## 症状
 
