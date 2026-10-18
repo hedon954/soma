@@ -12,6 +12,7 @@ struct CoachBubble: View, Equatable {
     var canRetry = false
     var showsUserQuestions = false
     var onQuestionAnswer: (String, String?, String?) throws -> Bool = { _, _, _ in false }
+    var onComposeAnswer: (String) throws -> Bool = { _ in false }
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
     var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
@@ -121,8 +122,12 @@ struct CoachBubble: View, Equatable {
                     CoachUserQuestionsView(
                         request: request,
                         isEnabled: message.agentStatus == .succeeded,
-                        onSubmit: onQuestionAnswer
+                        onSubmit: onQuestionAnswer,
+                        onCompose: onComposeAnswer
                     )
+                }
+                if let draft = payload.scheduleDraft {
+                    CoachScheduleDraftCard(payload: draft)
                 }
                 metaLine
             }

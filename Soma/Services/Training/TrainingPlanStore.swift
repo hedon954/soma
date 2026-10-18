@@ -402,7 +402,24 @@ enum TrainingPlanStore {
         autoRecordingPolicy: AutoRecordingPolicy = .disabled,
         in context: ModelContext
     ) throws -> WorkoutSession {
-        let values = prescriptions(for: program, in: context)
+        try startSession(
+            prescriptions: prescriptions(for: program, in: context),
+            sourceID: program.id,
+            name: program.name,
+            gymID: gymID,
+            autoRecordingPolicy: autoRecordingPolicy,
+            in: context
+        )
+    }
+
+    static func startSession(
+        prescriptions values: [TemplateExercisePrescription],
+        sourceID: UUID,
+        name: String,
+        gymID: UUID? = nil,
+        autoRecordingPolicy: AutoRecordingPolicy = .disabled,
+        in context: ModelContext
+    ) throws -> WorkoutSession {
         guard !values.isEmpty else { throw TrainingPlanError.missingTemplate }
         try validate(values, in: context)
         let blocking = readiness(
@@ -414,8 +431,8 @@ enum TrainingPlanStore {
 
         let session = WorkoutSession(
             gymID: gymID,
-            programID: program.id,
-            programNameSnapshot: program.name,
+            programID: sourceID,
+            programNameSnapshot: name,
             prescriptionSnapshot: values,
             status: .active,
             autoRecordingPolicy: autoRecordingPolicy
@@ -872,8 +889,8 @@ enum TrainingPlanStore {
     }
 }
 
-private extension TrainingPlanStore {
-    private static func validate(
+extension TrainingPlanStore {
+    static func validate(
         _ values: [TemplateExercisePrescription],
         in context: ModelContext
     ) throws {

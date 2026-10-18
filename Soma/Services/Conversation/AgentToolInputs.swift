@@ -212,7 +212,7 @@ extension AgentMutationPayload {
     }
 }
 
-struct AgentTemplateSetPrescriptionInput: Codable, Equatable {
+struct AgentTemplateSetPrescriptionInput: Codable, Equatable, Sendable {
     var order: Int
     var kind: WorkoutSetKind
     var targetKind: WorkoutTargetKind
@@ -234,7 +234,7 @@ struct AgentTemplateSetPrescriptionInput: Codable, Equatable {
     }
 }
 
-struct AgentTemplateExerciseInput: Codable, Equatable {
+struct AgentTemplateExerciseInput: Codable, Equatable, Sendable {
     var exerciseID: Int64
     var order: Int
     /// schema 2 compatibility fields. New calls use `laterality + set_prescriptions`.
@@ -265,6 +265,9 @@ struct AgentTemplateExerciseInput: Codable, Equatable {
 
 struct AgentToolArguments: Codable, Equatable {
     var questions: [AgentUserQuestion]?
+    var scheduleName: String?
+    var scheduleAnchorDate: String?
+    var scheduleSlots: [TrainingScheduleDraftSlotArgument]?
     var skillID: String?
     var scope: String?
     var query: String?
@@ -339,6 +342,9 @@ struct AgentToolArguments: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case questions
+        case scheduleName = "name"
+        case scheduleAnchorDate = "anchor_date"
+        case scheduleSlots = "slots"
         case scope, query, sort, limit, cursor, projection, fields, summary, equipment
         case exercise, laterality, sets, reps, weight, intensity, feedback, title, calories, protein
         case carbs, fat, note, items, waist, metric, operation, payload
@@ -450,9 +456,15 @@ struct AgentToolArguments: Codable, Equatable {
         exerciseNames: [String]? = nil,
         exercises: [AgentExerciseCreateInput]? = nil,
         workouts: [AgentWorkoutCreateInput]? = nil,
-        questions: [AgentUserQuestion]? = nil
+        questions: [AgentUserQuestion]? = nil,
+        scheduleName: String? = nil,
+        scheduleAnchorDate: String? = nil,
+        scheduleSlots: [TrainingScheduleDraftSlotArgument]? = nil
     ) {
         self.questions = questions
+        self.scheduleName = scheduleName
+        self.scheduleAnchorDate = scheduleAnchorDate
+        self.scheduleSlots = scheduleSlots
         self.skillID = skillID
         self.scope = scope
         self.query = query

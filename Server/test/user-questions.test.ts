@@ -32,6 +32,20 @@ test("questions reject recursive, invalid and unexposed bindings", () => {
   assert.throws(() => validate([question({ tool_name: "create_body_entry", arguments_json: '{"weight":68}' })], ["ask_user_questions"]));
 });
 
+test("selection questions stay free of tool actions", () => {
+  const selected = { ...question(), selection: "single" };
+  assert.doesNotThrow(() => validate([selected]));
+  assert.throws(() => validate([{ ...selected, allows_custom_input: false }]));
+  assert.throws(() => validate([{
+    ...question({ tool_name: "create_body_entry", arguments_json: '{"weight":68}' }),
+    selection: "single",
+  }]));
+  assert.throws(() => validate([
+    selected,
+    { ...question(), id: "place", question: "在哪练？" },
+  ]));
+});
+
 test("questions require actionable unique bounded options", () => {
   assert.throws(() => validate([question(), question()]));
   assert.throws(() => validate([{ ...question(), options: [], allows_custom_input: false }]));

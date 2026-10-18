@@ -1,5 +1,6 @@
 # ReAct Agent
 
+- 后续修订：[ADR 0141](adr/0141-coach-training-schedule-draft.md)（`propose_training_schedule` 只返回草稿，不写计划）
 - 后续修订：[ADR 0136](adr/0136-agent-user-questions.md)（受控提问与确定性按钮承接）
 
 - 后续修订：[ADR 0131](archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)（明确视频拒绝后单次画面回退）
@@ -73,14 +74,15 @@ Skill、Markdown 预览与恢复；Skill 只描述专业方法，工具权限由
 
 ## 本地工具
 
-当前协议使用 33 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 7 个，另有
+当前协议使用 34 个单一职责 Tool：动作 5 个，训练、饮食、身体各 5 个，计划 8 个，另有
 `load_skill`、`ask_user_questions`、健身房 2 个、复盘和反馈各 1 个。未选快捷按钮时，本轮全部放入 API
 `tools` 参数；选中按钮时注册其工具白名单与当前协议的交集，并始终包含提问工具。未知名称解码失败。
 每次调用的工具名同时写入 Trace model span 与本机诊断日志。
 
-`ask_user_questions` 成功后结束本轮推理，显示固定问题、选项和可选输入框。普通选项和自定义回答
+`ask_user_questions` 成功后结束本轮推理，显示固定问题、选项和可选输入框。未设置 `selection` 时，普通选项和自定义回答
 产生新的用户 Turn；绑定完整工具参数的选项通过本机确定性 Job 执行，复用工具、事件与记录卡。
-当前 Session 发送新消息后收起旧问题，旧按钮不能再次执行。
+带 `selection` 的提问改为点按选中，每题都有自填，整张卡片一次发送，不绑定确定性操作。
+当前 Session 发送新消息后收起旧问题，旧按钮不能再次执行。`propose_training_schedule` 只返回计划草稿，不写 `TrainingSchedule`。
 
 训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
 归档和合并。所有业务 ID 是 Int64。训练相关 Tool 当前使用 Schema v4：动作搜索/创建/更新显式

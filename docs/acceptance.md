@@ -1,4 +1,7 @@
 # Soma 验收清单
+- 后续修订：[PRD 072](prd/072-coach-training-schedule-draft.md)、[ADR 0141](adr/0141-coach-training-schedule-draft.md)（教练起草训练计划，确认后才保存）
+- 后续修订：[PRD 074](prd/074-composable-training.md)、[ADR 0143](adr/0143-composable-training.md)（直接动作、组合内容与最近参数推荐）
+- 后续修订：[PRD 073](prd/073-training-session-pages.md)、[ADR 0142](adr/0142-training-session-pages.md)（训练页最近训练按 14 条分页）
 - 后续修订：[PRD 066](prd/066-agent-user-questions.md)、[ADR 0136](adr/0136-agent-user-questions.md)（提问按钮与确定性回答）
 
 - 后续修订：[PRD 064](archive/0.0.23/prd/064-progress-total-energy-deficit.md)、[ADR 0133](archive/0.0.23/adr/0133-paired-day-total-energy-deficit.md)（日、周、月按同日配对累计总热量缺口）
@@ -102,7 +105,7 @@
 | 动态模型 | 模型是纯文本输入框；保存 API Key 后调用当前平台 `/models`，过滤不可用状态，以输入历史式建议列表出现在输入框下方，可点选也可手输。候选行只显示模型 ID，不截断列表，超过五条时列表内部滚动。刷新候选不覆盖已填写的模型，只在为空时补一个默认值。 |
 | 多模态提示位置 | 能力说明只在模型已填写后出现；支持、不支持必须同时显示平台模型目录中的明确字段来源。平台没有提供能力元数据时显示“未知”，模型名、平台名和 `vision` / `vl` 字样均不得作为证据。 |
 | 多模态提醒 | 未知能力先尝试完整视频；明确不支持时按 ADR 0131 使用有界画面。远程协商完整视频与画面能力，失败明确恢复办法，不得丢弃媒体为纯文本。 |
-| 真正 ReAct | 可配置步数上限（默认 100）和文字/图片/视频独立运行超时（默认 3/5/10 分钟，各自可设 3–60 分钟）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；两项在高级设置 `ReAct 循环` 同区呈现。规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。Tool/Skill 以原生 `toolCallID` 作为 operation 身份，从 preparing、running、waitingForDevice 到 completed/failed/cancelled 只更新同一卡；本地、Server、重连与设备执行等价，参数校验失败也先出现准备态，生产环境不以 sleep 延长阶段。当前 32 个单一职责 Tool：未选快捷按钮注册全部，选中快捷按钮只注册该按钮工具白名单。已知 Tool 的无单位数字字符串和简单分数按注册 Schema 安全归一化；仍不合法的参数以 `invalid_tool_arguments` 和原 `tool_call_id` 返回模型自纠。未知名称解码失败。过长 Tool 结果可展开；原位审查卡与 Event Cards 同时保留。原始 JSON 只在开发者 Trace 中保留。 |
+| 真正 ReAct | 可配置步数上限（默认 100）和文字/图片/视频独立运行超时（默认 3/5/10 分钟，各自可设 3–60 分钟）的流式“模型自然语言或原生 tool_calls—本地工具—role=tool”循环；两项在高级设置 `ReAct 循环` 同区呈现。规范化幂等签名与 pending/committed 账本去重，工具失败可回到下一轮修正；供应商可并行返回 tool_calls，本机仍顺序执行。Tool/Skill 以原生 `toolCallID` 作为 operation 身份，从 preparing、running、waitingForDevice 到 completed/failed/cancelled 只更新同一卡；本地、Server、重连与设备执行等价，参数校验失败也先出现准备态，生产环境不以 sleep 延长阶段。当前 34 个单一职责 Tool：未选快捷按钮注册全部，选中快捷按钮只注册该按钮工具白名单。已知 Tool 的无单位数字字符串和简单分数按注册 Schema 安全归一化；仍不合法的参数以 `invalid_tool_arguments` 和原 `tool_call_id` 返回模型自纠。未知名称解码失败。过长 Tool 结果可展开；原位审查卡与 Event Cards 同时保留。原始 JSON 只在开发者 Trace 中保留。 |
 | Agent 纠错与删除 | 数据查询返回稳定记录 ID；训练、饮食和身体支持显式 update 工具原位纠错并合并新媒体；delete 工具仅接受用户当前消息的明确意图，且不级联删除聊天和共享媒体。create 每次新增，不能用创建代替更新。 |
 | 跨消息去重 | 相同 Tool Call 由回执幂等；跨 Turn 训练/身体业务键返回疑似重复、不静默改写。纠正必须绑定查询得到的记录 ID。歧义时保持独立记录。 |
 | 可继续 Session | 教练页左上角时间按钮、左边界右滑与 VoiceOver 操作打开同一个历史会话抽屉；可新建或选择旧 Session 继续发送，跨天不自动抢走当前选择。 |

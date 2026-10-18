@@ -1,5 +1,6 @@
 # 数据库结构与 ER 图
 
+- 上游依据：[ADR 0143](../adr/0143-composable-training.md)（slotsData 的可选组合内容；持久字段不变）
 本文维护 Soma 当前持久化结构的可审查快照，覆盖设备端 SwiftData 与可选 Agent Server
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
@@ -82,7 +83,7 @@ schema version 7 marker 是当前唯一安装基线。启动先用 `key + schema
 | `ExerciseDefinition` | `canonicalNameKey: String [unique]`、`id: UUID`、`canonicalName: String`、`createdAt: Date`、`updatedAt: Date`、`archivedAt: Date?`、`mergedIntoID: UUID?`、`coachingNotes: String`、`primaryMusclesData: Data`、`secondaryMusclesData: Data`、`movementPatternsData: Data`、`muscleDiagramAssetName: String?`、`userDemoVideosData: Data`、`guidanceVideosData: Data`、`imageReferencesData: Data`、`lateralityRaw: String`、`targetKindRaw: String` | `mergedIntoID` 是动作合并后的自引用；规范名键唯一。内容字段只保存当前状态。空的 `lateralityRaw`/`targetKindRaw` 表示尚未配置，展示时按全身和按次数解释。 |
 | <!-- schema-model: ExerciseMergeRecord | id,businessID,sourceExerciseID,targetExerciseID,sourceName,affectedWorkoutIDsData,affectedTemplateExerciseIDsData,affectedPerformanceIDsData,affectedRecommendationIDsData,transferredUserDemoVideosData,transferredGuidanceVideosData,transferredImageReferencesData,createdAt,undoneAt --> `ExerciseMergeRecord` | `businessID: Int64?`、迁移锚点与可撤销合并快照 | 保存动作合并的受影响对象和可撤销媒体信息。 |
 | <!-- schema-model: TrainingProgram | id,businessID,name,overview,statusRaw,prescriptionGroupID,scheduleHint,createdAt,updatedAt,templateExercises --> `TrainingProgram` | `businessID: Int64?`、迁移锚点、当前计划字段与 cascade 动作关系 | 当前课程直接拥有处方，不维护版本号或版本链。 |
-| <!-- schema-model: TrainingSchedule | id,businessID,name,statusRaw,anchorDate,reanchorRequired,slotsData,closuresData,createdAt,updatedAt --> `TrainingSchedule` | `businessID: Int64?`、开始日、是否等待重新锚定、周期槽与闭合记录 | 产品名是训练计划。槽位按顺序对应周期中的一天，指向一堂课程或休息。闭合记录只保存明确休息和过期跳过，完成仍由 `WorkoutSession` 推导。 |
+| <!-- schema-model: TrainingSchedule | id,businessID,name,statusRaw,anchorDate,reanchorRequired,slotsData,closuresData,createdAt,updatedAt --> `TrainingSchedule` | `businessID: Int64?`、开始日、是否等待重新锚定、周期槽与闭合记录 | 产品名是训练计划。槽位按顺序组织动作处方、课程引用、计划引用或休息；计划引用展开完整天序。闭合记录只保存明确休息和过期跳过，完成仍由 `WorkoutSession` 推导。 |
 | <!-- schema-model: TemplateExercise | id,businessID,prescriptionGroupID,exerciseID,program,exerciseDefinition,order,targetSets,targetReps,targetWeightKG,targetRestSeconds,restBetweenSidesSeconds,firstSetIsWarmup,equipmentKind,notes,lateralityRaw,setPrescriptions --> `TemplateExercise` | `businessID: Int64?`、当前计划关系、动作级两类计划间歇、从动作定义复制的 `lateralityRaw` 及独立组集合 | `targetRestSeconds` 是组间歇，`restBetweenSidesSeconds` 只对左右分开有效；`prescriptionGroupID` 是旧列无损迁移锚点，新业务通过 `program` 关系读取。 |
 | <!-- schema-model: TemplateSetPrescription | id,businessID,templateExerciseID,templateExercise,order,kindRaw,targetKindRaw,targetReps,targetDurationSeconds,targetWeightKG,leftWeightKG,rightWeightKG,restBetweenSidesSeconds,restAfterSetSeconds,notes --> `TemplateSetPrescription` | 独立逻辑组的类型、次数/时长、逐侧重量与备注；两类旧间歇列仅兼容读取 | `templateExerciseID` 是迁移锚点，`templateExercise` 是业务关系；当前计划间歇写入 `TemplateExercise`，新组处方不写旧间歇列。 |
 | <!-- schema-model: WorkoutSession | id,businessID,startedAt,endedAt,gymID,programID,programNameSnapshot,prescriptionSnapshotData,statusRaw,guidedPhaseRaw,currentPerformanceID,currentSetID,currentEffortID,phaseStartedAt,phaseDeadlineAt,transitionRevision,restStartedAt,restTargetEndAt,autoRecordingPolicyRaw,queuedRecordingEffortID,automaticRecordingPaused,automaticRecordingPauseCodeRaw,automaticRecordingPauseReason,sourceTurnID,sourceJobID,performances --> `WorkoutSession` | `businessID: Int64?`、不可变处方快照、当前 Performance/Set/Effort、录像恢复状态及动作集合 | `transitionRevision` 是状态机并发令牌，不是业务版本；录像预约及带 code/reason 的暂停原因可跨 View 重建恢复；Performance 为 cascade 子项。 |
@@ -122,7 +123,7 @@ schema version 7 marker 是当前唯一安装基线。启动先用 `key + schema
 | `ExerciseMergeRecord` 的 `affected…IDsData` | `[UUID]` |
 | `ExerciseMergeRecord` 的 `transferred…Data` | 对应的 media、video 或 image reference 数组 |
 | `WorkoutSession.prescriptionSnapshotData` | `[TemplateExercisePrescription]`；动作级保存两类计划间歇，`plannedSets` 保存独立组目标 |
-| `TrainingSchedule.slotsData` | `[TrainingScheduleSlotValue]`，按周期顺序，`course` 带课程 id，`rest` 不带 |
+| `TrainingSchedule.slotsData` | `[TrainingScheduleSlotValue]`，旧 `course/programID` 和 `rest` 可读；新 `training` 带稳定 `id` 和有序 `contents`（动作处方 / 课程 UUID / 计划 UUID），嵌套计划保留休息日 |
 | `TrainingSchedule.closuresData` | `[TrainingScheduleClosureValue]`，某一应练日的明确休息或过期跳过 |
 | `ExercisePerformance.prescriptionSnapshotData` | `TemplateExercisePrescription`，旧聚合字段继续可解码 |
 | `CoachMessage.agentEventsData` | `[AgentTraceSpan]` |

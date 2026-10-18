@@ -5,6 +5,7 @@
 - 覆盖版本：0.0.1–0.0.23
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续修订：
+  - [PRD 072](072-coach-training-schedule-draft.md)（教练可起草训练计划，确认后才写入）
   - [PRD 071](071-training-schedule.md)（训练计划是锚定日上的课程周期）
   - [PRD 070](070-coach-timeline.md)（教练列表改为消息与无回合记录按发生时间投影）
   - [PRD 069](069-training-course-name.md)（原「训练计划」改称训练课程，为按日期排期的训练计划留出名字）

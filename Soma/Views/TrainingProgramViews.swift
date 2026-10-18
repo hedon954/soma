@@ -33,7 +33,7 @@ struct TrainingProgramLibraryView: View {
     @Environment(GuidedWorkoutCoordinator.self) private var guidedCoordinator
     @Query private var programs: [TrainingProgram]
     @Query private var resumableSessions: [WorkoutSession]
-    @Query private var completedSessions: [WorkoutSession]
+    @State private var sessionHistory = TrainingSessionHistory()
     @State private var showsCreation = false
     @State private var resumedSession: WorkoutSession?
     @State private var reviewSessionID: UUID?
@@ -60,17 +60,6 @@ struct TrainingProgramLibraryView: View {
         )
         resumableDescriptor.fetchLimit = 1
         _resumableSessions = Query(resumableDescriptor)
-
-        let completed = WorkoutSessionStatus.completed.rawValue
-        let abandoned = WorkoutSessionStatus.abandoned.rawValue
-        var recentDescriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate {
-                $0.statusRaw == completed || $0.statusRaw == abandoned
-            },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        recentDescriptor.fetchLimit = 4
-        _completedSessions = Query(recentDescriptor)
     }
 
     private var resumableSession: WorkoutSession? {
@@ -84,7 +73,8 @@ struct TrainingProgramLibraryView: View {
                 ForEach(
                     TrainingHomeSection.visible(
                         hasResumableSession: resumableSession != nil,
-                        hasRecentSessions: !completedSessions.isEmpty,
+                        hasRecentSessions: !sessionHistory.sessions.isEmpty
+                            || sessionHistory.errorMessage != nil,
                         hasArchivedPrograms: !projection.archived.isEmpty
                     )
                 ) { section in
@@ -121,6 +111,17 @@ struct TrainingProgramLibraryView: View {
         }
         .navigationDestination(item: $reviewSessionID) { sessionID in
             WorkoutSessionReviewDestination(sessionID: sessionID)
+        }
+        .onAppear {
+            sessionHistory.loadIfNeeded(in: modelContext)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: ModelContext.didSave,
+                object: modelContext
+            )
+        ) { notification in
+            sessionHistory.applySave(notification, in: modelContext)
         }
         .alert(
             "无法删除训练记录",
@@ -180,30 +181,15 @@ struct TrainingProgramLibraryView: View {
                 }
             }
         case .recent:
-            SectionHeading(title: "最近训练")
-            AppCard {
-                VStack(spacing: 0) {
-                    ForEach(Array(completedSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                        TrainingSessionHomeSwipeRow(
-                            session: session,
-                            fallbackProgramName: session.programID.flatMap {
-                                projection.namesByID[$0]
-                            },
-                            onOpen: {
-                                reviewSessionID = session.id
-                            },
-                            onDelete: {
-                                deleteSession(session)
-                            }
-                        )
-
-                        if index < min(completedSessions.count, 3) - 1 {
-                            Divider()
-                                .overlay(AppTheme.separator)
-                        }
-                    }
-                }
-            }
+            TrainingSessionHistorySection(
+                sessions: sessionHistory.sessions,
+                hasMore: sessionHistory.hasMore,
+                errorMessage: sessionHistory.errorMessage,
+                namesByID: projection.namesByID,
+                onOpen: { reviewSessionID = $0 },
+                onDelete: { deleteSession($0) },
+                onLoadMore: { sessionHistory.loadNextPage(in: modelContext) }
+            )
         case .archived:
             SectionHeading(title: "已归档")
             ForEach(projection.archived) { program in

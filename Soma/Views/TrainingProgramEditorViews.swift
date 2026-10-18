@@ -582,7 +582,7 @@ struct TrainingExercisePickerView: View {
     }
 }
 
-private extension TrainingPrescriptionDraft {
+extension TrainingPrescriptionDraft {
     var prescriptionSummary: String {
         WorkoutPrescriptionFormatter.exerciseSummary(
             prescription(order: 1, names: [:])

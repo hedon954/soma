@@ -4,14 +4,14 @@ import SwiftOpenAI
 import XCTest
 
 final class AgentV2Tests: XCTestCase {
-    func testTypedDomainContractExposesTwentySevenVersionedTools() {
+    func testTypedDomainContractExposesVersionedTools() {
         let tools = AgentToolExposurePolicy.tools(
             names: AgentToolExposurePolicy.toolNames(
                 for: [.exercises, .workouts, .meals, .body, .plans]
             )
         )
 
-        XCTAssertEqual(tools.count, 27)
+        XCTAssertEqual(tools.count, 28)
         XCTAssertEqual(
             Set(tools.filter { $0.schemaVersion == 4 }),
             [.searchExercises, .createExercise, .updateExercise, .createWorkout, .updateWorkout]
@@ -20,7 +20,10 @@ final class AgentV2Tests: XCTestCase {
             Set(tools.filter { $0.schemaVersion == 3 }),
             [.getProgram, .createProgram, .updateProgram]
         )
-        XCTAssertTrue(tools.allSatisfy { (2 ... 4).contains($0.schemaVersion) })
+        XCTAssertEqual(tools.filter { $0.schemaVersion == 1 }, [.proposeTrainingSchedule])
+        XCTAssertTrue(tools.allSatisfy {
+            $0 == .proposeTrainingSchedule || (2 ... 4).contains($0.schemaVersion)
+        })
         XCTAssertTrue(tools.contains(.updateMeal))
     }
 

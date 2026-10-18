@@ -43,10 +43,13 @@ enum TrainingScheduleStore {
         in context: ModelContext,
         calendar: Calendar = .current
     ) throws -> TrainingScheduleResolution {
+        let days = try TrainingContentCompiler.days(
+            scheduleID: schedule.id, slots: schedule.slots, in: context, validating: false
+        )
         let facts = try facts(for: schedule, in: context, calendar: calendar)
         let stale = TrainingScheduleResolver.phaseIsStale(
             anchor: schedule.anchorDate,
-            cycleLength: schedule.slots.count,
+            cycleLength: days.count,
             today: today,
             lastTrainingDay: facts.lastTrainingDay,
             calendar: calendar
@@ -57,7 +60,7 @@ enum TrainingScheduleStore {
         }
         let resolution = TrainingScheduleResolver.resolve(
             anchor: schedule.anchorDate,
-            slots: schedule.slots,
+            slots: days.map(\.slot),
             today: today,
             closures: schedule.closures,
             completions: facts.completions,
@@ -110,9 +113,10 @@ enum TrainingScheduleStore {
         in context: ModelContext,
         calendar: Calendar = .current
     ) throws {
+        let days = try TrainingContentCompiler.days(scheduleID: schedule.id, slots: schedule.slots, in: context)
         guard let anchor = TrainingScheduleResolver.anchor(
             soToday: today,
-            matchesFirstCourseIn: schedule.slots,
+            matchesFirstCourseIn: days.map(\.slot),
             calendar: calendar
         ) else { return }
         schedule.anchorDate = anchor
@@ -126,6 +130,7 @@ enum TrainingScheduleStore {
         _ schedule: TrainingSchedule,
         in context: ModelContext
     ) throws {
+        _ = try TrainingContentCompiler.days(scheduleID: schedule.id, slots: schedule.slots, in: context)
         if schedule.modelContext == nil {
             context.insert(schedule)
         }

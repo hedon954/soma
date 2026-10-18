@@ -70,6 +70,7 @@ struct AgentToolLoopState {
     /// `ChatCompletionParameters.Tool` 读不回名字，所以在组装时一并保存，供 Trace
     /// metadata、诊断日志与 checkpoint 使用。
     var exposedToolNames: [String] = []
+    var sourceText = ""
     var skillSnapshots: [AgentModelSkillSnapshot]?
     var observations: [AgentObservation] = []
     var executedMutations = Set<String>()

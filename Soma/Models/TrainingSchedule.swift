@@ -9,6 +9,8 @@ enum TrainingScheduleStatus: String, Codable, Sendable {
 struct TrainingScheduleSlotValue: Codable, Equatable, Sendable {
     var kindRaw: String
     var programID: UUID?
+    var id: UUID?
+    var contents: [TrainingContentSource]?
 
     static func rest() -> Self {
         Self(kindRaw: "rest", programID: nil)
@@ -18,8 +20,15 @@ struct TrainingScheduleSlotValue: Codable, Equatable, Sendable {
         Self(kindRaw: "course", programID: programID)
     }
 
+    static func training(_ contents: [TrainingContentSource], id: UUID = UUID()) -> Self {
+        Self(kindRaw: "training", programID: nil, id: id, contents: contents)
+    }
+
     var program: UUID? {
-        kindRaw == "course" ? programID : nil
+        if kindRaw == "course" {
+            return programID
+        }
+        return contents?.isEmpty == false ? id : nil
     }
 }
 

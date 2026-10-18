@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct TrainingScheduleHomeSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var cycleDays: Int?
     @Query private var schedules: [TrainingSchedule]
 
     init() {
@@ -25,27 +27,58 @@ struct TrainingScheduleHomeSection: View {
                         Text(schedule.name)
                             .font(.body.weight(.medium))
                             .foregroundStyle(AppTheme.accent)
-                        Text("\(schedule.slots.count) 天一轮")
+                        Text(cycleDays.map { "\($0) 天一轮" } ?? "查看训练安排")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.accent)
                     }
                 }
             }
             .buttonStyle(.plain)
+            .onAppear {
+                cycleDays = try? TrainingContentCompiler.days(
+                    scheduleID: schedule.id, slots: schedule.slots, in: modelContext, validating: false
+                ).count
+            }
+            NavigationLink("新建训练计划") { TrainingScheduleEditorView(schedule: nil) }
         } else {
             EmptyStateCard(
                 icon: "calendar",
                 title: "还没有训练计划",
-                message: "把课程排进每一天。休息也是一天。"
+                message: "把动作、课程或计划排进每一天。休息也是一天。"
             )
-            NavigationLink {
-                TrainingScheduleEditorView(schedule: nil)
-            } label: {
-                Text("新建训练计划")
-                    .frame(maxWidth: .infinity)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    newScheduleButton
+                    coachScheduleButton
+                }
+                VStack(spacing: 8) {
+                    newScheduleButton
+                    coachScheduleButton
+                }
             }
-            .appPrimaryButtonStyle()
         }
+    }
+
+    private var newScheduleButton: some View {
+        NavigationLink {
+            TrainingScheduleEditorView(schedule: nil)
+        } label: {
+            Text("新建训练计划")
+                .frame(maxWidth: .infinity)
+        }
+        .appPrimaryButtonStyle()
+    }
+
+    private var coachScheduleButton: some View {
+        Button {
+            CoachComposerCommand.pendingSend = ScheduleDraftAnswerText.opening
+            NotificationCenter.default.post(name: .sendCoachMessage, object: nil)
+        } label: {
+            Text("教练来排")
+                .frame(maxWidth: .infinity)
+        }
+        .appSecondaryButtonStyle()
+        .accessibilityLabel("用教练起草训练计划")
     }
 }
 
@@ -60,6 +93,7 @@ struct TrainingScheduleDetailView: View {
         probeProgramID: nil
     )
     @State private var errorMessage: String?
+    @State private var days: [TrainingContentDay] = []
     @State private var showsStart = false
     @State private var startedSession: WorkoutSession?
 
@@ -79,6 +113,11 @@ struct TrainingScheduleDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                ForEach(days, id: \.id) { day in
+                    Text(day.title)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.accent)
+                }
                 Text(summary)
                     .font(.body)
                     .foregroundStyle(AppTheme.accent)
@@ -145,13 +184,16 @@ struct TrainingScheduleDetailView: View {
     }
 
     private var summary: String {
+        if days.isEmpty {
+            return "训练内容暂不可用，请编辑计划后重试。"
+        }
         switch resolution.attention {
         case .paused:
             return "已经隔了一整轮没有新的训练记录。可以先练最常完成的一堂，或从今天接上原来的周期。"
         case .restDay:
             return "今天按计划休息。"
         case .settled:
-            return "今天这堂课已经完成。"
+            return "今天的训练已经完成。"
         case let .due(programID, _, makeup):
             let name = programName(programID)
             return makeup ? "把「\(name)」补上。下一次训练机会到来前，仍然只有这一堂。" : "今天是「\(name)」。"
@@ -164,7 +206,7 @@ struct TrainingScheduleDetailView: View {
         case .paused:
             VStack(alignment: .leading, spacing: 12) {
                 if let programID = resolution.probeProgramID,
-                   programs.contains(where: { $0.id == programID })
+                   days.contains(where: { $0.id == programID && !$0.prescriptions.isEmpty })
                 {
                     Button("先练「\(programName(programID))」") {
                         showsStart = true
@@ -178,11 +220,11 @@ struct TrainingScheduleDetailView: View {
             }
         case let .due(programID, dueDay, _):
             VStack(alignment: .leading, spacing: 12) {
-                Button(resolution.attention.isMakeup ? "补上这堂课" : "开始今天的课") {
+                Button(resolution.attention.isMakeup ? "补上这次训练" : "开始今天的训练") {
                     showsStart = true
                 }
                 .appPrimaryButtonStyle()
-                .disabled(!programs.contains { $0.id == programID })
+                .disabled(!days.contains { $0.id == programID && !$0.prescriptions.isEmpty })
                 Button("今天休息") {
                     perform {
                         try TrainingScheduleStore.recordRest(
@@ -199,13 +241,17 @@ struct TrainingScheduleDetailView: View {
     }
 
     private func programName(_ id: UUID) -> String {
-        programs.first { $0.id == id }?.name ?? "课程"
+        days.first { $0.id == id }?.title ?? "训练内容"
     }
 
     private func refresh() {
         do {
+            days = try TrainingContentCompiler.days(
+                scheduleID: schedule.id, slots: schedule.slots, in: modelContext
+            )
             resolution = try TrainingScheduleStore.sync(schedule, in: modelContext)
         } catch {
+            days = []
             errorMessage = AppErrorMessage.message(for: error, operation: .general)
         }
     }
@@ -219,13 +265,15 @@ struct TrainingScheduleDetailView: View {
         default:
             nil
         }
-        guard let programID, let program = programs.first(where: { $0.id == programID }) else {
+        guard let programID, let day = days.first(where: { $0.id == programID }) else {
             return
         }
         do {
             WorkoutInterfaceOrientationPolicy.shared.setGuidedWorkoutActive(true)
             startedSession = try TrainingPlanStore.startSession(
-                program: program,
+                prescriptions: day.prescriptions,
+                sourceID: day.id,
+                name: schedule.name + " · " + day.title,
                 autoRecordingPolicy: policy,
                 in: modelContext
             )
@@ -252,168 +300,5 @@ private extension TrainingScheduleAttention {
             return makeup
         }
         return false
-    }
-}
-
-struct TrainingScheduleEditorView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    @Query private var programs: [TrainingProgram]
-
-    let schedule: TrainingSchedule?
-    @State private var name: String
-    @State private var anchor: Date
-    @State private var slots: [TrainingScheduleSlotValue]
-    @State private var errorMessage: String?
-
-    init(schedule: TrainingSchedule?) {
-        self.schedule = schedule
-        _name = State(initialValue: schedule?.name ?? "")
-        _anchor = State(initialValue: schedule?.anchorDate ?? .now)
-        _slots = State(initialValue: schedule?.slots ?? [TrainingScheduleSlotValue.rest()])
-        let active = TrainingProgramStatus.active.rawValue
-        var descriptor = FetchDescriptor<TrainingProgram>(
-            predicate: #Predicate { $0.statusRaw == active },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 200
-        _programs = Query(descriptor)
-    }
-
-    var body: some View {
-        Form {
-            Section("计划") {
-                TextField("计划名称", text: $name)
-                DatePicker("开始日", selection: $anchor, displayedComponents: .date)
-            }
-            Section("每一天") {
-                ForEach(slots.indices, id: \.self) { index in
-                    dayRow(index)
-                }
-                Button("加一天") {
-                    guard slots.count < 14 else { return }
-                    slots.append(.rest())
-                }
-                .disabled(slots.count >= 14)
-            }
-            if programs.isEmpty {
-                Section {
-                    Text("先在训练页建一堂课程，再把它排进某一天。")
-                }
-            }
-        }
-        .navigationTitle(schedule == nil ? "新建训练计划" : "编辑训练计划")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存", action: save)
-                    .disabled(!canSave)
-            }
-        }
-        .alert(
-            "无法保存训练计划",
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: {
-                    if !$0 {
-                        errorMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
-    }
-
-    private var canSave: Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && slots.contains { $0.program != nil }
-    }
-
-    private func dayRow(_ index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("第 \(index + 1) 天")
-                Spacer()
-                if slots.count > 1 {
-                    Button("去掉") { slots.remove(at: index) }
-                        .font(.subheadline)
-                }
-            }
-            Picker("这一天", selection: kindBinding(index)) {
-                Text("休息").tag("rest")
-                Text("课程").tag("course")
-            }
-            .pickerStyle(.segmented)
-            if slots[index].program != nil {
-                Picker("课程", selection: courseBinding(index)) {
-                    Text("选择课程").tag(UUID?.none)
-                    ForEach(programs) { program in
-                        Text(program.name).tag(Optional(program.id))
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("第 \(index + 1) 天")
-    }
-
-    private func kindBinding(_ index: Int) -> Binding<String> {
-        Binding(
-            get: { slots[index].program == nil ? "rest" : "course" },
-            set: { kind in
-                if kind == "rest" {
-                    slots[index] = .rest()
-                } else if slots[index].program == nil, let id = programs.first?.id {
-                    slots[index] = .course(id)
-                }
-            }
-        )
-    }
-
-    private func courseBinding(_ index: Int) -> Binding<UUID?> {
-        Binding(
-            get: { slots[index].programID },
-            set: { id in
-                if let id {
-                    slots[index] = .course(id)
-                }
-            }
-        )
-    }
-
-    private func save() {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let usable = slots.map { slot -> TrainingScheduleSlotValue in
-            guard let programID = slot.program, programs.contains(where: { $0.id == programID }) else {
-                return .rest()
-            }
-            return .course(programID)
-        }
-        guard usable.contains(where: { $0.program != nil }) else {
-            errorMessage = "至少有一天要排一堂课程。"
-            return
-        }
-        do {
-            if let schedule {
-                schedule.name = trimmed
-                schedule.anchorDate = anchor
-                schedule.slots = usable
-                schedule.updatedAt = .now
-                try TrainingScheduleStore.save(schedule, in: modelContext)
-            } else {
-                let created = TrainingSchedule(
-                    name: trimmed,
-                    anchorDate: anchor,
-                    slots: usable
-                )
-                try TrainingScheduleStore.save(created, in: modelContext)
-            }
-            dismiss()
-        } catch {
-            errorMessage = AppErrorMessage.message(for: error, operation: .general)
-        }
     }
 }

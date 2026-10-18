@@ -403,8 +403,14 @@ extension AIService {
             } else if call.name == .askUserQuestions {
                 result = AgentUserQuestionsTool.result(
                     questions: call.arguments.questions,
-                    allowedNames: Set(state.exposedToolNames)
+                    allowedNames: Set(state.exposedToolNames),
+                    requiresSelection: ScheduleDraftAnswerText.requiresSelection(
+                        userText: state.sourceText
+                    )
                 )
+                wasDeduplicated = false
+            } else if call.name == .proposeTrainingSchedule {
+                result = try await execute(call)
                 wasDeduplicated = false
             } else if call.name.isMutation,
                       !state.executedMutations.insert(call.signature).inserted

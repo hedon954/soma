@@ -254,6 +254,35 @@ const definitions: DeviceToolDefinition[] = [
     parameters: userQuestionsParameters,
   },
   {
+    name: "propose_training_schedule",
+    description: "校验一份训练计划草稿并交给用户确认。不写入计划。",
+    schemaVersion: 1,
+    mutation: false,
+    parameters: parameters({
+      name: stringValue,
+      anchor_date: stringValue,
+      slots: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["rest", "training"] },
+            contents: { type: "array", items: {
+              type: "object", properties: {
+                kind: { type: "string", enum: ["exercise", "course", "plan"] },
+                program_id: integerValue,
+                schedule_id: integerValue,
+                exercises: templateExercisesV3,
+              }, required: ["kind"], additionalProperties: false,
+            } },
+          },
+          required: ["kind"],
+          additionalProperties: false,
+        },
+      },
+    }, ["name", "slots"]),
+  },
+  {
     name: "search_exercises",
     schemaVersion: 2,
     mutation: false,

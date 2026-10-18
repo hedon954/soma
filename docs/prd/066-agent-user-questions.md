@@ -5,6 +5,7 @@
 - 版本：0.0.24
 - 修订自：[PRD 000](000-origin-through-0.0.11.md) 的聊天交互与快捷聚焦工具曝光
 - 下游落地：[ADR 0136](../adr/0136-agent-user-questions.md)、[验收](../acceptance.md)
+- 后续修订：[PRD 072](072-coach-training-schedule-draft.md)（仅起草训练计划的提问改为单选或多选，并始终保留自填）
 
 ## 用户结果
 

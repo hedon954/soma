@@ -14,7 +14,13 @@ extension AgentToolName {
     private var toolDescription: String {
         switch self {
         case .askUserQuestions:
-            "需要用户补充事实、选择或确认时提出问题，成功后结束本轮等待回答。每个选项以用户口吻发送；能用已开放工具及确定参数完成的选项绑定 action，否则省略 action 交给下一轮 Agent。选项不完整时允许自定义输入。不要与依赖回答的写入操作同批调用；不要为已授权且事实明确的操作重复确认。"
+            "需要用户补充事实、选择或确认时提出问题，成功后结束本轮等待回答。每个选项以用户口吻发送；"
+                + "能用已开放工具及确定参数完成的选项绑定 action，否则省略 action 交给下一轮 Agent。"
+                + "选项不完整时允许自定义输入。排训练计划时每题必须设置 selection 为 single 或 multiple，"
+                + "allows_custom_input 为 true，并且不要绑定 action。"
+                + "不要与依赖回答的写入操作同批调用；不要为已授权且事实明确的操作重复确认。"
+        case .proposeTrainingSchedule:
+            "提交尚未保存的可组合训练计划草稿。每天 contents 可混排 exercise、course、plan。动作直接带逐组参数，不必先建课程；未知参数留空。用户没说开始日就省略。嵌套计划保留休息日，展开最多14天。"
         case .searchExercises:
             "按名称搜索未归档动作，返回 exercise_id、target_kind 与 laterality；记录训练或课程前使用。"
         case .createExercise:
@@ -50,7 +56,7 @@ extension AgentToolName {
         case .deleteBodyEntry:
             "删除指定 Int64 身体记录；仅在当前用户消息明确授权删除时使用。"
         case .listPrograms:
-            "读取可执行训练课程摘要。"
+            "读取可执行训练课程摘要和可组合训练计划的 schedule_id。"
         case .getProgram:
             "按 Int64 program_id 读取课程概览和独立逐组处方。"
         case .createProgram:
@@ -90,6 +96,23 @@ extension AgentToolName {
         switch self {
         case .askUserQuestions:
             AgentUserQuestionsSchema.parameters
+        case .proposeTrainingSchedule:
+            object([
+                "name": string("计划名称"),
+                "anchor_date": string("用户明确说过的开始日，YYYY-MM-DD；没说就省略"),
+                "slots": array(
+                    object([
+                        "kind": string("休息或训练内容", values: ["rest", "training"]),
+                        "contents": array(object([
+                            "kind": string("内容类型", values: ["exercise", "course", "plan"]),
+                            "program_id": integer("course 的课程 Int64 ID"),
+                            "schedule_id": integer("plan 的计划 Int64 ID"),
+                            "exercises": templateExerciseArrayV3()
+                        ], required: ["kind"]), description: "有序内容。exercise 只带一个 exercises 元素；course/plan 只带对应 ID")
+                    ], required: ["kind"]),
+                    description: "按顺序的天序，至少包含一个动作；rest 不带 contents"
+                )
+            ], required: ["name", "slots"])
         case .searchExercises:
             object([
                 "query": string("动作名称或同义搜索词"),

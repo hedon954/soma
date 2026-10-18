@@ -7,6 +7,7 @@
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
+  - [ADR 0141](0141-coach-training-schedule-draft.md)（增加不落库的训练计划草稿工具）
   - [ADR 0140](0140-training-schedule.md)（训练计划是锚定日上的课程周期；课程处方保持为 TrainingProgram）
   - [ADR 0139](0139-coach-timeline.md)（教练列表改为消息与无回合记录的时间投影；气泡与记录卡保持）
   - [ADR 0138](0138-training-course-name.md)（原训练计划的产品名改为训练课程；类型名与 Tool 名保持）

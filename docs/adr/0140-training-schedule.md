@@ -1,12 +1,13 @@
 # ADR 0140：训练计划是锚定日上的课程周期
 
+- 后续替代：[ADR 0143](0143-composable-training.md)（可组合槽位与稳定完成身份）
 - 状态：已采纳，已实现
 - 日期：2026-09-29
 - 版本：0.0.26
 - 维护者：Soma maintainers
 - 上游依据：[PRD 071](../prd/071-training-schedule.md)
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（仅「计划」所指的对象；课程处方、带练快照和聊天优先仍然有效）
-- 后续替代：暂无
+- 后续替代：[ADR 0141](0141-coach-training-schedule-draft.md)（仅增加不落库的计划草稿；周期规则不变）
 - 下游落地：[验收](../acceptance.md)
 
 ## 背景

@@ -32,15 +32,53 @@ struct AgentQuestionOption: Codable, Equatable, Identifiable, Sendable {
     var action: AgentQuestionAction? = nil
 }
 
+enum AgentQuestionSelection: String, Codable, Equatable, Sendable {
+    case single
+    case multiple
+}
+
 struct AgentUserQuestion: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var question: String
     var options: [AgentQuestionOption]
     var allowsCustomInput: Bool
+    var selection: AgentQuestionSelection?
 
     enum CodingKeys: String, CodingKey {
-        case id, question, options
+        case id, question, options, selection
         case allowsCustomInput = "allows_custom_input"
+    }
+
+    init(
+        id: String,
+        question: String,
+        options: [AgentQuestionOption],
+        allowsCustomInput: Bool,
+        selection: AgentQuestionSelection? = nil
+    ) {
+        self.id = id
+        self.question = question
+        self.options = options
+        self.allowsCustomInput = allowsCustomInput
+        self.selection = selection
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        question = try container.decode(String.self, forKey: .question)
+        options = try container.decode([AgentQuestionOption].self, forKey: .options)
+        allowsCustomInput = try container.decode(Bool.self, forKey: .allowsCustomInput)
+        selection = try container.decodeIfPresent(AgentQuestionSelection.self, forKey: .selection)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(question, forKey: .question)
+        try container.encode(options, forKey: .options)
+        try container.encode(allowsCustomInput, forKey: .allowsCustomInput)
+        try container.encodeIfPresent(selection, forKey: .selection)
     }
 }
 
@@ -90,7 +128,8 @@ struct AgentUserQuestionRequest: Codable, Equatable, Sendable {
 enum AgentUserQuestionsTool {
     static func result(
         questions: [AgentUserQuestion]?,
-        allowedNames: Set<String> = Set(AgentToolName.allCases.map(\.rawValue))
+        allowedNames: Set<String> = Set(AgentToolName.allCases.map(\.rawValue)),
+        requiresSelection: Bool = false
     ) -> AgentToolResult {
         do {
             guard var questions, (1 ... 3).contains(questions.count),
@@ -108,11 +147,24 @@ enum AgentUserQuestionsTool {
                     guard valid(option.id, maximum: 64), valid(option.text, maximum: 300)
                     else { throw AgentQuestionError.invalidQuestions }
                     if var action = option.action {
+                        if question.selection != nil {
+                            throw AgentQuestionError.invalidQuestions
+                        }
                         _ = try action.validatedCall(allowedNames: allowedNames)
                         action.schemaVersion = action.toolName.schemaVersion
                         questions[index].options[optionIndex].action = action
                     }
                 }
+                if question.selection != nil, !question.allowsCustomInput {
+                    throw AgentQuestionError.invalidQuestions
+                }
+            }
+            let selectionCount = questions.compactMap(\.selection).count
+            if selectionCount != 0, selectionCount != questions.count {
+                throw AgentQuestionError.invalidQuestions
+            }
+            if requiresSelection, selectionCount != questions.count {
+                throw AgentQuestionError.invalidQuestions
             }
             let request = AgentUserQuestionRequest(questions: questions)
             let data = try JSONDecoder().decode(AgentJSONValue.self, from: JSONEncoder().encode(request))

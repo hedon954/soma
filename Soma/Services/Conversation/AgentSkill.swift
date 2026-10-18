@@ -88,10 +88,10 @@ enum AgentSkill: String, CaseIterable, Identifiable {
 
             执行规则：
             1. 优先使用首轮已注入的身体、健身房、当日记录和近期变化；只有缺少必要精确事实时才调用对应 list 工具。
-            2. 目标、每周可训练次数、伤痛限制等关键约束缺失且会改变方案时，只追问最重要的一到两个问题。
-            3. 课程写清动作、组次、强度或 RIR 与休息；只推荐当前场馆可用器械。频率留给之后的训练计划，不写进课程。
+            2. 目标、每周可训练次数、伤痛限制等关键约束缺失且会改变方案时，用 ask_user_questions 只追问最重要的一到两个问题。排训练计划时每题设置 selection 为 single 或 multiple，allows_custom_input 为 true，不要绑定 action。
+            3. 课程写清动作、组次、强度或 RIR 与休息；只推荐当前场馆可用器械。一周里哪几天练、哪几天休息写进 propose_training_schedule 草稿，不写进课程，也不要声称计划已经保存。
             4. 用用户近期可完成的训练作为起点，避免突然增加容量或负荷；同时安排恢复和降载条件。
-            5. 写课程前用 search_exercises 复用动作；不存在时先 create_exercise，再把返回的 exercise_id 交给 create_program。课程是训练建议而非医疗处方。
+            5. 先用 search_exercises 复用动作；计划可以直接带动作逐组参数，或引用课程和计划，不要求先创建课程。参数优先参考最近实际训练，未知值留空。训练建议不替代医疗意见。
             """
         case .movementAnalysis:
             """

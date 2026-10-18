@@ -49,6 +49,9 @@ enum AppErrorMessage {
         if case let StreamingFailure.interrupted(underlying, _, _, _) = error {
             return message(for: underlying, operation: operation)
         }
+        if let content = error as? TrainingContentError {
+            return content.errorDescription ?? operation.fallback
+        }
         if error is CancellationError {
             return "操作已取消，需要时可以重新开始。"
         }

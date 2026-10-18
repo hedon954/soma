@@ -5,7 +5,7 @@ enum AgentUserQuestionsSchema {
         object([
             "questions": JSONSchema(
                 type: .array,
-                description: "1 到 3 个问题，每个选项按钮独占一行；任一选项点击后立即发送并开始新的用户 Turn。",
+                description: "1 到 3 个问题。未设置 selection 时，点按一个选项立即发送。排训练计划时必须设置 selection，点按只切换选中，每题都允许自填，整张卡片一次发送。",
                 items: object([
                     "id": string("当前请求内唯一的问题 ID，1 到 64 字"),
                     "question": string("简短具体的问题，最多 300 字"),
@@ -25,7 +25,12 @@ enum AgentUserQuestionsSchema {
                             ], required: ["tool_name", "arguments_json"])
                         ], required: ["id", "text"])
                     ),
-                    "allows_custom_input": JSONSchema(type: .boolean, description: "选项可能不完整时设为 true，提供自定义输入框")
+                    "allows_custom_input": JSONSchema(type: .boolean, description: "选项可能不完整时设为 true，提供自定义输入框。设置了 selection 时必须为 true"),
+                    "selection": JSONSchema(
+                        type: .string,
+                        description: "single 单选，multiple 多选。设置后点按不发送，并且不能绑定 action",
+                        enum: [AgentQuestionSelection.single.rawValue, AgentQuestionSelection.multiple.rawValue]
+                    )
                 ], required: ["id", "question", "options", "allows_custom_input"])
             )
         ], required: ["questions"])

@@ -30,6 +30,7 @@ export const userQuestionsParameters = {
             },
           },
           allows_custom_input: { type: "boolean" },
+          selection: { type: "string", enum: ["single", "multiple"] },
         },
         required: ["id", "question", "options", "allows_custom_input"],
         additionalProperties: false,
@@ -46,16 +47,23 @@ export function validateQuestionActions(
 ): void {
   const questions = args.questions as Array<{
     id: string; question: string; allows_custom_input: boolean;
+    selection?: string;
     options: Array<{ id: string; text: string; action?: { tool_name: string; arguments_json: string } }>;
   }>;
   const valid = (text: string, max: number) => text.trim().length > 0 && [...text].length <= max;
   if (new Set(questions.map((q) => q.id)).size !== questions.length) invalid();
+  const selectionCount = questions.filter((question) => question.selection !== undefined).length;
+  if (selectionCount !== 0 && selectionCount !== questions.length) invalid();
   for (const question of questions) {
+    if (question.selection !== undefined
+      && question.selection !== "single" && question.selection !== "multiple") invalid();
+    if (question.selection !== undefined && question.allows_custom_input !== true) invalid();
     if (!valid(question.id, 64) || !valid(question.question, 300)
       || (question.options.length === 0 && !question.allows_custom_input)
       || new Set(question.options.map((o) => o.id)).size !== question.options.length) invalid();
     for (const option of question.options) {
       if (!valid(option.id, 64) || !valid(option.text, 300)) invalid();
+      if (question.selection !== undefined && option.action !== undefined) invalid();
       if (option.action === undefined) continue;
       const action = option.action;
       if (["ask_user_questions", "load_skill", "submit_feedback", "record_performance_analysis"].includes(action.tool_name)

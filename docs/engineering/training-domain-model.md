@@ -2,6 +2,7 @@
 
 - 状态：独立组、Effort、attempt 与自动收口实施中；SwiftData 打开路径见 ADR 0075，侧别与完成方式见 ADR 0076
 - 日期：2026-08-16
+- 后续修订：[ADR 0143](../adr/0143-composable-training.md)（可组合内容与课程无关的 Session 来源身份）
 - 上游依据：[PRD 068](../prd/068-guided-intro-prescription-review.md)（准备页展示并调整本次分组）
 - 下游落地：[BUG 0062](../bugs/0062-guided-replacement-retains-old-targets.md)（替换动作的最近参数确认与运行时重建）
 - 下游落地：[BUG 0066](../bugs/0066-guided-replacement-computed-predicate-crash.md)（替换列表不可变候选与 `archivedAt` 查询）
@@ -136,8 +137,10 @@ generated/user 图片参与动作合并与撤销、媒体引用回收、加密�
 `TrainingProgram` 是一堂训练课程：名称、可编辑 `overview`、状态、`scheduleHint` 与当前动作处方。
 旧 `goal` 只作为迁移来源，不形成第二份事实。课程不保存版本号、版本来源、差异摘要或恢复链。
 
-`TrainingSchedule` 是训练计划：开始日、周期槽（课程或休息）和明确休息/过期跳过。今天该练哪一堂
-由 `TrainingScheduleResolver` 从这些事实推导，不把完成记录再抄一份。
+`TrainingSchedule` 是训练计划：开始日、有序组合内容与明确休息/过期跳过。`TrainingContentSource`
+统一表示直接动作处方、课程引用或计划引用；`TrainingContentCompiler` 先展开天序，保留嵌套休息日，
+再交给 `TrainingScheduleResolver` 推导今天安排。直接开始组合时不创建课程，`WorkoutSession.programID`
+保存稳定展开身份，`programNameSnapshot` 与处方保存当次快照；旧单课程计划仍使用原课程完成身份。
 
 `TemplateExercise` 保存动作关系、顺序、从 `ExerciseDefinition` 复制的 `lateralityRaw`、器械、动作
 备注、动作级组间歇 `targetRestSeconds` 与换侧间歇 `restBetweenSidesSeconds`。用户面对的侧别在动作

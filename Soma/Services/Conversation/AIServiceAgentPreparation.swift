@@ -139,6 +139,7 @@ extension AIService {
             messages: messages,
             tools: configuration.nativeTools,
             exposedToolNames: exposedTools.map(\.rawValue),
+            sourceText: request.text,
             skillSnapshots: configuration.skills
         )
         let batches = request.checkpoint?.toolBatches ?? []

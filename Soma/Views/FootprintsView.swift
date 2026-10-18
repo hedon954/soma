@@ -154,6 +154,9 @@ extension Notification.Name {
     static let prefillCoachDraft = Notification.Name(
         "Soma.prefillCoachDraft"
     )
+    static let sendCoachMessage = Notification.Name(
+        "Soma.sendCoachMessage"
+    )
 }
 
 /// 朋友圈式 feed 卡片：头像 + 昵称在左上，正文、九宫格媒体、

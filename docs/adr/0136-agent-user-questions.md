@@ -6,6 +6,7 @@
 - 上游依据：[PRD 066](../prd/066-agent-user-questions.md)
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md) 的纯 Markdown 交互与快捷聚焦工具曝光：新增固定提问组件及始终可用的提问工具
 - 部分替代：[ReAct Agent](../react-agent.md)、[Tool 目录](../engineering/agent-tool-catalog.md) 的工具目录与循环停止规则
+- 后续替代：[ADR 0141](0141-coach-training-schedule-draft.md)（仅带 selection 的提问不再点按即发送）
 - 下游落地：[验收](../acceptance.md)
 
 ## 背景

@@ -1,12 +1,13 @@
 # PRD 071：按日期排期的训练计划
 
+- 后续修订：[PRD 074](074-composable-training.md)（取消课程绑定，使用组合内容）
 - 状态：已采纳，已实现
 - 日期：2026-09-29
 - 版本：0.0.26
 - 修订自：
   - [PRD 069](069-training-course-name.md)（训练计划这个名字当时尚未提供能力）
   - [PRD 000](000-origin-through-0.0.11.md)（训练编排只有课程处方）
-- 后续修订：暂无
+- 后续修订：[PRD 072](072-coach-training-schedule-draft.md)（空计划区增加教练起草；周期与保存规则不变）
 - 下游落地：[ADR 0140](../adr/0140-training-schedule.md)、[验收](../acceptance.md)
 
 ## 背景

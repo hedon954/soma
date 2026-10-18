@@ -75,6 +75,18 @@ struct CoachSessionView: View {
     @State private var sessionDrawerPresented = false
     @State private var showsSessionDeleteBlockedAlert = false
     @State var pendingDeletionError: String?
+
+    private var pendingDeletionPresented: Binding<Bool> {
+        Binding(
+            get: { pendingDeletionError != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeletionError = nil
+                }
+            }
+        )
+    }
+
     @State private var showsLocationPrompt = false
     /// 标准配置由 Store 缓存；设置保存时通过通知精确刷新，不再在每次 Tab
     /// 重新挂载时重复解码 UserDefaults JSON。
@@ -236,14 +248,7 @@ struct CoachSessionView: View {
         } message: {
             Text("这条对话正在处理或仍有未完成的任务，暂不能删除。")
         }
-        .alert("未能删除暂存消息", isPresented: Binding(
-            get: { pendingDeletionError != nil },
-            set: {
-                if !$0 {
-                    pendingDeletionError = nil
-                }
-            }
-        )) {
+        .alert("未能删除暂存消息", isPresented: pendingDeletionPresented) {
             Button("知道了", role: .cancel) { pendingDeletionError = nil }
         } message: {
             Text(pendingDeletionError ?? "请重新打开暂存管理后重试。")
@@ -298,6 +303,7 @@ struct CoachSessionView: View {
             composer.draft = text
             composer.requestFocus()
         }
+        .modifier(CoachScheduleDraftSendModifier(onSend: consumeCoachSendIfNeeded))
         .onReceive(
             NotificationCenter.default.publisher(for: .focusCoachComposer)
         ) { _ in
@@ -955,5 +961,17 @@ struct CoachSessionView: View {
             return
         }
         submitCurrentDraft()
+    }
+}
+
+private struct CoachScheduleDraftSendModifier: ViewModifier {
+    let onSend: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .sendCoachMessage)) { _ in
+                onSend()
+            }
+            .onAppear(perform: onSend)
     }
 }

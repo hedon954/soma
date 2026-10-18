@@ -329,6 +329,13 @@ extension View {
         ))
     }
 
+    func appSecondaryButtonStyle() -> some View {
+        buttonStyle(AppFilledButtonStyle(
+            background: AppTheme.insetBackground,
+            foreground: AppTheme.accent
+        ))
+    }
+
     func appDestructivePrimaryButtonStyle() -> some View {
         buttonStyle(AppFilledButtonStyle(
             background: AppTheme.destructive,

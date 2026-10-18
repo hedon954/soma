@@ -309,6 +309,7 @@ struct CoachMessageRenderProjection {
 @MainActor
 struct CoachMessageRenderPayload {
     let userQuestions: AgentUserQuestionRequest?
+    let scheduleDraft: TrainingScheduleDraftPayload?
     let visibleText: String
     let turnItems: [AgentTurnItem]
     let transcriptSegments: [AgentTurnTranscriptSegment]
@@ -366,8 +367,12 @@ enum CoachMessageRenderPayloadCache {
 
         let storedItems = message.agentTurnItems
         let questions = AgentUserQuestionRequest.from(items: storedItems)
+        let scheduleDraft = TrainingScheduleDraftPayload.from(items: storedItems)
         let items = storedItems.filter { item in
             if item.kind == .text, item.text == questions?.historyText {
+                return false
+            }
+            if TrainingScheduleDraftPayload.from(items: [item]) != nil {
                 return false
             }
             // 问题由固定组件呈现；避免再显示一张重复问题文字的工具卡。
@@ -377,6 +382,7 @@ enum CoachMessageRenderPayloadCache {
         let turnItemsWithoutActivity = items.filter { $0.kind != .activity }
         let payload = CoachMessageRenderPayload(
             userQuestions: questions,
+            scheduleDraft: scheduleDraft,
             visibleText: message.isFromCoach
                 ? (questions == nil ? AgentVisibleTextSanitizer.sanitize(message.text) : "")
                 : message.text,

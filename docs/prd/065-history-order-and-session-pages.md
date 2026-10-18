@@ -5,6 +5,7 @@
 - 版本：0.0.24
 - 修订自：[PRD 000](000-origin-through-0.0.11.md) 的进展明细和会话浏览
 - 下游落地：[ADR 0134](../adr/0134-session-history-page-cache.md)
+- 下游落地：[PRD 073](073-training-session-pages.md)（训练页最近训练沿用按页查询，不改会话目录）
 
 ## 用户结果
 

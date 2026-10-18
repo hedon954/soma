@@ -117,6 +117,19 @@ private struct AgentToolSignatureArguments {
         put("overview", arguments.overview)
         put("schedule_hint", arguments.scheduleHint)
         put("auto_recording_policy", arguments.autoRecordingPolicy)
+        put("name", arguments.scheduleName)
+        put("anchor_date", arguments.scheduleAnchorDate)
+        appendScheduleSlots(arguments.scheduleSlots)
+    }
+
+    private mutating func appendScheduleSlots(
+        _ slots: [TrainingScheduleDraftSlotArgument]?
+    ) {
+        guard let slots, !slots.isEmpty,
+              let data = try? JSONEncoder().encode(slots),
+              let value = try? JSONSerialization.jsonObject(with: data)
+        else { return }
+        values["slots"] = value
     }
 
     private mutating func appendFields(_ fields: [String]?) {

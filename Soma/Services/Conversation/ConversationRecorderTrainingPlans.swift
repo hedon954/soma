@@ -19,7 +19,12 @@ extension ConversationRecorder {
                 + "；概览：\(program.overview.isEmpty ? "未记录" : program.overview)"
                 + "；动作：\(exerciseCount) 个"
         }
-        return .success(values.isEmpty ? "暂无可执行训练课程。" : values.joined(separator: "\n"))
+        let schedules = (try? context.fetch(FetchDescriptor<TrainingSchedule>())) ?? []
+        let plans = schedules.map { plan in
+            AgentFacingRecordID.labeled(plan.businessID, summary: plan.name, key: "schedule_id")
+        }
+        let lines = values + plans
+        return .success(lines.isEmpty ? "暂无训练课程或计划。" : lines.joined(separator: "\n"))
     }
 
     static func getTrainingProgram(
@@ -397,7 +402,7 @@ extension ConversationRecorder {
         return try? context.fetch(descriptor).first
     }
 
-    private static func planPrescriptions(
+    static func planPrescriptions(
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) throws -> [TemplateExercisePrescription] {

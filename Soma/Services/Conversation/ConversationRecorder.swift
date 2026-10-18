@@ -59,7 +59,17 @@ enum ConversationRecorder {
              .startProgram:
             .failure("v3 Tool 路由异常。", code: "internal_error")
         case .askUserQuestions:
-            AgentUserQuestionsTool.result(questions: call.arguments.questions)
+            AgentUserQuestionsTool.result(
+                questions: call.arguments.questions,
+                requiresSelection: ScheduleDraftAnswerText.requiresSelection(userText: sourceText)
+            )
+        case .proposeTrainingSchedule:
+            TrainingScheduleDraftTool.propose(
+                name: call.arguments.scheduleName,
+                anchorDate: call.arguments.scheduleAnchorDate,
+                slots: call.arguments.scheduleSlots,
+                in: context
+            )
         case .loadSkill:
             .failure("load_skill 应由 Agent 运行时处理。")
         case .submitFeedback:

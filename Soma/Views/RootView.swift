@@ -265,6 +265,11 @@ struct RootView: View {
                 selectCoachTabIfNeeded()
             }
             .onReceive(
+                NotificationCenter.default.publisher(for: .sendCoachMessage)
+            ) { _ in
+                selectCoachTabIfNeeded()
+            }
+            .onReceive(
                 NotificationCenter.default.publisher(
                     for: .coachRequiresAIConfiguration
                 )
@@ -319,6 +324,7 @@ struct RootView: View {
                 }
                 let performanceSession = PerformanceTestFixture
                     .seedLongStreamIfRequested(in: modelContext)
+                TrainingContentTestFixture.seedIfRequested(in: modelContext)
                 ProgressHistoryTestFixture.seedIfRequested(in: modelContext)
                 ConversationSessionHistoryFixture.seedIfRequested(in: modelContext)
                 conversationSessions.resolveForEntry(

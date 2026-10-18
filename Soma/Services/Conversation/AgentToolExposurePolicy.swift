@@ -45,7 +45,8 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
                 .updateProgram,
                 .archiveProgram,
                 .deleteProgram,
-                .startProgram
+                .startProgram,
+                .proposeTrainingSchedule
             ]
         case .gym:
             [.updateGym, .switchGym]

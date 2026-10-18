@@ -28,6 +28,78 @@ extension CoachSessionView {
         return accepted
     }
 
+    func submitComposedAnswer(_ text: String) throws -> Bool {
+        guard !composer.isPersistingSubmission,
+              let sessionID = conversationSessions.activeSessionID,
+              let context = ConversationProcessingContextFactory.make(
+                  sessionID: sessionID, dataSpace: dataSpace.activeSpace, ai: ai, in: modelContext
+              )
+        else { return false }
+        visibility.tailScroll.followState.resumeExplicitly()
+        let accepted = processor.submitPersisted(
+            text: text,
+            attachments: [],
+            context: context,
+            includeLocation: locationPreference == .enabled,
+            locationService: locationContext,
+            selectedShortcutID: nil,
+            forceLocal: false
+        )
+        if accepted {
+            scrollRequest = UUID()
+        }
+        return accepted
+    }
+
+    func consumeCoachSendIfNeeded() {
+        guard CoachComposerCommand.pendingSend == ScheduleDraftAnswerText.opening else { return }
+        guard !composer.isPersistingSubmission else { return }
+        CoachComposerCommand.pendingSend = nil
+        sendScheduleDraftRequest()
+    }
+
+    func sendScheduleDraftRequest() {
+        guard !composer.isPersistingSubmission else { return }
+        let text = ScheduleDraftAnswerText.opening
+        visibility.tailScroll.followState.resumeExplicitly()
+        let session = conversationSessions.ensureActiveSession(
+            dataSpace: dataSpace.activeSpace,
+            in: modelContext
+        )
+        guard let processingContext = ConversationProcessingContextFactory.make(
+            sessionID: session.id,
+            dataSpace: dataSpace.activeSpace,
+            ai: ai,
+            in: modelContext
+        ) else {
+            CoachComposerCommand.pendingSend = text
+            return
+        }
+        let needsGuidance = needsConfigurationGuidance(forceLocal: false)
+        composer.isPersistingSubmission = true
+        Task { @MainActor in
+            let accepted = await processor.submitAsync(
+                text: text,
+                attachments: [],
+                context: processingContext,
+                includeLocation: locationPreference == .enabled,
+                locationService: locationContext,
+                selectedShortcutID: nil,
+                forceLocal: false
+            )
+            composer.isPersistingSubmission = false
+            if accepted {
+                visibility.tailScroll.followState.resumeExplicitly()
+                scrollRequest = UUID()
+                if needsGuidance {
+                    openLLMConfiguration()
+                }
+            } else {
+                CoachComposerCommand.pendingSend = text
+            }
+        }
+    }
+
     func submitCurrentDraft(
         quickRecordOverride: ExerciseInputSuggestion? = nil
     ) {

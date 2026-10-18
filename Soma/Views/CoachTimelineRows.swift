@@ -70,6 +70,9 @@ extension CoachSessionView {
                     text: text
                 )
             },
+            onComposeAnswer: { text in
+                try submitComposedAnswer(text)
+            },
             onRetry: { retry(message) },
             onDiscardPending: message.turnID.map(
                 projection.stagedTurnIDs.contains

@@ -25,6 +25,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case archiveProgram = "archive_program"
     case deleteProgram = "delete_program"
     case startProgram = "start_program"
+    case proposeTrainingSchedule = "propose_training_schedule"
     case loadSkill = "load_skill"
     case askUserQuestions = "ask_user_questions"
     case updateWorkout = "update_workout"
@@ -63,7 +64,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .getBodyEntry,
              .listPrograms,
              .getProgram,
-             .loadSkill, .askUserQuestions:
+             .loadSkill, .askUserQuestions, .proposeTrainingSchedule:
             false
         default:
             true
@@ -72,7 +73,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
 
     var schemaVersion: Int {
         switch self {
-        case .askUserQuestions: 1
+        case .askUserQuestions, .proposeTrainingSchedule: 1
         case .searchExercises,
              .createExercise,
              .updateExercise,
@@ -153,6 +154,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         case .startProgram: "开始课程带练"
         case .loadSkill: "加载 Skill"
         case .askUserQuestions: "等待你的回答"
+        case .proposeTrainingSchedule: "起草训练计划"
         case .updateWorkout: "更新训练"
         case .updateMeal: "更新饮食"
         case .updateBody: "更新身体信息"
