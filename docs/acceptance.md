@@ -543,3 +543,11 @@ Agent 通过固定 `ask_user_questions` 展示问题，每个选项按钮独占�
 DailyActivityUITests 在 iPhone 17 Pro、iPhone 16e 和 iPad Pro 11-inch 各 2 项通过。
 已覆盖安装 0.0.27（31）Debug 至 iPhone 17 Pro Max；签名 HealthKit entitlement 和当前代码输入指纹核对通过。
 设备上的实际授权、COROS 对照与真实健康同步结果未验收。
+
+## 0.0.28 本地验证证据
+
+- 完整 `make verify`：965 项 XCTest、8 项 Swift Testing，静态检查、Server 测试、模拟器构建与测试通过，构建零警告。
+- 虚构数据界面：iPhone 17 Pro 浅/深主题的训练关联、事实编辑保存、暂停；Accessibility XXXL 键盘与滚动；iPhone 16e 小屏、iPad 11 寸大字号；每日三项运动记录和设置页均通过。
+- 调整历史可打开每日系数及冻结校准窗口的逐日输入；旧磁盘库保留原始记录，新表写入并重开验证通过。
+- 自动校准回归包括未来活动变化留出、持续低报上限、缺饮食/训练/来源覆盖、体重假设分歧和体液变化。模拟只验证控制行为，不表示个人生理准确度。
+- 真机安装与 Apple 健康权限/厂商数据验收独立记录；GitHub Release 只发布源码。既存反馈凭据门禁仍阻止 TestFlight 外部分发。

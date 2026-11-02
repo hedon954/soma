@@ -1,8 +1,8 @@
 # Soma 消耗计算体系：研究与推荐方案
 
 - 日期：2026-11-02
-- 状态：调研完成，已授权开发；运行时实现及验收进度见 PRD 076
-- 下游落地：[PRD 076](../prd/076-adaptive-energy-system.md)、[ADR 0145](../adr/0145-adaptive-energy-system.md)（已授权开发）
+- 状态：已转化并实现；本地算法与界面验收通过，真机数据与个人准确度待验收
+- 下游落地：[PRD 076](../prd/076-adaptive-energy-system.md)、[ADR 0145](../adr/0145-adaptive-energy-system.md)（已实现）
 - 修订自：[日消耗本地公式研究](2026-09-08-daily-energy-expenditure-methods.md)（重新界定活动系数、训练增量和长期校准的适用范围）
 - 参考当前实现：[HealthKit 日活动研究](2026-10-20-healthkit-daily-activity.md)、[PRD 075](../prd/075-healthkit-daily-activity.md)、[ADR 0144](../adr/0144-healthkit-daily-activity.md)
 
