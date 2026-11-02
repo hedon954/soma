@@ -52,15 +52,22 @@ extension CoachSessionView {
     }
 
     func consumeCoachSendIfNeeded() {
-        guard CoachComposerCommand.pendingSend == ScheduleDraftAnswerText.opening else { return }
+        guard let text = CoachComposerCommand.pendingSend,
+              [ScheduleDraftAnswerText.opening, CoachComposerCommand.energyContextOpening].contains(text) else { return }
         guard !composer.isPersistingSubmission else { return }
+        if text == CoachComposerCommand.energyContextOpening {
+            composer.selectedShortcutID = nil
+        }
         CoachComposerCommand.pendingSend = nil
-        sendScheduleDraftRequest()
+        sendCoachOpeningRequest(text)
     }
 
     func sendScheduleDraftRequest() {
+        sendCoachOpeningRequest(ScheduleDraftAnswerText.opening)
+    }
+
+    private func sendCoachOpeningRequest(_ text: String) {
         guard !composer.isPersistingSubmission else { return }
-        let text = ScheduleDraftAnswerText.opening
         visibility.tailScroll.followState.resumeExplicitly()
         let session = conversationSessions.ensureActiveSession(
             dataSpace: dataSpace.activeSpace,

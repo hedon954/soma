@@ -64,6 +64,7 @@ enum SettingsHomeIconTone: String, CaseIterable, Sendable {
 
 enum SettingsHomeItem: String, CaseIterable, Sendable {
     case bodyInfo
+    case health
     case gym
     case voiceCues
     case llm
@@ -77,6 +78,7 @@ enum SettingsHomeItem: String, CaseIterable, Sendable {
     var systemImage: String {
         switch self {
         case .bodyInfo: "person.text.rectangle"
+        case .health: "heart.text.square"
         case .gym: "building.2"
         case .voiceCues: "speaker.wave.2"
         case .llm: "sparkles"
@@ -94,7 +96,7 @@ enum SettingsHomeItem: String, CaseIterable, Sendable {
         case .bodyInfo, .privacy: .body
         case .gym, .voiceCues: .training
         case .llm, .advanced: .intelligence
-        case .dataBackup, .appearance: .data
+        case .dataBackup, .appearance, .health: .data
         case .taskProgress: .notification
         case .backgroundProcessing: .background
         }

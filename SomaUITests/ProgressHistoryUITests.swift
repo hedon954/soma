@@ -160,7 +160,7 @@ final class ProgressHistoryUITests: XCTestCase {
             app.buttons["饮食与能量，查看估算依据"].tap()
             XCTAssertTrue(app.navigationBars["能量依据"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.staticTexts["静息消耗"].exists)
-            XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "1.40 · 默认参考")).firstMatch.exists)
+            XCTAssertTrue(app.staticTexts["1.40 · 动态估算"].exists)
             XCTAssertFalse(app.staticTexts["统计范围"].exists)
             XCTAssertFalse(app.staticTexts["摄入有记录日"].exists)
             XCTAssertFalse(app.staticTexts["个人静息公式"].exists)

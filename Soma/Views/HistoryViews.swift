@@ -124,6 +124,10 @@ struct WorkoutHistoryView: View {
         .onChange(of: filter) { _, _ in
             reload()
         }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
+            guard ModelContextSaveImpact.affectsInsights(notification, in: modelContext) else { return }
+            refreshLoadedWorkouts()
+        }
         .sheet(item: $shareModel) { model in
             WorkoutShareSheet(model: model)
         }
@@ -157,6 +161,16 @@ struct WorkoutHistoryView: View {
         hasMore = true
         isLoading = false
         loadMore()
+    }
+
+    private func refreshLoadedWorkouts() {
+        let count = max(loaded.count, WorkoutHistoryQuery.pageSize)
+        var query = WorkoutHistoryQuery.fetchDescriptor(filter: filter, offset: 0)
+        query.fetchLimit = count + 1
+        guard let rows = try? modelContext.fetch(query) else { return }
+        loaded = Array(rows.prefix(count))
+        hasMore = rows.count > count
+        availableDates.formUnion(loaded.map(\.date))
     }
 
     private func loadMore() {
@@ -463,14 +477,14 @@ private struct WorkoutHistoryRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(exercise?.canonicalName ?? workout.exercise)
                     .font(.headline)
-                Text(workout.date.formatted(date: .abbreviated, time: .shortened))
+                Text(workout.date.formatted(date: .abbreviated, time: workout.isDailyActivity ? .omitted : .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !metricsText.isEmpty {
                     Text(metricsText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(workout.isDailyActivity ? nil : 1)
                 }
             }
 
@@ -486,7 +500,7 @@ private struct WorkoutHistoryRow: View {
             MediaThumbnail(
                 kind: .video,
                 path: video.path,
-                fallbackIcon: "figure.strengthtraining.traditional",
+                fallbackIcon: workout.isDailyActivity ? "figure.walk" : "figure.strengthtraining.traditional",
                 width: 42,
                 height: 74
             )
@@ -502,19 +516,22 @@ private struct WorkoutHistoryRow: View {
             MediaThumbnail(
                 kind: .image,
                 path: image.path,
-                fallbackIcon: "figure.strengthtraining.traditional"
+                fallbackIcon: workout.isDailyActivity ? "figure.walk" : "figure.strengthtraining.traditional"
             )
         } else {
             MediaThumbnail(
                 kind: .none,
                 path: nil,
-                fallbackIcon: "figure.strengthtraining.traditional"
+                fallbackIcon: workout.isDailyActivity ? "figure.walk" : "figure.strengthtraining.traditional"
             )
         }
     }
 
     private var metricsText: String {
         var metrics: [String] = []
+        if let summary = workout.dailyActivitySummary {
+            return summary
+        }
         if let setEvidenceSummary = workout.setEvidenceSummary {
             metrics.append(setEvidenceSummary)
         } else if let sets = workout.sets, let reps = workout.reps {

@@ -11,6 +11,7 @@ struct AdaptiveEnergyEstimate: Equatable, Sendable {
     enum Method: String, Sendable {
         case confirmedLifestyle
         case defaultReference
+        case dynamicActivity
     }
 
     let method: Method
@@ -20,8 +21,19 @@ struct AdaptiveEnergyEstimate: Equatable, Sendable {
     let effectiveFrom: Date
     var restingSourceName = "个人静息公式"
     var trainingNetKilocalories: Double = 0
+    var activeEnergyKilocalories: Double?
+    var calculation: EnergyDayCalculation?
     var totalKilocalories: Double {
-        restingKilocalories * factor + trainingNetKilocalories
+        if let calculation {
+            return calculation.total
+        }
+        return restingKilocalories * factor + trainingNetKilocalories
+    }
+
+    static func from(_ calculation: EnergyDayCalculation) -> Self {
+        .init(method: .dynamicActivity, restingKilocalories: calculation.input.resting, factor: calculation.factor,
+              sourceName: calculation.input.reference.reason, effectiveFrom: calculation.input.reference.effectiveFrom,
+              trainingNetKilocalories: calculation.trainingDelta, calculation: calculation)
     }
 }
 
@@ -37,6 +49,7 @@ enum AdaptiveEnergyEstimator {
         restingEstimate: Double?,
         baselines: [EnergyLifestyleBaseline] = [],
         trainingNetKilocalories: Double = 0,
+        activeEnergyKilocalories: Double? = nil,
         calendar: Calendar = .current
     ) -> AdaptiveEnergyOutcome {
         let targetDay = calendar.startOfDay(for: targetDate)
@@ -50,6 +63,7 @@ enum AdaptiveEnergyEstimator {
                 ? $0.id.uuidString < $1.id.uuidString
                 : $0.effectiveFrom < $1.effectiveFrom
         }
+        let activeEnergy = activeEnergyKilocalories.flatMap { validEnergy($0) ? $0 : nil }
         let factor = baseline?.factor ?? 1.4
         let trainingNet = validEnergy(trainingNetKilocalories) ? max(0, trainingNetKilocalories) : 0
         guard let resting = restingEstimate.flatMap({ validEnergy($0) && $0 > 0 ? $0 : nil }),
@@ -64,7 +78,8 @@ enum AdaptiveEnergyEstimator {
                 factor: factor,
                 sourceName: baseline?.label ?? "默认参考",
                 effectiveFrom: baseline?.effectiveFrom ?? targetDay,
-                trainingNetKilocalories: trainingNet
+                trainingNetKilocalories: trainingNet,
+                activeEnergyKilocalories: activeEnergy
             ),
             missingReason: nil
         )

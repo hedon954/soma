@@ -30,6 +30,12 @@ enum ProgressHistoryTestFixture {
                     date: day, mealType: .lunch, title: "进展夹具餐食 \(offset)",
                     calories: 1900 + abs(offset % 5) * 100, protein: 110, carbs: 240, fat: 60
                 ))
+                let confirmation = EnergyContextEntry(key: EnergyEvidenceStore.contextKey(for: day, calendar: calendar),
+                                                      date: day, timeZoneIdentifier: calendar.timeZone.identifier)
+                confirmation.confirmationData = try EnergyInputCoding.encode(EnergyDayConfirmation(
+                    foodComplete: true, mealEvidenceFingerprint: EnergyFoodEvidence.fingerprint(on: day, in: context, calendar: calendar)
+                ))
+                context.insert(confirmation)
                 if offset.isMultiple(of: 3) {
                     context.insert(WorkoutEntry(date: day, exercise: "虚构深蹲", sets: 5, reps: 5, weight: 40, restSeconds: 60))
                 }
@@ -37,8 +43,12 @@ enum ProgressHistoryTestFixture {
                     context.insert(BodyEntry(date: day, weight: 70 + Double(abs(offset)) / 100, bodyFat: 18, waist: 80))
                 }
             }
+            if ProcessInfo.processInfo.environment["SOMA_UI_DAILY_ACTIVITY_FIXTURE"] == "1" {
+                try DailyActivityRecordStore.replace([DailyActivitySyncCoordinator.demo(key: .init(date: today, calendar: calendar))], in: context)
+            }
             LibraryAndMealTestFixture.seedIfRequested(in: context)
             try context.save()
+            try EnergyUITestFixture.seedIfRequested(in: context)
         } catch {
             context.rollback()
             assertionFailure("Progress UI fixture could not be prepared")

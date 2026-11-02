@@ -67,7 +67,7 @@ final class ProgressHistoryProjectionTests: XCTestCase {
     func testTrainingNetIncrementIsAddedToEstimatedExpenditure() throws {
         let before = ProgressHistoryRecord(activity: activity(date(8, 30), .body), weight: 70)
         let workout = ProgressHistoryRecord(
-            activity: activity(date(9, 4), .workout), calories: 500, calorieMET: 5, logicalSets: 5
+            activity: activity(date(9, 4), .workout), calories: 500, calorieMET: 5, logicalSets: 5, durationSeconds: 3600
         )
         let profile = ProgressProfileFacts(
             updatedAt: date(8, 1), birthDate: calendar.date(from: DateComponents(year: 1996, month: 1, day: 1)),
@@ -80,8 +80,9 @@ final class ProgressHistoryProjectionTests: XCTestCase {
         )
         let resting = 700 + 1062.5 - 150 + 5
         XCTAssertEqual(snapshot.days.first?.trainingCalories.value, 500)
-        XCTAssertEqual(snapshot.days.first?.energy.estimate?.trainingNetKilocalories ?? 0, 400, accuracy: 0.001)
-        XCTAssertEqual(try XCTUnwrap(snapshot.averageEstimate), resting * 1.4 + 400, accuracy: 0.001)
+        let increment = 400 - (resting * 1.4 * 0.9 - resting) / 16
+        XCTAssertEqual(snapshot.days.first?.energy.estimate?.trainingNetKilocalories ?? 0, increment, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(snapshot.averageEstimate), resting * 1.4 + increment, accuracy: 0.001)
         XCTAssertEqual(snapshot.logicalSets, 5)
     }
 

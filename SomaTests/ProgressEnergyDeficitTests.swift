@@ -11,7 +11,7 @@ final class ProgressEnergyDeficitTests: XCTestCase {
     func testDayUsesEstimatedExpenditureWithNetTrainingInsteadOfGrossCalories() throws {
         let facts = snapshot(.day, [meal(10, 2000), record(10, .workout, calories: 500, met: 5)])
         let result = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: facts))
-        XCTAssertEqual(try XCTUnwrap(result.kilocalories), 2264.5 + 400 - 2000, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(result.kilocalories), 2264.5 + 400 - (2264.5 * 0.9 - 1617.5) / 16 - 2000, accuracy: 0.001)
         XCTAssertEqual(result.includedDayCount, 1)
         XCTAssertEqual(facts.days.first?.trainingCalories.value, 500)
         XCTAssertEqual(facts.days.first?.estimatedEnergyDeficit, result.kilocalories)
@@ -26,6 +26,17 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         }
         let result = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: snapshot(.day, [meal(10, 0)])))
         XCTAssertEqual(try XCTUnwrap(result.kilocalories), 2264.5, accuracy: 0.001)
+    }
+
+    func testUnconfirmedFoodOnlyShowsRecordedDifferenceAndIsExcludedFromPeriodTotal() throws {
+        let day = snapshot(.day, [meal(10, 1200)], confirmsFood: false)
+        XCTAssertNil(day.days.first?.estimatedEnergyDeficit)
+        XCTAssertEqual(day.days.first?.recordedEnergyDifference, 1064.5)
+        let caption = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: day))
+        XCTAssertEqual(caption.metricLabel, "已记饮食差额")
+        XCTAssertTrue(caption.detail.contains("尚未确认饮食完整"))
+        let period = snapshot(.week, [meal(9, 1200)], confirmsFood: false)
+        XCTAssertNil(try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: period)).kilocalories)
     }
 
     func testWeekAndMonthSumSameDayPairsAndExcludeTodayFutureAndUnmatchedDays() throws {
@@ -100,14 +111,22 @@ final class ProgressEnergyDeficitTests: XCTestCase {
 
     private func snapshot(
         _ period: ProgressPeriod, _ records: [ProgressHistoryRecord],
-        weightDay: Int? = nil, hasProfile: Bool = true, now: Date? = nil, anchor: Date? = nil, goal: FitnessGoal? = nil
+        weightDay: Int? = nil, hasProfile: Bool = true, now: Date? = nil, anchor: Date? = nil, goal: FitnessGoal? = nil,
+        confirmsFood: Bool = true
     ) -> ProgressHistorySnapshot {
         let weightDate = weightDay.map { date($0) } ?? date(30, month: 8)
         let weight = ProgressHistoryRecord(activity: .init(id: UUID(), kind: .body, date: weightDate,
                                                            title: "虚构体重", detail: "", metric: nil), weight: 70)
-        let profile = ProgressProfileFacts(updatedAt: date(1, month: 8),
+        var profile = ProgressProfileFacts(updatedAt: date(1, month: 8),
                                            birthDate: calendar.date(from: DateComponents(year: 1996, month: 1, day: 1)),
                                            height: 170, biologicalSex: .male, baselines: [], fitnessGoal: goal)
+        if confirmsFood {
+            let meals = Dictionary(grouping: records.filter { $0.activity.kind == .meal }) { calendar.startOfDay(for: $0.activity.date) }
+            profile.energyFacts.contexts = meals.map { day, records in
+                .init(date: day, timeZoneIdentifier: calendar.timeZone.identifier, lifestyle: nil,
+                      confirmation: .init(foodComplete: true, mealEvidenceFingerprint: EnergyFoodEvidence.fingerprint(records: records)), learningPaused: nil)
+            }
+        }
         return ProgressHistoryProjection.build(
             window: period.window(containing: anchor ?? date(10), calendar: calendar), records: records + [weight],
             profile: hasProfile ? profile : nil, now: now ?? date(10, hour: 12), calendar: calendar
@@ -122,7 +141,7 @@ final class ProgressEnergyDeficitTests: XCTestCase {
 
     private func record(_ day: Int, _ kind: ProgressRecentActivity.Kind, calories: Double?, met: Double? = nil) -> ProgressHistoryRecord {
         .init(activity: .init(id: UUID(), kind: kind, date: date(day), title: "虚构记录", detail: "", metric: nil),
-              calories: calories, calorieMET: met)
+              calories: calories, calorieMET: met, durationSeconds: met == nil ? nil : 3600)
     }
 
     private func date(_ day: Int, month: Int = 9, hour: Int = 0) -> Date {

@@ -35,7 +35,8 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
                 .getBodyEntry,
                 .createBodyEntry,
                 .updateBody,
-                .deleteBodyEntry
+                .deleteBodyEntry,
+                .recordEnergyContext
             ]
         case .plans:
             [

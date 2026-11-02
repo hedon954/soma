@@ -254,6 +254,7 @@ final class DataSpaceController {
     }
 
     private func clearStoreFiles(clearAll: Bool) {
+        NotificationCenter.default.post(name: .personalDataDidReplace, object: nil)
         let supportDirectory = try? Self.applicationSupportDirectory()
         guard let supportDirectory else { return }
 
@@ -358,6 +359,7 @@ struct SomaApp: App { // 组合根：只装配依赖并注入 environment
                     DataMigrationGateView()
                 }
             }
+            .modifier(DailyActivityScope())
             .environment(aiService)
             .environment(dataSpace)
             .environment(conversationProcessor)

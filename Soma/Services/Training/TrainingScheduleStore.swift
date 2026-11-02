@@ -25,6 +25,7 @@ enum TrainingScheduleStore {
             )
         }
         var entries = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.dailyActivityData == nil },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         entries.fetchLimit = 1

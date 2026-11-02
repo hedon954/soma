@@ -4,7 +4,6 @@ import SwiftUI
 struct ProgressEnergySourcesView: View {
     let snapshot: ProgressHistorySnapshot
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedDate: Date?
 
     private var day: ProgressDailyMetrics? {
@@ -14,46 +13,81 @@ struct ProgressEnergySourcesView: View {
     var body: some View {
         NavigationStack {
             List {
-                if let day {
-                    if snapshot.window.period == .day {
-                        LabeledContent("日期", value: day.date.formatted(.dateTime.year().month().day()))
-                    } else {
-                        Picker("日期", selection: Binding(get: { day.date }, set: { selectedDate = $0 })) {
-                            ForEach(snapshot.days.filter { !$0.isFuture }) { item in
-                                Text(item.date.formatted(.dateTime.year().month().day())).tag(item.date)
+                Group {
+                    if let day {
+                        if snapshot.window.period == .day {
+                            LabeledContent("日期", value: day.date.formatted(.dateTime.year().month().day()))
+                        } else {
+                            Picker("日期", selection: Binding(get: { day.date }, set: { selectedDate = $0 })) {
+                                ForEach(snapshot.days.filter { !$0.isFuture }) { item in
+                                    Text(item.date.formatted(.dateTime.year().month().day())).tag(item.date)
+                                }
                             }
                         }
+                        LabeledContent("静息消耗", value: energy(day.energy.estimate?.restingKilocalories ?? day.restingFormula?.dailyKilocalories))
+                        LabeledContent("当天有效系数", value: factorText(day.energy.estimate))
+                        if let calculation = day.energy.estimate?.calculation {
+                            LabeledContent("参考生活消耗", value: energy(calculation.baseline))
+                            LabeledContent("日常步行差额", value: energy(calculation.walkingDelta))
+                            LabeledContent("计入总消耗的训练", value: energy(calculation.trainingDelta))
+                            LabeledContent("长期修正", value: energy(calculation.input.correction))
+                        }
+                        LabeledContent("预估总消耗", value: energy(day.energy.estimate?.totalKilocalories))
+                        LabeledContent("已记录摄入", value: day.intake.knownCount > 0 ? energy(day.intake.value) : "未记录")
+                        LabeledContent(day.foodConfirmedComplete ? "预估热量缺口" : "已记饮食差额", value: day.recordedEnergyDifference.map { energy($0) }
+                            ?? day.energyDeficitMissingReason ?? "待估算")
+                        if day.energy.estimate == nil {
+                            NavigationLink("补充身体资料") { PersonalBodyInfoView() }
+                        }
+                        DisclosureGroup("计算明细") {
+                            calculationDetails(day)
+                        }
+                        NavigationLink("系数与调整历史") { EnergyHistoryView() }
+                        NavigationLink("生活与记录确认") { EnergyContextRecordsView() }
+                        if let calculation = day.energy.estimate?.calculation, !calculation.input.training.isEmpty {
+                            NavigationLink("同场训练关联") { EnergyTrainingLinksView(calculation: calculation) }
+                        }
+                        Button("完善生活信息") {
+                            dismiss()
+                            CoachComposerCommand.pendingSend = CoachComposerCommand.energyContextOpening
+                            NotificationCenter.default.post(name: .sendCoachMessage, object: nil)
+                        }.frame(minHeight: 44)
                     }
-                    LabeledContent("静息消耗", value: energy(day.energy.estimate?.restingKilocalories ?? day.restingFormula?.dailyKilocalories))
-                    NavigationLink {
-                        ProgressLifestyleEditor()
-                    } label: {
-                        LabeledContent("活动系数", value: factorText(day.energy.estimate))
+                    Section("近期习惯水平") {
+                        if let factor = snapshot.habitualEnergyFactor {
+                            LabeledContent("近 28 天有效系数", value: factor.formatted(.number.precision(.fractionLength(2))))
+                            Text("由相同日期的总消耗与静息估算汇总，已包含通常训练；不会再加到休息日。")
+                                .font(.footnote).foregroundStyle(AppTheme.accent)
+                        } else {
+                            Text("需要近 28 天至少 21 个活动依据完整的结束日，且每周都有覆盖。")
+                                .font(.footnote).foregroundStyle(AppTheme.accent)
+                        }
                     }
-                    LabeledContent("预估总消耗", value: energy(day.energy.estimate?.totalKilocalories))
-                    LabeledContent("已记录摄入", value: day.intake.knownCount > 0 ? energy(day.intake.value) : "未记录")
-                    LabeledContent("预估热量缺口", value: day.estimatedEnergyDeficit.map { energy($0) }
-                        ?? day.energyDeficitMissingReason ?? "待估算")
-                    LabeledContent("已记录训练消耗", value: energy(day.trainingCalories.value))
-                    if let net = day.energy.estimate?.trainingNetKilocalories, net > 0 || day.trainingCalories.knownCount > 0 {
-                        LabeledContent("计入总消耗的训练", value: energy(net))
+                    if !snapshot.energyForecasts.isEmpty {
+                        Section("未来 7 天预测") {
+                            ForEach(snapshot.energyForecasts) { forecast in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    LabeledContent(forecast.date.formatted(.dateTime.month().day().weekday()),
+                                                   value: forecast.total.map { energy($0) } ?? "依据不足")
+                                    Text(forecast.source).font(.footnote).foregroundStyle(AppTheme.accent)
+                                }
+                            }
+                            Text("以参考日预测日常活动，只预测训练增量。预测不进入已发生消耗、缺口或校准；日期到来后只采用当天事实。")
+                                .font(.footnote).foregroundStyle(AppTheme.accent)
+                        }
                     }
-                    if day.energy.estimate == nil {
-                        NavigationLink("补充身体资料") { PersonalBodyInfoView() }
-                    }
-                    DisclosureGroup("计算明细") {
-                        calculationDetails(day)
-                    }
-                }
+                }.listRowBackground(AppTheme.cardBackground)
             }
             .font(.subheadline)
+            .labeledContentStyle(EnergyEvidenceLabelStyle())
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .appPageBackground()
             .navigationTitle("能量依据").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
-        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        .presentationDetents([.large])
+        .presentationBackground(AppTheme.pageBackground)
     }
 
     @ViewBuilder
@@ -64,8 +98,14 @@ struct ProgressEnergySourcesView: View {
             if estimate.method == .confirmedLifestyle {
                 LabeledContent("参考生效", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
             }
-            Text("记录写整段训练；总消耗只加去掉与静息重叠后的部分。系数不含当天训练。")
-                .foregroundStyle(.secondary)
+            Text("当天有效系数由总消耗估算除以静息估算得到；日活动记录的卡路里不再额外相加。")
+                .foregroundStyle(AppTheme.accent)
+            if let calculation = estimate.calculation {
+                Text(calculation.input.reference.reason).font(.footnote)
+                ForEach(Array(Set(calculation.reasons)).sorted(), id: \.self) { reason in
+                    Text(reason).font(.footnote).foregroundStyle(AppTheme.accent)
+                }
+            }
         } else {
             Text(day.energy.missingReason ?? "缺少静息资料").foregroundStyle(.secondary)
         }
@@ -94,6 +134,7 @@ struct ProgressEnergySourcesView: View {
         let source = switch estimate.method {
         case .confirmedLifestyle: "个人设置"
         case .defaultReference: "默认参考"
+        case .dynamicActivity: "动态估算"
         }
         return estimate.factor.formatted(.number.precision(.fractionLength(2))) + " · " + source
     }
@@ -102,64 +143,14 @@ struct ProgressEnergySourcesView: View {
         let resting = estimate.restingKilocalories.formatted(.number.precision(.fractionLength(0)))
         let factor = estimate.factor.formatted(.number.precision(.fractionLength(2)))
         let total = estimate.totalKilocalories.formatted(.number.precision(.fractionLength(0)))
+        if let calculation = estimate.calculation {
+            return [calculation.baseline, calculation.walkingDelta, calculation.trainingDelta, calculation.input.correction]
+                .map { $0.formatted(.number.precision(.fractionLength(0))) }.joined(separator: " + ") + " ≈ \(total) kcal"
+        }
         if estimate.trainingNetKilocalories > 0 {
             let net = estimate.trainingNetKilocalories.formatted(.number.precision(.fractionLength(0)))
             return "\(resting) × \(factor) + \(net) ≈ \(total) kcal"
         }
         return "\(resting) × \(factor) ≈ \(total) kcal"
-    }
-}
-
-private struct ProgressLifestyleEditor: View {
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-    @State private var factorText = ""
-    @State private var effectiveFrom = Date.now
-    @State private var errorMessage: String?
-
-    var body: some View {
-        Form {
-            Section("本人确认的初始参考") {
-                HStack {
-                    Button("久坐为主") { factorText = "1.4" }
-                    Spacer()
-                    Button("经常走动") { factorText = "1.7" }
-                    Spacer()
-                    Button("高活动") { factorText = "2.0" }
-                }.buttonStyle(.borderless).font(.subheadline)
-                LabeledContent("有效活动系数") {
-                    TextField("例如 1.4", text: $factorText).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .accessibilityLabel("有效活动系数")
-                }
-                DatePicker("生效日期", selection: $effectiveFrom, in: ...Date.now, displayedComponents: .date)
-                Text("只描述日常怎么过，不含当天训练。默认参考 1.4；已确认的个人设置优先。")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            if let errorMessage {
-                Text(errorMessage).foregroundStyle(AppTheme.warning)
-            }
-        }
-        .navigationTitle("生活方式参考").navigationBarTitleDisplayMode(.inline)
-        .task {
-            do {
-                var query = FetchDescriptor<UserProfile>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
-                query.fetchLimit = 1
-                let profile = try context.fetch(query).first
-                if let last = try EnergyLifestyleStorage.decode(profile?.energyBaselinesData).max(by: { $0.effectiveFrom < $1.effectiveFrom }) {
-                    factorText = last.factor.formatted(.number.grouping(.never))
-                }
-            } catch { errorMessage = AppErrorMessage.message(for: error, operation: .load) }
-        }
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
-                    do {
-                        guard let factor = Double(factorText.replacingOccurrences(of: ",", with: ".")) else { throw EnergyLifestyleError.invalidFactor }
-                        try EnergyLifestyleStore.save(factor: factor, label: "本人确认的生活方式", effectiveFrom: effectiveFrom, in: context)
-                        dismiss()
-                    } catch { errorMessage = AppErrorMessage.message(for: error, operation: .save) }
-                }.disabled(factorText.isEmpty)
-            }
-        }
     }
 }

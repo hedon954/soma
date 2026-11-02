@@ -13,6 +13,8 @@ extension AgentToolName {
 
     private var toolDescription: String {
         switch self {
+        case .recordEnergyContext:
+            "只记录用户明确提供的工作坐/站/走、工时、通勤家务及逐日饮食/训练/携带完整性。不要让用户挑系数，不推测完整性；省略未知项。日期范围最多31日且必须获用户明确确认，生活事实只从范围起日生效，完整性适用于明确范围。可更正同日已有事实；计算留在本机。"
         case .askUserQuestions:
             "需要用户补充事实、选择或确认时提出问题，成功后结束本轮等待回答。每个选项以用户口吻发送；"
                 + "能用已开放工具及确定参数完成的选项绑定 action，否则省略 action 交给下一轮 Agent。"
@@ -94,6 +96,7 @@ extension AgentToolName {
 
     private var toolParameters: JSONSchema {
         switch self {
+        case .recordEnergyContext: AgentEnergyContextSchema.parameters
         case .askUserQuestions:
             AgentUserQuestionsSchema.parameters
         case .proposeTrainingSchedule:
@@ -244,6 +247,7 @@ extension AgentToolName {
                 "rest_seconds": integer("修正后的组间休息秒数"),
                 "duration_minutes": integer("修正后的训练时长分钟数"),
                 "calories": integer("用户在文字或图片中明确提供的训练消耗 kcal；未提供时省略，由本机 MET 公式重算，不要自行估算"),
+                "calories_scope": string("仅按用户明确证据：active 不含静息，gross 含静息；不清楚省略或 unknown，不猜测", values: ["active", "gross", "unknown"]),
                 "form_score": integer("有充分视频证据时的动作评分"),
                 "intensity": string("有证据的负荷判断"),
                 "feedback": string("有证据的动作反馈")
@@ -440,6 +444,7 @@ extension AgentToolName {
                 "rest_seconds": integer("组间休息秒数；用户未说明时填 0"),
                 "duration_minutes": integer("用户明确提供的训练时长分钟数"),
                 "calories": integer("用户在文字或图片中明确提供的训练消耗 kcal；未提供时省略，由本机 MET 公式计算，不要自行估算"),
+                "calories_scope": string("仅按用户明确证据：active 不含静息，gross 含静息；不清楚省略或 unknown，不猜测", values: ["active", "gross", "unknown"]),
                 "form_score": integer("有充分视频证据时的动作评分"),
                 "intensity": string("有证据的负荷判断"),
                 "feedback": string("有证据的动作反馈")

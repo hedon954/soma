@@ -168,6 +168,7 @@ struct ProgressPeriodRecordsView: View {
         do {
             let updated = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
             guard !Task.isCancelled, generation == revision else { return }
+            try EnergyRuntimePersistence.apply(updated.energyUpdates, in: context)
             snapshot = updated
             errorMessage = nil
         } catch is CancellationError {

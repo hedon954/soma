@@ -35,6 +35,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case switchGym = "switch_gym"
     case recordPerformanceAnalysis = "record_performance_analysis"
     case submitFeedback = "submit_feedback"
+    case recordEnergyContext = "record_energy_context"
 
     var isTypedTool: Bool {
         switch self {
@@ -73,7 +74,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
 
     var schemaVersion: Int {
         switch self {
-        case .askUserQuestions, .proposeTrainingSchedule: 1
+        case .askUserQuestions, .proposeTrainingSchedule, .recordEnergyContext: 1
         case .searchExercises,
              .createExercise,
              .updateExercise,
@@ -162,6 +163,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         case .switchGym: "切换健身房"
         case .recordPerformanceAnalysis: "保存视频复盘"
         case .submitFeedback: "提交产品反馈"
+        case .recordEnergyContext: "记录生活与完整性事实"
         }
     }
 }

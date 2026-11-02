@@ -95,6 +95,11 @@ struct SettingsView: View {
 
     private var profileAndTrainingSection: some View {
         Section {
+            NavigationLink { HealthActivitySettingsView() } label: {
+                SettingsHomeRowLabel(item: .health, title: "Apple 健康")
+            }
+            .accessibilityIdentifier("settings-apple-health")
+
             NavigationLink {
                 PersonalBodyInfoView()
             } label: {

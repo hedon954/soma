@@ -19,6 +19,9 @@ struct ProgressHistoryRecord: Sendable {
     let activity: ProgressRecentActivity
     var calories: Double?
     var calorieMET: Double?
+    var activeEnergyKilocalories: Double?
+    var isDailyActivity = false
+    var trainingEvidence: EnergyTrainingEvent?
     var protein: Double?
     var carbs: Double?
     var fat: Double?
@@ -41,6 +44,7 @@ struct ProgressProfileFacts: Sendable {
     var biologicalSex: BiologicalSex
     var baselines: [EnergyLifestyleBaseline]
     var fitnessGoal: FitnessGoal?
+    var energyFacts: EnergyProjectionFacts = .init()
 }
 
 struct ProgressDailyMetrics: Sendable, Identifiable {
@@ -58,12 +62,13 @@ struct ProgressDailyMetrics: Sendable, Identifiable {
     let energy: AdaptiveEnergyOutcome
     let restingFormula: RestingEnergyFormulaInput?
     let usesLaterProfile: Bool
+    var foodConfirmedComplete = false
     var id: Date {
         date
     }
 
     var hasTraining: Bool {
-        records.contains { $0.activity.kind == .workout }
+        records.contains { $0.activity.kind == .workout && !$0.isDailyActivity }
     }
 
     var latestWeight: ProgressHistoryRecord? {
@@ -100,6 +105,9 @@ struct ProgressHistorySnapshot: Sendable {
     let latestWeightKG: Double?
     let fitnessGoal: FitnessGoal?
     let nutritionRings: ProgressNutritionRings?
+    var energyUpdates: [EnergyHistoryUpdate] = []
+    var habitualEnergyFactor: Double?
+    var energyForecasts: [EnergyForecast] = []
 }
 
 enum ProgressHistoryProjection {
@@ -108,6 +116,7 @@ enum ProgressHistoryProjection {
         now: Date = .now, calendar: Calendar = .current
     ) -> ProgressHistorySnapshot {
         let today = calendar.startOfDay(for: now)
+        let runtime = EnergyRuntimeProjection.build(window: window, records: records, profile: profile, now: now, calendar: calendar)
         let visible = records.filter { $0.activity.date <= now && window.contains($0.activity.date) }
         let groups = Dictionary(grouping: visible, by: { calendar.startOfDay(for: $0.activity.date) })
         let weights = records.filter { record in
@@ -120,6 +129,7 @@ enum ProgressHistoryProjection {
             let entries = (groups[cursor] ?? []).sorted { $0.activity.date < $1.activity.date }
             let meals = entries.filter { $0.activity.kind == .meal }
             let workouts = entries.filter { $0.activity.kind == .workout }
+            let recordedActivity = workouts.compactMap(\.activeEnergyKilocalories).last
             let weight = weights.last { $0.activity.date < next }?.weight
             let age = profile?.birthDate.flatMap { calendar.dateComponents([.year], from: $0, to: cursor).year }
             let resting = RestingEnergyCalculator.dailyKilocalories(
@@ -135,22 +145,11 @@ enum ProgressHistoryProjection {
                 intake: .init(meals.map(\.calories), additionalIncompleteCount: meals.count { $0.caloriesArePartial && $0.calories != nil }),
                 protein: .init(meals.map(\.protein)),
                 carbs: .init(meals.map(\.carbs)), fat: .init(meals.map(\.fat)),
-                trainingCalories: .init(workouts.map(\.calories)), volume: .init(workouts.map(\.volume)),
+                trainingCalories: .init(recordedActivity.map { [$0] } ?? workouts.map(\.calories)), volume: .init(workouts.map(\.volume)),
                 logicalSets: workouts.reduce(0) { $0 + max(0, $1.logicalSets) },
-                energy: AdaptiveEnergyEstimator.estimate(
-                    for: cursor, now: now, restingEstimate: resting,
-                    baselines: profile?.baselines ?? [],
-                    trainingNetKilocalories: workouts.reduce(0) { partial, workout in
-                        partial + (TrainingEnergyNetIncrement.kilocalories(
-                            gross: workout.calories,
-                            met: workout.calorieMET,
-                            durationMinutes: workout.durationSeconds.map { $0 / 60 },
-                            dailyResting: resting
-                        ) ?? 0)
-                    },
-                    calendar: calendar
-                ),
-                restingFormula: formula, usesLaterProfile: (profile?.updatedAt ?? .distantPast) >= next
+                energy: runtime.outcomes[cursor] ?? .init(estimate: nil, missingReason: cursor > today ? "尚未发生" : "缺少有效静息消耗，请补充身体资料"),
+                restingFormula: formula, usesLaterProfile: (profile?.updatedAt ?? .distantPast) >= next,
+                foodConfirmedComplete: runtime.completeFoodDays.contains(cursor)
             ))
             cursor = next
         }
@@ -189,7 +188,10 @@ enum ProgressHistoryProjection {
             volume: days.reduce(0) { $0 + $1.volume.value },
             latestWeightKG: latestWeight,
             fitnessGoal: goal,
-            nutritionRings: nutritionRings
+            nutritionRings: nutritionRings, energyUpdates: runtime.updates,
+            habitualEnergyFactor: EnergyReferenceBuilder.habitualFactor(Array(runtime.calculations.values), before: today, calendar: calendar),
+            energyForecasts: EnergyForecastProjection.upcoming(calculations: runtime.calculations, plans: profile?.energyFacts.plannedDays ?? [],
+                                                               on: today, calendar: calendar)
         )
     }
 

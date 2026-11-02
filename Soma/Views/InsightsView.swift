@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct InsightsView: View {
+    @Environment(DailyActivitySyncCoordinator.self) private var activity
+    @State private var activityOwner = UUID()
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(InsightsSnapshotRevisionState.self) private var insightsRevision
@@ -107,7 +109,15 @@ struct InsightsView: View {
                 ProgressEnergySourcesView(snapshot: snapshot)
             }
         }
-        .task(id: request) { await load(request) }
+        .task(id: request) {
+            if window.period == .day {
+                activity.select(date: window.start, owner: activityOwner)
+            } else {
+                activity.releaseSelection(owner: activityOwner)
+            }
+            await load(request)
+        }
+        .onDisappear { activity.releaseSelection(owner: activityOwner) }
         .refreshable { revision += 1 }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in refreshDate() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in refreshDate() }
@@ -191,6 +201,7 @@ struct InsightsView: View {
             let projection = await withTaskCancellationHandler { await local.value } onCancel: { local.cancel() }
             try Task.checkCancellation()
             guard request == key else { return }
+            try EnergyRuntimePersistence.apply(projection.energyUpdates, in: modelContext)
             snapshot = projection
             loadedRequest = key
         } catch is CancellationError {

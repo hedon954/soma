@@ -14,6 +14,7 @@ extension ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
+        guard arguments.caloriesScope != .metGross else { return .failure("MET 口径只能由本地公式产生，请确认提供的是活动消耗还是包含静息的总消耗。") }
         try? BusinessIDAllocator.assignMissingIDs(in: context)
         let definition: ExerciseDefinition
         do {
@@ -133,6 +134,7 @@ extension ConversationRecorder {
             feedback: arguments.feedback?.trimmed.nilIfEmpty,
             estimatedCalories: arguments.calories ?? calorieEstimate?.calories,
             calorieMET: calorieEstimate?.met,
+            calorieScope: arguments.calories == nil ? .metGross : arguments.caloriesScope ?? .unknown,
             calorieDurationMinutes: calorieEstimate?.durationMinutes,
             calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
             sourceTurnID: sourceTurnID,
@@ -359,6 +361,7 @@ extension ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference],
         in context: ModelContext
     ) -> AgentToolResult {
+        guard arguments.caloriesScope != .metGross else { return .failure("MET 口径只能由本地公式产生，请确认提供的是活动消耗还是包含静息的总消耗。") }
         guard let id = recordID(from: arguments) else {
             return .failure("update_workout 需要有效的 record_id。")
         }
@@ -448,7 +451,8 @@ extension ConversationRecorder {
         WorkoutCalorieCalculator.refreshStoredEstimate(
             entry,
             in: context,
-            calorieOverride: arguments.calories
+            calorieOverride: arguments.calories ?? entry.recordedCalorieOverride,
+            calorieScope: arguments.caloriesScope ?? (arguments.calories == nil ? entry.calorieScope : .unknown)
         )
         try? context.save()
         return .success(

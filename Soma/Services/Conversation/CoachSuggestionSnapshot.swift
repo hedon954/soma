@@ -26,6 +26,7 @@ actor CoachSuggestionSnapshotLoader {
         definitionDescriptor.fetchLimit = 2000
 
         var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.externalSource == nil || $0.externalSource != "appleHealth" },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         workoutDescriptor.fetchLimit = 100

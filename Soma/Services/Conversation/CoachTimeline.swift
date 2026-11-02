@@ -153,7 +153,7 @@ enum CoachTimelineLoader {
             return []
         }
         var workouts = FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate { $0.date >= start && $0.date < end }
+            predicate: #Predicate { ($0.externalSource == nil || $0.externalSource != "appleHealth") && $0.date >= start && $0.date < end }
         )
         workouts.fetchLimit = 200
         var meals = FetchDescriptor<MealEntry>(

@@ -35,6 +35,11 @@ private struct AgentToolSignatureArguments {
     private(set) var values: [String: Any] = [:]
 
     init(_ arguments: AgentToolArguments) {
+        if let energy = arguments.energyContext, let data = try? EnergyInputCoding.encode(energy),
+           let object = try? JSONSerialization.jsonObject(with: data)
+        {
+            values["energy_context"] = object
+        }
         if let questions = arguments.questions,
            let data = try? JSONEncoder().encode(questions),
            let object = try? JSONSerialization.jsonObject(with: data)
@@ -93,6 +98,7 @@ private struct AgentToolSignatureArguments {
         put("meal_type", arguments.mealType)
         put("title", arguments.title)
         put("calories", arguments.calories)
+        put("calories_scope", arguments.caloriesScope?.rawValue)
         put("protein", arguments.protein)
         put("carbs", arguments.carbs)
         put("fat", arguments.fat)
@@ -276,6 +282,9 @@ private struct AgentToolSignatureArguments {
         }
         if let calories = item.calories {
             row["calories"] = calories
+        }
+        if let scope = item.caloriesScope {
+            row["calories_scope"] = scope.rawValue
         }
         if let score = item.formScore {
             row["form_score"] = score

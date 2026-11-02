@@ -50,9 +50,11 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
     var formScore: Int? = nil
     var intensity: String? = nil
     var feedback: String? = nil
+    var caloriesScope: WorkoutCalorieScope? = nil
     var calories: Int? = nil
 
     enum CodingKeys: String, CodingKey {
+        case caloriesScope = "calories_scope"
         case intensity, feedback, laterality, calories
         case exerciseID = "exercise_id"
         case targetKind = "target_kind"
@@ -75,7 +77,8 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
             formScore: formScore,
             intensity: intensity,
             feedback: feedback,
-            calories: calories
+            calories: calories,
+            caloriesScope: caloriesScope
         )
     }
 
@@ -94,6 +97,7 @@ struct AgentWorkoutCreateInput: Codable, Equatable {
             formScore: arguments.formScore,
             intensity: arguments.intensity,
             feedback: arguments.feedback,
+            caloriesScope: arguments.caloriesScope,
             calories: arguments.calories
         )
     }
@@ -143,6 +147,7 @@ struct AgentMutationPayload: Codable, Equatable {
     var feedback: String? = nil
     var mealType: String? = nil
     var title: String? = nil
+    var caloriesScope: WorkoutCalorieScope? = nil
     var calories: Int? = nil
     var protein: Double? = nil
     var carbs: Double? = nil
@@ -159,6 +164,7 @@ struct AgentMutationPayload: Codable, Equatable {
     var safetyNote: String? = nil
 
     enum CodingKeys: String, CodingKey {
+        case caloriesScope = "calories_scope"
         case intensity, feedback, laterality, title, calories, protein, carbs, fat, items, note, weight, waist
         case exerciseID = "exercise_id"
         case exerciseName = "exercise_name"
@@ -194,6 +200,7 @@ extension AgentMutationPayload {
             mealType: mealType,
             title: title,
             calories: calories,
+            caloriesScope: caloriesScope,
             protein: protein,
             carbs: carbs,
             fat: fat,
@@ -264,6 +271,7 @@ struct AgentTemplateExerciseInput: Codable, Equatable, Sendable {
 }
 
 struct AgentToolArguments: Codable, Equatable {
+    var energyContext: EnergyContextPatch?
     var questions: [AgentUserQuestion]?
     var scheduleName: String?
     var scheduleAnchorDate: String?
@@ -307,6 +315,7 @@ struct AgentToolArguments: Codable, Equatable {
 
     var mealType: String?
     var title: String?
+    var caloriesScope: WorkoutCalorieScope?
     var calories: Int?
     var protein: Double?
     var carbs: Double?
@@ -341,6 +350,8 @@ struct AgentToolArguments: Codable, Equatable {
     var workouts: [AgentWorkoutCreateInput]?
 
     enum CodingKeys: String, CodingKey {
+        case caloriesScope = "calories_scope"
+        case energyContext = "energy_context"
         case questions
         case scheduleName = "name"
         case scheduleAnchorDate = "anchor_date"
@@ -426,6 +437,7 @@ struct AgentToolArguments: Codable, Equatable {
         mealType: String? = nil,
         title: String? = nil,
         calories: Int? = nil,
+        caloriesScope: WorkoutCalorieScope? = nil,
         protein: Double? = nil,
         carbs: Double? = nil,
         fat: Double? = nil,
@@ -459,8 +471,10 @@ struct AgentToolArguments: Codable, Equatable {
         questions: [AgentUserQuestion]? = nil,
         scheduleName: String? = nil,
         scheduleAnchorDate: String? = nil,
-        scheduleSlots: [TrainingScheduleDraftSlotArgument]? = nil
+        scheduleSlots: [TrainingScheduleDraftSlotArgument]? = nil,
+        energyContext: EnergyContextPatch? = nil
     ) {
+        self.energyContext = energyContext
         self.questions = questions
         self.scheduleName = scheduleName
         self.scheduleAnchorDate = scheduleAnchorDate
@@ -501,6 +515,7 @@ struct AgentToolArguments: Codable, Equatable {
         self.feedback = feedback
         self.mealType = mealType
         self.title = title
+        self.caloriesScope = caloriesScope
         self.calories = calories
         self.protein = protein
         self.carbs = carbs

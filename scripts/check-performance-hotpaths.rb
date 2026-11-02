@@ -388,7 +388,8 @@ end
 progress_loader = File.read(File.join(ROOT, service_file("ProgressHistoryLoader.swift")))
 unless progress_loader.include?("@ModelActor") && progress_loader.include?("descriptor.fetchLimit = 256") &&
        progress_loader.include?("descriptor.fetchOffset") && progress_loader.include?("try Task.checkCancellation()") &&
-       progress_loader.scan(/\$0.date >= start && \$0.date < end/).length == 3
+       progress_loader.scan(/\$0.date >= start && \$0.date < end/).length == 5 &&
+       progress_loader.include?("value: -56, to: window.start")
   fail_check("Insights history lost bounded date queries or cancellable pagination")
 end
 if progress_loader.match?(/\.(performances|workoutSets|efforts)\b/) || insights_source.include?("modelContext.fetch(")
@@ -424,11 +425,11 @@ healthkit_paths = %w[
   Soma/Services/Health/HealthEnergyReader.swift
 ]
 if healthkit_paths.any? { |path| File.exist?(File.join(ROOT, path)) }
-  fail_check("HealthKit import or energy readers returned after PRD 060")
+  fail_check("PRD 075 permits daily projections only; legacy HealthKit importers must not return")
 end
 settings_source = File.read(File.join(ROOT, "Soma/Views/SettingsView.swift"))
 if settings_source.include?("HealthDataIntegrationsView") || settings_source.include?("健康数据与设备")
-  fail_check("Settings restored the HealthKit integrations page")
+  fail_check("PRD 075 does not restore the legacy HealthKit integrations page")
 end
 fail_check("SettingsView restored root trace counting") if settings_source.include?("AgentTraceCountLabel")
 if settings_source.include?("ai.hasRequiredAPIKey")

@@ -26,6 +26,7 @@ struct ProgressRecentActivity: Identifiable, Sendable {
     let title: String
     let detail: String
     let metric: String?
+    var isDailyActivity = false
 
     static func workout(
         id: UUID,
@@ -61,7 +62,14 @@ struct ProgressRecentActivity: Identifiable, Sendable {
     }
 
     static func workout(_ entry: WorkoutEntry) -> ProgressRecentActivity {
-        workout(
+        if let day = entry.dailyActivity {
+            let detail = [DailyActivityMetricKind.steps, .walkingRunningDistance].compactMap { kind in
+                day[kind].value.map { "\(kind.displayValue($0)) \(kind.unit)" }
+            }.joined(separator: " · ")
+            return .init(id: entry.id, kind: .workout, date: entry.date, title: "日常活动", detail: detail,
+                         metric: day[.activeEnergy].value.map { "\(DailyActivityMetricKind.activeEnergy.displayValue($0)) kcal" }, isDailyActivity: true)
+        }
+        return workout(
             id: entry.id,
             date: entry.date,
             title: entry.exercise,
@@ -72,7 +80,10 @@ struct ProgressRecentActivity: Identifiable, Sendable {
     }
 
     var icon: String {
-        switch kind {
+        if isDailyActivity {
+            return "figure.walk"
+        }
+        return switch kind {
         case .workout: "dumbbell.fill"
         case .meal: "fork.knife"
         case .body: "scalemass.fill"
@@ -214,10 +225,46 @@ struct ProgressConclusionCard: View {
 }
 
 struct ProgressRecentActivityRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let activity: ProgressRecentActivity
     var showsDisclosure = true
 
     var body: some View {
+        Group {
+            if activity.isDailyActivity, dynamicTypeSize.isAccessibilitySize {
+                dailyAccessibilityRow
+            } else {
+                horizontalRow
+            }
+        }
+        .frame(minHeight: activity.metric?.contains("\n") == true ? 72 : 64)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(activity.isDailyActivity ? "daily-activity-record" : "progress-activity-\(activity.id)")
+    }
+
+    private var dailyAccessibilityRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: activity.icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(activity.tint)
+                .frame(width: 40, height: 40)
+                .background(activity.softTint, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(activity.title).font(.subheadline.weight(.semibold))
+                Text(activity.detail).font(.caption).foregroundStyle(.secondary)
+                if let metric = activity.metric {
+                    Text(metric).font(.subheadline.monospacedDigit())
+                }
+                Text(dateText).font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var horizontalRow: some View {
         HStack(spacing: 12) {
             Image(systemName: activity.icon)
                 .font(.subheadline.weight(.semibold))
@@ -233,7 +280,7 @@ struct ProgressRecentActivityRow: View {
                 Text(activity.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(activity.isDailyActivity ? nil : 1)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
@@ -254,12 +301,12 @@ struct ProgressRecentActivityRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .frame(minHeight: activity.metric?.contains("\n") == true ? 72 : 64)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
     }
 
     private var dateText: String {
+        if activity.isDailyActivity {
+            return activity.date.formatted(.dateTime.month().day())
+        }
         if Calendar.current.isDateInToday(activity.date) {
             return activity.date.formatted(date: .omitted, time: .shortened)
         }

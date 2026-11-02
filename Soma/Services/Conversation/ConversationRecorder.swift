@@ -48,6 +48,8 @@ enum ConversationRecorder {
             )
         }
         return switch call.name {
+        case .recordEnergyContext:
+            AgentEnergyContextTool.execute(call.arguments, sourceDate: resolvedSourceDate, sourceTurnID: sourceTurnID, in: context)
         case .searchExercises, .createExercise, .updateExercise,
              .archiveExercise, .mergeExercises, .listWorkouts,
              .getWorkout, .createWorkout, .updateWorkout, .deleteWorkout, .listMeals,

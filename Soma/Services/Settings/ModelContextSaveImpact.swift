@@ -18,6 +18,8 @@ enum ModelContextSaveImpact {
         GymProfile.self,
         GymEquipment.self,
         UserProfile.self,
+        EnergyContextEntry.self,
+        EnergyEvidenceEntry.self,
         ExerciseDefinition.self,
         ExercisePerformance.self,
         WorkoutSession.self,
@@ -55,6 +57,25 @@ enum ModelContextSaveImpact {
             return false
         }
         return affects(notification, entities: insightsEntities)
+    }
+
+    static func affectsEnergyInputs(_ notification: Notification, in context: ModelContext) -> Bool {
+        guard belongsToSameContainer(notification, as: context) else { return false }
+        let inputs = entityNames([WorkoutEntry.self, MealEntry.self, BodyEntry.self, UserProfile.self,
+                                  EnergyContextEntry.self, TrainingSchedule.self, TrainingProgram.self,
+                                  TemplateExercise.self, TemplateSetPrescription.self, ExerciseDefinition.self])
+        if affects(notification, entities: inputs) {
+            return true
+        }
+        if affects(notification, entities: entityNames([WorkoutSession.self]), in: context, where: { ($0 as? WorkoutSession)?.endedAt != nil }) {
+            return true
+        }
+        let info = notification.userInfo ?? [:]
+        return changedIdentifiers(in: info).filter { $0.entityName == "EnergyEvidenceEntry" }.contains { identifier in
+            guard let entry = context.model(for: identifier) as? EnergyEvidenceEntry else { return true }
+            return entry.kindRaw == EnergyEvidenceKind.healthActivity.rawValue || entry.kindRaw == EnergyEvidenceKind.calibration.rawValue
+                || entry.kindRaw == EnergyEvidenceKind.association.rawValue
+        }
     }
 
     static func affectsExerciseHistory(

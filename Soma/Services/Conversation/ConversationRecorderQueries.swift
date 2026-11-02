@@ -368,6 +368,7 @@ extension ConversationRecorder {
         limit: Int? = nil
     ) -> [WorkoutEntry] {
         var descriptor = FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.externalSource == nil || $0.externalSource != "appleHealth" },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         descriptor.fetchLimit = limit
@@ -467,7 +468,7 @@ extension ConversationRecorder {
         if arguments.sort != "name" {
             descriptor.fetchLimit = queryFetchLimit(arguments, pageSize: limit)
         }
-        return (try? context.fetch(descriptor)) ?? []
+        return ((try? context.fetch(descriptor)) ?? []).filter { !$0.isDailyActivity }
     }
 
     static func queryMeals(
@@ -573,7 +574,7 @@ extension ConversationRecorder {
             predicate: #Predicate { $0.businessID == businessID }
         )
         descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        return (try? context.fetch(descriptor).first).flatMap { $0.isDailyActivity ? nil : $0 }
     }
 
     static func meal(

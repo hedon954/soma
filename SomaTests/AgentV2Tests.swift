@@ -11,7 +11,7 @@ final class AgentV2Tests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(tools.count, 28)
+        XCTAssertEqual(tools.count, 29)
         XCTAssertEqual(
             Set(tools.filter { $0.schemaVersion == 4 }),
             [.searchExercises, .createExercise, .updateExercise, .createWorkout, .updateWorkout]
@@ -20,9 +20,9 @@ final class AgentV2Tests: XCTestCase {
             Set(tools.filter { $0.schemaVersion == 3 }),
             [.getProgram, .createProgram, .updateProgram]
         )
-        XCTAssertEqual(tools.filter { $0.schemaVersion == 1 }, [.proposeTrainingSchedule])
+        XCTAssertEqual(tools.filter { $0.schemaVersion == 1 }, [.recordEnergyContext, .proposeTrainingSchedule])
         XCTAssertTrue(tools.allSatisfy {
-            $0 == .proposeTrainingSchedule || (2 ... 4).contains($0.schemaVersion)
+            [.proposeTrainingSchedule, .recordEnergyContext].contains($0) || (2 ... 4).contains($0.schemaVersion)
         })
         XCTAssertTrue(tools.contains(.updateMeal))
     }

@@ -248,6 +248,33 @@ function recordDomainDefinitions(): DeviceToolDefinition[] {
 
 const definitions: DeviceToolDefinition[] = [
   {
+    name: "record_energy_context",
+    description: "只记录用户明确的生活事实和日期范围内的完整性，不向模型返回健康依据或消耗系数。",
+    schemaVersion: 1,
+    mutation: true,
+    parameters: parameters({
+      date_from: stringValue,
+      date_to: stringValue,
+      energy_context: {
+        type: "object",
+        properties: {
+          work_posture: { type: "string", enum: ["sitting", "standing", "walking"] },
+          work_hours: numberValue,
+          work_days_per_week: integerValue,
+          commuting_description: stringValue,
+          commuting_walk_minutes: numberValue,
+          housework_description: stringValue,
+          housework_minutes: numberValue,
+          food_complete: booleanValue,
+          training_complete: booleanValue,
+          walking_coverage_complete: booleanValue,
+          fluid_change_concern: booleanValue,
+        },
+        additionalProperties: false,
+      },
+    }, ["energy_context"]),
+  },
+  {
     name: "ask_user_questions",
     schemaVersion: 1,
     mutation: false,
@@ -439,6 +466,7 @@ const definitions: DeviceToolDefinition[] = [
               rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
               duration_minutes: { type: "integer", minimum: 0, maximum: 1_440 },
               calories: integerValue,
+        calories_scope: { type: "string", enum: ["active", "gross", "unknown"] },
               form_score: { type: "integer", minimum: 0, maximum: 100 },
               intensity: stringValue,
               feedback: stringValue,
@@ -589,6 +617,7 @@ const definitions: DeviceToolDefinition[] = [
         rest_seconds: { type: "integer", minimum: 0, maximum: 3_600 },
         duration_minutes: { type: "integer", minimum: 0, maximum: 1_440 },
         calories: integerValue,
+        calories_scope: { type: "string", enum: ["active", "gross", "unknown"] },
         form_score: { type: "integer", minimum: 0, maximum: 100 },
         intensity: stringValue,
         feedback: stringValue,

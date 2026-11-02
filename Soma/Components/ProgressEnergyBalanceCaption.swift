@@ -19,13 +19,13 @@ struct ProgressEnergyBalanceCaption: View {
         .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
         .background(AppTheme.mealSoftTint, in: RoundedRectangle(cornerRadius: 18))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("当前热量缺口")
+        .accessibilityLabel(summary.metricLabel)
         .accessibilityValue(summary.accessibilityValue)
         .accessibilityIdentifier("progress-energy-balance-caption")
     }
 
     private var caption: Text {
-        let deficit = Text("当前热量缺口 ")
+        let deficit = Text(summary.metricLabel + " ")
             + Text(summary.valueText).foregroundColor(summary.kilocalories == nil ? AppTheme.accent : AppTheme.energyDeficitText)
             + Text(summary.kilocalories == nil ? "" : " kcal")
         guard let remaining = summary.remainingIntakeText else { return deficit }

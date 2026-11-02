@@ -48,7 +48,7 @@ enum AgentContextPackBuilder {
             sort: \WorkoutEntry.date,
             limit: 80,
             in: context
-        )
+        ).filter { !$0.isDailyActivity }
         let meals = fetchRecent(
             MealEntry.self,
             sort: \MealEntry.date,
@@ -89,6 +89,7 @@ enum AgentContextPackBuilder {
             "工具只使用 Int64 record_id / exercise_id / program_id / session_id；不要使用 UUID，也不要跨类型套用。"
         ]
         sections.append(profileLine(profiles.first, latestBody: latestWeightBody))
+        sections.append(EnergyContextPrompt.userFacts(in: context, date: businessDate, calendar: calendar))
         if focus == .full || focus == .workouts {
             sections.append(gymLine(gyms: gyms, equipment: equipment))
             sections.append(dayWorkoutLine(

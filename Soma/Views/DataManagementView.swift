@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct DataManagementView: View {
     @Environment(DataManagementCoordinator.self) private var coordinator
+    @Environment(DailyActivitySyncCoordinator.self) private var healthActivity
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationSessionController.self) private var conversationSessions
     @State private var folderPurpose: FolderPurpose?
@@ -328,12 +329,13 @@ struct DataManagementView: View {
             try await coordinator.restore(
                 from: pending.directoryURL,
                 password: pending.password,
-                dataSpace: dataSpace
+                dataSpace: dataSpace,
+                healthActivity: healthActivity
             )
             resolvePersonalSessionIfActive()
             notice = DataManagementNotice(
                 title: "恢复完成",
-                message: "个人数据和媒体已从备份恢复。"
+                message: "个人数据和媒体已从备份恢复。" + healthCleanupNotice
             )
         } catch {
             showError(error)
@@ -344,17 +346,22 @@ struct DataManagementView: View {
         Task {
             do {
                 let result = try await coordinator.clearPersonalData(
-                    dataSpace: dataSpace
+                    dataSpace: dataSpace,
+                    healthActivity: healthActivity
                 )
                 resolvePersonalSessionIfActive()
                 notice = DataManagementNotice(
                     title: "个人数据已清除",
-                    message: "已删除 \(result.deletedModelCount) 条本机数据和 \(result.deletedMediaCount) 个专属媒体；外部备份仍然保留。"
+                    message: "已删除 \(result.deletedModelCount) 条本机数据和 \(result.deletedMediaCount) 个专属媒体；外部备份仍然保留。" + healthCleanupNotice
                 )
             } catch {
                 showError(error)
             }
         }
+    }
+
+    private var healthCleanupNotice: String {
+        healthActivity.needsCleanup ? "Apple 健康读取已停止，连接设置清除失败；请在 Soma 的 Apple 健康设置中重试断开。" : ""
     }
 
     private func showError(_ error: Error) {

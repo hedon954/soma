@@ -132,7 +132,11 @@ struct WorkoutRecordDetailView: View {
     let workout: WorkoutEntry
 
     var body: some View {
-        WorkoutRecordEditor(workout: workout)
+        if workout.isDailyActivity {
+            DailyActivityRecordDetailView(workout: workout)
+        } else {
+            WorkoutRecordEditor(workout: workout)
+        }
     }
 }
 
@@ -165,6 +169,7 @@ private struct WorkoutRecordEditor: View {
     @State private var calorieMET: String
     @State private var calorieDurationMinutes: String
     @State private var calorieDurationEstimated: Bool
+    @State private var calorieScope: WorkoutCalorieScope
     @State private var formScore: String
     @State private var intensity: String
     @State private var feedback: String
@@ -191,6 +196,7 @@ private struct WorkoutRecordEditor: View {
         _calorieMET = State(initialValue: EditorValue.string(workout.calorieMET))
         _calorieDurationMinutes = State(initialValue: EditorValue.string(workout.calorieDurationMinutes))
         _calorieDurationEstimated = State(initialValue: workout.calorieDurationEstimated)
+        _calorieScope = State(initialValue: workout.calorieScope)
         _formScore = State(initialValue: EditorValue.string(workout.formScore))
         _intensity = State(initialValue: workout.intensity ?? "")
         _feedback = State(initialValue: workout.feedback ?? "")
@@ -301,6 +307,16 @@ private struct WorkoutRecordEditor: View {
                         text: $estimatedCalories,
                         keyboard: .numberPad
                     )
+                    .onChange(of: estimatedCalories) { _, value in
+                        if EditorValue.int(value) != workout.estimatedCalories, calorieScope == .metGross {
+                            calorieScope = .unknown
+                        }
+                    }
+                    Picker("消耗口径", selection: $calorieScope) {
+                        ForEach(WorkoutCalorieScope.allCases.filter { $0 != .metGross || calorieScope == .metGross }, id: \.self) { scope in
+                            Text(scope.label).tag(scope)
+                        }
+                    }
                     LabeledContent(
                         "MET",
                         value: EditorValue.double(calorieMET)?.formatted(
@@ -420,6 +436,7 @@ private struct WorkoutRecordEditor: View {
             || EditorValue.int(durationMinutes) != workout.durationMinutes
             || EditorValue.int(formScore) != workout.formScore
             || EditorValue.int(estimatedCalories) != workout.estimatedCalories
+            || calorieScope != workout.calorieScope
             || EditorValue.optionalText(intensity) != workout.intensity
             || EditorValue.optionalText(feedback) != workout.feedback
             || notes.trimmingCharacters(in: .whitespacesAndNewlines) != workout.notes
@@ -457,6 +474,7 @@ private struct WorkoutRecordEditor: View {
         calorieMET = EditorValue.string(workout.calorieMET)
         calorieDurationMinutes = EditorValue.string(workout.calorieDurationMinutes)
         calorieDurationEstimated = workout.calorieDurationEstimated
+        calorieScope = workout.calorieScope
     }
 
     private func save() {
@@ -503,12 +521,14 @@ private struct WorkoutRecordEditor: View {
         WorkoutCalorieCalculator.refreshStoredEstimate(
             workout,
             in: modelContext,
-            calorieOverride: EditorValue.int(estimatedCalories)
+            calorieOverride: EditorValue.int(estimatedCalories),
+            calorieScope: calorieScope
         )
         estimatedCalories = EditorValue.string(workout.estimatedCalories)
         calorieMET = EditorValue.string(workout.calorieMET)
         calorieDurationMinutes = EditorValue.string(workout.calorieDurationMinutes)
         calorieDurationEstimated = workout.calorieDurationEstimated
+        calorieScope = workout.calorieScope
         try? modelContext.save()
     }
 }
