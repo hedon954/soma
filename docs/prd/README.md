@@ -1,7 +1,7 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.29`、`0.0.27`、`0.0.26`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.30`、`0.0.27`、`0.0.26`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
 产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.25 及更早的**原文**在
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.26 → 0.0.27 → 0.0.29
+[PRD 000 压缩起点] → 0.0.26 → 0.0.27 → 0.0.30
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -37,8 +37,8 @@
 | [072](072-coach-training-schedule-draft.md) | 0.0.27 | 已采纳，已实现 |
 | [073](073-training-session-pages.md) | 0.0.27 | 已采纳，已实现 |
 | [074](074-composable-training.md) | 0.0.27 | 已采纳，已实现 |
-| [075](075-healthkit-daily-activity.md) | 0.0.29 | 已实现；真机数据待验收 |
-| [076](076-adaptive-energy-system.md) | 0.0.29 | 已实现；真机数据待验收 |
+| [075](075-healthkit-daily-activity.md) | 0.0.30 | 已实现；真机数据待验收 |
+| [076](076-adaptive-energy-system.md) | 0.0.30 | 已实现；真机数据待验收 |
 
 ## 阅读约定
 
@@ -71,7 +71,7 @@
 | [073](073-training-session-pages.md) | 已采纳，已实现 | 训练页最近训练按 14 条分页，不再固定 3 条 |
 | [074](074-composable-training.md) | 已采纳，已实现 | 动作、课程和计划按天组合，无需先建课程 |
 
-## 0.0.29 新增需求
+## 0.0.30 新增需求
 
 | 文档 | 状态 | 范围 |
 | --- | --- | --- |

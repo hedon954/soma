@@ -2,7 +2,7 @@
 
 - 状态：已采纳并实现；真机数据待验收
 - 日期：2026-11-02
-- 版本：0.0.29
+- 版本：0.0.30
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)（消耗估算、生活事实、记录完整性与审查边界）、[工程契约](../../CLAUDE.md)
 - 上游依据：[消耗体系研究](../research/2026-11-02-soma-energy-expenditure-system.md)
 - 下游落地：[ADR 0145](../adr/0145-adaptive-energy-system.md)

@@ -85,3 +85,7 @@
 ### 2026-11-03 远端格式门禁修复
 
 本机 SwiftFormat 0.62.1 与远端新规则存在差异。已升级为 0.64.5，在配置声明最低版本，机械格式调整单独提交 b676be2；make check 通过。正式发布目标改为 v0.0.29/build 33；0.0.28 未发布且不重写标签。0.0.29 的 make verify 已通过，965 XCTest、8 Swift Testing、构建零警告；SwiftLint 同步至 0.65.1 后 make check 也通过。待 GitHub CI/Release 和真机安装完成。手机仍锁定，解锁请求保持待处理。
+
+### 固定远端工具后的正式交付
+
+v0.0.29 候选的 CI 因 runner 预装工具不满足最低版本失败，已取消 Release，保留候选标签。新增官方二进制 SHA-256 校验与固定版本安装脚本，CI/Release 共用；本机按该脚本运行 make verify 通过 965 XCTest、8 Swift Testing，构建零警告。修复提交 c0bf463 的远端 CI 41510714848 成功；v0.0.30/build 34 完整 make verify 再次成功，待正式发布工作流。手机安装实际尝试因锁屏无法挂载开发磁盘而失败；没有覆盖安装成功，仍等待解锁。

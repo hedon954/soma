@@ -2,7 +2,7 @@
 
 - 状态：已采纳并实现；真机数据待验收
 - 日期：2026-11-02
-- 版本：0.0.29
+- 版本：0.0.30
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（生活系数、消耗投影和新增事实边界）、[工程契约](../../CLAUDE.md)
 - 上游依据：[PRD 076](../prd/076-adaptive-energy-system.md)、[消耗体系研究](../research/2026-11-02-soma-energy-expenditure-system.md)
 - 下游落地：[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)

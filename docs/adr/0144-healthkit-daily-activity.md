@@ -2,7 +2,7 @@
 
 - 状态：已采纳并实现；真机数据待验收
 - 日期：2026-10-21
-- 版本：0.0.29
+- 版本：0.0.30
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（日汇总无样本 cursor；自然日覆盖与真实来源）、[工程契约](../../CLAUDE.md)（三项只读接入）
 - 上游依据：[PRD 075](../prd/075-healthkit-daily-activity.md)、[HealthKit 调研](../research/2026-10-20-healthkit-daily-activity.md)
