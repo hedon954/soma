@@ -39,6 +39,11 @@ jobs:
       - name: Install development tools
         run: brew bundle --file Brewfile
 
+      - name: Install pinned SwiftFormat
+        run: |
+          ./scripts/install-ci-swiftformat.sh "$RUNNER_TEMP/soma-tools"
+          echo "$RUNNER_TEMP/soma-tools" >> "$GITHUB_PATH"
+
       - name: Install Agent server dependencies
         run: npm --prefix Server ci
 
