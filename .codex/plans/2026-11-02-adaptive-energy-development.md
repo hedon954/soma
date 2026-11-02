@@ -77,7 +77,11 @@
 
 1. 最后审查并运行发布版本完整 make verify（含刚补的日活动与计划回归）；保存 UI 附件后避免结果覆盖。
 2. 按可审查逻辑拆提交：纯模型/算法；持久化与只读健康基础；聊天/运行时/UI 集成；发布文档和版本归档。新纯 EnergyInputCoding 与 WorkoutCalorieScope 已与持久化扩展拆文件，方便独立提交。
-3. 审核最终差异和无真实健康/凭据，Conventional 中文提交，scripts/verify-release.sh v0.0.28，annotated tag，push，等待 CI/Release 成功，读取正式发布元数据。
+3. 代码已分四次提交并推送。v0.0.28 候选标签的 GitHub 格式门禁失败，Release 已取消且未创建发布；保持旧标签不变，统一 SwiftFormat 0.64.5 后以 v0.0.29/build 33 重新完整验证和发布。
 4. 指定 iPhone 17 Pro Max make install-device，查询已安装 top.hedon.soma 的 version/build；保留个人库、不自动启动。所有这些完成之前目标保持 active。
 
 发布门禁：v0.0.28/build 32 的 make verify 全部通过，965 XCTest、8 Swift Testing，构建零警告。代码已按内核、健康持久化、产品集成分三次提交；发布元数据单独收口。签名团队与旧 App 一致且本机证书有效至 2027 年。开发磁盘挂载被手机锁定阻止，已请求维护者解锁；此状态不是安装成功。
+
+### 2026-11-03 远端格式门禁修复
+
+本机 SwiftFormat 0.62.1 与远端新规则存在差异。已升级为 0.64.5，在配置声明最低版本，机械格式调整单独提交 b676be2；make check 通过。正式发布目标改为 v0.0.29/build 33；0.0.28 未发布且不重写标签。0.0.29 的 make verify 已通过，965 XCTest、8 Swift Testing、构建零警告；SwiftLint 同步至 0.65.1 后 make check 也通过。待 GitHub CI/Release 和真机安装完成。手机仍锁定，解锁请求保持待处理。

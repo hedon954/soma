@@ -544,7 +544,7 @@ DailyActivityUITests 在 iPhone 17 Pro、iPhone 16e 和 iPad Pro 11-inch 各 2 �
 已覆盖安装 0.0.27（31）Debug 至 iPhone 17 Pro Max；签名 HealthKit entitlement 和当前代码输入指纹核对通过。
 设备上的实际授权、COROS 对照与真实健康同步结果未验收。
 
-## 0.0.28 本地验证证据
+## 0.0.29 本地验证证据
 
 - 完整 `make verify`：965 项 XCTest、8 项 Swift Testing，静态检查、Server 测试、模拟器构建与测试通过，构建零警告。
 - 虚构数据界面：iPhone 17 Pro 浅/深主题的训练关联、事实编辑保存、暂停；Accessibility XXXL 键盘与滚动；iPhone 16e 小屏、iPad 11 寸大字号；每日三项运动记录和设置页均通过。
