@@ -275,8 +275,8 @@ final class ConversationRecorderToolTests: XCTestCase {
     }
 }
 
+@MainActor
 extension ConversationRecorderToolTests {
-    @MainActor
     func testAgentToolsPersistMixedMediaCollections() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(

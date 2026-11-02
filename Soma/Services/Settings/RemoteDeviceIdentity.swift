@@ -296,12 +296,10 @@ final class RemoteDeviceIdentity: @unchecked Sendable {
         ]
         var result: CFTypeRef?
         guard SecItemCopyMatching(
-            query as CFDictionary,
-            &result
-        ) == errSecSuccess else {
-            return nil
-        }
-        guard let result,
+                  query as CFDictionary,
+                  &result
+              ) == errSecSuccess,
+              let result,
               CFGetTypeID(result) == SecKeyGetTypeID()
         else {
             return nil

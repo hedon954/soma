@@ -959,13 +959,13 @@ final class WorkoutCameraService: NSObject, WorkoutRecordingControlling {
     func cameraPermissionGranted() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            return true
+            true
         case .notDetermined:
-            return await AVCaptureDevice.requestAccess(for: .video)
+            await AVCaptureDevice.requestAccess(for: .video)
         case .denied, .restricted:
-            return false
+            false
         @unknown default:
-            return false
+            false
         }
     }
 }

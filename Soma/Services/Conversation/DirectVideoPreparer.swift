@@ -44,8 +44,8 @@ enum DirectVideoPreparer {
         } onCancel: {
             sendableExporter.value.cancelExport()
         }
-        guard !Task.isCancelled else { return nil }
-        guard completed,
+        guard !Task.isCancelled,
+              completed,
               let size = try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
               size > 0, size <= capability.maximumRawBytes,
               let data = try? Data(contentsOf: temporaryURL),

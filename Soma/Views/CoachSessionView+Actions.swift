@@ -53,8 +53,8 @@ extension CoachSessionView {
 
     func consumeCoachSendIfNeeded() {
         guard let text = CoachComposerCommand.pendingSend,
-              [ScheduleDraftAnswerText.opening, CoachComposerCommand.energyContextOpening].contains(text) else { return }
-        guard !composer.isPersistingSubmission else { return }
+              [ScheduleDraftAnswerText.opening, CoachComposerCommand.energyContextOpening].contains(text),
+              !composer.isPersistingSubmission else { return }
         if text == CoachComposerCommand.energyContextOpening {
             composer.selectedShortcutID = nil
         }
@@ -363,8 +363,7 @@ extension CoachSessionView {
         _ proxy: ScrollViewProxy,
         targetMessageID: UUID? = nil
     ) {
-        guard isProcessingHere else { return }
-        guard visibility.tailScroll.followState.isFollowing else { return }
+        guard isProcessingHere, visibility.tailScroll.followState.isFollowing else { return }
         let performanceInterval = AppPerformance.begin(
             .agentProjection,
             detail: "phase=stream-scroll"

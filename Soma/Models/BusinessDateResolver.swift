@@ -76,13 +76,13 @@ enum BusinessDateResolver {
         ]
         for (pattern, includesYear) in patterns {
             guard let components = dateComponents(
-                matching: pattern,
-                in: text,
-                includesYear: includesYear,
-                turnSentAt: turnSentAt,
-                calendar: calendar
-            ) else { continue }
-            guard let date = calendar.date(from: components),
+                      matching: pattern,
+                      in: text,
+                      includesYear: includesYear,
+                      turnSentAt: turnSentAt,
+                      calendar: calendar
+                  ),
+                  let date = calendar.date(from: components),
                   calendar.component(.year, from: date) == components.year,
                   calendar.component(.month, from: date) == components.month,
                   calendar.component(.day, from: date) == components.day

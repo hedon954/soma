@@ -234,7 +234,7 @@ extension GuidedWorkoutCoordinator {
         }
         guard let performance = currentPerformance(for: session, in: context),
               let previousSet = sets(for: performance, in: context)
-              .last(where: { $0.order < set.order })
+                  .last(where: { $0.order < set.order })
         else { return }
         previousSet.actualRestSeconds = elapsed
     }
@@ -312,8 +312,7 @@ extension GuidedWorkoutCoordinator {
     }
 
     func releaseCameraIfNotNeeded(in context: ModelContext) async {
-        guard recordingSetID == nil, !isStartingRecording else { return }
-        guard !shouldCaptureCurrentEffort(in: context) else { return }
+        guard recordingSetID == nil, !isStartingRecording, !shouldCaptureCurrentEffort(in: context) else { return }
         recordingStatusMessage = nil
         await recorder.idlePreviewKeepingSessionOwner()
     }
@@ -404,10 +403,7 @@ extension GuidedWorkoutCoordinator {
         recordingStatusMessage = "正在启动相机并开启录像…"
         do {
             try await recorder.startRecording(attempt: attempt)
-            guard recordingRequestID == attempt.id else {
-                return
-            }
-            guard !terminalRecordingAttemptIDs.contains(attempt.id) else {
+            guard recordingRequestID == attempt.id, !terminalRecordingAttemptIDs.contains(attempt.id) else {
                 return
             }
             recordingSetID = set.id

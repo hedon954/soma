@@ -167,18 +167,18 @@ actor ImagePipeline {
 
     private static func readAspectRatio(url: URL) -> CGFloat? {
         guard let source = CGImageSourceCreateWithURL(
-            url as CFURL,
-            [kCGImageSourceShouldCache: false] as CFDictionary
-        ),
-            let properties = CGImageSourceCopyPropertiesAtIndex(
-                source,
-                0,
-                nil
-            ) as? [CFString: Any],
-            let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-            let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
-            width.doubleValue > 0,
-            height.doubleValue > 0
+                  url as CFURL,
+                  [kCGImageSourceShouldCache: false] as CFDictionary
+              ),
+              let properties = CGImageSourceCopyPropertiesAtIndex(
+                  source,
+                  0,
+                  nil
+              ) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+              width.doubleValue > 0,
+              height.doubleValue > 0
         else {
             return nil
         }

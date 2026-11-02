@@ -40,8 +40,7 @@ enum VideoPosterStore {
         if let cached = cache.object(forKey: path as NSString) {
             return cached
         }
-        guard let url = MediaStore.url(at: path) else { return nil }
-        guard let image = await generatePoster(from: url) else { return nil }
+        guard let url = MediaStore.url(at: path), let image = await generatePoster(from: url) else { return nil }
         cache.setObject(image, forKey: path as NSString)
         return image
     }

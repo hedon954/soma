@@ -803,11 +803,7 @@ enum AgentJobStore {
                 predicate: #Predicate { $0.id == responseID }
             )
             descriptor.fetchLimit = 1
-            guard (try? context.fetch(descriptor).first?.agentStatus) == .failed
-            else {
-                continue
-            }
-            guard job.state.canTransition(to: .waitingForUser) else { continue }
+            guard (try? context.fetch(descriptor).first?.agentStatus) == .failed, job.state.canTransition(to: .waitingForUser) else { continue }
             try waitForUser(
                 job,
                 message: "上次处理已失败，等待手动重试。",

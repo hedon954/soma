@@ -945,8 +945,8 @@ final class GuidedWorkoutCoordinatorTests: XCTestCase {
     }
 }
 
+@MainActor
 extension GuidedWorkoutCoordinatorTests {
-    @MainActor
     func testBothLateralityAdvancesLeftThenSideRestThenRightAndSetRest() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1011,7 +1011,6 @@ extension GuidedWorkoutCoordinatorTests {
         )
     }
 
-    @MainActor
     func testSkippingOneSidePreservesCompletedSideEvidence() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1081,7 +1080,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testRepetitionEffortPersistsActualElapsedDuration() async throws {
         var time = Date(timeIntervalSince1970: 2_000_000_000)
         let fixture = try makeFixture(
@@ -1114,7 +1112,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.sets[0].actualDurationSeconds, 12)
     }
 
-    @MainActor
     func testDurationDeadlineCompletesExactlyOnce() async throws {
         var time = Date(timeIntervalSince1970: 2_000_000_000)
         let fixture = try makeFixture(
@@ -1155,7 +1152,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testDurationMaterializationFailureRollsBackAndCanRetryCompletion() async throws {
         var time = Date(timeIntervalSince1970: 2_000_000_000)
         let fixture = try makeFixture(
@@ -1236,7 +1232,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testConcurrentDoubleCompletionStopsAndAdvancesOnlyOnce() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1294,7 +1289,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testRepetitionMaterializationFailureRollsBackAndCanRetryCompletion() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1350,7 +1344,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testSkipRollsBackWhenMaterializationFailsAndCanRetry() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1406,7 +1399,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testZeroRestMovesDirectlyIntoThreeSecondCountdown() async throws {
         var time = Date(timeIntervalSince1970: 2_000_000_000)
         let fixture = try makeFixture(
@@ -1449,7 +1441,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.currentSetID, fixture.sets[1].id)
     }
 
-    @MainActor
     func testPauseFreezesAndResumeShiftsDurationDeadline() async throws {
         var time = Date(timeIntervalSince1970: 2_000_000_000)
         let fixture = try makeFixture(
@@ -1493,7 +1484,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.efforts[0].status, .inProgress)
     }
 
-    @MainActor
     func testFirstWorkingSetRecordsBothEffortsIndependently() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1537,7 +1527,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertNotNil(fixture.efforts[1].recordedVideoPath)
     }
 
-    @MainActor
     func testRecordingPauseSurvivesRebuildAndClearsOnlyAfterManualSave() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1605,7 +1594,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(recorder.attempts[3].effortID, fixture.efforts[2].id)
     }
 
-    @MainActor
     func testManualRecordingCanBeQueuedBeforeEffortStarts() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1647,7 +1635,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(recorder.startedEffortIDs, [fixture.efforts[0].id])
     }
 
-    @MainActor
     func testFinalizeRejectsNonterminalFacts() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1675,7 +1662,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(fixture.session.guidedPhase, .sessionReview)
     }
 
-    @MainActor
     func testFinalizeMaterializesActionRecordBeforeCompletingSession() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1709,7 +1695,6 @@ extension GuidedWorkoutCoordinatorTests {
         XCTAssertEqual(entries[0].sourcePerformanceID, fixture.performance.id)
     }
 
-    @MainActor
     func testFinalizeCanRetryAfterMaterializationThrows() async throws {
         let fixture = try makeFixture(
             firstSetIsWarmup: false,
@@ -1762,7 +1747,6 @@ extension GuidedWorkoutCoordinatorTests {
         )
     }
 
-    @MainActor
     func makeFixture(
         firstSetIsWarmup: Bool,
         setCount: Int,

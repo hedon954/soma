@@ -64,9 +64,9 @@ final class DailyActivitySyncCoordinator {
         defer { isConnecting = false }
         do {
             try await reader.requestAuthorization()
-            guard token == connectionRevision, space == .personal, foreground else { return }
-            guard try await cache.setConnected(true, generation: generation) else { return }
-            guard token == connectionRevision else { return }
+            guard token == connectionRevision, space == .personal, foreground,
+                  try await cache.setConnected(true, generation: generation),
+                  token == connectionRevision else { return }
             isEnabled = true
             hasRequestedTrainingAccess = true
             errorMessage = nil
@@ -131,8 +131,7 @@ final class DailyActivitySyncCoordinator {
         historyDay = key
         historyRequest = UUID()
         tasks.removeValue(forKey: "history")?.cancel()
-        guard space == .personal, isEnabled, foreground, isPrepared else { return }
-        guard !automaticDays.contains(key), key.start <= now else { return }
+        guard space == .personal, isEnabled, foreground, isPrepared, !automaticDays.contains(key), key.start <= now else { return }
         monitor(DailyActivityWindow(containing: date, now: now, calendar: calendar, recent: false), slot: "history")
     }
 

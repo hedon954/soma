@@ -531,8 +531,7 @@ final class ConversationProcessingService {
             )
             return
         }
-        guard job.state.isRunnable else { return }
-        guard job.nextRetryAt == nil else { return }
+        guard job.state.isRunnable, job.nextRetryAt == nil else { return }
         guard let userMessage = ConversationTurnPersistence.message(id: job.userMessageID, in: modelContext),
               var context = ConversationProcessingContextFactory.make(
                   sessionID: job.sessionID,

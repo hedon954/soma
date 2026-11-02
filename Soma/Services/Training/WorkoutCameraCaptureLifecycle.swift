@@ -820,12 +820,10 @@ extension WorkoutCameraService {
                     }
                 }
             }
+        } else if preparationTask != nil {
+            invalidatePreparation(replacing: captureResources)
         } else {
-            if preparationTask != nil {
-                invalidatePreparation(replacing: captureResources)
-            } else {
-                await stopCaptureSession()
-            }
+            await stopCaptureSession()
         }
         state = .unavailable(message)
         if reasonCode == "runtime" {

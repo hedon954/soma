@@ -424,10 +424,7 @@ struct CoachSessionView: View {
                     }
                     visibility.tailMessageID = projection.latestAssistantMessageID
                         ?? messageID
-                    guard visibility.autoScrollGate.shouldScroll(to: messageID) else {
-                        return
-                    }
-                    guard visibility.tailScroll.followState.isFollowing else { return }
+                    guard visibility.autoScrollGate.shouldScroll(to: messageID), visibility.tailScroll.followState.isFollowing else { return }
                     visibility.tailScroll.enqueueMessage(
                         projection.latestAssistantMessageID ?? messageID
                     )
@@ -593,8 +590,7 @@ struct CoachSessionView: View {
         if #available(iOS 18.0, *) {
             return
         }
-        guard let fits = visibility.tailScroll.contentFitsViewport else { return }
-        guard messageListPosition.contentFitsViewport != fits else { return }
+        guard let fits = visibility.tailScroll.contentFitsViewport, messageListPosition.contentFitsViewport != fits else { return }
         messageListPosition = CoachMessageScrollPosition(
             isAtTop: messageListPosition.isAtTop,
             isNearBottom: fits ? true : messageListPosition.isNearBottom,
@@ -923,9 +919,9 @@ struct CoachSessionView: View {
                 !$0.text.isEmpty && $0.recordDraft?.setEntries.isEmpty == false
             })
             .max(by: { $0.date < $1.date }),
-            let exercise = suggestionSnapshot.exercises.first(where: {
-                $0.id == recent.exerciseID
-            })
+           let exercise = suggestionSnapshot.exercises.first(where: {
+               $0.id == recent.exerciseID
+           })
         {
             let quickRecord = ExerciseInputSuggestion(
                 id: exercise.id,

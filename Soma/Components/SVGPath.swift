@@ -265,8 +265,7 @@ enum SVGPath {
 
         mutating func number() -> CGFloat? {
             skipSeparators()
-            guard let next = peek() else { return nil }
-            guard next == "+" || next == "-" || next == "." || next.isASCIIDigit else {
+            guard let next = peek(), next == "+" || next == "-" || next == "." || next.isASCIIDigit else {
                 return nil
             }
 

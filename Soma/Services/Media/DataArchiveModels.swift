@@ -69,18 +69,12 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         guard (1 ... Self.currentSchemaVersion).contains(schemaVersion) else {
             throw DataArchiveError.unsupportedSchema(schemaVersion)
         }
-        guard mutationReceipts.allSatisfy(\.hasDecodableResult) else {
-            throw DataArchiveError.invalidSnapshot
-        }
-        guard (workoutSessions ?? []).allSatisfy({
+        guard mutationReceipts.allSatisfy(\.hasDecodableResult), (workoutSessions ?? []).allSatisfy({
             TrainingPlanCoding.decode(
                 [TemplateExercisePrescription].self,
                 from: $0.prescriptionSnapshotData
             ) != nil
-        }) else {
-            throw DataArchiveError.invalidSnapshot
-        }
-        guard (exercisePerformances ?? []).allSatisfy({
+        }), (exercisePerformances ?? []).allSatisfy({
             TrainingPlanCoding.decode(
                 TemplateExercisePrescription.self,
                 from: $0.prescriptionSnapshotData

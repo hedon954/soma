@@ -417,7 +417,7 @@ struct RootView: View {
                     foregroundRecovery.cancel()
                     if oldPhase == .active,
                        let requestID = capturePresentation
-                       .cancelForSceneDeactivation()
+                           .cancelForSceneDeactivation()
                     {
                         captureRouter.clear(requestID)
                     }

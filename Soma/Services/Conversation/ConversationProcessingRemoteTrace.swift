@@ -175,7 +175,7 @@ extension ConversationProcessingService {
               let nameRaw = event.payload["toolName"]?.stringValue,
               let name = AgentToolName(rawValue: nameRaw),
               ["started", "updated", "suspended", "completed", "failed", "cancelled"]
-              .contains(event.phase)
+                  .contains(event.phase)
         else {
             return false
         }

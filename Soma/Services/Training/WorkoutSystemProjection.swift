@@ -233,9 +233,9 @@ final class WorkoutSystemProjectionCoordinator {
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
         }
         let refreshed = await center.notificationSettings()
-        guard !Task.isCancelled, restEndAt > .now else { return }
-        guard refreshed.authorizationStatus == .authorized
-            || refreshed.authorizationStatus == .provisional
+        guard !Task.isCancelled, restEndAt > .now,
+              refreshed.authorizationStatus == .authorized
+              || refreshed.authorizationStatus == .provisional
         else {
             return
         }

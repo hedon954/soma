@@ -63,8 +63,7 @@ extension ConversationProcessingService {
         responseMessageID: UUID,
         modelContext: ModelContext
     ) {
-        guard let scenario = PerformanceTestFixture.requestedStreamScenario else { return }
-        guard !scenario.usesStaticAgentStage else { return }
+        guard let scenario = PerformanceTestFixture.requestedStreamScenario, !scenario.usesStaticAgentStage else { return }
         if scenario == .productionCompletion {
             startProductionStreamFixture(
                 dataSpace: dataSpace, sessionID: sessionID,

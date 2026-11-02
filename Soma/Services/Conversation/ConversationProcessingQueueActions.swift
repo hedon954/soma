@@ -181,13 +181,13 @@ extension ConversationProcessingService {
         }
         do {
             if let previous = existingJobs.first(where: {
-                $0.userMessageID == userMessage.id && $0.state.isTerminal
-            }),
-                let responseID = previous.responseMessageID,
-                let response = ConversationTurnPersistence.message(
-                    id: responseID,
-                    in: context.modelContext
-                )
+                   $0.userMessageID == userMessage.id && $0.state.isTerminal
+               }),
+               let responseID = previous.responseMessageID,
+               let response = ConversationTurnPersistence.message(
+                   id: responseID,
+                   in: context.modelContext
+               )
             {
                 ConversationTurnPersistence.prepareResponseMessageForManualRetry(
                     response,

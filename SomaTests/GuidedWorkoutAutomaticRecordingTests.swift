@@ -39,8 +39,8 @@ private final class SnapshotAwareRecordingSpy: WorkoutRecordingControlling {
     func cancelRecording(attemptID _: UUID?) async {}
 }
 
+@MainActor
 extension GuidedWorkoutCoordinatorTests {
-    @MainActor
     func testAutomaticRecordingWaitsForInProgressSnapshotPresentation() async throws {
         let fixture = try makeFixture(firstSetIsWarmup: false, setCount: 1)
         defer {

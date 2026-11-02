@@ -19,7 +19,7 @@ final class EnergyForecastTests: XCTestCase {
         let future = today.addingTimeInterval(86400)
         var history = [today: current]
         for week in 1 ... 3 {
-            let day = calendar.date(byAdding: .day, value: -7 * week, to: future)!
+            let day = try XCTUnwrap(calendar.date(byAdding: .day, value: -7 * week, to: future))
             history[day] = try calculation(day, training: 500)
         }
         let forecasts = EnergyForecastProjection.upcoming(calculations: history, plans: [], on: today, calendar: calendar)

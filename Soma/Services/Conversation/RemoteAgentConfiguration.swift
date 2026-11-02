@@ -85,9 +85,9 @@ enum RemoteAgentRevocationService {
     static func retryIfNeeded() async {
         let defaults = UserDefaults.standard
         guard defaults.bool(
-            forKey: RemoteAgentPreference.pendingRevocationKey
-        ),
-            let baseURL = RemoteAgentPreference.baseURL()
+                  forKey: RemoteAgentPreference.pendingRevocationKey
+              ),
+              let baseURL = RemoteAgentPreference.baseURL()
         else {
             return
         }

@@ -22,7 +22,7 @@ extension ConversationProcessingService {
         descriptor.fetchLimit = 1
         guard let job = try? context.modelContext.fetch(descriptor).first,
               [.running, .remoteRunning, .waitingForDevice]
-              .contains(job.state)
+                  .contains(job.state)
         else {
             return false
         }

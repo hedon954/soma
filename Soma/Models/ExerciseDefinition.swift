@@ -804,8 +804,7 @@ enum ExerciseLibraryStore {
         for group in Dictionary(grouping: unresolved, by: {
             canonicalNameKey($0.exercise)
         }).values {
-            guard let name = group.first?.exercise else { continue }
-            guard let definition = try? resolveOrCreateExact(
+            guard let name = group.first?.exercise, let definition = try? resolveOrCreateExact(
                 canonicalName: name,
                 in: context
             ) else {

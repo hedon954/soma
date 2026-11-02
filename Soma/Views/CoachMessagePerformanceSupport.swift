@@ -104,10 +104,7 @@ enum CoachOpenedSessionPinPolicy {
         if snapshot.messageCount == 0 {
             return snapshot.didPrepareVisiblePage ? .finish : .wait
         }
-        guard snapshot.didPrepareVisiblePage, snapshot.lastMessageIsDisplayed else {
-            return .wait
-        }
-        guard snapshot.contentHeight > 0, snapshot.contentFitsViewport != nil else {
+        guard snapshot.didPrepareVisiblePage, snapshot.lastMessageIsDisplayed, snapshot.contentHeight > 0, snapshot.contentFitsViewport != nil else {
             return .wait
         }
         if snapshot.contentFitsViewport == true || snapshot.isNearBottom {

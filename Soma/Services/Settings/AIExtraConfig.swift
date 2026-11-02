@@ -118,8 +118,7 @@ enum AIExtraConfig {
     }
 
     static func prettyPrinted(_ object: [String: Any]) -> String {
-        guard !object.isEmpty else { return "{}" }
-        guard let data = try? JSONSerialization.data(
+        guard !object.isEmpty, let data = try? JSONSerialization.data(
             withJSONObject: object,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         ) else { return "{}" }

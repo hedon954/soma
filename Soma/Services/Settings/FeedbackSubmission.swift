@@ -23,16 +23,16 @@ enum FeedbackMailConfiguration {
         -> FeedbackQQMailCredentials
     {
         guard let object = try? PropertyListSerialization.propertyList(
-            from: plistData,
-            options: [],
-            format: nil
-        ),
-            let plist = object as? [String: Any],
-            let senderAddress = nonemptyString(plist["SenderAddress"]),
-            isQQMailAddress(senderAddress),
-            let authorizationCode = nonemptyString(
-                plist["SMTPAuthorizationCode"]
-            )
+                  from: plistData,
+                  options: [],
+                  format: nil
+              ),
+              let plist = object as? [String: Any],
+              let senderAddress = nonemptyString(plist["SenderAddress"]),
+              isQQMailAddress(senderAddress),
+              let authorizationCode = nonemptyString(
+                  plist["SMTPAuthorizationCode"]
+              )
         else {
             throw FeedbackSubmissionError.configurationMissing
         }

@@ -15,8 +15,7 @@ enum TrainingContentRecommendations {
             sortBy: [SortDescriptor(\.date, order: .reverse), SortDescriptor(\.id, order: .reverse)]
         )
         descriptor.fetchLimit = 1
-        guard let entry = try context.fetch(descriptor).first else { return nil }
-        guard !entry.setEntries.isEmpty else { return nil }
+        guard let entry = try context.fetch(descriptor).first, !entry.setEntries.isEmpty else { return nil }
         return TrainingContentRecommendation(
             sourceDate: entry.date,
             prescription: prescription(for: exercise, evidence: entry.setEntries)

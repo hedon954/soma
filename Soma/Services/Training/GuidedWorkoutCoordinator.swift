@@ -460,8 +460,7 @@ final class GuidedWorkoutCoordinator {
         else {
             throw GuidedWorkoutError.missingEffort
         }
-        guard effort.status == .inProgress else { return }
-        guard activeEffortCompletionLease == nil else { return }
+        guard effort.status == .inProgress, activeEffortCompletionLease == nil else { return }
         let completionLease = EffortCompletionLease(
             id: UUID(),
             sessionID: session.id,
