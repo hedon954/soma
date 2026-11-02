@@ -4,7 +4,7 @@
 - 日期：2026-09-19
 - 修订自：[BUG 0045](0045-guided-workout-coredata-abort.md)（替换列表必须使用不可变候选）
 - 修订自：[BUG 0062](0062-guided-replacement-retains-old-targets.md)（更换动作确认边界）
-- 上游依据：[PRD 068](../prd/068-guided-intro-prescription-review.md)、[训练领域协议](../engineering/training-domain-model.md)
+- 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)、[训练领域协议](../engineering/training-domain-model.md)
 - 下游落地：[验收](../acceptance.md)
 
 ## 症状

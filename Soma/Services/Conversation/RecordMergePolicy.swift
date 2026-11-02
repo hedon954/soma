@@ -138,6 +138,7 @@ enum RecordMergePolicy {
         if let calorieEstimate {
             entry.estimatedCalories = calorieEstimate.calories
             entry.calorieMET = calorieEstimate.met
+            entry.calorieScope = .metGross
             entry.calorieDurationMinutes = calorieEstimate.durationMinutes
             entry.calorieDurationEstimated = calorieEstimate.durationWasEstimated
         }

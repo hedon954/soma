@@ -10,17 +10,32 @@ enum SomaStoreOpening {
         stepName: String
     ) throws -> ModelContainer {
         do {
-            return try ModelContainer(
-                for: schema,
-                configurations: [configuration(
-                    name: configurationName,
-                    schema: schema,
-                    isStoredInMemoryOnly: isStoredInMemoryOnly,
-                    url: url
-                )]
-            )
+            let config = configuration(name: configurationName, schema: schema, isStoredInMemoryOnly: isStoredInMemoryOnly, url: url)
+            if configurationName == "PersonalData", !isStoredInMemoryOnly {
+                try protectPersonalStore(at: config.url)
+            }
+            let container = try ModelContainer(for: schema, configurations: [config])
+            if configurationName == "PersonalData", !isStoredInMemoryOnly {
+                try protectPersonalStore(at: config.url)
+            }
+            return container
         } catch {
             throw DataMigrationError.stepFailed(stepName, error)
+        }
+    }
+
+    private static func protectPersonalStore(at url: URL) throws {
+        let manager = FileManager.default
+        var directory = url.deletingLastPathComponent()
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+        var excluded = URLResourceValues()
+        excluded.isExcludedFromBackup = true
+        try directory.setResourceValues(excluded)
+        try manager.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: directory.path)
+        for path in [url.path, url.path + "-wal", url.path + "-shm"] where manager.fileExists(atPath: path) {
+            try manager.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: path)
+            var file = URL(fileURLWithPath: path)
+            try file.setResourceValues(excluded)
         }
     }
 

@@ -23,3 +23,5 @@
 - [仓库与开发工作流](repository-workflow.md)
 - [GitHub 仓库设置](github-settings.md)
 - [版本、GitHub Release 与 TestFlight](release.md)
+
+Apple 健康每日运动记录见 [数据库结构](database-schema.md) 的 PRD 075 / ADR 0144 边界；新增 WorkoutEntry 可空字段，无新增模型。

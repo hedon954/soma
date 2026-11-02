@@ -41,6 +41,8 @@ enum SomaDataSchema {
         [
             ExternalSyncCursor.self,
             UserProfile.self,
+            EnergyContextEntry.self,
+            EnergyEvidenceEntry.self,
             GymProfile.self,
             GymEquipment.self,
             GymMedia.self,

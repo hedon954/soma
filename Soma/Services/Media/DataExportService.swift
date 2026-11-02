@@ -14,6 +14,7 @@ struct PortableExportPayload: Sendable {
         snapshot: PersonalDataSnapshot,
         timeZone: TimeZone = .current
     ) {
+        let snapshot = snapshot.withoutHealthActivity()
         createdAt = snapshot.createdAt
         timeZoneIdentifier = timeZone.identifier
         meals = snapshot.meals
@@ -277,6 +278,7 @@ enum DataExportService {
             feedback: workout.feedback,
             estimatedCalories: workout.estimatedCalories,
             calorieMET: workout.calorieMET,
+            calorieScopeRaw: workout.calorieScopeRaw,
             calorieDurationMinutes: workout.calorieDurationMinutes,
             calorieDurationEstimated: workout.calorieDurationEstimated,
             externalSource: workout.externalSource,

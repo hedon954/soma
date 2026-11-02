@@ -3,9 +3,9 @@
 - 状态：已采纳
 - 日期：2026-09-19
 - 版本：0.0.25
-- 修订自：[PRD 000](000-origin-through-0.0.11.md) 的训练课程与带练
-- 后续修订：[PRD 069](069-training-course-name.md)（准备页不回写的对象改称训练课程）
-- 下游落地：[验收](../acceptance.md)、[训练领域协议](../engineering/training-domain-model.md)、[BUG 0066](../bugs/0066-guided-replacement-computed-predicate-crash.md)
+- 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的训练课程与带练
+- 后续修订：[PRD 069](../../../prd/069-training-course-name.md)（准备页不回写的对象改称训练课程）
+- 下游落地：[验收](../../../acceptance.md)、[训练领域协议](../../../engineering/training-domain-model.md)、[BUG 0066](../../../bugs/0066-guided-replacement-computed-predicate-crash.md)
 
 ## 背景
 
@@ -36,6 +36,6 @@ Context 按稳定 ID 重新 fetch。测试只用虚构动作。
 ## 验收
 
 准备页浅深主题分别紧凑展示分组参数，主操作固定可见；调整后带练使用新目标，取消保持原状。点替换不再闪退，
-列表不含已归档动作，确认边界与 [BUG 0062](../bugs/0062-guided-replacement-retains-old-targets.md)
-及 [BUG 0066](../bugs/0066-guided-replacement-computed-predicate-crash.md) 一致。
+列表不含已归档动作，确认边界与 [BUG 0062](../../../bugs/0062-guided-replacement-retains-old-targets.md)
+及 [BUG 0066](../../../bugs/0066-guided-replacement-computed-predicate-crash.md) 一致。
 执行 `make check`、`make verify`。

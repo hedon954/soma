@@ -426,6 +426,7 @@ enum GuidedWorkoutRecordStore {
             mediaAttachments: attachments,
             estimatedCalories: calorieEstimate?.calories,
             calorieMET: calorieEstimate?.met,
+            calorieScope: .metGross,
             calorieDurationMinutes: calorieEstimate?.durationMinutes,
             calorieDurationEstimated: calorieEstimate?.durationWasEstimated ?? false,
             sourceWorkoutSessionID: session.id,

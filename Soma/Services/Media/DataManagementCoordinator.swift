@@ -242,7 +242,8 @@ final class DataManagementCoordinator {
     func restore(
         from selectedDirectory: URL,
         password: String,
-        dataSpace: DataSpaceController
+        dataSpace: DataSpaceController,
+        healthActivity: DailyActivitySyncCoordinator? = nil
     ) async throws {
         guard activity == nil else { throw DataArchiveError.backupAlreadyRunning }
         activity = .restoring
@@ -280,6 +281,7 @@ final class DataManagementCoordinator {
             }
             oldMedia = references.0
             demoMedia = references.1
+            await healthActivity?.disconnect()
             try prepared.snapshot.replace(
                 in: personalContext,
                 mediaPathMapping: prepared.mediaPathMapping
@@ -294,6 +296,9 @@ final class DataManagementCoordinator {
             }
             throw userFacing(error, fallback: "恢复失败，当前数据没有改变。")
         }
+        if healthActivity == nil {
+            NotificationCenter.default.post(name: .personalDataDidReplace, object: nil)
+        }
         let restoredMedia = Set(prepared.mediaPathMapping.values)
         _ = PersonalDataStore.reclaimMedia(
             oldMedia.union(MediaStore.allStoredPaths()),
@@ -302,15 +307,18 @@ final class DataManagementCoordinator {
     }
 
     func clearPersonalData(
-        dataSpace: DataSpaceController
+        dataSpace: DataSpaceController,
+        healthActivity: DailyActivitySyncCoordinator? = nil
     ) async throws -> PersonalDataClearResult {
         guard activity == nil else { throw DataArchiveError.backupAlreadyRunning }
         activity = .clearing
         defer { activity = nil }
         await RemoteAgentStatus().revokeAndDisable()
+        await healthActivity?.disconnect()
         let result = try PersonalDataStore.clear(
             personalContext: dataSpace.personalContainer.mainContext,
-            demoContext: dataSpace.demoContainer.mainContext
+            demoContext: dataSpace.demoContainer.mainContext,
+            notifiesHealthActivity: healthActivity == nil
         )
         disconnectBackup()
         return result

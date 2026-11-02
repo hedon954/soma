@@ -11,6 +11,7 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0068](0068-health-activity-cancels-lifestyle-baseline.md) | 本地回归与界面验收通过，真机数据待验收 | 健康活动日合计取消生活系数并形成错误总消耗 | 统一差额投影、明确口径、整场关联、完整性与校准门槛 |
 | [0067](0067-workout-live-activity-stale-progress.md) | 已修复，完整本地门禁通过，真机锁屏与灵动岛待验收 | 带练灵动岛和锁屏状态卡停在 0 组且呈搜索条 | 快照后投影、进度分数、复用 Activity、状态卡布局 |
 | [0066](0066-guided-replacement-computed-predicate-crash.md) | 已修复，完整本地门禁通过，真机交互待验收 | 替换动作用计算属性 Predicate 闪退 | 不可变候选、`archivedAt` 查询、同动作改目标重建、静态门禁 |
 | [0065](0065-agent-workout-calories-ignored.md) | 已修复，完整本地门禁通过 | 训练工具丢弃用户提供热量 | 创建／修改有值、无值四路径；零、缺体重、幂等与远程 Schema |

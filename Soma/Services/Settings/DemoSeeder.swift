@@ -153,6 +153,7 @@ enum DemoSeeder {
             )
             workout.estimatedCalories = estimate?.calories
             workout.calorieMET = estimate?.met
+            workout.calorieScope = .metGross
             workout.calorieDurationMinutes = estimate?.durationMinutes
             workout.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         }

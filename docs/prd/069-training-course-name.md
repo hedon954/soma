@@ -5,7 +5,6 @@
 - 版本：0.0.26
 - 修订自：
   - [PRD 000](000-origin-through-0.0.11.md)（把动作处方包称为训练计划的产品用词）
-  - [PRD 068](068-guided-intro-prescription-review.md)（准备页调整不回写的对象名称）
 - 后续修订：[PRD 071](071-training-schedule.md)（补上按日期排期的训练计划）
 - 下游落地：[ADR 0138](../adr/0138-training-course-name.md)、[验收](../acceptance.md)
 

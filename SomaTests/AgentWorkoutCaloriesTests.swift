@@ -103,7 +103,8 @@ final class AgentWorkoutCaloriesTests: XCTestCase {
                 exerciseID: exercise.id,
                 durationMinutes: 20,
                 notes: "虚构训练",
-                estimatedCalories: 321
+                estimatedCalories: 321,
+                calorieScope: .metGross
             )
             context.insert(existing)
             existing.exerciseDefinition = exercise

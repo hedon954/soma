@@ -3,7 +3,7 @@
 - 状态：独立组、Effort、attempt 与自动收口实施中；SwiftData 打开路径见 ADR 0075，侧别与完成方式见 ADR 0076
 - 日期：2026-08-16
 - 后续修订：[ADR 0143](../adr/0143-composable-training.md)（可组合内容与课程无关的 Session 来源身份）
-- 上游依据：[PRD 068](../prd/068-guided-intro-prescription-review.md)（准备页展示并调整本次分组）
+- 上游依据：[PRD 000](../prd/000-origin-through-0.0.11.md)（准备页展示并调整本次分组）
 - 下游落地：[BUG 0062](../bugs/0062-guided-replacement-retains-old-targets.md)（替换动作的最近参数确认与运行时重建）
 - 下游落地：[BUG 0066](../bugs/0066-guided-replacement-computed-predicate-crash.md)（替换列表不可变候选与 `archivedAt` 查询）
 - 下游落地：[BUG 0067](../bugs/0067-workout-live-activity-stale-progress.md)（带练 Live Activity 随进度更新）

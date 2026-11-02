@@ -15,7 +15,7 @@ labels = %w[
   下游落地
 ].freeze
 label_pattern = labels.map { |label| Regexp.escape(label) }.join("|")
-documents = Dir[root.join("docs/**/*.md")].map { |path| Pathname.new(path) }.sort
+documents = (Dir[root.join("docs/**/*.md")].map { |path| Pathname.new(path) } + [root.join("CLAUDE.md")]).sort
 edges = Hash.new { |hash, key| hash[key] = [] }
 failures = []
 

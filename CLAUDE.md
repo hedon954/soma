@@ -1,5 +1,9 @@
 # Soma Engineering Principles
 
+- 后续修订：
+  - [PRD 076](docs/prd/076-adaptive-energy-system.md)、[ADR 0145](docs/adr/0145-adaptive-energy-system.md)（动态消耗与逐次依据）
+  - [PRD 075](docs/prd/075-healthkit-daily-activity.md)、[ADR 0144](docs/adr/0144-healthkit-daily-activity.md)（三项日汇总保存为每日运动记录）
+
 本文件是 Soma 仓库内所有 coding agent 和贡献者的最高级工程契约。`AGENTS.md`
 链接到本文件，使 Codex、Claude Code、Cursor 和其他 Agent 共享同一套规则。
 
@@ -121,8 +125,11 @@ App → Views → Services → Models
 
 ### External imports
 
-当前不接入 Apple 健康、手表或其他外部健康平台。记录上的 `externalSource` 与
-`ExternalSyncCursor` 保留给以后的导入设计；重新接入必须新 PRD/ADR。
+按 PRD 075 / ADR 0144，每日步数、步跑距离和活动能量按自然日覆盖同一条 WorkoutEntry，保留真实 source。
+按 PRD 076 / ADR 0145，额外只读训练身份、类型、起止/有效时长及关联活动能量，用于训练去重及区间外步行统计。
+总消耗采用生活参考、非训练步行差额、去重训练时段增量和有条件长期校准，系数是总估算与静息之比。
+日活动总量保留为事实，不替代生活参考，也不额外叠加到已计算的步行/训练。不读取静息能量、心率、睡眠或路线。
+健康事实与派生依据不进入模型、应用备份/导出或 Server；个人库及其目录排除系统备份并采用 complete 文件保护。
 
 ### Sensitive data
 

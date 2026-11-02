@@ -39,6 +39,8 @@
     <true/>
     <key>NSSupportsLiveActivitiesFrequentUpdates</key>
     <true/>
+    <key>NSHealthShareUsageDescription</key>
+    <string>读取每日步数、步行与跑步距离、活动消耗，以及训练类型、时间和活动能量，用于估算每日消耗并避免重复计量。这些健康数据仅保存在本机，不读取静息消耗。</string>
     <key>NSCameraUsageDescription</key>
     <string>拍摄器械、饮食、体型和训练动作，用于生成你的私人健身记录与建议。</string>
 	<key>NSMicrophoneUsageDescription</key>

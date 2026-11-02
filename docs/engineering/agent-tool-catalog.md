@@ -2,6 +2,7 @@
 
 - 后续修订：[ADR 0141](../adr/0141-coach-training-schedule-draft.md)（增加不落库的 `propose_training_schedule`）
 - 后续修订：[ADR 0000](../adr/0000-origin-through-0.0.11.md)（固定提问工具与曝光例外）
+- 后续修订：[ADR 0145](../adr/0145-adaptive-energy-system.md)（明确生活/完整性事实与训练热量口径）
 
 本文件维护当前代码实际支持的 Agent Tool、暴露策略和协议边界。它只做导航与审计，不复制
 完整 JSON Schema；可执行事实以源码和测试为准。
@@ -20,7 +21,7 @@
 
 ## 暴露策略
 
-运行时只解码当前协议 34 个名称。每次请求把当轮允许的集合放进 API `tools` 参数；System
+运行时只解码当前协议 35 个名称。每次请求把当轮允许的集合放进 API `tools` 参数；System
 Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，整轮固定。
 
 - 未选快捷按钮：注册当前协议全部 34 个 Tool，含 `load_skill` 与 `ask_user_questions`。Skill 目录完整可见。不做关键词或本机状态剪枝。
@@ -42,6 +43,7 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 | workouts | `list_workouts`、`get_workout`、`create_workout`、`update_workout`、`delete_workout` | 训练记录单一职责 CRUD |
 | meals | `list_meals`、`get_meal`、`create_meal`、`update_meal`、`delete_meal` | 饮食记录单一职责 CRUD |
 | body | `list_body_entries`、`get_body_entry`、`create_body_entry`、`update_body`、`delete_body_entry` | 身体与体态记录单一职责 CRUD |
+| body | `record_energy_context` | 明确工作、通勤、家务与逐日饮食/训练/携带完整性；未知保持未知，不返回健康推导 |
 | plans | `list_programs`、`get_program`、`create_program`、`update_program`、`archive_program`、`delete_program`、`start_program`、`propose_training_schedule` | 课程读取、创建、直接更新当前处方、归档、删除和带练启动；计划草稿支持动作逐组参数、课程和嵌套计划，只校验不落库 |
 | gym | `update_gym`、`switch_gym` | 健身房与器械维护、当前场馆切换 |
 | review | `record_performance_analysis` | 保存绑定 Performance 的视频复盘 |
@@ -73,6 +75,9 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
   efforts；`.none` 与左右 effort 冲突返回可重试字段错误。本次 evidence 优先于动作库 fallback。
 - 新模型调用只广告当前 Schema；create 的 v2/v3 和其他 Tool 明确声明的旧版本仅用于恢复已持久
   Job，仍执行闭合字段、类型、范围与关系校验。
+- 训练提供可选 `calories_scope: active|gross|unknown`，只根据明确证据保存口径；`metGross` 仅由本地公式写入。
+  `record_energy_context` Schema v1 只接收明确生活事实及最多 31 日日期范围的完整性确认；修改/删除通过能量依据的原生审查页。
+  “完善生活信息”发送固定教练请求并清除先前快捷限制，不改变自定义快捷按钮的持久白名单；健康依据不进入 Tool 结果或上下文。
 - create 每次都新增独立记录，同一轮可多次调用；纠正、补图或改已有记录必须先 list/get 再 update。
 - 每个对象 Schema 都设置 `additionalProperties: false`；兼容 Provider 时发送 `strict: true`，
   设备仍执行本地未知字段、类型、ID、关系和授权校验。

@@ -62,6 +62,7 @@ server-test:
 	npm --prefix Server test
 
 perf-check:
+	ruby ./scripts/check-healthkit-boundary.rb
 	ruby ./scripts/check-performance-hotpaths.rb
 	ruby -c ./scripts/analyze-app-launch-life-cycle.rb >/dev/null
 	ruby -c ./scripts/analyze-animation-hitches.rb >/dev/null

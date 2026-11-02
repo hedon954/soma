@@ -253,6 +253,7 @@ enum WorkoutCalorieCalculator {
             return false
         }
         entry.durationMinutes = nil
+        guard entry.estimatedCalories == nil || entry.calorieScope == .metGross else { return true }
         let estimate = estimate(
             exercise: entry.exercise,
             intensity: entry.intensity,
@@ -264,6 +265,7 @@ enum WorkoutCalorieCalculator {
         )
         entry.estimatedCalories = estimate?.calories
         entry.calorieMET = estimate?.met
+        entry.calorieScope = .metGross
         entry.calorieDurationMinutes = estimate?.durationMinutes
         entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false
         return true
@@ -273,19 +275,22 @@ enum WorkoutCalorieCalculator {
     static func refreshStoredEstimate(
         _ entry: WorkoutEntry,
         in context: ModelContext,
-        calorieOverride: Int? = nil
+        calorieOverride: Int? = nil,
+        calorieScope: WorkoutCalorieScope? = nil
     ) {
         refreshStoredEstimate(
             entry,
             weightKG: latestRecordedWeight(at: entry.date, in: context),
-            calorieOverride: calorieOverride
+            calorieOverride: calorieOverride,
+            calorieScope: calorieScope
         )
     }
 
     static func refreshStoredEstimate(
         _ entry: WorkoutEntry,
         weightKG: Double?,
-        calorieOverride: Int? = nil
+        calorieOverride: Int? = nil,
+        calorieScope: WorkoutCalorieScope? = nil
     ) {
         let estimate = estimateWorkout(
             exercise: entry.exercise,
@@ -295,7 +300,11 @@ enum WorkoutCalorieCalculator {
             fallbackRestSeconds: entry.restSeconds,
             weightKG: weightKG
         )
+        let scope = calorieOverride.map { value in
+            calorieScope ?? (value == entry.estimatedCalories ? entry.calorieScope : .unknown)
+        } ?? .metGross
         entry.estimatedCalories = calorieOverride ?? estimate?.calories
+        entry.calorieScope = scope
         entry.calorieMET = estimate?.met
         entry.calorieDurationMinutes = estimate?.durationMinutes
         entry.calorieDurationEstimated = estimate?.durationWasEstimated ?? false

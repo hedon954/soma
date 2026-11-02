@@ -1,11 +1,13 @@
 # 数据库结构与 ER 图
 
+- 后续修订：[PRD 075](../prd/075-healthkit-daily-activity.md)、[ADR 0144](../adr/0144-healthkit-daily-activity.md)（日常活动运动记录与统计）
+
 - 上游依据：[ADR 0143](../adr/0143-composable-training.md)（slotsData 的可选组合内容；持久字段不变）
 本文维护 Soma 当前持久化结构的可审查快照，覆盖设备端 SwiftData 与可选 Agent Server
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
-- 状态：当前 schema 快照；实现收口后仍需以数据库结构门禁复核
-- 最近同步：2026-09-02
+- 状态：当前 schema 快照；与字段和注册模型门禁同步
+- 最近同步：2026-11-03
 - SwiftData 注册来源：[`Soma/App/SomaApp.swift`](../../Soma/App/SomaApp.swift)
 - SwiftData 版本与启动迁移来源：[`Soma/Models/SomaDataMigration.swift`](../../Soma/Models/SomaDataMigration.swift)
 - SwiftData 字段来源：[`Soma/Models/`](../../Soma/Models)
@@ -39,7 +41,7 @@
 
 ## 设备端 SwiftData
 
-个人空间与演示空间各自使用独立 `ModelContainer`，当前注册完全相同的 29 个模型。两个空间
+个人空间与演示空间各自使用独立 `ModelContainer`，当前注册完全相同的 31 个模型。两个空间
 不能互相连接，也不启用 CloudKit。App 启动时先迁移个人空间、再迁移演示空间；两者均写入并
 复核当前 `DataMigrationMarker` 前，根界面与 Agent 队列都不会挂载。
 
@@ -66,14 +68,28 @@ schema version 7 marker 是当前唯一安装基线。启动先用 `key + schema
 | <!-- schema-model: GymEquipment | id,businessID,gymID,name,category,capabilities,confidence,imagePath,createdAt --> `GymEquipment` | `businessID: Int64?`、`id: UUID`（迁移锚点）、`gymID: UUID` 及设备字段 | `gymID → GymProfile.id`；后续关系迁移前保留旧锚点。 |
 | <!-- schema-model: GymMedia | id,gymID,path,createdAt --> `GymMedia` | `id: UUID`、`gymID: UUID`、`path: String`、`createdAt: Date` | `gymID → GymProfile.id`；`path` 是独立逻辑媒体引用。相同内容允许由不同路径通过硬链接复用物理文件，单条记录删除不会破坏其他引用。 |
 
+### 动态消耗事实与私有依据
+
+<!-- schema-model: EnergyContextEntry | key,date,timeZoneIdentifier,lifestyleData,confirmationData,learningPaused,sourceTurnID,updatedAt -->
+<!-- schema-model: EnergyEvidenceEntry | key,kindRaw,date,payload,reason,predecessorKey,revision,createdAt -->
+| 模型 | 持久字段与约束 | 语义 |
+| --- | --- | --- |
+| `EnergyContextEntry` | 唯一 key、自然日 date、时区、可空 lifestyleData/confirmationData/learningPaused/sourceTurnID、updatedAt | 用户明确生活事实与逐日完整性；未知保持 nil。新增独立表，不改变旧身体记录。 |
+| `EnergyEvidenceEntry` | 唯一 key、kindRaw、date、payload、reason、可空 predecessorKey、revision、createdAt | 私有参考、每日计算与校准依据。每种日期的 revision 单调递增；输入不变不新增，迟到修改保留前驱；不依赖设备时钟排序。 |
+
+两表注册于当前 SomaDataSchema，旧库新增空表，无数据重建。上下文事实进入备份；健康推导依据仅保留在内部回滚快照，应用备份/导出及模型不包含。
+清空显式删除两表；个人库及目录沿用 complete 文件保护与排除系统备份。依据 [ADR 0145](../adr/0145-adaptive-energy-system.md)。
+
 ### 用户记录
+
+WorkoutEntry.calorieScopeRaw 为新增可空字符串，明确 active / gross / metGross / unknown。旧库 nil 保持未知，不能由旧 MET 推断口径；DTO 同步可空字段，不重建记录。只有本地公式能写 metGross。
 
 <!-- schema-model: MealEntry | id,businessID,date,mealTypeRaw,title,calories,protein,carbs,fat,glycemicSpeedRaw,glycemicAssessment,recommendedEatingOrder,itemsData,nutritionSourceRaw,notes,imagePath,mediaAttachmentsData,confidence,sourceTurnID,sourceSessionID -->
 | 模型 | 持久字段 | 关键约束或语义 |
 | --- | --- | --- |
 | `MealEntry` | `id: UUID`、`date: Date`、`mealTypeRaw: String`、`title: String`、`calories: Int?`、`protein: Double?`、`carbs: Double?`、`fat: Double?`、`glycemicSpeedRaw: String?`、`glycemicAssessment: String`、`recommendedEatingOrder: String`、`itemsData: Data`、`nutritionSourceRaw: String`、`notes: String`、`imagePath: String?`、`mediaAttachmentsData: Data`、`confidence: Double`、`sourceTurnID: UUID?`、`sourceSessionID: UUID?` | 未确认营养值保持为空；不保存图片无法稳定识别的总糖。升糖速度只表示成对保存的餐食组成定性估算；建议食用顺序只引用当前餐食中的实际菜品。修改菜品时同时清空旧评估与旧顺序。来源字段连接创建它的聊天 turn/session。 |
 | <!-- schema-model: BodyEntry | id,businessID,date,weight,bodyFat,waist,notes,imagePath,mediaAttachmentsData,analysis,externalSource,externalID,sourceTurnID,sourceSessionID --> `BodyEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）及身体记录字段 | `externalSource + externalID` 用于外部导入去重，由 Store 维护。 |
-| <!-- schema-model: WorkoutEntry | id,businessID,date,exercise,exerciseID,exerciseDefinition,sets,reps,weight,setEntriesData,restSeconds,durationMinutes,notes,mediaKindRaw,mediaPath,mediaAttachmentsData,formScore,intensity,feedback,estimatedCalories,calorieMET,calorieDurationMinutes,calorieDurationEstimated,externalSource,externalID,sourceTurnID,sourceSessionID,sourceWorkoutSessionID,sourcePerformanceID,projectionKey,sourcePerformance --> `WorkoutEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）、训练字段、动作关系、来源关系及唯一 `projectionKey` | 带练投影使用 `guided-performance:<uuid>`；其余记录使用 `entry:<uuid>`。unique 索引保留，启动迁移必须先补齐空 key，不能把多个 `nil` 留给 SwiftData 校验。热量投影保留 MET、计算时长、估算标记和结果，不维护算法版本；UUID 来源继续用于旧备份映射与审计。 |
+| <!-- schema-model: WorkoutEntry | id,businessID,date,exercise,exerciseID,exerciseDefinition,sets,reps,weight,setEntriesData,restSeconds,durationMinutes,notes,mediaKindRaw,mediaPath,mediaAttachmentsData,formScore,intensity,feedback,estimatedCalories,calorieMET,calorieScopeRaw,calorieDurationMinutes,calorieDurationEstimated,dailyActivityData,externalSource,externalID,sourceTurnID,sourceSessionID,sourceWorkoutSessionID,sourcePerformanceID,projectionKey,sourcePerformance --> `WorkoutEntry` | `businessID: Int64?`、`id: UUID`（迁移锚点）、训练字段、动作关系、来源关系及唯一 `projectionKey` | 带练投影使用 `guided-performance:<uuid>`；其余记录使用 `entry:<uuid>`。unique 索引保留，启动迁移必须先补齐空 key，不能把多个 `nil` 留给 SwiftData 校验。热量投影保留 MET、计算时长、估算标记和结果，不维护算法版本；UUID 来源继续用于旧备份映射与审计。 |
 
 ### 动作库与训练课程
 
@@ -281,3 +297,13 @@ erDiagram
 
 隐藏的 `schema-model` / `schema-table` 注释是自动门禁使用的结构化清单，不要手动删除；
 正文仍需解释类型、关系和语义，不能只为通过脚本更新注释。
+
+## Apple 健康每日运动记录（PRD 075 / ADR 0144）
+
+`WorkoutEntry.dailyActivityData: Data?` 是新增的可空持久字段，旧记录默认为 nil，使用 SwiftData 兼容的新增可空字段迁移。
+内容为 DailyActivitySummary：步数、米数、活动 kcal 与逐指标 source 名称/标识；source 由持久内容派生，读取渠道固定 appleHealth。
+同一自然日使用 `externalSource=appleHealth`、`externalID=daily:yyyy-MM-dd`、唯一 projectionKey，更新复用 id / businessID。
+只有已成功读取的指标覆盖旧值；nil 清除，0 有效，失败和未完成的指标不覆盖。三项均无值时删除该日记录。
+无组数、次数、重量、时长或静息读取。日/周/月/年通过既有 WorkoutEntry 加载统计；有活动 kcal 的日期用静息公式 + 活动 kcal，替换活动系数和训练增量。
+个人库及其目录采用 complete 文件保护并排除系统备份；应用备份/导出过滤 appleHealth 运动记录。内部回滚快照保留 dailyActivityData，避免恢复失败丢失健康记录。
+模型上下文与读取工具排除这些记录；无新模型注册、SQL migration、厂商或 Server API。连接配置单独保存在本机，断开停止同步，已同步运动记录保留。

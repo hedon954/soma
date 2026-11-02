@@ -5,7 +5,9 @@
 - 修订自：
   - [目标导向进展指标调研](2026-08-26-goal-directed-progress-metrics.md) 的「日消耗必须可审查、训练日应高于休息日」
   - [进展历史与图表逻辑重设计](2026-09-05-progress-history-and-chart-design.md) 的「不把未经校验的系数直接叠到当日数上」
-- 后续修订：暂无
+- 后续修订：
+  - [Soma 消耗计算体系研究](2026-11-02-soma-energy-expenditure-system.md)（重新界定 1.4、竞品实践、训练时段替换与有条件校准；推荐方案，未实施）
+  - [HealthKit 每日活动接入调研](2026-10-20-healthkit-daily-activity.md)（三项日汇总写为一条运动记录；有活动 kcal 的日期替换本文活动系数/训练增量，静息仍用本地公式；未读到时沿用本文规则）
 - 下游落地：
   - [PRD 060](../archive/0.0.23/prd/060-remove-healthkit-until-redesign.md)（仅撤回 HealthKit）
   - [ADR 0128](../archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md)

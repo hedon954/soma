@@ -14,6 +14,8 @@ enum PersonalDataStore {
         try context.delete(model: BusinessIDSequence.self)
         try context.delete(model: ExternalSyncCursor.self)
         try context.delete(model: UserProfile.self)
+        try context.delete(model: EnergyContextEntry.self)
+        try context.delete(model: EnergyEvidenceEntry.self)
         try context.delete(model: GymProfile.self)
         try context.delete(model: GymEquipment.self)
         try context.delete(model: GymMedia.self)
@@ -41,7 +43,8 @@ enum PersonalDataStore {
 
     static func clear(
         personalContext: ModelContext,
-        demoContext: ModelContext
+        demoContext: ModelContext,
+        notifiesHealthActivity: Bool = true
     ) throws -> PersonalDataClearResult {
         let personalSnapshot = try PersonalDataSnapshot.capture(from: personalContext)
         let demoMedia = try PersonalDataSnapshot.capture(from: demoContext)
@@ -54,6 +57,9 @@ enum PersonalDataStore {
             try personalContext.save()
         }
 
+        if notifiesHealthActivity {
+            NotificationCenter.default.post(name: .personalDataDidReplace, object: nil)
+        }
         let deletedMediaCount = reclaimMedia(
             oldPersonalMedia.union(MediaStore.allStoredPaths()),
             excluding: demoMedia
@@ -90,6 +96,8 @@ extension PersonalDataSnapshot {
         var total = 0
         total += externalSyncCursors.count
         total += userProfiles.count
+        total += energyContexts?.count ?? 0
+        total += energyEvidence?.count ?? 0
         total += gymProfiles.count
         total += gymEquipment.count
         total += gymMedia.count

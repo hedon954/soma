@@ -14,6 +14,7 @@ enum DataBackupService {
         now: Date = .now,
         mediaURL: (String) -> URL? = MediaStore.url(at:)
     ) throws -> DataBackupWriteResult {
+        let snapshot = snapshot.withoutHealthActivity()
         try snapshot.validate()
         guard credential.keyData.count == DataBackupCrypto.keyByteCount,
               credential.salt.count >= DataBackupCrypto.saltByteCount

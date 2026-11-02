@@ -76,6 +76,7 @@ struct PortableWorkoutAnalysis: Codable, Equatable, Sendable {
     var feedback: String?
     var estimatedCalories: Int?
     var calorieMET: Double?
+    var calorieScopeRaw: String?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool
     var externalSource: String?

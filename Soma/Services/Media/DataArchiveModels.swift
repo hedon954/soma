@@ -32,6 +32,8 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
     var mutationReceipts: [AgentMutationReceiptDTO]
     var agentJobs: [AgentJobDTO]?
     var agentEvents: [PersistentAgentEventDTO]?
+    var energyContexts: [EnergyContextDTO]? = nil
+    var energyEvidence: [EnergyEvidenceDTO]? = nil
 
     var referencedMediaPaths: Set<String> {
         var paths = Set<String>()
@@ -92,7 +94,9 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         from context: ModelContext,
         now: Date = .now
     ) throws -> PersonalDataSnapshot {
-        try PersonalDataSnapshot(
+        let contexts = try context.fetch(FetchDescriptor<EnergyContextEntry>()).map(EnergyContextDTO.init)
+        let evidence = try context.fetch(FetchDescriptor<EnergyEvidenceEntry>()).map(EnergyEvidenceDTO.init)
+        return try PersonalDataSnapshot(
             createdAt: now,
             externalSyncCursors: context.fetch(FetchDescriptor<ExternalSyncCursor>())
                 .map(ExternalSyncCursorDTO.init),
@@ -149,7 +153,9 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
             agentJobs: context.fetch(FetchDescriptor<AgentJob>())
                 .map(AgentJobDTO.init),
             agentEvents: context.fetch(FetchDescriptor<PersistentAgentEvent>())
-                .map(PersistentAgentEventDTO.init)
+                .map(PersistentAgentEventDTO.init),
+            energyContexts: contexts.isEmpty ? nil : contexts,
+            energyEvidence: evidence.isEmpty ? nil : evidence
         )
     }
 
@@ -161,6 +167,12 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
         try validate()
         try context.transaction {
             try PersonalDataStore.deleteAllModels(in: context)
+            for entry in energyContexts ?? [] {
+                entry.insert(in: context)
+            }
+            for entry in energyEvidence ?? [] {
+                entry.insert(in: context)
+            }
             insertProfileModels(
                 in: context,
                 mediaPathMapping: mediaPathMapping
@@ -284,7 +296,7 @@ struct PersonalDataSnapshot: Codable, Equatable, Sendable {
 @ModelActor
 actor PersonalDataSnapshotLoader {
     func capture(now: Date = .now) throws -> PersonalDataSnapshot {
-        try PersonalDataSnapshot.capture(from: modelContext, now: now)
+        try PersonalDataSnapshot.capture(from: modelContext, now: now).withoutHealthActivity()
     }
 }
 
@@ -621,8 +633,10 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
     var feedback: String?
     var estimatedCalories: Int?
     var calorieMET: Double?
+    var calorieScopeRaw: String?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool
+    var dailyActivityData: Data?
     var externalSource: String?
     var externalID: String?
     var sourceTurnID: UUID?
@@ -650,8 +664,10 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
         feedback = model.feedback
         estimatedCalories = model.estimatedCalories
         calorieMET = model.calorieMET
+        calorieScopeRaw = model.calorieScopeRaw
         calorieDurationMinutes = model.calorieDurationMinutes
         calorieDurationEstimated = model.calorieDurationEstimated
+        dailyActivityData = model.dailyActivityData
         externalSource = model.externalSource
         externalID = model.externalID
         sourceTurnID = model.sourceTurnID
@@ -680,6 +696,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
             feedback: feedback,
             estimatedCalories: estimatedCalories,
             calorieMET: calorieMET,
+            calorieScope: calorieScopeRaw.flatMap(WorkoutCalorieScope.init(rawValue:)),
             calorieDurationMinutes: calorieDurationMinutes,
             calorieDurationEstimated: calorieDurationEstimated,
             externalSource: externalSource,
@@ -690,6 +707,7 @@ struct WorkoutEntryDTO: Codable, Equatable, Sendable {
             sourcePerformanceID: sourcePerformanceID,
             projectionKey: projectionKey
         )
+        model.dailyActivityData = dailyActivityData
         model.id = id
         model.businessID = businessID
         if model.projectionKey == nil || model.projectionKey?.isEmpty == true {
@@ -715,5 +733,14 @@ func mapped(
             kind: $0.kind,
             path: mapping[$0.path] ?? $0.path
         )
+    }
+}
+
+extension PersonalDataSnapshot {
+    func withoutHealthActivity() -> Self {
+        var copy = self
+        copy.workouts.removeAll { $0.externalSource == "appleHealth" }
+        copy.energyEvidence = nil
+        return copy
     }
 }

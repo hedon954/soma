@@ -77,8 +77,10 @@ final class WorkoutEntry: BusinessIdentifiedModel {
     var feedback: String?
     var estimatedCalories: Int?
     var calorieMET: Double?
+    var calorieScopeRaw: String?
     var calorieDurationMinutes: Double?
     var calorieDurationEstimated: Bool = false
+    var dailyActivityData: Data?
     var externalSource: String?
     var externalID: String?
     var sourceTurnID: UUID?
@@ -238,6 +240,7 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         feedback: String? = nil,
         estimatedCalories: Int? = nil,
         calorieMET: Double? = nil,
+        calorieScope: WorkoutCalorieScope? = nil,
         calorieDurationMinutes: Double? = nil,
         calorieDurationEstimated: Bool = false,
         externalSource: String? = nil,
@@ -273,6 +276,7 @@ final class WorkoutEntry: BusinessIdentifiedModel {
         self.feedback = feedback
         self.estimatedCalories = estimatedCalories
         self.calorieMET = calorieMET
+        calorieScopeRaw = calorieScope?.rawValue
         self.calorieDurationMinutes = calorieDurationMinutes
         self.calorieDurationEstimated = calorieDurationEstimated
         self.externalSource = externalSource
