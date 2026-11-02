@@ -1,6 +1,6 @@
 import Foundation
 
-struct RestingEnergyFormulaInput: Equatable, Sendable {
+struct RestingEnergyFormulaInput: Codable, Equatable, Sendable {
     let weightKG: Double
     let heightCM: Double
     let age: Int
