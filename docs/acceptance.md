@@ -551,3 +551,10 @@ DailyActivityUITests 在 iPhone 17 Pro、iPhone 16e 和 iPad Pro 11-inch 各 2 �
 - 调整历史可打开每日系数及冻结校准窗口的逐日输入；旧磁盘库保留原始记录，新表写入并重开验证通过。
 - 自动校准回归包括未来活动变化留出、持续低报上限、缺饮食/训练/来源覆盖、体重假设分歧和体液变化。模拟只验证控制行为，不表示个人生理准确度。
 - 真机安装与 Apple 健康权限/厂商数据验收独立记录；GitHub Release 只发布源码。既存反馈凭据门禁仍阻止 TestFlight 外部分发。
+
+2026-11-03：已覆盖安装 0.0.30（34）Release 至 iPhone 17 Pro Max，并从设备读回
+`top.hedon.soma` 的版本和构建号。签名校验通过，HealthKit entitlement 存在；安装输入指纹
+已记录。安装验证不代表实际健康授权、COROS 对照或个人消耗准确度验收。
+
+同日 GitHub Release [v0.0.30](https://github.com/hedon954/soma/releases/tag/v0.0.30)
+发布成功；远端完整质量门禁通过 965 项 XCTest 与 8 项 Swift Testing。

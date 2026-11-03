@@ -89,3 +89,13 @@
 ### 固定远端工具后的正式交付
 
 v0.0.29 候选的 CI 因 runner 预装工具不满足最低版本失败，已取消 Release，保留候选标签。新增官方二进制 SHA-256 校验与固定版本安装脚本，CI/Release 共用；本机按该脚本运行 make verify 通过 965 XCTest、8 Swift Testing，构建零警告。修复提交 c0bf463 的远端 CI 41510714848 成功；v0.0.30/build 34 完整 make verify 再次成功，待正式发布工作流。手机安装实际尝试因锁屏无法挂载开发磁盘而失败；没有覆盖安装成功，仍等待解锁。
+
+### 2026-11-03 真机安装完成
+
+维护者解锁手机并恢复 Xcode 登录后，以原 Team 续签，直接运行 Release 的 make install-device。
+09:45 安装成功，设备读回 top.hedon.soma 为 0.0.30（34）；本地签名、HealthKit entitlement、
+安装输入指纹均核对通过。没有自动启动 App，真实健康授权与 COROS 数值仍需独立验收。
+v0.0.30 首次发布因 GitHub arm64 runner 容量不足未获分配而失败；已重试同一发布流程，
+第二次已通过完整质量门禁（965 XCTest、8 Swift Testing），09:46 创建正式 GitHub Release：
+https://github.com/hedon954/soma/releases/tag/v0.0.30 。远端 annotated tag 与本地一致，
+发布代码为 a8146e2；发布与真机覆盖安装均已完成。
