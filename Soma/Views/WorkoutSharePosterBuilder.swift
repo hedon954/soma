@@ -106,7 +106,7 @@ enum WorkoutSharePosterBuilder {
             sortBy: [SortDescriptor(\.date)]
         )
         descriptor.fetchLimit = 0
-        let workouts = try context.fetch(descriptor)
+        let workouts = try context.fetch(descriptor).filter { !$0.isDailyActivity }
         guard !workouts.isEmpty else { return nil }
         ExerciseLibraryStore.linkExistingExercises(for: workouts, in: context)
         let scope = Scope(

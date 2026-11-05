@@ -1,13 +1,19 @@
 import Foundation
 
 extension WorkoutEntry {
+    /// 日常活动以 `externalID` 的 `daily:` 前缀识别（ADR 0146）。
+    /// 旧记录同样使用 `daily:yyyy-MM-dd`，无需依赖 externalSource。
     var isDailyActivity: Bool {
-        externalSource == "appleHealth" && externalID?.hasPrefix("daily:") == true
+        externalID?.hasPrefix("daily:") == true
     }
 
     var dailyActivity: DailyActivitySummary? {
         guard let dailyActivityData else { return nil }
         return try? JSONDecoder().decode(DailyActivitySummary.self, from: dailyActivityData)
+    }
+
+    var dailyActivityWinningSource: DailyActivityWinningSource {
+        dailyActivity?.resolvedWinningSource ?? .appleHealth
     }
 
     var source: String? {

@@ -18,8 +18,12 @@ final class DailyActivitySyncCoordinator {
     private(set) var generation = 0
     private(set) var space: DataSpace = .demo
     private(set) var summaries: [DailyActivityDayKey: DailyActivitySummary] = [:]
+    /// 健康库回看窗口内是否已识别 COROS 日活动来源（控制设置选项可见性）。
+    private(set) var hasCOROSSamples = false
+    private(set) var sourcePreference: DailyActivitySourcePreference = .default
     private let reader: any DailyActivityReading
     private let cache: HealthConnectionStore
+    private let defaults: UserDefaults
     @ObservationIgnored private var recordContext: ModelContext?
     private var tasks: [String: Task<Void, Never>] = [:]
     private var foreground = false
@@ -28,18 +32,47 @@ final class DailyActivitySyncCoordinator {
     private var historyDay: DailyActivityDayKey?
     private var historyRequest = UUID()
     private var connectionRevision = 0
+    /// 系统汇总（Apple 策略 / 回退基线）。
+    private var aggregates: [DailyActivityDayKey: DailyActivitySummary] = [:]
+    /// 分来源贡献，供 COROS 整包与可见性判定。
+    private var contributions: [DailyActivityDayKey: [DailyActivityMetricKind: [DailyActivitySourceContribution]]] = [:]
 
-    init(reader: any DailyActivityReading = HealthKitDailyActivityReader(), cache: HealthConnectionStore = HealthConnectionStore()) {
+    init(
+        reader: any DailyActivityReading = HealthKitDailyActivityReader(),
+        cache: HealthConnectionStore = HealthConnectionStore(),
+        defaults: UserDefaults = .standard
+    ) {
         self.reader = reader
         self.cache = cache
+        self.defaults = defaults
+        sourcePreference = DailyActivitySourcePreference.stored(in: defaults)
     }
 
     func bind(context: ModelContext?) {
         recordContext = context
+        refreshCOROSAvailabilityFromStore()
     }
 
     var isAvailable: Bool {
         reader.isAvailable
+    }
+
+    var visibleSourceOptions: [DailyActivitySourcePreference] {
+        let corosAvailable = hasCOROSSamples || space == .demo
+        return DailyActivitySourcePreference.visibleOptions(corosAvailable: corosAvailable)
+    }
+
+    func setSourcePreference(_ preference: DailyActivitySourcePreference) {
+        let effective: DailyActivitySourcePreference
+        if preference == .coros, !hasCOROSSamples {
+            effective = .apple
+        } else {
+            effective = preference
+        }
+        DailyActivitySourcePreference.set(effective, in: defaults)
+        sourcePreference = effective
+        reselectAll()
+        persistSelectedSummaries()
     }
 
     func prepare() async {
@@ -51,6 +84,7 @@ final class DailyActivitySyncCoordinator {
         isEnabled = enabled
         hasRequestedTrainingAccess = trainingRequested
         isPrepared = true
+        reconcilePreference()
     }
 
     func connect() async {
@@ -91,6 +125,8 @@ final class DailyActivitySyncCoordinator {
         isPrepared = true
         isConnecting = false
         summaries = [:]
+        aggregates = [:]
+        contributions = [:]
         return generation
     }
 
@@ -113,8 +149,11 @@ final class DailyActivitySyncCoordinator {
         self.foreground = foreground
         cancelAll()
         summaries = [:]
+        aggregates = [:]
+        contributions = [:]
         guard isPrepared, isEnabled, foreground, space == .personal else { return }
         errorMessage = nil
+        reconcilePreference()
         let window = DailyActivityWindow(containing: now, now: now, calendar: calendar, recent: true)
         automaticDays = Set(window.days)
         monitor(window, slot: "automatic")
@@ -175,7 +214,8 @@ final class DailyActivitySyncCoordinator {
         let token = generation
         let historyToken = historyRequest
         for key in window.days {
-            summaries[key] = DailyActivitySummary(key: key)
+            aggregates[key] = DailyActivitySummary(key: key)
+            summaries[key] = DailyActivitySummary(key: key, winningSource: .appleHealth)
         }
         tasks[slot] = Task { [weak self, reader] in
             guard !Task.isCancelled else { return }
@@ -197,7 +237,10 @@ final class DailyActivitySyncCoordinator {
                                 try recordContext.save()
                             }
                         } else {
-                            try DailyActivityRecordStore.replace(window.days.compactMap { self.summaries[$0] }, in: recordContext)
+                            try DailyActivityRecordStore.replace(
+                                window.days.compactMap { self.summaries[$0] },
+                                in: recordContext
+                            )
                         }
                     }
                 } catch {
@@ -213,33 +256,134 @@ final class DailyActivitySyncCoordinator {
         switch update {
         case let .values(kind, values, date):
             for entry in values where window.days.contains(entry.key) {
-                var summary = summaries[entry.key] ?? DailyActivitySummary(key: entry.key)
+                var summary = aggregates[entry.key] ?? DailyActivitySummary(key: entry.key)
                 summary[kind].replace(value: entry.value, readAt: date)
-                summaries[entry.key] = summary
+                aggregates[entry.key] = summary
             }
+            reselect(days: values.map(\.key).filter(window.days.contains))
         case let .sources(kind, values):
             for entry in values where window.days.contains(entry.key) {
-                guard var summary = summaries[entry.key], summary[kind].availability == .value else { continue }
+                guard var summary = aggregates[entry.key], summary[kind].availability == .value else { continue }
                 summary[kind].source = entry.source
-                summaries[entry.key] = summary
+                aggregates[entry.key] = summary
+                var dayContrib = contributions[entry.key] ?? [:]
+                dayContrib[kind] = entry.contributions
+                contributions[entry.key] = dayContrib
             }
+            refreshCOROSAvailability()
+            reconcilePreference()
+            reselect(days: values.map(\.key).filter(window.days.contains))
         case let .failure(kind):
             errorMessage = "部分活动数据读取失败，请重新读取。"
             for key in window.days {
-                summaries[key]?[kind].availability = .failed
+                aggregates[key]?[kind].availability = .failed
             }
+            reselect(days: Array(window.days))
         case let .sourceFailure(kind):
             for key in window.days {
-                summaries[key]?[kind].source = nil
+                aggregates[key]?[kind].source = nil
+                contributions[key]?[kind] = []
             }
+            refreshCOROSAvailability()
+            reconcilePreference()
+            reselect(days: Array(window.days))
         case .trainingEvidence: break
         case .trainingFailure:
             errorMessage = "训练或训练时段外的步行暂时无法读取，已保留先前依据。"
         }
     }
 
+    private func reselect(days: [DailyActivityDayKey]) {
+        let preference = sourcePreference
+        let unique = Array(Set(days))
+        for key in unique {
+            guard let aggregate = aggregates[key] else { continue }
+            let apple = DailyActivityPackageSelector.applePackage(from: aggregate)
+            let coros = DailyActivityPackageSelector.corosPackage(
+                key: key,
+                contributions: contributions[key] ?? [:],
+                readAt: aggregate[.steps].readAt
+                    ?? aggregate[.walkingRunningDistance].readAt
+                    ?? aggregate[.activeEnergy].readAt
+                    ?? .now
+            )
+            let selected = DailyActivityPackageSelector.select(
+                preference: preference,
+                apple: apple,
+                coros: coros
+            )
+            if let selected {
+                var summary = selected.asSummary()
+                // 保留未完成的 loading/failed 状态：若选中包某指标尚无值且聚合仍在 loading/failed，透传可用性。
+                for kind in DailyActivityMetricKind.allCases {
+                    let agg = aggregate[kind]
+                    if summary[kind].value == nil, [.loading, .failed].contains(agg.availability) {
+                        summary[kind].availability = agg.availability
+                        summary[kind].readAt = agg.readAt
+                    }
+                }
+                summaries[key] = summary
+            } else {
+                var empty = DailyActivitySummary(key: key, winningSource: .appleHealth)
+                for kind in DailyActivityMetricKind.allCases {
+                    empty[kind] = aggregate[kind]
+                }
+                summaries[key] = empty
+            }
+        }
+    }
+
+    private func reselectAll() {
+        reselect(days: Array(aggregates.keys))
+    }
+
+    private func persistSelectedSummaries() {
+        guard let recordContext, space == .personal, isEnabled else { return }
+        do {
+            try DailyActivityRecordStore.replace(Array(summaries.values), in: recordContext)
+        } catch {
+            recordContext.rollback()
+            errorMessage = "活动数据已读取，运动记录暂时无法保存，请重新读取。"
+        }
+    }
+
+    private func refreshCOROSAvailability() {
+        if DailyActivityPackageSelector.hasCOROSSamples(contributions: contributions) {
+            hasCOROSSamples = true
+        }
+    }
+
+    private func refreshCOROSAvailabilityFromStore() {
+        guard let recordContext else { return }
+        var descriptor = FetchDescriptor<WorkoutEntry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = 120
+        guard let rows = try? recordContext.fetch(descriptor) else { return }
+        let found = rows.contains { entry in
+            guard entry.isDailyActivity else { return false }
+            if entry.dailyActivityWinningSource == .coros { return true }
+            let sources = entry.dailyActivity?.metrics.values.flatMap { $0.source?.sources ?? [] } ?? []
+            return sources.contains(where: DailyActivitySourceMatcher.isCOROS)
+        }
+        if found {
+            hasCOROSSamples = true
+        }
+        reconcilePreference()
+    }
+
+    private func reconcilePreference() {
+        let stored = DailyActivitySourcePreference.stored(in: defaults)
+        let effective = DailyActivitySourcePreference.resolveEffective(
+            stored: stored,
+            corosAvailable: hasCOROSSamples,
+            defaults: defaults
+        )
+        sourcePreference = effective
+    }
+
     static func demo(key: DailyActivityDayKey) -> DailyActivitySummary {
-        var summary = DailyActivitySummary(key: key)
+        var summary = DailyActivitySummary(key: key, winningSource: .coros)
         for (kind, value) in [(DailyActivityMetricKind.steps, 8640.0), (.walkingRunningDistance, 6100), (.activeEnergy, 486)] {
             summary[kind].replace(value: value, readAt: key.start)
             var sources = [HealthDataSource(name: "COROS（演示）", bundleIdentifier: "example.soma.demo.coros")]

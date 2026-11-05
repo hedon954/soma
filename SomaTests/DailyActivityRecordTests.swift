@@ -84,4 +84,28 @@ final class DailyActivityRecordTests: XCTestCase {
         XCTAssertEqual(entry.dailyActivity?[.activeEnergy].value, 500)
         XCTAssertEqual(entry.dailyActivity?[.steps].value, 123)
     }
+
+    func testWinningSourcePersistsAndKeepsStableProjectionKey() throws {
+        let container = try ModelContainer(for: Schema(SomaDataSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = container.mainContext
+        let key = DailyActivityDayKey(date: .now, calendar: .current)
+        var day = DailyActivitySummary(key: key, winningSource: .coros)
+        day[.steps].replace(value: 8000, readAt: .now)
+        day[.activeEnergy].replace(value: 400, readAt: .now)
+        try DailyActivityRecordStore.replace([day], in: context)
+        let first = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutEntry>()).first)
+        XCTAssertEqual(first.externalSource, "coros")
+        XCTAssertTrue(first.isDailyActivity)
+        XCTAssertEqual(first.dailyActivityWinningSource, .coros)
+        let projectionKey = first.projectionKey
+        day.winningSource = .appleHealth
+        day[.steps].replace(value: 1000, readAt: .now)
+        try DailyActivityRecordStore.replace([day], in: context)
+        let rows = try context.fetch(FetchDescriptor<WorkoutEntry>())
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.projectionKey, projectionKey)
+        XCTAssertEqual(rows.first?.externalSource, "appleHealth")
+        XCTAssertEqual(rows.first?.dailyActivity?[.steps].value, 1000)
+    }
+
 }

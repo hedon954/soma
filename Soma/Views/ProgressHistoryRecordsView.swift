@@ -71,7 +71,9 @@ struct ProgressDayRecordSections: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach([ProgressRecentActivity.Kind.meal, .workout, .body], id: \.title) { kind in
-                let records = day.records.filter { $0.activity.kind == kind }
+                let records = day.records.filter {
+                    $0.activity.kind == kind && (kind != .workout || !$0.isDailyActivity)
+                }
                 if !records.isEmpty {
                     HStack {
                         Text(kind.title).font(.headline)

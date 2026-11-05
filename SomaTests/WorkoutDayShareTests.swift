@@ -196,4 +196,36 @@ final class WorkoutDayShareTests: XCTestCase {
             day: day
         )
     }
+
+    @MainActor
+    func testDailyPosterExcludesDailyActivityRecords() throws {
+        let fixture = try makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let context = fixture.context
+        let day = fixture.day
+        let training = WorkoutEntry(
+            date: day,
+            exercise: "虚构深蹲",
+            setEntries: [WorkoutSetEvidence(logicalSetIndex: 1, reps: 5, externalWeightKG: 20)],
+            estimatedCalories: 30,
+            calorieDurationMinutes: 5
+        )
+        context.insert(training)
+        var summary = DailyActivitySummary(key: .init(date: day, calendar: fixture.calendar), winningSource: .coros)
+        summary[.steps].replace(value: 99999, readAt: day)
+        summary[.activeEnergy].replace(value: 999, readAt: day)
+        try DailyActivityRecordStore.replace([summary], in: context)
+        try context.save()
+
+        let model = try XCTUnwrap(WorkoutSharePosterBuilder.makeModel(
+            forDay: day,
+            in: context,
+            calendar: fixture.calendar
+        ))
+        XCTAssertEqual(model.exerciseCount, 1)
+        XCTAssertEqual(model.exercises.map(\.name), ["虚构深蹲"])
+        XCTAssertNil(model.exercises.first { $0.name == "日常活动" })
+        XCTAssertEqual(model.estimatedCalories, 30)
+    }
+
 }

@@ -13,7 +13,9 @@ enum ProgressRecordSections {
     static func make(snapshot: ProgressHistorySnapshot, kind: ProgressRecentActivity.Kind) -> [Section] {
         let newestFirst = kind == .workout && [.month, .year].contains(snapshot.window.period)
         let sections = snapshot.days.compactMap { day -> Section? in
-            let records = day.records.filter { $0.activity.kind == kind }
+            let records = day.records.filter {
+                $0.activity.kind == kind && (kind != .workout || !$0.isDailyActivity)
+            }
             guard !records.isEmpty else { return nil }
             return Section(date: day.date, records: newestFirst ? records.sorted { $0.activity.date > $1.activity.date } : records)
         }
