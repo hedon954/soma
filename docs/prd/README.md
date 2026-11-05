@@ -39,6 +39,7 @@
 | [074](074-composable-training.md) | 0.0.27 | 已采纳，已实现 |
 | [075](075-healthkit-daily-activity.md) | 0.0.30 | 已实现；真机数据待验收 |
 | [076](076-adaptive-energy-system.md) | 0.0.30 | 已实现；真机数据待验收 |
+| [077](077-daily-activity-source-priority.md) | 提议 | 提议：多来源整包择优与独立步数列表 |
 
 ## 阅读约定
 
@@ -77,3 +78,9 @@
 | --- | --- | --- |
 | [075](075-healthkit-daily-activity.md) | 已实现 | 健康三项日汇总覆盖运动记录 |
 | [076](076-adaptive-energy-system.md) | 已实现 | 动态系数、明确生活事实、去重训练与可审查校准 |
+
+## 提议中（尚未进入发布窗口版本号）
+
+| 文档 | 状态 | 范围 |
+| --- | --- | --- |
+| [077](077-daily-activity-source-priority.md) | 提议 | 多来源整包择优、COROS 直连调研结论、独立步数列表与分享排除 |

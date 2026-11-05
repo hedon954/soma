@@ -4,6 +4,7 @@
 - 日期：2026-10-21
 - 版本：0.0.30
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)（恢复三项日汇总，并纳入运动记录/能量统计）、[工程契约](../../CLAUDE.md)（外部导入范围）
+- 后续修订：[PRD 077](077-daily-activity-source-priority.md)（多来源整包择优、独立列表与分享排除）
 - 上游依据：[HealthKit 调研](../research/2026-10-20-healthkit-daily-activity.md)
 - 下游落地：[ADR 0144](../adr/0144-healthkit-daily-activity.md)、[验收](../acceptance.md)、[数据库结构](../engineering/database-schema.md)
 
