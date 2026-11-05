@@ -21,10 +21,12 @@ ADR 0144 通过 HealthKit 三项日统计覆盖为一条运动记录，并用系
 - HealthKit 实现除系统合并外，对已授权窗口使用按 `HKSource` / bundle 的分项统计，以便识别 COROS 与 Apple 系样本；不再把 `separateBySource` 仅当作名称装饰。
 - **不**新增 COROS MCP Reader、OAuth、Keychain 令牌或远程轮询。用户只授权 Apple 健康一次。
 - 设置持久化「日活动数据源」枚举（排除备份策略与连接状态文件一致评估）：
-  - `coros`：取 HealthKit 中来源为 COROS 的样本组成整包（步数+距离+卡路里）。
   - `apple`：采用 Apple 健康系统汇总 / 内部择优（`cumulativeSum` 或等价系统总量）；Soma 不重选来源。
+  - `coros`：取 HealthKit 中来源为 COROS 的样本组成整包（步数+距离+卡路里）。
   - `maxSteps`：在可用整包候选之间比较步数，取更大者；仍整包采用。
-- 产品默认：`coros`（Hedon 产品意图）；用户可改为 `apple` 或 `maxSteps`。
+- **产品默认：`apple`**（Hedon 锁定）。用户可在选项可见时改为 `coros` 或 `maxSteps`。
+- **COROS 选项可见性**：设置 UI 仅在健康库已能识别 COROS 日活动来源时展示 `coros` 行。判定：对已授权的日活动相关类型（至少步数；实现可扩展到距离/活动能量）在合理回看窗口（与同步窗口一致或 ADR 实现选定的固定天数，如最近 30 天）内，`separateBySource` / 等价分来源查询能得到至少一个 COROS `HKSource`（bundle / 名称匹配规则与整包识别相同）。无匹配则隐藏 COROS 选项；`apple` 与 `maxSteps` 在已授权后始终展示。
+- **持久化与隐藏交互**：若持久化值为 `coros`，但当前判定 COROS 不可见（样本消失或尚未写入），读取策略时**按 `apple` 行为**，并将持久化纠正为 `apple`（避免设置页与同步策略长期不一致）。用户再次出现 COROS 样本后，不自动切回 `coros`，需用户手动选择。
 - 同步协调器在写入前对每个自然日做**整包择优**：先按策略选出至多一个快照，再交给 `DailyActivityRecordStore` 覆盖。落选快照的任何指标不得补进获胜快照。
 
 ### COROS 缺包与回退
@@ -43,7 +45,8 @@ ADR 0144 通过 HealthKit 三项日统计覆盖为一条运动记录，并用系
 
 ### 设置 UI（icon）
 
-- 「日活动数据源」三个选项前必须带对应视觉标识：COROS logo、Apple 健康（或 Apple）logo、步数更大用非品牌的 gauge / 向上箭头类图标。
+- 「日活动数据源」每个**当前可见**选项前必须带对应视觉标识：Apple 健康（或 Apple）logo；COROS logo（仅选项可见时）；步数更大用非品牌的 gauge / 向上箭头类图标。
+- 无 COROS 样本时设置页只显示 Apple 与步数更大两行，不留空位或禁用态的 COROS 行。
 - 独立日常活动列表行内展示获胜来源图标（与设置选项同一套来源视觉语言）。
 
 ### 列表与分享
@@ -79,7 +82,7 @@ ADR 0144 通过 HealthKit 三项日统计覆盖为一条运动记录，并用系
 
 ## 验证
 
-- 单元测试：三种策略、COROS 缺包回退、平局、缺项不混拼、分享过滤、列表隔离、旧记录兼容。
+- 单元测试：默认 `apple`、COROS 选项可见/隐藏、曾选 `coros` 后样本消失回退并纠正持久化、三种策略、COROS 缺包回退、平局、缺项不混拼、分享过滤、列表隔离、旧记录兼容。
 - `make check` / `make verify`；文档生命周期双向链接门禁。
 - 真机 Spike：分来源统计能否稳定识别 COROS 三项；与系统汇总对照（不入库真实数值）。不要求 COROS MCP Spike。
 

@@ -36,21 +36,21 @@
 - 官方与 Reddit 长期反馈：强制杀 COROS、关后台刷新会导致不同步；Apple Watch→HealthKit 无同类「必须开厂商 App」问题。
 - 没有可靠的「放置 iPhone 保证 COROS 永久常驻」方案；实用组合是不杀进程 + 后台刷新 + Auto Sync + 习惯/快捷指令偶发打开。
 
-**产品锁定：** 日活动只走 HealthKit。设置「日活动数据源」= COROS（HealthKit 来源过滤整包）/ Apple（跟系统汇总）/ 步数更大（整包比步数）。默认 COROS。不做 MCP OAuth UI。
+**产品锁定：** 日活动只走 HealthKit。设置「日活动数据源」概念上 = COROS（HealthKit 来源过滤整包）/ Apple（跟系统汇总）/ 步数更大（整包比步数）。**默认 Apple**。COROS 选项仅当健康库已有 COROS 来源日活动样本时显示，否则隐藏。不做 MCP OAuth UI。
 
 ## 三、优先级与整包一致性
 
 用户规则：步数、距离、活动消耗必须来自**同一获胜来源快照**。禁止「COROS 步数 + Apple 距离/热量」混拼。
 
-策略枚举（设置可改；**默认 COROS**）：
+策略枚举（设置可改；**默认 Apple**）：
 
-1. **COROS**：HealthKit 中来源为 COROS 的整包；不完整则回退 Apple 汇总，图标如实反映。
-2. **Apple**：HealthKit 系统合并 / 内部择优；Soma 不重选。
-3. **步数更大**：在可用整包间比较步数；平手按稳定次序打破平局；仍整包采用。
+1. **Apple**（始终可选）：HealthKit 系统合并 / 内部择优；Soma 不重选。
+2. **COROS**（仅健康库已有 COROS 来源样本时显示）：HealthKit 中来源为 COROS 的整包；不完整则回退 Apple 汇总，图标如实反映。无样本时不展示该选项。
+3. **步数更大**（始终可选）：在可用整包间比较步数；平手按稳定次序打破平局；仍整包采用。无 COROS 时候选通常只剩 Apple。
 
 比较键只用步数；获胜后三项与来源图标一并采用。缺项保持 `nil`，不向落选快照借数。
 
-UI：三选项前分别加 COROS logo、Apple 健康 logo、非品牌「更大/择优」图标（gauge / 向上箭头等）。
+UI：可见选项前分别加对应 logo——Apple 健康 logo、COROS logo（选项可见时）、非品牌「更大/择优」图标（gauge / 向上箭头等）。
 
 ## 四、信息架构
 
@@ -67,6 +67,6 @@ UI：三选项前分别加 COROS logo、Apple 健康 logo、非品牌「更大/�
 
 ## 六、验收与 Spike
 
-确定性：三种策略、COROS 缺包回退、平局次序、缺项不混拼、分享过滤、列表隔离、来源图标、设置项 icon、旧 `appleHealth:daily:` 记录迁移或识别兼容、无 COROS OAuth UI。
+确定性：默认 Apple、COROS 选项有样才显示/无样隐藏、曾选 COROS 后样本消失回退、三种策略、COROS 缺包回退、平局次序、缺项不混拼、分享过滤、列表隔离、来源图标、设置项 icon、旧 `appleHealth:daily:` 记录迁移或识别兼容、无 COROS OAuth UI。
 
 真机 Spike（不入库真实数值）：HealthKit 分来源统计能否稳定识别 COROS 三项并与系统汇总对照。不要求 MCP discovery / 授权 Spike。
