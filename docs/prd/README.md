@@ -83,4 +83,4 @@
 
 | 文档 | 状态 | 范围 |
 | --- | --- | --- |
-| [077](077-daily-activity-source-priority.md) | 提议 | 多来源整包择优、COROS 直连调研结论、独立步数列表与分享排除 |
+| [077](077-daily-activity-source-priority.md) | 提议 | HealthKit 日活动数据源三选一（COROS/Apple/步数更大）、整包择优、独立列表与分享排除 |

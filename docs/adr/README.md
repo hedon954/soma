@@ -34,7 +34,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0143](0143-composable-training.md) | 0.0.27 | 已采纳，已实现 | 统一内容展开，保留天序与执行快照 |
 | [0144](0144-healthkit-daily-activity.md) | 0.0.30 | 已采纳并实现 | 每日健康运动记录、真实来源与覆盖同步 |
 | [0145](0145-adaptive-energy-system.md) | 0.0.30 | 已采纳并实现 | 动态消耗、明确事实、去重训练与逐次校准依据 |
-| [0146](0146-daily-activity-source-priority.md) | 提议 | 提议 | 多来源整包择优、来源身份、列表与分享边界 |
+| [0146](0146-daily-activity-source-priority.md) | 提议 | 提议 | HealthKit 日活动数据源三选一、整包择优、列表与分享边界 |
 
 新决策使用 [ADR 模板](template.md)。
 
@@ -81,4 +81,4 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | 文档 | 状态 | 决策 |
 | --- | --- | --- |
-| [0146](0146-daily-activity-source-priority.md) | 提议 | 部分替代 0144：整包择优、COROS MCP 直连边界、独立列表与分享排除 |
+| [0146](0146-daily-activity-source-priority.md) | 提议 | 部分替代 0144：HealthKit 整包择优（COROS/Apple/步数更大）、独立列表与分享排除；不做 MCP |
