@@ -483,6 +483,138 @@ final class AgentChatPresentationTests: XCTestCase {
         )
     }
 
+    func testSucceededTurnHidesPersistedFailedToolCardsWithoutMutatingItems() {
+        let title = AgentToolName.createMeal.displayTitle
+        let failedOne = AgentTurnItem(
+            kind: .tool,
+            status: .failed,
+            title: title,
+            errorMessage: "第一次失败"
+        )
+        let failedTwo = AgentTurnItem(
+            kind: .tool,
+            status: .failed,
+            title: title,
+            errorMessage: "第二次失败"
+        )
+        let succeeded = AgentTurnItem(
+            kind: .tool,
+            status: .succeeded,
+            title: title,
+            output: AgentTraceText.json(AgentToolResult.success(
+                "已记录晚餐。",
+                recordRefs: [
+                    AgentRecordReference(
+                        recordType: ConversationIntent.meal.rawValue,
+                        recordID: 42,
+                        title: "虚构晚餐"
+                    )
+                ],
+                recordType: .meal
+            ))
+        )
+        let persisted = [failedOne, failedTwo, succeeded]
+
+        let visible = AgentTurnVisibleItems.make(
+            from: persisted,
+            turnSucceeded: true
+        )
+        XCTAssertEqual(visible.map(\.status), [.succeeded])
+        XCTAssertEqual(visible.map(\.title), [title])
+
+        let segments = AgentTurnTranscriptSegments.make(
+            from: persisted,
+            turnSucceeded: true
+        )
+        XCTAssertEqual(
+            segments.compactMap { segment -> AgentTraceStatus? in
+                switch segment {
+                case let .process(_, items):
+                    items.first?.status
+                case let .item(item):
+                    item.status
+                case .record:
+                    nil
+                }
+            },
+            [.succeeded]
+        )
+        XCTAssertEqual(
+            segments.filter { $0.id.hasPrefix("record:") }.map(\.id),
+            ["record:meal:42"]
+        )
+        XCTAssertEqual(
+            persisted.map(\.status),
+            [.failed, .failed, .succeeded],
+            "展示过滤不得改写持久化 Item"
+        )
+    }
+
+    func testFailedTurnKeepsPersistedFailedToolCardsVisible() {
+        let title = AgentToolName.createMeal.displayTitle
+        let failed = AgentTurnItem(
+            kind: .tool,
+            status: .failed,
+            title: title,
+            errorMessage: "仍应可见"
+        )
+        let error = AgentTurnItem(
+            kind: .error,
+            status: .failed,
+            title: "执行失败",
+            errorMessage: "模型未能完成这次请求"
+        )
+
+        let visible = AgentTurnVisibleItems.make(
+            from: [failed, error],
+            turnSucceeded: false
+        )
+        XCTAssertEqual(visible.map(\.kind), [.tool, .error])
+        XCTAssertEqual(visible.first?.status, .failed)
+
+        let segments = AgentTurnTranscriptSegments.make(
+            from: [failed, error],
+            turnSucceeded: false
+        )
+        XCTAssertEqual(segments.count, 2)
+        if case let .item(item) = segments[0] {
+            XCTAssertEqual(item.status, .failed)
+            XCTAssertEqual(item.kind, .tool)
+        } else {
+            XCTFail("failed tool must stay visible on failed turn")
+        }
+    }
+
+    func testInterruptedTurnWithoutOverallSuccessKeepsFailedToolVisible() {
+        let search = toolItem(
+            title: "搜索动作",
+            name: "search_exercises",
+            observation: "找到 1 个动作。"
+        )
+        let failed = AgentTurnItem(
+            kind: .tool,
+            status: .failed,
+            title: "搜索动作",
+            errorMessage: "未找到动作"
+        )
+        let create = toolItem(
+            title: "创建训练记录",
+            name: "create_workout",
+            observation: "已记录 6 条训练。"
+        )
+
+        let interrupted = AgentTurnTranscriptSegments.make(
+            from: [search, failed, create],
+            turnSucceeded: false
+        )
+        XCTAssertEqual(interrupted.count, 3)
+        if case let .item(item) = interrupted[1] {
+            XCTAssertEqual(item.status, .failed)
+        } else {
+            XCTFail("failed tool must stay visible")
+        }
+    }
+
     private func toolItem(
         title: String,
         name: String,

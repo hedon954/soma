@@ -21,12 +21,19 @@ struct AgentTurnTranscript: View, Equatable {
             && lhs.allowsDeferredLoad == rhs.allowsDeferredLoad
     }
 
+    private var turnSucceeded: Bool {
+        sourceMessage?.agentStatus == .succeeded
+    }
+
     private var visibleItems: [AgentTurnItem] {
-        AgentTurnVisibleItems.make(from: items)
+        AgentTurnVisibleItems.make(from: items, turnSucceeded: turnSucceeded)
     }
 
     private var segments: [AgentTurnTranscriptSegment] {
-        preparedSegments ?? AgentTurnTranscriptSegments.make(from: items)
+        preparedSegments ?? AgentTurnTranscriptSegments.make(
+            from: items,
+            turnSucceeded: turnSucceeded
+        )
     }
 
     /// ADR 0014 / ADR 0077 / ADR 0085：按 Item 顺序渲染全部 Event Card，不按 kind 重排。

@@ -328,6 +328,7 @@ enum CoachMessageRenderPayloadCache {
         let mediaAttachmentsData: Data
         let turnItemsData: Data
         let locationData: Data
+        let agentStatusRaw: String?
         let payload: CoachMessageRenderPayload
 
         var approximateCost: Int {
@@ -337,6 +338,7 @@ enum CoachMessageRenderPayloadCache {
             cost += mediaAttachmentsData.count
             cost += turnItemsData.count
             cost += locationData.count
+            cost += agentStatusRaw?.utf8.count ?? 0
             return cost
         }
 
@@ -348,6 +350,7 @@ enum CoachMessageRenderPayloadCache {
                 && mediaAttachmentsData == message.mediaAttachmentsData
                 && turnItemsData == message.agentTurnItemsData
                 && locationData == message.locationData
+                && agentStatusRaw == message.agentStatusRaw
         }
     }
 
@@ -377,6 +380,7 @@ enum CoachMessageRenderPayloadCache {
         }
         let attachments = message.mediaAttachments
         let turnItemsWithoutActivity = items.filter { $0.kind != .activity }
+        let turnSucceeded = message.agentStatus == .succeeded
         let payload = CoachMessageRenderPayload(
             userQuestions: questions,
             scheduleDraft: scheduleDraft,
@@ -384,10 +388,14 @@ enum CoachMessageRenderPayloadCache {
                 ? (questions == nil ? AgentVisibleTextSanitizer.sanitize(message.text) : "")
                 : message.text,
             turnItems: items,
-            transcriptSegments: AgentTurnTranscriptSegments.make(from: items),
+            transcriptSegments: AgentTurnTranscriptSegments.make(
+                from: items,
+                turnSucceeded: turnSucceeded
+            ),
             turnItemsWithoutActivity: turnItemsWithoutActivity,
             transcriptSegmentsWithoutActivity: AgentTurnTranscriptSegments.make(
-                from: turnItemsWithoutActivity
+                from: turnItemsWithoutActivity,
+                turnSucceeded: turnSucceeded
             ),
             mediaAttachments: attachments,
             location: message.location,
@@ -406,6 +414,7 @@ enum CoachMessageRenderPayloadCache {
             mediaAttachmentsData: message.mediaAttachmentsData,
             turnItemsData: message.agentTurnItemsData,
             locationData: message.locationData,
+            agentStatusRaw: message.agentStatusRaw,
             payload: payload
         )
         if entries.updateValue(entry, forKey: message.id) == nil {
