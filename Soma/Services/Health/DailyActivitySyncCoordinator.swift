@@ -63,11 +63,10 @@ final class DailyActivitySyncCoordinator {
     }
 
     func setSourcePreference(_ preference: DailyActivitySourcePreference) {
-        let effective: DailyActivitySourcePreference
-        if preference == .coros, !hasCOROSSamples {
-            effective = .apple
+        let effective: DailyActivitySourcePreference = if preference == .coros, !hasCOROSSamples {
+            .apple
         } else {
-            effective = preference
+            preference
         }
         DailyActivitySourcePreference.set(effective, in: defaults)
         sourcePreference = effective
@@ -362,7 +361,9 @@ final class DailyActivitySyncCoordinator {
         guard let rows = try? recordContext.fetch(descriptor) else { return }
         let found = rows.contains { entry in
             guard entry.isDailyActivity else { return false }
-            if entry.dailyActivityWinningSource == .coros { return true }
+            if entry.dailyActivityWinningSource == .coros {
+                return true
+            }
             let sources = entry.dailyActivity?.metrics.values.flatMap { $0.source?.sources ?? [] } ?? []
             return sources.contains(where: DailyActivitySourceMatcher.isCOROS)
         }

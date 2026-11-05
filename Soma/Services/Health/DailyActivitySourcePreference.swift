@@ -9,7 +9,9 @@ enum DailyActivitySourcePreference: String, CaseIterable, Identifiable, Sendable
     static let defaultsKey = "health.dailyActivitySource"
     static let `default` = Self.apple
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -76,14 +78,18 @@ enum DailyActivityWinningSource: String, Codable, Sendable, Equatable {
         preference.title
     }
 
-    var externalSource: String { rawValue }
+    var externalSource: String {
+        rawValue
+    }
 }
 
 enum DailyActivitySourceMatcher {
     /// bundle / 名称匹配规则：与整包识别、COROS 选项可见性共用。
     static func isCOROS(_ source: HealthDataSource) -> Bool {
         let bundle = source.bundleIdentifier.lowercased()
-        if bundle.contains("coros") { return true }
+        if bundle.contains("coros") {
+            return true
+        }
         let name = source.name.lowercased()
         return name.contains("coros") || source.name.contains("高驰")
     }

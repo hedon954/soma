@@ -3,9 +3,9 @@ import Foundation
 import XCTest
 
 final class DailyActivitySourcePreferenceTests: XCTestCase {
-    func testDefaultIsAppleAndVisibleOptionsHideCOROSWithoutSamples() {
+    func testDefaultIsAppleAndVisibleOptionsHideCOROSWithoutSamples() throws {
         let suiteName = "DailyActivitySourcePreferenceTests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: suiteName)!
+        let suite = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { suite.removePersistentDomain(forName: suiteName) }
         XCTAssertEqual(DailyActivitySourcePreference.stored(in: suite), .apple)
         XCTAssertEqual(
@@ -18,9 +18,9 @@ final class DailyActivitySourcePreferenceTests: XCTestCase {
         )
     }
 
-    func testPersistedCOROSFallsBackAndDoesNotAutoRestore() {
+    func testPersistedCOROSFallsBackAndDoesNotAutoRestore() throws {
         let suiteName = "DailyActivitySourcePreferenceTests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: suiteName)!
+        let suite = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { suite.removePersistentDomain(forName: suiteName) }
         DailyActivitySourcePreference.set(.coros, in: suite)
         let effective = DailyActivitySourcePreference.resolveEffective(

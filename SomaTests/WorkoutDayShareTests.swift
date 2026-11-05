@@ -227,5 +227,4 @@ final class WorkoutDayShareTests: XCTestCase {
         XCTAssertNil(model.exercises.first { $0.name == "日常活动" })
         XCTAssertEqual(model.estimatedCalories, 30)
     }
-
 }

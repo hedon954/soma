@@ -53,15 +53,21 @@ enum DailyActivityPackageSelector {
             return corosOK ?? appleOK ?? apple
         case .maxSteps:
             switch (corosOK, appleOK) {
-            case let (c?, a?):
-                if c.steps! > a.steps! { return c }
-                if a.steps! > c.steps! { return a }
+            case let (corosCandidate?, appleCandidate?):
+                let corosSteps = corosCandidate.steps ?? -.infinity
+                let appleSteps = appleCandidate.steps ?? -.infinity
+                if corosSteps > appleSteps {
+                    return corosCandidate
+                }
+                if appleSteps > corosSteps {
+                    return appleCandidate
+                }
                 // 平手：稳定次序 coros > apple
-                return c
-            case let (c?, nil):
-                return c
-            case let (nil, a?):
-                return a
+                return corosCandidate
+            case let (corosCandidate?, nil):
+                return corosCandidate
+            case let (nil, appleCandidate?):
+                return appleCandidate
             case (nil, nil):
                 return apple ?? coros
             }
@@ -106,9 +112,15 @@ enum DailyActivityPackageSelector {
         let (energy, energySource) = corosValue(.activeEnergy)
         guard steps != nil else { return nil }
         var sourceByMetric: [DailyActivityMetricKind: ActivitySourceAttribution] = [:]
-        if let stepsSource { sourceByMetric[.steps] = stepsSource }
-        if let distanceSource { sourceByMetric[.walkingRunningDistance] = distanceSource }
-        if let energySource { sourceByMetric[.activeEnergy] = energySource }
+        if let stepsSource {
+            sourceByMetric[.steps] = stepsSource
+        }
+        if let distanceSource {
+            sourceByMetric[.walkingRunningDistance] = distanceSource
+        }
+        if let energySource {
+            sourceByMetric[.activeEnergy] = energySource
+        }
         return DailyActivityCandidatePackage(
             key: key,
             winningSource: .coros,
@@ -125,10 +137,10 @@ enum DailyActivityPackageSelector {
         contributions: [DailyActivityDayKey: [DailyActivityMetricKind: [DailyActivitySourceContribution]]]
     ) -> Bool {
         for day in contributions.values {
-            for kind in DailyActivityMetricKind.allCases {
-                if (day[kind] ?? []).contains(where: { DailyActivitySourceMatcher.isCOROS($0.source) }) {
-                    return true
-                }
+            for kind in DailyActivityMetricKind.allCases
+                where (day[kind] ?? []).contains(where: { DailyActivitySourceMatcher.isCOROS($0.source) })
+            {
+                return true
             }
         }
         return false

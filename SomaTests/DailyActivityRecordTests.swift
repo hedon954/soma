@@ -107,5 +107,4 @@ final class DailyActivityRecordTests: XCTestCase {
         XCTAssertEqual(rows.first?.externalSource, "appleHealth")
         XCTAssertEqual(rows.first?.dailyActivity?[.steps].value, 1000)
     }
-
 }
