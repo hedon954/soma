@@ -29,11 +29,11 @@ struct DailyActivitySourceIcon: View {
                 .frame(width: size, height: size)
                 .accessibilityLabel("Apple 健康")
         case .coros, .winning(.coros):
-            Text("C")
-                .font(.system(size: size * 0.55, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+            Image("CorosLogo")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
                 .frame(width: size, height: size)
-                .background(Color.orange.gradient, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
                 .accessibilityLabel("COROS")
         case .maxSteps:
             Image(systemName: "arrow.up.circle.fill")
