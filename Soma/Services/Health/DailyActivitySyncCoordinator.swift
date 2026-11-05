@@ -313,11 +313,18 @@ final class DailyActivitySyncCoordinator {
             )
             if let selected {
                 var summary = selected.asSummary()
-                // 保留未完成的 loading/failed 状态：若选中包某指标尚无值且聚合仍在 loading/failed，透传可用性。
+                // 透传聚合侧 loading/failed：失败时保留已读数值（旧行为），loading 仅在无值时保留。
                 for kind in DailyActivityMetricKind.allCases {
                     let agg = aggregate[kind]
-                    if summary[kind].value == nil, [.loading, .failed].contains(agg.availability) {
-                        summary[kind].availability = agg.availability
+                    if agg.availability == .failed {
+                        summary[kind].availability = .failed
+                        if summary[kind].value == nil {
+                            summary[kind].value = agg.value
+                            summary[kind].readAt = agg.readAt
+                        }
+                        summary[kind].source = agg.source
+                    } else if summary[kind].value == nil, agg.availability == .loading {
+                        summary[kind].availability = .loading
                         summary[kind].readAt = agg.readAt
                     }
                 }
