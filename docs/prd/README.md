@@ -1,7 +1,7 @@
 # Soma 产品需求文档
 
 活 PRD 链与对话压缩相同：先读**压缩起点**，再读最近 3 个营销版本的增量。当前窗口是
-`0.0.30`、`0.0.27`、`0.0.26`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
+`0.0.31`、`0.0.30`、`0.0.27`（以 `project.yml` 的 `MARKETING_VERSION` 与 `CHANGELOG.md`
 版本标题为准，不按文件日期）。
 
 产品不变量以 [工程契约](../../CLAUDE.md) 的 Product contract 为准。0.0.25 及更早的**原文**在
@@ -12,7 +12,7 @@
 阅读顺序：
 
 ```text
-[PRD 000 压缩起点] → 0.0.26 → 0.0.27 → 0.0.30
+[PRD 000 压缩起点] → 0.0.27 → 0.0.30 → 0.0.31
 ```
 
 压缩起点是双向链的起始节点：只保留滑出窗口后**仍然成立的最终要求**，不含沿途被替代的过渡
@@ -31,15 +31,12 @@
 | 文档 | 版本 | 角色 |
 | --- | --- | --- |
 | [000：0.0.25 及更早收口](000-origin-through-0.0.11.md) | ≤0.0.25 | 压缩起点 |
-| [069：训练课程与训练计划分开命名](069-training-course-name.md) | 0.0.26 | 已采纳，已实现 |
-| [070：教练页按发生时间排列事件](070-coach-timeline.md) | 0.0.26 | 已采纳，已实现 |
-| [071：按日期排期的训练计划](071-training-schedule.md) | 0.0.26 | 已采纳，已实现 |
 | [072](072-coach-training-schedule-draft.md) | 0.0.27 | 已采纳，已实现 |
 | [073](073-training-session-pages.md) | 0.0.27 | 已采纳，已实现 |
 | [074](074-composable-training.md) | 0.0.27 | 已采纳，已实现 |
 | [075](075-healthkit-daily-activity.md) | 0.0.30 | 已实现；真机数据待验收 |
 | [076](076-adaptive-energy-system.md) | 0.0.30 | 已实现；真机数据待验收 |
-| [077](077-daily-activity-source-priority.md) | 提议 | 提议：多来源整包择优与独立步数列表 |
+| [077](077-daily-activity-source-priority.md) | 0.0.31 | 已实现；真机数据待验收 |
 
 ## 阅读约定
 
@@ -79,8 +76,8 @@
 | [075](075-healthkit-daily-activity.md) | 已实现 | 健康三项日汇总覆盖运动记录 |
 | [076](076-adaptive-energy-system.md) | 已实现 | 动态系数、明确生活事实、去重训练与可审查校准 |
 
-## 提议中（尚未进入发布窗口版本号）
+## 0.0.31 新增需求
 
 | 文档 | 状态 | 范围 |
 | --- | --- | --- |
-| [077](077-daily-activity-source-priority.md) | 提议 | HealthKit 日活动数据源三选一（COROS/Apple/步数更大）、整包择优、独立列表与分享排除 |
+| [077](077-daily-activity-source-priority.md) | 已实现 | HealthKit 日活动数据源三选一（Apple/COROS/步数更大）、整包择优、独立列表与分享排除 |

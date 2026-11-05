@@ -1,7 +1,8 @@
 # ADR 0146：日常活动多来源整包择优与列表边界
 
-- 状态：提议
+- 状态：已采纳并实现；真机数据待验收
 - 日期：2026-11-05
+- 版本：0.0.31
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0144](0144-healthkit-daily-activity.md)（仅系统合并 HealthKit、externalSource 固定 appleHealth、日常活动混入训练列表且分享不排除、界面不展示来源）、[工程契约](../../CLAUDE.md)（外部导入与可替换边界：日活动多来源择优仍经 HealthKit）
 - 上游依据：[PRD 077](../prd/077-daily-activity-source-priority.md)、[多来源调研](../research/2026-11-05-daily-activity-source-priority.md)

@@ -1,7 +1,8 @@
 # PRD 077：日常活动多来源优先级与独立列表
 
-- 状态：提议
+- 状态：已实现；真机数据待验收
 - 日期：2026-11-05
+- 版本：0.0.31
 - 修订自：[PRD 075](075-healthkit-daily-activity.md)（单通道 Apple 健康日汇总混入训练列表）、[工程契约](../../CLAUDE.md)（外部导入与可替换边界）
 - 上游依据：[多来源调研](../research/2026-11-05-daily-activity-source-priority.md)
 - 下游落地：[ADR 0146](../adr/0146-daily-activity-source-priority.md)
