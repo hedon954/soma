@@ -188,24 +188,11 @@ final class CoachMessage {
             }
             guard span.kind == .skill || span.kind == .tool else { break }
             items.removeAll { $0.kind == .activity }
-            if let index = items.firstIndex(where: {
-                if let operationID = span.operationID {
-                    return $0.operationID == operationID
-                }
-                return $0.id == span.id
-            }) {
-                let existingID = items[index].id
-                items[index] = AgentTurnItem(
-                    span: span,
-                    sequence: items[index].sequence
-                )
-                items[index].id = existingID
-            } else {
-                items.append(AgentTurnItem(span: span, sequence: items.count + 1))
-            }
+            upsertToolOrSkillSpan(span, into: &items)
             applyLegacyAgentEvent(span)
         case let .completed(_, date):
             items.removeAll { $0.kind == .activity || $0.kind == .error }
+            items.removeAll(where: Self.isFailedOrCancelledToolOrSkill)
             for index in items.indices
                 where (items[index].kind == .text || items[index].kind == .reasoning)
                 && items[index].status == .running
@@ -281,6 +268,54 @@ final class CoachMessage {
                 startedAt: date
             ))
         }
+    }
+
+    /// PRD 027 / BUG 0047：同 operationID 原位更新；同标题失败互盖；成功/重试盖住旧失败。
+    private func upsertToolOrSkillSpan(
+        _ span: AgentTraceSpan,
+        into items: inout [AgentTurnItem]
+    ) {
+        let turnKind: AgentTurnItemKind = span.kind == .skill ? .skill : .tool
+        if let index = items.firstIndex(where: {
+            if let operationID = span.operationID {
+                return $0.operationID == operationID
+            }
+            return $0.id == span.id
+        }) {
+            let existingID = items[index].id
+            items[index] = AgentTurnItem(
+                span: span,
+                sequence: items[index].sequence
+            )
+            items[index].id = existingID
+        } else if span.status == .failed || span.status == .cancelled,
+                  let priorIndex = items.firstIndex(where: {
+                      $0.kind == turnKind
+                          && $0.title == span.title
+                          && ($0.status == .failed || $0.status == .cancelled)
+                  })
+        {
+            let existingID = items[priorIndex].id
+            items[priorIndex] = AgentTurnItem(
+                span: span,
+                sequence: items[priorIndex].sequence
+            )
+            items[priorIndex].id = existingID
+        } else {
+            items.append(AgentTurnItem(span: span, sequence: items.count + 1))
+        }
+        if span.status == .succeeded || span.status == .running {
+            items.removeAll {
+                $0.kind == turnKind
+                    && $0.title == span.title
+                    && ($0.status == .failed || $0.status == .cancelled)
+            }
+        }
+    }
+
+    private static func isFailedOrCancelledToolOrSkill(_ item: AgentTurnItem) -> Bool {
+        (item.kind == .tool || item.kind == .skill)
+            && (item.status == .failed || item.status == .cancelled)
     }
 
     func applyAgentEvent(_ span: AgentTraceSpan) {
