@@ -1,6 +1,7 @@
 # Soma Engineering Principles
 
 - 后续修订：
+  - [PRD 077](docs/prd/077-daily-activity-source-priority.md)、[ADR 0146](docs/adr/0146-daily-activity-source-priority.md)（日常活动多来源整包择优与独立列表）
   - [PRD 076](docs/prd/076-adaptive-energy-system.md)、[ADR 0145](docs/adr/0145-adaptive-energy-system.md)（动态消耗与逐次依据）
   - [PRD 075](docs/prd/075-healthkit-daily-activity.md)、[ADR 0144](docs/adr/0144-healthkit-daily-activity.md)（三项日汇总保存为每日运动记录）
 

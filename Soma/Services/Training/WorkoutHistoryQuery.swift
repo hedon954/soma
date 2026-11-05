@@ -145,7 +145,13 @@ enum WorkoutHistoryQuery {
             let start = interval.start
             let end = interval.end
             descriptor.predicate = #Predicate<WorkoutEntry> { workout in
-                workout.date >= start && workout.date < end
+                workout.externalSource == nil
+                    && workout.date >= start
+                    && workout.date < end
+            }
+        } else {
+            descriptor.predicate = #Predicate<WorkoutEntry> { workout in
+                workout.externalSource == nil
             }
         }
         return descriptor

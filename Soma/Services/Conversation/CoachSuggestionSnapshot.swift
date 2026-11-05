@@ -26,10 +26,9 @@ actor CoachSuggestionSnapshotLoader {
         definitionDescriptor.fetchLimit = 2000
 
         var workoutDescriptor = FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate { $0.externalSource == nil || $0.externalSource != "appleHealth" },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        workoutDescriptor.fetchLimit = 100
+        workoutDescriptor.fetchLimit = 140
 
         var sessionDescriptor = FetchDescriptor<WorkoutSession>(
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
@@ -37,7 +36,7 @@ actor CoachSuggestionSnapshotLoader {
         sessionDescriptor.fetchLimit = 40
 
         let definitions = try modelContext.fetch(definitionDescriptor)
-        let workouts = try modelContext.fetch(workoutDescriptor)
+        let workouts = try modelContext.fetch(workoutDescriptor).filter { !$0.isDailyActivity }
         try Task.checkCancellation()
         let sessions = try modelContext.fetch(sessionDescriptor)
         // 只遍历最近会话的当前关系图。全库固定上限会让无关旧行抢占配额，

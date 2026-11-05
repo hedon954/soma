@@ -11,7 +11,11 @@ failures << "HealthKit quantities must be steps, walking/running distance and ac
   types == %w[activeEnergyBurned distanceWalkingRunning stepCount]
 failures << "Minimal workout identity and interval reading must be declared" unless reader.include?("types.insert(HKObjectType.workoutType())")
 failures << "HealthKit must remain read-only" unless reader.include?("requestAuthorization(toShare: [], read: Self.readTypes)")
-failures << "HealthKit sources must not be added to the daily total" if reader.include?("sumQuantity(for:")
+# ADR 0144: daily totals use system-merged sumQuantity().
+# ADR 0146: sumQuantity(for:) allowed only for separateBySource Contribution packaging.
+failures << "HealthKit sources must not be added to the daily total" if reader.include?("sumQuantity(for:") &&
+  !(reader.include?("separateBySource") && reader.include?("DailyActivitySourceContribution"))
+failures << "Daily totals must still use system-merged sumQuantity()" unless reader.include?("sumQuantity()?.doubleValue")
 Dir[root.join("Soma/**/*.swift")].each do |path|
   next if Pathname.new(path) == reader_path
   failures << "HealthKit adapter escaped into #{path}" if File.read(path).match?(/^import HealthKit$/)

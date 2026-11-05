@@ -27,10 +27,28 @@ enum AgentTurnRecordReferences {
 
 enum AgentTurnVisibleItems {
     /// ADR 0014 / ADR 0077：空文字卡去掉；Skill/Tool/错误和有内容的文字全部保留。
-    static func make(from items: [AgentTurnItem]) -> [AgentTurnItem] {
-        items.filter {
-            $0.kind != .text
-                || !AgentVisibleTextSanitizer.sanitize($0.text).isEmpty
+    /// 整轮已成功时（PRD 027 / BUG 0047），渲染阶段跳过失败/取消的过程卡与错误卡，
+    /// 不改写已持久化的 `agentTurnItems`。
+    static func make(
+        from items: [AgentTurnItem],
+        turnSucceeded: Bool = false
+    ) -> [AgentTurnItem] {
+        items.filter { item in
+            if item.kind == .text,
+               AgentVisibleTextSanitizer.sanitize(item.text).isEmpty
+            {
+                return false
+            }
+            guard turnSucceeded else { return true }
+            if item.kind == .error {
+                return false
+            }
+            if item.kind == .tool || item.kind == .skill,
+               item.status == .failed || item.status == .cancelled
+            {
+                return false
+            }
+            return true
         }
     }
 }
@@ -93,7 +111,10 @@ enum AgentTurnTranscriptSegment: Equatable, Identifiable {
 }
 
 enum AgentTurnTranscriptSegments {
-    static func make(from items: [AgentTurnItem]) -> [AgentTurnTranscriptSegment] {
+    static func make(
+        from items: [AgentTurnItem],
+        turnSucceeded: Bool = false
+    ) -> [AgentTurnTranscriptSegment] {
         var segments: [AgentTurnTranscriptSegment] = []
         var process: [AgentTurnItem] = []
         var emittedRecords = Set<String>()
@@ -113,7 +134,10 @@ enum AgentTurnTranscriptSegments {
             process = []
         }
 
-        for item in AgentTurnVisibleItems.make(from: items) {
+        for item in AgentTurnVisibleItems.make(
+            from: items,
+            turnSucceeded: turnSucceeded
+        ) {
             if Self.isGroupableProcess(item) {
                 process.append(item)
             } else {

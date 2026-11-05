@@ -153,9 +153,9 @@ enum CoachTimelineLoader {
             return []
         }
         var workouts = FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate { ($0.externalSource == nil || $0.externalSource != "appleHealth") && $0.date >= start && $0.date < end }
+            predicate: #Predicate { $0.date >= start && $0.date < end }
         )
-        workouts.fetchLimit = 200
+        workouts.fetchLimit = 240
         var meals = FetchDescriptor<MealEntry>(
             predicate: #Predicate { $0.date >= start && $0.date < end }
         )
@@ -165,7 +165,7 @@ enum CoachTimelineLoader {
         )
         bodies.fetchLimit = 20
 
-        let workoutRecords = (try? context.fetch(workouts)) ?? []
+        let workoutRecords = ((try? context.fetch(workouts)) ?? []).filter { !$0.isDailyActivity }
         let mealRecords = (try? context.fetch(meals)) ?? []
         let bodyRecords = (try? context.fetch(bodies)) ?? []
         return workoutRecords.compactMap { entry in

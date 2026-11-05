@@ -733,7 +733,7 @@ func mapped(
 extension PersonalDataSnapshot {
     func withoutHealthActivity() -> Self {
         var copy = self
-        copy.workouts.removeAll { $0.externalSource == "appleHealth" }
+        copy.workouts.removeAll { $0.externalID?.hasPrefix("daily:") == true }
         copy.energyEvidence = nil
         return copy
     }

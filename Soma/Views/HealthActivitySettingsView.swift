@@ -55,9 +55,47 @@ struct HealthActivitySettingsView: View {
             } header: { Text("连接") }
                 .listRowBackground(AppTheme.cardBackground)
 
+            if activity.isEnabled || dataSpace.activeSpace == .demo {
+                Section {
+                    ForEach(activity.visibleSourceOptions) { option in
+                        Button {
+                            activity.setSourcePreference(option)
+                        } label: {
+                            HStack(spacing: 12) {
+                                DailyActivitySourceIcon(kind: .init(option), size: 24)
+                                Text(option.title)
+                                    .foregroundStyle(AppTheme.accent)
+                                Spacer()
+                                if activity.sourcePreference == option {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(AppTheme.accent)
+                                }
+                            }
+                            .frame(minHeight: 44)
+                        }
+                        .accessibilityIdentifier("daily-activity-source-\(option.rawValue)")
+                    }
+                    Text(sourceFooter)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } header: { Text("日活动数据源") }
+                    .listRowBackground(AppTheme.cardBackground)
+            }
+
             Section {
-                Text("先在 COROS App 的第三方应用中开启 Apple 健康同步，并允许写入这三项。Soma 会保留 Apple 健康实际返回的来源。")
+                NavigationLink {
+                    DailyActivityHistoryView()
+                } label: {
+                    Label("日常活动记录", systemImage: "figure.walk")
+                }
+                .accessibilityIdentifier("daily-activity-history")
+            } header: { Text("记录") }
+                .listRowBackground(AppTheme.cardBackground)
+
+            Section {
+                Text("先在 COROS App 的第三方应用中开启 Apple 健康同步，并允许写入这三项。Soma 只读取 Apple 健康，不要求额外授权 COROS。")
                 Text("连接后，每次打开 Soma 或回到前台都会重新读取每日汇总并覆盖旧值，不累加历次同步结果。")
+                Text("今日数据可能因手表同步链路略旧；多数时候不必为查看 Soma 专门打开 COROS。")
                 Text("暂无数据也可能是未允许读取。可在 Apple 健康的个人资料 → App → Soma 中调整访问；断开后停止同步，已同步的运动记录保留。")
             } header: { Text("同步与访问") }
                 .listRowBackground(AppTheme.cardBackground)
@@ -67,5 +105,12 @@ struct HealthActivitySettingsView: View {
         .appPageBackground()
         .navigationTitle("Apple 健康")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var sourceFooter: String {
+        if activity.hasCOROSSamples {
+            return "默认跟 Apple 健康系统汇总。可选 COROS 整包或步数更大者；步数、距离、卡路里始终同源，不跨源混拼。"
+        }
+        return "默认跟 Apple 健康系统汇总。健康库出现 COROS 来源样本后，将显示 COROS 选项。"
     }
 }

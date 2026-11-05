@@ -9,6 +9,7 @@
 | --- | --- | --- |
 | [Soma 消耗计算体系：理论、App 与推荐方案](2026-11-02-soma-energy-expenditure-system.md) | 已转化并实施；真机数据待验收 | 修订自[日消耗本地公式研究](2026-09-08-daily-energy-expenditure-methods.md)；下游 PRD 076 / ADR 0145；生活事实初值、步行/训练每日系数、饮食体重长期校准与逐次依据历史；公式、参数及最小训练证据边界 |
 | [HealthKit 能力与每日活动接入](2026-10-20-healthkit-daily-activity.md) | 已转化并实施；真机待验收 | 修订自[日消耗本地公式研究](2026-09-08-daily-energy-expenditure-methods.md)；下游 PRD 075 / ADR 0144；三项只读日活动写为一条运动记录，`source` 保留真实写入者；活动能量进入统计 |
+| [每日活动多来源优先级与 COROS 路径](2026-11-05-daily-activity-source-priority.md) | 已转化（提议 PRD/ADR） | 修订自[HealthKit 调研](2026-10-20-healthkit-daily-activity.md)；下游 PRD 077 / ADR 0146；锁定 HealthKit-only 三选一（COROS/Apple/步数更大），不做 MCP |
 | [Apple 本地中文听写](2026-09-05-apple-local-speech.md) | 已转化，真机准确率待对比 | PRD 056、ADR 0119 |
 | [动作库、训练计划、带练与视频复盘](2026-07-31-exercise-library-plans-guided-training.md) | 已转化并部分修订 | PRD 010、ADR 0028—0035、训练领域架构；带练体验由后续调研深化 |
 | [训练计划编排、沉浸式带练与真实取景](2026-08-03-guided-workout-flow-and-capture.md) | 已转化并部分修订 | PRD 013、ADR 0038、BUG 0006；录像反馈由后续调研深化 |

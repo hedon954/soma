@@ -96,10 +96,21 @@ struct DailyActivityMetric: Codable, Equatable, Sendable {
 struct DailyActivitySummary: Codable, Equatable, Sendable {
     let key: DailyActivityDayKey
     var metrics: [DailyActivityMetricKind: DailyActivityMetric] = [:]
+    /// 整包择优后的获胜来源；旧记录缺省时按 appleHealth 展示。
+    var winningSource: DailyActivityWinningSource?
+
+    init(key: DailyActivityDayKey, winningSource: DailyActivityWinningSource? = nil) {
+        self.key = key
+        self.winningSource = winningSource
+    }
 
     subscript(_ kind: DailyActivityMetricKind) -> DailyActivityMetric {
         get { metrics[kind] ?? DailyActivityMetric() }
         set { metrics[kind] = newValue }
+    }
+
+    var resolvedWinningSource: DailyActivityWinningSource {
+        winningSource ?? .appleHealth
     }
 }
 
@@ -130,9 +141,21 @@ struct DailyActivityValue: Sendable {
     let value: Double?
 }
 
+struct DailyActivitySourceContribution: Sendable, Equatable {
+    let source: HealthDataSource
+    let value: Double?
+}
+
 struct DailyActivitySources: Sendable {
     let key: DailyActivityDayKey
     let source: ActivitySourceAttribution?
+    let contributions: [DailyActivitySourceContribution]
+
+    init(key: DailyActivityDayKey, source: ActivitySourceAttribution?, contributions: [DailyActivitySourceContribution] = []) {
+        self.key = key
+        self.source = source
+        self.contributions = contributions
+    }
 }
 
 enum DailyActivityUpdate: Sendable {

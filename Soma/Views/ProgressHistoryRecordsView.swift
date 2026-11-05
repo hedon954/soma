@@ -70,8 +70,20 @@ struct ProgressDayRecordSections: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            // 进展「日」展示当日日常活动；「训练记录」区块仍排除（ADR 0146 / Hedon 2026-11-05）。
+            let dailyRecords = day.records.filter(\.isDailyActivity)
+            if !dailyRecords.isEmpty {
+                Text("日常活动").font(.headline)
+                ForEach(dailyRecords, id: \.activity.id) { record in
+                    NavigationLink { ProgressRecentActivityDestination(activity: record.activity) } label: {
+                        ProgressRecentActivityRow(activity: record.activity)
+                    }.buttonStyle(.plain)
+                }
+            }
             ForEach([ProgressRecentActivity.Kind.meal, .workout, .body], id: \.title) { kind in
-                let records = day.records.filter { $0.activity.kind == kind }
+                let records = day.records.filter {
+                    $0.activity.kind == kind && (kind != .workout || !$0.isDailyActivity)
+                }
                 if !records.isEmpty {
                     HStack {
                         Text(kind.title).font(.headline)

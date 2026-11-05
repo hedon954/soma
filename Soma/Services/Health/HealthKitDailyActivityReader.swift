@@ -196,11 +196,24 @@ actor HealthKitDailyActivityReader: DailyActivityReading {
                     let sourceCollection = try await sourceQuery.result(for: store)
                     try Task.checkCancellation()
                     let sourceReadAt = Date.now
-                    let sources = window.days.map { day in
-                        let entries = sourceCollection.statistics(for: day.start)?.sources?.map {
-                            HealthDataSource(name: $0.name, bundleIdentifier: $0.bundleIdentifier)
-                        } ?? []
-                        return DailyActivitySources(key: day, source: ActivitySourceAttribution(sources: entries, readAt: sourceReadAt))
+                    let sources = window.days.map { day -> DailyActivitySources in
+                        let statistics = sourceCollection.statistics(for: day.start)
+                        let hkSources = statistics?.sources ?? []
+                        let contributions = hkSources.map { hkSource in
+                            DailyActivitySourceContribution(
+                                source: HealthDataSource(
+                                    name: hkSource.name,
+                                    bundleIdentifier: hkSource.bundleIdentifier
+                                ),
+                                value: statistics?.sumQuantity(for: hkSource)?.doubleValue(for: unit(kind))
+                            )
+                        }
+                        let entries = contributions.map(\.source)
+                        return DailyActivitySources(
+                            key: day,
+                            source: ActivitySourceAttribution(sources: entries, readAt: sourceReadAt),
+                            contributions: contributions
+                        )
                     }
                     continuation.yield(.sources(kind, sources))
                 } catch {

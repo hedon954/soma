@@ -85,7 +85,7 @@ final class CoachMessageAgentEventTests: XCTestCase {
         XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
     }
 
-    func testTurnCompletionKeepsFailedOperationCard() {
+    func testTurnCompletionRemovesFailedToolCards() {
         let message = CoachMessage(isFromCoach: true, text: "")
         let startedAt = Date()
         message.applyAgentEvent(.span(AgentTraceSpan(
@@ -100,9 +100,128 @@ final class CoachMessageAgentEventTests: XCTestCase {
         )))
         message.applyAgentEvent(.completed(answer: "已完成纠正。", at: .now))
 
+        XCTAssertTrue(message.agentTurnItems.isEmpty)
+    }
+
+    func testSameTitleFailedThenSucceededCoversPriorFailure() {
+        let message = CoachMessage(isFromCoach: true, text: "")
+        let startedAt = Date()
+        let title = AgentToolName.createMeal.displayTitle
+
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: title,
+            status: .failed,
+            operationID: "call-meal-1",
+            phase: .failed,
+            startedAt: startedAt,
+            endedAt: startedAt,
+            errorMessage: "第一次失败"
+        )))
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: title,
+            status: .succeeded,
+            operationID: "call-meal-2",
+            phase: .completed,
+            startedAt: startedAt.addingTimeInterval(0.1),
+            endedAt: startedAt.addingTimeInterval(0.2),
+            output: "已记录晚餐"
+        )))
+
         XCTAssertEqual(message.agentTurnItems.count, 1)
-        XCTAssertEqual(message.agentTurnItems.first?.phase, .failed)
-        XCTAssertEqual(message.agentTurnItems.first?.errorMessage, "虚构字段错误")
+        XCTAssertEqual(message.agentTurnItems.first?.title, title)
+        XCTAssertEqual(message.agentTurnItems.first?.status, .succeeded)
+        XCTAssertEqual(message.agentTurnItems.first?.operationID, "call-meal-2")
+        XCTAssertNil(message.agentTurnItems.first?.errorMessage)
+    }
+
+    func testSameTitleFailuresCoverEachOtherUntilTurnCompletes() {
+        let message = CoachMessage(isFromCoach: true, text: "")
+        let startedAt = Date()
+        let title = AgentToolName.createMeal.displayTitle
+
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: title,
+            status: .failed,
+            operationID: "call-meal-a",
+            phase: .failed,
+            startedAt: startedAt,
+            endedAt: startedAt,
+            errorMessage: "第一次失败"
+        )))
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: title,
+            status: .failed,
+            operationID: "call-meal-b",
+            phase: .failed,
+            startedAt: startedAt.addingTimeInterval(0.1),
+            endedAt: startedAt.addingTimeInterval(0.1),
+            errorMessage: "第二次失败"
+        )))
+
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(message.agentTurnItems.first?.status, .failed)
+        XCTAssertEqual(message.agentTurnItems.first?.operationID, "call-meal-b")
+        XCTAssertEqual(message.agentTurnItems.first?.errorMessage, "第二次失败")
+
+        message.applyAgentEvent(.completed(answer: "已记下。", at: .now))
+        XCTAssertTrue(
+            message.agentTurnItems.filter {
+                $0.kind == .tool && ($0.status == .failed || $0.status == .cancelled)
+            }.isEmpty
+        )
+    }
+
+    func testRunningRetryOfSameTitleCoversPriorFailure() {
+        let message = CoachMessage(isFromCoach: true, text: "")
+        let startedAt = Date()
+        let title = AgentToolName.createMeal.displayTitle
+
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: title,
+            status: .failed,
+            operationID: "call-meal-old",
+            phase: .failed,
+            startedAt: startedAt,
+            endedAt: startedAt,
+            errorMessage: "旧失败"
+        )))
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: title,
+            status: .running,
+            operationID: "call-meal-retry",
+            phase: .running,
+            startedAt: startedAt.addingTimeInterval(0.1),
+            endedAt: startedAt.addingTimeInterval(0.1)
+        )))
+
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(message.agentTurnItems.first?.status, .running)
+        XCTAssertEqual(message.agentTurnItems.first?.operationID, "call-meal-retry")
+    }
+
+    func testFailedToolStaysVisibleWithoutLaterSuccessOrCompletion() {
+        let message = CoachMessage(isFromCoach: true, text: "")
+        let startedAt = Date()
+        message.applyAgentEvent(.span(AgentTraceSpan(
+            kind: .tool,
+            title: AgentToolName.createMeal.displayTitle,
+            status: .failed,
+            operationID: "call-meal-alone",
+            phase: .failed,
+            startedAt: startedAt,
+            endedAt: startedAt,
+            errorMessage: "仍应可见"
+        )))
+
+        XCTAssertEqual(message.agentTurnItems.count, 1)
+        XCTAssertEqual(message.agentTurnItems.first?.status, .failed)
+        XCTAssertEqual(message.agentTurnItems.first?.errorMessage, "仍应可见")
     }
 
     func testCoachMessageKeepsLiveToolAndSkillEventsAfterCompletion() {

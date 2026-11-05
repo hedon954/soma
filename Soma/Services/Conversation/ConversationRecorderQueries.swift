@@ -368,11 +368,15 @@ extension ConversationRecorder {
         limit: Int? = nil
     ) -> [WorkoutEntry] {
         var descriptor = FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate { $0.externalSource == nil || $0.externalSource != "appleHealth" },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        descriptor.fetchLimit = limit
-        return (try? context.fetch(descriptor)) ?? []
+        // Over-fetch then drop daily-activity rows so COROS-sourced dailies are excluded too.
+        descriptor.fetchLimit = limit.map { $0 + 40 } ?? 240
+        let rows = ((try? context.fetch(descriptor)) ?? []).filter { !$0.isDailyActivity }
+        if let limit {
+            return Array(rows.prefix(limit))
+        }
+        return rows
     }
 
     static func fetchMeals(
