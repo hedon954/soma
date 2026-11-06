@@ -3,16 +3,34 @@ import Foundation
 import XCTest
 
 final class DailyActivityEnergyTests: XCTestCase {
-    func testRecordedActiveEnergyDoesNotCancelLifestyleOrAddADuplicateReward() {
-        let outcome = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, trainingNetKilocalories: 700, activeEnergyKilocalories: 450)
+    func testSameRestingAndCoefficientChangeTotalByTheActiveEnergyDifference() {
+        let low = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, activeEnergyKilocalories: 100)
+        let high = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, activeEnergyKilocalories: 400)
+        XCTAssertEqual(low.estimate?.factor, ResidualEnergyCoefficient.initialFallback)
+        XCTAssertEqual(high.estimate?.factor, low.estimate?.factor)
+        XCTAssertEqual(low.estimate?.totalKilocalories, 1500 * 1.4 + 100)
+        XCTAssertEqual((high.estimate?.totalKilocalories ?? 0) - (low.estimate?.totalKilocalories ?? 0), 300)
+    }
+
+    func testSelectedActiveEnergyKeepsTheCoefficientAndDoesNotAddTrainingAgain() {
+        let outcome = AdaptiveEnergyEstimator.estimate(
+            for: .now, restingEstimate: 1500, trainingNetKilocalories: 700, activeEnergyKilocalories: 450
+        )
         XCTAssertEqual(outcome.estimate?.method, .defaultReference)
-        XCTAssertEqual(outcome.estimate?.totalKilocalories, 2800)
-        XCTAssertEqual(outcome.estimate?.trainingNetKilocalories, 700)
         XCTAssertEqual(outcome.estimate?.factor, 1.4)
-        let zero = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, trainingNetKilocalories: 700, activeEnergyKilocalories: 0)
-        XCTAssertEqual(zero.estimate?.totalKilocalories, 2800)
-        let fallback = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, trainingNetKilocalories: 700)
-        XCTAssertEqual(fallback.estimate?.totalKilocalories, 2800)
+        XCTAssertEqual(outcome.estimate?.totalKilocalories, 1500 * 1.4 + 450)
+        XCTAssertEqual(outcome.estimate?.components?.baselineExtraKilocalories, 1500 * 0.4)
+        XCTAssertEqual(outcome.estimate?.components?.activityKilocalories, 450)
+        XCTAssertEqual(outcome.estimate?.components?.componentsAddUp, true)
+        let zero = AdaptiveEnergyEstimator.estimate(
+            for: .now, restingEstimate: 1500, trainingNetKilocalories: 700, activeEnergyKilocalories: 0
+        )
+        XCTAssertEqual(zero.estimate?.totalKilocalories, 1500 * 1.4)
+        XCTAssertEqual(zero.estimate?.components?.activity, .selected(0))
+        let missing = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, trainingNetKilocalories: 700)
+        XCTAssertEqual(missing.estimate?.totalKilocalories, 1500 * 1.4 + 700)
+        XCTAssertEqual(missing.estimate?.components?.activity, .recordedTraining(700))
+        XCTAssertNil(missing.estimate?.activeEnergyKilocalories)
         XCTAssertNil(AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: nil, activeEnergyKilocalories: 450).estimate)
     }
 
@@ -37,7 +55,7 @@ final class DailyActivityEnergyTests: XCTestCase {
                                               confirmation: .init(foodComplete: true, mealEvidenceFingerprint: EnergyFoodEvidence.fingerprint(records: [meal])),
                                               learningPaused: nil)]
         let resting = 700.0 + 1062.5 - 150 + 5
-        let expected = resting * 1.4 + 640 - (resting * 1.4 * 0.9 - resting) / 16
+        let expected = resting * ResidualEnergyCoefficient.initialFallback + 450
         for period in [ProgressPeriod.day, .week, .month, .year] {
             let snapshot = ProgressHistoryProjection.build(
                 window: period.window(containing: day, calendar: calendar), records: [weight, meal, activity, training],

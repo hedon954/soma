@@ -1,6 +1,7 @@
 # Soma Engineering Principles
 
 - 后续修订：
+  - [PRD 078](docs/prd/078-residual-energy-coefficient.md)、[ADR 0147](docs/adr/0147-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
   - [PRD 077](docs/prd/077-daily-activity-source-priority.md)、[ADR 0146](docs/adr/0146-daily-activity-source-priority.md)（日常活动多来源整包择优与独立列表）
   - [PRD 076](docs/prd/076-adaptive-energy-system.md)、[ADR 0145](docs/adr/0145-adaptive-energy-system.md)（动态消耗与逐次依据）
   - [PRD 075](docs/prd/075-healthkit-daily-activity.md)、[ADR 0144](docs/adr/0144-healthkit-daily-activity.md)（三项日汇总保存为每日运动记录）
@@ -128,8 +129,8 @@ App → Views → Services → Models
 
 按 PRD 075 / ADR 0144，每日步数、步跑距离和活动能量按自然日覆盖同一条 WorkoutEntry，保留真实 source。
 按 PRD 076 / ADR 0145，额外只读训练身份、类型、起止/有效时长及关联活动能量，用于训练去重及区间外步行统计。
-总消耗采用生活参考、非训练步行差额、去重训练时段增量和有条件长期校准，系数是总估算与静息之比。
-日活动总量保留为事实，不替代生活参考，也不额外叠加到已计算的步行/训练。不读取静息能量、心率、睡眠或路线。
+按 PRD 078 / ADR 0147，预估总消耗 = 当日静息 × 残差系数 + 所选日活动能量。系数由独立提供方给出，当前回退为既有默认数值 1.4，表示静息与所选活动能量未覆盖的估算消耗，不是传统全天活动水平。
+已包含在所选日活动能量里的训练不再叠加；没有读数时不编造。不把 COROS 与 Apple 的活动能量相加。不读取静息能量、心率、睡眠或路线。
 健康事实与派生依据不进入模型、应用备份/导出或 Server；个人库及其目录排除系统备份并采用 complete 文件保护。
 
 ### Sensitive data

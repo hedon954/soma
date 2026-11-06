@@ -104,12 +104,13 @@ enum EnergyRuntimeProjection {
                         } }, weightRecordID: weightRecord?.activity.id, weightRecordDate: weightRecord?.activity.date
                     ))
                 } catch {
-                    output.outcomes[cursor] = .init(estimate: nil, missingReason: "生活参考与活动预算存在矛盾，请检查能量依据")
+                    calculation = nil
                 }
             }
+            present(resting: resting, entries: entries, training: training, calculation: &calculation,
+                    on: cursor, output: &output)
             if let calculation {
                 output.calculations[cursor] = calculation
-                output.outcomes[cursor] = .init(estimate: .from(calculation), missingReason: nil)
                 if cursor >= window.start {
                     output.updates.append(.daily(calculation))
                 }
@@ -132,6 +133,46 @@ enum EnergyRuntimeProjection {
                    facts: facts, output: &output, calendar: calendar)
         }
         return output
+    }
+
+    /// 当前总消耗。参考日差额失败时仍保留这份结果，因为总量不再依赖步行差额。
+    private static func present(
+        resting: Double?, entries: [ProgressHistoryRecord], training: [EnergyTrainingEvent],
+        calculation: inout EnergyDayCalculation?, on date: Date, output: inout EnergyRuntimeOutput
+    ) {
+        guard let resting else { return }
+        let selection = DailyEnergyTotal.selectedDailyActive(in: entries)
+        let recorded = selection.kilocalories == nil
+            ? DailyEnergyTotal.recordedTrainingKilocalories(training, resting: resting) : nil
+        let included = selection.kilocalories.flatMap { selected in
+            selection.source.flatMap {
+                DailyEnergyTotal.includedTrainingKilocalories(
+                    selectedActive: selected, winningSource: $0, events: training, resting: resting
+                )
+            }
+        }
+        guard let components = DailyEnergyTotal.compose(
+            restingKilocalories: resting,
+            coefficient: ResidualEnergyCoefficient.current(),
+            selectedActiveKilocalories: selection.kilocalories,
+            includedTrainingKilocalories: included,
+            recordedTrainingKilocalories: recorded
+        ) else {
+            output.outcomes[date] = .init(estimate: nil, missingReason: "活动能量读数无效")
+            return
+        }
+        if var updated = calculation {
+            updated.presentedTotal = components
+            updated.presentedSelectedActiveKilocalories = selection.kilocalories
+            calculation = updated
+        }
+        output.outcomes[date] = .init(
+            estimate: .presented(
+                components, selectedActiveKilocalories: selection.kilocalories,
+                calculation: calculation, effectiveFrom: date
+            ),
+            missingReason: nil
+        )
     }
 
     private static func recordOrder(_ left: ProgressHistoryRecord, _ right: ProgressHistoryRecord) -> Bool {
@@ -192,7 +233,9 @@ enum EnergyRuntimeProjection {
                                        isEndedDay: old.isEndedDay, training: old.training, correction: evaluation.nextCorrection,
                                        observedNonTrainingSteps: old.observedNonTrainingSteps, stepLengthMeters: old.stepLengthMeters,
                                        restingFormula: old.restingFormula, weightRecordID: old.weightRecordID, weightRecordDate: old.weightRecordDate)
-            if let updated = try? EnergyDayCalculator.calculate(input) {
+            if var updated = try? EnergyDayCalculator.calculate(input) {
+                updated.presentedTotal = calculation.presentedTotal
+                updated.presentedSelectedActiveKilocalories = calculation.presentedSelectedActiveKilocalories
                 output.calculations[today] = updated
                 output.outcomes[today] = .init(estimate: .from(updated), missingReason: nil)
                 output.updates.removeAll {

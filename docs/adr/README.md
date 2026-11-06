@@ -29,9 +29,10 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0141](0141-coach-training-schedule-draft.md) | 0.0.27 | 已采纳，已实现 | 草稿工具不写计划；起草提问支持单选、多选和自填 |
 | [0142](0142-training-session-pages.md) | 0.0.27 | 已采纳，已实现 | 训练页最近训练沿用未缓存身份分页 |
 | [0143](0143-composable-training.md) | 0.0.27 | 已采纳，已实现 | 统一内容展开，保留天序与执行快照 |
-| [0144](0144-healthkit-daily-activity.md) | 0.0.30 | 已采纳并实现 | 每日健康运动记录、真实来源与覆盖同步 |
-| [0145](0145-adaptive-energy-system.md) | 0.0.30 | 已采纳并实现 | 动态消耗、明确事实、去重训练与逐次校准依据 |
+| [0144](0144-healthkit-daily-activity.md) | 0.0.30 | 部分已替代 | 每日健康运动记录、真实来源与覆盖同步；总消耗见 0147 |
+| [0145](0145-adaptive-energy-system.md) | 0.0.30 | 部分已替代 | 动态消耗与校准证据；当前总量见 0147 |
 | [0146](0146-daily-activity-source-priority.md) | 0.0.31 | 已采纳并实现 | HealthKit 日活动数据源三选一、整包择优、列表与分享边界 |
+| [0147](0147-residual-energy-coefficient.md) | 未发布 | 已采纳并实现 | 总消耗改为残差系数加所选日活动能量 |
 
 新决策使用 [ADR 模板](template.md)。
 
@@ -71,11 +72,12 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 
 | 文档 | 状态 | 决策 |
 | --- | --- | --- |
-| [0144](0144-healthkit-daily-activity.md) | 已采纳并实现 | 每日一条健康活动记录与真实来源 |
-| [0145](0145-adaptive-energy-system.md) | 已采纳并实现 | 动态消耗、完整性与本地校准证据 |
+| [0144](0144-healthkit-daily-activity.md) | 部分已替代 | 每日一条健康活动记录与真实来源；总消耗见 0147 |
+| [0145](0145-adaptive-energy-system.md) | 部分已替代 | 动态消耗、完整性与本地校准证据；当前总量见 0147 |
 
 ## 0.0.31 新增决策
 
 | 文档 | 状态 | 决策 |
 | --- | --- | --- |
 | [0146](0146-daily-activity-source-priority.md) | 已采纳并实现 | 部分替代 0144：HealthKit 整包择优（Apple/COROS/步数更大）、独立列表与分享排除；不做 MCP |
+| [0147](0147-residual-energy-coefficient.md) | 已采纳并实现 | 部分替代 0145：总消耗改为残差系数加所选日活动能量；不做动态校准 |

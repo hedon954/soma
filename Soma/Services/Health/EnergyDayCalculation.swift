@@ -80,6 +80,10 @@ struct EnergyDayCalculation: Codable, Equatable, Sendable {
     let excludedTrainingIDs: [String]
     let issues: [EnergyDayIssue]
     var algorithmVersion: String? = Self.currentAlgorithmVersion
+    /// 当前展示和缺口使用的总消耗。缺省表示这份快照仍是旧的参考日差额。
+    var presentedTotal: DailyEnergyTotal.Components? = nil
+    /// 与 `presentedTotal` 对应的所选日活动读数。nil 表示没有读数，不是 0。
+    var presentedSelectedActiveKilocalories: Double? = nil
 
     var reasons: [String] {
         issues.map(\.explanation)
@@ -125,6 +129,8 @@ enum EnergyCalculationError: Error {
     case invalidInput, inconsistentReference
 }
 
+/// 参考日差额只保留给历史依据。用户可见总消耗在 `DailyEnergyTotal`：
+/// 静息 × `ResidualEnergyCoefficient` + 所选日活动能量。不要把这里的步行差额或训练时长摊销加回总量。
 enum EnergyDayCalculator {
     static func calculate(_ input: EnergyDayInput) throws -> EnergyDayCalculation {
         let ref = input.reference

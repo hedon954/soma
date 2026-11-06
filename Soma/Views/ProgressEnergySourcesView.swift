@@ -25,12 +25,10 @@ struct ProgressEnergySourcesView: View {
                             }
                         }
                         LabeledContent("静息消耗", value: energy(day.energy.estimate?.restingKilocalories ?? day.restingFormula?.dailyKilocalories))
-                        LabeledContent("当天有效系数", value: factorText(day.energy.estimate))
-                        if let calculation = day.energy.estimate?.calculation {
-                            LabeledContent("参考生活消耗", value: energy(calculation.baseline))
-                            LabeledContent("日常步行差额", value: energy(calculation.walkingDelta))
-                            LabeledContent("计入总消耗的训练", value: energy(calculation.trainingDelta))
-                            LabeledContent("长期修正", value: energy(calculation.input.correction))
+                        LabeledContent("残差系数", value: factorText(day.energy.estimate))
+                        if let components = day.energy.estimate?.components {
+                            LabeledContent("基准额外消耗", value: energy(components.baselineExtraKilocalories))
+                            activityContent(components.activity)
                         }
                         LabeledContent("预估总消耗", value: energy(day.energy.estimate?.totalKilocalories))
                         LabeledContent("已记录摄入", value: day.intake.knownCount > 0 ? energy(day.intake.value) : "未记录")
@@ -56,7 +54,7 @@ struct ProgressEnergySourcesView: View {
                     Section("近期习惯水平") {
                         if let factor = snapshot.habitualEnergyFactor {
                             LabeledContent("近 28 天有效系数", value: factor.formatted(.number.precision(.fractionLength(2))))
-                            Text("由相同日期的总消耗与静息估算汇总，已包含通常训练；不会再加到休息日。")
+                            Text("这是历史参考日差额的汇总，不加入当前预估总消耗，也不会再加到休息日。")
                                 .font(.footnote).foregroundStyle(AppTheme.accent)
                         } else {
                             Text("需要近 28 天至少 21 个活动依据完整的结束日，且每周都有覆盖。")
@@ -72,7 +70,7 @@ struct ProgressEnergySourcesView: View {
                                     Text(forecast.source).font(.footnote).foregroundStyle(AppTheme.accent)
                                 }
                             }
-                            Text("以参考日预测日常活动，只预测训练增量。预测不进入已发生消耗、缺口或校准；日期到来后只采用当天事实。")
+                            Text("未来日期没有所选日活动能量，不编造该读数。预测只在静息 × 残差系数上加上计划或同星期训练的活动能量，不按训练时长扣减，也不进入已发生消耗、缺口或校准。")
                                 .font(.footnote).foregroundStyle(AppTheme.accent)
                         }
                     }
@@ -98,7 +96,7 @@ struct ProgressEnergySourcesView: View {
             if estimate.method == .confirmedLifestyle {
                 LabeledContent("参考生效", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
             }
-            Text("当天有效系数由总消耗估算除以静息估算得到；日活动记录的卡路里不再额外相加。")
+            Text("预估总消耗 = 静息 × 残差系数 + 所选日活动能量。系数表示静息，以及所选活动能量没有覆盖的估算消耗，不是传统全天活动水平。已经包含在日活动能量里的训练不会再加一次；没有读数时不编造。")
                 .foregroundStyle(AppTheme.accent)
             if let calculation = estimate.calculation {
                 Text(calculation.input.reference.reason).font(.footnote)
@@ -130,10 +128,13 @@ struct ProgressEnergySourcesView: View {
     }
 
     private func factorText(_ estimate: AdaptiveEnergyEstimate?) -> String {
-        guard let estimate else { return "默认参考 1.40" }
+        guard let estimate else {
+            let fallback = ResidualEnergyCoefficient.initialFallback.formatted(.number.precision(.fractionLength(2)))
+            return fallback + " · 初始回退"
+        }
         let source = switch estimate.method {
         case .confirmedLifestyle: "个人设置"
-        case .defaultReference: "默认参考"
+        case .defaultReference: "初始回退"
         case .dynamicActivity: "动态估算"
         }
         return estimate.factor.formatted(.number.precision(.fractionLength(2))) + " · " + source
@@ -143,14 +144,25 @@ struct ProgressEnergySourcesView: View {
         let resting = estimate.restingKilocalories.formatted(.number.precision(.fractionLength(0)))
         let factor = estimate.factor.formatted(.number.precision(.fractionLength(2)))
         let total = estimate.totalKilocalories.formatted(.number.precision(.fractionLength(0)))
-        if let calculation = estimate.calculation {
-            return [calculation.baseline, calculation.walkingDelta, calculation.trainingDelta, calculation.input.correction]
-                .map { $0.formatted(.number.precision(.fractionLength(0))) }.joined(separator: " + ") + " ≈ \(total) kcal"
-        }
-        if estimate.trainingNetKilocalories > 0 {
-            let net = estimate.trainingNetKilocalories.formatted(.number.precision(.fractionLength(0)))
-            return "\(resting) × \(factor) + \(net) ≈ \(total) kcal"
+        if let components = estimate.components, components.activityKilocalories > 0 || components.activity != .absent {
+            let activity = components.activityKilocalories.formatted(.number.precision(.fractionLength(0)))
+            return "\(resting) × \(factor) + \(activity) ≈ \(total) kcal"
         }
         return "\(resting) × \(factor) ≈ \(total) kcal"
+    }
+
+    @ViewBuilder
+    private func activityContent(_ activity: DailyEnergyTotal.Components.Activity) -> some View {
+        switch activity {
+        case .absent:
+            LabeledContent("活动消耗", value: "未记录")
+        case let .selected(value), let .recordedTraining(value):
+            LabeledContent("活动消耗", value: energy(value))
+        case let .disaggregated(training, remaining):
+            Group {
+                LabeledContent("训练活动消耗", value: energy(training))
+                LabeledContent("其余活动消耗", value: energy(remaining))
+            }
+        }
     }
 }

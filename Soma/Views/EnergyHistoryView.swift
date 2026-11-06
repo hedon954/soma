@@ -88,7 +88,9 @@ struct EnergyHistoryView: View {
         if row.kindRaw == EnergyEvidenceKind.daily.rawValue,
            let value = try? JSONDecoder().decode(EnergyDayCalculation.self, from: row.payload)
         {
-            return "系数约 " + value.factor.formatted(.number.precision(.fractionLength(2))) + " · " + energyText(value.total)
+            let total = value.presentedTotal?.totalKilocalories ?? value.total
+            let coefficient = value.presentedTotal?.coefficient ?? value.factor
+            return "系数约 " + coefficient.formatted(.number.precision(.fractionLength(2))) + " · " + energyText(total)
         }
         if let review = try? JSONDecoder().decode(EnergyCalibrationReview.self, from: row.payload) {
             return review.delta == 0 ? "保持不变 · " + review.reason : energyText(review.previousCorrection) + " → " + energyText(review.nextCorrection)
@@ -111,23 +113,45 @@ private struct EnergyEvidenceDetail: View {
             {
                 Section("当天估算") {
                     LabeledContent("日期", value: value.input.date.formatted(.dateTime.year().month().day()))
-                    LabeledContent("有效系数", value: value.factor.formatted(.number.precision(.fractionLength(2))))
+                    if let presented = value.presentedTotal {
+                        LabeledContent("残差系数", value: presented.coefficient.formatted(.number.precision(.fractionLength(2))))
+                        LabeledContent("静息估算", value: energyText(presented.restingKilocalories))
+                        LabeledContent("基准额外消耗", value: energyText(presented.baselineExtraKilocalories))
+                        switch presented.activity {
+                        case .absent:
+                            LabeledContent("活动消耗", value: "未记录")
+                        case let .selected(kilocalories), let .recordedTraining(kilocalories):
+                            LabeledContent("活动消耗", value: energyText(kilocalories))
+                        case let .disaggregated(training, remaining):
+                            Group {
+                                LabeledContent("训练活动消耗", value: energyText(training))
+                                LabeledContent("其余活动消耗", value: energyText(remaining))
+                            }
+                        }
+                        LabeledContent("全天估算", value: energyText(presented.totalKilocalories))
+                        Text("预估总消耗 = 静息 × 残差系数 + 所选日活动能量。系数不是传统全天活动水平；已经包含在日活动能量里的训练不会再加一次。")
+                            .font(.footnote)
+                    }
+                    LabeledContent("参考日差额系数", value: value.factor.formatted(.number.precision(.fractionLength(2))))
                     if let previousFactor {
                         LabeledContent("上次估算系数", value: previousFactor.formatted(.number.precision(.fractionLength(2))))
                     }
-                    LabeledContent("静息估算", value: energyText(value.input.resting))
                     LabeledContent("参考生活消耗", value: energyText(value.baseline))
                     LabeledContent("非训练步行差额", value: energyText(value.walkingDelta))
                     LabeledContent("训练增量", value: energyText(value.trainingDelta))
                     LabeledContent("长期修正", value: energyText(value.input.correction))
-                    LabeledContent("全天估算", value: energyText(value.total))
+                    if value.presentedTotal == nil {
+                        LabeledContent("全天估算", value: energyText(value.total))
+                    }
                     LabeledContent("算法", value: value.algorithmVersion ?? "版本未记录")
                     LabeledContent("参考系数", value: value.input.reference.factor.formatted(.number.precision(.fractionLength(3))))
                     LabeledContent("参考非训练距离", value: value.input.reference.walkingKilometers.map {
                         $0.formatted(.number.precision(.fractionLength(2))) + " km"
                     } ?? "尚未建立")
                     LabeledContent("被训练替代的时段活动", value: value.displacedActivityPerHour.formatted(.number.precision(.fractionLength(1))) + " kcal/小时")
-                    Text("总消耗 = 参考生活消耗 + 非训练步行差额 + 训练增量 + 长期修正")
+                    Text(value.presentedTotal == nil
+                        ? "这是当时保存的参考日差额。当前预估总消耗是静息 × 残差系数 + 所选日活动能量。"
+                        : "下面的差额是当时的参考日记录，不加入上面的预估总消耗，也不表示要把日活动能量排除在总消耗之外。")
                         .font(.footnote)
                     Text(value.input.reference.reason)
                     if let formula = value.input.restingFormula {

@@ -23,24 +23,29 @@ final class AdaptiveEnergyEstimatorTests: XCTestCase {
         XCTAssertNil(result.missingReason)
     }
 
-    func testManualReferenceIsExplicitDatedAndNeverUsesFutureBaseline() {
-        let past = EnergyLifestyleBaseline(
-            effectiveFrom: target.addingTimeInterval(-86400), factor: 1.4, label: "本人确认"
+    func testCoefficientComesFromTheProviderAndIsNotInlinedInTheTotal() {
+        let fallback = ResidualEnergyCoefficient.current()
+        XCTAssertEqual(fallback.value, ResidualEnergyCoefficient.initialFallback)
+        XCTAssertEqual(fallback.value, 1.4)
+        let low = AdaptiveEnergyEstimator.estimate(
+            for: target, now: target, restingEstimate: 1700, coefficient: fallback, calendar: calendar
         )
-        let future = EnergyLifestyleBaseline(
-            effectiveFrom: target.addingTimeInterval(86400), factor: 2, label: "未来设置"
-        )
-        let result = AdaptiveEnergyEstimator.estimate(
+        let high = AdaptiveEnergyEstimator.estimate(
             for: target, now: target, restingEstimate: 1700,
-            baselines: [future, past], calendar: calendar
+            coefficient: .init(value: 1.8), calendar: calendar
         )
-        XCTAssertEqual(result.estimate?.totalKilocalories ?? 0, 2380, accuracy: 0.0001)
-        XCTAssertEqual(result.estimate?.method, .confirmedLifestyle)
+        XCTAssertEqual(low.estimate?.totalKilocalories ?? 0, 1700 * ResidualEnergyCoefficient.initialFallback, accuracy: 0.0001)
+        XCTAssertEqual(low.estimate?.method, .defaultReference)
         XCTAssertEqual(
+            (high.estimate?.totalKilocalories ?? 0) - (low.estimate?.totalKilocalories ?? 0),
+            1700 * 0.4,
+            accuracy: 0.0001
+        )
+        XCTAssertNil(
             AdaptiveEnergyEstimator.estimate(
-                for: target, now: target, restingEstimate: 1700, baselines: [future], calendar: calendar
-            ).estimate?.method,
-            .defaultReference
+                for: target, now: target, restingEstimate: 1700,
+                coefficient: .init(value: 9), calendar: calendar
+            ).estimate
         )
     }
 

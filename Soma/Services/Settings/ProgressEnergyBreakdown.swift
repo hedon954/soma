@@ -48,35 +48,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             }
             rows = items
         case .expenditure:
-            let estimates = days.compactMap(\.energy.estimate)
-            guard !estimates.isEmpty else {
-                var items = [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
-                if daily, let day = days.first {
-                    items.append(contentsOf: Self.workoutRows(in: day))
-                }
-                rows = items
-                return
-            }
-            let count = Double(estimates.count)
-            let resting = estimates.reduce(0) { $0 + $1.restingKilocalories } / count
-            let total = estimates.reduce(0) { $0 + $1.totalKilocalories } / count
-            let restingSum = estimates.reduce(0) { $0 + $1.restingKilocalories }
-            let factor = restingSum > 0
-                ? estimates.reduce(0) { $0 + $1.restingKilocalories * $1.factor } / restingSum
-                : estimates[0].factor
-            let prefix = daily ? "" : "日均"
-            var items = [
-                Row(id: "resting", label: prefix + "静息消耗", value: Self.energy(resting), tone: .resting),
-                Row(id: "activity", label: prefix + "活动等消耗", value: Self.energy(total - resting), tone: .activity),
-                Row(
-                    id: "factor", label: daily ? "活动系数" : "综合活动系数",
-                    value: factor.formatted(.number.precision(.fractionLength(2))), tone: .factor
-                )
-            ]
-            if daily, let day = days.first {
-                items.append(contentsOf: Self.workoutRows(in: day))
-            }
-            rows = items
+            rows = Self.expenditureRows(days: days, daily: daily)
         case .protein:
             rows = Self.nutrientRows(
                 days: days,
@@ -104,8 +76,60 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         }
     }
 
-    private static func workoutRows(in day: ProgressDailyMetrics) -> [Row] {
-        day.records.filter { $0.activity.kind == .workout }.map { record in
+    private static func expenditureRows(days: [ProgressDailyMetrics], daily: Bool) -> [Row] {
+        let estimates = days.compactMap(\.energy.estimate)
+        guard !estimates.isEmpty, estimates.allSatisfy({ $0.components != nil }) else {
+            var items = [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
+            if daily, let day = days.first {
+                items.append(contentsOf: workoutRows(in: day))
+            }
+            return items
+        }
+        let components = estimates.compactMap(\.components)
+        let count = Double(components.count)
+        let resting = components.reduce(0) { $0 + $1.restingKilocalories } / count
+        let extra = components.reduce(0) { $0 + $1.baselineExtraKilocalories } / count
+        let activity = components.reduce(0) { $0 + $1.activityKilocalories } / count
+        let prefix = daily ? "" : "日均"
+        var items = [
+            Row(id: "resting", label: prefix + "静息消耗", value: energy(resting), tone: .resting),
+            Row(id: "baseline-extra", label: prefix + "基准额外消耗", value: energy(extra), tone: .factor)
+        ]
+        if daily, let composition = components.first {
+            items.append(contentsOf: activityRows(composition.activity, prefix: ""))
+        } else if components.allSatisfy({ if case .absent = $0.activity { return true } else { return false } }) {
+            items.append(Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity))
+        } else {
+            items.append(Row(id: "activity", label: prefix + "活动消耗", value: energy(activity), tone: .activity))
+        }
+        if daily, let day = days.first {
+            items.append(contentsOf: workoutRows(in: day, omittingKnownEnergy: true))
+        }
+        return items
+    }
+
+    private static func activityRows(_ activity: DailyEnergyTotal.Components.Activity, prefix: String) -> [Row] {
+        switch activity {
+        case .absent:
+            [Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity)]
+        case let .selected(value), let .recordedTraining(value):
+            [Row(id: "activity", label: prefix + "活动消耗", value: energy(value), tone: .activity)]
+        case let .disaggregated(training, remaining):
+            [
+                Row(id: "activity-training", label: prefix + "训练活动消耗", value: energy(training), tone: .workout),
+                Row(id: "activity-remaining", label: prefix + "其余活动消耗", value: energy(remaining), tone: .activity)
+            ]
+        }
+    }
+
+    private static func workoutRows(in day: ProgressDailyMetrics, omittingKnownEnergy: Bool = false) -> [Row] {
+        day.records.filter { record in
+            guard record.activity.kind == .workout else { return false }
+            if omittingKnownEnergy {
+                return !record.isDailyActivity && record.calories == nil
+            }
+            return true
+        }.map { record in
             let calories = record.calories.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
             let title = record.activity.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return Row(

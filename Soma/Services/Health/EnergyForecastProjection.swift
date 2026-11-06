@@ -12,15 +12,14 @@ enum EnergyForecastProjection {
             if let plan = plans.first(where: { $0.date == future }) {
                 if let events = plan.eventsPerKilogram {
                     let values = events.compactMap { event -> Double? in
-                        guard let net = event.netEnergy(resting: latest.input.resting / latest.input.weightKG),
-                              let hours = event.durationHours, hours.isFinite, hours > 0 else { return nil }
-                        return max(0, net * latest.input.weightKG - latest.displacedActivityPerHour * hours)
+                        event.netEnergy(resting: latest.input.resting / latest.input.weightKG)
+                            .map { $0 * latest.input.weightKG }
                     }
                     delta = values.count == events.count ? values.reduce(0, +) : nil
                 } else {
                     delta = nil
                 }
-                source = plan.source + (delta == nil ? " · 目标或时长待补充" : " · 按计划估算")
+                source = plan.source + (delta == nil ? " · 目标或能量待补充" : " · 按计划估算")
                 evidence = []
             } else {
                 let samples = (1 ... 4).compactMap { week -> EnergyDayCalculation? in
@@ -28,12 +27,21 @@ enum EnergyForecastProjection {
                           let value = calculations[prior], value.canCalibrate else { return nil }
                     return value
                 }
-                delta = samples.count >= 3 ? samples.reduce(0) { $0 + $1.trainingDelta } / Double(samples.count) : nil
+                delta = samples.count >= 3 ? samples.reduce(0.0) { $0 + adoptedNet($1) } / Double(samples.count) : nil
                 source = delta == nil ? "同星期训练记录不足" : "近四周同星期的已完成训练"
                 evidence = samples.map(\.input.date).sorted()
             }
-            return .init(date: future, total: delta.map { latest.baseline + latest.input.correction + $0 },
+            let coefficient = ResidualEnergyCoefficient.current()
+            return .init(date: future, total: delta.map { latest.input.resting * coefficient.value + $0 },
                          trainingDelta: delta, source: source, evidenceDates: evidence)
         }
+    }
+
+    /// 已采用训练的活动能量，不按被替代时段扣减。
+    private static func adoptedNet(_ calculation: EnergyDayCalculation) -> Double {
+        let adopted = Set(calculation.adoptedTrainingIDs)
+        return calculation.input.training.filter { adopted.contains($0.id) }
+            .compactMap { $0.netEnergy(resting: calculation.input.resting) }
+            .reduce(0, +)
     }
 }

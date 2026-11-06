@@ -21,6 +21,8 @@ struct ProgressHistoryRecord: Sendable {
     var calorieMET: Double?
     var activeEnergyKilocalories: Double?
     var isDailyActivity = false
+    /// 日常活动获胜来源。只用于判断训练能否从同一份日活动能量里拆出，不把多个来源相加。
+    var dailyActivitySource: DailyActivityWinningSource? = nil
     var trainingEvidence: EnergyTrainingEvent?
     var protein: Double?
     var carbs: Double?

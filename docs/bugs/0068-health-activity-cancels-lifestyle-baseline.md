@@ -1,8 +1,9 @@
 # BUG 0068：健康日活动读数使生活系数消失
 
-- 状态：已修复，本地回归与界面验收通过；真机数据待验收
+- 状态：已修复；「不把日活动能量加入总量」已由后续公式修订
 - 日期：2026-11-03
 - 上游依据：[PRD 076](../prd/076-adaptive-energy-system.md)、[ADR 0145](../adr/0145-adaptive-energy-system.md)
+- 后续修订：[PRD 078](../prd/078-residual-energy-coefficient.md)、[ADR 0147](../adr/0147-residual-energy-coefficient.md)（保留系数，并加上所选日活动能量）
 
 ## 症状
 
@@ -21,9 +22,13 @@ COROS 的活动合计不能证明低强度生活活动已完整覆盖，因此�
 新增热量口径字段；旧 MET 不能证明旧热量口径。Soma 同一场动作先聚合，再通过原始身份或
 本人明确关联选择一份能量。跨来源、时段未知时保留未决依据，不同时累计可能重复的记录。
 
+## 后续公式
+
+活动读数取消系数仍然是错误。当前总量是静息 × 残差系数 + 所选日活动能量，因此「为避免重复而排除日活动能量」不再适用。已经包含在这份日活动能量里的训练仍然不能再加一次。
+
 ## 回归门禁
 
-- DailyActivityEnergyTests / EnergyRuntimeProjectionTests：活动日读数不能取消 1.4，也不多奖励日合计；日周月年一致。
+- DailyActivityEnergyTests / DailyEnergyTotalTests / EnergyRuntimeProjectionTests：活动读数不取消系数；同一系数下 100 与 400 kcal 使总量相差 300；训练不叠加到已选日活动能量上；缺数不编造。日周月年使用同一总量。
 - EnergyDayCalculationTests / EnergyTrainingAssociationTests：差额、替代时段、毛净口径、整场动作合计、关联/解除、未知时段与缺设备能量回退。
 - EnergyContextToolTests / ProgressEnergyDeficitTests：明确完整性、餐食变化失效、空摄入不补零、正式累计排除未确认日。
 - EnergyDiskCompatibilityTests / EnergyEvidenceStoreTests：旧磁盘库保留原值，新表、修订、备份与本地健康边界。

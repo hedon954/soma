@@ -304,6 +304,6 @@ erDiagram
 内容为 DailyActivitySummary：步数、米数、活动 kcal 与逐指标 source 名称/标识；source 由持久内容派生，读取渠道固定 appleHealth。
 同一自然日使用 `externalSource=appleHealth`、`externalID=daily:yyyy-MM-dd`、唯一 projectionKey，更新复用 id / businessID。
 只有已成功读取的指标覆盖旧值；nil 清除，0 有效，失败和未完成的指标不覆盖。三项均无值时删除该日记录。
-无组数、次数、重量、时长或静息读取。日/周/月/年通过既有 WorkoutEntry 加载统计；有活动 kcal 的日期用静息公式 + 活动 kcal，替换活动系数和训练增量。
+无组数、次数、重量、时长或静息读取。日/周/月/年通过既有 WorkoutEntry 加载统计；预估总消耗为静息 × 残差系数 + 所选日活动能量，不把多个来源的活动能量相加，也不用活动能量替换系数。
 个人库及其目录采用 complete 文件保护并排除系统备份；应用备份/导出过滤 appleHealth 运动记录。内部回滚快照保留 dailyActivityData，避免恢复失败丢失健康记录。
 模型上下文与读取工具排除这些记录；无新模型注册、SQL migration、厂商或 Server API。连接配置单独保存在本机，断开停止同步，已同步运动记录保留。
