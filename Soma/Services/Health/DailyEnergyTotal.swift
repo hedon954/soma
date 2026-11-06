@@ -7,29 +7,29 @@ import Foundation
 /// 并且拆开后的两项之和仍等于所选日活动能量，不能再加到总量上。
 /// 没有日活动读数时不编造；已记录、且未包含在日读数里的训练能量可以单独进入总量。
 enum DailyEnergyTotal {
-    struct Components: Codable, Equatable, Sendable {
-        enum Activity: Codable, Equatable, Sendable {
-            /// 一份所选日活动能量，未能可靠拆开。
-            case selected(Double)
-            /// 训练活动能量已包含在所选日活动能量中；其余 = 所选 − 训练。
-            case disaggregated(training: Double, remaining: Double)
-            /// 没有所选日活动读数。这里只是已知训练的活动能量，不是补出来的全天活动。
-            case recordedTraining(Double)
-            /// 没有所选日活动读数，也没有已知训练能量。
-            case absent
+    enum Activity: Codable, Equatable, Sendable {
+        /// 一份所选日活动能量，未能可靠拆开。
+        case selected(Double)
+        /// 训练活动能量已包含在所选日活动能量中；其余 = 所选 − 训练。
+        case disaggregated(training: Double, remaining: Double)
+        /// 没有所选日活动读数。这里只是已知训练的活动能量，不是补出来的全天活动。
+        case recordedTraining(Double)
+        /// 没有所选日活动读数，也没有已知训练能量。
+        case absent
 
-            var kilocalories: Double {
-                switch self {
-                case let .selected(value), let .recordedTraining(value):
-                    value
-                case let .disaggregated(training, remaining):
-                    training + remaining
-                case .absent:
-                    0
-                }
+        var kilocalories: Double {
+            switch self {
+            case let .selected(value), let .recordedTraining(value):
+                value
+            case let .disaggregated(training, remaining):
+                training + remaining
+            case .absent:
+                0
             }
         }
+    }
 
+    struct Components: Codable, Equatable, Sendable {
         var restingKilocalories: Double
         var coefficient: Double
         var activity: Activity
@@ -68,7 +68,7 @@ enum DailyEnergyTotal {
         guard restingKilocalories.isFinite, restingKilocalories > 0, restingKilocalories < 100_000,
               coefficient.isUsable
         else { return nil }
-        let activity: Components.Activity
+        let activity: Activity
         if let selected = selectedActiveKilocalories {
             guard isUsableActive(selected) else { return nil }
             if let training = includedTrainingKilocalories, isUsableActive(training), training <= selected {

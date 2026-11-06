@@ -152,7 +152,7 @@ struct ProgressEnergySourcesView: View {
     }
 
     @ViewBuilder
-    private func activityContent(_ activity: DailyEnergyTotal.Components.Activity) -> some View {
+    private func activityContent(_ activity: DailyEnergyTotal.Activity) -> some View {
         switch activity {
         case .absent:
             LabeledContent("活动消耗", value: "未记录")

@@ -116,7 +116,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         }
     }
 
-    private static func activityRows(_ activity: DailyEnergyTotal.Components.Activity, prefix: String) -> [Row] {
+    private static func activityRows(_ activity: DailyEnergyTotal.Activity, prefix: String) -> [Row] {
         switch activity {
         case .absent:
             [Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity)]
