@@ -27,10 +27,13 @@ struct ProgressEnergySourcesView: View {
                         LabeledContent("静息消耗", value: energy(day.energy.estimate?.restingKilocalories ?? day.restingFormula?.dailyKilocalories))
                         LabeledContent("残差系数", value: factorText(day.energy.estimate))
                         if let components = day.energy.estimate?.components {
-                            LabeledContent("基准额外消耗", value: energy(components.baselineExtraKilocalories))
-                            activityContent(components.activity)
+                            let displayed = EnergyKilocalorieDisplay.parts(components)
+                            LabeledContent("基准额外消耗", value: EnergyKilocalorieDisplay.kcal(displayed.baselineExtra))
+                            activityContent(displayed.activity)
                         }
-                        LabeledContent("预估总消耗", value: energy(day.energy.estimate?.totalKilocalories))
+                        LabeledContent("预估总消耗", value: day.energy.estimate?.components.map {
+                            EnergyKilocalorieDisplay.kcal(EnergyKilocalorieDisplay.parts($0).total)
+                        } ?? energy(day.energy.estimate?.totalKilocalories))
                         LabeledContent("已记录摄入", value: day.intake.knownCount > 0 ? energy(day.intake.value) : "未记录")
                         LabeledContent(day.foodConfirmedComplete ? "预估热量缺口" : "已记饮食差额", value: day.recordedEnergyDifference.map { energy($0) }
                             ?? day.energyDeficitMissingReason ?? "待估算")
@@ -124,7 +127,7 @@ struct ProgressEnergySourcesView: View {
     }
 
     private func energy(_ value: Double?) -> String {
-        value.map { $0.formatted(.number.precision(.fractionLength(0))) + " kcal" } ?? "缺少静息资料"
+        value.map { EnergyKilocalorieDisplay.kcal($0) } ?? "缺少静息资料"
     }
 
     private func factorText(_ estimate: AdaptiveEnergyEstimate?) -> String {
@@ -141,12 +144,14 @@ struct ProgressEnergySourcesView: View {
     }
 
     private func formulaText(_ estimate: AdaptiveEnergyEstimate) -> String {
-        let resting = estimate.restingKilocalories.formatted(.number.precision(.fractionLength(0)))
         let factor = estimate.factor.formatted(.number.precision(.fractionLength(2)))
-        let total = estimate.totalKilocalories.formatted(.number.precision(.fractionLength(0)))
-        if let components = estimate.components, components.activityKilocalories > 0 || components.activity != .absent {
-            let activity = components.activityKilocalories.formatted(.number.precision(.fractionLength(0)))
-            return "\(resting) × \(factor) + \(activity) ≈ \(total) kcal"
+        let displayed = estimate.components.map(EnergyKilocalorieDisplay.parts)
+        let resting = displayed.map { EnergyKilocalorieDisplay.text($0.resting) }
+            ?? EnergyKilocalorieDisplay.text(estimate.restingKilocalories)
+        let total = displayed.map { EnergyKilocalorieDisplay.text($0.total) }
+            ?? EnergyKilocalorieDisplay.text(estimate.totalKilocalories)
+        if let displayed, displayed.displayedActivity > 0 {
+            return "\(resting) × \(factor) + \(EnergyKilocalorieDisplay.text(displayed.displayedActivity)) ≈ \(total) kcal"
         }
         return "\(resting) × \(factor) ≈ \(total) kcal"
     }

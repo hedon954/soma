@@ -11,7 +11,7 @@ final class ProgressEnergyDeficitTests: XCTestCase {
     func testDayUsesEstimatedExpenditureWithNetTrainingInsteadOfGrossCalories() throws {
         let facts = snapshot(.day, [meal(10, 2000), record(10, .workout, calories: 500, met: 5)])
         let result = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: facts))
-        XCTAssertEqual(try XCTUnwrap(result.kilocalories), 2264.5 + 400 - (2264.5 * 0.9 - 1617.5) / 16 - 2000, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(result.kilocalories), 1617.5 * 1.4 + 400 - 2000, accuracy: 0.001)
         XCTAssertEqual(result.includedDayCount, 1)
         XCTAssertEqual(facts.days.first?.trainingCalories.value, 500)
         XCTAssertEqual(facts.days.first?.estimatedEnergyDeficit, result.kilocalories)

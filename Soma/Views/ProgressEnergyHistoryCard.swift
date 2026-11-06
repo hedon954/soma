@@ -90,7 +90,7 @@ struct ProgressEnergyHistoryCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(value.map { (estimated ? "约 " : "") + text($0) } ?? (estimated ? "待估算" : "未记录"))
+                    Text(value.map { (estimated ? "约 " : "") + EnergyKilocalorieDisplay.text($0) } ?? (estimated ? "待估算" : "未记录"))
                         .font(.title3.weight(.medium).monospacedDigit())
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)

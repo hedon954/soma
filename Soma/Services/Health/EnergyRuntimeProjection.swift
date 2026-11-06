@@ -199,9 +199,24 @@ enum EnergyRuntimeProjection {
         return references.filter { $0.id == seed.id && $0.effectiveFrom <= date }.max { $0.effectiveFrom < $1.effectiveFrom } ?? seed
     }
 
+    /// 非日常活动的训练都保留。已有活动能量时用活动口径，不再用同一条记录的毛热量。
+    /// 日常活动整包不进这里，避免和所选日活动能量重复。
     private static func localTraining(_ entries: [ProgressHistoryRecord]) -> [EnergyTrainingEvent] {
-        EnergyTrainingGrouping.sessions(entries.filter { $0.activity.kind == .workout && !$0.isDailyActivity && $0.activeEnergyKilocalories == nil }.map { record in
-            record.trainingEvidence ?? .init(
+        EnergyTrainingGrouping.sessions(entries.filter { $0.activity.kind == .workout && !$0.isDailyActivity }.map { record in
+            let evidence = record.trainingEvidence
+            if let active = record.activeEnergyKilocalories, DailyEnergyTotal.isUsableActive(active) {
+                return EnergyTrainingEvent(
+                    id: evidence?.id ?? "soma:" + record.activity.id.uuidString,
+                    source: evidence?.source ?? "Soma",
+                    scope: .active,
+                    kilocalories: active,
+                    met: nil,
+                    durationHours: evidence?.durationHours ?? record.durationSeconds.map { $0 / 3600 },
+                    start: evidence?.start,
+                    end: evidence?.end
+                )
+            }
+            return evidence ?? .init(
                 id: "soma:" + record.activity.id.uuidString, source: "Soma", scope: record.calorieMET == nil ? .unknown : .metGross,
                 kilocalories: record.calories, met: record.calorieMET, durationHours: record.durationSeconds.map { $0 / 3600 }, start: nil, end: nil
             )

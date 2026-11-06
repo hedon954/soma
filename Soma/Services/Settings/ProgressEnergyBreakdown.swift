@@ -86,34 +86,20 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             return items
         }
         let components = estimates.compactMap(\.components)
-        let count = Double(components.count)
-        let resting = components.reduce(0) { $0 + $1.restingKilocalories } / count
-        let extra = components.reduce(0) { $0 + $1.baselineExtraKilocalories } / count
-        let activity = components.reduce(0) { $0 + $1.activityKilocalories } / count
+        let displayed: EnergyKilocalorieDisplay.Parts
+        if daily {
+            guard let day = components.first else {
+                return [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
+            }
+            displayed = EnergyKilocalorieDisplay.parts(day)
+        } else {
+            displayed = EnergyKilocalorieDisplay.averaged(components)
+        }
         let prefix = daily ? "" : "日均"
-        var items = [
-            Row(id: "resting", label: prefix + "静息消耗", value: energy(resting), tone: .resting),
-            Row(id: "baseline-extra", label: prefix + "基准额外消耗", value: energy(extra), tone: .factor)
-        ]
-        if daily, let composition = components.first {
-            items.append(contentsOf: activityRows(composition.activity, prefix: ""))
-        } else if components.allSatisfy(Self.activityIsAbsent) {
-            items.append(Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity))
-        } else {
-            items.append(Row(id: "activity", label: prefix + "活动消耗", value: energy(activity), tone: .activity))
-        }
-        if daily, let day = days.first {
-            items.append(contentsOf: workoutRows(in: day, omittingKnownEnergy: true))
-        }
-        return items
-    }
-
-    private static func activityIsAbsent(_ components: DailyEnergyTotal.Components) -> Bool {
-        if case .absent = components.activity {
-            true
-        } else {
-            false
-        }
+        return [
+            Row(id: "resting", label: prefix + "静息消耗", value: EnergyKilocalorieDisplay.kcal(displayed.resting), tone: .resting),
+            Row(id: "baseline-extra", label: prefix + "基准额外消耗", value: EnergyKilocalorieDisplay.kcal(displayed.baselineExtra), tone: .factor)
+        ] + activityRows(displayed.activity, prefix: prefix)
     }
 
     private static func activityRows(_ activity: DailyEnergyTotal.Activity, prefix: String) -> [Row] {
@@ -130,14 +116,8 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         }
     }
 
-    private static func workoutRows(in day: ProgressDailyMetrics, omittingKnownEnergy: Bool = false) -> [Row] {
-        day.records.filter { record in
-            guard record.activity.kind == .workout else { return false }
-            if omittingKnownEnergy {
-                return !record.isDailyActivity && record.calories == nil
-            }
-            return true
-        }.map { record in
+    private static func workoutRows(in day: ProgressDailyMetrics) -> [Row] {
+        day.records.filter { $0.activity.kind == .workout }.map { record in
             let calories = record.calories.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
             let title = record.activity.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return Row(

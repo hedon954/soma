@@ -9,10 +9,18 @@ final class DailyEnergyTotalTests: XCTestCase {
             selectedActiveKilocalories: 250
         ))
         XCTAssertEqual(components.coefficient, ResidualEnergyCoefficient.initialFallback)
-        XCTAssertEqual(components.baselineExtraKilocalories, 640)
+        XCTAssertEqual(components.baselineExtraKilocalories, 640, accuracy: 0.001)
         XCTAssertEqual(components.activityKilocalories, 250)
-        XCTAssertEqual(components.totalKilocalories, 1600 * 1.4 + 250)
+        XCTAssertEqual(components.totalKilocalories, 1600 * 1.4 + 250, accuracy: 0.001)
         XCTAssertTrue(components.componentsAddUp)
+        let displayed = EnergyKilocalorieDisplay.parts(.init(
+            restingKilocalories: 1617.5, coefficient: 1.4, activity: .absent
+        ))
+        XCTAssertEqual(displayed.resting, 1618)
+        XCTAssertEqual(displayed.baselineExtra, 647)
+        XCTAssertEqual(displayed.total, 2265)
+        XCTAssertTrue(displayed.addsUp)
+        XCTAssertEqual(EnergyKilocalorieDisplay.whole(2264.5 - 1900), 365)
     }
 
     func testActiveEnergyChangesTheTotalWithoutChangingTheCoefficient() throws {

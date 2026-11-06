@@ -47,13 +47,13 @@ struct ProgressEnergyDeficit: Equatable, Sendable {
 
     var valueText: String {
         guard let kilocalories else { return unavailableText }
-        let rounded = kilocalories.rounded()
+        let rounded = Double(EnergyKilocalorieDisplay.whole(kilocalories))
         let sign = rounded < 0 ? "−" : ""
         return sign + abs(rounded).formatted(.number.precision(.fractionLength(0)))
     }
 
     var remainingIntakeText: String? {
-        remainingIntakeKilocalories.map { $0.rounded().formatted(.number.precision(.fractionLength(0))) }
+        remainingIntakeKilocalories.map { EnergyKilocalorieDisplay.text($0) }
     }
 
     var accessibilityValue: String {
