@@ -18,9 +18,9 @@ enum EnergyKilocalorieDisplay {
             case .absent:
                 0
             case let .selected(value), let .recordedTraining(value):
-                Self.whole(value)
+                EnergyKilocalorieDisplay.whole(value)
             case let .disaggregated(training, remaining):
-                Self.whole(training) + Self.whole(remaining)
+                EnergyKilocalorieDisplay.whole(training) + EnergyKilocalorieDisplay.whole(remaining)
             }
         }
     }
@@ -78,15 +78,15 @@ enum EnergyKilocalorieDisplay {
     private static func displayedActivity(_ activity: DailyEnergyTotal.Activity, fitting remainder: Int) -> DailyEnergyTotal.Activity {
         switch activity {
         case .absent:
-            .absent
+            return .absent
         case let .selected(value):
-            .selected(Double(min(whole(value), max(0, remainder))))
+            return .selected(Double(min(whole(value), max(0, remainder))))
         case let .recordedTraining(value):
-            .recordedTraining(Double(min(whole(value), max(0, remainder))))
+            return .recordedTraining(Double(min(whole(value), max(0, remainder))))
         case let .disaggregated(training, remaining):
-            let activity = min(whole(training + remaining), max(0, remainder))
-            let train = min(whole(training), activity)
-            return .disaggregated(training: Double(train), remaining: Double(activity - train))
+            let combined = min(whole(training + remaining), max(0, remainder))
+            let train = min(whole(training), combined)
+            return .disaggregated(training: Double(train), remaining: Double(combined - train))
         }
     }
 

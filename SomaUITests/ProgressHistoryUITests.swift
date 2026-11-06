@@ -162,7 +162,9 @@ final class ProgressHistoryUITests: XCTestCase {
             app.buttons["饮食与能量，查看估算依据"].tap()
             XCTAssertTrue(app.navigationBars["能量依据"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.staticTexts["静息消耗"].exists)
-            XCTAssertTrue(app.staticTexts["1.40 · 初始回退"].exists)
+            // LabeledContent 把标题和数值合成同一个无障碍标签。
+            XCTAssertTrue(app.staticTexts["残差系数、1.40 · 初始回退"].exists)
+            XCTAssertFalse(app.staticTexts["残差系数、1.40 · 动态估算"].exists)
             XCTAssertFalse(app.staticTexts["统计范围"].exists)
             XCTAssertFalse(app.staticTexts["摄入有记录日"].exists)
             XCTAssertFalse(app.staticTexts["个人静息公式"].exists)
