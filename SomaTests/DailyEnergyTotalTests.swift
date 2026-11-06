@@ -75,7 +75,7 @@ final class DailyEnergyTotalTests: XCTestCase {
         let selected = DailyEnergyTotal.selectedDailyActive(in: [apple, coros])
         XCTAssertEqual(selected.kilocalories, 400)
         XCTAssertEqual(selected.source, .coros)
-        XCTAssertNotEqual((selected.kilocalories ?? 0), 500)
+        XCTAssertNotEqual(selected.kilocalories ?? 0, 500)
     }
 
     func testOnlyTrainingInsideTheWinningPackageCanBeSplit() {

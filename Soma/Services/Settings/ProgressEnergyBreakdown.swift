@@ -97,7 +97,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         ]
         if daily, let composition = components.first {
             items.append(contentsOf: activityRows(composition.activity, prefix: ""))
-        } else if components.allSatisfy({ if case .absent = $0.activity { return true } else { return false } }) {
+        } else if components.allSatisfy(Self.activityIsAbsent) {
             items.append(Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity))
         } else {
             items.append(Row(id: "activity", label: prefix + "活动消耗", value: energy(activity), tone: .activity))
@@ -106,6 +106,14 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             items.append(contentsOf: workoutRows(in: day, omittingKnownEnergy: true))
         }
         return items
+    }
+
+    private static func activityIsAbsent(_ components: DailyEnergyTotal.Components) -> Bool {
+        if case .absent = components.activity {
+            true
+        } else {
+            false
+        }
     }
 
     private static func activityRows(_ activity: DailyEnergyTotal.Components.Activity, prefix: String) -> [Row] {
