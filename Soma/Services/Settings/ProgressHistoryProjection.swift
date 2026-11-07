@@ -21,6 +21,8 @@ struct ProgressHistoryRecord: Sendable {
     var calorieMET: Double?
     var activeEnergyKilocalories: Double?
     var isDailyActivity = false
+    /// 日常活动获胜来源。只用于判断训练能否从同一份日活动能量里拆出，不把多个来源相加。
+    var dailyActivitySource: DailyActivityWinningSource?
     var trainingEvidence: EnergyTrainingEvent?
     var protein: Double?
     var carbs: Double?
@@ -45,6 +47,7 @@ struct ProgressProfileFacts: Sendable {
     var baselines: [EnergyLifestyleBaseline]
     var fitnessGoal: FitnessGoal?
     var energyFacts: EnergyProjectionFacts = .init()
+    var dailyTargetDeficitKilocalories: Double?
 }
 
 struct ProgressDailyMetrics: Sendable, Identifiable {
@@ -176,7 +179,8 @@ enum ProgressHistoryProjection {
                 fat: day.fat.value,
                 estimate: day.energy.estimate?.totalKilocalories,
                 weightKG: latestWeight,
-                fitnessGoal: goal
+                fitnessGoal: goal,
+                dailyTargetDeficitKilocalories: profile?.dailyTargetDeficitKilocalories
             )
         } else {
             nil

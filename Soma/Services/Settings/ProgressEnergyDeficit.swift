@@ -47,13 +47,13 @@ struct ProgressEnergyDeficit: Equatable, Sendable {
 
     var valueText: String {
         guard let kilocalories else { return unavailableText }
-        let rounded = kilocalories.rounded()
+        let rounded = Double(EnergyKilocalorieDisplay.whole(kilocalories))
         let sign = rounded < 0 ? "−" : ""
         return sign + abs(rounded).formatted(.number.precision(.fractionLength(0)))
     }
 
     var remainingIntakeText: String? {
-        remainingIntakeKilocalories.map { $0.rounded().formatted(.number.precision(.fractionLength(0))) }
+        remainingIntakeKilocalories.map { EnergyKilocalorieDisplay.text($0) }
     }
 
     var accessibilityValue: String {
@@ -82,7 +82,7 @@ struct ProgressEnergyDeficit: Equatable, Sendable {
                 : "已计 \(values.count)/\(days.count) 天 · " + (containsToday ? "截至昨日 · 仅完整记食日" : "仅完整记食日")
         }
         let remaining: Double? = if daily, amount != nil, let calories = snapshot.nutritionRings?.calories,
-                                    let target = calories.target, target.isFinite, target > 0
+                                    let target = calories.target, target.isFinite, target >= 0
         {
             CalorieRingStatusCopy(progress: calories).remainingKilocalories ?? 0
         } else {

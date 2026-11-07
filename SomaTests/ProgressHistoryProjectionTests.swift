@@ -80,9 +80,9 @@ final class ProgressHistoryProjectionTests: XCTestCase {
         )
         let resting = 700 + 1062.5 - 150 + 5
         XCTAssertEqual(snapshot.days.first?.trainingCalories.value, 500)
-        let increment = 400 - (resting * 1.4 * 0.9 - resting) / 16
-        XCTAssertEqual(snapshot.days.first?.energy.estimate?.trainingNetKilocalories ?? 0, increment, accuracy: 0.001)
-        XCTAssertEqual(try XCTUnwrap(snapshot.averageEstimate), resting * 1.4 + increment, accuracy: 0.001)
+        let activity = 400.0
+        XCTAssertEqual(snapshot.days.first?.energy.estimate?.trainingNetKilocalories ?? 0, activity, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(snapshot.averageEstimate), resting * ResidualEnergyCoefficient.initialFallback + activity, accuracy: 0.001)
         XCTAssertEqual(snapshot.logicalSets, 5)
     }
 

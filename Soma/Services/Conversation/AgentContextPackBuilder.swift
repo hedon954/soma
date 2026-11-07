@@ -205,6 +205,11 @@ enum AgentContextPackBuilder {
         if !profile.fitnessGoal.isEmpty {
             parts.append("目标 \(profile.fitnessGoal)")
         }
+        if let deficit = DailyTargetDeficit.contextClause(
+            goal: FitnessGoal(rawValue: profile.fitnessGoal), stored: profile.dailyTargetDeficitKilocalories
+        ) {
+            parts.append(deficit)
+        }
         if !profile.healthNotes.isEmpty {
             parts.append("限制 \(profile.healthNotes)")
         }

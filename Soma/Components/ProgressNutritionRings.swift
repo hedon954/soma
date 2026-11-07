@@ -113,7 +113,7 @@ struct ProgressNutritionRingsView: View {
 
     private func calorieCenter(_ progress: NutritionRingProgress) -> some View {
         VStack(spacing: 2) {
-            Text("\(text(progress.intake)) / \(progress.target.map(text) ?? "—")")
+            Text("\(EnergyKilocalorieDisplay.text(progress.intake)) / \(progress.target.map(EnergyKilocalorieDisplay.text) ?? "—")")
                 .font(.title2.weight(.medium).monospacedDigit())
                 .foregroundStyle(AppTheme.accent)
                 .minimumScaleFactor(0.5)
@@ -146,9 +146,11 @@ struct ProgressNutritionRingsView: View {
         _ unit: String,
         showsCalorieStatus: Bool
     ) -> String {
-        let intake = "\(text(progress.intake)) \(unit)"
+        let amount = showsCalorieStatus ? EnergyKilocalorieDisplay.text(progress.intake) : text(progress.intake)
+        let intake = "\(amount) \(unit)"
         if let target = progress.target {
-            let prefix = showsCalorieStatus ? "\(title)已摄入 \(intake)，推荐摄入 \(text(target)) \(unit)" : "\(title) \(intake)，目标 \(text(target)) \(unit)"
+            let targetText = showsCalorieStatus ? EnergyKilocalorieDisplay.text(target) : text(target)
+            let prefix = showsCalorieStatus ? "\(title)已摄入 \(intake)，推荐摄入 \(targetText) \(unit)" : "\(title) \(intake)，目标 \(targetText) \(unit)"
             return "\(prefix)，\(progress.status.accessibilityLabel)"
         }
         return "\(title) \(intake)，没有推荐目标"

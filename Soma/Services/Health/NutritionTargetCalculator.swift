@@ -48,7 +48,10 @@ struct NutritionRingProgress: Equatable, Sendable {
     }
 
     var status: NutritionIntakeStatus {
-        NutritionIntakeStatus.from(ratio: ratio)
+        if target == 0, intake.isFinite, intake >= 0 {
+            return intake > 0 ? .over : .onTarget
+        }
+        return NutritionIntakeStatus.from(ratio: ratio)
     }
 }
 
@@ -58,14 +61,14 @@ struct CalorieRingStatusCopy: Equatable, Sendable {
     var completedPercent: Int?
 
     init(progress: NutritionRingProgress) {
-        guard let target = progress.target, target > 0, progress.intake.isFinite else {
+        guard let target = progress.target, target >= 0, progress.intake.isFinite else {
             remainingKilocalories = nil
             completedPercent = nil
             return
         }
         let remaining = target - progress.intake
         remainingKilocalories = remaining > 0 ? remaining : nil
-        completedPercent = max(0, Int((progress.intake / target * 100).rounded()))
+        completedPercent = target > 0 ? max(0, Int((progress.intake / target * 100).rounded())) : nil
     }
 }
 
@@ -82,7 +85,8 @@ struct ProgressNutritionRings: Equatable, Sendable {
         fat: Double,
         estimate: Double?,
         weightKG: Double?,
-        fitnessGoal: FitnessGoal?
+        fitnessGoal: FitnessGoal?,
+        dailyTargetDeficitKilocalories: Double? = nil
     ) -> ProgressNutritionRings? {
         guard let estimate, estimate > 0 else {
             return from(intake: intake, protein: protein, carbs: carbs, fat: fat, targets: nil)
@@ -95,7 +99,8 @@ struct ProgressNutritionRings: Equatable, Sendable {
             targets: NutritionTargetCalculator.targets(
                 weightKG: weightKG,
                 fitnessGoal: fitnessGoal,
-                totalKilocalories: estimate
+                totalKilocalories: estimate,
+                dailyTargetDeficitKilocalories: dailyTargetDeficitKilocalories
             )
         )
     }
@@ -117,12 +122,11 @@ struct ProgressNutritionRings: Equatable, Sendable {
 }
 
 enum NutritionTargetCalculator {
-    static func calorieAdjustment(for goal: FitnessGoal?) -> Double {
-        switch goal {
-        case .muscleGain: 250
-        case .fatLoss: -400
-        case .recomposition, .none: 0
+    static func calorieAdjustment(for goal: FitnessGoal?, dailyTargetDeficitKilocalories: Double? = nil) -> Double {
+        if goal?.supportsCalorieDeficit == true {
+            return -DailyTargetDeficit.resolve(dailyTargetDeficitKilocalories)
         }
+        return goal == .muscleGain ? 250 : 0
     }
 
     static func proteinGramsPerKilogram(for goal: FitnessGoal?) -> Double {
@@ -136,9 +140,12 @@ enum NutritionTargetCalculator {
     static func targets(
         weightKG: Double?,
         fitnessGoal: FitnessGoal?,
-        totalKilocalories: Double
+        totalKilocalories: Double,
+        dailyTargetDeficitKilocalories: Double? = nil
     ) -> NutritionTargets {
-        let calories = max(0, totalKilocalories + calorieAdjustment(for: fitnessGoal))
+        let calories = max(0, totalKilocalories + calorieAdjustment(
+            for: fitnessGoal, dailyTargetDeficitKilocalories: dailyTargetDeficitKilocalories
+        ))
         guard let weightKG, weightKG.isFinite, weightKG > 0 else {
             return NutritionTargets(
                 calories: calories,

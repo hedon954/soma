@@ -30,8 +30,9 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
             let snapshot = ProgressHistoryProjection.build(window: period.window(containing: day, calendar: calendar), records: records,
                                                            profile: profile, now: day.addingTimeInterval(86400), calendar: calendar)
             let estimate = try XCTUnwrap(snapshot.days.first { $0.date == day }?.energy.estimate)
-            XCTAssertEqual(estimate.totalKilocalories, 1617.5 * 1.4, accuracy: 0.001)
-            XCTAssertEqual(estimate.factor, 1.4, accuracy: 0.001)
+            XCTAssertEqual(estimate.totalKilocalories, 1617.5 * 1.4 + 223, accuracy: 0.001)
+            XCTAssertEqual(estimate.factor, ResidualEnergyCoefficient.initialFallback, accuracy: 0.001)
+            XCTAssertEqual(estimate.components?.activity, .selected(223))
         }
     }
 
@@ -49,11 +50,47 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
             nonTrainingSteps: 7000, hasAmbiguousBoundarySamples: false, basisID: HealthActivityDayEvidence.statisticsBasis)]
         let snapshot = ProgressHistoryProjection.build(window: ProgressPeriod.day.window(containing: day, calendar: calendar), records: [weight],
                                                        profile: profile, now: day.addingTimeInterval(86400), calendar: calendar)
-        let calculation = try XCTUnwrap(snapshot.days.first?.energy.estimate?.calculation)
-        XCTAssertEqual(calculation.walkingDelta, 70)
-        XCTAssertEqual(calculation.adoptedTrainingIDs, ["fixture-run"])
-        XCTAssertEqual(calculation.total, 1617.5 * 1.4 + 70 + 500 - (1617.5 * 1.4 * 0.9 - 1617.5 - 105) / 16, accuracy: 0.001)
-        XCTAssertTrue(calculation.canCalibrate)
+        let estimate = try XCTUnwrap(snapshot.days.first?.energy.estimate)
+        XCTAssertEqual(estimate.calculation?.adoptedTrainingIDs, ["fixture-run"])
+        XCTAssertEqual(estimate.totalKilocalories, 1617.5 * 1.4 + 500, accuracy: 0.001)
+        XCTAssertEqual(estimate.components?.activity, .recordedTraining(500))
+        XCTAssertNotNil(estimate.calculation)
+        XCTAssertNotEqual(estimate.calculation?.total, estimate.totalKilocalories)
+    }
+
+    func testWinningPackageSplitsIncludedTrainingAndDoesNotAddAnotherSource() throws {
+        var profile = profile
+        let health = EnergyTrainingEvent(
+            id: "health:fixture", source: "Apple Watch", scope: .active, kilocalories: 100,
+            met: nil, durationHours: 1, start: day, end: day.addingTimeInterval(3600)
+        )
+        profile.energyFacts.activity = [.init(
+            day: .init(date: day, calendar: calendar), training: [health], excludedIntervals: [],
+            nonTrainingKilometers: nil, nonTrainingSteps: nil, hasAmbiguousBoundarySamples: false,
+            basisID: HealthActivityDayEvidence.statisticsBasis
+        )]
+        let daily = ProgressHistoryRecord(
+            activity: .init(id: UUID(), kind: .workout, date: day, title: "日常活动", detail: "", metric: nil),
+            calories: 400, activeEnergyKilocalories: 400, isDailyActivity: true, dailyActivitySource: .appleHealth
+        )
+        let included = ProgressHistoryProjection.build(
+            window: ProgressPeriod.day.window(containing: day, calendar: calendar),
+            records: [weight, daily], profile: profile, now: day.addingTimeInterval(86400), calendar: calendar
+        )
+        let split = try XCTUnwrap(included.days.first { $0.date == day }?.energy.estimate)
+        XCTAssertEqual(split.totalKilocalories, 1617.5 * 1.4 + 400, accuracy: 0.001)
+        XCTAssertEqual(split.components?.activity, .disaggregated(training: 100, remaining: 300))
+        let soma = ProgressHistoryRecord(
+            activity: .init(id: UUID(), kind: .workout, date: day, title: "虚构训练", detail: "", metric: nil),
+            calories: 800, calorieMET: 5, durationSeconds: 3600
+        )
+        let mixed = ProgressHistoryProjection.build(
+            window: ProgressPeriod.day.window(containing: day, calendar: calendar),
+            records: [weight, daily, soma], profile: profile, now: day.addingTimeInterval(86400), calendar: calendar
+        )
+        let combined = try XCTUnwrap(mixed.days.first { $0.date == day }?.energy.estimate)
+        XCTAssertEqual(combined.totalKilocalories, split.totalKilocalories, accuracy: 0.001)
+        XCTAssertEqual(combined.components?.activity, .selected(400))
     }
 
     func testBoundaryAmbiguityAndUnknownCoverageDoNotReduceBudget() throws {
@@ -93,6 +130,8 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
         let updated = EnergyRuntimeProjection.build(window: ProgressPeriod.day.window(containing: day, calendar: calendar), records: [weight],
                                                     profile: profile, now: day, calendar: calendar)
         XCTAssertEqual(updated.calculations[day]?.input.reference.factor, 1.6)
+        XCTAssertEqual(updated.outcomes[day]?.estimate?.factor, ResidualEnergyCoefficient.initialFallback)
+        XCTAssertEqual(updated.outcomes[day]?.estimate?.totalKilocalories ?? 0, 1617.5 * 1.4, accuracy: 0.001)
         XCTAssertNil(updated.calculations[day]?.input.reference.walkingKilometers)
         profile.energyFacts.contexts = []
         let removed = EnergyRuntimeProjection.build(window: ProgressPeriod.day.window(containing: day, calendar: calendar), records: [weight],

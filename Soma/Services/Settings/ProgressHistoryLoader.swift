@@ -18,7 +18,9 @@ actor ProgressHistoryLoader {
             try ProgressHistoryRecord(
                 activity: .workout(workout), calories: workout.dailyActivity?[.activeEnergy].value ?? workout.estimatedCalories.map(Double.init),
                 calorieMET: workout.calorieMET, activeEnergyKilocalories: workout.dailyActivity?[.activeEnergy].value,
-                isDailyActivity: workout.isDailyActivity, trainingEvidence: trainingEvidence(workout), volume: workout.estimatedVolume,
+                isDailyActivity: workout.isDailyActivity,
+                dailyActivitySource: workout.isDailyActivity ? workout.dailyActivityWinningSource : nil,
+                trainingEvidence: trainingEvidence(workout), volume: workout.estimatedVolume,
                 logicalSets: Self.workingSetCount(workout), exerciseID: workout.exerciseID,
                 durationSeconds: (workout.calorieDurationMinutes ?? workout.durationMinutes.map(Double.init))
                     .map { $0 * 60 }
@@ -69,7 +71,8 @@ actor ProgressHistoryLoader {
             return try ProgressProfileFacts(
                 updatedAt: profile.updatedAt, birthDate: profile.birthDate, height: profile.height, biologicalSex: profile.biologicalSex,
                 baselines: EnergyLifestyleStorage.decode(profile.energyBaselinesData),
-                fitnessGoal: FitnessGoal(rawValue: profile.fitnessGoal), energyFacts: facts
+                fitnessGoal: FitnessGoal(rawValue: profile.fitnessGoal), energyFacts: facts,
+                dailyTargetDeficitKilocalories: profile.dailyTargetDeficitKilocalories
             )
         }
         return ProgressHistoryFacts(records: workouts + meals + body, profile: profile)

@@ -1,10 +1,11 @@
 # PRD 076：可解释的动态消耗
 
-- 状态：已采纳并实现；真机数据待验收
+- 状态：部分已替代；总消耗公式见 PRD 078，生活事实与审查边界仍在
 - 日期：2026-11-02
 - 版本：0.0.30
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)（消耗估算、生活事实、记录完整性与审查边界）、[工程契约](../../CLAUDE.md)
 - 上游依据：[消耗体系研究](../research/2026-11-02-soma-energy-expenditure-system.md)
+- 后续修订：[PRD 078](078-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
 - 下游落地：[ADR 0145](../adr/0145-adaptive-energy-system.md)
   - [BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)
   - [验收](../acceptance.md)
@@ -16,7 +17,9 @@
 
 ## 范围与公式
 
-遵循研究中的参考日差额模型：M=R×F_ref+ΔWalk+ΔTrain，T=M+C，有效系数=T/R。
+总消耗公式已由 [PRD 078](078-residual-energy-coefficient.md) 修订为：静息 × 残差系数 + 所选日活动能量。下面的参考日差额不再作为当前总消耗，日活动能量也不再为了避免重复计算而被排除。
+
+原先的参考日差额模型是：M=R×F_ref+ΔWalk+ΔTrain，T=M+C，有效系数=T/R。
 日常距离排除已计训练时段；步数和距离只形成一笔步行依据；COROS 日活动总量保留为观察事实。
 近期训练形成习惯水平和明确标识的预测，不在休息日重复奖励。预测被实际替换。
 初期根据明确生活事实建立参考，未知保持未知；粗档和默认 1.4 只是未校准先验。
