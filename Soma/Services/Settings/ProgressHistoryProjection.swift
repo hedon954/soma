@@ -47,6 +47,7 @@ struct ProgressProfileFacts: Sendable {
     var baselines: [EnergyLifestyleBaseline]
     var fitnessGoal: FitnessGoal?
     var energyFacts: EnergyProjectionFacts = .init()
+    var dailyTargetDeficitKilocalories: Double? = nil
 }
 
 struct ProgressDailyMetrics: Sendable, Identifiable {
@@ -178,7 +179,8 @@ enum ProgressHistoryProjection {
                 fat: day.fat.value,
                 estimate: day.energy.estimate?.totalKilocalories,
                 weightKG: latestWeight,
-                fitnessGoal: goal
+                fitnessGoal: goal,
+                dailyTargetDeficitKilocalories: profile?.dailyTargetDeficitKilocalories
             )
         } else {
             nil

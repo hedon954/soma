@@ -82,7 +82,7 @@ struct ProgressEnergyDeficit: Equatable, Sendable {
                 : "已计 \(values.count)/\(days.count) 天 · " + (containsToday ? "截至昨日 · 仅完整记食日" : "仅完整记食日")
         }
         let remaining: Double? = if daily, amount != nil, let calories = snapshot.nutritionRings?.calories,
-                                    let target = calories.target, target.isFinite, target > 0
+                                    let target = calories.target, target.isFinite, target >= 0
         {
             CalorieRingStatusCopy(progress: calories).remainingKilocalories ?? 0
         } else {

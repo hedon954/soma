@@ -1,4 +1,5 @@
 # Soma 验收清单
+- 后续修订：[PRD 079](prd/079-daily-target-deficit.md)、[ADR 0148](adr/0148-daily-target-deficit.md)（每日目标热量缺口）
 - 后续修订：[PRD 078](prd/078-residual-energy-coefficient.md)、[ADR 0147](adr/0147-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
 - 后续修订：[PRD 076](prd/076-adaptive-energy-system.md)、[ADR 0145](adr/0145-adaptive-energy-system.md)（动态消耗、完整性与本地校准）
 - 后续修订：[PRD 072](prd/072-coach-training-schedule-draft.md)、[ADR 0141](adr/0141-coach-training-schedule-draft.md)（教练起草训练计划，确认后才保存）
@@ -559,3 +560,13 @@ DailyActivityUITests 在 iPhone 17 Pro、iPhone 16e 和 iPad Pro 11-inch 各 2 �
 
 同日 GitHub Release [v0.0.30](https://github.com/hedon954/soma/releases/tag/v0.0.30)
 发布成功；远端完整质量门禁通过 965 项 XCTest 与 8 项 Swift Testing。
+
+## 每日目标热量缺口（PRD 079；待 iOS 验收）
+
+- [ ] 设置身体信息的减脂目标显示默认 400；修改并保存，返回重开及冷启动不丢失。
+- [ ] 显式 0 保留；负数、空白、非法输入不能保存；保存失败明确提示并允许重试。
+- [ ] 静息 × 残差系数 + 所选活动能量保持不变；自定义目标只影响推荐及仍可摄入，不改变实际缺口。
+- [ ] 推荐摄入与仍可摄入分别以 0 为下限；缺估算不生成推荐；非减脂目标不变。
+- [ ] 切换目标保留偏好；个人与演示空间隔离；旧库 / 旧 JSON 缺键回退 400，备份恢复保留 0 和自定义值。
+- [ ] iPhone 浅色、深色、大字号、键盘与滚动；进展保存后即时刷新，教练上下文区分偏好与事实。
+- [ ] 运行新增单元测试和设置 UI 测试、完整 `make verify`；Linux 静态检查不能替代这些验收。

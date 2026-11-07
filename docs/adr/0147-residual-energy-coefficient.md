@@ -5,7 +5,7 @@
 - 版本：未发布（修订 0.0.31 的总消耗公式，不单独发版）
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0145](0145-adaptive-energy-system.md)（当前总消耗不再使用参考日差额，日活动能量不再被排除）、[ADR 0144](0144-healthkit-daily-activity.md)（活动日合计进入总消耗的方式）、[ADR 0000](0000-origin-through-0.0.11.md)（全天消耗公式）、[工程契约](../../CLAUDE.md)
-- 后续替代：暂无
+- 后续修订：[ADR 0148](0148-daily-target-deficit.md)（摄入目标偏好；不替代总消耗公式）
 - 上游依据：[PRD 078](../prd/078-residual-energy-coefficient.md)
 - 下游落地：[验收](../acceptance.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)
 

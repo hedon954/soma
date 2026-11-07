@@ -38,6 +38,7 @@
 | [076](076-adaptive-energy-system.md) | 0.0.30 | 部分已替代；总消耗见 078 |
 | [077](077-daily-activity-source-priority.md) | 0.0.31 | 已实现；真机数据待验收 |
 | [078](078-residual-energy-coefficient.md) | 未发布 | 已实现；修订 076 的总消耗公式 |
+| [079](079-daily-target-deficit.md) | 未发布 | 已实现，待 iOS 验收；每日目标热量缺口 |
 
 ## 阅读约定
 
@@ -88,3 +89,4 @@
 | 文档 | 状态 | 范围 |
 | --- | --- | --- |
 | [078](078-residual-energy-coefficient.md) | 已实现 | 总消耗改为静息 × 残差系数 + 所选日活动能量；不发版 |
+| [079](079-daily-target-deficit.md) | 已实现，待 iOS 验收 | 减脂每日目标热量缺口，默认 400；补充 078，保持总消耗公式 |

@@ -40,6 +40,23 @@ final class ConversationContextProjectionTests: XCTestCase {
         XCTAssertTrue(contextText.contains("限制 虚构限制：避免跳跃"))
     }
 
+    @MainActor
+    func testAgentContextUsesSavedFatLossDeficitOnlyForFatLoss() throws {
+        let suiteName = "ConversationContextProjectionTests.deficit.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
+        let context = spaces.personalContainer.mainContext
+        let profile = UserProfile(fitnessGoal: FitnessGoal.fatLoss.rawValue)
+        profile.dailyTargetDeficitKilocalories = 600
+        context.insert(profile)
+        let custom = AgentContextPackBuilder.build(gyms: [], equipment: [], in: context)
+        XCTAssertTrue(custom.contains("每日目标热量缺口 600 千卡"))
+        profile.fitnessGoal = FitnessGoal.muscleGain.rawValue
+        let gain = AgentContextPackBuilder.build(gyms: [], equipment: [], in: context)
+        XCTAssertFalse(gain.contains("每日目标热量缺口"))
+    }
+
     func testHistoricalMediaRequiresExplicitReferenceAndCapsComparisonAtTwo() {
         let exchanges = (0 ..< 3).map { index in
             ConversationContextProjection.Exchange(

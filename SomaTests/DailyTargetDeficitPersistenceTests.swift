@@ -1,0 +1,46 @@
+@testable import Soma
+import SwiftData
+import XCTest
+
+@MainActor
+final class DailyTargetDeficitPersistenceTests: XCTestCase {
+    func testLegacyProfileArchiveMissingPreferenceUses400() throws {
+        let data = try JSONEncoder().encode(UserProfileDTO(UserProfile()))
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "dailyTargetDeficitKilocalories")
+        let decoded = try JSONDecoder().decode(UserProfileDTO.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(decoded.dailyTargetDeficitKilocalories)
+        XCTAssertEqual(DailyTargetDeficit.resolve(decoded.makeModel().dailyTargetDeficitKilocalories), 400)
+    }
+
+    func testBackupRoundTripPreservesCustomAndExplicitZero() throws {
+        for value in [0.0, 625.5] {
+            let profile = UserProfile(fitnessGoal: FitnessGoal.fatLoss.rawValue)
+            profile.dailyTargetDeficitKilocalories = value
+            let data = try JSONEncoder().encode(UserProfileDTO(profile))
+            let restored = try JSONDecoder().decode(UserProfileDTO.self, from: data).makeModel()
+            XCTAssertEqual(restored.dailyTargetDeficitKilocalories, value)
+        }
+    }
+
+    func testPreferenceSurvivesDiskReopenAndGoalChanges() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let configuration = ModelConfiguration(url: directory.appendingPathComponent("test.store"))
+        do {
+            let container = try ModelContainer(for: UserProfile.self, configurations: configuration)
+            let profile = UserProfile(fitnessGoal: FitnessGoal.fatLoss.rawValue)
+            profile.dailyTargetDeficitKilocalories = 625.5
+            container.mainContext.insert(profile)
+            try container.mainContext.save()
+            profile.fitnessGoal = FitnessGoal.muscleGain.rawValue
+            try container.mainContext.save()
+        }
+        let reopened = try ModelContainer(for: UserProfile.self, configurations: configuration)
+        let profile = try XCTUnwrap(reopened.mainContext.fetch(FetchDescriptor<UserProfile>()).first)
+        XCTAssertEqual(profile.dailyTargetDeficitKilocalories, 625.5)
+        profile.fitnessGoal = FitnessGoal.fatLoss.rawValue
+        XCTAssertEqual(DailyTargetDeficit.resolve(profile.dailyTargetDeficitKilocalories), 625.5)
+    }
+}

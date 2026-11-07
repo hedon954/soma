@@ -109,10 +109,25 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         }
     }
 
+    func testCustomTargetFlowsThroughProjectionWithoutChangingExpenditureOrActualDeficit() throws {
+        let original = snapshot(.day, [meal(10, 1000)], goal: .fatLoss)
+        let custom = snapshot(.day, [meal(10, 1000)], goal: .fatLoss, targetDeficit: 600)
+        XCTAssertEqual(custom.averageEstimate, original.averageEstimate)
+        XCTAssertEqual(custom.nutritionRings?.calories.target, (original.nutritionRings?.calories.target ?? 0) - 200)
+        let first = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: original))
+        let second = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: custom))
+        XCTAssertEqual(second.kilocalories, first.kilocalories)
+        XCTAssertEqual(second.remainingIntakeKilocalories, (first.remainingIntakeKilocalories ?? 0) - 200)
+        let clamped = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: snapshot(
+            .day, [meal(10, 1000)], goal: .fatLoss, targetDeficit: 3000
+        )))
+        XCTAssertEqual(clamped.remainingIntakeKilocalories, 0)
+    }
+
     private func snapshot(
         _ period: ProgressPeriod, _ records: [ProgressHistoryRecord],
         weightDay: Int? = nil, hasProfile: Bool = true, now: Date? = nil, anchor: Date? = nil, goal: FitnessGoal? = nil,
-        confirmsFood: Bool = true
+        confirmsFood: Bool = true, targetDeficit: Double? = nil
     ) -> ProgressHistorySnapshot {
         let weightDate = weightDay.map { date($0) } ?? date(30, month: 8)
         let weight = ProgressHistoryRecord(activity: .init(id: UUID(), kind: .body, date: weightDate,
@@ -120,6 +135,7 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         var profile = ProgressProfileFacts(updatedAt: date(1, month: 8),
                                            birthDate: calendar.date(from: DateComponents(year: 1996, month: 1, day: 1)),
                                            height: 170, biologicalSex: .male, baselines: [], fitnessGoal: goal)
+        profile.dailyTargetDeficitKilocalories = targetDeficit
         if confirmsFood {
             let meals = Dictionary(grouping: records.filter { $0.activity.kind == .meal }) { calendar.startOfDay(for: $0.activity.date) }
             profile.energyFacts.contexts = meals.map { day, records in

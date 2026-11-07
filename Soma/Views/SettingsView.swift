@@ -381,6 +381,8 @@ struct PersonalBodyInfoView: View {
     @State private var hasBirthDate = false
     @State private var height = ""
     @State private var fitnessGoal: FitnessGoal?
+    @State private var dailyTargetDeficit = DailyTargetDeficit.inputText(for: nil)
+    @State private var profileSaveError: String?
     @State private var healthNotes = ""
     @State private var loadedProfileID: UUID?
     @State private var showsBirthDateEditor = false
@@ -495,6 +497,9 @@ struct PersonalBodyInfoView: View {
                         Text(goal.rawValue).tag(Optional(goal))
                     }
                 }
+                if fitnessGoal == .fatLoss {
+                    DailyTargetDeficitField(text: $dailyTargetDeficit)
+                }
                 DisclosureGroup("训练上下文", isExpanded: $contextExpanded) {
                     ProfileFieldRow(
                         title: "身体限制与注意事项",
@@ -505,6 +510,9 @@ struct PersonalBodyInfoView: View {
                 }
             } footer: {
                 Text("AI 只会把这里的信息当作上下文，不会据此进行医学诊断。")
+                if let profileSaveError {
+                    Text(profileSaveError).foregroundStyle(.red)
+                }
             }
 
             Section {
@@ -582,9 +590,11 @@ struct PersonalBodyInfoView: View {
     private var isValid: Bool {
         (!hasBirthDate || birthDate <= .now)
             && validDouble(height, range: 80 ... 250)
+            && (fitnessGoal != .fatLoss || DailyTargetDeficit.parse(dailyTargetDeficit) != nil)
     }
 
     private var isDirty: Bool {
+        if profileSaveError != nil { return true }
         guard let profile else {
             return [displayName, height, healthNotes]
                 .contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
@@ -598,6 +608,8 @@ struct PersonalBodyInfoView: View {
             || parsedDouble(height) != profile.height
             || fitnessGoal?.rawValue
             != (profile.fitnessGoal.isEmpty ? nil : profile.fitnessGoal)
+            || (fitnessGoal == .fatLoss
+                && DailyTargetDeficit.parse(dailyTargetDeficit) != DailyTargetDeficit.resolve(profile.dailyTargetDeficitKilocalories))
             || normalized(healthNotes) != profile.healthNotes
     }
 
@@ -616,6 +628,7 @@ struct PersonalBodyInfoView: View {
         }
         height = profile.height.map(formatted) ?? ""
         fitnessGoal = FitnessGoal(rawValue: profile.fitnessGoal)
+        dailyTargetDeficit = DailyTargetDeficit.inputText(for: profile.dailyTargetDeficitKilocalories)
         healthNotes = profile.healthNotes
         contextExpanded = !profile.fitnessGoal.isEmpty || !profile.healthNotes.isEmpty
     }
@@ -632,6 +645,7 @@ struct PersonalBodyInfoView: View {
     }
 
     private func save() {
+        guard isValid else { return }
         let target: UserProfile
         if let profile {
             target = profile
@@ -647,8 +661,16 @@ struct PersonalBodyInfoView: View {
         target.age = nil
         target.height = parsedDouble(height)
         target.fitnessGoal = fitnessGoal?.rawValue ?? ""
+        if fitnessGoal == .fatLoss {
+            target.dailyTargetDeficitKilocalories = DailyTargetDeficit.parse(dailyTargetDeficit)
+        }
         target.healthNotes = normalized(healthNotes)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            profileSaveError = nil
+        } catch {
+            profileSaveError = "身体信息未能保存，请再次点击保存重试。"
+        }
     }
 
     private func normalized(_ value: String) -> String {

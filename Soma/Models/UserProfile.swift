@@ -35,6 +35,8 @@ final class UserProfile: BusinessIdentifiedModel {
     var height: Double?
     var fitnessGoal: String
     var healthNotes: String
+    /// nil preserves the 400 kcal default for existing profiles.
+    var dailyTargetDeficitKilocalories: Double?
     /// Explicit, effective-dated estimation settings; nil in stores created before PRD 053.
     var energyBaselinesData: Data?
 
@@ -67,6 +69,7 @@ final class UserProfile: BusinessIdentifiedModel {
         self.height = height
         self.fitnessGoal = fitnessGoal
         self.healthNotes = healthNotes
+        dailyTargetDeficitKilocalories = nil
         energyBaselinesData = nil
     }
 }
