@@ -2,7 +2,7 @@
 
 - 状态：已采纳并实现；模拟器验证通过；真实旧库升级待验收
 - 日期：2026-11-07
-- 版本：未发布
+- 版本：0.0.32
 - 上游依据：[PRD 079](../prd/079-daily-target-deficit.md)、[ADR 0147](0147-residual-energy-coefficient.md)（保持总消耗公式）
 - 下游落地：[验收](../acceptance.md)、[工程原则](../../CLAUDE.md)
 

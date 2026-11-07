@@ -2,7 +2,7 @@
 
 - 状态：已实现；真机数据待验收
 - 日期：2026-11-06
-- 版本：未发布（修订 0.0.31 的总消耗公式，不单独发版）
+- 版本：0.0.32（修订 0.0.31 的总消耗公式，不单独发版）
 - 修订自：[PRD 076](076-adaptive-energy-system.md)（总消耗不再使用参考日差额，也不再把日活动能量排除在总量之外）、[PRD 075](075-healthkit-daily-activity.md)（活动能量进入总消耗的方式）、[PRD 000](000-origin-through-0.0.11.md)（全天消耗公式）、[工程契约](../../CLAUDE.md)
 - 后续修订：[PRD 079](079-daily-target-deficit.md)（新增摄入目标设置；总消耗公式不变）
 - 下游落地：[ADR 0147](../adr/0147-residual-energy-coefficient.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)、[验收](../acceptance.md)

@@ -37,8 +37,8 @@
 | [075](075-healthkit-daily-activity.md) | 0.0.30 | 已实现；真机数据待验收 |
 | [076](076-adaptive-energy-system.md) | 0.0.30 | 部分已替代；总消耗见 078 |
 | [077](077-daily-activity-source-priority.md) | 0.0.31 | 已实现；真机数据待验收 |
-| [078](078-residual-energy-coefficient.md) | 未发布 | 已实现；修订 076 的总消耗公式 |
-| [079](079-daily-target-deficit.md) | 未发布 | 已实现，模拟器验证通过；每日目标热量缺口 |
+| [078](078-residual-energy-coefficient.md) | 0.0.32 | 已实现；修订 076 的总消耗公式 |
+| [079](079-daily-target-deficit.md) | 0.0.32 | 已实现，模拟器验证通过；每日目标热量缺口 |
 
 ## 阅读约定
 

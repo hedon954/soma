@@ -2,7 +2,7 @@
 
 - 状态：已实现；模拟器验证通过；真实旧库升级待验收
 - 日期：2026-11-07
-- 版本：未发布
+- 版本：0.0.32
 - 修订自：[PRD 078](078-residual-energy-coefficient.md)（补充摄入目标设置，不改变总消耗）
 - 下游落地：[ADR 0148](../adr/0148-daily-target-deficit.md)、[验收](../acceptance.md)、[工程原则](../../CLAUDE.md)
 

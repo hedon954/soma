@@ -32,8 +32,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0144](0144-healthkit-daily-activity.md) | 0.0.30 | 部分已替代 | 每日健康运动记录、真实来源与覆盖同步；总消耗见 0147 |
 | [0145](0145-adaptive-energy-system.md) | 0.0.30 | 部分已替代 | 动态消耗与校准证据；当前总量见 0147 |
 | [0146](0146-daily-activity-source-priority.md) | 0.0.31 | 已采纳并实现 | HealthKit 日活动数据源三选一、整包择优、列表与分享边界 |
-| [0147](0147-residual-energy-coefficient.md) | 未发布 | 已采纳并实现 | 总消耗改为残差系数加所选日活动能量 |
-| [0148](0148-daily-target-deficit.md) | 未发布 | 已采纳并实现，模拟器验证通过 | 每日目标热量缺口偏好与持久化 |
+| [0147](0147-residual-energy-coefficient.md) | 0.0.32 | 已采纳并实现 | 总消耗改为残差系数加所选日活动能量 |
+| [0148](0148-daily-target-deficit.md) | 0.0.32 | 已采纳并实现，模拟器验证通过 | 每日目标热量缺口偏好与持久化 |
 
 新决策使用 [ADR 模板](template.md)。
 
