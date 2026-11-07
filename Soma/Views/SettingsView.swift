@@ -498,7 +498,7 @@ struct PersonalBodyInfoView: View {
                     }
                 }
                 .accessibilityIdentifier("fitnessGoalPicker")
-                if fitnessGoal == .fatLoss {
+                if fitnessGoal?.supportsCalorieDeficit == true {
                     DailyTargetDeficitField(text: $dailyTargetDeficit)
                 }
                 DisclosureGroup("训练上下文", isExpanded: $contextExpanded) {
@@ -591,7 +591,7 @@ struct PersonalBodyInfoView: View {
     private var isValid: Bool {
         (!hasBirthDate || birthDate <= .now)
             && validDouble(height, range: 80 ... 250)
-            && (fitnessGoal != .fatLoss || DailyTargetDeficit.parse(dailyTargetDeficit) != nil)
+            && (fitnessGoal?.supportsCalorieDeficit != true || DailyTargetDeficit.parse(dailyTargetDeficit) != nil)
     }
 
     private var isDirty: Bool {
@@ -611,7 +611,7 @@ struct PersonalBodyInfoView: View {
             || parsedDouble(height) != profile.height
             || fitnessGoal?.rawValue
             != (profile.fitnessGoal.isEmpty ? nil : profile.fitnessGoal)
-            || (fitnessGoal == .fatLoss
+            || (fitnessGoal?.supportsCalorieDeficit == true
                 && DailyTargetDeficit.parse(dailyTargetDeficit) != DailyTargetDeficit.resolve(profile.dailyTargetDeficitKilocalories))
             || normalized(healthNotes) != profile.healthNotes
     }
@@ -664,7 +664,7 @@ struct PersonalBodyInfoView: View {
         target.age = nil
         target.height = parsedDouble(height)
         target.fitnessGoal = fitnessGoal?.rawValue ?? ""
-        if fitnessGoal == .fatLoss {
+        if fitnessGoal?.supportsCalorieDeficit == true {
             target.dailyTargetDeficitKilocalories = DailyTargetDeficit.parse(dailyTargetDeficit)
         }
         target.healthNotes = normalized(healthNotes)

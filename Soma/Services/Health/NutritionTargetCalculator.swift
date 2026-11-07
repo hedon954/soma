@@ -123,11 +123,10 @@ struct ProgressNutritionRings: Equatable, Sendable {
 
 enum NutritionTargetCalculator {
     static func calorieAdjustment(for goal: FitnessGoal?, dailyTargetDeficitKilocalories: Double? = nil) -> Double {
-        switch goal {
-        case .muscleGain: 250
-        case .fatLoss: -DailyTargetDeficit.resolve(dailyTargetDeficitKilocalories)
-        case .recomposition, .none: 0
+        if goal?.supportsCalorieDeficit == true {
+            return -DailyTargetDeficit.resolve(dailyTargetDeficitKilocalories)
         }
+        return goal == .muscleGain ? 250 : 0
     }
 
     static func proteinGramsPerKilogram(for goal: FitnessGoal?) -> Double {

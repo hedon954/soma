@@ -13,13 +13,16 @@ final class DailyTargetDeficitPersistenceTests: XCTestCase {
         XCTAssertEqual(DailyTargetDeficit.resolve(decoded.makeModel().dailyTargetDeficitKilocalories), 400)
     }
 
-    func testBackupRoundTripPreservesCustomAndExplicitZero() throws {
-        for value in [0.0, 625.5] {
-            let profile = UserProfile(fitnessGoal: FitnessGoal.fatLoss.rawValue)
-            profile.dailyTargetDeficitKilocalories = value
-            let data = try JSONEncoder().encode(UserProfileDTO(profile))
-            let restored = try JSONDecoder().decode(UserProfileDTO.self, from: data).makeModel()
-            XCTAssertEqual(restored.dailyTargetDeficitKilocalories, value)
+    func testBackupRoundTripPreservesCustomAndExplicitZeroForBothGoals() throws {
+        for goal in [FitnessGoal.fatLoss, .recomposition] {
+            for value in [0.0, 625.5] {
+                let profile = UserProfile(fitnessGoal: goal.rawValue)
+                profile.dailyTargetDeficitKilocalories = value
+                let data = try JSONEncoder().encode(UserProfileDTO(profile))
+                let restored = try JSONDecoder().decode(UserProfileDTO.self, from: data).makeModel()
+                XCTAssertEqual(restored.fitnessGoal, goal.rawValue)
+                XCTAssertEqual(restored.dailyTargetDeficitKilocalories, value)
+            }
         }
     }
 
@@ -40,7 +43,14 @@ final class DailyTargetDeficitPersistenceTests: XCTestCase {
         let reopened = try ModelContainer(for: UserProfile.self, configurations: configuration)
         let profile = try XCTUnwrap(reopened.mainContext.fetch(FetchDescriptor<UserProfile>()).first)
         XCTAssertEqual(profile.dailyTargetDeficitKilocalories, 625.5)
-        profile.fitnessGoal = FitnessGoal.fatLoss.rawValue
-        XCTAssertEqual(DailyTargetDeficit.resolve(profile.dailyTargetDeficitKilocalories), 625.5)
+        for goal in [FitnessGoal.recomposition, .fatLoss] {
+            profile.fitnessGoal = goal.rawValue
+            try reopened.mainContext.save()
+            XCTAssertEqual(DailyTargetDeficit.resolve(profile.dailyTargetDeficitKilocalories), 625.5)
+            XCTAssertEqual(NutritionTargetCalculator.targets(
+                weightKG: nil, fitnessGoal: goal, totalKilocalories: 2200,
+                dailyTargetDeficitKilocalories: profile.dailyTargetDeficitKilocalories
+            ).calories, 1574.5)
+        }
     }
 }

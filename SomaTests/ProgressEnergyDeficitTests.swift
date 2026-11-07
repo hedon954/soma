@@ -110,18 +110,20 @@ final class ProgressEnergyDeficitTests: XCTestCase {
     }
 
     func testCustomTargetFlowsThroughProjectionWithoutChangingExpenditureOrActualDeficit() throws {
-        let original = snapshot(.day, [meal(10, 1000)], goal: .fatLoss)
-        let custom = snapshot(.day, [meal(10, 1000)], goal: .fatLoss, targetDeficit: 600)
-        XCTAssertEqual(custom.averageEstimate, original.averageEstimate)
-        XCTAssertEqual(custom.nutritionRings?.calories.target, (original.nutritionRings?.calories.target ?? 0) - 200)
-        let first = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: original))
-        let second = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: custom))
-        XCTAssertEqual(second.kilocalories, first.kilocalories)
-        XCTAssertEqual(second.remainingIntakeKilocalories, (first.remainingIntakeKilocalories ?? 0) - 200)
-        let clamped = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: snapshot(
-            .day, [meal(10, 1000)], goal: .fatLoss, targetDeficit: 3000
-        )))
-        XCTAssertEqual(clamped.remainingIntakeKilocalories, 0)
+        for goal in [FitnessGoal.fatLoss, .recomposition] {
+            let original = snapshot(.day, [meal(10, 1000)], goal: goal)
+            let custom = snapshot(.day, [meal(10, 1000)], goal: goal, targetDeficit: 600)
+            XCTAssertEqual(custom.averageEstimate, original.averageEstimate)
+            XCTAssertEqual(custom.nutritionRings?.calories.target, (original.nutritionRings?.calories.target ?? 0) - 200)
+            let first = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: original))
+            let second = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: custom))
+            XCTAssertEqual(second.kilocalories, first.kilocalories)
+            XCTAssertEqual(second.remainingIntakeKilocalories, (first.remainingIntakeKilocalories ?? 0) - 200)
+            let clamped = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: snapshot(
+                .day, [meal(10, 1000)], goal: goal, targetDeficit: 3000
+            )))
+            XCTAssertEqual(clamped.remainingIntakeKilocalories, 0)
+        }
     }
 
     private func snapshot(

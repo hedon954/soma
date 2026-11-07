@@ -17,6 +17,13 @@ enum FitnessGoal: String, Codable, CaseIterable, Identifiable, Sendable {
     case fatLoss = "减脂"
     case recomposition = "增肌减脂"
 
+    var supportsCalorieDeficit: Bool {
+        switch self {
+        case .fatLoss, .recomposition: true
+        case .muscleGain: false
+        }
+    }
+
     var id: String {
         rawValue
     }

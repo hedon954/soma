@@ -205,7 +205,7 @@ enum AgentContextPackBuilder {
         if !profile.fitnessGoal.isEmpty {
             parts.append("目标 \(profile.fitnessGoal)")
         }
-        if FitnessGoal(rawValue: profile.fitnessGoal) == .fatLoss {
+        if FitnessGoal(rawValue: profile.fitnessGoal)?.supportsCalorieDeficit == true {
             let deficit = DailyTargetDeficit.resolve(profile.dailyTargetDeficitKilocalories)
             parts.append("每日目标热量缺口 \(deficit.formatted(.number.precision(.fractionLength(0 ... 1)))) 千卡（用户设置；推荐摄入为预估总消耗减去此值，最低为 0）")
         }

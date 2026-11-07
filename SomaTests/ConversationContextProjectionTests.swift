@@ -41,20 +41,27 @@ final class ConversationContextProjectionTests: XCTestCase {
     }
 
     @MainActor
-    func testAgentContextUsesSavedFatLossDeficitOnlyForFatLoss() throws {
+    func testAgentContextUsesDeficitForBothFatLossGoalsOnly() throws {
         let suiteName = "ConversationContextProjectionTests.deficit.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let spaces = DataSpaceController(defaults: defaults, isStoredInMemoryOnly: true)
         let context = spaces.personalContainer.mainContext
-        let profile = UserProfile(fitnessGoal: FitnessGoal.fatLoss.rawValue)
-        profile.dailyTargetDeficitKilocalories = 600
+        let profile = UserProfile()
         context.insert(profile)
-        let custom = AgentContextPackBuilder.build(gyms: [], equipment: [], in: context)
-        XCTAssertTrue(custom.contains("每日目标热量缺口 600 千卡"))
-        profile.fitnessGoal = FitnessGoal.muscleGain.rawValue
-        let gain = AgentContextPackBuilder.build(gyms: [], equipment: [], in: context)
-        XCTAssertFalse(gain.contains("每日目标热量缺口"))
+        for goal in [FitnessGoal.fatLoss, .recomposition] {
+            profile.fitnessGoal = goal.rawValue
+            for (stored, expected) in [(nil, "400"), (0.0, "0"), (600.0, "600")] as [(Double?, String)] {
+                profile.dailyTargetDeficitKilocalories = stored
+                let custom = AgentContextPackBuilder.build(gyms: [], equipment: [], in: context)
+                XCTAssertTrue(custom.contains("每日目标热量缺口 \(expected) 千卡"), goal.rawValue)
+            }
+        }
+        for rawGoal in [FitnessGoal.muscleGain.rawValue, ""] {
+            profile.fitnessGoal = rawGoal
+            let unchanged = AgentContextPackBuilder.build(gyms: [], equipment: [], in: context)
+            XCTAssertFalse(unchanged.contains("每日目标热量缺口"))
+        }
     }
 
     func testHistoricalMediaRequiresExplicitReferenceAndCapsComparisonAtTwo() {

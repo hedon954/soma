@@ -14,7 +14,7 @@ struct DailyTargetDeficitField: View {
                 Text("kcal").foregroundStyle(.secondary)
             }
         }
-        Text("默认 400 千卡，可设置为 0 或正数。推荐摄入为预估总消耗减去目标缺口，最低为 0；这不是医疗建议。")
+        Text("减脂和增肌减脂共用这一设置。默认 400 千卡，可设置为 0 或正数。推荐摄入为预估总消耗减去目标缺口，最低为 0；这不是医疗建议。")
             .font(.caption)
             .foregroundStyle(.secondary)
         if DailyTargetDeficit.parse(text) == nil {

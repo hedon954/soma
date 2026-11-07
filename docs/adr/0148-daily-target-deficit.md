@@ -8,7 +8,7 @@
 
 ## 背景
 
-减脂摄入目标此前固定减去 400 kcal，无法表达用户选择的每日目标缺口。需要在个人资料中保存偏好，保持既有总消耗模型与健康事实边界。
+减脂摄入目标此前固定减去 400 kcal，无法表达用户选择的每日目标缺口。需要在个人资料中保存偏好，保持既有总消耗模型与健康事实边界。减脂和增肌减脂都包含减脂意图，因此必须共用同一缺口规则，而不只是显示相同的输入框。
 
 ## 决策
 
@@ -19,7 +19,7 @@
 `DailyTargetDeficit` 统一有限非负数校验、输入解析与默认值 400；损坏或非法存储值只在读取时回退，
 不静默覆盖原记录。显式 0 不回退。设置沿用资料页保存动作，失败提示可重试，不假装成功。
 
-`NutritionTargetCalculator` 只在 `.fatLoss` 应用此偏好。`ProgressHistoryLoader` 将数值投影为
+`NutritionTargetCalculator` 通过 `FitnessGoal.supportsCalorieDeficit` 在 `.fatLoss` 和 `.recomposition` 应用同一个偏好。`ProgressHistoryLoader` 将数值投影为
 Sendable facts，日营养环和仍可摄入共用结果；`ModelContextSaveImpact` 已包含 UserProfile，
 保存会失效现有进展快照。零推荐摄入不计算百分比，不制造除零结果。
 
@@ -27,7 +27,7 @@ Sendable facts，日营养环和仍可摄入共用结果；`ModelContextSaveImpa
 这是资料偏好，和已有健身目标一样可进入教练上下文，不包含 HealthKit 读数或派生消耗证据。
 
 这是当前偏好，不是有效日期历史；保存后查看旧日期时，推荐摄入也按当前偏好重算。
-已保存的健康证据、真实摄入与实际消耗不被改写。切换非减脂目标保留但不应用该数值。
+已保存的健康证据、真实摄入与实际消耗不被改写。减脂与增肌减脂之间切换继续使用同一个数值；切换增肌或未选择目标时保留但不应用该数值。
 
 ## 未选择的方案
 
