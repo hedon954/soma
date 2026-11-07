@@ -497,6 +497,7 @@ struct PersonalBodyInfoView: View {
                         Text(goal.rawValue).tag(Optional(goal))
                     }
                 }
+                .accessibilityIdentifier("fitnessGoalPicker")
                 if fitnessGoal == .fatLoss {
                     DailyTargetDeficitField(text: $dailyTargetDeficit)
                 }
@@ -594,7 +595,9 @@ struct PersonalBodyInfoView: View {
     }
 
     private var isDirty: Bool {
-        if profileSaveError != nil { return true }
+        if profileSaveError != nil {
+            return true
+        }
         guard let profile else {
             return [displayName, height, healthNotes]
                 .contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
