@@ -15,7 +15,7 @@ final class DailyTargetDeficitPersistenceTests: XCTestCase {
 
     func testBackupRoundTripPreservesCustomAndExplicitZeroForBothGoals() throws {
         for goal in [FitnessGoal.fatLoss, .recomposition] {
-            for value in [0.0, 625.5] {
+            for value in [nil, 0.0, 625.5] as [Double?] {
                 let profile = UserProfile(fitnessGoal: goal.rawValue)
                 profile.dailyTargetDeficitKilocalories = value
                 let data = try JSONEncoder().encode(UserProfileDTO(profile))

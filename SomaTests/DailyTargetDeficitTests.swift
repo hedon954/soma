@@ -31,8 +31,37 @@ final class DailyTargetDeficitTests: XCTestCase {
         XCTAssertEqual(DailyTargetDeficit.parse(" 625.5 "), 625.5)
         XCTAssertEqual(DailyTargetDeficit.parse("625,5"), 625.5)
         XCTAssertEqual(DailyTargetDeficit.parse("0"), 0)
-        for text in ["", " ", "-1", "nan", "inf", "1e999", "abc"] {
+        for text in ["-1", "nan", "inf", "1e999", "abc"] {
             XCTAssertNil(DailyTargetDeficit.parse(text), text)
+        }
+    }
+
+    func testClearingInputRestoresDefaultAndReminderDoesNotLimitValidValues() {
+        XCTAssertEqual(DailyTargetDeficit.parse(""), 400)
+        XCTAssertEqual(DailyTargetDeficit.parse("  "), 400)
+        XCTAssertFalse(DailyTargetDeficit.needsReminder(800))
+        XCTAssertTrue(DailyTargetDeficit.needsReminder(800.5))
+        XCTAssertEqual(DailyTargetDeficit.parse("10001"), 10001)
+        XCTAssertFalse(DailyTargetDeficit.needsReminder(.infinity))
+    }
+
+    @MainActor
+    func testBothCoachSummariesUseTheSameGoalEligibilityAndPreference() throws {
+        for goal in [FitnessGoal.fatLoss, .recomposition, .muscleGain] {
+            for stored in [nil, 0, 625.5] as [Double?] {
+                let profile = UserProfile(fitnessGoal: goal.rawValue)
+                profile.dailyTargetDeficitKilocalories = stored
+                let clause = DailyTargetDeficit.contextClause(goal: goal, stored: stored)
+                let summary = ConversationRecorder.profileSummary(profile)
+                if goal.supportsCalorieDeficit {
+                    XCTAssertNotNil(clause)
+                    XCTAssertTrue(try summary.contains(XCTUnwrap(clause)))
+                    XCTAssertTrue(summary.contains("用户设置"))
+                } else {
+                    XCTAssertNil(clause)
+                    XCTAssertFalse(summary.contains("每日目标热量缺口"))
+                }
+            }
         }
     }
 

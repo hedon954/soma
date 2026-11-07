@@ -4,7 +4,7 @@
 - 日期：2026-11-07
 - 版本：未发布
 - 上游依据：[PRD 079](../prd/079-daily-target-deficit.md)、[ADR 0147](0147-residual-energy-coefficient.md)（保持总消耗公式）
-- 下游落地：[验收](../acceptance.md)
+- 下游落地：[验收](../acceptance.md)、[工程原则](../../CLAUDE.md)
 
 ## 背景
 
@@ -45,3 +45,9 @@ Sendable facts，日营养环和仍可摄入共用结果；`ModelContextSaveImpa
 `DailyTargetDeficitTests`、`DailyTargetDeficitPersistenceTests`、`ProgressEnergyDeficitTests`、
 `ConversationContextProjectionTests` 和 `DailyTargetDeficitUITests` 覆盖规则与接入。
 磁盘重开与备份测试不替代真实旧库升级测试；完整构建、SwiftData 与 UI 验收依赖 Xcode。
+
+## 本地实现整合补充
+
+- 减脂与增肌减脂共用可选目标缺口；0、小数与小数逗号可用。清空后保存恢复默认 400 kcal，并持久化为 nil；不影响其他目标。
+- 超过 800 kcal 提供非阻塞提醒，不代表医学安全阈值；不沿用本地草稿的任意 10000 kcal 上限，仍拒绝负数、非数字和非有限值。用户偏好不是测量事实，不改写实际消耗或健康历史。
+- 有界教练上下文与 ConversationRecorderShared 身体摘要复用同一目标判断、数值及“用户设置”说明。

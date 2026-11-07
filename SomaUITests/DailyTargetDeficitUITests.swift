@@ -52,7 +52,7 @@ final class DailyTargetDeficitUITests: XCTestCase {
         reveal(field, in: app)
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3))
-        XCTAssertFalse(app.navigationBars["身体信息"].buttons["保存"].isEnabled)
+        XCTAssertFalse(app.navigationBars["身体信息"].buttons["保存"].exists)
         field.typeText("600")
         app.navigationBars["身体信息"].buttons["保存"].tap()
         XCTAssertFalse(app.navigationBars["身体信息"].buttons["保存"].exists)
@@ -86,7 +86,7 @@ final class DailyTargetDeficitUITests: XCTestCase {
         reveal(caption, in: app)
         XCTAssertTrue((caption.value as? String ?? "").contains("仍可摄入 0 千卡"))
         keep(app, name: "daily-deficit-600-\(goalTitle)-\(appearance)-large-\(largeType)")
-        if goalTitle == "增肌减脂", !largeType {
+        if !largeType {
             app.tabBars.buttons["设置"].tap()
             reveal(field, in: app)
             field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
@@ -96,13 +96,51 @@ final class DailyTargetDeficitUITests: XCTestCase {
             app.buttons["身体信息"].tap()
             reveal(field, in: app)
             XCTAssertEqual(field.value as? String, "0")
-            keep(app, name: "daily-deficit-settings-zero-recomposition-light")
+            keep(app, name: "daily-deficit-settings-zero-\(goalTitle)-light")
             app.tabBars.buttons["进展"].tap()
             reveal(ring, in: app)
             let zeroTarget = (originalTarget + 400).formatted(.number.precision(.fractionLength(0)))
             expectation(for: NSPredicate(format: "label CONTAINS %@", "推荐摄入 \(zeroTarget) "), evaluatedWith: ring)
             waitForExpectations(timeout: 10)
-            keep(app, name: "daily-deficit-zero-recomposition-light")
+            keep(app, name: "daily-deficit-zero-\(goalTitle)-light")
+
+            app.tabBars.buttons["设置"].tap()
+            reveal(field, in: app)
+            replace(field, with: "10001")
+            let reminder = app.staticTexts["dailyTargetDeficitReminder"]
+            XCTAssertTrue(reminder.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.navigationBars["身体信息"].buttons["保存"].isEnabled)
+            replace(field, with: "900.5")
+            app.navigationBars["身体信息"].buttons["保存"].tap()
+            app.navigationBars["身体信息"].buttons.element(boundBy: 0).tap()
+            app.buttons["身体信息"].tap()
+            reveal(field, in: app)
+            XCTAssertEqual(field.value as? String, "900.5")
+            XCTAssertTrue(reminder.exists)
+            keep(app, name: "daily-deficit-warning-\(goalTitle)")
+            replace(field, with: "")
+            XCTAssertFalse(reminder.exists)
+            XCTAssertTrue(app.navigationBars["身体信息"].buttons["保存"].isEnabled)
+            app.navigationBars["身体信息"].buttons["保存"].tap()
+            app.navigationBars["身体信息"].buttons.element(boundBy: 0).tap()
+            app.buttons["身体信息"].tap()
+            reveal(field, in: app)
+            XCTAssertEqual(field.value as? String, "400")
+            keep(app, name: "daily-deficit-reset-\(goalTitle)")
+            app.tabBars.buttons["进展"].tap()
+            reveal(ring, in: app)
+            let resetTarget = originalTarget.formatted(.number.precision(.fractionLength(0)))
+            expectation(for: NSPredicate(format: "label CONTAINS %@", "推荐摄入 \(resetTarget) "), evaluatedWith: ring)
+            waitForExpectations(timeout: 10)
+        }
+    }
+
+    private func replace(_ field: XCUIElement, with text: String) {
+        let count = (field.value as? String ?? "").count
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: count))
+        if !text.isEmpty {
+            field.typeText(text)
         }
     }
 

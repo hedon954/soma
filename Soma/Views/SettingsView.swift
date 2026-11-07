@@ -665,7 +665,7 @@ struct PersonalBodyInfoView: View {
         target.height = parsedDouble(height)
         target.fitnessGoal = fitnessGoal?.rawValue ?? ""
         if fitnessGoal?.supportsCalorieDeficit == true {
-            target.dailyTargetDeficitKilocalories = DailyTargetDeficit.parse(dailyTargetDeficit)
+            target.dailyTargetDeficitKilocalories = normalized(dailyTargetDeficit).isEmpty ? nil : DailyTargetDeficit.parse(dailyTargetDeficit)
         }
         target.healthNotes = normalized(healthNotes)
         do {

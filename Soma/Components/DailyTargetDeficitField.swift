@@ -14,12 +14,17 @@ struct DailyTargetDeficitField: View {
                 Text("kcal").foregroundStyle(.secondary)
             }
         }
-        Text("减脂和增肌减脂共用这一设置。默认 400 千卡，可设置为 0 或正数。推荐摄入为预估总消耗减去目标缺口，最低为 0；这不是医疗建议。")
+        Text("减脂和增肌减脂共用这一设置。默认 400 千卡，可设置为 0 或正数，清空后保存可恢复默认。推荐摄入为预估总消耗减去目标缺口，最低为 0；这不是医疗建议。")
             .font(.caption)
             .foregroundStyle(.secondary)
         if DailyTargetDeficit.parse(text) == nil {
             Text("请输入 0 或正数的有效热量缺口。")
                 .foregroundStyle(.red)
+        } else if let value = DailyTargetDeficit.parse(text), DailyTargetDeficit.needsReminder(value) {
+            Text("这个缺口会明显压低推荐摄入，不是越大越好。仍可保存；800 千卡仅为提醒阈值，不是医学安全上限。")
+                .font(.caption)
+                .foregroundStyle(AppTheme.accent)
+                .accessibilityIdentifier("dailyTargetDeficitReminder")
         }
     }
 }
