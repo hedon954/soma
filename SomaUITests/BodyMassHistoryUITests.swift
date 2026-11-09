@@ -5,29 +5,30 @@ final class BodyMassHistoryUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testBodyHistoryShowsSourcesAndDualTrendsInLightAndDark() {
+    func testBodyHistoryShowsSourcesAndCombinedTrendInLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch(appearance)
             openBodyHistory(app)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8))
-            // 同屏双曲线：标题可见即证明无指标 Tab；Charts 第二图 a11y id 在部分系统上不稳定。
-            XCTAssertTrue(app.staticTexts["体重"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["体脂率"].waitForExistence(timeout: 5))
-            let weightChart = app.descendants(matching: .any)["body-history-trend-chart-weight"].firstMatch
-            let fatChart = app.descendants(matching: .any)["body-history-trend-chart-body-fat"].firstMatch
-            XCTAssertTrue(weightChart.exists || fatChart.exists || app.staticTexts["kg"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.waitForExistence(timeout: 5))
+            // 合并单图：不应再出现分拆的两张图标识。
+            XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-chart-weight"].firstMatch.exists)
+            XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-chart-body-fat"].firstMatch.exists)
             XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
-            XCTAssertEqual(app.segmentedControls.matching(identifier: "body-history-trend-metric").count, 0)
             XCTAssertFalse(app.buttons["腰围"].exists)
+
+            let legend = app.descendants(matching: .any)["body-history-trend-legend"].firstMatch
+            XCTAssertTrue(legend.label.contains("体重") || app.staticTexts["体重 kg"].exists)
+            XCTAssertTrue(legend.label.contains("体脂") || app.staticTexts["体脂率 %"].exists)
 
             XCTAssertTrue(app.descendants(matching: .any)["body-history-health-row"].firstMatch.exists)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-manual-row"].firstMatch.exists)
             let keep = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Keep")).firstMatch
             XCTAssertTrue(keep.waitForExistence(timeout: 5))
-            // Acme 在列表更下方，SwiftUI List 离屏行 exists 不稳定；有 Keep 健康行即可。
             XCTAssertFalse(app.staticTexts["Keep·自备识别标"].exists)
             XCTAssertFalse(keep.label.contains("腰围"))
-            keepScreenshot(app, "body-history-dual-\(appearance)")
+            keepScreenshot(app, "body-history-combined-\(appearance)")
             app.terminate()
         }
     }
@@ -45,7 +46,6 @@ final class BodyMassHistoryUITests: XCTestCase {
         XCTAssertTrue(manual.waitForExistence(timeout: 5))
 
         let tabTop = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
-        // 双曲线较高时可能需轻滑露出列表。
         if keep.frame.minY >= tabTop - 8 || manual.frame.minY >= tabTop - 8 {
             app.swipeUp()
         }
@@ -68,11 +68,15 @@ final class BodyMassHistoryUITests: XCTestCase {
         keepScreenshot(app, "body-history-keep-manual-unified-light")
     }
 
-    func testBodyHistoryLargeTypeDualTrend() {
+    func testBodyHistoryLargeTypeCombinedTrend() {
         let app = launch("dark", large: true)
         openBodyHistory(app)
         XCTAssertTrue(
             app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.exists
+                || app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.exists
         )
         XCTAssertFalse(app.buttons["腰围"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)

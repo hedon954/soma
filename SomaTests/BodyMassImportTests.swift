@@ -328,4 +328,29 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertNil(snapshot.bodyEntries.first?.externalSource)
         XCTAssertEqual(snapshot.bodyEntries.first?.bodyFat, 18)
     }
+
+    func testDualAxisMappingRoundTripsAndPadding() {
+        let source: ClosedRange<Double> = 16 ... 20
+        let target: ClosedRange<Double> = 70 ... 74
+        let mid = BodyHistoryDualAxisMapping.plot(18, from: source, onto: target)
+        XCTAssertEqual(mid, 72, accuracy: 0.0001)
+        let back = BodyHistoryDualAxisMapping.value(atPlot: mid, from: target, onto: source)
+        XCTAssertEqual(back, 18, accuracy: 0.0001)
+        XCTAssertEqual(
+            BodyHistoryDualAxisMapping.plot(16, from: source, onto: target),
+            70,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            BodyHistoryDualAxisMapping.plot(20, from: source, onto: target),
+            74,
+            accuracy: 0.0001
+        )
+        let padded = BodyHistoryDualAxisMapping.paddedRange(values: [18.0], minimumSpan: 2)
+        XCTAssertLessThan(padded.lowerBound, 18)
+        XCTAssertGreaterThan(padded.upperBound, 18)
+        let empty = BodyHistoryDualAxisMapping.paddedRange(values: [], minimumSpan: 2)
+        XCTAssertEqual(empty.lowerBound, 0)
+        XCTAssertGreaterThanOrEqual(empty.upperBound, 2)
+    }
 }
