@@ -11,12 +11,18 @@ final class BodyMassHistoryUITests: XCTestCase {
             openBodyHistory(app)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8))
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.waitForExistence(timeout: 5))
-            XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.waitForExistence(timeout: 5))
+            let chart = app.descendants(matching: .any)["body-history-trend-chart"].firstMatch
+            XCTAssertTrue(chart.waitForExistence(timeout: 5))
             // 合并单图：不应再出现分拆的两张图标识。
             XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-chart-weight"].firstMatch.exists)
             XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-chart-body-fat"].firstMatch.exists)
             XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
             XCTAssertFalse(app.buttons["腰围"].exists)
+            // 回归：无障碍文案声明两条独立曲线（防 LineMark 混 series 串线）。
+            XCTAssertTrue(
+                chart.label.contains("独立") || chart.label.contains("体重与体脂"),
+                "chart a11y should describe independent combined series, got: \(chart.label)"
+            )
 
             let legend = app.descendants(matching: .any)["body-history-trend-legend"].firstMatch
             XCTAssertTrue(legend.label.contains("体重") || app.staticTexts["体重 kg"].exists)

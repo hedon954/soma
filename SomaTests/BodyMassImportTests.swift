@@ -353,4 +353,82 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertEqual(empty.lowerBound, 0)
         XCTAssertGreaterThanOrEqual(empty.upperBound, 2)
     }
+
+    func testCombinedTrendModelKeepsIndependentSortedSeries() {
+        let calendar = Calendar(identifier: .gregorian)
+        func day(_ offset: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 9, day: 1 + offset))!
+        }
+        // 交错时刻：若 LineMark 未分 series，SwiftCharts 会按时间把体脂点连到体重点。
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: UUID(), date: day(10), value: 71.2),
+                (id: UUID(), date: day(40), value: 72.4),
+                (id: UUID(), date: day(5), value: 70.9)
+            ],
+            bodyFats: [
+                (id: UUID(), date: day(0), value: 18.0),
+                (id: UUID(), date: day(30), value: 18.6),
+                (id: UUID(), date: day(12), value: 17.8)
+            ]
+        )
+
+        XCTAssertEqual(model.weightPoints.map(\.value), [70.9, 71.2, 72.4])
+        XCTAssertEqual(model.bodyFatPoints.map(\.value), [18.0, 17.8, 18.6])
+        XCTAssertTrue(model.weightPoints.map(\.date).isSortedChronologically)
+        XCTAssertTrue(model.bodyFatPoints.map(\.date).isSortedChronologically)
+        XCTAssertTrue(model.weightPoints.allSatisfy { $0.id.hasPrefix(BodyHistoryTrendSeriesKey.weight.rawValue) })
+        XCTAssertTrue(model.bodyFatPoints.allSatisfy { $0.id.hasPrefix(BodyHistoryTrendSeriesKey.bodyFat.rawValue) })
+        XCTAssertEqual(Set(model.weightPoints.map(\.id)).count, model.weightPoints.count)
+        XCTAssertEqual(Set(model.bodyFatPlotPoints.map(\.id)).count, model.bodyFatPlotPoints.count)
+
+        // 映射后体脂绘图 Y 落在体重域内，且不等于真实百分点（防混单位直绘）。
+        for (display, plot) in zip(model.bodyFatPoints, model.bodyFatPlotPoints) {
+            XCTAssertEqual(display.date, plot.date)
+            XCTAssertNotEqual(plot.value, display.value, accuracy: 0.0001)
+            XCTAssertGreaterThanOrEqual(plot.value, model.weightDomain.lowerBound - 0.0001)
+            XCTAssertLessThanOrEqual(plot.value, model.weightDomain.upperBound + 0.0001)
+        }
+
+        // 混排时必然出现跨系列相邻；独立 series 渲染不得把这些相邻画成连线。
+        XCTAssertGreaterThan(model.illicitCrossSeriesAdjacencies, 0)
+        XCTAssertEqual(model.weightPoints.count, 3)
+        XCTAssertEqual(model.bodyFatPlotPoints.count, 3)
+
+        let labels = model.xAxisTickDates.map { BodyHistoryTrendChartModel.compactAxisDate($0) }
+        XCTAssertEqual(labels.count, 3)
+        XCTAssertFalse(labels.contains(where: { $0.contains("…") || $0.contains("月") }))
+        XCTAssertTrue(labels.allSatisfy { $0.contains("/") })
+    }
+
+    func testCombinedTrendModelWeightOnlyAndFatOnlyAndEmpty() throws {
+        let day = Date(timeIntervalSince1970: 1_700_000_000)
+        let weightOnly = BodyHistoryTrendChartModel.make(
+            weights: [(id: UUID(), date: day, value: 70)],
+            bodyFats: []
+        )
+        XCTAssertTrue(weightOnly.hasWeight)
+        XCTAssertFalse(weightOnly.hasBodyFat)
+        XCTAssertEqual(weightOnly.bodyFatPlotPoints.count, 0)
+        XCTAssertEqual(weightOnly.illicitCrossSeriesAdjacencies, 0)
+
+        let fatOnly = BodyHistoryTrendChartModel.make(
+            weights: [],
+            bodyFats: [(id: UUID(), date: day, value: 18.2)]
+        )
+        XCTAssertFalse(fatOnly.hasWeight)
+        XCTAssertTrue(fatOnly.hasBodyFat)
+        XCTAssertEqual(try XCTUnwrap(fatOnly.bodyFatPlotPoints.first).value, 18.2, accuracy: 0.0001)
+
+        let empty = BodyHistoryTrendChartModel.make(weights: [], bodyFats: [])
+        XCTAssertFalse(empty.hasWeight)
+        XCTAssertFalse(empty.hasBodyFat)
+        XCTAssertEqual(empty.illicitCrossSeriesAdjacencies, 0)
+    }
+}
+
+private extension [Date] {
+    var isSortedChronologically: Bool {
+        zip(self, dropFirst()).allSatisfy { $0 <= $1 }
+    }
 }
