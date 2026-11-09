@@ -39,7 +39,7 @@
 | [077](077-daily-activity-source-priority.md) | 0.0.31 | 已实现；真机数据待验收 |
 | [078](078-residual-energy-coefficient.md) | 0.0.32 | 已实现；修订 076 的总消耗公式 |
 | [079](079-daily-target-deficit.md) | 0.0.32 | 已实现，模拟器验证通过；每日目标热量缺口 |
-| [080](080-healthkit-body-mass.md) | 未发布 | 已实现；体重健康导入与身体曲线 |
+| [080](080-healthkit-body-mass.md) | 0.0.33 | 已实现；真机健康授权与后台唤醒待验收；体重/体脂只读导入与合并趋势图 |
 
 ## 阅读约定
 

@@ -34,7 +34,7 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0146](0146-daily-activity-source-priority.md) | 0.0.31 | 已采纳并实现 | HealthKit 日活动数据源三选一、整包择优、列表与分享边界 |
 | [0147](0147-residual-energy-coefficient.md) | 0.0.32 | 已采纳并实现 | 总消耗改为残差系数加所选日活动能量 |
 | [0148](0148-daily-target-deficit.md) | 0.0.32 | 已采纳并实现，模拟器验证通过 | 每日目标热量缺口偏好与持久化 |
-| [0149](0149-healthkit-body-mass.md) | 未发布 | 已采纳并实现 | HealthKit 体重导入与最初来源溯源 |
+| [0149](0149-healthkit-body-mass.md) | 0.0.33 | 已采纳并实现；真机健康授权与后台唤醒待验收 | HealthKit 体重/体脂导入与最初来源溯源 |
 
 新决策使用 [ADR 模板](template.md)。
 

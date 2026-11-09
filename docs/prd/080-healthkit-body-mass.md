@@ -2,7 +2,7 @@
 
 - 状态：已实现；真机健康授权与后台唤醒待验收
 - 日期：2026-11-09
-- 版本：未发布
+- 版本：0.0.33
 - 修订自：[PRD 075](075-healthkit-daily-activity.md)（扩展只读身体质量与体脂率，不改变三项日活动边界）
 - 后续修订：暂无
 - 下游落地：[ADR 0149](../adr/0149-healthkit-body-mass.md)、[验收](../acceptance.md)、[工程原则](../../CLAUDE.md)、[数据库结构](../engineering/database-schema.md)

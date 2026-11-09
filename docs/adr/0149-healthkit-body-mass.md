@@ -2,7 +2,7 @@
 
 - 状态：已采纳并实现；真机健康授权与后台唤醒待验收
 - 日期：2026-11-09
-- 版本：未发布
+- 版本：0.0.33
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0144](0144-healthkit-daily-activity.md)（在日活动只读边界上增加 `bodyMass` 与 `bodyFatPercentage` 导入；其余三项日活动决策仍有效）
 - 后续替代：暂无
