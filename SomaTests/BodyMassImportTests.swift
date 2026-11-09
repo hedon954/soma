@@ -22,7 +22,7 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertEqual(keep, .keep)
         XCTAssertTrue(keep.accessibilityLabel.contains("自备识别标"))
         XCTAssertTrue(keep.accessibilityLabel.contains("非官方"))
-        XCTAssertTrue(keep.listCaption.contains("自备识别标"))
+        XCTAssertEqual(keep.listCaption, "Keep")
         XCTAssertEqual(
             BodyMassKnownSource.resolve(name: "Health", bundleIdentifier: "com.apple.health"),
             .appleHealth

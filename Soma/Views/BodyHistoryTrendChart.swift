@@ -4,7 +4,6 @@ import SwiftUI
 enum BodyHistoryTrendMetric: String, CaseIterable, Identifiable {
     case weight
     case bodyFat
-    case waist
 
     var id: String {
         rawValue
@@ -14,7 +13,6 @@ enum BodyHistoryTrendMetric: String, CaseIterable, Identifiable {
         switch self {
         case .weight: "体重"
         case .bodyFat: "体脂率"
-        case .waist: "腰围"
         }
     }
 
@@ -22,7 +20,6 @@ enum BodyHistoryTrendMetric: String, CaseIterable, Identifiable {
         switch self {
         case .weight: "kg"
         case .bodyFat: "%"
-        case .waist: "cm"
         }
     }
 
@@ -30,7 +27,6 @@ enum BodyHistoryTrendMetric: String, CaseIterable, Identifiable {
         switch self {
         case .weight: entry.weight
         case .bodyFat: entry.bodyFat
-        case .waist: entry.waist
         }
     }
 }
@@ -75,7 +71,7 @@ struct BodyHistoryTrendChart: View {
                     systemImage: "chart.xyaxis.line",
                     description: Text(emptyDescription)
                 )
-                .frame(minHeight: 160)
+                .frame(minHeight: 120)
             } else {
                 Text(metric.unit)
                     .font(.caption)
@@ -110,7 +106,7 @@ struct BodyHistoryTrendChart: View {
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 3))
                 }
-                .frame(height: 200)
+                .frame(height: 168)
                 .accessibilityLabel("\(metric.title)趋势，单位\(metric.unit)")
                 .accessibilityIdentifier("body-history-trend-chart")
 
@@ -127,6 +123,8 @@ struct BodyHistoryTrendChart: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("body-history-trend-section")
         .onChange(of: metric) { selectedDate = nil }
     }
 
@@ -134,8 +132,8 @@ struct BodyHistoryTrendChart: View {
         switch metric {
         case .weight:
             "连接 Apple 健康后会自动同步体重；也可把体重发给教练记录。"
-        case .bodyFat, .waist:
-            "本迭代体脂与腰围使用本地或教练记录，不会从 Apple 健康自动同步。"
+        case .bodyFat:
+            "体脂使用本地或教练记录，不会从 Apple 健康自动同步。"
         }
     }
 

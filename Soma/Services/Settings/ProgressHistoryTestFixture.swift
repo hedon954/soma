@@ -47,8 +47,10 @@ enum ProgressHistoryTestFixture {
                 try DailyActivityRecordStore.replace([DailyActivitySyncCoordinator.demo(key: .init(date: today, calendar: calendar))], in: context)
             }
             if ProcessInfo.processInfo.environment["SOMA_UI_BODY_MASS_FIXTURE"] == "1" {
-                let keepDay = calendar.date(byAdding: .day, value: -2, to: today)!
-                let unknownDay = calendar.date(byAdding: .day, value: -1, to: today)!
+                // Keep 放在今日午间，保证排序后紧贴手动行，便于同屏对比图标容器。
+                let keepDay = calendar.date(byAdding: .hour, value: 12, to: today)!
+                let manualDay = calendar.date(byAdding: .day, value: -1, to: today)!
+                let unknownDay = calendar.date(byAdding: .day, value: -5, to: today)!
                 context.insert(BodyEntry(
                     date: keepDay,
                     weight: 72.4,
@@ -71,8 +73,9 @@ enum ProgressHistoryTestFixture {
                     sourceName: "Acme Scale",
                     sourceBundleIdentifier: "com.acme.scale"
                 ))
+                // 含腰围字段：本页 UI 不展示，但历史数据保留。
                 context.insert(BodyEntry(
-                    date: today,
+                    date: manualDay,
                     weight: 71.8,
                     bodyFat: 17.5,
                     waist: 79,

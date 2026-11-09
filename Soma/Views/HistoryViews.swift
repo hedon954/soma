@@ -396,7 +396,6 @@ struct BodyHistoryView: View {
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                     .listRowBackground(AppTheme.cardBackground)
                     .listRowSeparator(.hidden)
-                    .accessibilityIdentifier("body-history-trend-section")
             }
 
             if entries.isEmpty {
@@ -620,6 +619,8 @@ private struct MealHistoryRow: View {
 private struct BodyHistoryRow: View {
     let entry: BodyEntry
 
+    private static let leadingIconSize: CGFloat = 58
+
     private var knownSource: BodyMassKnownSource? {
         guard entry.isHealthImported else { return nil }
         return BodyMassKnownSource.resolve(
@@ -630,16 +631,9 @@ private struct BodyHistoryRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            if let knownSource {
-                BodyMassSourceIcon(source: knownSource, size: 28)
-            } else {
-                MediaThumbnail(
-                    kind: entry.mediaAttachments.first?.kind ?? .none,
-                    path: entry.mediaAttachments.first?.path,
-                    fallbackIcon: "scalemass",
-                    role: .body
-                )
-            }
+            leadingIcon
+                .frame(width: Self.leadingIconSize, height: Self.leadingIconSize)
+                .accessibilityIdentifier("body-history-row-leading-icon")
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(entry.date.formatted(date: .abbreviated, time: .shortened))
@@ -649,7 +643,7 @@ private struct BodyHistoryRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             if let weight = entry.weight {
                 Text(weight.formatted(.number.precision(.fractionLength(1))))
@@ -664,6 +658,22 @@ private struct BodyHistoryRow: View {
         .accessibilityIdentifier(entry.isHealthImported ? "body-history-health-row" : "body-history-manual-row")
     }
 
+    @ViewBuilder
+    private var leadingIcon: some View {
+        if let knownSource {
+            BodyMassSourceIcon(source: knownSource, size: Self.leadingIconSize)
+        } else {
+            MediaThumbnail(
+                kind: entry.mediaAttachments.first?.kind ?? .none,
+                path: entry.mediaAttachments.first?.path,
+                fallbackIcon: "scalemass",
+                width: Self.leadingIconSize,
+                height: Self.leadingIconSize,
+                role: .body
+            )
+        }
+    }
+
     private var secondaryMetrics: String {
         var metrics: [String] = []
         if let knownSource {
@@ -672,9 +682,7 @@ private struct BodyHistoryRow: View {
         if let bodyFat = entry.bodyFat {
             metrics.append("体脂 \(bodyFat.formatted(.number.precision(.fractionLength(1))))%")
         }
-        if let waist = entry.waist {
-            metrics.append("腰围 \(waist.formatted(.number.precision(.fractionLength(1))))cm")
-        }
+        // 本页不展示腰围摘要；BodyEntry.waist 仍保留供详情等入口。
         if metrics.isEmpty {
             return "身体趋势记录"
         }

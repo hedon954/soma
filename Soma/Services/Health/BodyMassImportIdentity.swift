@@ -28,12 +28,20 @@ enum BodyMassKnownSource: Equatable, Sendable {
         }
     }
 
-    /// 列表次要文案：Keep 标明自备识别标，避免被当成官方品牌图标。
+    /// 列表次要文案：简洁来源名；诚实说明见 `accessibilityLabel` 与品牌文档。
     var listCaption: String {
         switch self {
-        case .keep: "Keep·自备识别标"
+        case .keep: "Keep"
         case .appleHealth: "Apple 健康"
         case let .unknown(name): name.isEmpty ? "未知来源" : name
+        }
+    }
+
+    var accessibilityIdentifierSuffix: String {
+        switch self {
+        case .keep: "keep"
+        case .appleHealth: "apple"
+        case .unknown: "unknown"
         }
     }
 
