@@ -142,6 +142,11 @@ final class BodyMassHistoryUITests: XCTestCase {
         app.swipeUp()
         app.swipeUp()
         keepScreenshot(app, "body-history-large-scrolled")
+        // 顺带核对末行能否滚过浮动 Tab：再多滑几次拍到底。
+        for _ in 0 ..< 8 {
+            app.swipeUp()
+        }
+        keepScreenshot(app, "body-history-large-bottom")
     }
 
     func testHealthSettingsMentionsWeightAndBodyFatScope() {

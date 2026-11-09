@@ -60,7 +60,7 @@ enum BodyMassKnownSource: Equatable, Sendable {
 
     var accessibilityLabel: String {
         switch self {
-        case .keep: "Keep 来源（自备识别标，非官方图标）"
+        case .keep: "Keep 来源"
         case .appleHealth: "Apple 健康"
         case let .unknown(name): name.isEmpty ? "未知来源" : name
         }
