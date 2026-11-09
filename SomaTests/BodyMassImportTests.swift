@@ -354,13 +354,14 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(empty.upperBound, 2)
     }
 
-    func testCombinedTrendModelKeepsIndependentSortedSeries() {
+    func testCombinedTrendModelKeepsIndependentSortedSeries() throws {
         let calendar = Calendar(identifier: .gregorian)
-        func day(_ offset: Int) -> Date {
-            calendar.date(from: DateComponents(year: 2026, month: 9, day: 1 + offset))!
+        func day(_ offset: Int) throws -> Date {
+            try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 1 + offset)))
         }
         // 交错时刻：若 LineMark 未分 series，SwiftCharts 会按时间把体脂点连到体重点。
-        let model = BodyHistoryTrendChartModel.make(
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9)))
+        let model = try BodyHistoryTrendChartModel.make(
             weights: [
                 (id: UUID(), date: day(10), value: 71.2),
                 (id: UUID(), date: day(40), value: 72.4),
@@ -370,7 +371,10 @@ final class BodyMassImportTests: XCTestCase {
                 (id: UUID(), date: day(0), value: 18.0),
                 (id: UUID(), date: day(30), value: 18.6),
                 (id: UUID(), date: day(12), value: 17.8)
-            ]
+            ],
+            range: .year,
+            now: now,
+            calendar: calendar
         )
 
         XCTAssertEqual(model.weightPoints.map(\.value), [70.9, 71.2, 72.4])
@@ -402,10 +406,16 @@ final class BodyMassImportTests: XCTestCase {
     }
 
     func testCombinedTrendModelWeightOnlyAndFatOnlyAndEmpty() throws {
-        let day = Date(timeIntervalSince1970: 1_700_000_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8, hour: 12)))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 12)))
         let weightOnly = BodyHistoryTrendChartModel.make(
             weights: [(id: UUID(), date: day, value: 70)],
-            bodyFats: []
+            bodyFats: [],
+            range: .week,
+            now: now,
+            calendar: calendar
         )
         XCTAssertTrue(weightOnly.hasWeight)
         XCTAssertFalse(weightOnly.hasBodyFat)
@@ -414,16 +424,106 @@ final class BodyMassImportTests: XCTestCase {
 
         let fatOnly = BodyHistoryTrendChartModel.make(
             weights: [],
-            bodyFats: [(id: UUID(), date: day, value: 18.2)]
+            bodyFats: [(id: UUID(), date: day, value: 18.2)],
+            range: .week,
+            now: now,
+            calendar: calendar
         )
         XCTAssertFalse(fatOnly.hasWeight)
         XCTAssertTrue(fatOnly.hasBodyFat)
         XCTAssertEqual(try XCTUnwrap(fatOnly.bodyFatPlotPoints.first).value, 18.2, accuracy: 0.0001)
 
-        let empty = BodyHistoryTrendChartModel.make(weights: [], bodyFats: [])
+        let empty = BodyHistoryTrendChartModel.make(
+            weights: [],
+            bodyFats: [],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
         XCTAssertFalse(empty.hasWeight)
         XCTAssertFalse(empty.hasBodyFat)
         XCTAssertEqual(empty.illicitCrossSeriesAdjacencies, 0)
+    }
+
+    func testTrendRangeWindowsUseCalendarNowNotLatestSample() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 15)))
+        let week = BodyHistoryTrendRange.week.window(now: now, calendar: calendar)
+        XCTAssertEqual(calendar.startOfDay(for: week.start), calendar.date(from: DateComponents(year: 2026, month: 11, day: 3)))
+        XCTAssertEqual(week.end, calendar.date(from: DateComponents(year: 2026, month: 11, day: 10)))
+        XCTAssertTrue(try week.contains(XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 23)))))
+        XCTAssertFalse(week.contains(week.end))
+
+        let month = BodyHistoryTrendRange.month.window(now: now, calendar: calendar)
+        XCTAssertEqual(month.start, calendar.date(from: DateComponents(year: 2026, month: 10, day: 9)))
+        let three = BodyHistoryTrendRange.threeMonths.window(now: now, calendar: calendar)
+        XCTAssertEqual(three.start, calendar.date(from: DateComponents(year: 2026, month: 8, day: 9)))
+        let year = BodyHistoryTrendRange.year.window(now: now, calendar: calendar)
+        XCTAssertEqual(year.start, calendar.date(from: DateComponents(year: 2025, month: 11, day: 9)))
+        XCTAssertEqual(BodyHistoryTrendRange.default, .month)
+    }
+
+    func testTrendModelFiltersBySelectedRangeAndKeepsSharedDomain() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 12)))
+        let inside = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1, hour: 8)))
+        let outside = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 1, hour: 8)))
+        let farFutureSample = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 1, day: 1)))
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: UUID(), date: inside, value: 71.0),
+                (id: UUID(), date: outside, value: 80.0),
+                (id: UUID(), date: farFutureSample, value: 90.0)
+            ],
+            bodyFats: [
+                (id: UUID(), date: inside, value: 18.0),
+                (id: UUID(), date: outside, value: 22.0)
+            ],
+            range: .month,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(model.weightPoints.map(\.value), [71.0])
+        XCTAssertEqual(model.bodyFatPoints.map(\.value), [18.0])
+        let window = BodyHistoryTrendRange.month.window(now: now, calendar: calendar)
+        XCTAssertEqual(model.sharedDateDomain.lowerBound, window.start)
+        XCTAssertLessThan(model.sharedDateDomain.upperBound, window.end)
+        XCTAssertEqual(model.range, .month)
+
+        let weekEmpty = BodyHistoryTrendChartModel.make(
+            weights: [(id: UUID(), date: outside, value: 80)],
+            bodyFats: [],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertFalse(weekEmpty.hasWeight)
+        XCTAssertFalse(weekEmpty.hasBodyFat)
+        XCTAssertEqual(
+            weekEmpty.sharedDateDomain.lowerBound,
+            BodyHistoryTrendRange.week.window(now: now, calendar: calendar).start
+        )
+    }
+
+    func testTrendModelHidesPermanentPointsWhenDense() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9)))
+        let weights = (0 ..< 20).map { offset -> (id: UUID, date: Date, value: Double) in
+            let date = calendar.date(byAdding: .day, value: -offset, to: now)!
+            return (id: UUID(), date: date, value: 70 + Double(offset % 3))
+        }
+        let model = BodyHistoryTrendChartModel.make(
+            weights: weights,
+            bodyFats: [],
+            range: .month,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertGreaterThan(model.weightPoints.count, BodyHistoryTrendChartModel.permanentPointLimit)
+        XCTAssertFalse(model.showsPermanentPoints)
     }
 }
 

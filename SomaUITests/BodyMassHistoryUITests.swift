@@ -11,6 +11,27 @@ final class BodyMassHistoryUITests: XCTestCase {
             openBodyHistory(app)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8))
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.waitForExistence(timeout: 5))
+            let range = app.descendants(matching: .any)["body-history-trend-range"].firstMatch
+            XCTAssertTrue(range.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["一个月"].exists || range.label.contains("一个月"))
+            // 默认一个月；切换四种区间后列表仍在。
+            let ranges: [(String, String)] = [
+                ("一周", "week"),
+                ("一个月", "month"),
+                ("三个月", "three-months"),
+                ("一年", "year")
+            ]
+            for (title, slug) in ranges {
+                let button = app.buttons[title]
+                if button.exists {
+                    button.tap()
+                }
+                keepScreenshot(app, "body-history-range-\(slug)-\(appearance)")
+            }
+            XCTAssertTrue(app.descendants(matching: .any)["body-history-health-row"].firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-axis-units"].firstMatch.exists
+                || app.staticTexts["kg"].exists)
+
             let chart = app.descendants(matching: .any)["body-history-trend-chart"].firstMatch
             XCTAssertTrue(chart.waitForExistence(timeout: 5))
             // 合并单图：不应再出现分拆的两张图标识。
@@ -34,7 +55,10 @@ final class BodyMassHistoryUITests: XCTestCase {
             XCTAssertTrue(keep.waitForExistence(timeout: 5))
             XCTAssertFalse(app.staticTexts["Keep·自备识别标"].exists)
             XCTAssertFalse(keep.label.contains("腰围"))
-            keepScreenshot(app, "body-history-combined-\(appearance)")
+            if app.buttons["一个月"].exists {
+                app.buttons["一个月"].tap()
+            }
+            keepScreenshot(app, "body-history-range-\(appearance)")
             app.terminate()
         }
     }

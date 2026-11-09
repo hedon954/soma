@@ -1,212 +1,14 @@
 import Charts
 import SwiftUI
 
-struct BodyHistoryTrendPoint: Identifiable, Equatable {
-    var id: String
-    var date: Date
-    var value: Double
-}
-
-enum BodyHistoryTrendSeriesKey: String, CaseIterable {
-    case weight = "体重"
-    case bodyFat = "体脂率"
-}
-
-/// 双轴绘制：把次轴真实值线性映射到主轴绘图域；标签用逆映射还原，避免混用未标注刻度。
-enum BodyHistoryDualAxisMapping {
-    static func plot(
-        _ value: Double,
-        from source: ClosedRange<Double>,
-        onto target: ClosedRange<Double>
-    ) -> Double {
-        let sourceSpan = source.upperBound - source.lowerBound
-        let targetSpan = target.upperBound - target.lowerBound
-        guard sourceSpan > 0, targetSpan > 0, value.isFinite else {
-            return target.lowerBound
-        }
-        let fraction = (value - source.lowerBound) / sourceSpan
-        return target.lowerBound + fraction * targetSpan
-    }
-
-    static func value(
-        atPlot plot: Double,
-        from target: ClosedRange<Double>,
-        onto source: ClosedRange<Double>
-    ) -> Double {
-        let sourceSpan = source.upperBound - source.lowerBound
-        let targetSpan = target.upperBound - target.lowerBound
-        guard sourceSpan > 0, targetSpan > 0, plot.isFinite else {
-            return source.lowerBound
-        }
-        let fraction = (plot - target.lowerBound) / targetSpan
-        return source.lowerBound + fraction * sourceSpan
-    }
-
-    static func paddedRange(values: [Double], minimumSpan: Double) -> ClosedRange<Double> {
-        let finite = values.filter(\.isFinite)
-        guard let lower = finite.min(), let upper = finite.max() else {
-            return 0 ... max(minimumSpan, 1)
-        }
-        if lower == upper {
-            let pad = max(minimumSpan / 2, abs(lower) * 0.05, 0.5)
-            return max(0, lower - pad) ... (upper + pad)
-        }
-        let margin = max(minimumSpan * 0.1, (upper - lower) * 0.1)
-        return max(0, lower - margin) ... (upper + margin)
-    }
-}
-
-/// 可单测的合并趋势图数据：体重/体脂必须是独立有序序列，禁止混成一条折线。
-struct BodyHistoryTrendChartModel: Equatable {
-    var weightPoints: [BodyHistoryTrendPoint]
-    var bodyFatPoints: [BodyHistoryTrendPoint]
-    var bodyFatPlotPoints: [BodyHistoryTrendPoint]
-    var weightDomain: ClosedRange<Double>
-    var bodyFatDomain: ClosedRange<Double>
-    var plotDomain: ClosedRange<Double>
-    var sharedDateDomain: ClosedRange<Date>
-
-    var hasWeight: Bool {
-        !weightPoints.isEmpty
-    }
-
-    var hasBodyFat: Bool {
-        !bodyFatPoints.isEmpty
-    }
-
-    static func make(from entries: [BodyEntry]) -> BodyHistoryTrendChartModel {
-        make(
-            weights: entries.compactMap { entry in
-                guard let value = entry.weight, value.isFinite else { return nil }
-                return (id: entry.id, date: entry.date, value: value)
-            },
-            bodyFats: entries.compactMap { entry in
-                guard let value = entry.bodyFat, value.isFinite else { return nil }
-                return (id: entry.id, date: entry.date, value: value)
-            }
-        )
-    }
-
-    static func make(
-        weights: [(id: UUID, date: Date, value: Double)],
-        bodyFats: [(id: UUID, date: Date, value: Double)]
-    ) -> BodyHistoryTrendChartModel {
-        let weightPoints = weights
-            .filter(\.value.isFinite)
-            .map {
-                BodyHistoryTrendPoint(
-                    id: "\(BodyHistoryTrendSeriesKey.weight.rawValue)-\($0.id.uuidString)",
-                    date: $0.date,
-                    value: $0.value
-                )
-            }
-            .sorted { $0.date < $1.date }
-
-        let bodyFatPoints = bodyFats
-            .filter(\.value.isFinite)
-            .map {
-                BodyHistoryTrendPoint(
-                    id: "\(BodyHistoryTrendSeriesKey.bodyFat.rawValue)-\($0.id.uuidString)",
-                    date: $0.date,
-                    value: $0.value
-                )
-            }
-            .sorted { $0.date < $1.date }
-
-        let weightDomain = BodyHistoryDualAxisMapping.paddedRange(
-            values: weightPoints.map(\.value),
-            minimumSpan: 2
-        )
-        let bodyFatDomain = BodyHistoryDualAxisMapping.paddedRange(
-            values: bodyFatPoints.map(\.value),
-            minimumSpan: 2
-        )
-        let hasWeight = !weightPoints.isEmpty
-        let hasBodyFat = !bodyFatPoints.isEmpty
-        let plotDomain: ClosedRange<Double> = {
-            if hasWeight {
-                return weightDomain
-            }
-            if hasBodyFat {
-                return bodyFatDomain
-            }
-            return 0 ... 1
-        }()
-
-        let bodyFatPlotPoints: [BodyHistoryTrendPoint] = bodyFatPoints.map { point in
-            let plotValue = hasWeight
-                ? BodyHistoryDualAxisMapping.plot(point.value, from: bodyFatDomain, onto: weightDomain)
-                : point.value
-            return BodyHistoryTrendPoint(id: point.id, date: point.date, value: plotValue)
-        }
-
-        let dates = weightPoints.map(\.date) + bodyFatPoints.map(\.date)
-        let sharedDateDomain: ClosedRange<Date> = {
-            guard let first = dates.min(), let last = dates.max() else {
-                let now = Date()
-                return now.addingTimeInterval(-86400) ... now
-            }
-            if first == last {
-                return first.addingTimeInterval(-86400) ... last.addingTimeInterval(86400)
-            }
-            return first ... last
-        }()
-
-        return BodyHistoryTrendChartModel(
-            weightPoints: weightPoints,
-            bodyFatPoints: bodyFatPoints,
-            bodyFatPlotPoints: bodyFatPlotPoints,
-            weightDomain: weightDomain,
-            bodyFatDomain: bodyFatDomain,
-            plotDomain: plotDomain,
-            sharedDateDomain: sharedDateDomain
-        )
-    }
-
-    /// 若错误地把两系按时间混成一条折线，会在相邻异系点之间产生跨指标连线；测试用此检测。
-    var illicitCrossSeriesAdjacencies: Int {
-        let mixed = (weightPoints.map { ($0.date, BodyHistoryTrendSeriesKey.weight, $0.value) }
-            + bodyFatPlotPoints.map { ($0.date, BodyHistoryTrendSeriesKey.bodyFat, $0.value) })
-            .sorted { lhs, rhs in
-                if lhs.0 != rhs.0 {
-                    return lhs.0 < rhs.0
-                }
-                return lhs.1.rawValue < rhs.1.rawValue
-            }
-        guard mixed.count >= 2 else { return 0 }
-        var count = 0
-        for index in 1 ..< mixed.count where mixed[index].1 != mixed[index - 1].1 {
-            count += 1
-        }
-        return count
-    }
-
-    var xAxisTickDates: [Date] {
-        let start = sharedDateDomain.lowerBound
-        let end = sharedDateDomain.upperBound
-        let span = end.timeIntervalSince(start)
-        guard span > 0 else { return [start] }
-        // 3 个短标签，避免中文「9月1日」在窄图上被截成「1…」。
-        return [
-            start,
-            start.addingTimeInterval(span / 2),
-            end
-        ]
-    }
-
-    static func compactAxisDate(_ date: Date, calendar: Calendar = .current) -> String {
-        let month = calendar.component(.month, from: date)
-        let day = calendar.component(.day, from: date)
-        return "\(month)/\(day)"
-    }
-}
-
 struct BodyHistoryTrendChart: View {
     let entries: [BodyEntry]
+    var now: Date = .now
+    @State private var range: BodyHistoryTrendRange = .default
     @State private var selectedDate: Date?
 
     private var model: BodyHistoryTrendChartModel {
-        BodyHistoryTrendChartModel.make(from: entries)
+        BodyHistoryTrendChartModel.make(from: entries, range: range, now: now)
     }
 
     private var weightColor: Color {
@@ -219,17 +21,32 @@ struct BodyHistoryTrendChart: View {
 
     var body: some View {
         let chartModel = model
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 10) {
+            rangePicker
             legend
             if !chartModel.hasWeight, !chartModel.hasBodyFat {
-                emptyBoth
+                emptyInRange
             } else {
+                unitHeaders(chartModel)
                 chart(chartModel)
                 selectionReadout(chartModel)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("body-history-trend-section")
+        .onChange(of: range) { _, _ in
+            selectedDate = nil
+        }
+    }
+
+    private var rangePicker: some View {
+        Picker("时间区间", selection: $range) {
+            ForEach(BodyHistoryTrendRange.allCases) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("body-history-trend-range")
     }
 
     private var legend: some View {
@@ -255,47 +72,67 @@ struct BodyHistoryTrendChart: View {
             ZStack {
                 if dashed {
                     Capsule()
-                        .stroke(color, style: StrokeStyle(lineWidth: 3, dash: [5, 3]))
-                        .frame(width: 20, height: 3)
+                        .stroke(color, style: StrokeStyle(lineWidth: 1.25, dash: [4, 3]))
+                        .frame(width: 18, height: 2)
                 } else {
                     Capsule()
                         .fill(color)
-                        .frame(width: 20, height: 3)
+                        .frame(width: 18, height: 2)
                 }
                 if diamond {
-                    RoundedRectangle(cornerRadius: 1)
+                    RoundedRectangle(cornerRadius: 0.5)
                         .fill(color)
-                        .frame(width: 8, height: 8)
+                        .frame(width: 5, height: 5)
                         .rotationEffect(.degrees(45))
                 } else {
                     Circle()
                         .fill(color)
-                        .frame(width: 7, height: 7)
+                        .frame(width: 5, height: 5)
                 }
             }
-            .frame(width: 24, height: 12)
+            .frame(width: 22, height: 10)
             Text("\(title) \(unit)")
                 .foregroundStyle(.primary)
         }
         .accessibilityLabel("\(title)，单位\(unit)")
     }
 
-    private var emptyBoth: some View {
+    private func unitHeaders(_ model: BodyHistoryTrendChartModel) -> some View {
+        HStack {
+            Text(model.hasWeight ? "kg" : "%")
+                .font(.caption2)
+                .foregroundStyle(model.hasWeight ? weightColor : bodyFatColor)
+            Spacer(minLength: 0)
+            if model.hasWeight, model.hasBodyFat {
+                Text("%")
+                    .font(.caption2)
+                    .foregroundStyle(bodyFatColor)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(model.hasWeight && model.hasBodyFat ? "左轴千克，右轴百分比" : (model.hasWeight ? "单位千克" : "单位百分比"))
+        .accessibilityIdentifier("body-history-trend-axis-units")
+    }
+
+    private var emptyInRange: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("暂无体重或体脂记录")
+            Text("所选时间内暂无体重或体脂")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("连接 Apple 健康后会自动同步体重与体脂；也可发给教练记录。不同时间的样本不会捏成同一次测量。")
+            Text("可切换更长区间，或连接 Apple 健康同步；下方列表仍显示全部记录。不同时间的样本不会捏成同一次测量。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
+        .accessibilityIdentifier("body-history-trend-empty-range")
     }
 
     private func chart(_ model: BodyHistoryTrendChartModel) -> some View {
-        Chart {
+        let selectedWeight = selectedHighlight(in: model.weightPoints)
+        let selectedFatPlot = selectedHighlight(in: model.bodyFatPlotPoints)
+        return Chart {
             if model.hasWeight {
                 ForEach(model.weightPoints) { point in
                     LineMark(
@@ -304,17 +141,29 @@ struct BodyHistoryTrendChart: View {
                         series: .value("指标", BodyHistoryTrendSeriesKey.weight.rawValue)
                     )
                     .foregroundStyle(weightColor)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1.25))
                     .interpolationMethod(.linear)
                     .accessibilityHidden(true)
 
+                    if model.showsPermanentPoints {
+                        PointMark(
+                            x: .value("日期", point.date),
+                            y: .value("绘图值", point.value)
+                        )
+                        .foregroundStyle(weightColor)
+                        .symbol(BasicChartSymbolShape.circle)
+                        .symbolSize(12)
+                        .accessibilityHidden(true)
+                    }
+                }
+                if let selectedWeight {
                     PointMark(
-                        x: .value("日期", point.date),
-                        y: .value("绘图值", point.value)
+                        x: .value("日期", selectedWeight.date),
+                        y: .value("绘图值", selectedWeight.value)
                     )
                     .foregroundStyle(weightColor)
                     .symbol(BasicChartSymbolShape.circle)
-                    .symbolSize(44)
+                    .symbolSize(28)
                     .accessibilityHidden(true)
                 }
             }
@@ -327,17 +176,29 @@ struct BodyHistoryTrendChart: View {
                         series: .value("指标", BodyHistoryTrendSeriesKey.bodyFat.rawValue)
                     )
                     .foregroundStyle(bodyFatColor)
-                    .lineStyle(StrokeStyle(lineWidth: 3, dash: [5, 3]))
+                    .lineStyle(StrokeStyle(lineWidth: 1.25, dash: [4, 3]))
                     .interpolationMethod(.linear)
                     .accessibilityHidden(true)
 
+                    if model.showsPermanentPoints {
+                        PointMark(
+                            x: .value("日期", point.date),
+                            y: .value("绘图值", point.value)
+                        )
+                        .foregroundStyle(bodyFatColor)
+                        .symbol(BasicChartSymbolShape.diamond)
+                        .symbolSize(14)
+                        .accessibilityHidden(true)
+                    }
+                }
+                if let selectedFatPlot {
                     PointMark(
-                        x: .value("日期", point.date),
-                        y: .value("绘图值", point.value)
+                        x: .value("日期", selectedFatPlot.date),
+                        y: .value("绘图值", selectedFatPlot.value)
                     )
                     .foregroundStyle(bodyFatColor)
                     .symbol(BasicChartSymbolShape.diamond)
-                    .symbolSize(64)
+                    .symbolSize(30)
                     .accessibilityHidden(true)
                 }
             }
@@ -401,21 +262,14 @@ struct BodyHistoryTrendChart: View {
                 }
             }
         }
-        .chartYAxisLabel(position: .leading, alignment: .center) {
-            Text(model.hasWeight ? "kg" : "%")
-                .font(.caption2)
-                .foregroundStyle(model.hasWeight ? weightColor : bodyFatColor)
-        }
-        .chartYAxisLabel(position: .trailing, alignment: .center) {
-            if model.hasWeight, model.hasBodyFat {
-                Text("%")
-                    .font(.caption2)
-                    .foregroundStyle(bodyFatColor)
-            }
-        }
         .frame(height: 200)
         .accessibilityLabel(chartAccessibilityLabel(model))
         .accessibilityIdentifier("body-history-trend-chart")
+    }
+
+    private func selectedHighlight(in points: [BodyHistoryTrendPoint]) -> BodyHistoryTrendPoint? {
+        guard selectedDate != nil else { return nil }
+        return nearest(in: points)
     }
 
     private func bodyFatTickPlotValues(_ model: BodyHistoryTrendChartModel) -> [Double] {
@@ -435,15 +289,16 @@ struct BodyHistoryTrendChart: View {
     }
 
     private func chartAccessibilityLabel(_ model: BodyHistoryTrendChartModel) -> String {
+        let rangeText = model.range.title
         switch (model.hasWeight, model.hasBodyFat) {
         case (true, true):
-            "体重与体脂率合并趋势，左轴千克，右轴百分比，两条独立曲线"
+            return "体重与体脂率合并趋势，区间\(rangeText)，左轴千克，右轴百分比，两条独立曲线"
         case (true, false):
-            "体重趋势，单位千克"
+            return "体重趋势，区间\(rangeText)，单位千克"
         case (false, true):
-            "体脂率趋势，单位百分比"
+            return "体脂率趋势，区间\(rangeText)，单位百分比"
         case (false, false):
-            "暂无趋势数据"
+            return "暂无趋势数据"
         }
     }
 
