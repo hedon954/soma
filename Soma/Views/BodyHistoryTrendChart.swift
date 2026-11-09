@@ -6,6 +6,7 @@ struct BodyHistoryTrendChart: View {
     var now: Date = .now
     @State private var range: BodyHistoryTrendRange = .default
     @State private var selection: BodyHistoryTrendSelection?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var model: BodyHistoryTrendChartModel {
         BodyHistoryTrendChartModel.make(from: entries, range: range, now: now)
@@ -50,15 +51,26 @@ struct BodyHistoryTrendChart: View {
     }
 
     private var legend: some View {
-        HStack(spacing: 16) {
-            legendItem(color: weightColor, title: "体重", unit: "kg", dashed: false, diamond: false)
-            legendItem(color: bodyFatColor, title: "体脂率", unit: "%", dashed: true, diamond: true)
-            Spacer(minLength: 0)
+        let content = Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    legendItem(color: weightColor, title: "体重", unit: "kg", dashed: false, diamond: false)
+                    legendItem(color: bodyFatColor, title: "体脂率", unit: "%", dashed: true, diamond: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 16) {
+                    legendItem(color: weightColor, title: "体重", unit: "kg", dashed: false, diamond: false)
+                    legendItem(color: bodyFatColor, title: "体脂率", unit: "%", dashed: true, diamond: true)
+                    Spacer(minLength: 0)
+                }
+            }
         }
-        .font(.caption)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("图例：体重千克，身体蓝实线；体脂率百分比，趋势紫虚线。点选图上样本可查看该次数值。")
-        .accessibilityIdentifier("body-history-trend-legend")
+        return content
+            .font(.caption)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("图例：体重千克，身体蓝实线；体脂率百分比，趋势紫虚线。点选图上样本可查看该次数值。")
+            .accessibilityIdentifier("body-history-trend-legend")
     }
 
     private func legendItem(
@@ -204,7 +216,7 @@ struct BodyHistoryTrendChart: View {
         .chartYScale(domain: model.plotDomain)
         .chartXAxis {
             AxisMarks(values: model.xAxisTickDates) { value in
-                AxisGridLine()
+                AxisGridLine().foregroundStyle(AppTheme.separator)
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(BodyHistoryTrendChartModel.compactAxisDate(date))
@@ -217,7 +229,7 @@ struct BodyHistoryTrendChart: View {
         .chartYAxis {
             if model.hasWeight {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine()
+                    AxisGridLine().foregroundStyle(AppTheme.separator)
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(number.formatted(.number.precision(.fractionLength(0 ... 1))))
@@ -227,7 +239,7 @@ struct BodyHistoryTrendChart: View {
                 }
             } else if model.hasBodyFat {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine()
+                    AxisGridLine().foregroundStyle(AppTheme.separator)
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(number.formatted(.number.precision(.fractionLength(0 ... 1))))
@@ -252,7 +264,9 @@ struct BodyHistoryTrendChart: View {
                 }
             }
         }
-        .frame(height: 220)
+        .frame(height: chartHeight)
+        // 坐标/网格随字号适度放大，但不跟到 AccessibilityXXXL，避免挤爆绘图区。
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .chartOverlay { proxy in
             GeometryReader { geo in
                 Rectangle()
@@ -300,27 +314,27 @@ struct BodyHistoryTrendChart: View {
     private func selectionCallout(_ selection: BodyHistoryTrendSelection) -> some View {
         let color = selection.series == .weight ? weightColor : bodyFatColor
         let value = selection.displayValue.formatted(.number.precision(.fractionLength(0 ... 1)))
-        return VStack(alignment: .leading, spacing: 2) {
+        return VStack(alignment: .leading, spacing: 4) {
             Text("\(selection.title) \(value) \(selection.unit)")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
             Text(selection.date.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? 240 : 200, alignment: .leading)
+        .background(
+            AppTheme.insetBackground,
+            in: RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.controlRadius, style: .continuous)
                 .stroke(AppTheme.separator, lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
-        .fixedSize()
         .accessibilityIdentifier("body-history-trend-selection-callout")
     }
 
@@ -365,6 +379,10 @@ struct BodyHistoryTrendChart: View {
             return
         }
         selection = BodyHistoryTrendSelectionResolver.nearest(date: date, plotY: plotY, in: model)
+    }
+
+    private var chartHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 300 : 220
     }
 
     private func bodyFatTickPlotValues(_ model: BodyHistoryTrendChartModel) -> [Double] {

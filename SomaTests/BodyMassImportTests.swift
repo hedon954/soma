@@ -716,6 +716,23 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertEqual(model.weightPoints.count, 2)
         XCTAssertEqual(model.weightPoints.map(\.value), [71, 72])
     }
+
+    func testBodyHistoryGroupsEntriesByCalendarDay() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let dayA = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8, hour: 9)))
+        let dayALater = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8, hour: 18)))
+        let dayB = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 10)))
+        let a1 = BodyEntry(date: dayALater, weight: 71)
+        let a0 = BodyEntry(date: dayA, weight: 72)
+        let b0 = BodyEntry(date: dayB, bodyFat: 18.5)
+        let groups = BodyHistoryQuery.groupedByDay([a1, b0, a0], calendar: calendar)
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups[0].entries.count, 1)
+        XCTAssertEqual(groups[0].entries.first?.bodyFat, 18.5)
+        XCTAssertEqual(groups[1].entries.map(\.weight), [71, 72])
+        XCTAssertTrue(groups[1].recordCountText.contains("2"))
+    }
 }
 
 private extension [Date] {

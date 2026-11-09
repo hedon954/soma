@@ -112,6 +112,8 @@ enum HistoryDayCardLayout {
     /// Shared by the day title and row thumbnails so the left edge stays on one grid.
     static let horizontalInset: CGFloat = 16
     static let headerVerticalPadding: CGFloat = 14
+    /// Clears the floating root Tab so the last history row stays fully visible.
+    static let listBottomScrollMargin: CGFloat = 72
 }
 
 extension View {

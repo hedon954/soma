@@ -382,23 +382,24 @@ struct BodyHistoryView: View {
     @State private var entries: [BodyEntry] = []
     @State private var hasMore = true
     @State private var isLoading = false
+    @State private var collapsedDays: Set<Date> = []
 
-    private static let pageSize = 50
+    private static let pageSize = BodyHistoryQuery.pageSize
 
-    private var chartEntries: [BodyEntry] {
-        entries
+    private var dayGroups: [BodyHistoryDayGroup] {
+        BodyHistoryQuery.groupedByDay(entries)
     }
 
     var body: some View {
         List {
             Section {
-                BodyHistoryTrendChart(entries: chartEntries)
+                BodyHistoryTrendChart(entries: entries)
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                     .listRowBackground(AppTheme.cardBackground)
                     .listRowSeparator(.hidden)
             }
 
-            if entries.isEmpty {
+            if entries.isEmpty, !isLoading {
                 ContentUnavailableView(
                     "暂无体重记录",
                     systemImage: "scalemass",
@@ -407,22 +408,44 @@ struct BodyHistoryView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             } else {
-                ForEach(entries) { entry in
-                    NavigationLink {
-                        BodyRecordDetailView(entry: entry)
-                    } label: {
-                        BodyHistoryRow(entry: entry)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            delete(entry)
-                        } label: {
-                            Image(systemName: "trash")
+                ForEach(dayGroups) { group in
+                    let isExpanded = !collapsedDays.contains(group.day)
+                    Section {
+                        HistoryDayHeader(
+                            title: group.title,
+                            summary: group.recordCountText,
+                            metric: nil,
+                            metricUnit: nil,
+                            isExpanded: isExpanded,
+                            toggle: { toggleDay(group.day) }
+                        )
+                        .historyDayCardRow(edge: isExpanded ? .top : .single)
+
+                        if isExpanded {
+                            ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                                NavigationLink {
+                                    BodyRecordDetailView(entry: entry)
+                                } label: {
+                                    BodyHistoryRow(entry: entry)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        delete(entry)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .accessibilityLabel("删除身体记录")
+                                    .tint(.red)
+                                }
+                                .historyDayCardRow(
+                                    edge: index == group.entries.count - 1 ? .bottom : .middle
+                                )
+                            }
                         }
-                        .accessibilityLabel("删除身体记录")
-                        .tint(.red)
                     }
+                    .listSectionSeparator(.hidden)
                 }
+
                 if hasMore {
                     HStack {
                         Spacer()
@@ -433,11 +456,18 @@ struct BodyHistoryView: View {
                     .listRowSeparator(.hidden)
                     .onAppear(perform: loadMore)
                 }
+
+                Color.clear
+                    .frame(height: HistoryDayCardLayout.listBottomScrollMargin)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityHidden(true)
             }
         }
         .listStyle(.plain)
+        .listSectionSpacing(12)
         .scrollContentBackground(.hidden)
-        .contentMargins(.bottom, 28, for: .scrollContent)
+        .contentMargins(.bottom, HistoryDayCardLayout.listBottomScrollMargin, for: .scrollContent)
         .appPageBackground()
         .navigationTitle("体重记录")
         .navigationBarTitleDisplayMode(.inline)
@@ -446,6 +476,14 @@ struct BodyHistoryView: View {
                 await Task.yield()
                 loadMore()
             }
+        }
+    }
+
+    private func toggleDay(_ day: Date) {
+        if collapsedDays.contains(day) {
+            collapsedDays.remove(day)
+        } else {
+            collapsedDays.insert(day)
         }
     }
 
@@ -618,6 +656,7 @@ private struct MealHistoryRow: View {
 
 private struct BodyHistoryRow: View {
     let entry: BodyEntry
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private static let leadingIconSize: CGFloat = 58
 
@@ -629,33 +668,74 @@ private struct BodyHistoryRow: View {
         )
     }
 
+    private var dateText: String {
+        entry.date.formatted(date: .abbreviated, time: .shortened)
+    }
+
     var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibilityLayout
+            } else {
+                compactLayout
+            }
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(entry.isHealthImported ? "body-history-health-row" : "body-history-manual-row")
+    }
+
+    private var compactLayout: some View {
         HStack(alignment: .center, spacing: 12) {
             leadingIcon
                 .frame(width: Self.leadingIconSize, height: Self.leadingIconSize)
                 .accessibilityIdentifier("body-history-row-leading-icon")
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                Text(dateText)
                     .font(.headline)
+                    .lineLimit(2)
                 Text(secondaryMetrics)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 8)
 
-            if let weight = entry.weight {
-                Text(weight.formatted(.number.precision(.fractionLength(1))))
-                    .font(.title3.bold().monospacedDigit())
-                Text("kg")
-                    .font(.caption)
+            weightTrailing
+        }
+    }
+
+    private var accessibilityLayout: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(dateText)
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: 12) {
+                leadingIcon
+                    .frame(width: Self.leadingIconSize, height: Self.leadingIconSize)
+                    .accessibilityIdentifier("body-history-row-leading-icon")
+                Text(secondaryMetrics)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                weightTrailing
             }
         }
-        .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(entry.isHealthImported ? "body-history-health-row" : "body-history-manual-row")
+    }
+
+    @ViewBuilder
+    private var weightTrailing: some View {
+        if let weight = entry.weight {
+            Text(weight.formatted(.number.precision(.fractionLength(1))))
+                .font(.title3.weight(.medium).monospacedDigit())
+            Text("kg")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder

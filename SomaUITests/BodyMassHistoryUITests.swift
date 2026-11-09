@@ -123,6 +123,25 @@ final class BodyMassHistoryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["腰围"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
         keepScreenshot(app, "body-history-large")
+        // 大字号下优先确认日卡摘要；行 identifier 可能因 NavigationLink 合并而不稳定。
+        let daySummary = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "条记录")).firstMatch
+        var foundList = false
+        for _ in 0 ..< 36 {
+            if daySummary.exists
+                || app.descendants(matching: .any)["body-history-health-row"].firstMatch.exists
+                || app.descendants(matching: .any)["body-history-manual-row"].firstMatch.exists
+                || app.staticTexts["Keep"].exists
+            {
+                foundList = true
+                break
+            }
+            app.swipeUp()
+        }
+        XCTAssertTrue(foundList, "大字号下滚动后应看到日卡或体重历史行")
+        keepScreenshot(app, "body-history-large-list")
+        app.swipeUp()
+        app.swipeUp()
+        keepScreenshot(app, "body-history-large-scrolled")
     }
 
     func testHealthSettingsMentionsWeightAndBodyFatScope() {

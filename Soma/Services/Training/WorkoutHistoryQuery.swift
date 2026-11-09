@@ -221,6 +221,41 @@ enum MealHistoryQuery {
     }
 }
 
+struct BodyHistoryDayGroup: Identifiable {
+    let day: Date
+    let entries: [BodyEntry]
+
+    var id: Date {
+        day
+    }
+
+    var title: String {
+        WorkoutHistoryDayGroup(day: day, workouts: []).title
+    }
+
+    var recordCountText: String {
+        "\(entries.count) 条记录"
+    }
+}
+
+enum BodyHistoryQuery {
+    static let pageSize = WorkoutHistoryQuery.pageSize
+
+    static func groupedByDay(
+        _ entries: [BodyEntry],
+        calendar: Calendar = .current
+    ) -> [BodyHistoryDayGroup] {
+        HistoryDayGrouping.grouped(
+            entries,
+            date: \.date,
+            calendar: calendar
+        )
+        .map { day, items in
+            BodyHistoryDayGroup(day: day, entries: items)
+        }
+    }
+}
+
 enum HistoryDayGrouping {
     static func grouped<Item>(
         _ items: [Item],
