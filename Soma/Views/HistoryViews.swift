@@ -440,7 +440,7 @@ struct BodyHistoryView: View {
         .contentMargins(.bottom, 28, for: .scrollContent)
         .appPageBackground()
         .navigationTitle("体重记录")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             if entries.isEmpty {
                 await Task.yield()

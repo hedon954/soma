@@ -10,6 +10,9 @@ final class BodyMassHistoryUITests: XCTestCase {
             let app = launch(appearance)
             openBodyHistory(app)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8))
+            // inline 小标题：导航栏仍有「体重记录」，并保留返回。
+            XCTAssertTrue(app.navigationBars["体重记录"].exists)
+            XCTAssertTrue(app.navigationBars["体重记录"].buttons.firstMatch.exists)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.waitForExistence(timeout: 5))
             let range = app.descendants(matching: .any)["body-history-trend-range"].firstMatch
             XCTAssertTrue(range.waitForExistence(timeout: 5))
@@ -58,7 +61,7 @@ final class BodyMassHistoryUITests: XCTestCase {
             if app.buttons["一个月"].exists {
                 app.buttons["一个月"].tap()
             }
-            keepScreenshot(app, "body-history-range-\(appearance)")
+            keepScreenshot(app, "body-history-inline-title-\(appearance)")
             app.terminate()
         }
     }
