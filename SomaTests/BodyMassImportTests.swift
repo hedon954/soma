@@ -525,6 +525,93 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertGreaterThan(model.weightPoints.count, BodyHistoryTrendChartModel.permanentPointLimit)
         XCTAssertFalse(model.showsPermanentPoints)
     }
+
+    func testTrendSelectionPicksSingleNearestSampleInPlotSpace() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 12)))
+        let weightDate = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 12)))
+        let fatDate = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 10)))
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [(id: UUID(), date: weightDate, value: 72.4)],
+            bodyFats: [(id: UUID(), date: fatDate, value: 18.6)],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        // 点在体重绘图位置附近，应只命中体重，不拼体脂。
+        let weightHit = try XCTUnwrap(
+            BodyHistoryTrendSelectionResolver.nearest(
+                date: weightDate,
+                plotY: 72.4,
+                in: model,
+                maxNormalizedDistance: 0.2
+            )
+        )
+        XCTAssertEqual(weightHit.series, .weight)
+        XCTAssertEqual(weightHit.displayValue, 72.4, accuracy: 0.0001)
+        XCTAssertEqual(weightHit.unit, "kg")
+
+        let fatPlot = try XCTUnwrap(model.bodyFatPlotPoints.first).value
+        let fatHit = try XCTUnwrap(
+            BodyHistoryTrendSelectionResolver.nearest(
+                date: fatDate,
+                plotY: fatPlot,
+                in: model,
+                maxNormalizedDistance: 0.2
+            )
+        )
+        XCTAssertEqual(fatHit.series, .bodyFat)
+        XCTAssertEqual(fatHit.displayValue, 18.6, accuracy: 0.0001)
+        XCTAssertEqual(fatHit.unit, "%")
+        XCTAssertNotEqual(fatHit.plotValue, fatHit.displayValue, accuracy: 0.0001)
+
+        let miss = try BodyHistoryTrendSelectionResolver.nearest(
+            date: XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 5))),
+            plotY: model.plotDomain.lowerBound,
+            in: model,
+            maxNormalizedDistance: 0.05
+        )
+        XCTAssertNil(miss)
+    }
+
+    func testTrendSelectionClearsWhenOutsideSelectedRange() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9)))
+        let recent = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8)))
+        let old = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 1)))
+        let yearModel = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: UUID(), date: recent, value: 71),
+                (id: UUID(), date: old, value: 80)
+            ],
+            bodyFats: [],
+            range: .year,
+            now: now,
+            calendar: calendar
+        )
+        let oldPoint = try XCTUnwrap(yearModel.weightPoints.first { abs($0.value - 80) < 0.01 })
+        let selection = BodyHistoryTrendSelection(
+            id: oldPoint.id,
+            series: .weight,
+            date: oldPoint.date,
+            displayValue: oldPoint.value,
+            plotValue: oldPoint.value
+        )
+        let weekModel = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: UUID(), date: recent, value: 71),
+                (id: UUID(), date: old, value: 80)
+            ],
+            bodyFats: [],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertNil(BodyHistoryTrendSelectionResolver.validated(selection, in: weekModel))
+        XCTAssertNotNil(BodyHistoryTrendSelectionResolver.validated(selection, in: yearModel))
+    }
 }
 
 private extension [Date] {

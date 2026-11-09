@@ -257,3 +257,101 @@ struct BodyHistoryTrendChartModel: Equatable {
         return "\(month)/\(day)"
     }
 }
+
+/// 图内点选的单次样本（永不把不同时间的体重/体脂拼成一次）。
+struct BodyHistoryTrendSelection: Equatable, Sendable {
+    var id: String
+    var series: BodyHistoryTrendSeriesKey
+    var date: Date
+    /// 真实展示值：kg 或百分点。
+    var displayValue: Double
+    /// 主绘图域中的 Y，用于命中与标注定位。
+    var plotValue: Double
+
+    var unit: String {
+        switch series {
+        case .weight: "kg"
+        case .bodyFat: "%"
+        }
+    }
+
+    var title: String {
+        series.rawValue
+    }
+
+    var annotationText: String {
+        let value = displayValue.formatted(.number.precision(.fractionLength(0 ... 1)))
+        let time = date.formatted(date: .abbreviated, time: .shortened)
+        return "\(title) \(value) \(unit)\n\(time)"
+    }
+
+    var accessibilityLabel: String {
+        let value = displayValue.formatted(.number.precision(.fractionLength(0 ... 1)))
+        let time = date.formatted(date: .abbreviated, time: .shortened)
+        return "\(title) \(value) \(unit)，\(time)"
+    }
+}
+
+enum BodyHistoryTrendSelectionResolver {
+    /// 归一化平面上的最大命中半径（约等于舒适触达）。
+    static let maxNormalizedDistance = 0.12
+
+    static func selectablePoints(from model: BodyHistoryTrendChartModel) -> [BodyHistoryTrendSelection] {
+        let weights = model.weightPoints.map {
+            BodyHistoryTrendSelection(
+                id: $0.id,
+                series: .weight,
+                date: $0.date,
+                displayValue: $0.value,
+                plotValue: $0.value
+            )
+        }
+        let fats = zip(model.bodyFatPoints, model.bodyFatPlotPoints).map { display, plot in
+            BodyHistoryTrendSelection(
+                id: display.id,
+                series: .bodyFat,
+                date: display.date,
+                displayValue: display.value,
+                plotValue: plot.value
+            )
+        }
+        return weights + fats
+    }
+
+    /// 在日期域 × 绘图域的归一化平面上找最近单样本；超出阈值则无选中。
+    static func nearest(
+        date: Date,
+        plotY: Double,
+        in model: BodyHistoryTrendChartModel,
+        maxNormalizedDistance: Double = maxNormalizedDistance
+    ) -> BodyHistoryTrendSelection? {
+        let points = selectablePoints(from: model)
+        guard !points.isEmpty else { return nil }
+        let dateSpan = max(model.sharedDateDomain.upperBound.timeIntervalSince(model.sharedDateDomain.lowerBound), 1)
+        let plotSpan = max(model.plotDomain.upperBound - model.plotDomain.lowerBound, 0.0001)
+        var best: (BodyHistoryTrendSelection, Double)?
+        for point in points {
+            let dx = point.date.timeIntervalSince(date) / dateSpan
+            let dy = (point.plotValue - plotY) / plotSpan
+            let distance = (dx * dx + dy * dy).squareRoot()
+            if let current = best {
+                if distance < current.1 {
+                    best = (point, distance)
+                }
+            } else {
+                best = (point, distance)
+            }
+        }
+        guard let best, best.1 <= maxNormalizedDistance else { return nil }
+        return best.0
+    }
+
+    /// 区间切换后：若选中样本仍落在当前模型点集中则保留，否则清空。
+    static func validated(
+        _ selection: BodyHistoryTrendSelection?,
+        in model: BodyHistoryTrendChartModel
+    ) -> BodyHistoryTrendSelection? {
+        guard let selection else { return nil }
+        return selectablePoints(from: model).first { $0.id == selection.id }
+    }
+}

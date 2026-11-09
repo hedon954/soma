@@ -5,7 +5,7 @@ struct BodyHistoryTrendChart: View {
     let entries: [BodyEntry]
     var now: Date = .now
     @State private var range: BodyHistoryTrendRange = .default
-    @State private var selectedDate: Date?
+    @State private var selection: BodyHistoryTrendSelection?
 
     private var model: BodyHistoryTrendChartModel {
         BodyHistoryTrendChartModel.make(from: entries, range: range, now: now)
@@ -29,13 +29,13 @@ struct BodyHistoryTrendChart: View {
             } else {
                 unitHeaders(chartModel)
                 chart(chartModel)
-                selectionReadout(chartModel)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("body-history-trend-section")
-        .onChange(of: range) { _, _ in
-            selectedDate = nil
+        .onChange(of: range) { _, newRange in
+            let updated = BodyHistoryTrendChartModel.make(from: entries, range: newRange, now: now)
+            selection = BodyHistoryTrendSelectionResolver.validated(selection, in: updated)
         }
     }
 
@@ -57,7 +57,7 @@ struct BodyHistoryTrendChart: View {
         }
         .font(.caption)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("图例：体重千克，身体蓝实线；体脂率百分比，趋势紫虚线")
+        .accessibilityLabel("图例：体重千克，身体蓝实线；体脂率百分比，趋势紫虚线。点选图上样本可查看该次数值。")
         .accessibilityIdentifier("body-history-trend-legend")
     }
 
@@ -119,7 +119,7 @@ struct BodyHistoryTrendChart: View {
             Text("所选时间内暂无体重或体脂")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("可切换更长区间，或连接 Apple 健康同步；下方列表仍显示全部记录。不同时间的样本不会捏成同一次测量。")
+            Text("可切换更长区间，或连接 Apple 健康同步；下方列表仍显示全部记录。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -130,9 +130,7 @@ struct BodyHistoryTrendChart: View {
     }
 
     private func chart(_ model: BodyHistoryTrendChartModel) -> some View {
-        let selectedWeight = selectedHighlight(in: model.weightPoints)
-        let selectedFatPlot = selectedHighlight(in: model.bodyFatPlotPoints)
-        return Chart {
+        Chart {
             if model.hasWeight {
                 ForEach(model.weightPoints) { point in
                     LineMark(
@@ -155,16 +153,6 @@ struct BodyHistoryTrendChart: View {
                         .symbolSize(12)
                         .accessibilityHidden(true)
                     }
-                }
-                if let selectedWeight {
-                    PointMark(
-                        x: .value("日期", selectedWeight.date),
-                        y: .value("绘图值", selectedWeight.value)
-                    )
-                    .foregroundStyle(weightColor)
-                    .symbol(BasicChartSymbolShape.circle)
-                    .symbolSize(28)
-                    .accessibilityHidden(true)
                 }
             }
 
@@ -191,27 +179,29 @@ struct BodyHistoryTrendChart: View {
                         .accessibilityHidden(true)
                     }
                 }
-                if let selectedFatPlot {
-                    PointMark(
-                        x: .value("日期", selectedFatPlot.date),
-                        y: .value("绘图值", selectedFatPlot.value)
-                    )
-                    .foregroundStyle(bodyFatColor)
-                    .symbol(BasicChartSymbolShape.diamond)
-                    .symbolSize(30)
-                    .accessibilityHidden(true)
-                }
             }
 
-            if let selectedDate {
-                RuleMark(x: .value("所选日期", selectedDate))
-                    .foregroundStyle(.secondary)
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            if let selection {
+                PointMark(
+                    x: .value("日期", selection.date),
+                    y: .value("绘图值", selection.plotValue)
+                )
+                .foregroundStyle(selection.series == .weight ? weightColor : bodyFatColor)
+                .symbol(
+                    selection.series == .weight
+                        ? BasicChartSymbolShape.circle
+                        : BasicChartSymbolShape.diamond
+                )
+                .symbolSize(44)
+                .annotation(position: annotationPosition(for: selection, in: model), spacing: 6) {
+                    selectionCallout(selection)
+                }
+                .accessibilityLabel(selection.accessibilityLabel)
+                .accessibilityIdentifier("body-history-trend-selection-callout")
             }
         }
         .chartXScale(domain: model.sharedDateDomain)
         .chartYScale(domain: model.plotDomain)
-        .chartXSelection(value: $selectedDate)
         .chartXAxis {
             AxisMarks(values: model.xAxisTickDates) { value in
                 AxisGridLine()
@@ -262,14 +252,119 @@ struct BodyHistoryTrendChart: View {
                 }
             }
         }
-        .frame(height: 200)
+        .frame(height: 220)
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { value in
+                                select(at: value.location, proxy: proxy, geo: geo, model: model)
+                            }
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(chartAccessibilityLabel(model))
+        .accessibilityHint("点选图上的样本可查看该次数值与时间")
         .accessibilityIdentifier("body-history-trend-chart")
+        .accessibilityAction(named: Text("朗读最近体重样本")) {
+            if let last = model.weightPoints.last {
+                selection = BodyHistoryTrendSelection(
+                    id: last.id,
+                    series: .weight,
+                    date: last.date,
+                    displayValue: last.value,
+                    plotValue: last.value
+                )
+            }
+        }
+        .accessibilityAction(named: Text("朗读最近体脂样本")) {
+            if let last = model.bodyFatPoints.last,
+               let plot = model.bodyFatPlotPoints.last
+            {
+                selection = BodyHistoryTrendSelection(
+                    id: last.id,
+                    series: .bodyFat,
+                    date: last.date,
+                    displayValue: last.value,
+                    plotValue: plot.value
+                )
+            }
+        }
     }
 
-    private func selectedHighlight(in points: [BodyHistoryTrendPoint]) -> BodyHistoryTrendPoint? {
-        guard selectedDate != nil else { return nil }
-        return nearest(in: points)
+    private func selectionCallout(_ selection: BodyHistoryTrendSelection) -> some View {
+        let color = selection.series == .weight ? weightColor : bodyFatColor
+        let value = selection.displayValue.formatted(.number.precision(.fractionLength(0 ... 1)))
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("\(selection.title) \(value) \(selection.unit)")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Text(selection.date.formatted(date: .abbreviated, time: .shortened))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.separator, lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+        .fixedSize()
+        .accessibilityIdentifier("body-history-trend-selection-callout")
+    }
+
+    private func annotationPosition(
+        for selection: BodyHistoryTrendSelection,
+        in model: BodyHistoryTrendChartModel
+    ) -> AnnotationPosition {
+        let span = model.sharedDateDomain.upperBound.timeIntervalSince(model.sharedDateDomain.lowerBound)
+        guard span > 0 else { return .top }
+        let fraction = selection.date.timeIntervalSince(model.sharedDateDomain.lowerBound) / span
+        if fraction > 0.72 {
+            return .leading
+        }
+        if fraction < 0.28 {
+            return .trailing
+        }
+        let plotSpan = model.plotDomain.upperBound - model.plotDomain.lowerBound
+        if plotSpan > 0 {
+            let yFraction = (selection.plotValue - model.plotDomain.lowerBound) / plotSpan
+            if yFraction > 0.78 {
+                return .bottom
+            }
+        }
+        return .top
+    }
+
+    private func select(
+        at location: CGPoint,
+        proxy: ChartProxy,
+        geo: GeometryProxy,
+        model: BodyHistoryTrendChartModel
+    ) {
+        guard let plotFrame = proxy.plotFrame else { return }
+        let frame = geo[plotFrame]
+        let localX = location.x - frame.origin.x
+        let localY = location.y - frame.origin.y
+        guard localX >= 0, localY >= 0, localX <= frame.width, localY <= frame.height,
+              let date: Date = proxy.value(atX: localX),
+              let plotY: Double = proxy.value(atY: localY)
+        else {
+            selection = nil
+            return
+        }
+        selection = BodyHistoryTrendSelectionResolver.nearest(date: date, plotY: plotY, in: model)
     }
 
     private func bodyFatTickPlotValues(_ model: BodyHistoryTrendChartModel) -> [Double] {
@@ -299,48 +394,6 @@ struct BodyHistoryTrendChart: View {
             return "体脂率趋势，区间\(rangeText)，单位百分比"
         case (false, false):
             return "暂无趋势数据"
-        }
-    }
-
-    private func selectionReadout(_ model: BodyHistoryTrendChartModel) -> some View {
-        let weight = nearest(in: model.weightPoints)
-        let fat = nearest(in: model.bodyFatPoints)
-        return VStack(alignment: .leading, spacing: 4) {
-            if let weight {
-                Text(
-                    "体重 \(weight.value.formatted(.number.precision(.fractionLength(0 ... 1)))) kg · \(weight.date.formatted(date: .abbreviated, time: .shortened))"
-                )
-                .foregroundStyle(weightColor)
-            } else if model.hasWeight {
-                Text("体重 —")
-                    .foregroundStyle(.secondary)
-            }
-            if let fat {
-                Text(
-                    "体脂率 \(fat.value.formatted(.number.precision(.fractionLength(0 ... 1)))) % · \(fat.date.formatted(date: .abbreviated, time: .shortened))"
-                )
-                .foregroundStyle(bodyFatColor)
-            } else if model.hasBodyFat {
-                Text("体脂率 —")
-                    .foregroundStyle(.secondary)
-            }
-            if let weight, let fat, weight.date != fat.date {
-                Text("两条曲线取自不同记录时间，不是同一次测量。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .font(.subheadline)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 44, alignment: .topLeading)
-        .accessibilityIdentifier("body-history-trend-selection")
-    }
-
-    private func nearest(in points: [BodyHistoryTrendPoint]) -> BodyHistoryTrendPoint? {
-        guard !points.isEmpty else { return nil }
-        guard let selectedDate else { return points.last }
-        return points.min {
-            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
         }
     }
 }

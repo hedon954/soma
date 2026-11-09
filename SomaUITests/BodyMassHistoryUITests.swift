@@ -47,6 +47,15 @@ final class BodyMassHistoryUITests: XCTestCase {
                 chart.label.contains("独立") || chart.label.contains("体重与体脂"),
                 "chart a11y should describe independent combined series, got: \(chart.label)"
             )
+            XCTAssertFalse(app.staticTexts["两条曲线取自不同记录时间，不是同一次测量。"].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-selection"].firstMatch.exists)
+
+            // 点选图上偏右侧样本，应出现图内浮层（默认无常驻读数）。
+            let point = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.28))
+            point.tap()
+            let callout = app.descendants(matching: .any)["body-history-trend-selection-callout"].firstMatch
+            XCTAssertTrue(callout.waitForExistence(timeout: 4), "expected on-chart selection callout after tap")
+            keepScreenshot(app, "body-history-selection-\(appearance)")
 
             let legend = app.descendants(matching: .any)["body-history-trend-legend"].firstMatch
             XCTAssertTrue(legend.label.contains("体重") || app.staticTexts["体重 kg"].exists)
