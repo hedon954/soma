@@ -572,6 +572,8 @@ struct BodyEntryDTO: Codable, Equatable, Sendable {
     var analysis: String
     var externalSource: String?
     var externalID: String?
+    var sourceName: String?
+    var sourceBundleIdentifier: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
 
@@ -587,6 +589,8 @@ struct BodyEntryDTO: Codable, Equatable, Sendable {
         analysis = model.analysis
         externalSource = model.externalSource
         externalID = model.externalID
+        sourceName = model.sourceName
+        sourceBundleIdentifier = model.sourceBundleIdentifier
         sourceTurnID = model.sourceTurnID
         sourceSessionID = model.sourceSessionID
     }
@@ -602,6 +606,8 @@ struct BodyEntryDTO: Codable, Equatable, Sendable {
             analysis: analysis,
             externalSource: externalSource,
             externalID: externalID,
+            sourceName: sourceName,
+            sourceBundleIdentifier: sourceBundleIdentifier,
             sourceTurnID: sourceTurnID,
             sourceSessionID: sourceSessionID
         )
@@ -737,6 +743,7 @@ extension PersonalDataSnapshot {
     func withoutHealthActivity() -> Self {
         var copy = self
         copy.workouts.removeAll { $0.externalID?.hasPrefix("daily:") == true }
+        copy.bodyEntries.removeAll { $0.externalSource == BodyMassImportIdentity.externalSource }
         copy.energyEvidence = nil
         return copy
     }

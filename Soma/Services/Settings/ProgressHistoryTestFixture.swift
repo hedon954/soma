@@ -46,6 +46,39 @@ enum ProgressHistoryTestFixture {
             if ProcessInfo.processInfo.environment["SOMA_UI_DAILY_ACTIVITY_FIXTURE"] == "1" {
                 try DailyActivityRecordStore.replace([DailyActivitySyncCoordinator.demo(key: .init(date: today, calendar: calendar))], in: context)
             }
+            if ProcessInfo.processInfo.environment["SOMA_UI_BODY_MASS_FIXTURE"] == "1" {
+                let keepDay = calendar.date(byAdding: .day, value: -2, to: today)!
+                let unknownDay = calendar.date(byAdding: .day, value: -1, to: today)!
+                context.insert(BodyEntry(
+                    date: keepDay,
+                    weight: 72.4,
+                    bodyFat: nil,
+                    waist: nil,
+                    notes: "",
+                    analysis: "",
+                    externalSource: BodyMassImportIdentity.externalSource,
+                    externalID: BodyMassImportIdentity.externalID(sampleUUID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+                    sourceName: "Keep",
+                    sourceBundleIdentifier: "com.gotokeep.keep"
+                ))
+                context.insert(BodyEntry(
+                    date: unknownDay,
+                    weight: 72.1,
+                    notes: "",
+                    analysis: "",
+                    externalSource: BodyMassImportIdentity.externalSource,
+                    externalID: BodyMassImportIdentity.externalID(sampleUUID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!),
+                    sourceName: "Acme Scale",
+                    sourceBundleIdentifier: "com.acme.scale"
+                ))
+                context.insert(BodyEntry(
+                    date: today,
+                    weight: 71.8,
+                    bodyFat: 17.5,
+                    waist: 79,
+                    notes: "手动夹具"
+                ))
+            }
             LibraryAndMealTestFixture.seedIfRequested(in: context)
             try context.save()
             try EnergyUITestFixture.seedIfRequested(in: context)

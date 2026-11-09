@@ -385,13 +385,25 @@ struct BodyHistoryView: View {
 
     private static let pageSize = 50
 
+    private var chartEntries: [BodyEntry] {
+        entries
+    }
+
     var body: some View {
         List {
+            Section {
+                BodyHistoryTrendChart(entries: chartEntries)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(AppTheme.cardBackground)
+                    .listRowSeparator(.hidden)
+                    .accessibilityIdentifier("body-history-trend-section")
+            }
+
             if entries.isEmpty {
                 ContentUnavailableView(
                     "暂无体重记录",
                     systemImage: "scalemass",
-                    description: Text("把体重数字、体重秤或体型照片发给教练，AI 会自动记录到这里。")
+                    description: Text("连接 Apple 健康后会自动同步体重；也可把体重数字、体重秤或体型照片发给教练。")
                 )
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -607,14 +619,26 @@ private struct MealHistoryRow: View {
 private struct BodyHistoryRow: View {
     let entry: BodyEntry
 
+    private var knownSource: BodyMassKnownSource? {
+        guard entry.isHealthImported else { return nil }
+        return BodyMassKnownSource.resolve(
+            name: entry.sourceName,
+            bundleIdentifier: entry.sourceBundleIdentifier
+        )
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            MediaThumbnail(
-                kind: entry.mediaAttachments.first?.kind ?? .none,
-                path: entry.mediaAttachments.first?.path,
-                fallbackIcon: "scalemass",
-                role: .body
-            )
+            if let knownSource {
+                BodyMassSourceIcon(source: knownSource, size: 28)
+            } else {
+                MediaThumbnail(
+                    kind: entry.mediaAttachments.first?.kind ?? .none,
+                    path: entry.mediaAttachments.first?.path,
+                    fallbackIcon: "scalemass",
+                    role: .body
+                )
+            }
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(entry.date.formatted(date: .abbreviated, time: .shortened))
@@ -636,16 +660,23 @@ private struct BodyHistoryRow: View {
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(entry.isHealthImported ? "body-history-health-row" : "body-history-manual-row")
     }
 
     private var secondaryMetrics: String {
         var metrics: [String] = []
+        if let knownSource {
+            metrics.append(knownSource.accessibilityLabel)
+        }
         if let bodyFat = entry.bodyFat {
             metrics.append("体脂 \(bodyFat.formatted(.number.precision(.fractionLength(1))))%")
         }
         if let waist = entry.waist {
             metrics.append("腰围 \(waist.formatted(.number.precision(.fractionLength(1))))cm")
         }
-        return metrics.isEmpty ? "身体趋势记录" : metrics.joined(separator: " · ")
+        if metrics.isEmpty {
+            return "身体趋势记录"
+        }
+        return metrics.joined(separator: " · ")
     }
 }

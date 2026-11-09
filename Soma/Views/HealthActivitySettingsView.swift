@@ -2,13 +2,14 @@ import SwiftUI
 
 struct HealthActivitySettingsView: View {
     @Environment(DailyActivitySyncCoordinator.self) private var activity
+    @Environment(BodyMassSyncCoordinator.self) private var bodyMass
     @Environment(DataSpaceController.self) private var dataSpace
 
     var body: some View {
         Form {
             Section {
-                Text("读取每日步数、步行与跑步距离、活动消耗，以及训练的类型、时间和活动能量。每日三项覆盖为一条运动记录；训练依据用于避免跑步与步数重复计算。")
-                Text("记录与来源信息仅保存在本机，不发送给教练模型，也不进入备份与导出。")
+                Text("读取每日步数、步行与跑步距离、活动消耗、训练的类型/时间/活动能量，以及体重。每日三项覆盖为一条运动记录；体重写入本地体重记录并保留最初来源。训练依据用于避免跑步与步数重复计算。本迭代不同步体脂。")
+                Text("记录与来源信息仅保存在本机。健康导入的日活动与体重不发送给教练模型批量历史，也不进入备份与导出；最新体重仍供本机计算。")
             } header: { Text("读取范围") }
                 .listRowBackground(AppTheme.cardBackground)
 
@@ -25,8 +26,11 @@ struct HealthActivitySettingsView: View {
                             .disabled(activity.isConnecting)
                             .frame(minHeight: 44)
                     }
-                    Button("重新读取") { activity.refresh() }
-                        .frame(minHeight: 44)
+                    Button("重新读取") {
+                        activity.refresh()
+                        bodyMass.refresh()
+                    }
+                    .frame(minHeight: 44)
                     Button("断开连接", role: .destructive) {
                         Task { await activity.disconnect() }
                     }.frame(minHeight: 44)

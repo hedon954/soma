@@ -60,7 +60,7 @@ enum AgentContextPackBuilder {
             sort: \BodyEntry.date,
             limit: 14,
             in: context
-        )
+        ).filter { $0.externalSource == nil }
         let latestWeightBody = latestRecordedWeight(in: context)
         let profiles = fetchRecent(
             UserProfile.self,

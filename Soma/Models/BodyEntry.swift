@@ -15,6 +15,10 @@ final class BodyEntry: BusinessIdentifiedModel {
     var analysis: String
     var externalSource: String?
     var externalID: String?
+    /// HealthKit `HKSourceRevision.source.name`；手动记录为 nil。
+    var sourceName: String?
+    /// HealthKit `HKSourceRevision.source.bundleIdentifier`；手动记录为 nil。
+    var sourceBundleIdentifier: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
 
@@ -29,6 +33,8 @@ final class BodyEntry: BusinessIdentifiedModel {
         analysis: String = "",
         externalSource: String? = nil,
         externalID: String? = nil,
+        sourceName: String? = nil,
+        sourceBundleIdentifier: String? = nil,
         sourceTurnID: UUID? = nil,
         sourceSessionID: UUID? = nil
     ) {
@@ -43,6 +49,8 @@ final class BodyEntry: BusinessIdentifiedModel {
         self.analysis = analysis
         self.externalSource = externalSource
         self.externalID = externalID
+        self.sourceName = sourceName
+        self.sourceBundleIdentifier = sourceBundleIdentifier
         self.sourceTurnID = sourceTurnID
         self.sourceSessionID = sourceSessionID
     }
@@ -59,5 +67,10 @@ final class BodyEntry: BusinessIdentifiedModel {
             mediaAttachmentsData = MediaAttachmentStorage.encode(newValue)
             imagePath = newValue.first(where: { $0.kind == .image })?.path
         }
+    }
+
+    /// 来自 Apple 健康的体重样本（可再同步，不进备份/导出）。
+    var isHealthImported: Bool {
+        externalSource == BodyMassImportIdentity.externalSource
     }
 }

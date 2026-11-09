@@ -1,0 +1,63 @@
+import Foundation
+
+enum BodyMassImportIdentity {
+    static let externalSource = "appleHealth"
+    static let cursorSource = "appleHealth"
+    static let cursorStream = "bodyMass"
+
+    static func externalID(sampleUUID: UUID) -> String {
+        "bodyMass:" + sampleUUID.uuidString
+    }
+
+    static func sampleUUID(externalID: String) -> UUID? {
+        guard externalID.hasPrefix("bodyMass:") else { return nil }
+        return UUID(uuidString: String(externalID.dropFirst("bodyMass:".count)))
+    }
+}
+
+enum BodyMassKnownSource: Equatable, Sendable {
+    case keep
+    case appleHealth
+    case unknown(displayName: String)
+
+    var accessibilityLabel: String {
+        switch self {
+        case .keep: "Keep"
+        case .appleHealth: "Apple 健康"
+        case let .unknown(name): name.isEmpty ? "未知来源" : name
+        }
+    }
+
+    static func resolve(name: String?, bundleIdentifier: String?) -> BodyMassKnownSource {
+        let combined = [name, bundleIdentifier]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        if combined.contains("gotokeep") || combined.contains("keep") {
+            return .keep
+        }
+        if combined.contains("com.apple.health")
+            || combined.contains("apple health")
+            || combined.contains("health") && (bundleIdentifier?.contains("com.apple") == true)
+            || name == "Health"
+            || name == "健康"
+        {
+            return .appleHealth
+        }
+        let display = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return .unknown(displayName: display.isEmpty ? (bundleIdentifier ?? "") : display)
+    }
+}
+
+struct BodyMassSampleImport: Equatable, Sendable {
+    var sampleUUID: UUID
+    var date: Date
+    var weightKilograms: Double
+    var sourceName: String
+    var sourceBundleIdentifier: String
+}
+
+struct BodyMassSyncDelta: Equatable, Sendable {
+    var upserts: [BodyMassSampleImport]
+    var deletedSampleUUIDs: [UUID]
+    var newAnchorData: Data?
+}

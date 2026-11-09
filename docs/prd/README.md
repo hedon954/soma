@@ -39,6 +39,7 @@
 | [077](077-daily-activity-source-priority.md) | 0.0.31 | 已实现；真机数据待验收 |
 | [078](078-residual-energy-coefficient.md) | 0.0.32 | 已实现；修订 076 的总消耗公式 |
 | [079](079-daily-target-deficit.md) | 0.0.32 | 已实现，模拟器验证通过；每日目标热量缺口 |
+| [080](080-healthkit-body-mass.md) | 未发布 | 已实现；体重健康导入与身体曲线 |
 
 ## 阅读约定
 
@@ -90,3 +91,4 @@
 | --- | --- | --- |
 | [078](078-residual-energy-coefficient.md) | 已实现 | 总消耗改为静息 × 残差系数 + 所选日活动能量；不发版 |
 | [079](079-daily-target-deficit.md) | 已实现，模拟器验证通过 | 减脂与增肌减脂共用每日目标热量缺口，默认 400；补充 078，保持总消耗公式 |
+| [080](080-healthkit-body-mass.md) | 已实现 | Apple 健康体重导入、来源图标与身体指标曲线 |

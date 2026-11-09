@@ -5,6 +5,19 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Added
+
+- 连接 Apple 健康后自动导入体重到本地体重记录，列表显示 Keep 等最初来源图标；体重记录页增加体重/体脂/腰围变化曲线（体脂与腰围本迭代使用本地记录）。
+
+### Privacy and compatibility
+
+- 新增只读 `bodyMass` 权限与可选后台交付 entitlement；健康导入体重不进入备份/导出与教练批量身体历史。
+- `BodyEntry` 增加可选最初来源字段，旧库轻量兼容；不重建用户数据，不写回 Apple 健康。
+
+### Known limitations
+
+- 真机 Keep→健康→Soma 对照与观察者后台唤醒尚未验收；模拟器以合成导入数据验证幂等与界面。
+
 ## [0.0.32] - 2026-11-07
 
 总消耗纳入所选日活动能量；减脂与增肌减脂可共享自定义目标缺口，设置、进展和教练使用一致规则。

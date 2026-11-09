@@ -5,7 +5,7 @@
 - 版本：0.0.30
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（日汇总无样本 cursor；自然日覆盖与真实来源）、[工程契约](../../CLAUDE.md)（三项只读接入）
-- 后续替代：[ADR 0146](0146-daily-activity-source-priority.md)（多来源整包择优、来源身份、列表与分享边界）、[ADR 0147](0147-residual-energy-coefficient.md)（所选日活动能量进入总消耗）
+- 后续替代：[ADR 0146](0146-daily-activity-source-priority.md)（多来源整包择优、来源身份、列表与分享边界）、[ADR 0147](0147-residual-energy-coefficient.md)（所选日活动能量进入总消耗）、[ADR 0149](0149-healthkit-body-mass.md)（部分替代：增加 bodyMass 导入）
 - 上游依据：[PRD 075](../prd/075-healthkit-daily-activity.md)、[HealthKit 调研](../research/2026-10-20-healthkit-daily-activity.md)
 - 下游落地：[验收](../acceptance.md)、[数据库结构](../engineering/database-schema.md)
 
