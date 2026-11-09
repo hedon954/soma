@@ -3,15 +3,53 @@ import Foundation
 enum BodyMassImportIdentity {
     static let externalSource = "appleHealth"
     static let cursorSource = "appleHealth"
-    static let cursorStream = "bodyMass"
+    static let bodyMassStream = "bodyMass"
+    static let bodyFatStream = "bodyFat"
+
+    /// 兼容旧调用：默认体重游标流。
+    static let cursorStream = bodyMassStream
+
+    static let bodyMassExternalIDPrefix = "bodyMass:"
+    static let bodyFatExternalIDPrefix = "bodyFat:"
 
     static func externalID(sampleUUID: UUID) -> String {
-        "bodyMass:" + sampleUUID.uuidString
+        bodyMassExternalID(sampleUUID: sampleUUID)
+    }
+
+    static func bodyMassExternalID(sampleUUID: UUID) -> String {
+        bodyMassExternalIDPrefix + sampleUUID.uuidString
+    }
+
+    static func bodyFatExternalID(sampleUUID: UUID) -> String {
+        bodyFatExternalIDPrefix + sampleUUID.uuidString
     }
 
     static func sampleUUID(externalID: String) -> UUID? {
-        guard externalID.hasPrefix("bodyMass:") else { return nil }
-        return UUID(uuidString: String(externalID.dropFirst("bodyMass:".count)))
+        if externalID.hasPrefix(bodyMassExternalIDPrefix) {
+            return UUID(uuidString: String(externalID.dropFirst(bodyMassExternalIDPrefix.count)))
+        }
+        if externalID.hasPrefix(bodyFatExternalIDPrefix) {
+            return UUID(uuidString: String(externalID.dropFirst(bodyFatExternalIDPrefix.count)))
+        }
+        return nil
+    }
+}
+
+/// HealthKit `.percent()`：1.0 = 100%。转换为 BodyEntry 使用的百分点（0…100）。
+enum BodyFatPercentageConversion {
+    static func percentPoints(fromHealthKitPercentUnit raw: Double) -> Double? {
+        guard raw.isFinite, raw > 0 else { return nil }
+        let points: Double
+        if raw <= 1 {
+            points = raw * 100
+        } else if raw <= 100 {
+            // 少数来源可能已按百分点写入；避免再乘 100。
+            points = raw
+        } else {
+            return nil
+        }
+        guard points > 0, points <= 100 else { return nil }
+        return points
     }
 }
 
@@ -79,8 +117,23 @@ struct BodyMassSampleImport: Equatable, Sendable {
     var sourceBundleIdentifier: String
 }
 
+struct BodyFatSampleImport: Equatable, Sendable {
+    var sampleUUID: UUID
+    var date: Date
+    /// 百分点 0…100（非 HealthKit 0…1 分数）。
+    var bodyFatPercent: Double
+    var sourceName: String
+    var sourceBundleIdentifier: String
+}
+
 struct BodyMassSyncDelta: Equatable, Sendable {
     var upserts: [BodyMassSampleImport]
+    var deletedSampleUUIDs: [UUID]
+    var newAnchorData: Data?
+}
+
+struct BodyFatSyncDelta: Equatable, Sendable {
+    var upserts: [BodyFatSampleImport]
     var deletedSampleUUIDs: [UUID]
     var newAnchorData: Data?
 }

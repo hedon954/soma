@@ -4,12 +4,13 @@ import SwiftData
 import XCTest
 
 final class DailyActivityValueTests: XCTestCase {
-    func testReadTypesIncludeDailyQuantitiesBodyMassAndMinimalWorkoutWithoutRestingEnergy() {
+    func testReadTypesIncludeDailyQuantitiesBodyMassBodyFatAndMinimalWorkoutWithoutRestingEnergy() {
         XCTAssertEqual(Set(HealthKitDailyActivityReader.readTypes.map(\.identifier)), Set([
             HKQuantityTypeIdentifier.stepCount.rawValue,
             HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue,
             HKQuantityTypeIdentifier.activeEnergyBurned.rawValue,
             HKQuantityTypeIdentifier.bodyMass.rawValue,
+            HKQuantityTypeIdentifier.bodyFatPercentage.rawValue,
             HKWorkoutTypeIdentifier
         ]))
     }

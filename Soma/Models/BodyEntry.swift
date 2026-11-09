@@ -69,7 +69,7 @@ final class BodyEntry: BusinessIdentifiedModel {
         }
     }
 
-    /// 来自 Apple 健康的体重样本（可再同步，不进备份/导出）。
+    /// 来自 Apple 健康的体重或体脂样本（可再同步，不进备份/导出）。
     var isHealthImported: Bool {
         externalSource == BodyMassImportIdentity.externalSource
     }

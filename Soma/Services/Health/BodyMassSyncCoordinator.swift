@@ -83,14 +83,23 @@ final class BodyMassSyncCoordinator {
 
     private func pullAndApply(token: Int, context: ModelContext) async {
         do {
-            let anchor = try BodyMassRecordStore.loadAnchorData(in: context)
-            let delta = try await reader.pull(anchorData: anchor)
+            let massAnchor = try BodyMassRecordStore.loadAnchorData(in: context)
+            let massDelta = try await reader.pull(anchorData: massAnchor)
             guard !Task.isCancelled, token == generation, isEnabled, space == .personal else { return }
             // 仅删除 HealthKit 明确回报的 deleted UUID；空结果（含权限拒绝无法区分的情况）不擦除本地导入。
-            try BodyMassRecordStore.apply(delta, in: context)
+            try BodyMassRecordStore.apply(massDelta, in: context)
             guard !Task.isCancelled, token == generation, isEnabled, space == .personal else { return }
-            if let newAnchor = delta.newAnchorData {
+            if let newAnchor = massDelta.newAnchorData {
                 try BodyMassRecordStore.saveAnchorData(newAnchor, in: context)
+            }
+
+            let fatAnchor = try BodyMassRecordStore.loadBodyFatAnchorData(in: context)
+            let fatDelta = try await reader.pullBodyFat(anchorData: fatAnchor)
+            guard !Task.isCancelled, token == generation, isEnabled, space == .personal else { return }
+            try BodyMassRecordStore.applyBodyFat(fatDelta, in: context)
+            guard !Task.isCancelled, token == generation, isEnabled, space == .personal else { return }
+            if let newAnchor = fatDelta.newAnchorData {
+                try BodyMassRecordStore.saveBodyFatAnchorData(newAnchor, in: context)
             }
         } catch {
             // 失败不推进擦除、不改写游标；下次前台再追赶。

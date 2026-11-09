@@ -47,19 +47,32 @@ enum ProgressHistoryTestFixture {
                 try DailyActivityRecordStore.replace([DailyActivitySyncCoordinator.demo(key: .init(date: today, calendar: calendar))], in: context)
             }
             if ProcessInfo.processInfo.environment["SOMA_UI_BODY_MASS_FIXTURE"] == "1" {
-                // Keep 放在今日午间，保证排序后紧贴手动行，便于同屏对比图标容器。
-                let keepDay = calendar.date(byAdding: .hour, value: 12, to: today)!
+                // Keep 体重与体脂为独立样本（不同时刻），不捏成同一次测量。
+                let keepWeightDay = calendar.date(byAdding: .hour, value: 12, to: today)!
+                let keepFatDay = calendar.date(byAdding: .hour, value: 10, to: today)!
                 let manualDay = calendar.date(byAdding: .day, value: -1, to: today)!
                 let unknownDay = calendar.date(byAdding: .day, value: -5, to: today)!
                 context.insert(BodyEntry(
-                    date: keepDay,
+                    date: keepWeightDay,
                     weight: 72.4,
                     bodyFat: nil,
                     waist: nil,
                     notes: "",
                     analysis: "",
                     externalSource: BodyMassImportIdentity.externalSource,
-                    externalID: BodyMassImportIdentity.externalID(sampleUUID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+                    externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+                    sourceName: "Keep",
+                    sourceBundleIdentifier: "com.gotokeep.keep"
+                ))
+                context.insert(BodyEntry(
+                    date: keepFatDay,
+                    weight: nil,
+                    bodyFat: 18.6,
+                    waist: nil,
+                    notes: "",
+                    analysis: "",
+                    externalSource: BodyMassImportIdentity.externalSource,
+                    externalID: BodyMassImportIdentity.bodyFatExternalID(sampleUUID: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!),
                     sourceName: "Keep",
                     sourceBundleIdentifier: "com.gotokeep.keep"
                 ))
@@ -69,7 +82,7 @@ enum ProgressHistoryTestFixture {
                     notes: "",
                     analysis: "",
                     externalSource: BodyMassImportIdentity.externalSource,
-                    externalID: BodyMassImportIdentity.externalID(sampleUUID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!),
+                    externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!),
                     sourceName: "Acme Scale",
                     sourceBundleIdentifier: "com.acme.scale"
                 ))

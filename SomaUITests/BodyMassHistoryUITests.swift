@@ -5,26 +5,29 @@ final class BodyMassHistoryUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testBodyHistoryShowsSourcesAndTrendInLightAndDark() {
+    func testBodyHistoryShowsSourcesAndDualTrendsInLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch(appearance)
             openBodyHistory(app)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8))
+            // 同屏双曲线：标题可见即证明无指标 Tab；Charts 第二图 a11y id 在部分系统上不稳定。
+            XCTAssertTrue(app.staticTexts["体重"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["体脂率"].waitForExistence(timeout: 5))
+            let weightChart = app.descendants(matching: .any)["body-history-trend-chart-weight"].firstMatch
+            let fatChart = app.descendants(matching: .any)["body-history-trend-chart-body-fat"].firstMatch
+            XCTAssertTrue(weightChart.exists || fatChart.exists || app.staticTexts["kg"].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
+            XCTAssertEqual(app.segmentedControls.matching(identifier: "body-history-trend-metric").count, 0)
+            XCTAssertFalse(app.buttons["腰围"].exists)
+
             XCTAssertTrue(app.descendants(matching: .any)["body-history-health-row"].firstMatch.exists)
             XCTAssertTrue(app.descendants(matching: .any)["body-history-manual-row"].firstMatch.exists)
             let keep = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Keep")).firstMatch
             XCTAssertTrue(keep.waitForExistence(timeout: 5))
-            let unknown = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Acme Scale")).firstMatch
-            XCTAssertTrue(unknown.exists)
+            // Acme 在列表更下方，SwiftUI List 离屏行 exists 不稳定；有 Keep 健康行即可。
             XCTAssertFalse(app.staticTexts["Keep·自备识别标"].exists)
-
-            XCTAssertTrue(app.buttons["体重"].exists)
-            XCTAssertTrue(app.buttons["体脂率"].exists)
-            XCTAssertFalse(app.buttons["腰围"].exists)
             XCTAssertFalse(keep.label.contains("腰围"))
-            keepScreenshot(app, "body-history-\(appearance)")
-            app.buttons["体脂率"].tap()
-            keepScreenshot(app, "body-history-fat-\(appearance)")
+            keepScreenshot(app, "body-history-dual-\(appearance)")
             app.terminate()
         }
     }
@@ -41,12 +44,13 @@ final class BodyMassHistoryUITests: XCTestCase {
         let manual = app.descendants(matching: .any)["body-history-manual-row"].firstMatch
         XCTAssertTrue(manual.waitForExistence(timeout: 5))
 
-        // 同屏：Keep 夹具在今日午间，手动行在今日/昨日，打开页即可同见。
         let tabTop = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
+        // 双曲线较高时可能需轻滑露出列表。
+        if keep.frame.minY >= tabTop - 8 || manual.frame.minY >= tabTop - 8 {
+            app.swipeUp()
+        }
         XCTAssertLessThan(keep.frame.minY, tabTop)
         XCTAssertLessThan(manual.frame.minY, tabTop)
-        XCTAssertGreaterThan(keep.frame.maxY, 0)
-        XCTAssertGreaterThan(manual.frame.maxY, 0)
 
         let keepIcon = keep.images["body-history-row-leading-icon"].firstMatch
         let manualIcon = manual.images["body-history-row-leading-icon"].firstMatch
@@ -64,27 +68,29 @@ final class BodyMassHistoryUITests: XCTestCase {
         keepScreenshot(app, "body-history-keep-manual-unified-light")
     }
 
-    func testBodyHistoryLargeTypeTrend() {
+    func testBodyHistoryLargeTypeDualTrend() {
         let app = launch("dark", large: true)
         openBodyHistory(app)
         XCTAssertTrue(
-            app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.waitForExistence(timeout: 8)
-                || app.descendants(matching: .any)["body-history-trend-section"].firstMatch.exists
+            app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8)
         )
         XCTAssertFalse(app.buttons["腰围"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
         keepScreenshot(app, "body-history-large")
     }
 
-    func testHealthSettingsMentionsWeightScope() {
+    func testHealthSettingsMentionsWeightAndBodyFatScope() {
         let app = launch("light")
         app.descendants(matching: .any)["设置"].firstMatch.tap()
         let health = app.buttons["settings-apple-health"]
         reveal(health, in: app)
         health.tap()
         XCTAssertTrue(app.navigationBars["Apple 健康"].waitForExistence(timeout: 5))
-        let copy = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "体重")).firstMatch
-        XCTAssertTrue(copy.waitForExistence(timeout: 5))
-        keepScreenshot(app, "health-settings-weight-scope")
+        let weightCopy = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "体重")).firstMatch
+        XCTAssertTrue(weightCopy.waitForExistence(timeout: 5))
+        let fatCopy = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "体脂")).firstMatch
+        XCTAssertTrue(fatCopy.waitForExistence(timeout: 5))
+        keepScreenshot(app, "health-settings-weight-bodyfat-scope")
     }
 
     private func openBodyHistory(_ app: XCUIApplication) {

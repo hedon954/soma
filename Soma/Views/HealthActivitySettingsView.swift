@@ -8,8 +8,8 @@ struct HealthActivitySettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text("读取每日步数、步行与跑步距离、活动消耗、训练的类型/时间/活动能量，以及体重。每日三项覆盖为一条运动记录；体重写入本地体重记录并保留最初来源。训练依据用于避免跑步与步数重复计算。本迭代不同步体脂。")
-                Text("记录与来源信息仅保存在本机。健康导入的日活动与体重不发送给教练模型批量历史，也不进入备份与导出；最新体重仍供本机计算。")
+                Text("读取每日步数、步行与跑步距离、活动消耗、训练的类型/时间/活动能量，以及体重与体脂率。每日三项覆盖为一条运动记录；体重与体脂各自写入本地体重记录并保留最初来源，不会因同日自动合并。训练依据用于避免跑步与步数重复计算。")
+                Text("记录与来源信息仅保存在本机。健康导入的日活动、体重与体脂不发送给教练模型批量历史，也不进入备份与导出；最新体重仍供本机计算。")
             } header: { Text("读取范围") }
                 .listRowBackground(AppTheme.cardBackground)
 
@@ -31,13 +31,27 @@ struct HealthActivitySettingsView: View {
                         bodyMass.refresh()
                     }
                     .frame(minHeight: 44)
+                    Button("补充健康读取权限") {
+                        Task {
+                            await activity.connect()
+                            bodyMass.refresh()
+                        }
+                    }
+                    .disabled(activity.isConnecting)
+                    .frame(minHeight: 44)
+                    Text("新增体脂等读取项后，已连接用户需再次授权。系统可能不弹窗；也可在「健康 → 个人资料 → App → Soma」中开启。本 App 无法区分未允许读取与暂无样本。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     Button("断开连接", role: .destructive) {
                         Task { await activity.disconnect() }
                     }.frame(minHeight: 44)
                         .accessibilityIdentifier("health-disconnect")
                 } else {
                     Button {
-                        Task { await activity.connect() }
+                        Task {
+                            await activity.connect()
+                            bodyMass.refresh()
+                        }
                     } label: {
                         HStack {
                             Text(activity.isConnecting ? "正在连接…" : "连接 Apple 健康")

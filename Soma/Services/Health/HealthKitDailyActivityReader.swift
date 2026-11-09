@@ -27,6 +27,7 @@ actor HealthKitDailyActivityReader: DailyActivityReading {
         var types: Set<HKObjectType> = Set(DailyActivityMetricKind.allCases.map { quantityType($0) })
         types.insert(HKObjectType.workoutType())
         types.insert(HKQuantityType(.bodyMass))
+        types.insert(HKQuantityType(.bodyFatPercentage))
         return types
     }()
 

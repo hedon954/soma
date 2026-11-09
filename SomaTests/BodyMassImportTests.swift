@@ -149,4 +149,183 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertTrue(pack.contains("体重：70"))
         XCTAssertFalse(pack.contains("Keep"))
     }
+
+    func testBodyFatPercentConversionFromHealthKitFraction() {
+        XCTAssertEqual(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: 0.185), 18.5)
+        XCTAssertEqual(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: 1.0), 100)
+        XCTAssertEqual(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: 18.5), 18.5)
+        XCTAssertNil(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: 0))
+        XCTAssertNil(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: -0.1))
+        XCTAssertNil(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: 150))
+        XCTAssertNil(BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: .nan))
+    }
+
+    func testBodyFatImportIsIndependentFromWeightSample() throws {
+        let context = container.mainContext
+        let weightID = UUID()
+        let fatID = UUID()
+        let weightDate = Date(timeIntervalSince1970: 1_700_200_000)
+        let fatDate = Date(timeIntervalSince1970: 1_700_200_000 + 3600)
+        try BodyMassRecordStore.apply(
+            BodyMassSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: weightID, date: weightDate, weightKilograms: 72.4,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: Data([9])
+            ),
+            in: context
+        )
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: fatID, date: fatDate, bodyFatPercent: 18.2,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: Data([8])
+            ),
+            in: context
+        )
+        try BodyMassRecordStore.saveBodyFatAnchorData(Data([8]), in: context)
+
+        let bodies = try context.fetch(FetchDescriptor<BodyEntry>(sortBy: [SortDescriptor(\.date)]))
+        XCTAssertEqual(bodies.count, 2)
+        let weightRow = try XCTUnwrap(bodies.first { $0.externalID == BodyMassImportIdentity.bodyMassExternalID(sampleUUID: weightID) })
+        let fatRow = try XCTUnwrap(bodies.first { $0.externalID == BodyMassImportIdentity.bodyFatExternalID(sampleUUID: fatID) })
+        XCTAssertEqual(weightRow.weight, 72.4)
+        XCTAssertNil(weightRow.bodyFat)
+        XCTAssertNil(fatRow.weight)
+        XCTAssertEqual(fatRow.bodyFat, 18.2)
+        XCTAssertEqual(weightRow.sourceName, "Keep")
+        XCTAssertEqual(fatRow.sourceName, "Keep")
+        XCTAssertEqual(try BodyMassRecordStore.loadBodyFatAnchorData(in: context), Data([8]))
+    }
+
+    func testDeletingBodyFatDoesNotRemoveWeightImport() throws {
+        let context = container.mainContext
+        let weightID = UUID()
+        let fatID = UUID()
+        try BodyMassRecordStore.apply(
+            BodyMassSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: weightID, date: .now, weightKilograms: 70.5,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: nil
+            ),
+            in: context
+        )
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: fatID, date: .now.addingTimeInterval(60), bodyFatPercent: 17.0,
+                        sourceName: "Acme Scale", sourceBundleIdentifier: "com.acme.scale"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: nil
+            ),
+            in: context
+        )
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(upserts: [], deletedSampleUUIDs: [fatID], newAnchorData: nil),
+            in: context
+        )
+        let remaining = try context.fetch(FetchDescriptor<BodyEntry>())
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining.first?.externalID, BodyMassImportIdentity.bodyMassExternalID(sampleUUID: weightID))
+        XCTAssertEqual(remaining.first?.weight, 70.5)
+    }
+
+    func testEmptyBodyFatDeltaDoesNotEraseImports() throws {
+        let context = container.mainContext
+        let fatID = UUID()
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: fatID, date: .now, bodyFatPercent: 16.5,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: nil
+            ),
+            in: context
+        )
+        // 空结果（拒权与无数据不可区分）不得擦除。
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(upserts: [], deletedSampleUUIDs: [], newAnchorData: nil),
+            in: context
+        )
+        let remaining = try context.fetch(FetchDescriptor<BodyEntry>())
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining.first?.bodyFat, 16.5)
+    }
+
+    func testFatOnlyImportDoesNotClearLatestWeight() throws {
+        let context = container.mainContext
+        let weightDate = Date(timeIntervalSince1970: 1_700_300_000)
+        let fatDate = Date(timeIntervalSince1970: 1_700_400_000)
+        try BodyMassRecordStore.apply(
+            BodyMassSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: UUID(), date: weightDate, weightKilograms: 73.0,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: nil
+            ),
+            in: context
+        )
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: UUID(), date: fatDate, bodyFatPercent: 19.0,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: nil
+            ),
+            in: context
+        )
+        let latest = WorkoutCalorieCalculator.latestRecordedWeight(at: fatDate.addingTimeInterval(10), in: context)
+        XCTAssertEqual(latest, 73.0)
+    }
+
+    func testBodyFatBackupFilterExcludesHealthImports() throws {
+        let context = container.mainContext
+        context.insert(BodyEntry(date: .now, weight: 70, bodyFat: 18, notes: "manual"))
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    .init(
+                        sampleUUID: UUID(), date: .now.addingTimeInterval(10), bodyFatPercent: 17.2,
+                        sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: nil
+            ),
+            in: context
+        )
+        let snapshot = try PersonalDataSnapshot.capture(from: context).withoutHealthActivity()
+        XCTAssertEqual(snapshot.bodyEntries.count, 1)
+        XCTAssertNil(snapshot.bodyEntries.first?.externalSource)
+        XCTAssertEqual(snapshot.bodyEntries.first?.bodyFat, 18)
+    }
 }
