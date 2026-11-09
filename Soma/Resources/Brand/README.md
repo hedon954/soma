@@ -6,9 +6,9 @@
 - Bundled as `Assets.xcassets/CorosLogo.imageset` (PNG 1x/2x/3x rendered from that SVG)
 - COROS and the COROS logo are trademarks of COROS Wearables Inc. Used only to label COROS as a HealthKit data source inside Soma; not affiliated with or endorsed by COROS.
 
+## Keep recognition badge（自备识别标，非官方图标）
 
-## Keep logo
-
-- Recognition badge for HealthKit samples whose `source.name` / `bundleIdentifier` match Keep (e.g. name contains "Keep", bundle contains `gotokeep` / `keep`).
-- Bundled as `Assets.xcassets/KeepLogo.imageset` (teal mark rendered for Soma source labeling).
-- Keep and related marks are trademarks of their owners. Used only to label Keep as a HealthKit data source inside Soma; not affiliated with or endorsed by Keep.
+- **Not** an official Keep brand asset. Soma-crafted teal mark for HealthKit source recognition only.
+- Matched when HealthKit `source.name` / `bundleIdentifier` indicate Keep (e.g. name `Keep`, bundle contains `gotokeep`).
+- Bundled as `Assets.xcassets/KeepLogo.imageset`. UI accessibility/list captions state it is a custom recognition badge, not an official icon.
+- Keep and related marks remain trademarks of their owners; Soma is not affiliated with or endorsed by Keep.

@@ -26,16 +26,20 @@ final class BodyMassSyncCoordinator {
         isEnabled = enabled
         if !enabled {
             cancel()
-            Task { await reader.stopObserving() }
-            observing = false
+            stopObservation()
         }
     }
 
     func setContext(space: DataSpace, foreground: Bool) {
         self.space = space
         self.foreground = foreground
-        guard isEnabled, foreground, space == .personal, recordContext != nil else {
+        let canSync = isEnabled && foreground && space == .personal && recordContext != nil
+        guard canSync else {
             cancel()
+            // 断开、演示空间或无上下文时停止观察，避免跨空间迟到回调写入。
+            if !isEnabled || space != .personal || recordContext == nil {
+                stopObservation()
+            }
             return
         }
         refresh()
@@ -53,16 +57,22 @@ final class BodyMassSyncCoordinator {
     }
 
     private func ensureObserving() {
-        guard isEnabled, space == .personal, !observing else { return }
+        guard isEnabled, space == .personal, recordContext != nil, !observing else { return }
         observing = true
         Task { [weak self] in
             guard let self else { return }
             await reader.startObserving { [weak self] in
                 Task { @MainActor in
-                    self?.refresh()
+                    guard let self, self.isEnabled, self.space == .personal else { return }
+                    self.refresh()
                 }
             }
         }
+    }
+
+    private func stopObservation() {
+        observing = false
+        Task { await reader.stopObserving() }
     }
 
     private func cancel() {
@@ -75,13 +85,15 @@ final class BodyMassSyncCoordinator {
         do {
             let anchor = try BodyMassRecordStore.loadAnchorData(in: context)
             let delta = try await reader.pull(anchorData: anchor)
-            guard !Task.isCancelled, token == generation else { return }
+            guard !Task.isCancelled, token == generation, isEnabled, space == .personal else { return }
+            // 仅删除 HealthKit 明确回报的 deleted UUID；空结果（含权限拒绝无法区分的情况）不擦除本地导入。
             try BodyMassRecordStore.apply(delta, in: context)
+            guard !Task.isCancelled, token == generation, isEnabled, space == .personal else { return }
             if let newAnchor = delta.newAnchorData {
                 try BodyMassRecordStore.saveAnchorData(newAnchor, in: context)
             }
         } catch {
-            // 前台失败不打断日活动；下一次回前台再追赶。
+            // 失败不推进擦除、不改写游标；下次前台再追赶。
         }
     }
 }

@@ -438,6 +438,7 @@ struct BodyHistoryView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .contentMargins(.bottom, 28, for: .scrollContent)
         .appPageBackground()
         .navigationTitle("体重记录")
         .navigationBarTitleDisplayMode(.large)
@@ -666,7 +667,7 @@ private struct BodyHistoryRow: View {
     private var secondaryMetrics: String {
         var metrics: [String] = []
         if let knownSource {
-            metrics.append(knownSource.accessibilityLabel)
+            metrics.append(knownSource.listCaption)
         }
         if let bodyFat = entry.bodyFat {
             metrics.append("体脂 \(bodyFat.formatted(.number.precision(.fractionLength(1))))%")

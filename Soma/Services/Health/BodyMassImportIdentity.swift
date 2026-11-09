@@ -22,7 +22,16 @@ enum BodyMassKnownSource: Equatable, Sendable {
 
     var accessibilityLabel: String {
         switch self {
-        case .keep: "Keep"
+        case .keep: "Keep 来源（自备识别标，非官方图标）"
+        case .appleHealth: "Apple 健康"
+        case let .unknown(name): name.isEmpty ? "未知来源" : name
+        }
+    }
+
+    /// 列表次要文案：Keep 标明自备识别标，避免被当成官方品牌图标。
+    var listCaption: String {
+        switch self {
+        case .keep: "Keep·自备识别标"
         case .appleHealth: "Apple 健康"
         case let .unknown(name): name.isEmpty ? "未知来源" : name
         }
@@ -32,7 +41,13 @@ enum BodyMassKnownSource: Equatable, Sendable {
         let combined = [name, bundleIdentifier]
             .compactMap { $0?.lowercased() }
             .joined(separator: " ")
-        if combined.contains("gotokeep") || combined.contains("keep") {
+        let nameLower = name?.lowercased() ?? ""
+        let bundleLower = bundleIdentifier?.lowercased() ?? ""
+        if bundleLower.contains("gotokeep")
+            || nameLower == "keep"
+            || nameLower.hasPrefix("keep ")
+            || nameLower.contains(" keep")
+        {
             return .keep
         }
         if combined.contains("com.apple.health")

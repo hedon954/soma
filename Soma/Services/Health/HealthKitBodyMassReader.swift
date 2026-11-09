@@ -49,6 +49,8 @@ actor HealthKitBodyMassReader: BodyMassReading {
                     continuation.resume(throwing: error)
                     return
                 }
+                // 读权限被拒与「暂无样本」在 HealthKit 中通常都表现为空结果且无 error；
+                // 空 upsert/空 deleted 不得被解读为清空本地导入。
                 let upserts = (samples ?? []).compactMap { sample -> BodyMassSampleImport? in
                     guard let quantity = sample as? HKQuantitySample else { return nil }
                     let kg = quantity.quantity.doubleValue(for: .gramUnit(with: .kilo))
@@ -79,9 +81,11 @@ actor HealthKitBodyMassReader: BodyMassReading {
         guard isAvailable else { return }
         let healthStore = healthStore()
         if observerQuery == nil {
-            let query = HKObserverQuery(sampleType: Self.bodyMassType, predicate: nil) { _, completion, _ in
+            let query = HKObserverQuery(sampleType: Self.bodyMassType, predicate: nil) { _, completion, error in
+                // 系统要求无论成功失败都必须调用 completion。
+                defer { completion() }
+                guard error == nil else { return }
                 onChange()
-                completion()
             }
             observerQuery = query
             healthStore.execute(query)

@@ -16,6 +16,7 @@ final class BodyMassHistoryUITests: XCTestCase {
             XCTAssertTrue(keep.waitForExistence(timeout: 5))
             let unknown = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Acme Scale")).firstMatch
             XCTAssertTrue(unknown.exists)
+            XCTAssertTrue(keep.label.contains("自备识别标") || app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自备识别标")).firstMatch.exists)
             keepScreenshot(app, "body-history-\(appearance)")
             let fat = app.segmentedControls["body-history-trend-metric"].buttons["体脂率"]
             if fat.waitForExistence(timeout: 3) {
@@ -26,11 +27,26 @@ final class BodyMassHistoryUITests: XCTestCase {
         }
     }
 
+    func testKeepRowFullyVisibleAboveTabBarInLight() {
+        let app = launch("light")
+        openBodyHistory(app)
+        let keep = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Keep")).firstMatch
+        XCTAssertTrue(keep.waitForExistence(timeout: 8))
+        revealFullyAboveTabBar(keep, in: app)
+        XCTAssertTrue(
+            keep.label.contains("自备识别标")
+                || app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自备识别标")).firstMatch.exists
+        )
+        keepScreenshot(app, "body-history-keep-visible-light")
+    }
+
     func testBodyHistoryLargeTypeTrend() {
         let app = launch("dark", large: true)
         openBodyHistory(app)
-        XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.waitForExistence(timeout: 8)
-            || app.descendants(matching: .any)["body-history-trend-section"].firstMatch.exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.waitForExistence(timeout: 8)
+                || app.descendants(matching: .any)["body-history-trend-section"].firstMatch.exists
+        )
         keepScreenshot(app, "body-history-large")
     }
 
@@ -80,6 +96,31 @@ final class BodyMassHistoryUITests: XCTestCase {
             app.swipeUp()
         }
         XCTFail("目标入口未进入可视区域")
+    }
+
+    /// 把行滚到 TabBar 之上，保证来源图标与文案完整入镜。
+    private func revealFullyAboveTabBar(_ element: XCUIElement, in app: XCUIApplication) {
+        let tab = app.tabBars.firstMatch
+        for _ in 0 ..< 30 {
+            guard element.exists else {
+                app.swipeUp()
+                continue
+            }
+            let tabTop = tab.exists ? tab.frame.minY : app.frame.maxY
+            let navBottom = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : 0
+            let frame = element.frame
+            if frame.minY >= navBottom + 8, frame.maxY <= tabTop - 8, element.isHittable {
+                return
+            }
+            if frame.maxY > tabTop - 8 {
+                app.swipeUp()
+            } else if frame.minY < navBottom + 8 {
+                app.swipeDown()
+            } else {
+                return
+            }
+        }
+        XCTFail("Keep 行未能完整露出在 TabBar 之上")
     }
 
     private func keepScreenshot(_ app: XCUIApplication, _ name: String) {

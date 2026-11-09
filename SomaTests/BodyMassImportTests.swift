@@ -18,10 +18,11 @@ final class BodyMassImportTests: XCTestCase {
     }
 
     func testKeepAndUnknownSourceMapping() {
-        XCTAssertEqual(
-            BodyMassKnownSource.resolve(name: "Keep", bundleIdentifier: "com.gotokeep.keep"),
-            .keep
-        )
+        let keep = BodyMassKnownSource.resolve(name: "Keep", bundleIdentifier: "com.gotokeep.keep")
+        XCTAssertEqual(keep, .keep)
+        XCTAssertTrue(keep.accessibilityLabel.contains("自备识别标"))
+        XCTAssertTrue(keep.accessibilityLabel.contains("非官方"))
+        XCTAssertTrue(keep.listCaption.contains("自备识别标"))
         XCTAssertEqual(
             BodyMassKnownSource.resolve(name: "Health", bundleIdentifier: "com.apple.health"),
             .appleHealth
