@@ -612,6 +612,110 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertNil(BodyHistoryTrendSelectionResolver.validated(selection, in: weekModel))
         XCTAssertNotNil(BodyHistoryTrendSelectionResolver.validated(selection, in: yearModel))
     }
+
+    func testTrendModelKeepsLastValidSamplePerCalendarDaySeparately() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 20)))
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8)))
+        let morning = try XCTUnwrap(calendar.date(bySettingHour: 8, minute: 0, second: 0, of: day))
+        let noon = try XCTUnwrap(calendar.date(bySettingHour: 12, minute: 0, second: 0, of: day))
+        let evening = try XCTUnwrap(calendar.date(bySettingHour: 19, minute: 30, second: 0, of: day))
+        let earlyWeight = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+        let lateWeight = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+        let earlyFat = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+        let lateFat = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: lateWeight, date: evening, value: 71.2),
+                (id: earlyWeight, date: morning, value: 72.8),
+                (id: UUID(), date: noon, value: .nan)
+            ],
+            bodyFats: [
+                (id: lateFat, date: noon, value: 18.6),
+                (id: earlyFat, date: morning, value: 19.1),
+                (id: UUID(), date: evening, value: .infinity)
+            ],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(model.weightPoints.count, 1)
+        XCTAssertEqual(model.bodyFatPoints.count, 1)
+        let weight = try XCTUnwrap(model.weightPoints.first)
+        let fat = try XCTUnwrap(model.bodyFatPoints.first)
+        XCTAssertEqual(weight.value, 71.2, accuracy: 0.0001)
+        XCTAssertEqual(weight.date, evening)
+        XCTAssertTrue(weight.id.contains(lateWeight.uuidString))
+        XCTAssertEqual(fat.value, 18.6, accuracy: 0.0001)
+        XCTAssertEqual(fat.date, noon)
+        XCTAssertTrue(fat.id.contains(lateFat.uuidString))
+    }
+
+    func testTrendDayReductionDoesNotLetOneMetricEraseTheOther() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 18)))
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9)))
+        let morning = try XCTUnwrap(calendar.date(bySettingHour: 7, minute: 0, second: 0, of: day))
+        let afternoon = try XCTUnwrap(calendar.date(bySettingHour: 15, minute: 0, second: 0, of: day))
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [(id: UUID(), date: morning, value: 70.5)],
+            bodyFats: [(id: UUID(), date: afternoon, value: 17.8)],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(model.weightPoints.count, 1)
+        XCTAssertEqual(model.bodyFatPoints.count, 1)
+        XCTAssertEqual(try XCTUnwrap(model.weightPoints.first).value, 70.5, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(model.bodyFatPoints.first).value, 17.8, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(model.weightPoints.first).date, morning)
+        XCTAssertEqual(try XCTUnwrap(model.bodyFatPoints.first).date, afternoon)
+    }
+
+    func testTrendDayReductionUsesStableIdTieBreakAtSameTimestamp() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9)))
+        let stamp = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8, hour: 10)))
+        let lower = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+        let higher = try XCTUnwrap(UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: lower, date: stamp, value: 69),
+                (id: higher, date: stamp, value: 70)
+            ],
+            bodyFats: [],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        let point = try XCTUnwrap(model.weightPoints.first)
+        XCTAssertEqual(model.weightPoints.count, 1)
+        XCTAssertEqual(point.value, 70, accuracy: 0.0001)
+        XCTAssertTrue(point.id.contains(higher.uuidString))
+    }
+
+    func testTrendDayReductionRespectsDayBoundaryAcrossMidnight() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 12)))
+        let lateNight = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 7, hour: 23, minute: 50)))
+        let nextMorning = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 8, hour: 0, minute: 10)))
+        let model = BodyHistoryTrendChartModel.make(
+            weights: [
+                (id: UUID(), date: lateNight, value: 71),
+                (id: UUID(), date: nextMorning, value: 72)
+            ],
+            bodyFats: [],
+            range: .week,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(model.weightPoints.count, 2)
+        XCTAssertEqual(model.weightPoints.map(\.value), [71, 72])
+    }
 }
 
 private extension [Date] {

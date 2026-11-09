@@ -60,6 +60,42 @@ enum BodyHistoryTrendRange: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// 按自然日各取最后一次有效样本（图表用）；同时间用 id 字符串稳定决胜。
+enum BodyHistoryTrendDayReduction {
+    static func lastPerCalendarDay(
+        _ samples: [(id: UUID, date: Date, value: Double)],
+        calendar: Calendar
+    ) -> [(id: UUID, date: Date, value: Double)] {
+        var latestByDay: [Date: (id: UUID, date: Date, value: Double)] = [:]
+        for sample in samples where sample.value.isFinite {
+            let day = calendar.startOfDay(for: sample.date)
+            if let existing = latestByDay[day] {
+                if isLater(sample, than: existing) {
+                    latestByDay[day] = sample
+                }
+            } else {
+                latestByDay[day] = sample
+            }
+        }
+        return latestByDay.values.sorted { lhs, rhs in
+            if lhs.date != rhs.date {
+                return lhs.date < rhs.date
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+    }
+
+    private static func isLater(
+        _ sample: (id: UUID, date: Date, value: Double),
+        than existing: (id: UUID, date: Date, value: Double)
+    ) -> Bool {
+        if sample.date != existing.date {
+            return sample.date > existing.date
+        }
+        return sample.id.uuidString > existing.id.uuidString
+    }
+}
+
 /// 双轴绘制：把次轴真实值线性映射到主轴绘图域；标签用逆映射还原，避免混用未标注刻度。
 enum BodyHistoryDualAxisMapping {
     static func plot(
@@ -155,27 +191,28 @@ struct BodyHistoryTrendChartModel: Equatable {
         calendar: Calendar = .current
     ) -> BodyHistoryTrendChartModel {
         let window = range.window(now: now, calendar: calendar)
-        let weightPoints = weights
-            .filter { $0.value.isFinite && window.contains($0.date) }
-            .map {
-                BodyHistoryTrendPoint(
-                    id: "\(BodyHistoryTrendSeriesKey.weight.rawValue)-\($0.id.uuidString)",
-                    date: $0.date,
-                    value: $0.value
-                )
-            }
-            .sorted { $0.date < $1.date }
-
-        let bodyFatPoints = bodyFats
-            .filter { $0.value.isFinite && window.contains($0.date) }
-            .map {
-                BodyHistoryTrendPoint(
-                    id: "\(BodyHistoryTrendSeriesKey.bodyFat.rawValue)-\($0.id.uuidString)",
-                    date: $0.date,
-                    value: $0.value
-                )
-            }
-            .sorted { $0.date < $1.date }
+        let reducedWeights = BodyHistoryTrendDayReduction.lastPerCalendarDay(
+            weights.filter { $0.value.isFinite && window.contains($0.date) },
+            calendar: calendar
+        )
+        let reducedBodyFats = BodyHistoryTrendDayReduction.lastPerCalendarDay(
+            bodyFats.filter { $0.value.isFinite && window.contains($0.date) },
+            calendar: calendar
+        )
+        let weightPoints = reducedWeights.map {
+            BodyHistoryTrendPoint(
+                id: "\(BodyHistoryTrendSeriesKey.weight.rawValue)-\($0.id.uuidString)",
+                date: $0.date,
+                value: $0.value
+            )
+        }
+        let bodyFatPoints = reducedBodyFats.map {
+            BodyHistoryTrendPoint(
+                id: "\(BodyHistoryTrendSeriesKey.bodyFat.rawValue)-\($0.id.uuidString)",
+                date: $0.date,
+                value: $0.value
+            )
+        }
 
         let weightDomain = BodyHistoryDualAxisMapping.paddedRange(
             values: weightPoints.map(\.value),
