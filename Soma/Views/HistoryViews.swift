@@ -426,7 +426,11 @@ struct BodyHistoryView: View {
                                 NavigationLink {
                                     BodyRecordDetailView(entry: entry)
                                 } label: {
-                                    BodyHistoryRow(entry: entry)
+                                    BodyHistoryRow(
+                                        entry: entry,
+                                        isListEnd: group.day == dayGroups.last?.day
+                                            && index == group.entries.count - 1
+                                    )
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
@@ -461,13 +465,16 @@ struct BodyHistoryView: View {
                     .frame(height: HistoryDayCardLayout.listBottomScrollMargin)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .accessibilityHidden(true)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityIdentifier("body-history-scroll-end")
+                    .accessibilityLabel("列表底部")
             }
         }
         .listStyle(.plain)
         .listSectionSpacing(12)
         .scrollContentBackground(.hidden)
         .contentMargins(.bottom, HistoryDayCardLayout.listBottomScrollMargin, for: .scrollContent)
+        .accessibilityIdentifier("body-history-list")
         .appPageBackground()
         .navigationTitle("体重记录")
         .navigationBarTitleDisplayMode(.inline)
@@ -656,6 +663,7 @@ private struct MealHistoryRow: View {
 
 private struct BodyHistoryRow: View {
     let entry: BodyEntry
+    var isListEnd: Bool = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private static let leadingIconSize: CGFloat = 58
@@ -666,6 +674,13 @@ private struct BodyHistoryRow: View {
             name: entry.sourceName,
             bundleIdentifier: entry.sourceBundleIdentifier
         )
+    }
+
+    private var rowAccessibilityIdentifier: String {
+        if isListEnd {
+            return "body-history-last-row"
+        }
+        return entry.isHealthImported ? "body-history-health-row" : "body-history-manual-row"
     }
 
     private var dateText: String {
@@ -682,7 +697,7 @@ private struct BodyHistoryRow: View {
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(entry.isHealthImported ? "body-history-health-row" : "body-history-manual-row")
+        .accessibilityIdentifier(rowAccessibilityIdentifier)
     }
 
     private var compactLayout: some View {

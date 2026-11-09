@@ -267,15 +267,16 @@ struct BodyHistoryTrendChart: View {
         .frame(height: chartHeight)
         // 坐标/网格随字号适度放大，但不跟到 AccessibilityXXXL，避免挤爆绘图区。
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        // SpatialTap 只吃点按，不拦截 List 纵向滚动；DragGesture(minimumDistance:0) 会在超大字号下吞掉上滑。
         .chartOverlay { proxy in
             GeometryReader { geo in
                 Rectangle()
                     .fill(Color.clear)
                     .contentShape(Rectangle())
                     .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onEnded { value in
-                                select(at: value.location, proxy: proxy, geo: geo, model: model)
+                        SpatialTapGesture()
+                            .onEnded { event in
+                                select(at: event.location, proxy: proxy, geo: geo, model: model)
                             }
                     )
                     .accessibilityHidden(true)
