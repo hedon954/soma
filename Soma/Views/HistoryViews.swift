@@ -687,6 +687,17 @@ private struct BodyHistoryRow: View {
         entry.date.formatted(date: .abbreviated, time: .shortened)
     }
 
+    private var accessibilityLines: BodyMassHistoryRowPresentation.AccessibilityLines {
+        BodyMassHistoryRowPresentation.accessibilityLines(
+            date: entry.date,
+            weight: entry.weight,
+            bodyFat: entry.bodyFat,
+            source: knownSource,
+            unknownSourceName: entry.sourceName,
+            isHealthImported: entry.isHealthImported
+        )
+    }
+
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
@@ -696,7 +707,10 @@ private struct BodyHistoryRow: View {
             }
         }
         .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
+        // Accessibility 布局暴露子元素标识，便于 UITest 断言「70.9 kg」整行未被拆开。
+        .accessibilityElement(
+            children: dynamicTypeSize.isAccessibilitySize ? .contain : .combine
+        )
         .accessibilityIdentifier(rowAccessibilityIdentifier)
     }
 
@@ -722,34 +736,71 @@ private struct BodyHistoryRow: View {
         }
     }
 
+    /// Accessibility：日期（仅采样时间）/ 来源 / 体重 / 体脂各自足宽整行，禁止把数值和单位塞进窄横排。
     private var accessibilityLayout: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(dateText)
+        let lines = accessibilityLines
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(lines.sampleTime)
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("body-history-row-sample-time")
+
             HStack(alignment: .center, spacing: 12) {
                 leadingIcon
                     .frame(width: Self.leadingIconSize, height: Self.leadingIconSize)
                     .accessibilityIdentifier("body-history-row-leading-icon")
-                Text(secondaryMetrics)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if let source = lines.sourceCaption {
+                    Text(source)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("body-history-row-source")
+                } else {
+                    Spacer(minLength: 0)
+                }
+            }
+
+            if let weightLine = lines.weightLine {
+                Text(weightLine)
+                    .font(.title3.weight(.medium).monospacedDigit())
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                weightTrailing
+                    .accessibilityIdentifier("body-history-row-weight")
+            }
+
+            if let bodyFat = entry.bodyFat {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("体脂率")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(
+                        "\(bodyFat.formatted(.number.precision(.fractionLength(1))))%"
+                    )
+                    .font(.title3.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(BodyMassHistoryRowPresentation.bodyFatLine(for: bodyFat))
+                .accessibilityIdentifier("body-history-row-body-fat")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
     private var weightTrailing: some View {
         if let weight = entry.weight {
-            Text(weight.formatted(.number.precision(.fractionLength(1))))
+            Text(BodyMassHistoryRowPresentation.weightLine(for: weight))
                 .font(.title3.weight(.medium).monospacedDigit())
-            Text("kg")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("body-history-row-weight")
         }
     }
 

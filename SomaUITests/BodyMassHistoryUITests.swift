@@ -127,6 +127,8 @@ final class BodyMassHistoryUITests: XCTestCase {
             let before = app.screenshot().pngRepresentation
             keepScreenshot(app, "body-history-large-\(appearance)-before")
 
+            assertAccessibilityMetricLinesUnbroken(in: app, appearance: appearance)
+
             let lastRow = revealLastBodyHistoryRow(in: app)
             let after = app.screenshot().pngRepresentation
             XCTAssertNotEqual(
@@ -144,6 +146,11 @@ final class BodyMassHistoryUITests: XCTestCase {
                 "末行 frame.maxY=\(lastRow.frame.maxY) 应低于 TabBar.minY=\(tabBar.frame.minY)；appearance=\(appearance)"
             )
             XCTAssertTrue(lastRow.isHittable, "末行应可点，不被浮动 Tab 挡住")
+            assertSingleLineMetric(
+                lastRow.descendants(matching: .any)["body-history-row-weight"].firstMatch,
+                expectedSubstring: "kg",
+                name: "末行体重"
+            )
             keepScreenshot(app, "body-history-large-\(appearance)-bottom")
 
             lastRow.tap()
@@ -199,6 +206,65 @@ final class BodyMassHistoryUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["进展"].firstMatch.waitForExistence(timeout: 20))
         return app
+    }
+
+    /// 滚过图表后核对：体重「70.9 kg」、体脂「体脂率 18.x%」各为足宽单行，不被窄横排拆小数。
+    private func assertAccessibilityMetricLinesUnbroken(in app: XCUIApplication, appearance: String) {
+        var sawWeight = false
+        var sawBodyFat = false
+        var sawLongSource = false
+        for _ in 0 ..< 36 {
+            let weight = app.descendants(matching: .any)["body-history-row-weight"].firstMatch
+            if weight.exists {
+                assertSingleLineMetric(weight, expectedSubstring: "kg", name: "体重")
+                sawWeight = true
+            }
+            let bodyFat = app.descendants(matching: .any)["body-history-row-body-fat"].firstMatch
+            if bodyFat.exists {
+                assertSingleLineMetric(bodyFat, expectedSubstring: "体脂率", name: "体脂")
+                XCTAssertTrue(bodyFat.label.contains("%"), "体脂行应含 %，got \(bodyFat.label)")
+                sawBodyFat = true
+            }
+            let source = app.descendants(matching: .any)["body-history-row-source"].firstMatch
+            if source.exists, source.label.contains("超长厂商名称") {
+                sawLongSource = true
+            }
+            if sawWeight, sawBodyFat, sawLongSource {
+                break
+            }
+            scrollBodyHistoryList(in: app)
+        }
+        XCTAssertTrue(sawWeight, "超大字号应见到体重整行")
+        XCTAssertTrue(sawBodyFat, "超大字号应见到体脂率整行（含纯体脂/体重+体脂行）")
+        XCTAssertTrue(sawLongSource, "超大字号应见到长来源名整行")
+        keepScreenshot(app, "body-history-large-\(appearance)-metrics")
+    }
+
+    private func assertSingleLineMetric(
+        _ element: XCUIElement,
+        expectedSubstring: String,
+        name: String
+    ) {
+        XCTAssertTrue(element.exists, "\(name) 元素应存在")
+        let label = element.label
+        XCTAssertTrue(
+            label.contains(expectedSubstring),
+            "\(name) label 应含 \(expectedSubstring)，got \(label)"
+        )
+        XCTAssertFalse(label.contains("\n"), "\(name) label 不应含换行：\(label)")
+        XCTAssertFalse(
+            label.contains("…") || label.contains("..."),
+            "\(name) 不应被截断成省略号：\(label)"
+        )
+        // 关键读数：小数点两侧数字与单位同在 label 内（防「70.」/「9」拆开后只露出半截）。
+        let pattern = expectedSubstring == "kg"
+            ? #"\d+\.\d+\s*kg"#
+            : #"\d+\.\d+\s*%"#
+        XCTAssertTrue(
+            label.range(of: pattern, options: .regularExpression) != nil,
+            "\(name) 应含完整小数读数，got \(label)"
+        )
+        XCTAssertGreaterThan(element.frame.width, 80, "\(name) 应占用足宽，width=\(element.frame.width)")
     }
 
     @discardableResult

@@ -83,7 +83,7 @@ enum ProgressHistoryTestFixture {
                     analysis: "",
                     externalSource: BodyMassImportIdentity.externalSource,
                     externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!),
-                    sourceName: "Acme Scale",
+                    sourceName: "超长厂商名称 Acme Smart Body Composition Scale Pro Max",
                     sourceBundleIdentifier: "com.acme.scale"
                 ))
                 // 含腰围字段：本页 UI 不展示，但历史数据保留。
