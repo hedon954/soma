@@ -34,7 +34,7 @@ final class ProgressDetailTrendTests: XCTestCase {
     func testFourPeriodsAndMetricChoicesMatchVisibleContract() {
         XCTAssertEqual(ProgressPeriod.allCases.map(\.title), ["日", "周", "月", "年"])
         XCTAssertEqual(ProgressDetailMetric.options(for: .workout), [.trainingDays, .sets, .volume, .duration])
-        XCTAssertEqual(ProgressDetailMetric.options(for: .body), [.weight, .bodyFat, .waist])
+        XCTAssertEqual(ProgressDetailMetric.options(for: .body), [.weight, .bodyFat])
     }
 
     func testAnnualBodyBucketsKeepMeasurementCountsAndSkipEmptyMonths() throws {

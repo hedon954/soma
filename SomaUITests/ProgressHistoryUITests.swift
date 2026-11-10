@@ -275,7 +275,7 @@ final class ProgressHistoryUITests: XCTestCase {
         body.tap()
         XCTAssertTrue(metrics.waitForExistence(timeout: 10))
         metrics.buttons["体脂率"].tap()
-        metrics.buttons["腰围"].tap()
+        XCTAssertFalse(metrics.buttons["腰围"].exists)
         keep(app, "progress-body-detail-light")
         metrics.buttons["体重"].tap()
     }

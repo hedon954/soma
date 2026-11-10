@@ -47,13 +47,13 @@ enum ProgressHistoryTestFixture {
                 try DailyActivityRecordStore.replace([DailyActivitySyncCoordinator.demo(key: .init(date: today, calendar: calendar))], in: context)
             }
             if ProcessInfo.processInfo.environment["SOMA_UI_BODY_MASS_FIXTURE"] == "1" {
-                // Keep 体重与体脂为独立样本（不同时刻），不捏成同一次测量。
-                let keepWeightDay = calendar.date(byAdding: .hour, value: 12, to: today)!
-                let keepFatDay = calendar.date(byAdding: .hour, value: 10, to: today)!
+                // 同源同一秒的体重+体脂应展示为一条同次测量；同日不同秒保持单指标。
+                let keepPaired = calendar.date(byAdding: .hour, value: 12, to: today)!
+                let keepSplit = calendar.date(byAdding: .hour, value: 10, to: today)!
                 let manualDay = calendar.date(byAdding: .day, value: -1, to: today)!
                 let unknownDay = calendar.date(byAdding: .day, value: -5, to: today)!
                 context.insert(BodyEntry(
-                    date: keepWeightDay,
+                    date: keepPaired,
                     weight: 72.4,
                     bodyFat: nil,
                     waist: nil,
@@ -65,7 +65,7 @@ enum ProgressHistoryTestFixture {
                     sourceBundleIdentifier: "com.gotokeep.keep"
                 ))
                 context.insert(BodyEntry(
-                    date: keepFatDay,
+                    date: keepPaired,
                     weight: nil,
                     bodyFat: 18.6,
                     waist: nil,
@@ -73,6 +73,18 @@ enum ProgressHistoryTestFixture {
                     analysis: "",
                     externalSource: BodyMassImportIdentity.externalSource,
                     externalID: BodyMassImportIdentity.bodyFatExternalID(sampleUUID: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!),
+                    sourceName: "Keep",
+                    sourceBundleIdentifier: "com.gotokeep.keep"
+                ))
+                context.insert(BodyEntry(
+                    date: keepSplit,
+                    weight: 70.9,
+                    bodyFat: nil,
+                    waist: nil,
+                    notes: "",
+                    analysis: "",
+                    externalSource: BodyMassImportIdentity.externalSource,
+                    externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!),
                     sourceName: "Keep",
                     sourceBundleIdentifier: "com.gotokeep.keep"
                 ))

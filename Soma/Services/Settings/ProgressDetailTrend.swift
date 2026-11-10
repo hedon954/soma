@@ -34,7 +34,7 @@ enum ProgressDetailMetric: String, CaseIterable, Identifiable, Sendable {
     }
 
     static func options(for kind: ProgressRecentActivity.Kind) -> [Self] {
-        kind == .workout ? [.trainingDays, .sets, .volume, .duration] : [.weight, .bodyFat, .waist]
+        kind == .workout ? [.trainingDays, .sets, .volume, .duration] : [.weight, .bodyFat]
     }
 }
 

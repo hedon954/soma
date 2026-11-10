@@ -75,6 +75,74 @@ final class BodyMassHistoryUITests: XCTestCase {
         }
     }
 
+    func testPairedKeepMeasurementShowsBothMetricsReadOnlyDetailAndNoWaist() {
+        for appearance in ["light", "dark"] {
+            assertPairedMeasurement(in: launch(appearance), appearance: appearance, large: false)
+        }
+        assertPairedMeasurement(in: launch("light", large: true), appearance: "light-large", large: true)
+    }
+
+    private func assertPairedMeasurement(in app: XCUIApplication, appearance: String, large: Bool) {
+        openBodyHistory(app)
+        if large {
+            scrollBodyHistoryList(in: app)
+        }
+        let paired = app.descendants(matching: .any)["body-history-paired-row"].firstMatch
+        XCTAssertTrue(paired.waitForExistence(timeout: 8), "同源同一秒的 Keep 体重+体脂应显示为一行")
+        let tabTop = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
+        if paired.frame.minY >= tabTop - 8 {
+            scrollBodyHistoryList(in: app)
+        }
+        let rowLabel = paired.label
+        let weight = paired.descendants(matching: .any)["body-history-row-weight"].firstMatch
+        let bodyFat = paired.descendants(matching: .any)["body-history-row-body-fat"].firstMatch
+        XCTAssertTrue(
+            rowLabel.contains("72.4") || (weight.exists && weight.label.contains("72.4")),
+            "组合行应含体重 72.4，got \(rowLabel) / \(weight.label)"
+        )
+        XCTAssertTrue(
+            rowLabel.contains("18.6") || (bodyFat.exists && bodyFat.label.contains("18.6")),
+            "组合行应含体脂 18.6，got \(rowLabel) / \(bodyFat.label)"
+        )
+        XCTAssertFalse(rowLabel.contains("腰围"))
+        XCTAssertFalse(paired.label.contains("腰围"))
+
+        // 超大字号下列表行使用 contain 而非 combine，70.9 在子元素 label 中。
+        let splitWeight = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "body-history-row-weight", "70.9"))
+            .firstMatch
+        if !splitWeight.exists {
+            scrollBodyHistoryList(in: app)
+        }
+        XCTAssertTrue(splitWeight.waitForExistence(timeout: 5), "同日不同秒的 Keep 体重应保持单指标行")
+        XCTAssertFalse(splitWeight.label.contains("18.6"))
+        keepScreenshot(app, "body-history-paired-row-\(appearance)")
+
+        XCTAssertTrue(paired.isHittable || paired.exists)
+        if !paired.isHittable {
+            scrollBodyHistoryList(in: app)
+        }
+        paired.tap()
+        let detail = app.descendants(matching: .any)["body-record-detail-readonly"].firstMatch
+        XCTAssertTrue(detail.waitForExistence(timeout: 6), "健康导入组合记录应为只读明细")
+        let detailWeight = app.descendants(matching: .any)["body-record-detail-weight"].firstMatch
+        let detailFat = app.descendants(matching: .any)["body-record-detail-body-fat"].firstMatch
+        XCTAssertTrue(detailWeight.waitForExistence(timeout: 5))
+        XCTAssertTrue(detailFat.waitForExistence(timeout: 5))
+        XCTAssertTrue(detailWeight.label.contains("72.4") || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "72.4")).firstMatch.exists)
+        XCTAssertTrue(detailFat.label.contains("18.6") || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "18.6")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["腰围"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["腰围"].exists)
+        XCTAssertFalse(app.buttons["保存"].exists)
+        keepScreenshot(app, "body-history-paired-detail-\(appearance)")
+        let back = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.navigationBars["体重记录"].waitForExistence(timeout: 6))
+        keepScreenshot(app, "body-history-paired-after-back-\(appearance)")
+        app.terminate()
+    }
+
     func testKeepAndManualRowsShareVisibleIconContainersInLight() {
         let app = launch("light")
         openBodyHistory(app)
@@ -158,6 +226,8 @@ final class BodyMassHistoryUITests: XCTestCase {
                 app.navigationBars.firstMatch.waitForExistence(timeout: 6),
                 "应能点开最后一条记录进入详情"
             )
+            XCTAssertFalse(app.staticTexts["腰围"].firstMatch.exists)
+            XCTAssertFalse(app.buttons["腰围"].exists)
             // 详情不一定改标题；有返回即可。
             let back = app.navigationBars.buttons.firstMatch
             XCTAssertTrue(back.waitForExistence(timeout: 5))
@@ -319,11 +389,18 @@ final class BodyMassHistoryUITests: XCTestCase {
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        let container = app.descendants(matching: .any)["insights-content"].firstMatch
         for _ in 0 ..< 24 {
             if element.exists, element.isHittable {
                 return
             }
-            app.swipeUp()
+            if container.exists {
+                container.swipeUp(velocity: .fast)
+            } else {
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82))
+                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
+                start.press(forDuration: 0.05, thenDragTo: end)
+            }
         }
         XCTFail("目标入口未进入可视区域")
     }

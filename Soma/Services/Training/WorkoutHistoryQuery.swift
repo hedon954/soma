@@ -254,6 +254,37 @@ enum BodyHistoryQuery {
             BodyHistoryDayGroup(day: day, entries: items)
         }
     }
+
+    static func groupedMeasurementsByDay(
+        _ measurements: [BodyHistoryMeasurement],
+        calendar: Calendar = .current
+    ) -> [BodyMeasurementDayGroup] {
+        HistoryDayGrouping.grouped(
+            measurements,
+            date: \.date,
+            calendar: calendar
+        )
+        .map { day, items in
+            BodyMeasurementDayGroup(day: day, measurements: items)
+        }
+    }
+}
+
+struct BodyMeasurementDayGroup: Identifiable {
+    let day: Date
+    let measurements: [BodyHistoryMeasurement]
+
+    var id: Date {
+        day
+    }
+
+    var title: String {
+        WorkoutHistoryDayGroup(day: day, workouts: []).title
+    }
+
+    var recordCountText: String {
+        "\(measurements.count) 条记录"
+    }
 }
 
 enum HistoryDayGrouping {

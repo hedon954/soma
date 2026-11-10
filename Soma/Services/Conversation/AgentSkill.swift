@@ -49,7 +49,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
         case .trainingPlan: "用户希望制定、调整、查看或开始训练课程时"
         case .movementAnalysis: "用户要求分析动作照片、视频、技术或负荷时"
         case .nutritionAnalysis: "用户要记录餐食，或识别食物照片时"
-        case .postureAnalysis: "用户记录或比较体态、体重、体脂、腰围时"
+        case .postureAnalysis: "用户记录或比较体态、体重、体脂时"
         case .trendAnalysis: "用户询问跨日或跨周期的训练、饮食、身体趋势时"
         case .trainingVolumeAnalysis: "用户询问训练量、容量、频率或周期对比时"
         case .calorieEstimation: "用户希望估算训练消耗或记录可计算训练时"
@@ -134,7 +134,7 @@ enum AgentSkill: String, CaseIterable, Identifiable {
             执行规则：
             1. 只描述可见的对齐、姿势、拍摄条件和左右差异，不评价外貌、不推断人格或健康状况。
             2. 比较多张照片前检查机位、距离、光线、服装、站姿和时间是否接近；条件不同必须提示可比性有限。
-            3. 体重、体脂和腰围只有在文字、秤面或用户输入明确可读时才记录；不得从外观猜测数值。
+            3. 体重和体脂只有在文字、秤面或用户输入明确可读时才记录；不得从外观猜测数值。不要记录腰围。
             4. 姿势差异不是疾病诊断。疼痛、活动受限或持续不对称需要由合格专业人员评估。
             5. 信息足够时调用 create_body_entry 新增记录；纠正或给已有测量补图必须先读取再用 update_body，并把观察局限写入 posture_note 或 safety_note。
             """

@@ -224,7 +224,6 @@ extension AgentToolName {
                 "occurred_at": string("可选 ISO-8601 发生时间；省略时使用当前 Job 冻结的默认记录时间"),
                 "weight": number("明确读到或用户提供的体重 kg"),
                 "body_fat": number("明确读到或用户提供的体脂率"),
-                "waist": number("明确读到或用户提供的腰围 cm"),
                 "posture_note": string("中性、非诊断的可见体态观察"),
                 "safety_note": string("局限性与安全提醒")
             ])
@@ -277,7 +276,6 @@ extension AgentToolName {
                 "occurred_at": string("仅在用户明确纠正时间时提供的 ISO-8601 发生时间"),
                 "weight": number("明确读到或用户提供的体重 kg"),
                 "body_fat": number("明确读到或用户提供的体脂率"),
-                "waist": number("明确读到或用户提供的腰围 cm"),
                 "posture_note": string("中性、非诊断的可见体态观察"),
                 "safety_note": string("局限性与安全提醒")
             ], required: ["record_id"])

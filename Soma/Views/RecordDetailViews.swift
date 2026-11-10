@@ -56,7 +56,7 @@ private struct RecordVideoPreview: View {
 
 private struct RecordMediaGallery: View {
     let attachments: [MediaAttachmentReference]
-    let onDelete: (MediaAttachmentReference) -> Void
+    var onDelete: ((MediaAttachmentReference) -> Void)?
     @Namespace private var mediaZoomNamespace
     @State private var selectedAttachmentID = ""
     @State private var presentedAttachment: MediaAttachmentReference?
@@ -150,9 +150,12 @@ struct MealRecordDetailView: View {
 
 struct BodyRecordDetailView: View {
     let entry: BodyEntry
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
-        BodyRecordEditor(entry: entry)
+        BodyRecordEditor(
+            measurement: BodyMassMeasurementPairing.measurement(for: entry, in: modelContext)
+        )
     }
 }
 
@@ -797,88 +800,129 @@ private struct MealRecordEditor: View {
 
 private struct BodyRecordEditor: View {
     @Environment(\.modelContext) private var modelContext
-    let entry: BodyEntry
+    let measurement: BodyHistoryMeasurement
 
     @State private var date: Date
     @State private var weight: String
     @State private var bodyFat: String
-    @State private var waist: String
     @State private var analysis: String
     @State private var notes: String
     @State private var analysisExpanded = false
     @State private var notesExpanded = false
-    init(entry: BodyEntry) {
-        self.entry = entry
-        _date = State(initialValue: entry.date)
-        _weight = State(initialValue: EditorValue.string(entry.weight))
-        _bodyFat = State(initialValue: EditorValue.string(entry.bodyFat))
-        _waist = State(initialValue: EditorValue.string(entry.waist))
-        _analysis = State(initialValue: entry.analysis)
-        _notes = State(initialValue: entry.notes)
+
+    private var isReadOnly: Bool {
+        measurement.isHealthImported
+    }
+
+    private var primary: BodyEntry {
+        measurement.primary
+    }
+
+    init(measurement: BodyHistoryMeasurement) {
+        self.measurement = measurement
+        _date = State(initialValue: measurement.date)
+        _weight = State(initialValue: EditorValue.string(measurement.weight))
+        _bodyFat = State(initialValue: EditorValue.string(measurement.bodyFat))
+        _analysis = State(initialValue: measurement.analysis ?? "")
+        _notes = State(initialValue: measurement.notes ?? "")
     }
 
     var body: some View {
         Form {
-            if !entry.mediaAttachments.isEmpty {
+            if measurement.hasMedia {
                 Section("体态媒体") {
-                    RecordMediaGallery(
-                        attachments: entry.mediaAttachments,
-                        onDelete: {
-                            MediaAssociationStore.detach(
-                                $0,
-                                from: entry,
-                                in: modelContext
-                            )
-                        }
-                    )
+                    ForEach(measurement.entries.filter { !$0.mediaAttachments.isEmpty }) { entry in
+                        RecordMediaGallery(
+                            attachments: entry.mediaAttachments,
+                            onDelete: isReadOnly ? nil : { attachment in
+                                MediaAssociationStore.detach(
+                                    attachment,
+                                    from: entry,
+                                    in: modelContext
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
             Section("身体数据") {
-                DatePicker("时间", selection: $date)
-                RecordFieldRow(
-                    title: "体重",
-                    placeholder: "未记录",
-                    unit: "kg",
-                    text: $weight,
-                    keyboard: .decimalPad
-                )
-                RecordFieldRow(
-                    title: "体脂",
-                    placeholder: "未记录",
-                    unit: "%",
-                    text: $bodyFat,
-                    keyboard: .decimalPad
-                )
-                RecordFieldRow(
-                    title: "腰围",
-                    placeholder: "未记录",
-                    unit: "cm",
-                    text: $waist,
-                    keyboard: .decimalPad
-                )
-            }
-
-            // PRD 020：AI 观察与原始记录默认折叠，展开后仍可完整编辑。
-            Section {
-                DisclosureGroup("AI 体态观察", isExpanded: $analysisExpanded) {
+                if isReadOnly {
+                    LabeledContent("时间") {
+                        Text(measurement.date.formatted(date: .abbreviated, time: .shortened))
+                    }
+                    if let weight = measurement.weight {
+                        LabeledContent("体重") {
+                            Text(BodyMassHistoryRowPresentation.weightLine(for: weight))
+                        }
+                        .accessibilityIdentifier("body-record-detail-weight")
+                    }
+                    if let bodyFat = measurement.bodyFat {
+                        LabeledContent("体脂") {
+                            Text(
+                                "\(bodyFat.formatted(.number.precision(.fractionLength(1))))%"
+                            )
+                        }
+                        .accessibilityIdentifier("body-record-detail-body-fat")
+                    }
+                    if let source = measurement.sourceName, !source.isEmpty {
+                        LabeledContent("来源") {
+                            Text(source)
+                        }
+                    }
+                } else {
+                    DatePicker("时间", selection: $date)
                     RecordFieldRow(
-                        title: "观察",
+                        title: "体重",
                         placeholder: "未记录",
-                        text: $analysis,
-                        isMultiline: true
+                        unit: "kg",
+                        text: $weight,
+                        keyboard: .decimalPad
                     )
+                    .accessibilityIdentifier("body-record-detail-weight")
+                    RecordFieldRow(
+                        title: "体脂",
+                        placeholder: "未记录",
+                        unit: "%",
+                        text: $bodyFat,
+                        keyboard: .decimalPad
+                    )
+                    .accessibilityIdentifier("body-record-detail-body-fat")
                 }
             }
 
-            Section {
-                DisclosureGroup("原始记录", isExpanded: $notesExpanded) {
-                    RecordFieldRow(
-                        title: "文字记录",
-                        placeholder: "未记录",
-                        text: $notes,
-                        isMultiline: true
-                    )
+            if isReadOnly {
+                if let analysis = measurement.analysis, !analysis.isEmpty {
+                    Section("AI 体态观察") {
+                        Text(analysis)
+                    }
+                }
+                if let notes = measurement.notes, !notes.isEmpty {
+                    Section("原始记录") {
+                        Text(notes)
+                    }
+                }
+            } else {
+                Section {
+                    DisclosureGroup("AI 体态观察", isExpanded: $analysisExpanded) {
+                        RecordFieldRow(
+                            title: "观察",
+                            placeholder: "未记录",
+                            text: $analysis,
+                            isMultiline: true
+                        )
+                    }
+                }
+
+                Section {
+                    DisclosureGroup("原始记录", isExpanded: $notesExpanded) {
+                        RecordFieldRow(
+                            title: "文字记录",
+                            placeholder: "未记录",
+                            text: $notes,
+                            isMultiline: true
+                        )
+                    }
                 }
             }
         }
@@ -886,9 +930,10 @@ private struct BodyRecordEditor: View {
         .appPageBackground()
         .navigationTitle("身体记录")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier(isReadOnly ? "body-record-detail-readonly" : "body-record-detail")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                if isDirty {
+                if !isReadOnly, isDirty {
                     Button("保存", action: save)
                         .disabled(!isValid)
                 }
@@ -899,29 +944,28 @@ private struct BodyRecordEditor: View {
     private var isValid: Bool {
         EditorValue.validDouble(weight, range: 1 ... 500)
             && EditorValue.validDouble(bodyFat, range: 0 ... 100)
-            && EditorValue.validDouble(waist, range: 1 ... 500)
     }
 
     private var isDirty: Bool {
-        date != entry.date
-            || EditorValue.double(weight) != entry.weight
-            || EditorValue.double(bodyFat) != entry.bodyFat
-            || EditorValue.double(waist) != entry.waist
-            || analysis.trimmingCharacters(in: .whitespacesAndNewlines) != entry.analysis
-            || notes.trimmingCharacters(in: .whitespacesAndNewlines) != entry.notes
+        date != primary.date
+            || EditorValue.double(weight) != measurement.weight
+            || EditorValue.double(bodyFat) != measurement.bodyFat
+            || analysis.trimmingCharacters(in: .whitespacesAndNewlines) != (measurement.analysis ?? "")
+            || notes.trimmingCharacters(in: .whitespacesAndNewlines) != (measurement.notes ?? "")
     }
 
     private func save() {
+        guard !isReadOnly else { return }
         let normalizedAnalysis = analysis.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         analysis = normalizedAnalysis
         notes = normalizedNotes
-        entry.date = date
-        entry.weight = EditorValue.double(weight)
-        entry.bodyFat = EditorValue.double(bodyFat)
-        entry.waist = EditorValue.double(waist)
-        entry.analysis = normalizedAnalysis
-        entry.notes = normalizedNotes
+        primary.date = date
+        primary.weight = EditorValue.double(weight)
+        primary.bodyFat = EditorValue.double(bodyFat)
+        primary.analysis = normalizedAnalysis
+        primary.notes = normalizedNotes
+        // 不改写已存腰围；用户路径不再输入该字段。
         try? modelContext.save()
     }
 }

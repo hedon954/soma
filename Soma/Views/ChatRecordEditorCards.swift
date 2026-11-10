@@ -10,7 +10,6 @@ private struct WorkoutAutosaveValue: Equatable {
 private struct BodyAutosaveValue: Equatable {
     var weight: String
     var bodyFat: String
-    var waist: String
     var notes: String
 }
 
@@ -457,7 +456,6 @@ private struct InlineBodyCard: View {
     let isEditable: Bool
     @State private var weight: String
     @State private var bodyFat: String
-    @State private var waist: String
     @State private var notes: String
     @State private var showsDelete = false
     @State private var saveState: InlineRecordSaveState = .idle
@@ -468,8 +466,11 @@ private struct InlineBodyCard: View {
         self.isEditable = isEditable
         _weight = State(initialValue: entry.weight.map { $0.formatted() } ?? "")
         _bodyFat = State(initialValue: entry.bodyFat.map { $0.formatted() } ?? "")
-        _waist = State(initialValue: entry.waist.map { $0.formatted() } ?? "")
         _notes = State(initialValue: entry.notes)
+    }
+
+    private var canEdit: Bool {
+        isEditable && !entry.isHealthImported
     }
 
     var body: some View {
@@ -478,16 +479,15 @@ private struct InlineBodyCard: View {
             icon: "scalemass",
             iconTint: AppTheme.bodyAccent,
             iconSoftTint: AppTheme.bodySoftTint,
-            isEditable: isEditable,
+            isEditable: canEdit,
             saveState: $saveState,
             onSave: save,
             onDelete: { showsDelete = true }
         ) {
-            if isEditable {
+            if canEdit {
                 HStack(spacing: 6) {
                     compactMetric("kg", text: $weight, decimal: true)
                     compactMetric("%", text: $bodyFat, decimal: true)
-                    compactMetric("腰围", text: $waist, decimal: true)
                 }
                 TextField("备注", text: $notes, axis: .vertical)
                     .font(.caption)
@@ -511,22 +511,21 @@ private struct InlineBodyCard: View {
             value: BodyAutosaveValue(
                 weight: weight,
                 bodyFat: bodyFat,
-                waist: waist,
                 notes: notes
             ),
-            isEnabled: isEditable,
+            isEnabled: canEdit,
             state: $saveState,
             save: save
         )
     }
 
     private func save() -> Bool {
+        guard !entry.isHealthImported else { return false }
         entry.weight = Double(weight)
         entry.bodyFat = Double(bodyFat)
-        entry.waist = Double(waist)
         entry.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         sourceMessage?.recordManualCorrection(
-            "身体记录 \(AgentFacingRecordID.correctionToken(entry.businessID)) 已改为体重\(weight)kg、体脂\(bodyFat)%、腰围\(waist)cm"
+            "身体记录 \(AgentFacingRecordID.correctionToken(entry.businessID)) 已改为体重\(weight)kg、体脂\(bodyFat)%"
         )
         try? modelContext.save()
         return true

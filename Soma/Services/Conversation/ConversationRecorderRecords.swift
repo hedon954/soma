@@ -293,9 +293,6 @@ extension ConversationRecorder {
         if let bodyFat = arguments.bodyFat, !(0 ... 100).contains(bodyFat) {
             return .failure("body_fat 必须在 0 到 100 之间。")
         }
-        if let waist = arguments.waist, !(0 ... 300).contains(waist) {
-            return .failure("waist 必须在 0 到 300cm 之间。")
-        }
         let analysis = [
             arguments.postureNote?.trimmed.nilIfEmpty,
             arguments.safetyNote?.trimmed.nilIfEmpty
@@ -327,7 +324,7 @@ extension ConversationRecorder {
             date: sourceDate,
             weight: arguments.weight,
             bodyFat: arguments.bodyFat,
-            waist: arguments.waist,
+            waist: nil,
             notes: sourceText,
             imagePath: mediaKind == .image ? mediaPath : nil,
             mediaAttachments: resolvedMedia,
@@ -584,12 +581,9 @@ extension ConversationRecorder {
         if let bodyFat = arguments.bodyFat, !(0 ... 100).contains(bodyFat) {
             return .failure("body_fat 必须在 0 到 100 之间。")
         }
-        if let waist = arguments.waist, !(0 ... 300).contains(waist) {
-            return .failure("waist 必须在 0 到 300cm 之间。")
-        }
         entry.weight = arguments.weight ?? entry.weight
         entry.bodyFat = arguments.bodyFat ?? entry.bodyFat
-        entry.waist = arguments.waist ?? entry.waist
+        // 不再写入腰围；已存值保留。
         entry.notes = RecordMergePolicy.mergedText(entry.notes, sourceText)
         let analysis = [
             arguments.postureNote?.trimmed.nilIfEmpty,

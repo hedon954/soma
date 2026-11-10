@@ -164,7 +164,7 @@ extension ConversationRecorder {
                 "glycemic_assessment", "recommended_eating_order", "items", "note"
             ]
         case "body": [
-                "record_id", "date", "weight", "body_fat", "waist",
+                "record_id", "date", "weight", "body_fat",
                 "analysis"
             ]
         case "profile": ["record_id", "summary"]
@@ -340,7 +340,7 @@ private extension AgentMutationPayload {
                 "recommended_eating_order", "items", "note"
             ]
         case "body": [
-                "weight", "body_fat", "waist", "posture_note", "safety_note"
+                "weight", "body_fat", "posture_note", "safety_note"
             ]
         default: []
         }
@@ -416,9 +416,7 @@ private extension AgentMutationPayload {
         if bodyFat != nil {
             fields.insert("body_fat")
         }
-        if waist != nil {
-            fields.insert("waist")
-        }
+        // 腰围不再作为可见/可写字段；忽略历史入参。
         if postureNote != nil {
             fields.insert("posture_note")
         }

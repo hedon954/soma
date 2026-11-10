@@ -52,9 +52,10 @@ actor ProgressHistoryLoader {
                 caloriesArePartial: totals.map { !$0.caloriesIsComplete } ?? (meal.calories == nil)
             )
         }
-        var body = try read(FetchDescriptor<BodyEntry>(
+        let windowBodies = try read(FetchDescriptor<BodyEntry>(
             predicate: #Predicate { $0.date >= start && $0.date < end }, sortBy: [SortDescriptor(\.date)]
-        ), transform: Self.bodyRecord)
+        ), transform: { $0 })
+        var body = Self.bodyRecords(from: windowBodies)
         // At most one carry-in weight; it supplies the historical formula, not a fabricated chart point.
         let maximumWeight = Double.greatestFiniteMagnitude
         var earlierWeight = FetchDescriptor<BodyEntry>(
@@ -62,7 +63,7 @@ actor ProgressHistoryLoader {
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
         earlierWeight.fetchLimit = 1
-        body += try modelContext.fetch(earlierWeight).map(Self.bodyRecord)
+        body += try modelContext.fetch(earlierWeight).map { Self.bodyRecord(BodyHistoryMeasurement(entries: [$0])) }
         var profileQuery = FetchDescriptor<UserProfile>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
         profileQuery.fetchLimit = 1
         let profile = try modelContext.fetch(profileQuery).first.map { profile in
@@ -165,10 +166,23 @@ actor ProgressHistoryLoader {
         return indexed.count + entries.count(where: { $0.logicalSetIndex == nil })
     }
 
-    private static func bodyRecord(_ entry: BodyEntry) -> ProgressHistoryRecord {
+    private static func bodyRecords(from entries: [BodyEntry]) -> [ProgressHistoryRecord] {
+        BodyMassMeasurementPairing.measurements(from: entries).map(bodyRecord)
+    }
+
+    private static func bodyRecord(_ measurement: BodyHistoryMeasurement) -> ProgressHistoryRecord {
         .init(
-            activity: .init(id: entry.id, kind: .body, date: entry.date, title: "身体测量", detail: entry.notes, metric: entry.weight.map { "\($0.formatted()) kg" }),
-            weight: entry.weight, bodyFat: entry.bodyFat, waist: entry.waist
+            activity: .init(
+                id: measurement.id,
+                kind: .body,
+                date: measurement.date,
+                title: "身体测量",
+                detail: measurement.notes ?? "",
+                metric: measurement.weight.map { "\($0.formatted()) kg" }
+            ),
+            weight: measurement.weight,
+            bodyFat: measurement.bodyFat,
+            waist: nil
         )
     }
 }
