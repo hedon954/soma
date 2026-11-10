@@ -178,64 +178,91 @@ final class BodyMassHistoryUITests: XCTestCase {
         keepScreenshot(app, "body-history-keep-manual-unified-light")
     }
 
-    func testBodyHistoryLargeTypeClearsFloatingTabInLightAndDark() {
-        for appearance in ["light", "dark"] {
-            let app = launch(appearance, large: true)
-            openBodyHistory(app)
-            XCTAssertTrue(
-                app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8)
-            )
-            XCTAssertTrue(
-                app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.exists
-                    || app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.exists
-            )
-            XCTAssertFalse(app.buttons["腰围"].exists)
-            XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
+    func testBodyHistoryLargeTypeClearsFloatingTabInLight() {
+        assertLargeTypeClearsFloatingTab(appearance: "light")
+    }
 
-            let before = app.screenshot().pngRepresentation
-            keepScreenshot(app, "body-history-large-\(appearance)-before")
+    /// 独立启动深色 XXXL，避免在同一测试进程里先跑完浅色再 relaunch 导致进展页滑动卡住 idle。
+    func testBodyHistoryLargeTypeClearsFloatingTabInDark() {
+        assertLargeTypeClearsFloatingTab(appearance: "dark")
+    }
 
-            assertAccessibilityMetricLinesUnbroken(in: app, appearance: appearance)
+    private func assertLargeTypeClearsFloatingTab(appearance: String) {
+        let app = launch(appearance, large: true)
+        openBodyHistory(app)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["body-history-trend-section"].firstMatch.waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["body-history-trend-chart"].firstMatch.exists
+                || app.descendants(matching: .any)["body-history-trend-legend"].firstMatch.exists
+        )
+        XCTAssertFalse(app.buttons["腰围"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["body-history-trend-metric"].firstMatch.exists)
+        assertPairedRowVisibleOnHistory(in: app)
 
-            let lastRow = revealLastBodyHistoryRow(in: app)
-            let after = app.screenshot().pngRepresentation
-            XCTAssertNotEqual(
-                before,
-                after,
-                "超大字号滚动前后截图必须不同（此前 app.swipeUp 落在图表 DragGesture 上导致四张 MD5 相同）"
-            )
-            keepScreenshot(app, "body-history-large-\(appearance)-scrolled")
+        let before = app.screenshot().pngRepresentation
+        keepScreenshot(app, "body-history-large-\(appearance)-before")
 
-            let tabBar = app.tabBars.firstMatch
-            XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
-            XCTAssertLessThan(
-                lastRow.frame.maxY,
-                tabBar.frame.minY,
-                "末行 frame.maxY=\(lastRow.frame.maxY) 应低于 TabBar.minY=\(tabBar.frame.minY)；appearance=\(appearance)"
-            )
-            XCTAssertTrue(lastRow.isHittable, "末行应可点，不被浮动 Tab 挡住")
-            assertSingleLineMetric(
-                lastRow.descendants(matching: .any)["body-history-row-weight"].firstMatch,
-                expectedSubstring: "kg",
-                name: "末行体重"
-            )
-            keepScreenshot(app, "body-history-large-\(appearance)-bottom")
+        assertAccessibilityMetricLinesUnbroken(in: app, appearance: appearance)
 
-            lastRow.tap()
-            XCTAssertTrue(
-                app.navigationBars.firstMatch.waitForExistence(timeout: 6),
-                "应能点开最后一条记录进入详情"
-            )
-            XCTAssertFalse(app.staticTexts["腰围"].firstMatch.exists)
-            XCTAssertFalse(app.buttons["腰围"].exists)
-            // 详情不一定改标题；有返回即可。
-            let back = app.navigationBars.buttons.firstMatch
-            XCTAssertTrue(back.waitForExistence(timeout: 5))
-            back.tap()
-            XCTAssertTrue(app.navigationBars["体重记录"].waitForExistence(timeout: 6))
-            keepScreenshot(app, "body-history-large-\(appearance)-after-back")
-            app.terminate()
+        let lastRow = revealLastBodyHistoryRow(in: app)
+        let after = app.screenshot().pngRepresentation
+        XCTAssertNotEqual(
+            before,
+            after,
+            "超大字号滚动前后截图必须不同（此前 app.swipeUp 落在图表 DragGesture 上导致四张 MD5 相同）"
+        )
+        keepScreenshot(app, "body-history-large-\(appearance)-scrolled")
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
+        XCTAssertLessThan(
+            lastRow.frame.maxY,
+            tabBar.frame.minY,
+            "末行 frame.maxY=\(lastRow.frame.maxY) 应低于 TabBar.minY=\(tabBar.frame.minY)；appearance=\(appearance)"
+        )
+        XCTAssertTrue(lastRow.isHittable, "末行应可点，不被浮动 Tab 挡住")
+        assertSingleLineMetric(
+            lastRow.descendants(matching: .any)["body-history-row-weight"].firstMatch,
+            expectedSubstring: "kg",
+            name: "末行体重"
+        )
+        keepScreenshot(app, "body-history-large-\(appearance)-bottom")
+
+        lastRow.tap()
+        XCTAssertTrue(
+            app.navigationBars.firstMatch.waitForExistence(timeout: 6),
+            "应能点开最后一条记录进入详情"
+        )
+        XCTAssertFalse(app.staticTexts["腰围"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["腰围"].exists)
+        let back = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.navigationBars["体重记录"].waitForExistence(timeout: 6))
+        keepScreenshot(app, "body-history-large-\(appearance)-after-back")
+        app.terminate()
+    }
+
+    private func assertPairedRowVisibleOnHistory(in app: XCUIApplication) {
+        let paired = app.descendants(matching: .any)["body-history-paired-row"].firstMatch
+        for _ in 0 ..< 8 where !paired.exists {
+            scrollBodyHistoryList(in: app)
         }
+        XCTAssertTrue(paired.waitForExistence(timeout: 5), "大字号列表应能看到同源同一秒的体重+体脂组合行")
+        let weight = paired.descendants(matching: .any)["body-history-row-weight"].firstMatch
+        let bodyFat = paired.descendants(matching: .any)["body-history-row-body-fat"].firstMatch
+        XCTAssertTrue(
+            paired.label.contains("72.4") || (weight.exists && weight.label.contains("72.4")),
+            "组合行应含体重 72.4，got \(paired.label) / \(weight.label)"
+        )
+        XCTAssertTrue(
+            paired.label.contains("18.6") || (bodyFat.exists && bodyFat.label.contains("18.6")),
+            "组合行应含体脂 18.6，got \(paired.label) / \(bodyFat.label)"
+        )
+        XCTAssertFalse(paired.label.contains("腰围"))
+        keepScreenshot(app, "body-history-large-\(app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] ?? "")-paired-row")
     }
 
     func testHealthSettingsMentionsWeightAndBodyFatScope() {
@@ -253,10 +280,14 @@ final class BodyMassHistoryUITests: XCTestCase {
     }
 
     private func openBodyHistory(_ app: XCUIApplication) {
-        app.descendants(matching: .any)["进展"].firstMatch.tap()
+        let progress = app.descendants(matching: .any)["进展"].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 20))
+        progress.tap()
         XCTAssertTrue(app.segmentedControls["progress-period-picker"].waitForExistence(timeout: 10))
+        _ = app.descendants(matching: .any)["insights-content"].firstMatch.waitForExistence(timeout: 5)
         let link = app.buttons["身体记录"].firstMatch
         reveal(link, in: app)
+        XCTAssertTrue(link.waitForExistence(timeout: 2), "应能找到身体记录入口")
         link.tap()
         XCTAssertTrue(app.navigationBars["体重记录"].waitForExistence(timeout: 8))
     }
@@ -390,17 +421,16 @@ final class BodyMassHistoryUITests: XCTestCase {
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         let container = app.descendants(matching: .any)["insights-content"].firstMatch
+        _ = container.waitForExistence(timeout: 5)
         for _ in 0 ..< 24 {
-            if element.exists, element.isHittable {
+            if element.waitForExistence(timeout: 0.6), element.isHittable {
                 return
             }
-            if container.exists {
-                container.swipeUp(velocity: .fast)
-            } else {
-                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82))
-                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
-                start.press(forDuration: 0.05, thenDragTo: end)
-            }
+            // 从下半部短拖，避免顶部图表手势或整页 swipeUp 卡住 event-loop idle。
+            let target: XCUIElement = container.exists ? container : app
+            let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.86))
+            let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.58))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTFail("目标入口未进入可视区域")
     }
