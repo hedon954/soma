@@ -18,7 +18,7 @@ enum BodyMassHistoryRowPresentation {
         isHealthImported: Bool = false
     ) -> AccessibilityLines {
         AccessibilityLines(
-            sampleTime: sampleTimeText(date),
+            sampleTime: listDateText(date),
             sourceCaption: sourceCaption(
                 source: source,
                 unknownSourceName: unknownSourceName,
@@ -29,9 +29,13 @@ enum BodyMassHistoryRowPresentation {
         )
     }
 
-    /// 日卡已有完整日期，行内只保留真实采样时间，去掉冗余年月日。
+    /// 列表已无日卡，行内只展示一次自然日，不用时钟时间冒充双指标采样时点。
+    static func listDateText(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
+    }
+
     static func sampleTimeText(_ date: Date) -> String {
-        date.formatted(date: .omitted, time: .shortened)
+        listDateText(date)
     }
 
     static func weightLine(for weight: Double) -> String {

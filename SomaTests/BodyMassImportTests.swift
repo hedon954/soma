@@ -77,7 +77,13 @@ final class BodyMassImportTests: XCTestCase {
         XCTAssertEqual(imported.count, 1)
         XCTAssertEqual(imported.first?.weight, 71.5)
         XCTAssertEqual(imported.first?.sourceName, "Keep")
-        XCTAssertEqual(imported.first?.externalID, BodyMassImportIdentity.externalID(sampleUUID: sampleID))
+        XCTAssertEqual(
+            imported.first?.externalID,
+            BodyMassImportIdentity.bodyDayExternalID(
+                dayKey: BodyMassDayKey.dayKey(for: Date(timeIntervalSince1970: 1_700_000_100))
+            )
+        )
+        XCTAssertEqual(imported.first?.healthDayEvidence?.weight?.sampleUUID, sampleID)
         XCTAssertEqual(bodies.filter { !$0.isHealthImported }.count, 1)
         XCTAssertEqual(try BodyMassRecordStore.loadAnchorData(in: context), Data([1, 2, 3]))
         try BodyMassRecordStore.saveAnchorData(second.newAnchorData, in: context)
@@ -86,32 +92,45 @@ final class BodyMassImportTests: XCTestCase {
 
     func testDeletionRemovesImportedSampleOnly() throws {
         let context = container.mainContext
+        let calendar = Calendar.current
         let sampleID = UUID()
         let otherID = UUID()
+        let today = Date()
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: today))
         try BodyMassRecordStore.apply(
             BodyMassSyncDelta(
                 upserts: [
                     .init(
-                        sampleUUID: sampleID, date: .now, weightKilograms: 68,
+                        sampleUUID: sampleID, date: today, weightKilograms: 68,
                         sourceName: "Keep", sourceBundleIdentifier: "com.gotokeep.keep"
                     ),
                     .init(
-                        sampleUUID: otherID, date: .now.addingTimeInterval(-3600), weightKilograms: 69,
+                        sampleUUID: otherID, date: yesterday, weightKilograms: 69,
                         sourceName: "Acme", sourceBundleIdentifier: "com.acme"
                     )
                 ],
                 deletedSampleUUIDs: [],
                 newAnchorData: nil
             ),
-            in: context
+            in: context,
+            calendar: calendar
         )
+        let todayKey = BodyMassDayKey.dayKey(for: today, calendar: calendar)
         try BodyMassRecordStore.apply(
             BodyMassSyncDelta(upserts: [], deletedSampleUUIDs: [sampleID], newAnchorData: nil),
-            in: context
+            in: context,
+            calendar: calendar,
+            resample: BodyMassDayResampleSet(weightsByDay: [todayKey: []])
         )
         let remaining = try context.fetch(FetchDescriptor<BodyEntry>())
         XCTAssertEqual(remaining.count, 1)
-        XCTAssertEqual(remaining.first?.externalID, BodyMassImportIdentity.externalID(sampleUUID: otherID))
+        XCTAssertEqual(remaining.first?.weight, 69)
+        XCTAssertEqual(
+            remaining.first?.externalID,
+            BodyMassImportIdentity.bodyDayExternalID(
+                dayKey: BodyMassDayKey.dayKey(for: yesterday, calendar: calendar)
+            )
+        )
     }
 
     func testBackupAndAgentFiltersExcludeHealthImports() throws {
@@ -196,15 +215,18 @@ final class BodyMassImportTests: XCTestCase {
         try BodyMassRecordStore.saveBodyFatAnchorData(Data([8]), in: context)
 
         let bodies = try context.fetch(FetchDescriptor<BodyEntry>(sortBy: [SortDescriptor(\.date)]))
-        XCTAssertEqual(bodies.count, 2)
-        let weightRow = try XCTUnwrap(bodies.first { $0.externalID == BodyMassImportIdentity.bodyMassExternalID(sampleUUID: weightID) })
-        let fatRow = try XCTUnwrap(bodies.first { $0.externalID == BodyMassImportIdentity.bodyFatExternalID(sampleUUID: fatID) })
-        XCTAssertEqual(weightRow.weight, 72.4)
-        XCTAssertNil(weightRow.bodyFat)
-        XCTAssertNil(fatRow.weight)
-        XCTAssertEqual(fatRow.bodyFat, 18.2)
-        XCTAssertEqual(weightRow.sourceName, "Keep")
-        XCTAssertEqual(fatRow.sourceName, "Keep")
+        XCTAssertEqual(bodies.count, 1)
+        let row = try XCTUnwrap(bodies.first)
+        XCTAssertEqual(row.weight, 72.4)
+        XCTAssertEqual(row.bodyFat, 18.2)
+        XCTAssertEqual(row.date, fatDate)
+        XCTAssertEqual(row.sourceName, "Keep")
+        XCTAssertEqual(row.healthDayEvidence?.weight?.sampleUUID, weightID)
+        XCTAssertEqual(row.healthDayEvidence?.bodyFat?.sampleUUID, fatID)
+        XCTAssertEqual(
+            row.externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: BodyMassDayKey.dayKey(for: weightDate))
+        )
         XCTAssertEqual(try BodyMassRecordStore.loadBodyFatAnchorData(in: context), Data([8]))
     }
 
@@ -238,14 +260,18 @@ final class BodyMassImportTests: XCTestCase {
             ),
             in: context
         )
+        let dayKey = BodyMassDayKey.dayKey(for: .now)
         try BodyMassRecordStore.applyBodyFat(
             BodyFatSyncDelta(upserts: [], deletedSampleUUIDs: [fatID], newAnchorData: nil),
-            in: context
+            in: context,
+            resample: BodyMassDayResampleSet(bodyFatByDay: [dayKey: []])
         )
         let remaining = try context.fetch(FetchDescriptor<BodyEntry>())
         XCTAssertEqual(remaining.count, 1)
-        XCTAssertEqual(remaining.first?.externalID, BodyMassImportIdentity.bodyMassExternalID(sampleUUID: weightID))
         XCTAssertEqual(remaining.first?.weight, 70.5)
+        XCTAssertNil(remaining.first?.bodyFat)
+        XCTAssertEqual(remaining.first?.healthDayEvidence?.weight?.sampleUUID, weightID)
+        XCTAssertNil(remaining.first?.healthDayEvidence?.bodyFat)
     }
 
     func testEmptyBodyFatDeltaDoesNotEraseImports() throws {

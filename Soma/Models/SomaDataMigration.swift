@@ -92,36 +92,41 @@ enum SomaDataMigration {
             }
         )
         completedDescriptor.fetchLimit = 1
-        if try !context.fetch(completedDescriptor).isEmpty {
-            return
-        }
-        do {
-            try assignUniqueProjectionKeys(in: context)
-            if context.hasChanges {
-                try context.save()
+        if try context.fetch(completedDescriptor).isEmpty {
+            do {
+                try assignUniqueProjectionKeys(in: context)
+                if context.hasChanges {
+                    try context.save()
+                }
+            } catch {
+                throw DataMigrationError.stepFailed("补齐训练投影键", error)
             }
-        } catch {
-            throw DataMigrationError.stepFailed("补齐训练投影键", error)
-        }
-        do {
-            try ExerciseLoggingProfile.backfillIfNeeded(in: context)
-            if context.hasChanges {
-                try context.save()
+            do {
+                try ExerciseLoggingProfile.backfillIfNeeded(in: context)
+                if context.hasChanges {
+                    try context.save()
+                }
+            } catch {
+                throw DataMigrationError.stepFailed("回填动作侧别与完成方式", error)
             }
-        } catch {
-            throw DataMigrationError.stepFailed("回填动作侧别与完成方式", error)
+            do {
+                try completeLaunchMigrationIfNeeded(
+                    context: context,
+                    dataSpace: dataSpace,
+                    now: now,
+                    timeZone: timeZone
+                )
+            } catch let error as DataMigrationError {
+                throw error
+            } catch {
+                throw DataMigrationError.stepFailed("完成启动迁移", error)
+            }
         }
+        // 独立于 schemaVersion：v7 完成后仍需幂等折叠旧健康样本行，且不得重跑会话标题改写。
         do {
-            try completeLaunchMigrationIfNeeded(
-                context: context,
-                dataSpace: dataSpace,
-                now: now,
-                timeZone: timeZone
-            )
-        } catch let error as DataMigrationError {
-            throw error
+            try BodyMassDailyRecordStore.foldLegacySampleRowsIfNeeded(in: context)
         } catch {
-            throw DataMigrationError.stepFailed("完成启动迁移", error)
+            throw DataMigrationError.stepFailed("折叠健康身体记录为每日一条", error)
         }
     }
 

@@ -171,29 +171,30 @@ final class BodyMassMeasurementPairingTests: XCTestCase {
         )
 
         let imported = try context.fetch(FetchDescriptor<BodyEntry>()).filter(\.isHealthImported)
-        XCTAssertEqual(imported.count, 2)
-        XCTAssertEqual(BodyMassMeasurementPairing.measurements(from: imported).count, 1)
+        XCTAssertEqual(imported.count, 1)
+        XCTAssertEqual(imported.first?.weight, 72.4)
+        XCTAssertEqual(imported.first?.bodyFat, 18.6)
 
+        let dayKey = BodyMassDayKey.dayKey(for: instant)
         try BodyMassRecordStore.applyBodyFat(
             BodyFatSyncDelta(
                 upserts: [],
                 deletedSampleUUIDs: [fatID],
                 newAnchorData: Data([3])
             ),
-            in: context
+            in: context,
+            resample: BodyMassDayResampleSet(bodyFatByDay: [dayKey: []])
         )
         let remaining = try context.fetch(FetchDescriptor<BodyEntry>()).filter(\.isHealthImported)
         XCTAssertEqual(remaining.count, 1)
         let leftover = try XCTUnwrap(remaining.first)
         XCTAssertEqual(leftover.weight, 72.4)
         XCTAssertNil(leftover.bodyFat)
-        let afterDelete = BodyMassMeasurementPairing.measurements(from: remaining)
-        XCTAssertEqual(afterDelete.count, 1)
-        XCTAssertEqual(afterDelete[0].weight, 72.4)
-        XCTAssertNil(afterDelete[0].bodyFat)
+        XCTAssertEqual(leftover.healthDayEvidence?.weight?.sampleUUID, weightID)
+        XCTAssertNil(leftover.healthDayEvidence?.bodyFat)
     }
 
-    func testUpdatingOneSampleDateUnpairsDifferentSeconds() throws {
+    func testUpdatingOneSampleDateKeepsOneDailyRecord() throws {
         let context = container.mainContext
         let weightID = try XCTUnwrap(UUID(uuidString: "CCCCCCCC-DDDD-EEEE-FFFF-AAAAAAAAAAAA"))
         let fatID = try XCTUnwrap(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-BBBBBBBBBBBB"))
@@ -246,14 +247,15 @@ final class BodyMassMeasurementPairingTests: XCTestCase {
             in: context
         )
         let imported = try context.fetch(FetchDescriptor<BodyEntry>()).filter(\.isHealthImported)
-        XCTAssertEqual(imported.count, 2)
-        let measurements = BodyMassMeasurementPairing.measurements(from: imported)
-        XCTAssertEqual(measurements.count, 2)
-        XCTAssertEqual(Set(measurements.compactMap(\.bodyFat)), [16.2])
-        XCTAssertEqual(Set(measurements.compactMap(\.weight)), [70])
+        XCTAssertEqual(imported.count, 1)
+        XCTAssertEqual(imported.first?.weight, 70)
+        XCTAssertEqual(imported.first?.bodyFat, 16.2)
+        XCTAssertEqual(imported.first?.healthDayEvidence?.weight?.date, instant)
+        XCTAssertEqual(imported.first?.healthDayEvidence?.bodyFat?.date, laterSameDay)
+        XCTAssertEqual(imported.first?.date, laterSameDay)
     }
 
-    func testReapplyingSameSamplesKeepsIndependentUUIDs() throws {
+    func testReapplyingSameSamplesKeepsOneDailyRecord() throws {
         let context = container.mainContext
         let weightID = try XCTUnwrap(UUID(uuidString: "EEEEEEEE-FFFF-AAAA-BBBB-CCCCCCCCCCCC"))
         let fatID = try XCTUnwrap(UUID(uuidString: "FFFFFFFF-AAAA-BBBB-CCCC-DDDDDDDDDDDD"))
@@ -288,12 +290,13 @@ final class BodyMassMeasurementPairingTests: XCTestCase {
         try BodyMassRecordStore.apply(weightDelta, in: context)
         try BodyMassRecordStore.applyBodyFat(fatDelta, in: context)
         let imported = try context.fetch(FetchDescriptor<BodyEntry>()).filter(\.isHealthImported)
-        XCTAssertEqual(imported.count, 2)
-        XCTAssertEqual(Set(imported.compactMap(\.externalID)), [
-            BodyMassImportIdentity.externalID(sampleUUID: weightID),
-            BodyMassImportIdentity.bodyFatExternalID(sampleUUID: fatID)
-        ])
-        XCTAssertEqual(BodyMassMeasurementPairing.measurements(from: imported).count, 1)
+        XCTAssertEqual(imported.count, 1)
+        XCTAssertEqual(
+            imported.first?.externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: BodyMassDayKey.dayKey(for: instant))
+        )
+        XCTAssertEqual(imported.first?.healthDayEvidence?.weight?.sampleUUID, weightID)
+        XCTAssertEqual(imported.first?.healthDayEvidence?.bodyFat?.sampleUUID, fatID)
     }
 
     func testGroupByDayKeepsSameDaySessionsSeparate() {

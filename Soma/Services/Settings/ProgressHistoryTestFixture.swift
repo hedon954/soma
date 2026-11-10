@@ -47,57 +47,68 @@ enum ProgressHistoryTestFixture {
                 try DailyActivityRecordStore.replace([DailyActivitySyncCoordinator.demo(key: .init(date: today, calendar: calendar))], in: context)
             }
             if ProcessInfo.processInfo.environment["SOMA_UI_BODY_MASS_FIXTURE"] == "1" {
-                // 同源同一秒的体重+体脂应展示为一条同次测量；同日不同秒保持单指标。
+                // 健康导入按自然日一条：当天最后体重 72.4、最后体脂 18.6 合为今日日记录；同日手动保留。
                 let keepPaired = calendar.date(byAdding: .hour, value: 12, to: today)!
-                let keepSplit = calendar.date(byAdding: .hour, value: 10, to: today)!
                 let manualDay = calendar.date(byAdding: .day, value: -1, to: today)!
                 let unknownDay = calendar.date(byAdding: .day, value: -5, to: today)!
-                context.insert(BodyEntry(
+                let rangeProbe = calendar.date(byAdding: .day, value: -80, to: today)!
+                let todayKey = BodyMassDayKey.dayKey(for: keepPaired, calendar: calendar)
+                let todayEntry = BodyEntry(
                     date: keepPaired,
                     weight: 72.4,
-                    bodyFat: nil,
-                    waist: nil,
-                    notes: "",
-                    analysis: "",
-                    externalSource: BodyMassImportIdentity.externalSource,
-                    externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
-                    sourceName: "Keep",
-                    sourceBundleIdentifier: "com.gotokeep.keep"
-                ))
-                context.insert(BodyEntry(
-                    date: keepPaired,
-                    weight: nil,
                     bodyFat: 18.6,
                     waist: nil,
                     notes: "",
                     analysis: "",
                     externalSource: BodyMassImportIdentity.externalSource,
-                    externalID: BodyMassImportIdentity.bodyFatExternalID(sampleUUID: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!),
+                    externalID: BodyMassImportIdentity.bodyDayExternalID(dayKey: todayKey),
                     sourceName: "Keep",
                     sourceBundleIdentifier: "com.gotokeep.keep"
-                ))
-                context.insert(BodyEntry(
-                    date: keepSplit,
-                    weight: 70.9,
-                    bodyFat: nil,
-                    waist: nil,
-                    notes: "",
-                    analysis: "",
-                    externalSource: BodyMassImportIdentity.externalSource,
-                    externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!),
-                    sourceName: "Keep",
-                    sourceBundleIdentifier: "com.gotokeep.keep"
-                ))
-                context.insert(BodyEntry(
+                )
+                todayEntry.healthDayEvidence = BodyHealthDayEvidence(
+                    dayKey: todayKey,
+                    timeZoneIdentifier: calendar.timeZone.identifier,
+                    weight: .init(
+                        sampleUUID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+                        date: keepPaired,
+                        value: 72.4,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    ),
+                    bodyFat: .init(
+                        sampleUUID: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+                        date: keepPaired,
+                        value: 18.6,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                )
+                context.insert(todayEntry)
+                let unknownKey = BodyMassDayKey.dayKey(for: unknownDay, calendar: calendar)
+                let unknownName = "超长厂商名称 Acme Smart Body Composition Scale Pro Max"
+                let unknownEntry = BodyEntry(
                     date: unknownDay,
                     weight: 72.1,
                     notes: "",
                     analysis: "",
                     externalSource: BodyMassImportIdentity.externalSource,
-                    externalID: BodyMassImportIdentity.bodyMassExternalID(sampleUUID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!),
-                    sourceName: "超长厂商名称 Acme Smart Body Composition Scale Pro Max",
+                    externalID: BodyMassImportIdentity.bodyDayExternalID(dayKey: unknownKey),
+                    sourceName: unknownName,
                     sourceBundleIdentifier: "com.acme.scale"
-                ))
+                )
+                unknownEntry.healthDayEvidence = BodyHealthDayEvidence(
+                    dayKey: unknownKey,
+                    timeZoneIdentifier: calendar.timeZone.identifier,
+                    weight: .init(
+                        sampleUUID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+                        date: unknownDay,
+                        value: 72.1,
+                        sourceName: unknownName,
+                        sourceBundleIdentifier: "com.acme.scale"
+                    ),
+                    bodyFat: nil
+                )
+                context.insert(unknownEntry)
                 // 含腰围字段：本页 UI 不展示，但历史数据保留。
                 context.insert(BodyEntry(
                     date: manualDay,
@@ -105,6 +116,11 @@ enum ProgressHistoryTestFixture {
                     bodyFat: 17.5,
                     waist: 79,
                     notes: "手动夹具"
+                ))
+                context.insert(BodyEntry(
+                    date: rangeProbe,
+                    weight: 66.6,
+                    notes: "区间夹具"
                 ))
             }
             LibraryAndMealTestFixture.seedIfRequested(in: context)

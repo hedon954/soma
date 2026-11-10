@@ -380,25 +380,18 @@ struct MealHistoryView: View {
 struct BodyHistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var entries: [BodyEntry] = []
-    @State private var fetchedCount = 0
-    @State private var hasMore = true
+    @State private var hasAnyEntries = false
     @State private var isLoading = false
-    @State private var collapsedDays: Set<Date> = []
-
-    private static let pageSize = BodyHistoryQuery.pageSize
+    @State private var range: BodyHistoryTrendRange = .default
 
     private var measurements: [BodyHistoryMeasurement] {
-        BodyMassMeasurementPairing.measurements(from: entries)
-    }
-
-    private var dayGroups: [BodyMeasurementDayGroup] {
-        BodyHistoryQuery.groupedMeasurementsByDay(measurements)
+        entries.map { BodyHistoryMeasurement(entries: [$0]) }
     }
 
     var body: some View {
         List {
             Section {
-                BodyHistoryTrendChart(entries: entries)
+                BodyHistoryTrendChart(entries: entries, range: $range)
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                     .listRowBackground(AppTheme.cardBackground)
                     .listRowSeparator(.hidden)
@@ -406,64 +399,39 @@ struct BodyHistoryView: View {
 
             if entries.isEmpty, !isLoading {
                 ContentUnavailableView(
-                    "暂无体重记录",
+                    hasAnyEntries ? "该时间区间暂无体重记录" : "暂无体重记录",
                     systemImage: "scalemass",
-                    description: Text("连接 Apple 健康后会自动同步体重；也可把体重数字、体重秤或体型照片发给教练。")
+                    description: Text(
+                        hasAnyEntries
+                            ? "试试切换一周、一个月、三个月或一年，查看其他时间的记录。"
+                            : "连接 Apple 健康后会自动同步体重；也可把体重数字、体重秤或体型照片发给教练。"
+                    )
                 )
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+                .accessibilityIdentifier(
+                    hasAnyEntries ? "body-history-empty-range" : "body-history-empty"
+                )
             } else {
-                ForEach(dayGroups) { group in
-                    let isExpanded = !collapsedDays.contains(group.day)
-                    Section {
-                        HistoryDayHeader(
-                            title: group.title,
-                            summary: group.recordCountText,
-                            metric: nil,
-                            metricUnit: nil,
-                            isExpanded: isExpanded,
-                            toggle: { toggleDay(group.day) }
+                ForEach(Array(measurements.enumerated()), id: \.element.id) { index, measurement in
+                    NavigationLink {
+                        BodyRecordDetailView(entry: measurement.primary)
+                    } label: {
+                        BodyHistoryRow(
+                            measurement: measurement,
+                            isListEnd: index == measurements.count - 1
                         )
-                        .historyDayCardRow(edge: isExpanded ? .top : .single)
-
-                        if isExpanded {
-                            ForEach(Array(group.measurements.enumerated()), id: \.element.id) { index, measurement in
-                                NavigationLink {
-                                    BodyRecordDetailView(entry: measurement.primary)
-                                } label: {
-                                    BodyHistoryRow(
-                                        measurement: measurement,
-                                        isListEnd: group.day == dayGroups.last?.day
-                                            && index == group.measurements.count - 1
-                                    )
-                                }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        delete(measurement)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .accessibilityLabel("删除身体记录")
-                                    .tint(.red)
-                                }
-                                .historyDayCardRow(
-                                    edge: index == group.measurements.count - 1 ? .bottom : .middle
-                                )
-                            }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            delete(measurement)
+                        } label: {
+                            Image(systemName: "trash")
                         }
+                        .accessibilityLabel("删除身体记录")
+                        .tint(.red)
                     }
-                    .listSectionSeparator(.hidden)
-                }
-
-                if hasMore {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .padding(.vertical, 12)
-                        Spacer()
-                    }
-                    .listRowSeparator(.hidden)
-                    .onAppear(perform: loadMore)
+                    .listRowBackground(AppTheme.cardBackground)
                 }
 
                 Color.clear
@@ -484,69 +452,36 @@ struct BodyHistoryView: View {
         .navigationTitle("体重记录")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if entries.isEmpty {
-                await Task.yield()
-                loadMore()
-            }
+            await Task.yield()
+            reload()
+        }
+        .onChange(of: range) { _, _ in
+            reload()
         }
     }
 
-    private func toggleDay(_ day: Date) {
-        if collapsedDays.contains(day) {
-            collapsedDays.remove(day)
-        } else {
-            collapsedDays.insert(day)
-        }
-    }
-
-    private func loadMore() {
-        guard hasMore, !isLoading else { return }
+    private func reload() {
         isLoading = true
         defer { isLoading = false }
-        var descriptor = FetchDescriptor<BodyEntry>(
-            sortBy: [
-                SortDescriptor(\.date, order: .reverse),
-                SortDescriptor(\.id, order: .reverse)
-            ]
-        )
-        descriptor.fetchOffset = fetchedCount
-        descriptor.fetchLimit = Self.pageSize
         do {
-            let page = try modelContext.fetch(descriptor)
-            fetchedCount += page.count
-            let existing = Set(entries.map(\.id))
-            entries.append(contentsOf: page.filter { !existing.contains($0.id) })
-            injectComplements(for: page)
-            hasMore = page.count >= Self.pageSize
+            hasAnyEntries = try BodyHistoryQuery.hasAny(in: modelContext)
+            entries = try BodyHistoryQuery.entries(
+                in: range.window(now: .now),
+                context: modelContext
+            )
         } catch {
-            hasMore = false
+            entries = []
         }
-    }
-
-    private func injectComplements(for page: [BodyEntry]) {
-        var existing = Set(entries.map(\.id))
-        var extras: [BodyEntry] = []
-        for entry in page {
-            let measurement = BodyMassMeasurementPairing.measurement(for: entry, in: modelContext)
-            for peer in measurement.entries where !existing.contains(peer.id) {
-                extras.append(peer)
-                existing.insert(peer.id)
-            }
-        }
-        entries.append(contentsOf: extras)
     }
 
     private func delete(_ measurement: BodyHistoryMeasurement) {
         let ids = measurement.memberIDs
         entries.removeAll { ids.contains($0.id) }
-        fetchedCount = max(0, fetchedCount - measurement.entries.count)
         for entry in measurement.entries {
             modelContext.delete(entry)
         }
         try? modelContext.save()
-        if entries.count < Self.pageSize, hasMore {
-            loadMore()
-        }
+        reload()
     }
 }
 
@@ -698,10 +633,33 @@ private struct BodyHistoryRow: View {
 
     private var knownSource: BodyMassKnownSource? {
         guard measurement.isHealthImported else { return nil }
+        if let evidence = measurement.primary.healthDayEvidence,
+           evidence.unifiedSource == nil,
+           [evidence.weight, evidence.bodyFat].compactMap({ $0 }).count > 1
+        {
+            return nil
+        }
         return BodyMassKnownSource.resolve(
             name: measurement.sourceName,
             bundleIdentifier: measurement.sourceBundleIdentifier
         )
+    }
+
+    private var sourceCaptionText: String? {
+        if let evidence = measurement.primary.healthDayEvidence {
+            let captions = evidence.sourceCaptions
+            if !captions.isEmpty {
+                return captions.joined(separator: " · ")
+            }
+        }
+        if let knownSource {
+            return knownSource.listCaption
+        }
+        if measurement.isHealthImported {
+            let name = measurement.sourceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? "未知来源" : name
+        }
+        return nil
     }
 
     private var rowAccessibilityIdentifier: String {
@@ -715,7 +673,7 @@ private struct BodyHistoryRow: View {
     }
 
     private var dateText: String {
-        measurement.date.formatted(date: .abbreviated, time: .shortened)
+        BodyMassHistoryRowPresentation.listDateText(measurement.date)
     }
 
     private var accessibilityLines: BodyMassHistoryRowPresentation.AccessibilityLines {
@@ -724,7 +682,7 @@ private struct BodyHistoryRow: View {
             weight: measurement.weight,
             bodyFat: measurement.bodyFat,
             source: knownSource,
-            unknownSourceName: measurement.sourceName,
+            unknownSourceName: sourceCaptionText,
             isHealthImported: measurement.isHealthImported
         )
     }
@@ -767,7 +725,7 @@ private struct BodyHistoryRow: View {
         }
     }
 
-    /// Accessibility：日期（仅采样时间）/ 来源 / 体重 / 体脂各自足宽整行，禁止把数值和单位塞进窄横排。
+    /// Accessibility：日期 / 来源 / 体重 / 体脂各自足宽整行，禁止把数值和单位塞进窄横排。
     private var accessibilityLayout: some View {
         let lines = accessibilityLines
         return VStack(alignment: .leading, spacing: 10) {
@@ -857,8 +815,8 @@ private struct BodyHistoryRow: View {
 
     private var secondaryMetrics: String {
         var metrics: [String] = []
-        if let knownSource {
-            metrics.append(knownSource.listCaption)
+        if let sourceCaptionText {
+            metrics.append(sourceCaptionText)
         }
         if let bodyFat = measurement.bodyFat {
             metrics.append("体脂 \(bodyFat.formatted(.number.precision(.fractionLength(1))))%")

@@ -268,6 +268,29 @@ enum BodyHistoryQuery {
             BodyMeasurementDayGroup(day: day, measurements: items)
         }
     }
+
+    static func entries(
+        in window: BodyHistoryTrendRange.Window,
+        context: ModelContext
+    ) throws -> [BodyEntry] {
+        let start = window.start
+        let end = window.end
+        return try context.fetch(
+            FetchDescriptor<BodyEntry>(
+                predicate: #Predicate { $0.date >= start && $0.date < end },
+                sortBy: [
+                    SortDescriptor(\.date, order: .reverse),
+                    SortDescriptor(\.id, order: .reverse)
+                ]
+            )
+        )
+    }
+
+    static func hasAny(in context: ModelContext) throws -> Bool {
+        var descriptor = FetchDescriptor<BodyEntry>()
+        descriptor.fetchLimit = 1
+        return try !context.fetch(descriptor).isEmpty
+    }
 }
 
 struct BodyMeasurementDayGroup: Identifiable {

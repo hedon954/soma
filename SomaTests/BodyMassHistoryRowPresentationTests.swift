@@ -17,9 +17,11 @@ final class BodyMassHistoryRowPresentationTests: XCTestCase {
         XCTAssertEqual(lines.bodyFatLine, "体脂率\u{00A0}18.0%")
         XCTAssertEqual(lines.sourceCaption, "Keep")
         XCTAssertFalse(lines.weightLine?.contains("\n") == true)
-        XCTAssertEqual(lines.sampleTime, BodyMassHistoryRowPresentation.sampleTimeText(date))
-        XCTAssertFalse(lines.sampleTime.contains("2026"))
-        XCTAssertFalse(lines.sampleTime.contains("8月11日") || lines.sampleTime.contains("8/11"))
+        XCTAssertEqual(lines.sampleTime, BodyMassHistoryRowPresentation.listDateText(date))
+        XCTAssertTrue(
+            lines.sampleTime.contains("11") || lines.sampleTime.contains("8"),
+            "行内日期应展示自然日，got \(lines.sampleTime)"
+        )
     }
 
     func testBodyFatOnlyAndLongUnknownSource() {

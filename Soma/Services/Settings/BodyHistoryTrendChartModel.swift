@@ -171,11 +171,13 @@ struct BodyHistoryTrendChartModel: Equatable {
         make(
             weights: entries.compactMap { entry in
                 guard let value = entry.weight, value.isFinite else { return nil }
-                return (id: entry.id, date: entry.date, value: value)
+                let date = entry.healthDayEvidence?.weight?.date ?? entry.date
+                return (id: entry.id, date: date, value: value)
             },
             bodyFats: entries.compactMap { entry in
                 guard let value = entry.bodyFat, value.isFinite else { return nil }
-                return (id: entry.id, date: entry.date, value: value)
+                let date = entry.healthDayEvidence?.bodyFat?.date ?? entry.date
+                return (id: entry.id, date: date, value: value)
             },
             range: range,
             now: now,

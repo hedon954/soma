@@ -34,7 +34,8 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0146](0146-daily-activity-source-priority.md) | 0.0.31 | 已采纳并实现 | HealthKit 日活动数据源三选一、整包择优、列表与分享边界 |
 | [0147](0147-residual-energy-coefficient.md) | 0.0.32 | 已采纳并实现 | 总消耗改为残差系数加所选日活动能量 |
 | [0148](0148-daily-target-deficit.md) | 0.0.32 | 已采纳并实现，模拟器验证通过 | 每日目标热量缺口偏好与持久化 |
-| [0149](0149-healthkit-body-mass.md) | 0.0.33 | 已采纳并实现；真机健康授权与后台唤醒待验收 | HealthKit 体重/体脂导入与最初来源溯源 |
+| [0149](0149-healthkit-body-mass.md) | 0.0.33 | 部分已替代 | HealthKit 体重/体脂只读导入与最初来源溯源；日记录规则见 0150 |
+| [0150](0150-healthkit-body-daily-records.md) | 未发布 | 已采纳并实现；真机授权、后台与真实旧库升级待验收 | 健康导入按自然日一条记录，列表去分组并随区间筛选 |
 
 新决策使用 [ADR 模板](template.md)。
 
@@ -84,4 +85,10 @@ ADR 记录已经生效且会影响后续实现的关键决策。每篇只回答�
 | [0146](0146-daily-activity-source-priority.md) | 已采纳并实现 | 部分替代 0144：HealthKit 整包择优（Apple/COROS/步数更大）、独立列表与分享排除；不做 MCP |
 | [0147](0147-residual-energy-coefficient.md) | 已采纳并实现 | 部分替代 0145：总消耗改为残差系数加所选日活动能量；不做动态校准 |
 | [0148](0148-daily-target-deficit.md) | 已采纳并实现，模拟器验证通过 | 个人资料可选缺口偏好、旧库回退及备份；补充 0147 |
-| [0149](0149-healthkit-body-mass.md) | 已采纳并实现 | 部分替代 0144：bodyMass 导入、来源图标；体脂曲线用本地记录 |
+| [0149](0149-healthkit-body-mass.md) | 部分已替代 | 部分替代 0144：bodyMass 导入、来源图标；日记录规则见 0150 |
+
+## 未发布决策
+
+| 文档 | 状态 | 决策 |
+| --- | --- | --- |
+| [0150](0150-healthkit-body-daily-records.md) | 已采纳并实现；真机授权、后台与真实旧库升级待验收 | 部分替代 0149：健康导入按自然日一条记录，列表去分组并随区间筛选 |

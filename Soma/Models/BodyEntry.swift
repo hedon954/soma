@@ -21,6 +21,8 @@ final class BodyEntry: BusinessIdentifiedModel {
     var sourceBundleIdentifier: String?
     var sourceTurnID: UUID?
     var sourceSessionID: UUID?
+    /// 健康日记录各指标的真实采样证据（UUID、时间、来源）。旧库默认为空。
+    var healthDayEvidenceData: Data = Data()
 
     init(
         date: Date = .now,
@@ -72,5 +74,10 @@ final class BodyEntry: BusinessIdentifiedModel {
     /// 来自 Apple 健康的体重或体脂样本（可再同步，不进备份/导出）。
     var isHealthImported: Bool {
         externalSource == BodyMassImportIdentity.externalSource
+    }
+
+    var healthDayEvidence: BodyHealthDayEvidence? {
+        get { BodyHealthDayEvidence.decode(healthDayEvidenceData) }
+        set { healthDayEvidenceData = newValue?.encode() ?? Data() }
     }
 }

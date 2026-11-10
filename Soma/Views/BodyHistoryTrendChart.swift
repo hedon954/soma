@@ -3,8 +3,8 @@ import SwiftUI
 
 struct BodyHistoryTrendChart: View {
     let entries: [BodyEntry]
+    @Binding var range: BodyHistoryTrendRange
     var now: Date = .now
-    @State private var range: BodyHistoryTrendRange = .default
     @State private var selection: BodyHistoryTrendSelection?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 

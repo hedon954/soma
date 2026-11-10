@@ -24,12 +24,42 @@ final class BodyMassHistoryUITests: XCTestCase {
                 ("三个月", "three-months"),
                 ("一年", "year")
             ]
-            for (title, slug) in ranges {
+            XCTAssertFalse(
+                app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "点按折叠或展开这一天的记录")).firstMatch.exists
+            )
+            if app.buttons["一周"].exists {
+                app.buttons["一周"].tap()
+            }
+            keepScreenshot(app, "body-history-range-week-\(appearance)")
+            XCTAssertFalse(
+                app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "66.6")).firstMatch.exists,
+                "一周区间不应包含 80 天前的手动记录"
+            )
+            for (title, slug) in ranges where title != "一周" {
                 let button = app.buttons[title]
                 if button.exists {
                     button.tap()
                 }
                 keepScreenshot(app, "body-history-range-\(slug)-\(appearance)")
+            }
+            XCTAssertTrue(app.buttons["一年"].exists)
+            if app.buttons["一年"].exists {
+                app.buttons["一年"].tap()
+            }
+            var sawRangeProbe = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "66.6")).firstMatch.exists
+            for _ in 0 ..< 24 where !sawRangeProbe {
+                scrollBodyHistoryList(in: app)
+                sawRangeProbe = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "66.6")).firstMatch.exists
+            }
+            XCTAssertTrue(sawRangeProbe, "一年区间应包含 80 天前的手动记录 66.6")
+            if app.buttons["一个月"].exists {
+                app.buttons["一个月"].tap()
+            }
+            let list = app.descendants(matching: .any)["body-history-list"].firstMatch
+            for _ in 0 ..< 8 {
+                if list.exists {
+                    list.swipeDown(velocity: .fast)
+                }
             }
             XCTAssertTrue(app.descendants(matching: .any)["body-history-health-row"].firstMatch.waitForExistence(timeout: 5))
             XCTAssertTrue(app.descendants(matching: .any)["body-history-trend-axis-units"].firstMatch.exists
@@ -88,7 +118,7 @@ final class BodyMassHistoryUITests: XCTestCase {
             scrollBodyHistoryList(in: app)
         }
         let paired = app.descendants(matching: .any)["body-history-paired-row"].firstMatch
-        XCTAssertTrue(paired.waitForExistence(timeout: 8), "同源同一秒的 Keep 体重+体脂应显示为一行")
+        XCTAssertTrue(paired.waitForExistence(timeout: 8), "当天健康导入应显示为一条 72.4 kg + 18.6% 记录")
         let tabTop = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
         if paired.frame.minY >= tabTop - 8 {
             scrollBodyHistoryList(in: app)
@@ -107,30 +137,50 @@ final class BodyMassHistoryUITests: XCTestCase {
         XCTAssertFalse(rowLabel.contains("腰围"))
         XCTAssertFalse(paired.label.contains("腰围"))
 
-        // 超大字号下列表行使用 contain 而非 combine，70.9 在子元素 label 中。
-        let splitWeight = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "body-history-row-weight", "70.9"))
-            .firstMatch
-        if !splitWeight.exists {
-            scrollBodyHistoryList(in: app)
-        }
-        XCTAssertTrue(splitWeight.waitForExistence(timeout: 5), "同日不同秒的 Keep 体重应保持单指标行")
-        XCTAssertFalse(splitWeight.label.contains("18.6"))
+        XCTAssertFalse(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "点按折叠或展开这一天的记录")).firstMatch.exists
+        )
+        let pairedCount = app.descendants(matching: .any).matching(identifier: "body-history-paired-row").count
+        XCTAssertGreaterThanOrEqual(pairedCount, 1, "应有当天健康日记录行")
         keepScreenshot(app, "body-history-paired-row-\(appearance)")
 
         XCTAssertTrue(paired.isHittable || paired.exists)
         if !paired.isHittable {
             scrollBodyHistoryList(in: app)
         }
-        paired.tap()
+        let target = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "body-history-paired-row", "72.4"))
+            .firstMatch
+        if target.exists {
+            if !target.isHittable {
+                scrollBodyHistoryList(in: app)
+            }
+            target.tap()
+        } else {
+            paired.tap()
+        }
         let detail = app.descendants(matching: .any)["body-record-detail-readonly"].firstMatch
         XCTAssertTrue(detail.waitForExistence(timeout: 6), "健康导入组合记录应为只读明细")
-        let detailWeight = app.descendants(matching: .any)["body-record-detail-weight"].firstMatch
-        let detailFat = app.descendants(matching: .any)["body-record-detail-body-fat"].firstMatch
-        XCTAssertTrue(detailWeight.waitForExistence(timeout: 5))
-        XCTAssertTrue(detailFat.waitForExistence(timeout: 5))
-        XCTAssertTrue(detailWeight.label.contains("72.4") || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "72.4")).firstMatch.exists)
-        XCTAssertTrue(detailFat.label.contains("18.6") || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "18.6")).firstMatch.exists)
+        let detailWeight = revealDetailElement("body-record-detail-weight", in: app)
+        XCTAssertTrue(detailWeight.waitForExistence(timeout: 4), "只读明细应含体重")
+        XCTAssertTrue(
+            detailWeight.label.contains("72.4"),
+            "打开的应是 72.4 日记录明细，got \(detailWeight.label)"
+        )
+        let detailFat = revealDetailElement("body-record-detail-body-fat", in: app)
+        let fatVisible = detailFat.exists
+            || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "18.6")).firstMatch.exists
+        XCTAssertTrue(fatVisible, "明细应含体脂 18.6，got \(detailFat.label)")
+        let weightTime = revealDetailElement("body-record-detail-weight-time", in: app)
+        XCTAssertTrue(
+            weightTime.exists
+                || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "体重时间")).firstMatch.exists
+        )
+        let weightSource = revealDetailElement("body-record-detail-weight-source", in: app)
+        XCTAssertTrue(
+            weightSource.label.contains("Keep")
+                || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Keep")).firstMatch.exists
+        )
         XCTAssertFalse(app.staticTexts["腰围"].firstMatch.exists)
         XCTAssertFalse(app.buttons["腰围"].exists)
         XCTAssertFalse(app.buttons["保存"].exists)
@@ -148,7 +198,7 @@ final class BodyMassHistoryUITests: XCTestCase {
         openBodyHistory(app)
 
         let keep = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "body-history-health-row", "Keep"))
+            .matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "body-history-paired-row", "Keep"))
             .firstMatch
         XCTAssertTrue(keep.waitForExistence(timeout: 8))
 
@@ -309,7 +359,7 @@ final class BodyMassHistoryUITests: XCTestCase {
         return app
     }
 
-    /// 滚过图表后核对：体重「70.9 kg」、体脂「体脂率 18.x%」各为足宽单行，不被窄横排拆小数。
+    /// 滚过图表后核对：体重「N kg」、体脂「体脂率 N%」各为足宽单行，不被窄横排拆小数。
     private func assertAccessibilityMetricLinesUnbroken(in app: XCUIApplication, appearance: String) {
         var sawWeight = false
         var sawBodyFat = false
@@ -433,6 +483,23 @@ final class BodyMassHistoryUITests: XCTestCase {
             start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTFail("目标入口未进入可视区域")
+    }
+
+    private func revealDetailElement(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let element = app.descendants(matching: .any)[identifier].firstMatch
+        if element.waitForExistence(timeout: 1.5) {
+            return element
+        }
+        let detail = app.descendants(matching: .any)["body-record-detail-readonly"].firstMatch
+        for _ in 0 ..< 6 {
+            if detail.exists {
+                detail.swipeUp(velocity: .slow)
+            }
+            if element.waitForExistence(timeout: 0.8) {
+                return element
+            }
+        }
+        return element
     }
 
     private func keepScreenshot(_ app: XCUIApplication, _ name: String) {

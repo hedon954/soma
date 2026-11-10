@@ -154,7 +154,7 @@ struct BodyRecordDetailView: View {
 
     var body: some View {
         BodyRecordEditor(
-            measurement: BodyMassMeasurementPairing.measurement(for: entry, in: modelContext)
+            measurement: BodyHistoryMeasurement(entries: [entry])
         )
     }
 }
@@ -814,6 +814,13 @@ private struct BodyRecordEditor: View {
         measurement.isHealthImported
     }
 
+    private func metricSourceCaption(_ evidence: BodyHealthDayMetricEvidence) -> String {
+        BodyMassKnownSource.resolve(
+            name: evidence.sourceName,
+            bundleIdentifier: evidence.sourceBundleIdentifier
+        ).listCaption
+    }
+
     private var primary: BodyEntry {
         measurement.primary
     }
@@ -848,26 +855,41 @@ private struct BodyRecordEditor: View {
 
             Section("身体数据") {
                 if isReadOnly {
-                    LabeledContent("时间") {
-                        Text(measurement.date.formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent("日期") {
+                        Text(BodyMassHistoryRowPresentation.listDateText(measurement.date))
                     }
                     if let weight = measurement.weight {
                         LabeledContent("体重") {
                             Text(BodyMassHistoryRowPresentation.weightLine(for: weight))
+                                .accessibilityIdentifier("body-record-detail-weight")
                         }
-                        .accessibilityIdentifier("body-record-detail-weight")
+                    }
+                    if let evidence = primary.healthDayEvidence?.weight {
+                        LabeledContent("体重时间") {
+                            Text(evidence.date.formatted(date: .abbreviated, time: .shortened))
+                                .accessibilityIdentifier("body-record-detail-weight-time")
+                        }
+                        LabeledContent("体重来源") {
+                            Text(metricSourceCaption(evidence))
+                                .accessibilityIdentifier("body-record-detail-weight-source")
+                        }
                     }
                     if let bodyFat = measurement.bodyFat {
                         LabeledContent("体脂") {
                             Text(
                                 "\(bodyFat.formatted(.number.precision(.fractionLength(1))))%"
                             )
+                            .accessibilityIdentifier("body-record-detail-body-fat")
                         }
-                        .accessibilityIdentifier("body-record-detail-body-fat")
                     }
-                    if let source = measurement.sourceName, !source.isEmpty {
-                        LabeledContent("来源") {
-                            Text(source)
+                    if let evidence = primary.healthDayEvidence?.bodyFat {
+                        LabeledContent("体脂时间") {
+                            Text(evidence.date.formatted(date: .abbreviated, time: .shortened))
+                                .accessibilityIdentifier("body-record-detail-body-fat-time")
+                        }
+                        LabeledContent("体脂来源") {
+                            Text(metricSourceCaption(evidence))
+                                .accessibilityIdentifier("body-record-detail-body-fat-source")
                         }
                     }
                 } else {

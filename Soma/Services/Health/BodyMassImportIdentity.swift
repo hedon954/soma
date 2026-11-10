@@ -11,6 +11,7 @@ enum BodyMassImportIdentity {
 
     static let bodyMassExternalIDPrefix = "bodyMass:"
     static let bodyFatExternalIDPrefix = "bodyFat:"
+    static let bodyDayExternalIDPrefix = "bodyDay:"
 
     static func externalID(sampleUUID: UUID) -> String {
         bodyMassExternalID(sampleUUID: sampleUUID)
@@ -22,6 +23,36 @@ enum BodyMassImportIdentity {
 
     static func bodyFatExternalID(sampleUUID: UUID) -> String {
         bodyFatExternalIDPrefix + sampleUUID.uuidString
+    }
+
+    static func bodyDayExternalID(dayKey: String) -> String {
+        bodyDayExternalIDPrefix + dayKey
+    }
+
+    static func isLegacySampleExternalID(_ externalID: String?) -> Bool {
+        guard let externalID else { return false }
+        return externalID.hasPrefix(bodyMassExternalIDPrefix)
+            || externalID.hasPrefix(bodyFatExternalIDPrefix)
+    }
+
+    static func isDayExternalID(_ externalID: String?) -> Bool {
+        externalID?.hasPrefix(bodyDayExternalIDPrefix) == true
+    }
+
+    static func dayKey(externalID: String) -> String? {
+        guard externalID.hasPrefix(bodyDayExternalIDPrefix) else { return nil }
+        let key = String(externalID.dropFirst(bodyDayExternalIDPrefix.count))
+        return key.isEmpty ? nil : key
+    }
+
+    static func sampleUUID(fromLegacyExternalID externalID: String) -> UUID? {
+        if externalID.hasPrefix(bodyMassExternalIDPrefix) {
+            return UUID(uuidString: String(externalID.dropFirst(bodyMassExternalIDPrefix.count)))
+        }
+        if externalID.hasPrefix(bodyFatExternalIDPrefix) {
+            return UUID(uuidString: String(externalID.dropFirst(bodyFatExternalIDPrefix.count)))
+        }
+        return nil
     }
 
     static func sampleUUID(externalID: String) -> UUID? {

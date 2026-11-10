@@ -6,6 +6,8 @@ protocol BodyMassReading: Sendable {
     func requestAuthorization() async throws
     func pull(anchorData: Data?) async throws -> BodyMassSyncDelta
     func pullBodyFat(anchorData: Data?) async throws -> BodyFatSyncDelta
+    func weightSamples(from start: Date, to end: Date) async throws -> [BodyMassSampleImport]
+    func bodyFatSamples(from start: Date, to end: Date) async throws -> [BodyFatSampleImport]
     func startObserving(onChange: @escaping @Sendable () -> Void) async
     func stopObserving() async
 }
@@ -127,6 +129,24 @@ actor HealthKitBodyMassReader: BodyMassReading {
         }
     }
 
+    func weightSamples(from start: Date, to end: Date) async throws -> [BodyMassSampleImport] {
+        try await quantitySamples(
+            type: Self.bodyMassType,
+            from: start,
+            to: end,
+            map: { Self.bodyMassImport(from: $0) }
+        )
+    }
+
+    func bodyFatSamples(from start: Date, to end: Date) async throws -> [BodyFatSampleImport] {
+        try await quantitySamples(
+            type: Self.bodyFatType,
+            from: start,
+            to: end,
+            map: { Self.bodyFatImport(from: $0) }
+        )
+    }
+
     func startObserving(onChange: @escaping @Sendable () -> Void) async {
         guard isAvailable else { return }
         let healthStore = healthStore()
@@ -176,6 +196,67 @@ actor HealthKitBodyMassReader: BodyMassReading {
             }
         }
         backgroundEnabledTypes.removeAll()
+    }
+
+    private func quantitySamples<T>(
+        type: HKQuantityType,
+        from start: Date,
+        to end: Date,
+        map: @escaping @Sendable (HKQuantitySample) -> T?
+    ) async throws -> [T] {
+        guard isAvailable else { throw BodyMassReadError.unavailable }
+        let healthStore = healthStore()
+        let predicate = HKQuery.predicateForSamples(
+            withStart: start,
+            end: end,
+            options: .strictStartDate
+        )
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let mapped = (samples ?? []).compactMap { sample -> T? in
+                    guard let quantity = sample as? HKQuantitySample else { return nil }
+                    return map(quantity)
+                }
+                continuation.resume(returning: mapped)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    private nonisolated static func bodyMassImport(from quantity: HKQuantitySample) -> BodyMassSampleImport? {
+        let kg = quantity.quantity.doubleValue(for: .gramUnit(with: .kilo))
+        guard kg.isFinite, kg > 0 else { return nil }
+        let source = quantity.sourceRevision.source
+        return BodyMassSampleImport(
+            sampleUUID: quantity.uuid,
+            date: quantity.startDate,
+            weightKilograms: kg,
+            sourceName: source.name,
+            sourceBundleIdentifier: source.bundleIdentifier
+        )
+    }
+
+    private nonisolated static func bodyFatImport(from quantity: HKQuantitySample) -> BodyFatSampleImport? {
+        let raw = quantity.quantity.doubleValue(for: .percent())
+        guard let percent = BodyFatPercentageConversion.percentPoints(fromHealthKitPercentUnit: raw)
+        else { return nil }
+        let source = quantity.sourceRevision.source
+        return BodyFatSampleImport(
+            sampleUUID: quantity.uuid,
+            date: quantity.startDate,
+            bodyFatPercent: percent,
+            sourceName: source.name,
+            sourceBundleIdentifier: source.bundleIdentifier
+        )
     }
 
     private func decodeAnchor(_ data: Data?) throws -> HKQueryAnchor? {

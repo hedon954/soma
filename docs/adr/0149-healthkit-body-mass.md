@@ -1,11 +1,11 @@
 # ADR 0149：HealthKit 体重/体脂导入与最初来源溯源
 
-- 状态：已采纳并实现；真机健康授权与后台唤醒待验收
+- 状态：部分已替代；只读导入、双游标、隐私过滤、官方图标与合并图等仍有效
 - 日期：2026-11-09
 - 版本：0.0.33
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0144](0144-healthkit-daily-activity.md)（在日活动只读边界上增加 `bodyMass` 与 `bodyFatPercentage` 导入；其余三项日活动决策仍有效）
-- 后续替代：暂无
+- 后续替代：[ADR 0150](0150-healthkit-body-daily-records.md)（按自然日一条健康记录、取消同秒配对与列表日卡全量）
 - 上游依据：[PRD 080](../prd/080-healthkit-body-mass.md)
 - 下游落地：[验收](../acceptance.md)、[数据库结构](../engineering/database-schema.md)、[工程原则](../../CLAUDE.md)
 
