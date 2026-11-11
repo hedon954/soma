@@ -195,64 +195,18 @@ final class BodyMassMeasurementPairingTests: XCTestCase {
     }
 
     func testUpdatingOneSampleDateKeepsOneDailyRecord() throws {
-        let context = container.mainContext
-        let weightID = try XCTUnwrap(UUID(uuidString: "CCCCCCCC-DDDD-EEEE-FFFF-AAAAAAAAAAAA"))
-        let fatID = try XCTUnwrap(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-BBBBBBBBBBBB"))
-        try BodyMassRecordStore.apply(
-            BodyMassSyncDelta(
-                upserts: [
-                    BodyMassSampleImport(
-                        sampleUUID: weightID,
-                        date: instant,
-                        weightKilograms: 70,
-                        sourceName: "Keep",
-                        sourceBundleIdentifier: "com.gotokeep.keep"
-                    )
-                ],
-                deletedSampleUUIDs: [],
-                newAnchorData: Data([4])
-            ),
-            in: context
-        )
-        try BodyMassRecordStore.applyBodyFat(
-            BodyFatSyncDelta(
-                upserts: [
-                    BodyFatSampleImport(
-                        sampleUUID: fatID,
-                        date: instant,
-                        bodyFatPercent: 16,
-                        sourceName: "Keep",
-                        sourceBundleIdentifier: "com.gotokeep.keep"
-                    )
-                ],
-                deletedSampleUUIDs: [],
-                newAnchorData: Data([5])
-            ),
-            in: context
-        )
-        try BodyMassRecordStore.applyBodyFat(
-            BodyFatSyncDelta(
-                upserts: [
-                    BodyFatSampleImport(
-                        sampleUUID: fatID,
-                        date: laterSameDay,
-                        bodyFatPercent: 16.2,
-                        sourceName: "Keep",
-                        sourceBundleIdentifier: "com.gotokeep.keep"
-                    )
-                ],
-                deletedSampleUUIDs: [],
-                newAnchorData: Data([6])
-            ),
-            in: context
-        )
-        let imported = try context.fetch(FetchDescriptor<BodyEntry>()).filter(\.isHealthImported)
-        XCTAssertEqual(imported.count, 1)
-        XCTAssertEqual(imported.first?.weight, 70)
-        XCTAssertEqual(imported.first?.bodyFat, 16.2)
-        XCTAssertEqual(imported.first?.healthDayEvidence?.weight?.date, instant)
-        XCTAssertEqual(imported.first?.healthDayEvidence?.bodyFat?.date, laterSameDay)
-        XCTAssertEqual(imported.first?.date, laterSameDay)
+        try assertUpdatingOneSampleDateKeepsOneDailyRecord(in: calendar(timeZoneIdentifier: "UTC"))
+        try assertUpdatingOneSampleDateKeepsOneDailyRecord(in: calendar(timeZoneIdentifier: "Asia/Shanghai"))
+    }
+
+    func testGroupByDayKeepsSameDaySessionsSeparate() throws {
+        try assertGroupByDayKeepsSameDaySessionsSeparate(in: calendar(timeZoneIdentifier: "UTC"))
+        try assertGroupByDayKeepsSameDaySessionsSeparate(in: calendar(timeZoneIdentifier: "Asia/Shanghai"))
+    }
+
+    func testCalendarDayBoundarySplitsUTCAndShanghai() throws {
+        try assertCalendarDayBoundary(in: calendar(timeZoneIdentifier: "UTC"))
+        try assertCalendarDayBoundary(in: calendar(timeZoneIdentifier: "Asia/Shanghai"))
     }
 
     func testReapplyingSameSamplesKeepsOneDailyRecord() throws {
@@ -299,15 +253,181 @@ final class BodyMassMeasurementPairingTests: XCTestCase {
         XCTAssertEqual(imported.first?.healthDayEvidence?.bodyFat?.sampleUUID, fatID)
     }
 
-    func testGroupByDayKeepsSameDaySessionsSeparate() {
-        let morning = health(date: instant, weight: 71)
-        let morningFat = health(date: instant, bodyFat: 17)
-        let evening = health(date: laterSameDay, weight: 70)
-        let measurements = BodyHistoryQuery.groupedMeasurementsByDay(
-            BodyMassMeasurementPairing.measurements(from: [morning, morningFat, evening])
+    private func assertUpdatingOneSampleDateKeepsOneDailyRecord(in calendar: Calendar) throws {
+        try resetStore()
+        let context = container.mainContext
+        let zone = calendar.timeZone.identifier
+        let morning = date(2026, 11, 9, 8, 0, calendar: calendar)
+        let evening = date(2026, 11, 9, 22, 30, calendar: calendar)
+        XCTAssertEqual(BodyMassDayKey.dayKey(for: morning, calendar: calendar), "2026-11-09", zone)
+        XCTAssertEqual(BodyMassDayKey.dayKey(for: evening, calendar: calendar), "2026-11-09", zone)
+
+        let weightID = try XCTUnwrap(UUID(uuidString: "CCCCCCCC-DDDD-EEEE-FFFF-AAAAAAAAAAAA"))
+        let fatID = try XCTUnwrap(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-BBBBBBBBBBBB"))
+        try BodyMassRecordStore.apply(
+            BodyMassSyncDelta(
+                upserts: [
+                    BodyMassSampleImport(
+                        sampleUUID: weightID,
+                        date: morning,
+                        weightKilograms: 70,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: Data([4])
+            ),
+            in: context,
+            calendar: calendar
         )
-        XCTAssertEqual(measurements.count, 1)
-        XCTAssertEqual(measurements[0].measurements.count, 2)
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    BodyFatSampleImport(
+                        sampleUUID: fatID,
+                        date: morning,
+                        bodyFatPercent: 16,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: Data([5])
+            ),
+            in: context,
+            calendar: calendar
+        )
+        try BodyMassRecordStore.applyBodyFat(
+            BodyFatSyncDelta(
+                upserts: [
+                    BodyFatSampleImport(
+                        sampleUUID: fatID,
+                        date: evening,
+                        bodyFatPercent: 16.2,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: Data([6])
+            ),
+            in: context,
+            calendar: calendar
+        )
+        let imported = try context.fetch(FetchDescriptor<BodyEntry>()).filter(\.isHealthImported)
+        XCTAssertEqual(imported.count, 1, zone)
+        XCTAssertEqual(imported.first?.weight, 70, zone)
+        XCTAssertEqual(imported.first?.bodyFat, 16.2, zone)
+        XCTAssertEqual(imported.first?.healthDayEvidence?.weight?.date, morning, zone)
+        XCTAssertEqual(imported.first?.healthDayEvidence?.bodyFat?.date, evening, zone)
+        XCTAssertEqual(imported.first?.date, evening, zone)
+        XCTAssertEqual(
+            imported.first?.externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-09"),
+            zone
+        )
+    }
+
+    private func assertGroupByDayKeepsSameDaySessionsSeparate(in calendar: Calendar) throws {
+        let zone = calendar.timeZone.identifier
+        let morning = date(2026, 11, 9, 0, 30, calendar: calendar)
+        let evening = date(2026, 11, 9, 23, 30, calendar: calendar)
+        XCTAssertEqual(BodyMassDayKey.dayKey(for: morning, calendar: calendar), "2026-11-09", zone)
+        XCTAssertEqual(BodyMassDayKey.dayKey(for: evening, calendar: calendar), "2026-11-09", zone)
+
+        let morningWeight = health(date: morning, weight: 71)
+        let morningFat = health(date: morning, bodyFat: 17)
+        let eveningWeight = health(date: evening, weight: 70)
+        let measurements = BodyHistoryQuery.groupedMeasurementsByDay(
+            BodyMassMeasurementPairing.measurements(from: [morningWeight, morningFat, eveningWeight]),
+            calendar: calendar
+        )
+        XCTAssertEqual(measurements.count, 1, zone)
+        XCTAssertEqual(measurements[0].measurements.count, 2, zone)
+    }
+
+    private func assertCalendarDayBoundary(in calendar: Calendar) throws {
+        try resetStore()
+        let context = container.mainContext
+        let zone = calendar.timeZone.identifier
+        let beforeMidnight = date(2026, 11, 9, 23, 59, calendar: calendar)
+        let afterMidnight = date(2026, 11, 10, 0, 0, calendar: calendar)
+        XCTAssertEqual(BodyMassDayKey.dayKey(for: beforeMidnight, calendar: calendar), "2026-11-09", zone)
+        XCTAssertEqual(BodyMassDayKey.dayKey(for: afterMidnight, calendar: calendar), "2026-11-10", zone)
+
+        try BodyMassRecordStore.apply(
+            BodyMassSyncDelta(
+                upserts: [
+                    BodyMassSampleImport(
+                        sampleUUID: UUID(),
+                        date: beforeMidnight,
+                        weightKilograms: 71,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    ),
+                    BodyMassSampleImport(
+                        sampleUUID: UUID(),
+                        date: afterMidnight,
+                        weightKilograms: 72,
+                        sourceName: "Keep",
+                        sourceBundleIdentifier: "com.gotokeep.keep"
+                    )
+                ],
+                deletedSampleUUIDs: [],
+                newAnchorData: Data([9])
+            ),
+            in: context,
+            calendar: calendar
+        )
+        let imported = try context.fetch(FetchDescriptor<BodyEntry>())
+            .filter(\.isHealthImported)
+            .sorted { $0.date < $1.date }
+        XCTAssertEqual(imported.count, 2, zone)
+        XCTAssertEqual(
+            imported[0].externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-09"),
+            zone
+        )
+        XCTAssertEqual(
+            imported[1].externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-10"),
+            zone
+        )
+
+        let before = health(date: beforeMidnight, weight: 71)
+        let after = health(date: afterMidnight, weight: 72)
+        let groups = BodyHistoryQuery.groupedMeasurementsByDay(
+            BodyMassMeasurementPairing.measurements(from: [before, after]),
+            calendar: calendar
+        )
+        XCTAssertEqual(groups.count, 2, zone)
+    }
+
+    private func calendar(timeZoneIdentifier: String) throws -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: timeZoneIdentifier))
+        return calendar
+    }
+
+    private func date(
+        _ year: Int,
+        _ month: Int,
+        _ day: Int,
+        _ hour: Int,
+        _ minute: Int,
+        calendar: Calendar
+    ) -> Date {
+        calendar.date(from: DateComponents(
+            year: year, month: month, day: day, hour: hour, minute: minute
+        ))!
+    }
+
+    private func resetStore() throws {
+        container = try ModelContainer(
+            for: Schema(SomaDataSchema.models),
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
     }
 
     private func health(

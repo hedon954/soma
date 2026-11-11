@@ -130,7 +130,7 @@ final class BodyMassDailyRecordTests: XCTestCase {
             deleted: [fatID],
             resample: BodyMassDayResampleSet(bodyFatByDay: ["2026-11-09": []])
         )
-        var row = try XCTUnwrap(try healthRows().first)
+        let row = try XCTUnwrap(try healthRows().first)
         XCTAssertEqual(row.weight, 72.0)
         XCTAssertNil(row.bodyFat)
 
@@ -172,16 +172,43 @@ final class BodyMassDailyRecordTests: XCTestCase {
     }
 
     func testDayBoundaryUsesCalendarStartOfDay() throws {
-        let beforeMidnight = date(2026, 11, 9, 23, 30)
-        let afterMidnight = date(2026, 11, 10, 0, 30)
+        try assertDayBoundaryUsesCalendarStartOfDay(in: calendar(timeZoneIdentifier: "UTC"))
+        try assertDayBoundaryUsesCalendarStartOfDay(in: calendar(timeZoneIdentifier: "Asia/Shanghai"))
+    }
+
+    private func assertDayBoundaryUsesCalendarStartOfDay(in calendar: Calendar) throws {
+        for row in try healthRows() {
+            container.mainContext.delete(row)
+        }
+        try container.mainContext.save()
+
+        let beforeMidnight = date(2026, 11, 9, 23, 59, calendar: calendar)
+        let afterMidnight = date(2026, 11, 10, 0, 0, calendar: calendar)
         try applyMass([
             mass(UUID(), beforeMidnight, 71.0),
             mass(UUID(), afterMidnight, 72.0)
-        ])
+        ], calendar: calendar)
         let rows = try healthRows().sorted { $0.date < $1.date }
-        XCTAssertEqual(rows.count, 2)
-        XCTAssertEqual(rows[0].externalID, BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-09"))
-        XCTAssertEqual(rows[1].externalID, BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-10"))
+        let zone = calendar.timeZone.identifier
+        XCTAssertEqual(rows.count, 2, zone)
+        XCTAssertEqual(
+            rows[0].externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-09"),
+            zone
+        )
+        XCTAssertEqual(
+            rows[1].externalID,
+            BodyMassImportIdentity.bodyDayExternalID(dayKey: "2026-11-10"),
+            zone
+        )
+        XCTAssertEqual(rows[0].date, beforeMidnight, zone)
+        XCTAssertEqual(rows[1].date, afterMidnight, zone)
+    }
+
+    private func calendar(timeZoneIdentifier: String) throws -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: timeZoneIdentifier))
+        return calendar
     }
 
     func testLegacySampleRowsFoldIntoDailyRecordsAndPreserveManuals() throws {
@@ -267,12 +294,13 @@ final class BodyMassDailyRecordTests: XCTestCase {
     private func applyMass(
         _ upserts: [BodyMassSampleImport],
         deleted: [UUID] = [],
-        resample: BodyMassDayResampleSet = BodyMassDayResampleSet()
+        resample: BodyMassDayResampleSet = BodyMassDayResampleSet(),
+        calendar: Calendar? = nil
     ) throws {
         try BodyMassRecordStore.apply(
             BodyMassSyncDelta(upserts: upserts, deletedSampleUUIDs: deleted, newAnchorData: nil),
             in: container.mainContext,
-            calendar: calendar,
+            calendar: calendar ?? self.calendar,
             resample: resample
         )
     }
@@ -296,8 +324,15 @@ final class BodyMassDailyRecordTests: XCTestCase {
             .sorted { $0.date < $1.date }
     }
 
-    private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
-        calendar.date(from: DateComponents(
+    private func date(
+        _ year: Int,
+        _ month: Int,
+        _ day: Int,
+        _ hour: Int,
+        _ minute: Int = 0,
+        calendar: Calendar? = nil
+    ) -> Date {
+        (calendar ?? self.calendar).date(from: DateComponents(
             year: year, month: month, day: day, hour: hour, minute: minute
         ))!
     }
