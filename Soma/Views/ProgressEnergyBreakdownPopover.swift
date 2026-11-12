@@ -46,9 +46,11 @@ private struct ProgressEnergyBreakdownPopover: View {
     @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        let maxHeight: CGFloat = dynamicTypeSize.isAccessibilitySize ? 480 : 380
+        let maxHeight: CGFloat = dynamicTypeSize.isAccessibilitySize
+            ? min(UIScreen.main.bounds.height * 0.75, 720) : 380
         let measured = contentHeight > 0 ? contentHeight : CGFloat(max(source.rows.count, 1)) * rowHeight + 16
-        let height = min(measured, maxHeight)
+        let slack: CGFloat = dynamicTypeSize.isAccessibilitySize ? 16 : 0
+        let height = min(measured + slack, maxHeight)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(source.rows) { row in
@@ -71,14 +73,15 @@ private struct ProgressEnergyBreakdownPopover: View {
         .scrollBounceBehavior(.basedOnSize)
         .onPreferenceChange(EnergyBreakdownHeightKey.self) { reported in
             let estimate = CGFloat(max(source.rows.count, 1)) * rowHeight + 16
-            if reported > 0, reported <= max(estimate * 2, estimate) {
+            let limit = dynamicTypeSize.isAccessibilitySize ? max(estimate * 4, 600) : max(estimate * 2, estimate)
+            if reported > 0, reported <= limit {
                 contentHeight = reported
             }
         }
         .accessibilityIdentifier("progress-energy-breakdown-list")
         .frame(
             width: min(400, max(260, UIScreen.main.bounds.width - 32)),
-            height: height,
+            height: dynamicTypeSize.isAccessibilitySize ? maxHeight : height,
             alignment: .top
         )
         .background(AppTheme.cardBackground)

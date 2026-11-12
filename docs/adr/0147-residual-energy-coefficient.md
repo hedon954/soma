@@ -1,11 +1,11 @@
 # ADR 0147：总消耗使用残差系数加所选日活动能量
 
-- 状态：已采纳并实现；真机数据待验收
+- 状态：部分已替代；残差系数与日活动能量规则仍在，训练如何进入总量见 ADR 0151
 - 日期：2026-11-06
 - 版本：0.0.32（修订 0.0.31 的总消耗公式，不单独发版）
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0145](0145-adaptive-energy-system.md)（当前总消耗不再使用参考日差额，日活动能量不再被排除）、[ADR 0144](0144-healthkit-daily-activity.md)（活动日合计进入总消耗的方式）、[ADR 0000](0000-origin-through-0.0.11.md)（全天消耗公式）、[工程契约](../../CLAUDE.md)
-- 后续修订：[ADR 0148](0148-daily-target-deficit.md)（摄入目标偏好；不替代总消耗公式）
+- 后续修订：[ADR 0148](0148-daily-target-deficit.md)（摄入目标偏好；不替代总消耗公式）、[ADR 0151](0151-training-energy-in-total.md)（部分替代：训练列表消耗作为独立加项直接加入总量）
 - 上游依据：[PRD 078](../prd/078-residual-energy-coefficient.md)
 - 下游落地：[验收](../acceptance.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)
 
@@ -15,7 +15,9 @@ ADR 0145 用参考日差额计算总消耗，并规定设备日活动能量不�
 
 ## 决策
 
-用户可见的预估总消耗、缺口、推荐目标和周期图表都使用：
+当前总消耗中的训练加项见 [ADR 0151](0151-training-energy-in-total.md)。下列公式是 0.0.32 当时的决策，不再作为「训练不得另加」的当前边界：
+
+用户可见的预估总消耗、缺口、推荐目标和周期图表当时使用：
 
 ```text
 当日静息 × 残差系数 + 所选日活动能量

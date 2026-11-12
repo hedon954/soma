@@ -6,21 +6,20 @@ enum EnergyKilocalorieDisplay {
         var resting: Int
         var baselineExtra: Int
         var activity: DailyEnergyTotal.Activity
+        var training: Int
         var total: Int
 
         var addsUp: Bool {
-            resting + baselineExtra + displayedActivity == total
+            resting + baselineExtra + displayedActivity + training == total
         }
 
-        /// 未记录的活动不显示成 0，加总时按 0 处理，使静息和基准额外等于总量。
+        /// 未记录的活动不显示成 0，加总时按 0 处理。
         var displayedActivity: Int {
             switch activity {
             case .absent:
                 0
-            case let .selected(value), let .recordedTraining(value):
+            case let .selected(value):
                 EnergyKilocalorieDisplay.whole(value)
-            case let .disaggregated(training, remaining):
-                EnergyKilocalorieDisplay.whole(training) + EnergyKilocalorieDisplay.whole(remaining)
             }
         }
     }
@@ -49,44 +48,40 @@ enum EnergyKilocalorieDisplay {
     static func parts(_ components: DailyEnergyTotal.Components) -> Parts {
         let total = whole(components.totalKilocalories)
         let resting = whole(components.restingKilocalories)
-        let activity = displayedActivity(components.activity, fitting: total - resting)
-        let extra = total - resting - activityKilocalories(activity)
-        return Parts(resting: resting, baselineExtra: extra, activity: activity, total: total)
+        var remainder = max(0, total - resting)
+        let activity = displayedActivity(components.activity, fitting: remainder)
+        remainder -= activityKilocalories(activity)
+        let training = min(whole(components.trainingKilocalories), remainder)
+        let extra = total - resting - activityKilocalories(activity) - training
+        return Parts(resting: resting, baselineExtra: extra, activity: activity, training: training, total: total)
     }
 
     static func averaged(_ values: [DailyEnergyTotal.Components]) -> Parts {
         let count = Double(values.count)
-        let mean = DailyEnergyTotal.Components(
-            restingKilocalories: values.reduce(0) { $0 + $1.restingKilocalories } / count,
-            coefficient: values.reduce(0) { $0 + $1.coefficient } / count,
-            activity: .recordedTraining(values.reduce(0) { $0 + $1.activityKilocalories } / count)
-        )
-        var parts = parts(mean)
-        if values.allSatisfy({
+        let allActivityAbsent = values.allSatisfy {
             if case .absent = $0.activity {
                 true
             } else {
                 false
             }
-        }) {
-            parts.activity = .absent
-            parts.baselineExtra = parts.total - parts.resting
         }
-        return parts
+        let mean = DailyEnergyTotal.Components(
+            restingKilocalories: values.reduce(0) { $0 + $1.restingKilocalories } / count,
+            coefficient: values.reduce(0) { $0 + $1.coefficient } / count,
+            activity: allActivityAbsent
+                ? .absent
+                : .selected(values.reduce(0) { $0 + $1.activityKilocalories } / count),
+            trainingKilocalories: values.reduce(0) { $0 + $1.trainingKilocalories } / count
+        )
+        return parts(mean)
     }
 
     private static func displayedActivity(_ activity: DailyEnergyTotal.Activity, fitting remainder: Int) -> DailyEnergyTotal.Activity {
         switch activity {
         case .absent:
-            return .absent
+            .absent
         case let .selected(value):
-            return .selected(Double(min(whole(value), max(0, remainder))))
-        case let .recordedTraining(value):
-            return .recordedTraining(Double(min(whole(value), max(0, remainder))))
-        case let .disaggregated(training, remaining):
-            let combined = min(whole(training + remaining), max(0, remainder))
-            let train = min(whole(training), combined)
-            return .disaggregated(training: Double(train), remaining: Double(combined - train))
+            .selected(Double(min(whole(value), max(0, remainder))))
         }
     }
 
@@ -94,10 +89,8 @@ enum EnergyKilocalorieDisplay {
         switch activity {
         case .absent:
             0
-        case let .selected(value), let .recordedTraining(value):
+        case let .selected(value):
             whole(value)
-        case let .disaggregated(training, remaining):
-            whole(training) + whole(remaining)
         }
     }
 }

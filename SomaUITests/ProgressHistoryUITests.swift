@@ -127,11 +127,14 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
             XCTAssertTrue(popover.staticTexts["活动消耗"].exists)
             XCTAssertTrue(popover.staticTexts["基准额外消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["训练消耗"].exists)
+            XCTAssertFalse(popover.staticTexts["训练活动消耗"].exists)
+            XCTAssertFalse(popover.staticTexts["其余活动消耗"].exists)
             XCTAssertFalse(popover.staticTexts["活动等消耗"].exists)
             XCTAssertFalse(popover.staticTexts["个人静息公式"].exists)
             XCTAssertFalse(popover.staticTexts["默认参考"].exists)
             XCTAssertFalse(popover.staticTexts["个人设置"].exists)
-            XCTAssertLessThanOrEqual(popover.frame.height, 160, "三行组成不应留下空行")
+            XCTAssertLessThanOrEqual(popover.frame.height, 230, "四行组成不应留下空行")
             XCTAssertFalse(popover.staticTexts["已记录摄入"].exists)
             keep(app, "energy-expenditure-breakdown-\(appearance)")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
@@ -151,6 +154,57 @@ final class ProgressHistoryUITests: XCTestCase {
         }
     }
 
+    func testExpenditureAddsListTrainingAcrossThemesPeriodsAndDynamicType() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance, noBaseline: true, energyFixture: true, dailyActivity: true)
+            let picker = app.segmentedControls["progress-period-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 15))
+            picker.buttons["日"].tap()
+            XCTAssertTrue(app.staticTexts["约 200 kcal"].waitForExistence(timeout: 10))
+            let expenditure = app.buttons["progress-expenditure-breakdown"]
+            reveal(expenditure, in: app)
+            expenditure.tap()
+            let popover = app.scrollViews["progress-energy-breakdown-list"]
+            XCTAssertTrue(popover.waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["基准额外消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["活动消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["训练消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["486 kcal"].exists)
+            XCTAssertTrue(popover.staticTexts["400 kcal"].exists)
+            XCTAssertFalse(popover.staticTexts["训练活动消耗"].exists)
+            keep(app, "training-total-day-\(appearance)")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: popover)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+            picker.buttons["周"].tap()
+            let weekExpenditure = app.buttons["progress-expenditure-breakdown"]
+            reveal(weekExpenditure, in: app)
+            weekExpenditure.tap()
+            XCTAssertTrue(popover.waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["日均训练消耗"].waitForExistence(timeout: 5))
+            keep(app, "training-total-week-\(appearance)")
+            app.terminate()
+        }
+        let large = launch("dark", largeType: true, noBaseline: true, energyFixture: true, dailyActivity: true)
+        let picker = large.segmentedControls["progress-period-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        picker.buttons["日"].tap()
+        let expenditure = large.buttons["progress-expenditure-breakdown"]
+        reveal(expenditure, in: large)
+        expenditure.tap()
+        let list = large.scrollViews["progress-energy-breakdown-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        let training = list.staticTexts["训练消耗"]
+        for _ in 0 ..< 6 where !training.isHittable {
+            list.swipeUp()
+        }
+        XCTAssertTrue(training.isHittable)
+        XCTAssertTrue(list.staticTexts["400 kcal"].exists)
+        keep(large, "training-total-day-large-dark")
+        large.terminate()
+    }
+
     func testRestingOnlyEstimateAndCompactDetails() {
         for appearance in ["light", "dark"] {
             let app = launch(appearance, noBaseline: true)
@@ -164,6 +218,7 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["静息消耗"].exists)
             // LabeledContent 把标题和数值合成同一个无障碍标签。
             XCTAssertTrue(app.staticTexts["残差系数、1.40 · 初始回退"].exists)
+            XCTAssertTrue(app.staticTexts["训练消耗"].exists)
             XCTAssertFalse(app.staticTexts["残差系数、1.40 · 动态估算"].exists)
             XCTAssertFalse(app.staticTexts["统计范围"].exists)
             XCTAssertFalse(app.staticTexts["摄入有记录日"].exists)
@@ -390,13 +445,19 @@ final class ProgressHistoryUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
-    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true) -> XCUIApplication {
+    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true, energyFixture: Bool = false, dailyActivity: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = hasRecords ? "1" : "0"
         app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] = appearance
         if noBaseline {
             app.launchEnvironment["SOMA_UI_PROGRESS_NO_BASELINE"] = "1"
+        }
+        if energyFixture {
+            app.launchEnvironment["SOMA_UI_ENERGY_FIXTURE"] = "1"
+        }
+        if dailyActivity {
+            app.launchEnvironment["SOMA_UI_DAILY_ACTIVITY_FIXTURE"] = "1"
         }
         if largeType {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]

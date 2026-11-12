@@ -5,7 +5,7 @@
 - 版本：0.0.30
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（日汇总无样本 cursor；自然日覆盖与真实来源）、[工程契约](../../CLAUDE.md)（三项只读接入）
-- 后续替代：[ADR 0146](0146-daily-activity-source-priority.md)（多来源整包择优、来源身份、列表与分享边界）、[ADR 0147](0147-residual-energy-coefficient.md)（所选日活动能量进入总消耗）、[ADR 0149](0149-healthkit-body-mass.md)（部分替代：增加 bodyMass 导入）
+- 后续替代：[ADR 0146](0146-daily-activity-source-priority.md)（多来源整包择优、来源身份、列表与分享边界）、[ADR 0147](0147-residual-energy-coefficient.md)（所选日活动能量进入总消耗）、[ADR 0149](0149-healthkit-body-mass.md)（部分替代：增加 bodyMass 导入）、[ADR 0151](0151-training-energy-in-total.md)（部分替代：训练列表消耗作为独立加项直接加入总量）
 - 上游依据：[PRD 075](../prd/075-healthkit-daily-activity.md)、[HealthKit 调研](../research/2026-10-20-healthkit-daily-activity.md)
 - 下游落地：[验收](../acceptance.md)、[数据库结构](../engineering/database-schema.md)
 
@@ -25,7 +25,7 @@ COROS 通过 Apple 健康提供源事实，三项日汇总可能包含当天训�
 前台重读近 30 日，额外历史日窗口有独立 owner；切空间、后台和断开取消，以 generation 拒绝迟到结果。
 不另存日汇总文件；连接状态仍使用受保护且排除备份的独立文件。
 
-能量投影从每日记录加载事实参考。当前总消耗按 [ADR 0147](0147-residual-energy-coefficient.md) 计算：静息 × 残差系数 + 所选日活动能量。活动日合计不再为了避免重复而排除在总量之外；已经包含在其中的训练不另加。
+能量投影从每日记录加载事实参考。当前总消耗按 [ADR 0151](0151-training-energy-in-total.md) 计算：静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。活动日合计仍进入总量；训练列表消耗作为独立加项直接加入，不猜测与日活动去重。
 现有训练记录仍显示原始热量；日/周/月/年图表、缺口及推荐目标共享同一去重投影。
 这是本产品统计口径，不将活动读数解释为全天覆盖完整的证明。
 

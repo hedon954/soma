@@ -120,16 +120,12 @@ private struct EnergyEvidenceDetail: View {
                         switch presented.activity {
                         case .absent:
                             LabeledContent("活动消耗", value: "未记录")
-                        case let .selected(kilocalories), let .recordedTraining(kilocalories):
+                        case let .selected(kilocalories):
                             LabeledContent("活动消耗", value: energyText(kilocalories))
-                        case let .disaggregated(training, remaining):
-                            Group {
-                                LabeledContent("训练活动消耗", value: energyText(training))
-                                LabeledContent("其余活动消耗", value: energyText(remaining))
-                            }
                         }
+                        LabeledContent("训练消耗", value: energyText(presented.trainingKilocalories))
                         LabeledContent("全天估算", value: energyText(presented.totalKilocalories))
-                        Text("预估总消耗 = 静息 × 残差系数 + 所选日活动能量。系数不是传统全天活动水平；已经包含在日活动能量里的训练不会再加一次。")
+                        Text("预估总消耗 = 静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。系数不是传统全天活动水平。训练消耗与训练列表口径一致；不声称已与日活动能量去重。")
                             .font(.footnote)
                     }
                     LabeledContent("参考日差额系数", value: value.factor.formatted(.number.precision(.fractionLength(2))))
@@ -150,7 +146,7 @@ private struct EnergyEvidenceDetail: View {
                     } ?? "尚未建立")
                     LabeledContent("被训练替代的时段活动", value: value.displacedActivityPerHour.formatted(.number.precision(.fractionLength(1))) + " kcal/小时")
                     Text(value.presentedTotal == nil
-                        ? "这是当时保存的参考日差额。当前预估总消耗是静息 × 残差系数 + 所选日活动能量。"
+                        ? "这是当时保存的参考日差额。当前预估总消耗是静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。"
                         : "下面的差额是当时的参考日记录，不加入上面的预估总消耗，也不表示要把日活动能量排除在总消耗之外。")
                         .font(.footnote)
                     Text(value.input.reference.reason)

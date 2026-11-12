@@ -12,24 +12,27 @@ final class DailyActivityEnergyTests: XCTestCase {
         XCTAssertEqual((high.estimate?.totalKilocalories ?? 0) - (low.estimate?.totalKilocalories ?? 0), 300)
     }
 
-    func testSelectedActiveEnergyKeepsTheCoefficientAndDoesNotAddTrainingAgain() {
+    func testSelectedActiveEnergyKeepsTheCoefficientAndAddsTrainingDirectly() {
         let outcome = AdaptiveEnergyEstimator.estimate(
-            for: .now, restingEstimate: 1500, trainingNetKilocalories: 700, activeEnergyKilocalories: 450
+            for: .now, restingEstimate: 1500, trainingKilocalories: 700, activeEnergyKilocalories: 450
         )
         XCTAssertEqual(outcome.estimate?.method, .defaultReference)
         XCTAssertEqual(outcome.estimate?.factor, 1.4)
-        XCTAssertEqual(outcome.estimate?.totalKilocalories, 1500 * 1.4 + 450)
+        XCTAssertEqual(outcome.estimate?.totalKilocalories, 1500 * 1.4 + 450 + 700)
         XCTAssertEqual(outcome.estimate?.components?.baselineExtraKilocalories ?? 0, 600, accuracy: 0.001)
         XCTAssertEqual(outcome.estimate?.components?.activityKilocalories, 450)
+        XCTAssertEqual(outcome.estimate?.components?.trainingKilocalories, 700)
         XCTAssertEqual(outcome.estimate?.components?.componentsAddUp, true)
         let zero = AdaptiveEnergyEstimator.estimate(
-            for: .now, restingEstimate: 1500, trainingNetKilocalories: 700, activeEnergyKilocalories: 0
+            for: .now, restingEstimate: 1500, trainingKilocalories: 700, activeEnergyKilocalories: 0
         )
-        XCTAssertEqual(zero.estimate?.totalKilocalories, 1500 * 1.4)
+        XCTAssertEqual(zero.estimate?.totalKilocalories, 1500 * 1.4 + 700)
         XCTAssertEqual(zero.estimate?.components?.activity, .selected(0))
-        let missing = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, trainingNetKilocalories: 700)
+        XCTAssertEqual(zero.estimate?.components?.trainingKilocalories, 700)
+        let missing = AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: 1500, trainingKilocalories: 700)
         XCTAssertEqual(missing.estimate?.totalKilocalories, 1500 * 1.4 + 700)
-        XCTAssertEqual(missing.estimate?.components?.activity, .recordedTraining(700))
+        XCTAssertEqual(missing.estimate?.components?.activity, .absent)
+        XCTAssertEqual(missing.estimate?.components?.trainingKilocalories, 700)
         XCTAssertNil(missing.estimate?.activeEnergyKilocalories)
         XCTAssertNil(AdaptiveEnergyEstimator.estimate(for: .now, restingEstimate: nil, activeEnergyKilocalories: 450).estimate)
     }
@@ -55,8 +58,8 @@ final class DailyActivityEnergyTests: XCTestCase {
                                               confirmation: .init(foodComplete: true, mealEvidenceFingerprint: EnergyFoodEvidence.fingerprint(records: [meal])),
                                               learningPaused: nil)]
         let resting = 700.0 + 1062.5 - 150 + 5
-        // 450 不是日活动整包，是这条训练自己的活动能量；800 MET 5 是另一条训练的净活动能量 640。两者都计入，不互相覆盖。
-        let expected = resting * ResidualEnergyCoefficient.initialFallback + 450 + 800 * (5 - 1) / 5
+        // 两条都是训练列表记录：450 与列表展示的 800（MET 毛消耗）都按列表口径直接加入，不改写成净活动能量。
+        let expected = resting * ResidualEnergyCoefficient.initialFallback + 450 + 800
         for period in [ProgressPeriod.day, .week, .month, .year] {
             let snapshot = ProgressHistoryProjection.build(
                 window: period.window(containing: day, calendar: calendar), records: [weight, meal, activity, training],
@@ -76,8 +79,11 @@ final class DailyActivityEnergyTests: XCTestCase {
             window: ProgressPeriod.day.window(containing: day, calendar: calendar),
             records: [weight, meal, dailyActivity, training], profile: profile, now: now, calendar: calendar
         )
-        let packagedTotal = try XCTUnwrap(packaged.days.first { $0.date == day }?.energy.estimate?.totalKilocalories)
-        XCTAssertEqual(packagedTotal, resting * ResidualEnergyCoefficient.initialFallback + 450, accuracy: 0.001)
-        XCTAssertEqual(expected - packagedTotal, 640, accuracy: 0.001)
+        let packagedDay = try XCTUnwrap(packaged.days.first { $0.date == day })
+        let packagedTotal = try XCTUnwrap(packagedDay.energy.estimate?.totalKilocalories)
+        XCTAssertEqual(packagedTotal, resting * ResidualEnergyCoefficient.initialFallback + 450 + 800, accuracy: 0.001)
+        XCTAssertEqual(packagedDay.energy.estimate?.components?.activity, .selected(450))
+        XCTAssertEqual(packagedDay.energy.estimate?.components?.trainingKilocalories, 800)
+        XCTAssertEqual(packagedDay.trainingCalories.value, 450)
     }
 }

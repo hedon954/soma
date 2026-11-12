@@ -137,26 +137,16 @@ enum EnergyRuntimeProjection {
 
     /// 当前总消耗。参考日差额失败时仍保留这份结果，因为总量不再依赖步行差额。
     private static func present(
-        resting: Double?, entries: [ProgressHistoryRecord], training: [EnergyTrainingEvent],
+        resting: Double?, entries: [ProgressHistoryRecord], training _: [EnergyTrainingEvent],
         calculation: inout EnergyDayCalculation?, on date: Date, output: inout EnergyRuntimeOutput
     ) {
         guard let resting else { return }
         let selection = DailyEnergyTotal.selectedDailyActive(in: entries)
-        let recorded = selection.kilocalories == nil
-            ? DailyEnergyTotal.recordedTrainingKilocalories(training, resting: resting) : nil
-        let included = selection.kilocalories.flatMap { selected in
-            selection.source.flatMap {
-                DailyEnergyTotal.includedTrainingKilocalories(
-                    selectedActive: selected, winningSource: $0, events: training, resting: resting
-                )
-            }
-        }
         guard let components = DailyEnergyTotal.compose(
             restingKilocalories: resting,
             coefficient: ResidualEnergyCoefficient.current(),
             selectedActiveKilocalories: selection.kilocalories,
-            includedTrainingKilocalories: included,
-            recordedTrainingKilocalories: recorded
+            trainingKilocalories: DailyEnergyTotal.listTrainingKilocalories(in: entries)
         ) else {
             output.outcomes[date] = .init(estimate: nil, missingReason: "活动能量读数无效")
             return

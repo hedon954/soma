@@ -30,6 +30,7 @@ struct ProgressEnergySourcesView: View {
                             let displayed = EnergyKilocalorieDisplay.parts(components)
                             LabeledContent("基准额外消耗", value: EnergyKilocalorieDisplay.kcal(displayed.baselineExtra))
                             activityContent(displayed.activity)
+                            LabeledContent("训练消耗", value: EnergyKilocalorieDisplay.kcal(displayed.training))
                         }
                         LabeledContent("预估总消耗", value: day.energy.estimate?.components.map {
                             EnergyKilocalorieDisplay.kcal(EnergyKilocalorieDisplay.parts($0).total)
@@ -99,7 +100,7 @@ struct ProgressEnergySourcesView: View {
             if estimate.method == .confirmedLifestyle {
                 LabeledContent("参考生效", value: estimate.effectiveFrom.formatted(.dateTime.year().month().day()))
             }
-            Text("预估总消耗 = 静息 × 残差系数 + 所选日活动能量。系数表示静息，以及所选活动能量没有覆盖的估算消耗，不是传统全天活动水平。已经包含在日活动能量里的训练不会再加一次；没有读数时不编造。")
+            Text("预估总消耗 = 静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。系数不是传统全天活动水平。训练消耗与训练列表口径一致；日活动能量仍可能包含手表或其他 App 对同一场训练的计量，此处不扣减、也不声称已去重。没有日活动读数时不编造。")
                 .foregroundStyle(AppTheme.accent)
             if let calculation = estimate.calculation {
                 Text(calculation.input.reference.reason).font(.footnote)
@@ -150,8 +151,17 @@ struct ProgressEnergySourcesView: View {
             ?? EnergyKilocalorieDisplay.text(estimate.restingKilocalories)
         let total = displayed.map { EnergyKilocalorieDisplay.text($0.total) }
             ?? EnergyKilocalorieDisplay.text(estimate.totalKilocalories)
-        if let displayed, displayed.displayedActivity > 0 {
-            return "\(resting) × \(factor) + \(EnergyKilocalorieDisplay.text(displayed.displayedActivity)) ≈ \(total) kcal"
+        if let displayed {
+            var addends: [String] = []
+            if displayed.displayedActivity > 0 {
+                addends.append(EnergyKilocalorieDisplay.text(displayed.displayedActivity))
+            }
+            if displayed.training > 0 {
+                addends.append(EnergyKilocalorieDisplay.text(displayed.training))
+            }
+            if !addends.isEmpty {
+                return "\(resting) × \(factor) + " + addends.joined(separator: " + ") + " ≈ \(total) kcal"
+            }
         }
         return "\(resting) × \(factor) ≈ \(total) kcal"
     }
@@ -161,13 +171,8 @@ struct ProgressEnergySourcesView: View {
         switch activity {
         case .absent:
             LabeledContent("活动消耗", value: "未记录")
-        case let .selected(value), let .recordedTraining(value):
+        case let .selected(value):
             LabeledContent("活动消耗", value: energy(value))
-        case let .disaggregated(training, remaining):
-            Group {
-                LabeledContent("训练活动消耗", value: energy(training))
-                LabeledContent("其余活动消耗", value: energy(remaining))
-            }
         }
     }
 }

@@ -52,13 +52,14 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
                                                        profile: profile, now: day.addingTimeInterval(86400), calendar: calendar)
         let estimate = try XCTUnwrap(snapshot.days.first?.energy.estimate)
         XCTAssertEqual(estimate.calculation?.adoptedTrainingIDs, ["fixture-run"])
-        XCTAssertEqual(estimate.totalKilocalories, 1617.5 * 1.4 + 500, accuracy: 0.001)
-        XCTAssertEqual(estimate.components?.activity, .recordedTraining(500))
+        XCTAssertEqual(estimate.totalKilocalories, 1617.5 * 1.4, accuracy: 0.001)
+        XCTAssertEqual(estimate.components?.activity, .absent)
+        XCTAssertEqual(estimate.components?.trainingKilocalories, 0)
         XCTAssertNotNil(estimate.calculation)
         XCTAssertNotEqual(estimate.calculation?.total, estimate.totalKilocalories)
     }
 
-    func testWinningPackageSplitsIncludedTrainingAndDoesNotAddAnotherSource() throws {
+    func testWinningPackageKeepsSelectedActiveAndAddsListTrainingDirectly() throws {
         var profile = profile
         let health = EnergyTrainingEvent(
             id: "health:fixture", source: "Apple Watch", scope: .active, kilocalories: 100,
@@ -79,7 +80,8 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
         )
         let split = try XCTUnwrap(included.days.first { $0.date == day }?.energy.estimate)
         XCTAssertEqual(split.totalKilocalories, 1617.5 * 1.4 + 400, accuracy: 0.001)
-        XCTAssertEqual(split.components?.activity, .disaggregated(training: 100, remaining: 300))
+        XCTAssertEqual(split.components?.activity, .selected(400))
+        XCTAssertEqual(split.components?.trainingKilocalories, 0)
         let soma = ProgressHistoryRecord(
             activity: .init(id: UUID(), kind: .workout, date: day, title: "虚构训练", detail: "", metric: nil),
             calories: 800, calorieMET: 5, durationSeconds: 3600
@@ -89,8 +91,9 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
             records: [weight, daily, soma], profile: profile, now: day.addingTimeInterval(86400), calendar: calendar
         )
         let combined = try XCTUnwrap(mixed.days.first { $0.date == day }?.energy.estimate)
-        XCTAssertEqual(combined.totalKilocalories, split.totalKilocalories, accuracy: 0.001)
+        XCTAssertEqual(combined.totalKilocalories, 1617.5 * 1.4 + 400 + 800, accuracy: 0.001)
         XCTAssertEqual(combined.components?.activity, .selected(400))
+        XCTAssertEqual(combined.components?.trainingKilocalories, 800)
     }
 
     func testBoundaryAmbiguityAndUnknownCoverageDoNotReduceBudget() throws {
@@ -138,5 +141,42 @@ final class EnergyRuntimeProjectionTests: XCTestCase {
                                                     profile: profile, now: day, calendar: calendar)
         XCTAssertEqual(removed.calculations[day]?.input.reference.factor, 1.4)
         XCTAssertNotEqual(removed.calculations[day]?.input.reference.id, life.id)
+    }
+
+    func testAddingEditingAndDeletingTrainingRefreshesThePresentedTotal() throws {
+        let daily = ProgressHistoryRecord(
+            activity: .init(id: UUID(), kind: .workout, date: day, title: "日常活动", detail: "", metric: nil),
+            calories: 300, activeEnergyKilocalories: 300, isDailyActivity: true, dailyActivitySource: .appleHealth
+        )
+        var first = ProgressHistoryRecord(
+            activity: .init(id: UUID(), kind: .workout, date: day, title: "虚构训练甲", detail: "", metric: nil),
+            calories: 80
+        )
+        let second = ProgressHistoryRecord(
+            activity: .init(id: UUID(), kind: .workout, date: day, title: "虚构训练乙", detail: "", metric: nil),
+            calories: 90
+        )
+        func total(for records: [ProgressHistoryRecord]) throws -> (Double, Double) {
+            let snapshot = ProgressHistoryProjection.build(
+                window: ProgressPeriod.day.window(containing: day, calendar: calendar),
+                records: records, profile: profile, now: day.addingTimeInterval(86400), calendar: calendar
+            )
+            let estimate = try XCTUnwrap(snapshot.days.first { $0.date == day }?.energy.estimate)
+            return try (XCTUnwrap(estimate.totalKilocalories), estimate.components?.trainingKilocalories ?? -1)
+        }
+        let baseline = 1617.5 * 1.4 + 300
+        let added = try total(for: [weight, daily, first, second])
+        XCTAssertEqual(added.0, baseline + 80 + 90, accuracy: 0.001)
+        XCTAssertEqual(added.1, 170, accuracy: 0.001)
+        first.calories = 120
+        let edited = try total(for: [weight, daily, first, second])
+        XCTAssertEqual(edited.0, baseline + 120 + 90, accuracy: 0.001)
+        XCTAssertEqual(edited.1, 210, accuracy: 0.001)
+        let deleted = try total(for: [weight, daily, first])
+        XCTAssertEqual(deleted.0, baseline + 120, accuracy: 0.001)
+        XCTAssertEqual(deleted.1, 120, accuracy: 0.001)
+        let empty = try total(for: [weight, daily])
+        XCTAssertEqual(empty.0, baseline, accuracy: 0.001)
+        XCTAssertEqual(empty.1, 0, accuracy: 0.001)
     }
 }

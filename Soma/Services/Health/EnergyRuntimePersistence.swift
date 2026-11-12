@@ -13,7 +13,7 @@ enum EnergyRuntimePersistence {
                 case let .daily(calculation):
                     let explanation = calculation.presentedTotal == nil
                         ? "生活参考、非训练步行差额、去重训练与长期修正共同计算"
-                        : "静息 × 残差系数 + 所选日活动能量"
+                        : "静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗"
                     try EnergyEvidenceStore.append(calculation, kind: .daily, date: calculation.input.date,
                                                    reason: explanation, in: context, now: now, saveImmediately: false)
                 case let .calibration(review):

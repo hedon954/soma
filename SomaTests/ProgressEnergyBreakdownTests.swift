@@ -47,11 +47,13 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
     func testExpenditureShowsEffectiveFactorAndTrainingAfterTimeReplacement() {
         let snapshot = make(.day, records: [record(5, .workout, "训练", 800, calorieMET: 5)], hasProfile: true)
         let breakdown = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure)
-        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "基准额外消耗", "活动消耗"])
+        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "基准额外消耗", "活动消耗", "训练消耗"])
         XCTAssertEqual(breakdown.rows[0].value, "1,618 kcal")
         XCTAssertEqual(breakdown.rows[1].value, "647 kcal")
-        XCTAssertEqual(breakdown.rows[2].value, "640 kcal")
+        XCTAssertEqual(breakdown.rows[2].value, "未记录")
         XCTAssertEqual(breakdown.rows[2].tone, .activity)
+        XCTAssertEqual(breakdown.rows[3].value, "800 kcal")
+        XCTAssertEqual(breakdown.rows[3].tone, .workout)
         XCTAssertFalse(breakdown.rows.contains { $0.label.contains("预估总消耗") })
     }
 
@@ -71,8 +73,9 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         let snapshot = make(.month, records: [], hasProfile: true)
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure).rows
         XCTAssertEqual(snapshot.estimateDayCount, 4)
-        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗"])
+        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗", "日均训练消耗"])
         XCTAssertEqual(rows[2].value, "未记录")
+        XCTAssertEqual(rows[3].value, "0 kcal")
         XCTAssertFalse(rows.contains { $0.label.contains("预估总消耗") })
     }
 
@@ -151,7 +154,9 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         let activity = components.reduce(0) { $0 + $1.activityKilocalories } / count
         XCTAssertEqual(components.map(\.coefficient), Array(repeating: ResidualEnergyCoefficient.initialFallback, count: components.count))
         XCTAssertEqual(resting + extra + activity, components.reduce(0) { $0 + $1.totalKilocalories } / count, accuracy: 0.001)
-        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗"])
+        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗", "日均训练消耗"])
+        let training = components.reduce(0) { $0 + $1.trainingKilocalories } / count
+        XCTAssertEqual(resting + extra + activity + training, components.reduce(0) { $0 + $1.totalKilocalories } / count, accuracy: 0.001)
     }
 
     private func make(_ period: ProgressPeriod, records: [ProgressHistoryRecord], hasProfile: Bool = false) -> ProgressHistorySnapshot {

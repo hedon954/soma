@@ -1,28 +1,22 @@
 import Foundation
 
-/// 预估总消耗 = 当日静息 × 残差系数 + 进入总量的活动能量。
+/// 预估总消耗 = 当日静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。
 ///
 /// 活动能量只取已经择优的一份日活动读数。HealthKit `activeEnergyBurned` 不含静息。
-/// 重叠的 COROS / Apple 日活动能量不能相加。训练只有在能证明已经包含在这份读数里时才拆开展示，
-/// 并且拆开后的两项之和仍等于所选日活动能量，不能再加到总量上。
-/// 没有日活动读数时不编造；已记录、且未包含在日读数里的训练能量可以单独进入总量。
+/// 重叠的 COROS / Apple 日活动能量不能相加。训练消耗与进展页训练列表使用同一汇总口径，
+/// 作为独立加项直接加入，不从日活动能量里拆出，也不猜测扣减。
+/// 没有日活动读数时不编造；没有训练记录时训练消耗为 0。
 enum DailyEnergyTotal {
     enum Activity: Codable, Equatable, Sendable {
-        /// 一份所选日活动能量，未能可靠拆开。
+        /// 一份所选日活动能量。
         case selected(Double)
-        /// 训练活动能量已包含在所选日活动能量中；其余 = 所选 − 训练。
-        case disaggregated(training: Double, remaining: Double)
-        /// 没有所选日活动读数。这里只是已知训练的活动能量，不是补出来的全天活动。
-        case recordedTraining(Double)
-        /// 没有所选日活动读数，也没有已知训练能量。
+        /// 没有所选日活动读数。
         case absent
 
         var kilocalories: Double {
             switch self {
-            case let .selected(value), let .recordedTraining(value):
+            case let .selected(value):
                 value
-            case let .disaggregated(training, remaining):
-                training + remaining
             case .absent:
                 0
             }
@@ -33,8 +27,9 @@ enum DailyEnergyTotal {
         var restingKilocalories: Double
         var coefficient: Double
         var activity: Activity
+        var trainingKilocalories: Double = 0
 
-        /// 静息 ×（系数 − 1）。这是系数里、所选活动能量没有覆盖的那一部分。
+        /// 静息 ×（系数 − 1）。这是系数里、所选活动能量和训练消耗没有单独列出的那一部分。
         var baselineExtraKilocalories: Double {
             restingKilocalories * (coefficient - 1)
         }
@@ -44,11 +39,56 @@ enum DailyEnergyTotal {
         }
 
         var totalKilocalories: Double {
-            restingKilocalories * coefficient + activityKilocalories
+            restingKilocalories * coefficient + activityKilocalories + trainingKilocalories
         }
 
         var componentsAddUp: Bool {
-            abs(restingKilocalories + baselineExtraKilocalories + activityKilocalories - totalKilocalories) < 0.000_001
+            abs(
+                restingKilocalories + baselineExtraKilocalories + activityKilocalories
+                    + trainingKilocalories - totalKilocalories
+            ) < 0.000_001
+        }
+
+        init(
+            restingKilocalories: Double,
+            coefficient: Double,
+            activity: Activity,
+            trainingKilocalories: Double = 0
+        ) {
+            self.restingKilocalories = restingKilocalories
+            self.coefficient = coefficient
+            self.activity = activity
+            self.trainingKilocalories = trainingKilocalories
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: DailyEnergyTotalComponentKeys.self)
+            restingKilocalories = try container.decode(Double.self, forKey: .restingKilocalories)
+            coefficient = try container.decode(Double.self, forKey: .coefficient)
+            let legacy = try container.decode(DailyEnergyTotalLegacyActivity.self, forKey: .activity)
+            let storedTraining = try container.decodeIfPresent(Double.self, forKey: .trainingKilocalories) ?? 0
+            switch legacy {
+            case let .selected(value):
+                activity = .selected(value)
+                trainingKilocalories = storedTraining
+            case let .disaggregated(training, remaining):
+                activity = .selected(training + remaining)
+                trainingKilocalories = storedTraining
+            case let .recordedTraining(value):
+                activity = .absent
+                trainingKilocalories = storedTraining == 0 ? value : storedTraining
+            case .absent:
+                activity = .absent
+                trainingKilocalories = storedTraining
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: DailyEnergyTotalComponentKeys.self)
+            try container.encode(restingKilocalories, forKey: .restingKilocalories)
+            try container.encode(coefficient, forKey: .coefficient)
+            try container.encode(activity, forKey: .activity)
+            try container.encode(trainingKilocalories, forKey: .trainingKilocalories)
         }
     }
 
@@ -57,13 +97,12 @@ enum DailyEnergyTotal {
     }
 
     /// `selectedActiveKilocalories == nil` 表示没有读数。非 nil 的 0 是有效读数。
-    /// 无效读数不当成 0，也不改用训练能量顶上。
+    /// 无效活动读数不当成 0，也不改用训练能量顶上。无效训练加项按 0 处理，不让整份总量失败。
     static func compose(
         restingKilocalories: Double,
         coefficient: ResidualEnergyCoefficient,
         selectedActiveKilocalories: Double?,
-        includedTrainingKilocalories: Double? = nil,
-        recordedTrainingKilocalories: Double? = nil
+        trainingKilocalories: Double = 0
     ) -> Components? {
         guard restingKilocalories.isFinite, restingKilocalories > 0, restingKilocalories < 100_000,
               coefficient.isUsable
@@ -71,20 +110,16 @@ enum DailyEnergyTotal {
         let activity: Activity
         if let selected = selectedActiveKilocalories {
             guard isUsableActive(selected) else { return nil }
-            if let training = includedTrainingKilocalories, isUsableActive(training), training <= selected {
-                activity = .disaggregated(training: training, remaining: selected - training)
-            } else {
-                activity = .selected(selected)
-            }
-        } else if let training = recordedTrainingKilocalories, isUsableActive(training) {
-            activity = .recordedTraining(training)
-        } else if recordedTrainingKilocalories != nil {
-            return nil
+            activity = .selected(selected)
         } else {
             activity = .absent
         }
+        let training = isUsableActive(trainingKilocalories) ? trainingKilocalories : 0
         let components = Components(
-            restingKilocalories: restingKilocalories, coefficient: coefficient.value, activity: activity
+            restingKilocalories: restingKilocalories,
+            coefficient: coefficient.value,
+            activity: activity,
+            trainingKilocalories: training
         )
         guard components.totalKilocalories.isFinite, components.totalKilocalories > 0, components.totalKilocalories < 100_000,
               components.componentsAddUp
@@ -100,44 +135,80 @@ enum DailyEnergyTotal {
         return (record.activeEnergyKilocalories, record.dailyActivitySource)
     }
 
-    /// 没有所选日活动读数时，汇总去重后已知的训练活动能量。未知口径保持未知，不补 0。
-    static func recordedTrainingKilocalories(_ events: [EnergyTrainingEvent], resting: Double) -> Double? {
-        let preferred = EnergyDayCalculator.preferredEvents(events, resting: resting)
-        let known = preferred.compactMap { $0.netEnergy(resting: resting) }
-        guard !known.isEmpty else { return nil }
-        let total = known.reduce(0, +)
-        return isUsableActive(total) ? total : nil
+    /// 与进展页训练列表相同的汇总：运动记录且不是日常活动，按记录身份去重后加总列表展示的估算。
+    /// `nil`、非有限、小于 0、或达到 100000 的单条不计入、不编成 0。
+    static func listTrainingKilocalories(in entries: [ProgressHistoryRecord]) -> Double {
+        var seen: Set<UUID> = []
+        var total = 0.0
+        for record in entries where isListTraining(record) {
+            guard seen.insert(record.activity.id).inserted, let value = record.calories, isUsableActive(value) else { continue }
+            total += value
+        }
+        return total
     }
 
-    /// 只有这些训练的活动能量能被证明包含在同一份获胜日活动能量里时，才返回可拆出的训练部分。
-    /// Apple 健康汇总只拆 `health:` 且口径为活动能量的训练；COROS 整包只拆来源属于 COROS 的训练。
-    /// 夹杂 Soma 本地记录、未知口径或其他来源时不拆，调用方也不得把它们再加到日活动能量上。
-    static func includedTrainingKilocalories(
-        selectedActive: Double,
-        winningSource: DailyActivityWinningSource,
-        events: [EnergyTrainingEvent],
-        resting: Double
-    ) -> Double? {
-        guard isUsableActive(selectedActive) else { return nil }
-        let preferred = EnergyDayCalculator.preferredEvents(events, resting: resting)
-        guard !preferred.isEmpty else { return nil }
-        let included = preferred.filter { event in
-            event.scope == .active && event.id.hasPrefix("health:") && source(event, matches: winningSource)
+    private static func isListTraining(_ record: ProgressHistoryRecord) -> Bool {
+        record.activity.kind == .workout && !record.isDailyActivity
+    }
+}
+
+private enum DailyEnergyTotalComponentKeys: String, CodingKey {
+    case restingKilocalories, coefficient, activity, trainingKilocalories
+}
+
+private enum DailyEnergyTotalLegacyActivityKeys: String, CodingKey {
+    case selected, disaggregated, recordedTraining, absent
+}
+
+private enum DailyEnergyTotalLegacyDisaggregatedKeys: String, CodingKey {
+    case training, remaining
+}
+
+private enum DailyEnergyTotalLegacyAnonymousValueKey: String, CodingKey {
+    case value = "_0"
+}
+
+/// 旧存档里活动项曾包含训练拆分或把训练填进活动槽位。
+private enum DailyEnergyTotalLegacyActivity: Decodable, Equatable {
+    case selected(Double)
+    case disaggregated(training: Double, remaining: Double)
+    case recordedTraining(Double)
+    case absent
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DailyEnergyTotalLegacyActivityKeys.self)
+        if let value = try Self.decodeSingle(container, forKey: .selected) {
+            self = .selected(value)
+        } else if let value = try Self.decodeSingle(container, forKey: .recordedTraining) {
+            self = .recordedTraining(value)
+        } else if container.contains(.disaggregated) {
+            let nested = try container.nestedContainer(
+                keyedBy: DailyEnergyTotalLegacyDisaggregatedKeys.self, forKey: .disaggregated
+            )
+            self = try .disaggregated(
+                training: nested.decode(Double.self, forKey: .training),
+                remaining: nested.decode(Double.self, forKey: .remaining)
+            )
+        } else if container.contains(.absent) {
+            self = .absent
+        } else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: decoder.codingPath, debugDescription: "未知活动存档")
+            )
         }
-        guard included.count == preferred.count else { return nil }
-        let values = included.compactMap { $0.netEnergy(resting: resting) }
-        guard values.count == included.count else { return nil }
-        let sum = values.reduce(0, +)
-        guard isUsableActive(sum), sum <= selectedActive else { return nil }
-        return sum
     }
 
-    private static func source(_ event: EnergyTrainingEvent, matches winningSource: DailyActivityWinningSource) -> Bool {
-        switch winningSource {
-        case .appleHealth:
-            true
-        case .coros:
-            DailyActivitySourceMatcher.isCOROS(name: event.source, bundleIdentifier: "")
+    private static func decodeSingle(
+        _ container: KeyedDecodingContainer<DailyEnergyTotalLegacyActivityKeys>,
+        forKey key: DailyEnergyTotalLegacyActivityKeys
+    ) throws -> Double? {
+        if let value = try container.decodeIfPresent(Double.self, forKey: key) {
+            return value
         }
+        guard container.contains(key) else { return nil }
+        let nested = try container.nestedContainer(
+            keyedBy: DailyEnergyTotalLegacyAnonymousValueKey.self, forKey: key
+        )
+        return try nested.decode(Double.self, forKey: .value)
     }
 }

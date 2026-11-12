@@ -37,9 +37,10 @@
 | [075](075-healthkit-daily-activity.md) | 0.0.30 | 已实现；真机数据待验收 |
 | [076](076-adaptive-energy-system.md) | 0.0.30 | 部分已替代；总消耗见 078 |
 | [077](077-daily-activity-source-priority.md) | 0.0.31 | 已实现；真机数据待验收 |
-| [078](078-residual-energy-coefficient.md) | 0.0.32 | 已实现；修订 076 的总消耗公式 |
+| [078](078-residual-energy-coefficient.md) | 0.0.32 | 部分已替代；训练加项见 081 |
 | [079](079-daily-target-deficit.md) | 0.0.32 | 已实现，模拟器验证通过；每日目标热量缺口 |
 | [080](080-healthkit-body-mass.md) | 0.0.35 | 已实现；健康导入按自然日一条记录，列表随区间平铺；真机授权与真实旧库升级待验收 |
+| [081](081-training-energy-in-total.md) | 未发布 | 已实现，待模拟器验收；总消耗把训练列表消耗直接加入 |
 
 ## 阅读约定
 
@@ -89,5 +90,6 @@
 
 | 文档 | 状态 | 范围 |
 | --- | --- | --- |
-| [078](078-residual-energy-coefficient.md) | 已实现 | 总消耗改为静息 × 残差系数 + 所选日活动能量；不发版 |
+| [078](078-residual-energy-coefficient.md) | 部分已替代 | 总消耗改为静息 × 残差系数 + 所选日活动能量；训练加项见 081 |
 | [079](079-daily-target-deficit.md) | 已实现，模拟器验证通过 | 减脂与增肌减脂共用每日目标热量缺口，默认 400；补充 078，保持总消耗公式 |
+| [081](081-training-energy-in-total.md) | 已实现，待模拟器验收 | 部分替代 078：训练列表消耗作为独立加项直接加入总量 |

@@ -130,7 +130,7 @@ enum EnergyCalculationError: Error {
 }
 
 /// 参考日差额只保留给历史依据。用户可见总消耗在 `DailyEnergyTotal`：
-/// 静息 × `ResidualEnergyCoefficient` + 所选日活动能量。不要把这里的步行差额或训练时长摊销加回总量。
+/// 静息 × `ResidualEnergyCoefficient` + 所选日活动能量 + Soma 已记录训练消耗。不要把这里的步行差额或训练时长摊销加回总量。
 enum EnergyDayCalculator {
     static func calculate(_ input: EnergyDayInput) throws -> EnergyDayCalculation {
         let ref = input.reference

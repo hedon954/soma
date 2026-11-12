@@ -26,7 +26,7 @@ struct EnergyCalibrationDayDetail: View {
                     }
                     ForEach(Array(Set(calculation.reasons)).sorted(), id: \.self) { Text($0).font(.footnote) }
                 }
-                Text("这里保留评估当时的输入。更正原记录会参与后续计算，不会改写这份历史。当前预估总消耗是静息 × 残差系数 + 所选日活动能量，不把日活动能量排除在外。")
+                Text("这里保留评估当时的输入。更正原记录会参与后续计算，不会改写这份历史。当前预估总消耗是静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗，不把日活动能量排除在外。")
                     .font(.footnote)
             }.listRowBackground(AppTheme.cardBackground)
             Section("饮食来源记录") {

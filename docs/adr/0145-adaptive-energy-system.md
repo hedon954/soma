@@ -5,7 +5,7 @@
 - 版本：0.0.30
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（生活系数、消耗投影和新增事实边界）、[工程契约](../../CLAUDE.md)
 - 上游依据：[PRD 076](../prd/076-adaptive-energy-system.md)、[消耗体系研究](../research/2026-11-02-soma-energy-expenditure-system.md)
-- 后续替代：[ADR 0147](0147-residual-energy-coefficient.md)（当前总消耗改为残差系数加所选日活动能量）
+- 后续替代：[ADR 0147](0147-residual-energy-coefficient.md)（当前总消耗改为残差系数加所选日活动能量）、[ADR 0151](0151-training-energy-in-total.md)（部分替代：再加入训练列表消耗）
 - 下游落地：[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)
   - [验收](../acceptance.md)
   - [Tool 目录](../engineering/agent-tool-catalog.md)
@@ -28,7 +28,7 @@ record_energy_context 为固定事实写入工具，两端 Schema 同步；按�
 饮食完整性绑定餐食输入指纹，用户只编辑生活信息不会自动重新确认已经变化的餐食。
 生活事实指纹参与参考选择，修改或删除后不继续采用失效来源建立的参考；原历史证据仍可审查。
 
-当前总消耗已由 [ADR 0147](0147-residual-energy-coefficient.md) 改为静息 × 残差系数 + 所选日活动能量。下列参考日差额和「日活动能量不再相加」只保留为当时的决策，不再作为当前总量。
+当前总消耗已由 [ADR 0151](0151-training-energy-in-total.md) 改为静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。下列参考日差额和「日活动能量不再相加」只保留为当时的决策，不再作为当前总量。
 
 每日计算当时采用研究指定的参考日差额和训练时段替换；动态系数为总估算与静息的比值。
 设备日活动能量当时不替代基线，也不再与已经计算的步行和训练相加。

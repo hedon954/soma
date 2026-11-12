@@ -5,7 +5,7 @@
 - 版本：0.0.30
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)（消耗估算、生活事实、记录完整性与审查边界）、[工程契约](../../CLAUDE.md)
 - 上游依据：[消耗体系研究](../research/2026-11-02-soma-energy-expenditure-system.md)
-- 后续修订：[PRD 078](078-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
+- 后续修订：[PRD 078](078-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）、[PRD 081](081-training-energy-in-total.md)（部分替代：再加入训练列表消耗）
 - 下游落地：[ADR 0145](../adr/0145-adaptive-energy-system.md)
   - [BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)
   - [验收](../acceptance.md)
@@ -17,7 +17,7 @@
 
 ## 范围与公式
 
-总消耗公式已由 [PRD 078](078-residual-energy-coefficient.md) 修订为：静息 × 残差系数 + 所选日活动能量。下面的参考日差额不再作为当前总消耗，日活动能量也不再为了避免重复计算而被排除。
+总消耗公式已由 [PRD 081](081-training-energy-in-total.md) 修订为：静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。下面的参考日差额不再作为当前总消耗，日活动能量也不再为了避免重复计算而被排除。
 
 原先的参考日差额模型是：M=R×F_ref+ΔWalk+ΔTrain，T=M+C，有效系数=T/R。
 日常距离排除已计训练时段；步数和距离只形成一笔步行依据；COROS 日活动总量保留为观察事实。

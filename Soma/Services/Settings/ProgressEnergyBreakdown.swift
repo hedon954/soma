@@ -99,20 +99,17 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         return [
             Row(id: "resting", label: prefix + "静息消耗", value: EnergyKilocalorieDisplay.kcal(displayed.resting), tone: .resting),
             Row(id: "baseline-extra", label: prefix + "基准额外消耗", value: EnergyKilocalorieDisplay.kcal(displayed.baselineExtra), tone: .factor)
-        ] + activityRows(displayed.activity, prefix: prefix)
+        ] + activityRows(displayed.activity, prefix: prefix) + [
+            Row(id: "training", label: prefix + "训练消耗", value: EnergyKilocalorieDisplay.kcal(displayed.training), tone: .workout)
+        ]
     }
 
     private static func activityRows(_ activity: DailyEnergyTotal.Activity, prefix: String) -> [Row] {
         switch activity {
         case .absent:
             [Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity)]
-        case let .selected(value), let .recordedTraining(value):
+        case let .selected(value):
             [Row(id: "activity", label: prefix + "活动消耗", value: energy(value), tone: .activity)]
-        case let .disaggregated(training, remaining):
-            [
-                Row(id: "activity-training", label: prefix + "训练活动消耗", value: energy(training), tone: .workout),
-                Row(id: "activity-remaining", label: prefix + "其余活动消耗", value: energy(remaining), tone: .activity)
-            ]
         }
     }
 
