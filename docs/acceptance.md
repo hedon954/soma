@@ -493,6 +493,8 @@ LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/mode
 
 按 [PRD 081](prd/081-training-energy-in-total.md)、[ADR 0151](adr/0151-training-energy-in-total.md)：预估总消耗 = 静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。训练消耗与进展页训练列表的合法估算之和一致，无训练为 0；不按训练时长从基线里扣减，也不猜测与日活动能量去重。记录卡、聊天卡与详情仍显示完整热量。
 
+- [x] 已存校准评审中的历史 `presentedTotal`（`EnergyInputCoding` 关联值字典，而非手写纯 Double）以及当前四项编码均可解码；合成旧格式打开进展日页不得出现「与当前版本不兼容」整页错误。总量仍按训练列表消耗直接加入。
+
 ## 教练 ID、训练卡 0 与进展一致性（PRD 059）
 
 按 [PRD 059](archive/0.0.23/prd/059-coach-ids-progress-and-required-zeros.md)、[PRD 062](archive/0.0.23/prd/062-workout-share-fill-or-grow.md)、[ADR 0126](archive/0.0.23/adr/0126-workout-share-pro-max-canvas.md)、[ADR 0127](archive/0.0.23/adr/0127-agent-workout-weight-and-rest-zero.md)、[ADR 0130](archive/0.0.23/adr/0130-workout-share-fill-or-grow.md)：本机上下文与跨轮引用只暴露 Int64 `record_id` / `exercise_id` / `program_id` / `session_id`，饮食食物项不再给出 UUID。Agent 省略训练重量或非最后组间歇时落 0；0kg 显示自重。进展日列表每条训练同时给出容量与已估算热量。训练分享宽度 440 pt、高度至少 956 pt；4–7 个动作铺满纸面，更多动作在压不下时加高。计划训练统计按 Session ID 打开复盘。教练页写入后 RootView 递增进展 revision，隐藏的进展 Tab 再进入会重读当日快照。冷启动后已排版页展示全部消息，含助手气泡。可编辑卡保存后有「已保存」胶囊与教练 Toast。左右各做的组数 `×N` 在成对卡片右侧垂直居中。超长标题换行。

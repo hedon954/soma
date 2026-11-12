@@ -45,6 +45,8 @@ HealthKit 授权的写入集合为空，Soma 不把训练或活动能量写回 A
 
 增删改训练记录后，总量与明细因共享上述计算而更新，不在视图里另写一套加法。
 
+`DailyEnergyTotal.Components` 的自定义解码必须接受历史与当前 `EnergyInputCoding` 写出的真实线格式。Swift `Codable` 把 `selected` / `recordedTraining` 等关联值写成 `{"_0": n}` 或无标签数组；只按手写纯 Double 猜测旧档会在 `decodeIfPresent(Double)` 上触发 `typeMismatch`。该错误会被进展加载映射成「返回或保存的内容与当前版本不兼容」，使日页整页无法读取。旧的 `recordedTraining` 仍迁为活动未记录 + 独立训练加项，`disaggregated` 仍合并为整份活动能量；当前写出的 `selected` / `absent` 与 `trainingKilocalories` 必须能往返。此兼容解码不改变「直接加入」的公式。
+
 ## 未选择的方案
 
 - 继续在有日活动读数时排除训练：这正是用户要求改掉的行为。
@@ -66,7 +68,7 @@ HealthKit 授权的写入集合为空，Soma 不把训练或活动能量写回 A
 
 ## 验证
 
-`DailyEnergyTotalTests`、`DailyActivityEnergyTests`、`ProgressEnergyBreakdownTests` 与相关投影测试覆盖四项加总、列表汇总、无训练为 0、空/非法值、增删改后的同一计算，以及日/周期。`make verify` 通过后，用模拟器合成数据目视日页弹层、训练列表、浅色/深色和大字号。
+`DailyEnergyTotalTests`、`DailyEnergyTotalLegacyDecodingTests`、`DailyActivityEnergyTests`、`ProgressEnergyBreakdownTests` 与相关投影测试覆盖四项加总、列表汇总、无训练为 0、空/非法值、增删改后的同一计算、日/周期，以及用 `EnergyInputCoding` 生成的历史/当前 `presentedTotal` 线格式解码。`make verify` 通过后，用模拟器合成数据目视日页弹层、训练列表、浅色/深色、大字号，以及带旧格式校准评审时日页仍可读取。
 
 ## 参考
 

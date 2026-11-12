@@ -166,6 +166,7 @@ private enum DailyEnergyTotalLegacyDisaggregatedKeys: String, CodingKey {
 
 private enum DailyEnergyTotalLegacyAnonymousValueKey: String, CodingKey {
     case value = "_0"
+    case second = "_1"
 }
 
 /// 旧存档里活动项曾包含训练拆分或把训练填进活动槽位。
@@ -182,13 +183,8 @@ private enum DailyEnergyTotalLegacyActivity: Decodable, Equatable {
         } else if let value = try Self.decodeSingle(container, forKey: .recordedTraining) {
             self = .recordedTraining(value)
         } else if container.contains(.disaggregated) {
-            let nested = try container.nestedContainer(
-                keyedBy: DailyEnergyTotalLegacyDisaggregatedKeys.self, forKey: .disaggregated
-            )
-            self = try .disaggregated(
-                training: nested.decode(Double.self, forKey: .training),
-                remaining: nested.decode(Double.self, forKey: .remaining)
-            )
+            let values = try Self.decodeDisaggregated(container)
+            self = .disaggregated(training: values.training, remaining: values.remaining)
         } else if container.contains(.absent) {
             self = .absent
         } else {
@@ -198,17 +194,60 @@ private enum DailyEnergyTotalLegacyActivity: Decodable, Equatable {
         }
     }
 
+    /// `decodeIfPresent(Double)` 在遇到 Codable 关联值字典时会 typeMismatch，不能当「不是纯数字」用。
     private static func decodeSingle(
         _ container: KeyedDecodingContainer<DailyEnergyTotalLegacyActivityKeys>,
         forKey key: DailyEnergyTotalLegacyActivityKeys
     ) throws -> Double? {
-        if let value = try container.decodeIfPresent(Double.self, forKey: key) {
+        guard container.contains(key) else { return nil }
+        if let value = try decodeFlexibleDouble(container.superDecoder(forKey: key)) {
             return value
         }
-        guard container.contains(key) else { return nil }
-        let nested = try container.nestedContainer(
-            keyedBy: DailyEnergyTotalLegacyAnonymousValueKey.self, forKey: key
+        throw DecodingError.typeMismatch(
+            Double.self,
+            .init(codingPath: container.codingPath + [key], debugDescription: "无法读取活动关联值")
         )
-        return try nested.decode(Double.self, forKey: .value)
+    }
+
+    private static func decodeDisaggregated(
+        _ container: KeyedDecodingContainer<DailyEnergyTotalLegacyActivityKeys>
+    ) throws -> (training: Double, remaining: Double) {
+        let decoder = try container.superDecoder(forKey: .disaggregated)
+        if let nested = try? decoder.container(keyedBy: DailyEnergyTotalLegacyDisaggregatedKeys.self),
+           let training = try? nested.decode(Double.self, forKey: .training),
+           let remaining = try? nested.decode(Double.self, forKey: .remaining)
+        {
+            return (training, remaining)
+        }
+        if let nested = try? decoder.container(keyedBy: DailyEnergyTotalLegacyAnonymousValueKey.self),
+           let training = try? nested.decode(Double.self, forKey: .value),
+           let remaining = try? nested.decode(Double.self, forKey: .second)
+        {
+            return (training, remaining)
+        }
+        if var unkeyed = try? decoder.unkeyedContainer(),
+           let training = try? unkeyed.decode(Double.self),
+           let remaining = try? unkeyed.decode(Double.self)
+        {
+            return (training, remaining)
+        }
+        throw DecodingError.dataCorrupted(
+            .init(codingPath: decoder.codingPath, debugDescription: "无法读取拆分活动存档")
+        )
+    }
+
+    private static func decodeFlexibleDouble(_ decoder: Decoder) throws -> Double? {
+        if let value = try? decoder.singleValueContainer().decode(Double.self) {
+            return value
+        }
+        if let nested = try? decoder.container(keyedBy: DailyEnergyTotalLegacyAnonymousValueKey.self),
+           let value = try? nested.decode(Double.self, forKey: .value)
+        {
+            return value
+        }
+        if var unkeyed = try? decoder.unkeyedContainer(), let value = try? unkeyed.decode(Double.self) {
+            return value
+        }
+        return nil
     }
 }

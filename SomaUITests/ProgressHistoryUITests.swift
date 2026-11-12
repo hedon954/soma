@@ -205,6 +205,23 @@ final class ProgressHistoryUITests: XCTestCase {
         large.terminate()
     }
 
+    func testLegacyPresentedTotalReviewStillLoadsProgressDayAcrossThemes() {
+        for appearance in ["light", "dark"] {
+            let app = launch(
+                appearance, noBaseline: true, energyFixture: true, dailyActivity: true, legacyEnergyTotal: true
+            )
+            let picker = app.segmentedControls["progress-period-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 15))
+            picker.buttons["日"].tap()
+            XCTAssertFalse(app.staticTexts["返回或保存的内容与当前版本不兼容，暂时无法读取。请更新 App 后重试；原始记录和附件请继续保留。"].exists)
+            XCTAssertFalse(app.buttons["重试"].exists)
+            XCTAssertTrue(app.buttons["progress-expenditure-breakdown"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["约 200 kcal"].exists)
+            keep(app, "legacy-energy-total-day-\(appearance)")
+            app.terminate()
+        }
+    }
+
     func testRestingOnlyEstimateAndCompactDetails() {
         for appearance in ["light", "dark"] {
             let app = launch(appearance, noBaseline: true)
@@ -445,7 +462,7 @@ final class ProgressHistoryUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
-    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true, energyFixture: Bool = false, dailyActivity: Bool = false) -> XCUIApplication {
+    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true, energyFixture: Bool = false, dailyActivity: Bool = false, legacyEnergyTotal: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = hasRecords ? "1" : "0"
@@ -458,6 +475,9 @@ final class ProgressHistoryUITests: XCTestCase {
         }
         if dailyActivity {
             app.launchEnvironment["SOMA_UI_DAILY_ACTIVITY_FIXTURE"] = "1"
+        }
+        if legacyEnergyTotal {
+            app.launchEnvironment["SOMA_UI_LEGACY_ENERGY_TOTAL_FIXTURE"] = "1"
         }
         if largeType {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]

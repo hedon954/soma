@@ -4,7 +4,16 @@ import SwiftData
 @MainActor
 enum EnergyUITestFixture {
     static func seedIfRequested(in context: ModelContext) throws {
-        guard AppTestRuntime.isRunning, ProcessInfo.processInfo.environment["SOMA_UI_ENERGY_FIXTURE"] == "1" else { return }
+        guard AppTestRuntime.isRunning else { return }
+        if ProcessInfo.processInfo.environment["SOMA_UI_ENERGY_FIXTURE"] == "1" {
+            try seedEnergy(in: context)
+        }
+        if ProcessInfo.processInfo.environment["SOMA_UI_LEGACY_ENERGY_TOTAL_FIXTURE"] == "1" {
+            try seedLegacyPresentedTotalReview(in: context)
+        }
+    }
+
+    private static func seedEnergy(in context: ModelContext) throws {
         let calendar = Calendar.current, today = calendar.startOfDay(for: .now)
         let first = calendar.date(byAdding: .day, value: -56, to: today)!
         let old = try context.fetch(FetchDescriptor<WorkoutEntry>(predicate: #Predicate { $0.exercise == "虚构深蹲" }))
@@ -33,5 +42,66 @@ enum EnergyUITestFixture {
                                                   hasAmbiguousBoundarySamples: false, basisID: HealthActivityDayEvidence.statisticsBasis)
             try EnergyEvidenceStore.append(value, kind: .healthActivity, date: day, reason: "虚构 UI 夹具", in: context)
         }
+    }
+
+    private static func seedLegacyPresentedTotalReview(in context: ModelContext) throws {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let existing = try context.fetch(FetchDescriptor<EnergyEvidenceEntry>(
+            predicate: #Predicate { $0.key == "calibration:ui-legacy-presented-total" }
+        ))
+        existing.forEach { context.delete($0) }
+        let reference = EnergyReferenceDay(effectiveFrom: today, factor: 1.4, reason: "虚构旧格式参考")
+        let input = EnergyDayInput(
+            date: today, resting: 1600, weightKG: 70, reference: reference,
+            nonTrainingKilometers: nil, walkingCoverageConfirmed: false, isEndedDay: true,
+            training: [], correction: 0
+        )
+        let calculation = EnergyDayCalculation(
+            input: input, baseline: 2240, walkingDelta: 0, trainingDelta: 0,
+            displacedActivityPerHour: 0, adoptedTrainingIDs: [], excludedTrainingIDs: [], issues: []
+        )
+        let review = EnergyCalibrationReview(
+            date: today, windowStart: today, windowEnd: today, inputFingerprint: "ui-legacy-fixture",
+            previousCorrection: 0, nextCorrection: 0, meanIntake: nil, meanModel: nil,
+            slope: nil, minimumCandidate: nil, maximumCandidate: nil, weightDayCount: 0,
+            direction: 0, evidenceEligible: false, reason: "虚构旧格式校准",
+            inputDays: [
+                .init(
+                    date: today, intake: 2000, uncalibratedTotal: 2240, foodComplete: true,
+                    activityComplete: true, weights: [70], fluidChangeConcern: false,
+                    calculation: calculation, sourceMealIDs: nil
+                )
+            ]
+        )
+        var object = try jsonObject(EnergyInputCoding.encode(review))
+        let presented: [String: Any] = [
+            "restingKilocalories": 1600,
+            "coefficient": 1.4,
+            "activity": ["recordedTraining": ["_0": 320]]
+        ]
+        guard var days = object["inputDays"] as? [[String: Any]], var first = days.first else { return }
+        var calc = first["calculation"] as? [String: Any] ?? [:]
+        calc["presentedTotal"] = presented
+        first["calculation"] = calc
+        days[0] = first
+        object["inputDays"] = days
+        let payload = try JSONSerialization.data(withJSONObject: object)
+        context.insert(
+            EnergyEvidenceEntry(
+                key: "calibration:ui-legacy-presented-total",
+                kindRaw: EnergyEvidenceKind.calibration.rawValue,
+                date: today, payload: payload, reason: "虚构旧格式 UI 夹具", predecessorKey: nil
+            )
+        )
+        try context.save()
+    }
+
+    private static func jsonObject(_ data: Data) throws -> [String: Any] {
+        let value = try JSONSerialization.jsonObject(with: data)
+        guard let object = value as? [String: Any] else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "夹具 JSON 不是对象"))
+        }
+        return object
     }
 }
