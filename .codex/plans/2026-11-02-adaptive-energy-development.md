@@ -1,7 +1,7 @@
 # Soma 动态消耗开发与发布计划
 
 - 目标：完整实施消耗体系，发布新的 GitHub Release，覆盖安装到 hedon 的 iPhone 17 Pro Max。
-- 依据：[研究方案](../../docs/research/2026-11-02-soma-energy-expenditure-system.md)、[PRD 076](../../docs/prd/076-adaptive-energy-system.md)、[ADR 0145](../../docs/adr/0145-adaptive-energy-system.md)。
+- 依据：[研究方案](../../docs/research/2026-11-02-soma-energy-expenditure-system.md)、[PRD 076](../../docs/archive/0.0.30/prd/076-adaptive-energy-system.md)、[ADR 0145](../../docs/archive/0.0.30/adr/0145-adaptive-energy-system.md)。
 - 发布前不将组件测试、模拟数据或设备安装元数据宣称为真实个人消耗准确度验证。
 
 ## 实施顺序

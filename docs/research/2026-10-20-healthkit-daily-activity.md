@@ -4,7 +4,7 @@
 - 状态：已转化为 PRD 075 / ADR 0144，按每日一条运动记录实施
 - 修订自：[日消耗本地公式调研](2026-09-08-daily-energy-expenditure-methods.md)（三项活动日汇总的只读来源与覆盖边界）
 - 后续修订：[多来源优先级调研](2026-11-05-daily-activity-source-priority.md)
-- 下游落地：[PRD 075](../prd/075-healthkit-daily-activity.md)、[ADR 0144](../adr/0144-healthkit-daily-activity.md)
+- 下游落地：[PRD 075](../archive/0.0.30/prd/075-healthkit-daily-activity.md)、[ADR 0144](../archive/0.0.30/adr/0144-healthkit-daily-activity.md)
 
 ## 一、HealthKit 能提供什么
 

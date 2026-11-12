@@ -1,9 +1,9 @@
 # 数据库结构与 ER 图
 
-- 后续修订：[PRD 080](../prd/080-healthkit-body-mass.md)、[ADR 0149](../adr/0149-healthkit-body-mass.md)、[ADR 0150](../adr/0150-healthkit-body-daily-records.md)（体重健康导入、每日一条记录与最初来源字段）
-- 后续修订：[PRD 075](../prd/075-healthkit-daily-activity.md)、[ADR 0144](../adr/0144-healthkit-daily-activity.md)（日常活动运动记录与统计）
+- 后续修订：[PRD 080](../prd/080-healthkit-body-mass.md)、[ADR 0149](../archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](../adr/0150-healthkit-body-daily-records.md)（体重健康导入、每日一条记录与最初来源字段）
+- 后续修订：[PRD 075](../archive/0.0.30/prd/075-healthkit-daily-activity.md)、[ADR 0144](../archive/0.0.30/adr/0144-healthkit-daily-activity.md)（日常活动运动记录与统计）
 
-- 上游依据：[ADR 0143](../adr/0143-composable-training.md)（slotsData 的可选组合内容；持久字段不变）
+- 上游依据：[ADR 0143](../archive/0.0.27/adr/0143-composable-training.md)（slotsData 的可选组合内容；持久字段不变）
 本文维护 Soma 当前持久化结构的可审查快照，覆盖设备端 SwiftData 与可选 Agent Server
 的 PostgreSQL。修改模型或 migration 时，必须在同一个变更中同步本文。
 
@@ -79,7 +79,7 @@ schema version 7 marker 是当前唯一安装基线。启动先用 `key + schema
 | `EnergyEvidenceEntry` | 唯一 key、kindRaw、date、payload、reason、可空 predecessorKey、revision、createdAt | 私有参考、每日计算与校准依据。每种日期的 revision 单调递增；输入不变不新增，迟到修改保留前驱；不依赖设备时钟排序。 |
 
 两表注册于当前 SomaDataSchema，旧库新增空表，无数据重建。上下文事实进入备份；健康推导依据仅保留在内部回滚快照，应用备份/导出及模型不包含。
-清空显式删除两表；个人库及目录沿用 complete 文件保护与排除系统备份。依据 [ADR 0145](../adr/0145-adaptive-energy-system.md)。
+清空显式删除两表；个人库及目录沿用 complete 文件保护与排除系统备份。依据 [ADR 0145](../archive/0.0.30/adr/0145-adaptive-energy-system.md)。
 
 ### 用户记录
 

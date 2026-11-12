@@ -1,11 +1,11 @@
 # PRD 081：总消耗把训练列表消耗直接加入
 
-- 状态：已实现，待模拟器验收
+- 状态：已实现，模拟器验收通过
 - 日期：2026-11-12
-- 版本：未发布
-- 修订自：[PRD 078](078-residual-energy-coefficient.md)（部分替代：训练不再为避免与日活动重复而不加入总量）、[PRD 076](076-adaptive-energy-system.md)（当前总消耗再加入训练列表消耗）、[PRD 075](075-healthkit-daily-activity.md)（训练列表消耗作为独立加项进入总量）
+- 版本：0.0.36
+- 修订自：[PRD 000](000-origin-through-0.0.11.md)（日活动与总消耗）
 - 后续修订：暂无
-- 下游落地：[ADR 0151](../adr/0151-training-energy-in-total.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)、[验收](../acceptance.md)
+- 下游落地：[ADR 0151](../adr/0151-training-energy-in-total.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)、[验收](../acceptance.md)、[工程契约](../../CLAUDE.md)
 
 ## 背景
 
@@ -40,7 +40,7 @@
 - 为模糊重叠猜测扣减，或让用户在活动消耗与训练消耗中二选一。
 - 改变残差系数提供方，或把 MET 毛消耗改写成净活动能量后再加入（那会与训练列表数字不一致）。
 - 修改健康账户授权、写回 HealthKit，或把真实个人健康数据写入测试、日志或 Issue。
-- 本轮发版或 TestFlight。
+- TestFlight 或 App Store 分发。
 
 ## 验收
 

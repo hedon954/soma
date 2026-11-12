@@ -111,7 +111,7 @@ Release 真机 VoiceOver 和帧率尚未作为通过证据；不能用安装成�
 
 # 可组合训练计划视觉 QA
 
-日期：2026-10-18。来源：[PRD 074](docs/prd/074-composable-training.md)。
+日期：2026-10-18。来源：[PRD 074](docs/archive/0.0.27/prd/074-composable-training.md)。
 
 - 状态：iPhone 17 Pro 正常字号浅色/深色核心流程 passed。
 - 使用独立内存库与虚构深蹲记录。参数页显示日期与 `1×8次 20kg · 1×5次 25kg`，确认后返回同一草稿并保存，无需课程。

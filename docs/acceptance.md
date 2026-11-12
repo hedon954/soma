@@ -1,20 +1,20 @@
 # Soma 验收清单
-- 后续修订：[PRD 080](prd/080-healthkit-body-mass.md)、[ADR 0149](adr/0149-healthkit-body-mass.md)、[ADR 0150](adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录与身体曲线）
-- 后续修订：[PRD 079](prd/079-daily-target-deficit.md)、[ADR 0148](adr/0148-daily-target-deficit.md)（每日目标热量缺口）
-- 后续修订：[PRD 078](prd/078-residual-energy-coefficient.md)、[ADR 0147](adr/0147-residual-energy-coefficient.md)、[PRD 081](prd/081-training-energy-in-total.md)、[ADR 0151](adr/0151-training-energy-in-total.md)（总消耗再加入训练列表消耗）
-- 后续修订：[PRD 076](prd/076-adaptive-energy-system.md)、[ADR 0145](adr/0145-adaptive-energy-system.md)（动态消耗、完整性与本地校准）
-- 后续修订：[PRD 072](prd/072-coach-training-schedule-draft.md)、[ADR 0141](adr/0141-coach-training-schedule-draft.md)（教练起草训练计划，确认后才保存）
-- 后续修订：[PRD 074](prd/074-composable-training.md)、[ADR 0143](adr/0143-composable-training.md)（直接动作、组合内容与最近参数推荐）
-- 后续修订：[PRD 073](prd/073-training-session-pages.md)、[ADR 0142](adr/0142-training-session-pages.md)（训练页最近训练按 14 条分页）
+- 后续修订：[PRD 080](prd/080-healthkit-body-mass.md)、[ADR 0149](archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录与身体曲线）
+- 后续修订：[PRD 079](archive/0.0.32/prd/079-daily-target-deficit.md)、[ADR 0148](archive/0.0.32/adr/0148-daily-target-deficit.md)（每日目标热量缺口）
+- 后续修订：[PRD 078](archive/0.0.32/prd/078-residual-energy-coefficient.md)、[ADR 0147](archive/0.0.32/adr/0147-residual-energy-coefficient.md)、[PRD 081](prd/081-training-energy-in-total.md)、[ADR 0151](adr/0151-training-energy-in-total.md)（总消耗再加入训练列表消耗）
+- 后续修订：[PRD 076](archive/0.0.30/prd/076-adaptive-energy-system.md)、[ADR 0145](archive/0.0.30/adr/0145-adaptive-energy-system.md)（动态消耗、完整性与本地校准）
+- 后续修订：[PRD 072](archive/0.0.27/prd/072-coach-training-schedule-draft.md)、[ADR 0141](archive/0.0.27/adr/0141-coach-training-schedule-draft.md)（教练起草训练计划，确认后才保存）
+- 后续修订：[PRD 074](archive/0.0.27/prd/074-composable-training.md)、[ADR 0143](archive/0.0.27/adr/0143-composable-training.md)（直接动作、组合内容与最近参数推荐）
+- 后续修订：[PRD 073](archive/0.0.27/prd/073-training-session-pages.md)、[ADR 0142](archive/0.0.27/adr/0142-training-session-pages.md)（训练页最近训练按 14 条分页）
 - 后续修订：[PRD 000](prd/000-origin-through-0.0.11.md)、[ADR 0000](adr/0000-origin-through-0.0.11.md)（提问按钮与确定性回答）
 
 - 后续修订：[PRD 064](archive/0.0.23/prd/064-progress-total-energy-deficit.md)、[ADR 0133](archive/0.0.23/adr/0133-paired-day-total-energy-deficit.md)（日、周、月按同日配对累计总热量缺口）
 - 后续修订：[ADR 0132](archive/0.0.23/adr/0132-actionable-error-presentation.md)、[BUG 0063](bugs/0063-explicit-video-rejection-has-no-compatible-input.md)、[BUG 0064](bugs/0064-raw-errors-without-recovery.md)（视频回退及错误呈现回归）
 - 后续修订：[PRD 063](archive/0.0.23/prd/063-video-compatibility-and-actionable-errors.md)、[ADR 0131](archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)（视频兼容回退与可操作失败提示）
 
-- 后续修订：[PRD 069](prd/069-training-course-name.md)、[ADR 0138](adr/0138-training-course-name.md)（动作处方改称训练课程）
-- 后续修订：[PRD 070](prd/070-coach-timeline.md)、[ADR 0139](adr/0139-coach-timeline.md)（教练页按发生时间投影无回合记录，组件外观不变）
-- 后续修订：[PRD 071](prd/071-training-schedule.md)、[ADR 0140](adr/0140-training-schedule.md)（训练计划按锚定日排课程或休息，缺席只保留一堂，满一轮后停住）
+- 后续修订：[PRD 069](archive/0.0.26/prd/069-training-course-name.md)、[ADR 0138](archive/0.0.26/adr/0138-training-course-name.md)（动作处方改称训练课程）
+- 后续修订：[PRD 070](archive/0.0.26/prd/070-coach-timeline.md)、[ADR 0139](archive/0.0.26/adr/0139-coach-timeline.md)（教练页按发生时间投影无回合记录，组件外观不变）
+- 后续修订：[PRD 071](archive/0.0.26/prd/071-training-schedule.md)、[ADR 0140](archive/0.0.26/adr/0140-training-schedule.md)（训练计划按锚定日排课程或休息，缺席只保留一堂，满一轮后停住）
 - 后续修订：[PRD 000](prd/000-origin-through-0.0.11.md)、[BUG 0066](bugs/0066-guided-replacement-computed-predicate-crash.md)、[BUG 0067](bugs/0067-workout-live-activity-stale-progress.md)（准备页展示并调整本次分组；替换列表不可变候选；带练系统投影随进度更新）
 - 后续修订：[BUG 0062](bugs/0062-guided-replacement-retains-old-targets.md)（更换动作先确认最近实际参数，保留已完成证据）
 
@@ -31,7 +31,7 @@
 - 后续修订：[PRD 062](archive/0.0.23/prd/062-workout-share-fill-or-grow.md)（分享海报按动作数铺满或加高）
 - 后续修订：[ADR 0130](archive/0.0.23/adr/0130-workout-share-fill-or-grow.md)（短会话铺满 440×956，超出才加高）
 - 后续修订：[ADR 0127](archive/0.0.23/adr/0127-agent-workout-weight-and-rest-zero.md)（Agent 训练重量与间歇未说明时写 0）
-- 后续修订：[PRD 075](prd/075-healthkit-daily-activity.md)、[ADR 0144](adr/0144-healthkit-daily-activity.md)（三项只读日活动及真实来源）
+- 后续修订：[PRD 075](archive/0.0.30/prd/075-healthkit-daily-activity.md)、[ADR 0144](archive/0.0.30/adr/0144-healthkit-daily-activity.md)（三项只读日活动及真实来源）
 - 后续修订：[PRD 060](archive/0.0.23/prd/060-remove-healthkit-until-redesign.md)（撤回 Apple 健康接入）
 - 后续修订：[ADR 0128](archive/0.0.23/adr/0128-remove-healthkit-until-redesign.md)（当前不接入 HealthKit）
 - 后续修订：[PRD 061](archive/0.0.23/prd/061-daily-energy-net-training.md)（日总计加入去重后的训练增量）
@@ -485,8 +485,8 @@ LLM 配置在模拟器补充验收：在模型输入框手输一个不在 `/mode
 
 ## 撤回 Apple 健康接入（PRD 060）
 
-按 [PRD 075](prd/075-healthkit-daily-activity.md) / [ADR 0144](adr/0144-healthkit-daily-activity.md)，三项只读日汇总形成每日运动记录。
-按 [PRD 076](prd/076-adaptive-energy-system.md) / [ADR 0145](adr/0145-adaptive-energy-system.md)，最小私有训练依据只用于去重和非训练步行统计，
+按 [PRD 075](archive/0.0.30/prd/075-healthkit-daily-activity.md) / [ADR 0144](archive/0.0.30/adr/0144-healthkit-daily-activity.md)，三项只读日汇总形成每日运动记录。
+按 [PRD 076](archive/0.0.30/prd/076-adaptive-energy-system.md) / [ADR 0145](archive/0.0.30/adr/0145-adaptive-energy-system.md)，最小私有训练依据只用于去重和非训练步行统计，
 不新增身体或单场训练导入记录，不读取静息；健康原值与推导不进入模型或备份/导出。
 
 ## 日消耗去重训练增量（PRD 061）

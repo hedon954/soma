@@ -4,7 +4,7 @@
 - 日期：2026-09-19
 - 版本：0.0.25
 - 修订自：[PRD 000](../../../prd/000-origin-through-0.0.11.md) 的训练课程与带练
-- 后续修订：[PRD 069](../../../prd/069-training-course-name.md)（准备页不回写的对象改称训练课程）
+- 后续修订：[PRD 069](../../0.0.26/prd/069-training-course-name.md)（准备页不回写的对象改称训练课程）
 - 下游落地：[验收](../../../acceptance.md)、[训练领域协议](../../../engineering/training-domain-model.md)、[BUG 0066](../../../bugs/0066-guided-replacement-computed-predicate-crash.md)
 
 ## 背景

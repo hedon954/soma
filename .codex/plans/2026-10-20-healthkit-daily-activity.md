@@ -1,7 +1,7 @@
 # HealthKit 每日运动记录实现计划
 
 - 日期：2026-10-21
-- 依据：[PRD 075](../../docs/prd/075-healthkit-daily-activity.md)、[ADR 0144](../../docs/adr/0144-healthkit-daily-activity.md)
+- 依据：[PRD 075](../../docs/archive/0.0.30/prd/075-healthkit-daily-activity.md)、[ADR 0144](../../docs/archive/0.0.30/adr/0144-healthkit-daily-activity.md)
 - 范围：每日步数、距离、活动消耗写为一条运动记录，同日覆盖，进入既有统计；不增加独立卡或来源/时间元数据 UI。
 
 - [x] 固定三项只读查询、真实 source、自然日窗口及根层前台 owner。

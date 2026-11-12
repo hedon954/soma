@@ -5,7 +5,7 @@
 - 版本：0.0.24
 - 上游依据：[PRD 065](../prd/065-history-order-and-session-pages.md)
 - 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md) 仅教练会话目录查询与缓存寿命；聊天消息分页保持不变
-- 下游落地：[PRD 073](../../../prd/073-training-session-pages.md)、[ADR 0142](../../../adr/0142-training-session-pages.md)（训练页最近训练沿用未缓存身份分页）
+- 下游落地：[PRD 073](../../0.0.27/prd/073-training-session-pages.md)、[ADR 0142](../../0.0.27/adr/0142-training-session-pages.md)（训练页最近训练沿用未缓存身份分页）
 
 ## 背景
 

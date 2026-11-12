@@ -3,7 +3,7 @@
 - 日期：2026-11-05
 - 状态：已转化为 PRD 077 / ADR 0146（产品已锁定 HealthKit-only）
 - 修订自：[HealthKit 调研](2026-10-20-healthkit-daily-activity.md)（单通道 HealthKit 合并三项）
-- 下游落地：[PRD 077](../prd/077-daily-activity-source-priority.md)、[ADR 0146](../adr/0146-daily-activity-source-priority.md)
+- 下游落地：[PRD 077](../archive/0.0.31/prd/077-daily-activity-source-priority.md)、[ADR 0146](../archive/0.0.31/adr/0146-daily-activity-source-priority.md)
 
 ## 一、现状（代码事实）
 

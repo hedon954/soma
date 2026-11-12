@@ -1,6 +1,6 @@
 # ReAct Agent
 
-- 后续修订：[ADR 0141](adr/0141-coach-training-schedule-draft.md)（`propose_training_schedule` 只返回草稿，不写计划）
+- 后续修订：[ADR 0141](archive/0.0.27/adr/0141-coach-training-schedule-draft.md)（`propose_training_schedule` 只返回草稿，不写计划）
 - 后续修订：[ADR 0000](adr/0000-origin-through-0.0.11.md)（受控提问与确定性按钮承接）
 
 - 后续修订：[ADR 0131](archive/0.0.23/adr/0131-explicit-video-rejection-frame-fallback.md)（明确视频拒绝后单次画面回退）

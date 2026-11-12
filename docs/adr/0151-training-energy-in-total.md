@@ -1,13 +1,13 @@
 # ADR 0151：总消耗把 Soma 训练消耗作为独立加项
 
-- 状态：已采纳并实现，待模拟器验收
+- 状态：已采纳并实现，模拟器验收通过
 - 日期：2026-11-12
-- 版本：未发布
+- 版本：0.0.36
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0147](0147-residual-energy-coefficient.md)（存在日活动读数时不再把训练排除在总量之外，也不再把训练只作为日活动能量的拆分项）、[ADR 0145](0145-adaptive-energy-system.md)（当前总消耗再加入训练列表消耗）、[ADR 0144](0144-healthkit-daily-activity.md)（训练列表消耗作为独立加项进入总量）
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（总消耗中的训练计量）
 - 后续替代：暂无
 - 上游依据：[PRD 081](../prd/081-training-energy-in-total.md)
-- 下游落地：[验收](../acceptance.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)
+- 下游落地：[验收](../acceptance.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)、[工程契约](../../CLAUDE.md)
 
 ## 背景
 
@@ -74,4 +74,4 @@ HealthKit 授权的写入集合为空，Soma 不把训练或活动能量写回 A
 
 - `Soma/Services/Health/DailyEnergyTotal.swift`
 - `Soma/Services/Settings/ProgressEnergyBreakdown.swift`
-- [ADR 0147](0147-residual-energy-coefficient.md)
+- [ADR 0147](../archive/0.0.32/adr/0147-residual-energy-coefficient.md)

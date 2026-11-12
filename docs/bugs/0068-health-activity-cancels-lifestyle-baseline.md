@@ -2,8 +2,8 @@
 
 - 状态：已修复；「不把日活动能量加入总量」已由后续公式修订
 - 日期：2026-11-03
-- 上游依据：[PRD 076](../prd/076-adaptive-energy-system.md)、[ADR 0145](../adr/0145-adaptive-energy-system.md)
-- 后续修订：[PRD 078](../prd/078-residual-energy-coefficient.md)、[ADR 0147](../adr/0147-residual-energy-coefficient.md)（保留系数，并加上所选日活动能量）、[PRD 081](../prd/081-training-energy-in-total.md)、[ADR 0151](../adr/0151-training-energy-in-total.md)（再加入训练列表消耗）
+- 上游依据：[PRD 076](../archive/0.0.30/prd/076-adaptive-energy-system.md)、[ADR 0145](../archive/0.0.30/adr/0145-adaptive-energy-system.md)
+- 后续修订：[PRD 078](../archive/0.0.32/prd/078-residual-energy-coefficient.md)、[ADR 0147](../archive/0.0.32/adr/0147-residual-energy-coefficient.md)（保留系数，并加上所选日活动能量）、[PRD 081](../prd/081-training-energy-in-total.md)、[ADR 0151](../adr/0151-training-energy-in-total.md)（再加入训练列表消耗）
 
 ## 症状
 

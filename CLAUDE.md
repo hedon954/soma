@@ -1,12 +1,13 @@
 # Soma Engineering Principles
 
 - 后续修订：
-  - [PRD 080](docs/prd/080-healthkit-body-mass.md)、[ADR 0149](docs/adr/0149-healthkit-body-mass.md)、[ADR 0150](docs/adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录、来源图标与身体曲线）
-  - [PRD 079](docs/prd/079-daily-target-deficit.md)、[ADR 0148](docs/adr/0148-daily-target-deficit.md)（减脂与增肌减脂共用可设置目标缺口，默认 400 kcal；清空恢复默认）
-  - [PRD 078](docs/prd/078-residual-energy-coefficient.md)、[ADR 0147](docs/adr/0147-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
-  - [PRD 077](docs/prd/077-daily-activity-source-priority.md)、[ADR 0146](docs/adr/0146-daily-activity-source-priority.md)（日常活动多来源整包择优与独立列表）
-  - [PRD 076](docs/prd/076-adaptive-energy-system.md)、[ADR 0145](docs/adr/0145-adaptive-energy-system.md)（动态消耗与逐次依据）
-  - [PRD 075](docs/prd/075-healthkit-daily-activity.md)、[ADR 0144](docs/adr/0144-healthkit-daily-activity.md)（三项日汇总保存为每日运动记录）
+  - [PRD 081](docs/prd/081-training-energy-in-total.md)、[ADR 0151](docs/adr/0151-training-energy-in-total.md)（预估总消耗独立加入训练列表消耗）
+  - [PRD 080](docs/prd/080-healthkit-body-mass.md)、[ADR 0149](docs/archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](docs/adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录、来源图标与身体曲线）
+  - [PRD 079](docs/archive/0.0.32/prd/079-daily-target-deficit.md)、[ADR 0148](docs/archive/0.0.32/adr/0148-daily-target-deficit.md)（减脂与增肌减脂共用可设置目标缺口，默认 400 kcal；清空恢复默认）
+  - [PRD 078](docs/archive/0.0.32/prd/078-residual-energy-coefficient.md)、[ADR 0147](docs/archive/0.0.32/adr/0147-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
+  - [PRD 077](docs/archive/0.0.31/prd/077-daily-activity-source-priority.md)、[ADR 0146](docs/archive/0.0.31/adr/0146-daily-activity-source-priority.md)（日常活动多来源整包择优与独立列表）
+  - [PRD 076](docs/archive/0.0.30/prd/076-adaptive-energy-system.md)、[ADR 0145](docs/archive/0.0.30/adr/0145-adaptive-energy-system.md)（动态消耗与逐次依据）
+  - [PRD 075](docs/archive/0.0.30/prd/075-healthkit-daily-activity.md)、[ADR 0144](docs/archive/0.0.30/adr/0144-healthkit-daily-activity.md)（三项日汇总保存为每日运动记录）
 
 本文件是 Soma 仓库内所有 coding agent 和贡献者的最高级工程契约。`AGENTS.md`
 链接到本文件，使 Codex、Claude Code、Cursor 和其他 Agent 共享同一套规则。
@@ -131,11 +132,11 @@ App → Views → Services → Models
 
 按 PRD 075 / ADR 0144，每日步数、步跑距离和活动能量按自然日覆盖同一条 WorkoutEntry，保留真实 source。
 按 PRD 076 / ADR 0145，额外只读训练身份、类型、起止/有效时长及关联活动能量，用于训练去重及区间外步行统计。
-按 PRD 078 / ADR 0147，预估总消耗 = 当日静息 × 残差系数 + 所选日活动能量。系数由独立提供方给出，当前回退为既有默认数值 1.4，表示静息与所选活动能量未覆盖的估算消耗，不是传统全天活动水平。
+按 PRD 081 / ADR 0151，预估总消耗 = 当日静息 × 残差系数 + 所选日活动能量 + Soma 已记录训练消耗。系数由独立提供方给出，当前回退为既有默认数值 1.4，表示静息与所选活动能量未覆盖的估算消耗，不是传统全天活动水平。
 按 PRD 080 / ADR 0149 与 0150，连接 Apple 健康后按自然日各保留一条健康 BodyEntry，当天各指标取最后有效样本并保留各自时间与来源。列表平铺所选区间，无日卡分组。健康导入不进备份/导出与教练批量历史，且只读；手动记录不被健康同步删除。用户路径不展示或输入腰围；已存字段保留。
 
 按 PRD 079 / ADR 0148，减脂与增肌减脂推荐摄入 = max(0, 预估总消耗 − 用户目标缺口)，仍可摄入 = max(0, 推荐摄入 − 已记录摄入)。目标缺口不是实际消耗或健康事实；超过 800 kcal 仅非阻塞提醒，不是医学阈值。
-已包含在所选日活动能量里的训练不再叠加；没有读数时不编造。不把 COROS 与 Apple 的活动能量相加。不读取静息能量、心率、睡眠或路线。
+训练项汇总当天训练列表的有效估算。手表或其他 App 可能已把同场训练计入日活动能量，明细保留重复计量的说明。缺少日活动读数时保留未知。不把 COROS 与 Apple 的活动能量相加。不读取静息能量、心率、睡眠或路线。
 健康事实与派生依据不进入模型、应用备份/导出或 Server；个人库及其目录排除系统备份并采用 complete 文件保护。
 
 ### Sensitive data

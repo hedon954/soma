@@ -4,7 +4,7 @@
 - 日期：2026-11-10
 - 版本：0.0.35
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0149](0149-healthkit-body-mass.md)（将「各 HealthKit 样本一行持久化 + 同秒展示配对 + 列表全量日卡分组、区间只裁图表」改为「每个自然日一条健康 `BodyEntry` + 所选区间同时筛选列表」；只读权限、双游标、删除感知、拒权空结果不擦除、手动不被覆盖、隐私过滤、官方来源图标、合并双轴图、无腰围输入与 SpatialTap 仍有效）
+- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（健康身体测量的存储与展示）
 - 后续替代：暂无
 - 上游依据：[PRD 080](../prd/080-healthkit-body-mass.md)
 - 下游落地：[验收](../acceptance.md)、[数据库结构](../engineering/database-schema.md)、[工程原则](../../CLAUDE.md)

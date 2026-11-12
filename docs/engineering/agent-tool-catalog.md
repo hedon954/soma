@@ -1,8 +1,8 @@
 # Agent Tool 目录
 
-- 后续修订：[ADR 0141](../adr/0141-coach-training-schedule-draft.md)（增加不落库的 `propose_training_schedule`）
+- 后续修订：[ADR 0141](../archive/0.0.27/adr/0141-coach-training-schedule-draft.md)（增加不落库的 `propose_training_schedule`）
 - 后续修订：[ADR 0000](../adr/0000-origin-through-0.0.11.md)（固定提问工具与曝光例外）
-- 后续修订：[ADR 0145](../adr/0145-adaptive-energy-system.md)（明确生活/完整性事实与训练热量口径）
+- 后续修订：[ADR 0145](../archive/0.0.30/adr/0145-adaptive-energy-system.md)（明确生活/完整性事实与训练热量口径）
 
 本文件维护当前代码实际支持的 Agent Tool、暴露策略和协议边界。它只做导航与审计，不复制
 完整 JSON Schema；可执行事实以源码和测试为准。
