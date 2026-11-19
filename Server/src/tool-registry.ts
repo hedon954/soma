@@ -5,7 +5,7 @@ import { userQuestionsParameters, validateQuestionActions } from "./user-questio
 export interface DeviceToolDefinition {
   name: string;
   description?: string;
-  schemaVersion: 1 | 2 | 3 | 4;
+  schemaVersion: 1 | 2 | 3 | 4 | 5;
   mutation: boolean;
   appDirectOnly?: true;
   parameters: {
@@ -40,6 +40,18 @@ const setEntries = {
 };
 const targetKindValue = { type: "string", enum: ["repetitions", "duration"] };
 const lateralityValue = { type: "string", enum: ["none", "both", "left", "right"] };
+const muscleIDValue = {
+  type: "string",
+  enum: [
+    "trapezius", "upper-back", "lower-back", "chest", "biceps", "triceps",
+    "forearm", "back-deltoids", "front-deltoids", "abs", "obliques", "adductor",
+    "abductors", "hamstring", "quadriceps", "calves", "gluteal", "neck",
+  ],
+};
+const exerciseMuscleFields = {
+  primary_muscle_ids: { type: "array", items: muscleIDValue, minItems: 1 },
+  secondary_muscle_ids: { type: "array", items: muscleIDValue },
+};
 const effortSideValue = { type: "string", enum: ["none", "left", "right"] };
 const setEntriesV4 = {
   type: "array",
@@ -406,6 +418,29 @@ const definitions: DeviceToolDefinition[] = [
       },
       ["exercise_id"],
     ),
+  },
+  {
+    name: "create_exercise",
+    schemaVersion: 5,
+    mutation: true,
+    parameters: parameters({
+      exercises: {
+        type: "array",
+        minItems: 1,
+        maxItems: 20,
+        items: {
+          type: "object",
+          properties: {
+            exercise_name: stringValue,
+            target_kind: targetKindValue,
+            laterality: lateralityValue,
+            ...exerciseMuscleFields,
+          },
+          required: ["exercise_name", "target_kind", "laterality", "primary_muscle_ids", "secondary_muscle_ids"],
+          additionalProperties: false,
+        },
+      },
+    }, ["exercises"]),
   },
   {
     name: "archive_exercise",
@@ -782,9 +817,24 @@ export function validateDeviceTool(input: {
   if (input.schemaVersion === 3 && [
     "get_program", "create_program", "update_program",
   ].includes(input.name)) validatePlanV3(input);
-  if (input.schemaVersion === 4) validateToolV4(input);
+  if (input.schemaVersion >= 4) validateToolV4(input);
+  if (input.schemaVersion === 5) validateExerciseMusclesV5(input);
   rejectForbiddenValues(input.arguments);
   return definition;
+}
+
+function validateExerciseMusclesV5(input: { name: string; arguments: Record<string, unknown> }): void {
+  function validateSelection(fields: Record<string, unknown>): void {
+    const primary = fields.primary_muscle_ids;
+    const secondary = fields.secondary_muscle_ids;
+    if (!Array.isArray(primary) || primary.length === 0 || !Array.isArray(secondary) ||
+        new Set([...primary, ...secondary]).size !== primary.length + secondary.length) {
+      invalidSchema("须提供主要和辅助受力块 ID，主要至少一项，全部 ID 不重复。");
+    }
+  }
+  if (input.name === "create_exercise" && Array.isArray(input.arguments.exercises)) {
+    for (const exercise of input.arguments.exercises) validateSelection(exercise as Record<string, unknown>);
+  }
 }
 
 function validateToolV4(input: {

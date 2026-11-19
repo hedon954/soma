@@ -86,9 +86,9 @@ Skill、Markdown 预览与恢复；Skill 只描述专业方法，工具权限由
 当前 Session 发送新消息后收起旧问题，旧按钮不能再次执行。`propose_training_schedule` 只返回计划草稿，不写 `TrainingSchedule`。
 
 训练、饮食和身体记录都有独立 list/get/create/update/delete；动作独立搜索、创建、更新、
-归档和合并。所有业务 ID 是 Int64。训练相关 Tool 当前使用 Schema v4：动作搜索/创建/更新显式
-返回或提交 `target_kind` 与 `laterality`，训练创建/更新以逻辑组和 side effort 保存逐组事实；
-旧 v2/v3 只恢复已持久任务，不向新模型广告。完整当前清单和出入参见
+归档和合并。所有业务 ID 是 Int64。动作搜索、更新和训练创建、更新使用 Schema v4。动作创建使用 v5，显式提交
+`target_kind`、`laterality` 与受力块 ID。训练创建和更新以逻辑组和 side effort 保存逐组事实。
+旧工具版本用于已持久任务的恢复。完整当前清单和出入参见
 [Agent Tool 目录](engineering/agent-tool-catalog.md)。
 
 工具名称、描述和参数 Schema 由 Runtime 固定，通过 API 原生注册，不拼接进系统提示词，也不允许用户修改。工具不会向模型暴露数据库句柄、API Key 或本地文件路径。
@@ -214,7 +214,7 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
   侧别等影响动作身份且缺少依据时，使用 `ask_user_questions` 确认对应区别，保留已知训练数据，
   等待用户回答后再写入该条记录。
 - 只有无语义等价项时一次调用 `create_exercise(exercises)`，每项明确 `exercise_name`、
-  `target_kind` 与 `laterality`，再把返回的 Int64 ID 交给一次 `create_workout(workouts)`；
+  `target_kind`、`laterality`、`primary_muscle_ids` 和 `secondary_muscle_ids`，再把返回的 Int64 ID 交给一次 `create_workout(workouts)`；
 - 每条 workout 明确 `target_kind`、`laterality` 和 `set_entries`。左右各做用 `laterality=both`，
   同一 `logical_set_index` 写 left/right 两条 effort；双侧同时才用 `side=none`。每条 effort 保存
   自己的目标类型、次数/时长、外部重量和已知间歇；不要指定新建 `record_id`；

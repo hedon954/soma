@@ -7,6 +7,7 @@
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
 - 后续替代：
+  - [ADR 0154](0154-exercise-muscle-map-ids.md)（动作库肌群来源与写入）
   - [ADR 0152](0152-coach-progress-reliability.md)（回到今天、训练视频能力确认与降级、诊断投递与餐次覆盖）
   - [ADR 0150](0150-healthkit-body-daily-records.md)（健康身体记录按日归并）
   - [ADR 0151](0151-training-energy-in-total.md)（总消耗增加独立训练项）

@@ -1,8 +1,7 @@
 import Foundation
 
 /// Canonical muscle keys used for programmatic highlighting.
-/// Free-text `primaryMuscles` / `secondaryMuscles` remain the editable facts;
-/// rendering maps those strings through `MuscleGroupMapping`.
+/// Stable IDs saved by the Agent. Historical names resolve through `MuscleGroupMapping`.
 enum MuscleGroup: String, CaseIterable, Codable, Sendable, Hashable {
     case trapezius
     case upperBack = "upper-back"
@@ -92,6 +91,10 @@ enum MuscleGroup: String, CaseIterable, Codable, Sendable, Hashable {
 }
 
 enum MuscleGroupMapping {
+    static func displayNames(_ values: [String]) -> [String] {
+        values.map { MuscleGroup(rawValue: $0)?.displayName ?? $0 }
+    }
+
     /// Deterministic Chinese/alias → canonical muscle mapping. Unmapped names stay dark.
     static func resolve(_ rawNames: [String]) -> Set<MuscleGroup> {
         Set(rawNames.compactMap(resolveOne))
@@ -100,7 +103,7 @@ enum MuscleGroupMapping {
     static func resolveOne(_ raw: String) -> MuscleGroup? {
         let key = normalize(raw)
         guard !key.isEmpty else { return nil }
-        return aliases[key]
+        return MuscleGroup(rawValue: key) ?? aliases[key]
     }
 
     static func intensityMap(
@@ -110,10 +113,11 @@ enum MuscleGroupMapping {
         secondaryWeight: Double = 0.45
     ) -> [MuscleGroup: Double] {
         var values: [MuscleGroup: Double] = [:]
-        for group in resolve(primary) {
+        let primaryGroups = resolve(primary)
+        for group in primaryGroups {
             values[group, default: 0] += primaryWeight
         }
-        for group in resolve(secondary) {
+        for group in resolve(secondary).subtracting(primaryGroups) {
             values[group, default: 0] += secondaryWeight
         }
         return values

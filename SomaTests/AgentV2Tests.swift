@@ -14,15 +14,16 @@ final class AgentV2Tests: XCTestCase {
         XCTAssertEqual(tools.count, 30)
         XCTAssertEqual(
             Set(tools.filter { $0.schemaVersion == 4 }),
-            [.searchExercises, .createExercise, .updateExercise, .createWorkout, .updateWorkout]
+            [.searchExercises, .updateExercise, .createWorkout, .updateWorkout]
         )
+        XCTAssertEqual(Set(tools.filter { $0.schemaVersion == 5 }), [.createExercise])
         XCTAssertEqual(
             Set(tools.filter { $0.schemaVersion == 3 }),
             [.getProgram, .createProgram, .updateProgram]
         )
         XCTAssertEqual(tools.filter { $0.schemaVersion == 1 }, [.getDailyEnergy, .recordEnergyContext, .proposeTrainingSchedule])
         XCTAssertTrue(tools.allSatisfy {
-            [.proposeTrainingSchedule, .recordEnergyContext, .getDailyEnergy].contains($0) || (2 ... 4).contains($0.schemaVersion)
+            [.proposeTrainingSchedule, .recordEnergyContext, .getDailyEnergy].contains($0) || (2 ... 5).contains($0.schemaVersion)
         })
         XCTAssertTrue(tools.contains(.updateMeal))
     }

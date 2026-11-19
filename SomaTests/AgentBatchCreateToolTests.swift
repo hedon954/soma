@@ -3,17 +3,17 @@ import SwiftData
 import XCTest
 
 final class AgentBatchCreateToolTests: XCTestCase {
-    func testExerciseAndWorkoutToolsAdvertiseSchemaFour() {
+    func testExerciseAndWorkoutToolsAdvertiseCurrentSchemas() {
         for name in [
             AgentToolName.searchExercises,
-            .createExercise,
-            .updateExercise,
-            .createWorkout,
-            .updateWorkout
+            .updateExercise
         ] {
             XCTAssertEqual(name.schemaVersion, 4)
         }
-        XCTAssertEqual(AgentToolName.createExercise.supportedSchemaVersions, [1, 2, 3, 4])
+        XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 5)
+        XCTAssertEqual(AgentToolName.createWorkout.schemaVersion, 4)
+        XCTAssertEqual(AgentToolName.updateWorkout.schemaVersion, 4)
+        XCTAssertEqual(AgentToolName.createExercise.supportedSchemaVersions, [1, 2, 3, 4, 5])
         XCTAssertEqual(AgentToolName.createWorkout.supportedSchemaVersions, [1, 2, 3, 4])
         XCTAssertEqual(AgentToolName.searchExercises.supportedSchemaVersions, [1, 2, 4])
     }
@@ -154,6 +154,20 @@ final class AgentBatchCreateToolTests: XCTestCase {
             for: .createExercise,
             schemaVersion: 2
         ))
+    }
+
+    func testNewExerciseRequiresValidPrimaryAndSecondaryMuscleIDs() throws {
+        let base = ["exercise_name": "虚构绳索划船", "target_kind": "repetitions", "laterality": "none"]
+        try AgentToolSchemaValidator.validate(json(["exercises": [base]]), for: .createExercise, schemaVersion: 4)
+        XCTAssertThrowsError(try AgentToolSchemaValidator.validate(json(["exercises": [base]]), for: .createExercise, schemaVersion: 5))
+        var row: [String: Any] = base
+        row["primary_muscle_ids"] = ["upper-back"]
+        row["secondary_muscle_ids"] = ["biceps"]
+        try AgentToolSchemaValidator.validate(json(["exercises": [row]]), for: .createExercise, schemaVersion: 5)
+        for invalid in [[], ["背阔肌"], ["biceps"], ["upper-back", "upper-back"]] {
+            row["primary_muscle_ids"] = invalid
+            XCTAssertThrowsError(try AgentToolSchemaValidator.validate(json(["exercises": [row]]), for: .createExercise, schemaVersion: 5))
+        }
     }
 
     func testWorkoutBatchSignaturePreservesItemOrder() {

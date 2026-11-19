@@ -8,7 +8,7 @@ final class AgentPlanToolV3Tests: XCTestCase {
         XCTAssertEqual(AgentToolName.getProgram.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.createProgram.schemaVersion, 3)
         XCTAssertEqual(AgentToolName.updateProgram.schemaVersion, 3)
-        XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 4)
+        XCTAssertEqual(AgentToolName.createExercise.schemaVersion, 5)
         XCTAssertEqual(AgentToolName.createWorkout.schemaVersion, 4)
         XCTAssertEqual(AgentToolName.startProgram.schemaVersion, 2)
         XCTAssertEqual(AgentToolName.listPrograms.schemaVersion, 2)

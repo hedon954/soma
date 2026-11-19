@@ -426,13 +426,18 @@ extension ConversationRecorder {
         _ arguments: AgentToolArguments,
         in context: ModelContext
     ) -> AgentToolResult {
-        let requested: [(name: String, targetKind: WorkoutTargetKind?, laterality: ExerciseLaterality?)]
+        typealias ExerciseDraft = (name: String, targetKind: WorkoutTargetKind?, laterality: ExerciseLaterality?,
+                                   muscles: (primary: [MuscleGroup], secondary: [MuscleGroup])?)
+        let requested: [ExerciseDraft]
         if let batch = arguments.exercises {
-            requested = batch.map { ($0.exerciseName, $0.targetKind, $0.laterality) }
+            requested = batch.map { row in
+                let muscles = row.primaryMuscleIDs.map { (primary: $0, secondary: row.secondaryMuscleIDs ?? []) }
+                return (row.exerciseName, row.targetKind, row.laterality, muscles)
+            }
         } else if let batch = arguments.exerciseNames {
-            requested = batch.map { ($0, nil, nil) }
+            requested = batch.map { ($0, nil, nil, nil) }
         } else if let single = arguments.exerciseName {
-            requested = [(single, arguments.targetKind, arguments.laterality)]
+            requested = [(single, arguments.targetKind, arguments.laterality, nil)]
         } else {
             return .failure(
                 "exercises 不能为空。",
@@ -450,13 +455,13 @@ extension ConversationRecorder {
             )
         }
         var seen = Set<String>()
-        var unique: [(name: String, targetKind: WorkoutTargetKind?, laterality: ExerciseLaterality?)] = []
+        var unique: [ExerciseDraft] = []
         for item in requested {
             let trimmed = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
             let key = ExerciseLibraryStore.canonicalNameKey(trimmed)
             guard seen.insert(key).inserted else { continue }
-            unique.append((trimmed, item.targetKind, item.laterality))
+            unique.append((trimmed, item.targetKind, item.laterality, item.muscles))
         }
         guard !unique.isEmpty else {
             return .failure(
@@ -472,6 +477,8 @@ extension ConversationRecorder {
             for item in unique {
                 let exercise = try ExerciseLibraryStore.resolveOrCreateExact(
                     canonicalName: item.name,
+                    saveChanges: false,
+                    muscleIDs: item.muscles,
                     in: context
                 )
                 if let targetKind = item.targetKind {
@@ -489,6 +496,7 @@ extension ConversationRecorder {
                 ]))
                 summaries.append("[exercise_id:\(id)]：\(exercise.canonicalName)")
             }
+            try context.save()
             let message = unique.count == 1
                 ? "动作已就绪 \(summaries[0])。"
                 : "已就绪 \(unique.count) 个动作：\(summaries.joined(separator: "；"))。"
@@ -497,6 +505,7 @@ extension ConversationRecorder {
                 data: .object(["items": .array(items)])
             )
         } catch {
+            context.rollback()
             return .failure(error.localizedDescription)
         }
     }

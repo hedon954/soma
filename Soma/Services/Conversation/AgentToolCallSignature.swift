@@ -169,12 +169,15 @@ private struct AgentToolSignatureArguments {
     private mutating func appendExercises(_ exercises: [AgentExerciseCreateInput]?) {
         guard let exercises, !exercises.isEmpty else { return }
         values["exercises"] = exercises.map {
-            [
+            var row: [String: Any] = [
                 "exercise_name": $0.exerciseName
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                 "target_kind": $0.targetKind.rawValue,
                 "laterality": $0.laterality.rawValue
             ]
+            row["primary_muscle_ids"] = $0.primaryMuscleIDs?.map(\.rawValue).sorted()
+            row["secondary_muscle_ids"] = $0.secondaryMuscleIDs?.map(\.rawValue).sorted()
+            return row
         }
     }
 

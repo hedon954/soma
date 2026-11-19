@@ -175,6 +175,18 @@ struct MuscleMapView: View {
                     }
                 }
             }
+            // The source illustration has no separate hip abductor contour.
+            if let intensity = normalized[.abductors],
+               let anchor = MuscleMapLabels.anchors(for: side).first(where: { $0.group == .abductors })
+            {
+                let radius = max(1, 18 * layout.scale)
+                let width = MuscleMapPathData.viewSize(for: side).width
+                for horizontalPosition in [anchor.musclePoint.x, width - anchor.musclePoint.x] {
+                    let center = mapPoint(CGPoint(x: horizontalPosition, y: anchor.musclePoint.y), layout: layout)
+                    let area = CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)
+                    context.fill(Path(ellipseIn: area), with: .color(fillColor(intensity: intensity, structural: false)))
+                }
+            }
         }
     }
 

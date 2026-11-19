@@ -77,10 +77,9 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     var schemaVersion: Int {
         switch self {
         case .askUserQuestions, .proposeTrainingSchedule, .recordEnergyContext, .getDailyEnergy: 1
-        case .searchExercises,
-             .createExercise,
-             .updateExercise,
-             .createWorkout,
+        case .createExercise:
+            5
+        case .searchExercises, .updateExercise, .createWorkout,
              .updateWorkout:
             4
         case .getProgram,
@@ -118,9 +117,13 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     /// 新调用只广告当前版本；升级前持久化的远程 Job 仍可按原版本交回设备执行。
     var supportedSchemaVersions: Set<Int> {
         switch self {
-        case .createExercise, .createWorkout:
+        case .createExercise:
+            [1, 2, 3, 4, 5]
+        case .searchExercises, .updateExercise:
+            [1, 2, 4]
+        case .createWorkout:
             [1, 2, 3, 4]
-        case .searchExercises, .updateExercise, .updateWorkout:
+        case .updateWorkout:
             [1, 2, 4]
         case .getProgram, .createProgram, .updateProgram:
             [1, 2, 3]

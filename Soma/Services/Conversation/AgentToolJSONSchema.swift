@@ -3,11 +3,15 @@ import SwiftOpenAI
 
 extension AgentToolName {
     var chatTool: ChatCompletionParameters.Tool {
+        chatTool(for: schemaVersion)
+    }
+
+    func chatTool(for schemaVersion: Int) -> ChatCompletionParameters.Tool {
         ChatCompletionParameters.Tool(function: .init(
             name: rawValue,
             strict: true,
             description: toolDescription,
-            parameters: toolParameters
+            parameters: self == .createExercise && schemaVersion == 4 ? exerciseCreateParameters(includesMuscles: false) : toolParameters
         ))
     }
 
@@ -28,7 +32,7 @@ extension AgentToolName {
         case .searchExercises:
             "按名称或内置别名搜索未归档动作。返回 exercise_id、规范名、target_kind、laterality 和 match_kind（canonical、alias、related）。has_more 表示还有候选，catalog_names 是未入库的规范名称候选。记录训练或课程前使用，存在歧义时先问用户。"
         case .createExercise:
-            "仅在动作库没有语义等价项时批量创建标准动作，并明确 target_kind 与 laterality。左右各做用 both；双侧同时或不区分用 none。"
+            "仅在动作库没有语义等价项时批量创建标准动作，传完成方式、侧别和对应的主要、辅助肌群受力块 ID。动作有歧义先向用户确认。"
         case .updateExercise:
             "按 Int64 exercise_id 修正动作名称、完成方式或侧别；只提交有明确用户或本次训练证据的字段。"
         case .archiveExercise:
@@ -133,22 +137,7 @@ extension AgentToolName {
                 "limit": integer("最多返回多少条，默认 10，最大 20")
             ], required: ["query"])
         case .createExercise:
-            object([
-                "exercises": array(
-                    object([
-                        "exercise_name": string("简洁、明确的标准动作名称"),
-                        "target_kind": string(
-                            "repetitions=按次数，duration=按时长",
-                            values: WorkoutTargetKind.allCases.map(\.rawValue)
-                        ),
-                        "laterality": string(
-                            "none=双侧同时或不区分，both=左右分别，left/right=仅单侧",
-                            values: ExerciseLaterality.allCases.map(\.rawValue)
-                        )
-                    ], required: ["exercise_name", "target_kind", "laterality"]),
-                    description: "一次创建 1 到 20 个动作；已存在名称返回原 exercise_id 并以明确证据更新完成方式与侧别"
-                )
-            ], required: ["exercises"])
+            exerciseCreateParameters(includesMuscles: true)
         case .updateExercise:
             object([
                 "exercise_id": integer("要更新的动作 Int64 ID"),
@@ -361,6 +350,36 @@ extension AgentToolName {
         case .submitFeedback:
             object([:])
         }
+    }
+
+    private func exerciseCreateParameters(includesMuscles: Bool) -> JSONSchema {
+        object([
+            "exercises": array(
+                object([
+                    "exercise_name": string("简洁、明确的标准动作名称"),
+                    "target_kind": string(
+                        "repetitions=按次数，duration=按时长",
+                        values: WorkoutTargetKind.allCases.map(\.rawValue)
+                    ),
+                    "laterality": string(
+                        "none=双侧同时或不区分，both=左右分别，left/right=仅单侧",
+                        values: ExerciseLaterality.allCases.map(\.rawValue)
+                    )
+                ].merging(includesMuscles ? muscleIDFields : [:]) { existing, _ in existing },
+                required: ["exercise_name", "target_kind", "laterality"] + (includesMuscles ? muscleIDFields.keys.sorted() : [])),
+                description: "一次创建 1 到 20 个动作；已存在名称返回原 exercise_id 并以明确证据更新完成方式与侧别"
+            )
+        ], required: ["exercises"])
+    }
+
+    private var muscleIDFields: [String: JSONSchema] {
+        let muscles = MuscleGroup.allCases
+        let legend = muscles.map { "\($0.rawValue)=\($0.displayName)" }.joined(separator: "、")
+        let item = string("受力块 ID：\(legend)", values: muscles.map(\.rawValue))
+        return [
+            "primary_muscle_ids": array(item, description: "主要受力块，至少选一个 ID，不重复"),
+            "secondary_muscle_ids": array(item, description: "辅助受力块，可传空数组，不与主要受力块重叠")
+        ]
     }
 
     private func object(

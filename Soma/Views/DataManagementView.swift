@@ -15,11 +15,25 @@ struct DataManagementView: View {
     @State private var showExportDisclosure = false
     @State private var showClearConfirmation = false
     @State private var showDisconnectConfirmation = false
+    #if SOMA_EXERCISE_METADATA_REPAIR
+        @State private var repairClosed = false
+    #endif
 
     var body: some View {
         Form {
             exportSection
             backupSection
+            #if SOMA_EXERCISE_METADATA_REPAIR
+                if dataSpace.activeSpace == .personal, !repairClosed,
+                   FileManager.default.fileExists(atPath: ExerciseMuscleRepair.planURL.path)
+                {
+                    Section {
+                        NavigationLink("预览动作元数据修复") {
+                            ExerciseMuscleRepairView { repairClosed = true }
+                        }
+                    }
+                }
+            #endif
             #if DEBUG
                 if dataSpace.activeSpace == .personal, WorkoutWeightCorrectionView.enabled {
                     Section {

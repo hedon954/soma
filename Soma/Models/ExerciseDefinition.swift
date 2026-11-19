@@ -154,12 +154,10 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
 
     var primaryMuscles: [String] {
         get {
-            ExerciseDefinitionCoding.decode(
-                [String].self,
-                from: primaryMusclesData
-            ) ?? []
+            MuscleGroupMapping.displayNames(storedPrimaryMuscles)
         }
         set {
+            guard newValue != primaryMuscles else { return }
             primaryMusclesData = ExerciseDefinitionCoding.encode(newValue)
             updatedAt = .now
         }
@@ -167,14 +165,35 @@ final class ExerciseDefinition: BusinessIdentifiedModel {
 
     var secondaryMuscles: [String] {
         get {
-            ExerciseDefinitionCoding.decode(
+            MuscleGroupMapping.displayNames(ExerciseDefinitionCoding.decode(
                 [String].self,
                 from: secondaryMusclesData
-            ) ?? []
+            ) ?? [])
         }
         set {
+            guard newValue != secondaryMuscles else { return }
             secondaryMusclesData = ExerciseDefinitionCoding.encode(newValue)
             updatedAt = .now
+        }
+    }
+
+    private var storedPrimaryMuscles: [String] {
+        ExerciseDefinitionCoding.decode([String].self, from: primaryMusclesData) ?? []
+    }
+
+    var hasExplicitMuscleIDs: Bool {
+        storedPrimaryMuscles.contains { MuscleGroup(rawValue: $0) != nil }
+    }
+
+    var needsMuscleMap: Bool {
+        MuscleGroupMapping.resolve(storedPrimaryMuscles).isEmpty
+    }
+
+    func fillMissingMuscleMap(primary: [MuscleGroup], secondary: [MuscleGroup]) {
+        guard needsMuscleMap, !primary.isEmpty else { return }
+        primaryMuscles = storedPrimaryMuscles + primary.map(\.rawValue)
+        if MuscleGroupMapping.resolve(secondaryMuscles).isEmpty {
+            secondaryMuscles += secondary.map(\.rawValue)
         }
     }
 
@@ -495,6 +514,8 @@ enum ExerciseLibraryStore {
 
     static func resolveOrCreateExact(
         canonicalName: String,
+        saveChanges: Bool = true,
+        muscleIDs: (primary: [MuscleGroup], secondary: [MuscleGroup])? = nil,
         in context: ModelContext
     ) throws -> ExerciseDefinition {
         let name = canonicalName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -512,12 +533,19 @@ enum ExerciseLibraryStore {
                 namespace: "exercise",
                 in: context
             )
-            if BundledExerciseCatalog.activateIfAvailable(existing) {
+            if let muscleIDs {
+                existing.fillMissingMuscleMap(primary: muscleIDs.primary, secondary: muscleIDs.secondary)
+            }
+            let activated = BundledExerciseCatalog.activateIfAvailable(existing)
+            if saveChanges, activated || muscleIDs != nil {
                 try context.save()
             }
             return existing
         }
         let value = ExerciseDefinition(canonicalName: name)
+        if let muscleIDs {
+            value.fillMissingMuscleMap(primary: muscleIDs.primary, secondary: muscleIDs.secondary)
+        }
         _ = BundledExerciseCatalog.activateIfAvailable(value)
         context.insert(value)
         try BusinessIDAllocator.assign(
@@ -525,19 +553,24 @@ enum ExerciseLibraryStore {
             namespace: "exercise",
             in: context
         )
-        try context.save()
+        if saveChanges {
+            try context.save()
+        }
         return value
     }
 
     static func rename(
         _ exercise: ExerciseDefinition,
         to name: String,
+        refreshBundledContent: Bool = true,
+        saveChanges: Bool = true,
         in context: ModelContext
     ) throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = canonicalNameKey(trimmed)
         guard !key.isEmpty else { throw ExerciseLibraryError.emptyName }
         let exerciseID = exercise.id
+        let previousName = exercise.canonicalName
         var duplicateDescriptor = FetchDescriptor<ExerciseDefinition>(
             predicate: #Predicate {
                 $0.id != exerciseID
@@ -551,17 +584,19 @@ enum ExerciseLibraryStore {
         }
         exercise.canonicalName = trimmed
         exercise.canonicalNameKey = key
-        _ = BundledExerciseCatalog.activateIfAvailable(exercise)
+        if refreshBundledContent {
+            _ = BundledExerciseCatalog.activateIfAvailable(exercise)
+        }
         exercise.updatedAt = .now
-        let workouts = (
-            try? context.fetch(FetchDescriptor<WorkoutEntry>(
-                predicate: #Predicate { $0.exerciseID == exerciseID }
-            ))
-        ) ?? []
+        let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.exerciseID == exerciseID || ($0.exerciseID == nil && $0.exercise == previousName) }
+        ))
         for workout in workouts {
             workout.exercise = trimmed
         }
-        try context.save()
+        if saveChanges {
+            try context.save()
+        }
     }
 
     static func archive(
@@ -576,6 +611,7 @@ enum ExerciseLibraryStore {
     static func merge(
         source: ExerciseDefinition,
         into target: ExerciseDefinition,
+        saveChanges: Bool = true,
         in context: ModelContext
     ) throws -> ExerciseMergeRecord {
         guard source.id != target.id,
@@ -585,30 +621,25 @@ enum ExerciseLibraryStore {
             throw ExerciseLibraryError.invalidMerge
         }
         let sourceID = source.id
-        let affected = (
-            try? context.fetch(FetchDescriptor<WorkoutEntry>(
-                predicate: #Predicate { $0.exerciseID == sourceID }
-            ))
-        ) ?? []
+        let sourceName = source.canonicalName
+        let affected = try context.fetch(FetchDescriptor<WorkoutEntry>(
+            predicate: #Predicate { $0.exerciseID == sourceID || ($0.exerciseID == nil && $0.exercise == sourceName) }
+        ))
         for workout in affected {
             workout.exerciseID = target.id
             workout.exerciseDefinition = target
             workout.exercise = target.canonicalName
         }
-        let affectedTemplateExercises = (
-            try? context.fetch(FetchDescriptor<TemplateExercise>(
-                predicate: #Predicate { $0.exerciseID == sourceID }
-            ))
-        ) ?? []
+        let affectedTemplateExercises = try context.fetch(FetchDescriptor<TemplateExercise>(
+            predicate: #Predicate { $0.exerciseID == sourceID }
+        ))
         for templateExercise in affectedTemplateExercises {
             templateExercise.exerciseID = target.id
             templateExercise.exerciseDefinition = target
         }
-        let affectedPerformances = (
-            try? context.fetch(FetchDescriptor<ExercisePerformance>(
-                predicate: #Predicate { $0.exerciseID == sourceID }
-            ))
-        ) ?? []
+        let affectedPerformances = try context.fetch(FetchDescriptor<ExercisePerformance>(
+            predicate: #Predicate { $0.exerciseID == sourceID }
+        ))
         for performance in affectedPerformances {
             performance.exerciseID = target.id
             performance.exerciseDefinition = target
@@ -621,13 +652,9 @@ enum ExerciseLibraryStore {
                 )
             }
         }
-        let affectedRecommendations = (
-            try? context.fetch(FetchDescriptor<RecommendationSnapshot>(
-                predicate: #Predicate {
-                    $0.targetKind == "exercise" && $0.targetID == sourceID
-                }
-            ))
-        ) ?? []
+        let affectedRecommendations = try context.fetch(FetchDescriptor<RecommendationSnapshot>(
+            predicate: #Predicate { $0.targetKind == "exercise" && $0.targetID == sourceID }
+        ))
         for recommendation in affectedRecommendations {
             recommendation.targetID = target.id
         }
@@ -674,7 +701,9 @@ enum ExerciseLibraryStore {
             transferredImageReferences: transferredImageReferences
         )
         context.insert(record)
-        try context.save()
+        if saveChanges {
+            try context.save()
+        }
         return record
     }
 

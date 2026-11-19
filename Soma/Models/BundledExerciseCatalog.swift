@@ -228,7 +228,7 @@ enum BundledExerciseCatalog {
             definition.primaryMuscles = content.primaryMuscles
             changed = true
         }
-        if definition.secondaryMuscles.isEmpty {
+        if definition.secondaryMuscles.isEmpty, !definition.hasExplicitMuscleIDs {
             definition.secondaryMuscles = content.secondaryMuscles
             changed = true
         }

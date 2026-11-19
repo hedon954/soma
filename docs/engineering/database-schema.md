@@ -133,7 +133,7 @@ WorkoutEntry.calorieScopeRaw 为新增可空字符串，明确 active / gross / 
 | `MealEntry.itemsData` | `[MealItem]`，每项包含稳定 ID、名称、可选份量、热量与三大宏量 |
 | 各记录与消息的 `mediaAttachmentsData` | `[MediaAttachmentReference]` |
 | `WorkoutEntry.setEntriesData` | `[WorkoutSetEvidence]`；V5 可含 logical set index、side、kind、target kind、reps/duration、重量、休息与录像 |
-| `ExerciseDefinition.primaryMusclesData`、`secondaryMusclesData`、`movementPatternsData` | `[String]` |
+| `ExerciseDefinition.primaryMusclesData`、`secondaryMusclesData`、`movementPatternsData` | `[String]`。肌群数组可包含 `MuscleGroup` 稳定 ID 或旧版名称，动作模式仍为名称。 |
 | `ExerciseDefinition.userDemoVideosData` | `[MediaAttachmentReference]` |
 | `ExerciseDefinition.guidanceVideosData` | `[ExerciseVideoSource]` |
 | `ExerciseDefinition.imageReferencesData` | `[ExerciseImageReference]` |

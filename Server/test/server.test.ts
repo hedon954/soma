@@ -918,9 +918,26 @@ test("plan schema 3 validates nested prescriptions and keeps schema 2 registered
   }
 });
 
-test("schema 4 carries workout laterality and keeps schemas 2 and 3 registered", () => {
+test("exercise schema 5 requires canonical, nonoverlapping muscle IDs", () => {
+  const row = {
+    exercise_name: "虚构绳索划船",
+    target_kind: "repetitions",
+    laterality: "none",
+    primary_muscle_ids: ["upper-back"],
+    secondary_muscle_ids: ["biceps"],
+  };
+  const validate = (exercise: Record<string, unknown>) => validateDeviceTool({
+    name: "create_exercise", schemaVersion: 5, arguments: { exercises: [exercise] }, allowedNames: ["create_exercise"],
+  });
+  assert.equal(validate(row).schemaVersion, 5);
+  for (const primary of [undefined, [], ["背阔肌"], ["biceps"], ["upper-back", "upper-back"]]) {
+    assert.throws(() => validate({ ...row, primary_muscle_ids: primary }));
+  }
+});
+
+test("schema 4 carries workout laterality and keeps old exercise schemas registered", () => {
   assert.equal(deviceToolRegistry.get("search_exercises")?.schemaVersion, 4);
-  assert.equal(deviceToolRegistry.get("create_exercise")?.schemaVersion, 4);
+  assert.equal(deviceToolRegistry.get("create_exercise")?.schemaVersion, 5);
   assert.equal(deviceToolRegistry.get("update_exercise")?.schemaVersion, 4);
   assert.equal(deviceToolRegistry.get("create_workout")?.schemaVersion, 4);
   assert.equal(deviceToolRegistry.get("update_workout")?.schemaVersion, 4);

@@ -30,11 +30,15 @@ struct AgentExerciseCreateInput: Codable, Equatable {
     var exerciseName: String
     var targetKind: WorkoutTargetKind
     var laterality: ExerciseLaterality
+    var primaryMuscleIDs: [MuscleGroup]? = nil
+    var secondaryMuscleIDs: [MuscleGroup]? = nil
 
     enum CodingKeys: String, CodingKey {
         case laterality
         case exerciseName = "exercise_name"
         case targetKind = "target_kind"
+        case primaryMuscleIDs = "primary_muscle_ids"
+        case secondaryMuscleIDs = "secondary_muscle_ids"
     }
 }
 

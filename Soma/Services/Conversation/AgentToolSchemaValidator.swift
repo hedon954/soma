@@ -36,19 +36,22 @@ enum AgentToolSchemaValidator {
             return
         }
         // 旧 schema 1 的形状由历史 decoder 与业务 Store 继续兜底；当前版本始终严格递归验证。
-        guard schemaVersion == name.schemaVersion else { return }
-        let parameters = try parameterSchema(for: name)
+        guard schemaVersion == name.schemaVersion || (schemaVersion == 4 && name.schemaVersion == 5) else { return }
+        let parameters = try parameterSchema(for: name, schemaVersion: schemaVersion)
         try validate(raw, schema: parameters, path: name.rawValue)
         if [.createProgram, .updateProgram, .getProgram].contains(name) {
             try validatePlanV3(raw, for: name)
         }
-        if schemaVersion == 4 {
+        if schemaVersion >= 4 {
             try validateV4(raw, for: name)
+        }
+        if schemaVersion == 5 {
+            try validateExerciseMusclesV5(raw, for: name)
         }
     }
 
-    static func parameterSchema(for name: AgentToolName) throws -> [String: Any] {
-        let encoded = try JSONEncoder().encode(name.chatTool)
+    static func parameterSchema(for name: AgentToolName, schemaVersion: Int? = nil) throws -> [String: Any] {
+        let encoded = try JSONEncoder().encode(name.chatTool(for: schemaVersion ?? name.schemaVersion))
         guard let tool = try JSONSerialization.jsonObject(with: encoded)
             as? [String: Any],
             let function = tool["function"] as? [String: Any],
@@ -492,6 +495,22 @@ enum AgentToolSchemaValidator {
             break
         default:
             break
+        }
+    }
+
+    private static func validateExerciseMusclesV5(_ raw: [String: Any], for name: AgentToolName) throws {
+        func validateSelection(_ fields: [String: Any], path: String) throws {
+            guard let primary = fields["primary_muscle_ids"] as? [String], !primary.isEmpty,
+                  let secondary = fields["secondary_muscle_ids"] as? [String],
+                  Set(primary + secondary).count == primary.count + secondary.count
+            else {
+                throw invalid(path, "须提供主要和辅助受力块 ID，主要至少一项，全部 ID 不重复")
+            }
+        }
+        if name == .createExercise, let exercises = raw["exercises"] as? [[String: Any]] {
+            for (index, exercise) in exercises.enumerated() {
+                try validateSelection(exercise, path: "create_exercise.exercises[\(index)]")
+            }
         }
     }
 
