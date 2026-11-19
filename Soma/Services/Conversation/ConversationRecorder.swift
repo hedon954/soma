@@ -15,7 +15,11 @@ enum ConversationRecorder {
         preferredGymID _: UUID? = nil,
         in context: ModelContext
     ) -> AgentToolResult {
-        try? BusinessIDAllocator.assignMissingIDs(in: context)
+        // Startup migration repairs historical IDs. These two create tools allocate
+        // only their new rows and already require stable referenced exercise IDs.
+        if call.name != .createMeal, call.name != .createWorkout {
+            try? BusinessIDAllocator.assignMissingIDs(in: context)
+        }
         let occurredAt: Date?
         if let raw = call.arguments.occurredAt {
             guard let parsed = parsedOccurredAt(raw) else {

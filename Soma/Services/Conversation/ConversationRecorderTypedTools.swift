@@ -72,7 +72,7 @@ extension ConversationRecorder {
     ) -> AgentToolResult {
         switch call.name {
         case .listWorkouts:
-            typedList(scope: "workouts", arguments: call.arguments, in: context)
+            typedList(scope: call.arguments.exerciseID == nil ? "workouts" : "exercise_history", arguments: call.arguments, in: context)
         case .getWorkout:
             typedGet(scope: "workouts", arguments: call.arguments, in: context)
         case .createWorkout:
@@ -270,6 +270,14 @@ extension ConversationRecorder {
             }
         }
 
+        // Persist any earlier independent tool effects before opening the batch.
+        do {
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            return .failure("前一项修改尚未保存，请重试。", code: "save_failed")
+        }
         var messages: [String] = []
         var refs: [AgentRecordReference] = []
         for (index, item) in items.enumerated() {
@@ -282,11 +290,23 @@ extension ConversationRecorder {
                 mediaKind: mediaKind,
                 mediaPath: mediaPath,
                 mediaAttachments: mediaAttachments,
+                savesImmediately: false,
                 in: context
             )
-            guard result.ok else { return result }
+            guard result.ok else {
+                context.rollback()
+                return result
+            }
             messages.append(result.message)
             refs.append(contentsOf: result.recordRefs ?? [])
+        }
+        do {
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            context.rollback()
+            return .failure("本批训练未保存，请重试。", code: "save_failed")
         }
         let message = messages.count == 1
             ? messages[0]

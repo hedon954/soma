@@ -198,7 +198,9 @@ extension ConversationRecorder {
                 [
                     "record_id": businessIDValue($0.businessID),
                     "date": .string($0.date.ISO8601Format()),
-                    "summary": .string(workoutSummary($0))
+                    "exercise_id": .number(Double(businessID)),
+                    "summary": .string(WorkoutHistoryFormatter.text(for: $0)),
+                    "volume_kg": $0.estimatedVolume.map(AgentJSONValue.number) ?? .null
                 ] as [String: AgentJSONValue]
             }
             return pagedResult(values, noun: "动作训练历史", arguments: arguments, limit: limit)

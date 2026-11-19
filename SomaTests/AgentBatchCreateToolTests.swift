@@ -239,6 +239,15 @@ final class AgentBatchCreateToolTests: XCTestCase {
         let occurredAt = "2026-08-17T20:47:00+08:00"
         let occurredDate = try XCTUnwrap(ISO8601DateFormatter().date(from: occurredAt))
         let turnID = UUID()
+        var businessSaves = 0
+        let observer = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: fixture.context, queue: nil) { note in
+            MainActor.assumeIsolated {
+                if let context = note.object as? ModelContext, ModelContextSaveImpact.affectsInsights(note, in: context) {
+                    businessSaves += 1
+                }
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
 
         let result = ConversationRecorder.executeAgentTool(
             AgentToolCall(
@@ -269,6 +278,7 @@ final class AgentBatchCreateToolTests: XCTestCase {
         )
 
         XCTAssertTrue(result.ok, result.message)
+        XCTAssertEqual(businessSaves, 1)
         XCTAssertEqual(result.recordRefs?.count, 2)
         let workouts = try fixture.context.fetch(FetchDescriptor<WorkoutEntry>())
             .sorted { $0.exercise < $1.exercise }

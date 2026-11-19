@@ -12,10 +12,10 @@ extension ConversationRecorder {
         mediaKind: MediaKind,
         mediaPath: String?,
         mediaAttachments: [MediaAttachmentReference] = [],
+        savesImmediately: Bool = true,
         in context: ModelContext
     ) -> AgentToolResult {
         guard arguments.caloriesScope != .metGross else { return .failure("MET 口径只能由本地公式产生，请确认提供的是活动消耗还是包含静息的总消耗。") }
-        try? BusinessIDAllocator.assignMissingIDs(in: context)
         let definition: ExerciseDefinition
         do {
             definition = try resolveExercise(
@@ -142,12 +142,15 @@ extension ConversationRecorder {
         )
         context.insert(created)
         created.exerciseDefinition = definition
-        try? BusinessIDAllocator.assign(
-            created,
-            namespace: "workout",
-            in: context
-        )
-        try? context.save()
+        do {
+            try BusinessIDAllocator.assign(created, namespace: "workout", in: context)
+            if savesImmediately {
+                try context.save()
+            }
+        } catch {
+            context.delete(created)
+            return .failure("训练记录未保存，请重试。", code: "save_failed")
+        }
         let entry = created
         var summary = [exercise]
         if let setEntries, !setEntries.isEmpty {
@@ -199,7 +202,6 @@ extension ConversationRecorder {
         mediaAttachments: [MediaAttachmentReference] = [],
         in context: ModelContext
     ) -> AgentToolResult {
-        try? BusinessIDAllocator.assignMissingIDs(in: context)
         guard let title = arguments.title?.trimmed.nilIfEmpty else {
             return .failure("record_meal 缺少 title。")
         }
@@ -224,15 +226,19 @@ extension ConversationRecorder {
         }) else {
             return .failure("items 包含空名称或超出范围的营养值。")
         }
-        let mealType = explicitMealType(in: sourceText)
-            ?? inferredMealType(at: sourceDate)
+        let backfill = MealBackfillTarget.parse(prompt: sourceText, reference: .now)
+        let date = backfill.map { target in
+            BusinessDateResolver.defaultOccurredAt(turnSentAt: sourceDate, businessDate: target.day, timeZone: .current)
+        } ?? sourceDate
+        let explicitType = backfill?.meal ?? explicitMealType(in: sourceText)
+        let mealType = explicitType ?? inferredMealType(at: date)
         let resolvedMedia = resolvedMediaAttachments(
             mediaAttachments,
             legacyKind: mediaKind,
             legacyPath: mediaPath
         )
         let created = MealEntry(
-            date: sourceDate,
+            date: date,
             mealType: mealType,
             title: title,
             calories: arguments.calories,
@@ -260,12 +266,17 @@ extension ConversationRecorder {
         created.recommendedEatingOrder = arguments.recommendedEatingOrder?
             .trimmed.prefix(500).description ?? ""
         context.insert(created)
-        try? BusinessIDAllocator.assign(
-            created,
-            namespace: "meal",
-            in: context
-        )
-        try? context.save()
+        do {
+            created.mealTypeConfirmed = explicitType != nil
+            if explicitType != nil {
+                try MealCoverageStore.setSkipped(false, meal: mealType, day: date, in: context, save: false)
+            }
+            try BusinessIDAllocator.assign(created, namespace: "meal", in: context)
+            try context.save()
+        } catch {
+            context.rollback()
+            return .failure("饮食记录未保存，请重试。", code: "save_failed")
+        }
         let caloriesText = created.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
             "已记录\(mealType.rawValue)：\(title)，\(caloriesText)。\(AgentFacingRecordID.trailing(created.businessID))",
@@ -474,9 +485,6 @@ extension ConversationRecorder {
         guard let entry = meal(businessID: id, in: context) else {
             return .failure("没有找到指定饮食记录，请重新查询。")
         }
-        if let occurredAt {
-            entry.date = occurredAt
-        }
         if let calories = arguments.calories, !(0 ... 10000).contains(calories) {
             return .failure("calories 必须在 0 到 10000 之间。")
         }
@@ -487,6 +495,11 @@ extension ConversationRecorder {
         let glycemic = validatedGlycemicAssessment(arguments)
         if case let .failure(message) = glycemic {
             return .failure(message)
+        }
+        if let rawType = arguments.mealType,
+           MealType(rawValue: rawType) == nil
+        {
+            return .failure("meal_type 必须是早餐、午餐、下午点心、晚餐或加餐。")
         }
         if let itemInputs = arguments.items {
             let items = itemInputs.map(\.model)
@@ -501,14 +514,13 @@ extension ConversationRecorder {
             }
             entry.replaceItemsAndDeriveTotals(items)
         }
-        if let rawType = arguments.mealType,
-           MealType(rawValue: rawType) == nil
-        {
-            return .failure("meal_type 必须是早餐、午餐、下午点心、晚餐或加餐。")
+        if let occurredAt {
+            entry.date = occurredAt
         }
         if let explicitType = explicitMealType(in: sourceText) {
             entry.mealType = explicitType
-        } else if occurredAt != nil {
+            entry.mealTypeConfirmed = true
+        } else if occurredAt != nil, entry.mealTypeConfirmed != true {
             entry.mealType = inferredMealType(at: entry.date)
         }
         entry.title = arguments.title?.trimmed.nilIfEmpty ?? entry.title
@@ -547,7 +559,15 @@ extension ConversationRecorder {
                 legacyPath: mediaPath
             )
         )
-        try? context.save()
+        do {
+            if entry.mealTypeConfirmed == true {
+                try MealCoverageStore.setSkipped(false, meal: entry.mealType, day: entry.date, in: context, save: false)
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            return .failure("饮食记录未更新，请重试。", code: "save_failed")
+        }
         let caloriesText = entry.calories.map { "约 \($0)kcal" } ?? "营养尚未估算"
         return .success(
             "已更新\(entry.mealType.rawValue)：\(entry.title)，\(caloriesText)。\(AgentFacingRecordID.trailing(entry.businessID))",
