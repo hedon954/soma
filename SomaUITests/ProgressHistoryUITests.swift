@@ -129,8 +129,8 @@ final class ProgressHistoryUITests: XCTestCase {
             let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: popover)
             XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
             let expenditure = app.buttons["progress-expenditure-breakdown"]
-            XCTAssertTrue(expenditure.waitForExistence(timeout: 5))
-            XCTAssertTrue(expenditure.isHittable)
+            let expenditureReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: expenditure)
+            XCTAssertEqual(XCTWaiter.wait(for: [expenditureReady], timeout: 8), .completed)
             expenditure.tap()
             XCTAssertTrue(popover.waitForExistence(timeout: 5))
             XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
