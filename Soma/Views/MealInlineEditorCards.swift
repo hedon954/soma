@@ -38,6 +38,7 @@ struct InlineMealCards: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            HStack { Spacer(); MealShareButton(meal: meal) }
             itemsCard
             MealTotalsCard(
                 meal: meal,

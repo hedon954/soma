@@ -696,6 +696,7 @@ private struct MealRecordEditor: View {
         .navigationTitle(meal.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { MealShareButton(meal: meal) }
             ToolbarItem(placement: .confirmationAction) {
                 if isDirty {
                     Button("保存", action: save)

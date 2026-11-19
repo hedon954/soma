@@ -111,6 +111,50 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
+    func testMealShareCanIncludePhotoAndHideDateInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance)
+            let meal = app.staticTexts["虚构餐食 0"].firstMatch
+            for _ in 0 ..< 10 where !meal.isHittable {
+                app.scrollViews["insights-content"].swipeUp()
+            }
+            XCTAssertTrue(meal.isHittable)
+            meal.tap()
+            let share = app.buttons["分享饮食记录"]
+            XCTAssertTrue(share.waitForExistence(timeout: 5))
+            share.tap()
+            let preview = app.images["饮食分享预览，虚构餐食 0"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 5))
+            let initialHeight = preview.frame.height
+            keep(app, "meal-share-no-photo-\(appearance)")
+            let photo = app.switches["显示餐图"]
+            XCTAssertEqual(photo.value as? String, "0")
+            photo.tap()
+            waitForFrame(of: preview) { $0.height > initialHeight + 100 }
+            keep(app, "meal-share-photo-\(appearance)")
+            let date = app.switches["显示日期"]
+            XCTAssertEqual(date.value as? String, "1")
+            date.tap()
+            XCTAssertEqual(date.value as? String, "0")
+            let systemShare = app.navigationBars["分享饮食"].buttons["分享"]
+            XCTAssertTrue(systemShare.waitForExistence(timeout: 5))
+            systemShare.tap()
+            let saveImage = app.descendants(matching: .any)["保存图像"].firstMatch
+            XCTAssertTrue(saveImage.waitForExistence(timeout: 5), app.debugDescription)
+            keep(app, "meal-share-system-\(appearance)")
+            app.tapCoordinate(x: 0.5, y: 0.88)
+            XCTAssertFalse(saveImage.exists)
+            app.navigationBars["分享饮食"].buttons["关闭"].tap()
+            XCTAssertTrue(share.waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
+    private func waitForFrame(of element: XCUIElement, matching condition: @escaping (CGRect) -> Bool) {
+        let predicate = NSPredicate { _, _ in element.exists && condition(element.frame) }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 5), .completed)
+    }
+
     private func openLibrary(_ app: XCUIApplication) {
         let link = app.buttons["动作库"].firstMatch
         for _ in 0 ..< 15 {

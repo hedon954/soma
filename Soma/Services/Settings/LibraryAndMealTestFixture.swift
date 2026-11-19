@@ -3,16 +3,41 @@ import SwiftData
 
 @MainActor
 enum LibraryAndMealTestFixture {
+    static func seedBackfillIfRequested(in context: ModelContext) {
+        guard AppTestRuntime.isRunning,
+              context.container.configurations.allSatisfy(\.isStoredInMemoryOnly),
+              ProcessInfo.processInfo.environment["SOMA_UI_TEST_MEAL_BACKFILL"] == "1"
+        else { return }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
+              let thirdDay = calendar.date(byAdding: .day, value: -3, to: today)
+        else { return }
+        for (day, types) in [(yesterday, [.breakfast, .lunch, .snack]), (thirdDay, MealCoverage.mainMeals)] {
+            for type in types {
+                context.insert(MealEntry(date: day, mealType: type, title: "虚构\(type.rawValue)", calories: type == .lunch ? nil : 320))
+            }
+        }
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            assertionFailure("Meal backfill fixture could not save")
+        }
+    }
+
     static func seedIfRequested(in context: ModelContext) {
         guard AppTestRuntime.isRunning,
               ProcessInfo.processInfo.environment["SOMA_UI_LIBRARY_MEALS_FIXTURE"] == "1"
         else { return }
         let day = Calendar.current.startOfDay(for: .now)
+        let breakfastPhoto = Bundle.main.url(forResource: "meal-chicken-bowl", withExtension: "jpg")
         for (index, type) in MealType.allCases.enumerated() {
             context.insert(MealEntry(
                 date: day.addingTimeInterval(Double(index + 1)), mealType: type,
                 title: index == 2 ? "虚构餐食与较长的食物组成名称，用于检查换行" : "虚构餐食 \(index)",
-                calories: 200 + index * 50
+                calories: 200 + index * 50,
+                imagePath: index == 0 ? breakfastPhoto?.path : nil
             ))
         }
         let entries: [(String, [String], [String], [String])] = [
