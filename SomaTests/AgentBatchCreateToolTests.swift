@@ -170,6 +170,26 @@ final class AgentBatchCreateToolTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testAgentCreatesExerciseWithDurableIDsAndReadableLabels() throws {
+        let fixture = try makeContext()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let context = fixture.context
+        let call = AgentToolCall(name: .createExercise, arguments: .init(exercises: [
+            .init(exerciseName: "虚构划船变式", targetKind: .repetitions, laterality: .both,
+                  primaryMuscleIDs: [.upperBack, .backDeltoids], secondaryMuscleIDs: [.biceps])
+        ]))
+        let result = ConversationRecorder.executeAgentTool(call, sourceText: "补一个虚构动作", mediaKind: .none, mediaPath: nil, in: context)
+        XCTAssertTrue(result.ok, result.message)
+        XCTAssertTrue(call.signature.contains("upper-back"))
+        let reader = ModelContext(context.container)
+        let definition = try XCTUnwrap(reader.fetch(FetchDescriptor<ExerciseDefinition>()).first)
+        XCTAssertEqual(try JSONDecoder().decode([String].self, from: definition.primaryMusclesData), ["upper-back", "back-deltoids"])
+        XCTAssertEqual(definition.primaryMuscles, ["上背", "三角肌后束"])
+        XCTAssertEqual(MuscleMapView.intensities(for: definition), [.upperBack: 1, .backDeltoids: 1, .biceps: 0.45])
+        XCTAssertEqual(definition.laterality, .both)
+    }
+
     func testWorkoutBatchSignaturePreservesItemOrder() {
         let first = AgentWorkoutCreateInput(
             exerciseID: 1,

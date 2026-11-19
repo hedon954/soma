@@ -562,8 +562,6 @@ enum ExerciseLibraryStore {
     static func rename(
         _ exercise: ExerciseDefinition,
         to name: String,
-        refreshBundledContent: Bool = true,
-        saveChanges: Bool = true,
         in context: ModelContext
     ) throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -584,9 +582,7 @@ enum ExerciseLibraryStore {
         }
         exercise.canonicalName = trimmed
         exercise.canonicalNameKey = key
-        if refreshBundledContent {
-            _ = BundledExerciseCatalog.activateIfAvailable(exercise)
-        }
+        _ = BundledExerciseCatalog.activateIfAvailable(exercise)
         exercise.updatedAt = .now
         let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>(
             predicate: #Predicate { $0.exerciseID == exerciseID || ($0.exerciseID == nil && $0.exercise == previousName) }
@@ -594,9 +590,7 @@ enum ExerciseLibraryStore {
         for workout in workouts {
             workout.exercise = trimmed
         }
-        if saveChanges {
-            try context.save()
-        }
+        try context.save()
     }
 
     static func archive(
@@ -611,7 +605,6 @@ enum ExerciseLibraryStore {
     static func merge(
         source: ExerciseDefinition,
         into target: ExerciseDefinition,
-        saveChanges: Bool = true,
         in context: ModelContext
     ) throws -> ExerciseMergeRecord {
         guard source.id != target.id,
@@ -701,9 +694,7 @@ enum ExerciseLibraryStore {
             transferredImageReferences: transferredImageReferences
         )
         context.insert(record)
-        if saveChanges {
-            try context.save()
-        }
+        try context.save()
         return record
     }
 
