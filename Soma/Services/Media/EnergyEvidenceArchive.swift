@@ -7,6 +7,7 @@ struct EnergyContextDTO: Codable, Equatable, Sendable {
     let timeZoneIdentifier: String
     let lifestyleData: Data?
     let confirmationData: Data?
+    let skippedMealsData: Data?
     let learningPaused: Bool?
     let sourceTurnID: UUID?
     let updatedAt: Date
@@ -17,6 +18,7 @@ struct EnergyContextDTO: Codable, Equatable, Sendable {
         timeZoneIdentifier = entry.timeZoneIdentifier
         lifestyleData = entry.lifestyleData
         confirmationData = entry.confirmationData
+        skippedMealsData = entry.skippedMealsData
         learningPaused = entry.learningPaused
         sourceTurnID = entry.sourceTurnID
         updatedAt = entry.updatedAt
@@ -26,6 +28,7 @@ struct EnergyContextDTO: Codable, Equatable, Sendable {
         let entry = EnergyContextEntry(key: key, date: date, timeZoneIdentifier: timeZoneIdentifier, updatedAt: updatedAt)
         entry.lifestyleData = lifestyleData
         entry.confirmationData = confirmationData
+        entry.skippedMealsData = skippedMealsData
         entry.learningPaused = learningPaused
         entry.sourceTurnID = sourceTurnID
         context.insert(entry)

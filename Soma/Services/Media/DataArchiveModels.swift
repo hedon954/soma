@@ -489,6 +489,7 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
     var businessID: Int64?
     var date: Date
     var mealTypeRaw: String
+    var mealTypeConfirmed: Bool?
     var title: String
     var calories: Int?
     var protein: Double?
@@ -510,6 +511,7 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
         businessID = model.businessID
         date = model.date
         mealTypeRaw = model.mealTypeRaw
+        mealTypeConfirmed = model.mealTypeConfirmed
         title = model.title
         calories = model.calories
         protein = model.protein
@@ -556,6 +558,7 @@ struct MealEntryDTO: Codable, Equatable, Sendable {
         model.id = id
         model.businessID = businessID
         model.mealTypeRaw = mealTypeRaw
+        model.mealTypeConfirmed = mealTypeConfirmed
         return model
     }
 }

@@ -17,6 +17,7 @@ final class EnergyContextEntry {
     var timeZoneIdentifier: String
     var lifestyleData: Data?
     var confirmationData: Data?
+    var skippedMealsData: Data?
     var learningPaused: Bool?
     var sourceTurnID: UUID?
     var updatedAt: Date

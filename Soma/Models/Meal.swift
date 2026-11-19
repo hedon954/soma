@@ -92,6 +92,7 @@ final class MealEntry: BusinessIdentifiedModel {
     var id: UUID
     var businessID: Int64?
     var date: Date
+    var mealTypeConfirmed: Bool?
     var mealTypeRaw: String
     var title: String
     var calories: Int?

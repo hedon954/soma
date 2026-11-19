@@ -45,6 +45,8 @@ struct CoachMessageDTO: Codable, Equatable, Sendable {
     var attemptNumber: Int
     var locationData: Data
     var effectiveGymID: UUID?
+    var manualCorrectionSummary: String?
+    var deviceReadKindRaw: String?
 
     init(_ model: CoachMessage) {
         id = model.id
@@ -63,6 +65,8 @@ struct CoachMessageDTO: Codable, Equatable, Sendable {
         attemptNumber = model.attemptNumber
         locationData = model.locationData
         effectiveGymID = model.effectiveGymID
+        manualCorrectionSummary = model.manualCorrectionSummary
+        deviceReadKindRaw = model.deviceReadKindRaw
     }
 
     func makeModel(mediaPathMapping: [String: String]) -> CoachMessage {
@@ -90,6 +94,8 @@ struct CoachMessageDTO: Codable, Equatable, Sendable {
         model.agentEventsData = agentEventsData
         model.agentTurnItemsData = agentTurnItemsData
         model.locationData = locationData
+        model.manualCorrectionSummary = manualCorrectionSummary
+        model.deviceReadKindRaw = deviceReadKindRaw
         return model
     }
 }

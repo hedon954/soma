@@ -22,6 +22,7 @@ final class CoachMessage {
     var effectiveGymID: UUID?
     /// 最新回复卡片内的用户修订摘要；下一轮作为结构化纠错块注入历史。
     var manualCorrectionSummary: String?
+    var deviceReadKindRaw: String?
 
     init(
         date: Date = .now,
@@ -60,13 +61,21 @@ final class CoachMessage {
         self.effectiveGymID = effectiveGymID
     }
 
+    var isManualCorrectionReceipt: Bool {
+        isFromCoach && turnID == nil && text.isEmpty && manualCorrectionSummary != nil
+    }
+
     func recordManualCorrection(_ summary: String) {
         let line = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
         let prior = manualCorrectionSummary?
             .split(separator: "\n")
             .map(String.init) ?? []
-        manualCorrectionSummary = (prior + ["- \(line)"])
+        let identity = line.range(of: " 已").map { "- " + line[..<$0.lowerBound] + " 已" }
+        let retained = prior.filter { previous in
+            identity.map { !previous.hasPrefix($0) } ?? (previous != "- \(line)")
+        }
+        manualCorrectionSummary = (retained + ["- \(line)"])
             .suffix(8)
             .joined(separator: "\n")
     }
