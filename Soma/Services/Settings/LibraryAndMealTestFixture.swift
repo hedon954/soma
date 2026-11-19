@@ -7,6 +7,20 @@ enum LibraryAndMealTestFixture {
         AppTestRuntime.isRunning && ProcessInfo.processInfo.environment["SOMA_UI_TEST_MEAL_BACKFILL"] == "1"
     }
 
+    static var requestsPhotoSend: Bool {
+        AppTestRuntime.isRunning && ProcessInfo.processInfo.environment["SOMA_UI_TEST_SEND_PHOTOS"] == "1"
+    }
+
+    static func photoSendMedia() -> [PickedMedia]? {
+        guard requestsPhotoSend else { return nil }
+        return ["meal-chicken-bowl", "gym-equipment", "workout-squat"].compactMap { name in
+            guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
+                  let data = try? Data(contentsOf: url)
+            else { return nil }
+            return .image(data)
+        }
+    }
+
     static func reminderTime(_ now: Date) -> Date {
         guard showsBackfill, PerformanceTestFixture.requestedStreamScenario == .productionCompletion else { return now }
         return Calendar.current.date(bySettingHour: 13, minute: 0, second: 0, of: now) ?? now

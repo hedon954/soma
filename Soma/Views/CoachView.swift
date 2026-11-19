@@ -754,6 +754,10 @@ struct CoachSessionView: View {
     }
 
     private func showMedia() {
+        if let testMedia = LibraryAndMealTestFixture.photoSendMedia() {
+            composer.appendPickedMedia(testMedia)
+            return
+        }
         sheet = .media
     }
 

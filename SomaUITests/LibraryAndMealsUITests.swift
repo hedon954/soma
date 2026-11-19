@@ -129,6 +129,51 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
+    func testSendingThreePhotosFromTheFocusedComposerAfterAgentReply() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment = [
+                "SOMA_UI_TEST_PROCESS": "1",
+                "SOMA_UI_TEST_SEND_PHOTOS": "1",
+                "SOMA_UI_TEST_MEAL_BACKFILL": appearance == "light" ? "1" : "0",
+                "SOMA_UI_TEST_APPEARANCE": appearance,
+                "SOMA_UI_PERFORMANCE_FIXTURE": "long-stream-production-completion",
+                "SOMA_UI_PERFORMANCE_FAST_STREAM": "1"
+            ]
+            app.launchArguments = [
+                "-conversation.locationPreference", "disabled", "-agent.remote.enabled", "NO", "-mealBackfill.hiddenDay", "0"
+            ]
+            app.launch()
+            let phase = app.descendants(matching: .any)["performance-fixture-phase"]
+            let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "completed"), object: phase)
+            XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 20), .completed)
+            XCTAssertEqual(app.buttons["记录今天的早餐"].exists, appearance == "light")
+
+            app.buttons["快捷按钮：记录饮食"].tap()
+            app.buttons["添加照片或视频，可多选"].tap()
+            let previews = app.buttons.matching(identifier: "移除图片")
+            XCTAssertTrue(previews.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertEqual(previews.count, 3)
+            let input = app.textViews["coach-message-input"]
+            input.tap()
+            input.typeText("虚构试吃 100 克\n另两份各 25 克")
+            XCTAssertTrue(app.keyboards.firstMatch.exists)
+            XCTAssertTrue(app.buttons["发送"].isEnabled)
+            app.buttons["发送"].tap()
+
+            let config = app.navigationBars["LLM 配置"]
+            XCTAssertTrue(config.waitForExistence(timeout: 10), app.debugDescription)
+            config.buttons.element(boundBy: 0).tap()
+            app.navigationBars["设置"].buttons["完成"].tap()
+            XCTAssertTrue(app.staticTexts["已暂存，等待队首处理"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["展开 3 个媒体附件"].exists)
+            XCTAssertEqual(previews.count, 0)
+            XCTAssertFalse(app.keyboards.firstMatch.exists)
+            keep(app, "coach-three-photos-staged-\(appearance)")
+            app.terminate()
+        }
+    }
+
     func testCoachShortcutChipsSupportFullTapTargetsAndSelectionInBothThemes() {
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()
