@@ -26,7 +26,7 @@ extension AgentToolName {
         case .proposeTrainingSchedule:
             "提交尚未保存的可组合训练计划草稿。每天 contents 可混排 exercise、course、plan。动作直接带逐组参数，不必先建课程；未知参数留空。用户没说开始日就省略。嵌套计划保留休息日，展开最多14天。"
         case .searchExercises:
-            "按名称搜索未归档动作，返回 exercise_id、target_kind 与 laterality；记录训练或课程前使用。"
+            "按名称或内置别名搜索未归档动作。返回 exercise_id、规范名、target_kind、laterality 和 match_kind（canonical、alias、related）。has_more 表示还有候选，catalog_names 是未入库的规范名称候选。记录训练或课程前使用，存在歧义时先问用户。"
         case .createExercise:
             "仅在动作库没有语义等价项时批量创建标准动作，并明确 target_kind 与 laterality。左右各做用 both；双侧同时或不区分用 none。"
         case .updateExercise:

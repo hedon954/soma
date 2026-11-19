@@ -58,7 +58,9 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
   提问不执行绑定操作；用户点击后重新校验并执行，不需要模型续跑。递归提问、Skill 加载、反馈外发和媒体复盘不能绑定。
 - 业务 `record_id`、`exercise_id`、`program_id`、`schedule_id`、计划动作 ID 均为正 `Int64`；UUID 只留给
   Session、Turn、Job、Trace、Event、媒体、外部来源和旧备份映射。
-- 训练域当前为 Schema v4：`search_exercises` 返回动作 ID、`target_kind` 与 `laterality`；动作
+- 训练域当前为 Schema v4。`search_exercises` 返回动作 ID、规范名、`target_kind`、`laterality` 与
+  `match_kind`（`canonical`、`alias`、`related`）。`has_more` 标明结果是否被截断，`catalog_names`
+  是命中内置目录但尚未入库的规范名。动作
   不存在时先搜索，确认无语义等价项后一次 `create_exercise(exercises)`，每项显式提供名称、目标
   类型和侧别，再一次 `create_workout(workouts)`。新建训练记录不要传 `record_id`。
 - 计划的每个动作也必须绑定动作库 `exercise_id`。用户要求把当日原始训练总结为计划时，

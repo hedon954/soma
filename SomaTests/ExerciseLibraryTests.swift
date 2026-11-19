@@ -302,6 +302,46 @@ final class ExerciseLibraryTests: XCTestCase {
     }
 
     @MainActor
+    func testExerciseSearchFindsCanonicalNameFromCatalogAlias() throws {
+        let (spaces, defaults) = try makeSpaces()
+        defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
+        let context = ModelContext(spaces.personalContainer)
+        let curl = try ExerciseLibraryStore.resolveOrCreateExact(canonicalName: "上斜哑铃弯举", in: context)
+        let result = ConversationRecorder.executeAgentTool(
+            .init(name: .searchExercises, arguments: .init(query: "上斜凳弯举")),
+            sourceText: "", mediaKind: .none, mediaPath: nil, in: context
+        )
+
+        XCTAssertTrue(result.ok)
+        guard case let .object(payload) = result.data, case let .array(items) = payload["items"],
+              case let .object(first) = items.first
+        else { return XCTFail("动作搜索缺少候选") }
+        XCTAssertEqual(first["name"], .string("上斜哑铃弯举"))
+        XCTAssertEqual(first["exercise_id"], try .number(Double(XCTUnwrap(curl.businessID))))
+        XCTAssertEqual(first["match_kind"], .string("alias"))
+    }
+
+    @MainActor
+    func testExerciseSearchReportsAdditionalCandidatesWhenCapped() throws {
+        let (spaces, defaults) = try makeSpaces()
+        defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
+        let context = ModelContext(spaces.personalContainer)
+        _ = try ExerciseLibraryStore.resolveOrCreateExact(canonicalName: "杠铃卧推", in: context)
+        _ = try ExerciseLibraryStore.resolveOrCreateExact(canonicalName: "单侧哑铃卧推", in: context)
+
+        let result = ConversationRecorder.executeAgentTool(
+            .init(name: .searchExercises, arguments: .init(query: "卧推", limit: 1)),
+            sourceText: "", mediaKind: .none, mediaPath: nil, in: context
+        )
+        guard case let .object(payload) = result.data, case let .array(items) = payload["items"],
+              case let .object(first) = items.first
+        else { return XCTFail("动作搜索缺少候选") }
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(payload["has_more"], .bool(true))
+        XCTAssertEqual(first["match_kind"], .string("related"))
+    }
+
+    @MainActor
     func testRecordWorkoutUsesExistingIDOrCreatesOnlyFromExerciseName() throws {
         let (spaces, defaults) = try makeSpaces()
         defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }

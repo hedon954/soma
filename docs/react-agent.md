@@ -207,8 +207,12 @@ Attempt。成功 mutation 由规范化签名的 `AgentMutationReceipt`（pending
 
 训练动作身份已经使用：
 
-- `search_exercises` 按名称返回 `{exercise_id,name,target_kind,laterality}`，已有上下文足够时不得
-  重复搜索；
+- `search_exercises` 按名称和内置别名查询。`items` 包含 `exercise_id`、`name`、`target_kind`、
+  `laterality` 和 `match_kind`，按规范名、别名、相关名称排序。`has_more` 表示结果被截断，
+  `catalog_names` 提供命中内置目录但尚未入库的规范名。已有上下文足够时无需重复查询。
+- 记录训练时，口语或错字能唯一匹配则使用规范名，保存后说明名称的对应关系。器械、姿势、握法、
+  侧别等影响动作身份且缺少依据时，使用 `ask_user_questions` 确认对应区别，保留已知训练数据，
+  等待用户回答后再写入该条记录。
 - 只有无语义等价项时一次调用 `create_exercise(exercises)`，每项明确 `exercise_name`、
   `target_kind` 与 `laterality`，再把返回的 Int64 ID 交给一次 `create_workout(workouts)`；
 - 每条 workout 明确 `target_kind`、`laterality` 和 `set_entries`。左右各做用 `laterality=both`，

@@ -374,28 +374,52 @@ extension ConversationRecorder {
             )
         }
         let limit = min(max(arguments.limit ?? 10, 1), 20)
-        let matches = ExerciseLibraryStore.activeDefinitions(in: context)
-            .filter {
-                ($0.canonicalName.localizedCaseInsensitiveContains(query)
-                    || query.localizedCaseInsensitiveContains($0.canonicalName))
-                    && (arguments.targetKind == nil || $0.targetKind == arguments.targetKind)
-                    && (arguments.laterality == nil || $0.laterality == arguments.laterality)
+        let queryKey = ExerciseLibraryStore.canonicalNameKey(query)
+        let catalogNames = BundledExerciseCatalog.entries.filter { entry in
+            ExerciseLibraryStore.canonicalNameKey(entry.canonicalName) == queryKey
+                || entry.aliases.contains { ExerciseLibraryStore.canonicalNameKey($0) == queryKey }
+        }.map(\.canonicalName)
+        let catalogKeys = Set(catalogNames.map(ExerciseLibraryStore.canonicalNameKey))
+        let definitions = ExerciseLibraryStore.activeDefinitions(in: context)
+        let matches = definitions.compactMap { exercise -> (ExerciseDefinition, ExerciseNameMatch)? in
+            guard arguments.targetKind == nil || exercise.targetKind == arguments.targetKind,
+                  arguments.laterality == nil || exercise.laterality == arguments.laterality else { return nil }
+            if exercise.canonicalNameKey == queryKey {
+                return (exercise, .canonical)
             }
-            .prefix(limit)
-        let items: [AgentJSONValue] = matches.map { exercise in
+            if catalogKeys.contains(exercise.canonicalNameKey) {
+                return (exercise, .alias)
+            }
+            if exercise.canonicalName.localizedCaseInsensitiveContains(query) || query.localizedCaseInsensitiveContains(exercise.canonicalName) {
+                return (exercise, .related)
+            }
+            return nil
+        }.sorted { $0.1.rawValue < $1.1.rawValue }
+        let items: [AgentJSONValue] = matches.prefix(limit).map { exercise, match in
             .object([
                 "exercise_id": exercise.businessID.map {
                     .number(Double($0))
                 } ?? .null,
                 "name": .string(exercise.canonicalName),
                 "target_kind": .string(exercise.targetKind.rawValue),
-                "laterality": .string(exercise.laterality.rawValue)
+                "laterality": .string(exercise.laterality.rawValue),
+                "match_kind": .string(String(describing: match))
             ])
         }
+        let activeKeys = Set(definitions.map(\.canonicalNameKey))
+        let catalogCandidates = catalogNames.filter { !activeKeys.contains(ExerciseLibraryStore.canonicalNameKey($0)) }
         return .success(
             items.isEmpty ? "没有匹配动作。" : "找到 \(items.count) 个动作。",
-            data: .object(["items": .array(items)])
+            data: .object([
+                "items": .array(items),
+                "has_more": .bool(matches.count > limit),
+                "catalog_names": .array(catalogCandidates.map(AgentJSONValue.string))
+            ])
         )
+    }
+
+    private enum ExerciseNameMatch: Int {
+        case canonical, alias, related
     }
 
     static func createExercise(
