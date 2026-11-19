@@ -63,6 +63,13 @@ cohesive type when that can be done without mixing unrelated behavior.
 7. Update PRD for product scope, ADR for durable decisions, and Changelog for shipped behavior;
    do not turn those files into implementation diaries.
 
+## 5. Commit one small feature at a time
+
+- Give each independently reviewable feature or fix its own commit with its related tests and docs.
+- Stage only the files or hunks needed for that change. Keep shared groundwork and release metadata
+  in their own commits when they can stand alone.
+- Keep tightly coupled changes together when splitting them would leave a broken intermediate state.
+
 ## Definition of done
 
 - Product and privacy behavior match the current PRD.
