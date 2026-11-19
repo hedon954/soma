@@ -20,6 +20,13 @@ struct DataManagementView: View {
         Form {
             exportSection
             backupSection
+            #if DEBUG
+                if dataSpace.activeSpace == .personal, WorkoutWeightCorrectionView.enabled {
+                    Section {
+                        NavigationLink("预览重量校正") { WorkoutWeightCorrectionView() }
+                    }
+                }
+            #endif
             clearSection
         }
         .navigationTitle("数据与备份")
