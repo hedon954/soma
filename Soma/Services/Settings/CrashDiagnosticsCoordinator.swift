@@ -16,7 +16,9 @@ final class CrashDiagnosticsCoordinator: NSObject {
     private let mailer: DiagnosticReportMailer
     private var previousRun: AppRunSentinel.PreviousRun?
     private var hasActivated = false
-    private var isFlushing = false
+    private static let receiptKey = "diagnostics.deliveredMetricEvents"
+    private var isDelivering = false
+    private var needsDeliveryPass = false
     /// 单测宿主是 App 本身，每轮测试结束都会被杀进程；测试里必须完全不上报。
     private let isSuppressed = AppRunSentinel.isRunningUnderTests
 
@@ -55,9 +57,7 @@ final class CrashDiagnosticsCoordinator: NSObject {
 
     /// 启动后只清理旧哨兵标记并投递已有的系统确认报告，不查询业务数据库。
     func flushPendingReports() async {
-        guard !isSuppressed, !isFlushing else { return }
-        isFlushing = true
-        defer { isFlushing = false }
+        guard !isSuppressed else { return }
 
         if let previousRun {
             if previousRun.endedUnexpectedly {
@@ -82,9 +82,17 @@ final class CrashDiagnosticsCoordinator: NSObject {
             )
             return
         }
+        let stackData = Data((diagnosis.callStack ?? "").utf8)
+        let normalizedStack = (try? JSONSerialization.jsonObject(with: stackData)).flatMap {
+            try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys])
+        } ?? stackData
+        let fields = [diagnosis.periodStart?.description, diagnosis.periodEnd?.description, diagnosis.diagnosticVersion,
+                      diagnosis.exceptionType, diagnosis.exceptionCode, diagnosis.signal, EnergyInputCoding.digest(normalizedStack)]
+        let key = EnergyInputCoding.digest(Data(fields.map { $0 ?? "" }.joined(separator: "|").utf8))
+        guard deliveryReceipts[key] == nil, !reports.pendingReports().contains(where: { $0.eventKey == key }) else { return }
         let reportID = UUID()
         let createdAt = Date()
-        let report = DiagnosticReport(
+        var report = DiagnosticReport(
             id: reportID,
             createdAt: createdAt,
             subject: CrashReportComposer.subject(for: diagnosis),
@@ -94,10 +102,11 @@ final class CrashDiagnosticsCoordinator: NSObject {
                 diagnosis: diagnosis,
                 environment: Self.environment(),
                 context: context,
-                recentLog: logs.recentText()
+                recentLog: ""
             ),
             evidenceSource: .metricKit
         )
+        report.eventKey = key
         reports.save(report)
         pendingReportCount = reports.pendingReports().count
         lastReportSummary = Self.summary(of: report)
@@ -113,33 +122,64 @@ final class CrashDiagnosticsCoordinator: NSObject {
     }
 
     func deliverPendingReports() async {
+        if isDelivering {
+            needsDeliveryPass = true
+            return
+        }
+        isDelivering = true
+        defer { isDelivering = false }
+        repeat {
+            needsDeliveryPass = false
+            await deliverOnce()
+        } while needsDeliveryPass
+    }
+
+    private func deliverOnce() async {
         let loaded = await reports.pendingReportsAsync()
-        let unconfirmed = loaded.filter {
-            !CrashReportEligibility.isSystemConfirmed(report: $0)
+        var receipts = deliveryReceipts
+        var confirmed: [DiagnosticReport] = []
+        var unconfirmedCount = 0
+        for report in loaded {
+            if !CrashReportEligibility.isSystemConfirmed(report: report) {
+                unconfirmedCount += 1
+                reports.remove(report.id)
+            } else if let key = report.eventKey, receipts[key] != nil {
+                reports.remove(report.id)
+            } else {
+                confirmed.append(report)
+            }
         }
-        for report in unconfirmed {
-            reports.remove(report.id)
-        }
-        if !unconfirmed.isEmpty {
+        if unconfirmedCount > 0 {
             logs.append(
                 category: "diagnostics",
                 message: "已清理缺少 MetricKit 证据的旧崩溃报告",
-                fields: ["count": "\(unconfirmed.count)"]
+                fields: ["count": "\(unconfirmedCount)"]
             )
         }
-        let confirmed = loaded.filter(CrashReportEligibility.isSystemConfirmed)
         pendingReportCount = confirmed.count
         lastReportSummary = confirmed.last.map(Self.summary(of:))
         guard isAutoSendEnabled else { return }
 
         for report in confirmed {
-            guard report.deliveryAttemptCount
-                < DiagnosticReportStore.maximumDeliveryAttempts
+            guard isAutoSendEnabled else { break }
+            if let key = report.eventKey, receipts[key] != nil {
+                reports.remove(report.id)
+                continue
+            }
+            guard report.nextDeliveryAt.map({ $0 <= Date.now }) ?? true,
+                  report.deliveryAttemptCount
+                  < DiagnosticReportStore.maximumDeliveryAttempts
             else {
                 continue
             }
             do {
                 try await mailer.send(report)
+                if let key = report.eventKey {
+                    let now = Date()
+                    receipts = receipts.filter { now.timeIntervalSince($0.value) < 90 * 86400 }
+                    receipts[key] = now
+                    defaults.set(receipts, forKey: Self.receiptKey)
+                }
                 reports.remove(report.id)
                 DiagnosticsLogStore.shared.append(
                     category: "diagnostics",
@@ -149,6 +189,7 @@ final class CrashDiagnosticsCoordinator: NSObject {
             } catch {
                 var retried = report
                 retried.deliveryAttemptCount += 1
+                retried.nextDeliveryAt = Date.now.addingTimeInterval(60 * pow(2, Double(retried.deliveryAttemptCount)))
                 retried.lastError = error.localizedDescription
                 reports.save(retried)
                 DiagnosticsLogStore.shared.append(
@@ -165,6 +206,10 @@ final class CrashDiagnosticsCoordinator: NSObject {
         let remaining = await reports.pendingReportsAsync()
         pendingReportCount = remaining.count
         lastReportSummary = remaining.last.map(Self.summary(of:))
+    }
+
+    private var deliveryReceipts: [String: Date] {
+        defaults.dictionary(forKey: Self.receiptKey) as? [String: Date] ?? [:]
     }
 
     func latestReportTextAsync() async -> String? {
@@ -227,7 +272,13 @@ final class CrashDiagnosticsCoordinator: NSObject {
 extension CrashDiagnosticsCoordinator: MXMetricManagerSubscriber {
     nonisolated func didReceive(_ payloads: [MXDiagnosticPayload]) {
         let diagnoses = payloads.flatMap { payload in
-            (payload.crashDiagnostics ?? []).map(Self.diagnosis(from:))
+            (payload.crashDiagnostics ?? []).map { crash in
+                var diagnosis = Self.diagnosis(from: crash)
+                diagnosis.periodStart = payload.timeStampBegin
+                diagnosis.periodEnd = payload.timeStampEnd
+                diagnosis.diagnosticVersion = crash.applicationVersion
+                return diagnosis
+            }
         }
         guard !diagnoses.isEmpty else { return }
         Task { @MainActor [weak self] in

@@ -13,6 +13,8 @@ struct DiagnosticReport: Codable, Equatable, Identifiable, Sendable {
     var subject: String
     var body: String
     var evidenceSource: DiagnosticReportEvidenceSource?
+    var eventKey: String?
+    var nextDeliveryAt: Date?
     var deliveryAttemptCount: Int
     var lastError: String?
 

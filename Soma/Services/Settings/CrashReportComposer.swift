@@ -34,6 +34,9 @@ struct CrashReportDiagnosis: Equatable, Sendable {
     var exceptionCode: String?
     var signal: String?
     var callStack: String?
+    var periodStart: Date?
+    var periodEnd: Date?
+    var diagnosticVersion: String?
 }
 
 enum CrashReportComposer {
@@ -58,6 +61,8 @@ enum CrashReportComposer {
             section("概要", lines: [
                 "报告 ID：\(reportID.uuidString)",
                 "生成时间：\(format(createdAt))",
+                "系统记录区间：\(diagnosis.periodStart.map(format) ?? "未知") 至 \(diagnosis.periodEnd.map(format) ?? "未知")",
+                "事件版本：\(diagnosis.diagnosticVersion ?? "未知")",
                 "来源：\(diagnosis.source)",
                 "判定：\(diagnosis.headline)",
                 "终止原因：\(diagnosis.terminationReason ?? "未提供")",
