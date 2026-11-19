@@ -1,7 +1,7 @@
 # PRD 082 · 教练连续性、进展可信度与记录体验
 
 - 状态：已实现，模拟器验证通过，真机验收见技术方案
-- 修订自：[PRD 000](000-origin-through-0.0.11.md)
+- 修订自：[PRD 000](000-origin-through-0.0.11.md)、[PRD 081](081-training-energy-in-total.md)（能量明细）
 - 下游落地：[ADR 0152](../adr/0152-coach-progress-reliability.md)、[ADR 0153](../adr/0153-agent-daily-energy-read.md)、[BUG 0069](../bugs/0069-batch-record-rendering.md)、[BUG 0072](../bugs/0072-nutrition-label-obscured-column.md)、[BUG 0073](../bugs/0073-stale-coach-next-actions.md)、[BUG 0074](../bugs/0074-stale-workout-weight-correction.md)、[BUG 0075](../bugs/0075-already-recorded-meals-in-backfill.md)、[BUG 0076](../bugs/0076-meal-backfill-keyboard-watchdog.md)、[BUG 0077](../bugs/0077-meal-backfill-dismissal-lifetime.md)
 - 日期：2026-11-18
 - 版本：0.0.37（构建 41），基线为 0.0.36（构建 40）
@@ -222,6 +222,7 @@ App 预览和开关跟随主题，导出图片固定浅底深字。右上角打�
 
 ## 能量与动作历史
 
+- 日账消耗明细逐条展示训练动作和该条记录的估算热量，与训练列表和总消耗按同一记录身份取数。饮食、营养和消耗明细省略显示为 0 的行。缺少记录或估算时仍标明相应状态。周、月、年保留日均口径。
 - 教练在回答「今天还能吃多少」或基于当日记录给饮食建议时，可调用只读工具 `get_daily_energy`。工具在调用时读取进展日账，包括当日已记饮食分项、消耗分项、营养指标、缺失状态、目标缺口、推荐摄入和剩余值。用户在一轮内先记录再问时，读取已保存的新值。日账卡片仍支持由设备直接展示。模型请求的数据范围见 ADR 0153。
 - 同一个动作按库内稳定身份串联教练、手动和完成带练产生的实际记录。动作详情沿用「最近一次 → 趋势 → 全部记录」，图表可切换容量、最高实际重量、同负重重复次数等有据指标，按日期点选回到记录。左右、器械或负重量纲不同的记录保留独立序列。缺值断开，按时长记录的动作显示时长维度。
 - 教练判断是否接近结束时先看本次课程完成情况，其次看同类历史的动作与组次，再结合本周训练量、明确报告的疲劳和目标。渐进超负荷建议引用可比较的历史事实，可建议下次增加次数或小幅增重，同一建议优先改变一个变量。历史不足时就本次已记录内容给选项，用户决定是否继续。[ACSM 2026 抗阻训练立场](https://acsm.org/resistance-training-guidelines-update-2026/)

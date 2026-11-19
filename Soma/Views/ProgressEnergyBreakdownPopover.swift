@@ -53,10 +53,15 @@ private struct ProgressEnergyBreakdownPopover: View {
         let height = min(measured + slack, maxHeight)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(source.rows) { row in
-                    rowView(row)
-                    if row.id != source.rows.last?.id {
-                        Divider().padding(.leading, 20)
+                if source.rows.isEmpty {
+                    Text("暂无明细").font(.subheadline).foregroundStyle(AppTheme.accent)
+                        .frame(minHeight: rowHeight)
+                } else {
+                    ForEach(source.rows) { row in
+                        rowView(row)
+                        if row.id != source.rows.last?.id {
+                            Divider().padding(.leading, 20)
+                        }
                     }
                 }
             }

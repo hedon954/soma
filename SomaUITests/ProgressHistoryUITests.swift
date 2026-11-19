@@ -136,7 +136,8 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
             XCTAssertTrue(popover.staticTexts["活动消耗"].exists)
             XCTAssertTrue(popover.staticTexts["基准额外消耗"].exists)
-            XCTAssertTrue(popover.staticTexts["训练消耗"].exists)
+            XCTAssertFalse(popover.staticTexts["训练消耗"].exists)
+            XCTAssertFalse(popover.staticTexts["0 kcal"].exists)
             XCTAssertFalse(popover.staticTexts["训练活动消耗"].exists)
             XCTAssertFalse(popover.staticTexts["其余活动消耗"].exists)
             XCTAssertFalse(popover.staticTexts["活动等消耗"].exists)
@@ -178,9 +179,11 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertTrue(popover.staticTexts["静息消耗"].exists)
             XCTAssertTrue(popover.staticTexts["基准额外消耗"].exists)
             XCTAssertTrue(popover.staticTexts["活动消耗"].exists)
-            XCTAssertTrue(popover.staticTexts["训练消耗"].exists)
+            XCTAssertTrue(popover.staticTexts["虚构动作 1"].exists)
+            XCTAssertTrue(popover.staticTexts["虚构动作 2"].exists)
+            XCTAssertFalse(popover.staticTexts["训练消耗"].exists)
             XCTAssertTrue(popover.staticTexts["486 kcal"].exists)
-            XCTAssertTrue(popover.staticTexts["400 kcal"].exists)
+            XCTAssertEqual(popover.staticTexts.matching(identifier: "200 kcal").count, 2)
             XCTAssertFalse(popover.staticTexts["训练活动消耗"].exists)
             keep(app, "training-total-day-\(appearance)")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
@@ -191,7 +194,8 @@ final class ProgressHistoryUITests: XCTestCase {
             reveal(weekExpenditure, in: app)
             weekExpenditure.tap()
             XCTAssertTrue(popover.waitForExistence(timeout: 5))
-            XCTAssertTrue(popover.staticTexts["日均训练消耗"].waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["日均静息消耗"].waitForExistence(timeout: 5))
+            XCTAssertFalse(popover.staticTexts["0 kcal"].exists)
             keep(app, "training-total-week-\(appearance)")
             app.terminate()
         }
@@ -204,12 +208,12 @@ final class ProgressHistoryUITests: XCTestCase {
         expenditure.tap()
         let list = large.scrollViews["progress-energy-breakdown-list"]
         XCTAssertTrue(list.waitForExistence(timeout: 5))
-        let training = list.staticTexts["训练消耗"]
+        let training = list.staticTexts["虚构动作 1"]
         for _ in 0 ..< 6 where !training.isHittable {
             list.swipeUp()
         }
         XCTAssertTrue(training.isHittable)
-        XCTAssertTrue(list.staticTexts["400 kcal"].exists)
+        XCTAssertTrue(list.staticTexts.matching(identifier: "200 kcal").firstMatch.exists)
         keep(large, "training-total-day-large-dark")
         large.terminate()
     }
@@ -335,7 +339,7 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["静息消耗"].exists)
             // LabeledContent 把标题和数值合成同一个无障碍标签。
             XCTAssertTrue(app.staticTexts["残差系数、1.40 · 初始回退"].exists)
-            XCTAssertTrue(app.staticTexts["训练消耗"].exists)
+            XCTAssertFalse(app.staticTexts["训练消耗"].exists)
             XCTAssertFalse(app.staticTexts["残差系数、1.40 · 动态估算"].exists)
             XCTAssertFalse(app.staticTexts["统计范围"].exists)
             XCTAssertFalse(app.staticTexts["摄入有记录日"].exists)

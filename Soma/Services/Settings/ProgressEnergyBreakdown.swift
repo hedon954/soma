@@ -28,8 +28,9 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         case .intake:
             var items: [Row] = []
             if daily, let day = days.first {
-                items = day.records.filter { $0.activity.kind == .meal }.map { record in
+                items = day.records.filter { $0.activity.kind == .meal }.compactMap { record in
                     let calories = record.calories.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+                    guard !Self.isDisplayedZero(calories) else { return nil }
                     let mealType = MealType(rawValue: record.activity.detail)
                     return Row(
                         id: record.activity.id.uuidString,
@@ -39,7 +40,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                     )
                 }
             } else {
-                items = days.filter { $0.intake.knownCount > 0 }.map { day in
+                items = days.filter { $0.intake.knownCount > 0 && !Self.isDisplayedZero($0.intake.value) }.map { day in
                     Row(
                         id: "day-\(day.date.timeIntervalSinceReferenceDate)", label: day.date.formatted(.dateTime.month().day()),
                         value: Self.energy(day.intake.value), tone: .meal
@@ -48,7 +49,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
             }
             rows = items
         case .expenditure:
-            rows = Self.expenditureRows(days: days, daily: daily)
+            rows = daily ? Self.dayExpenditureRows(days.first) : Self.periodExpenditureRows(days: days)
         case .protein:
             rows = Self.nutrientRows(
                 days: days,
@@ -76,51 +77,57 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         }
     }
 
-    private static func expenditureRows(days: [ProgressDailyMetrics], daily: Bool) -> [Row] {
+    static func dayExpenditureRows(_ day: ProgressDailyMetrics?) -> [Row] {
+        guard let day else { return [missingExpenditure] }
+        guard let components = day.energy.estimate?.components else { return [missingExpenditure] + workoutRows(in: day) }
+        let displayed = EnergyKilocalorieDisplay.parts(components)
+        return breakdownRows(displayed, prefix: "") + workoutRows(in: day, includesTraining: components.trainingKilocalories > 0)
+    }
+
+    private static let missingExpenditure = Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)
+
+    private static func periodExpenditureRows(days: [ProgressDailyMetrics]) -> [Row] {
         let estimates = days.compactMap(\.energy.estimate)
-        guard !estimates.isEmpty, estimates.allSatisfy({ $0.components != nil }) else {
-            var items = [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
-            if daily, let day = days.first {
-                items.append(contentsOf: workoutRows(in: day))
-            }
-            return items
-        }
         let components = estimates.compactMap(\.components)
-        let displayed: EnergyKilocalorieDisplay.Parts
-        if daily {
-            guard let day = components.first else {
-                return [Row(id: "missing", label: "预估总消耗", value: "缺少静息资料", tone: .total)]
-            }
-            displayed = EnergyKilocalorieDisplay.parts(day)
-        } else {
-            displayed = EnergyKilocalorieDisplay.averaged(components)
+        guard !components.isEmpty, components.count == estimates.count else { return [missingExpenditure] }
+        let displayed = EnergyKilocalorieDisplay.averaged(components)
+        var rows = breakdownRows(displayed, prefix: "日均")
+        if displayed.training != 0 {
+            rows.append(Row(id: "training", label: "日均训练消耗", value: EnergyKilocalorieDisplay.kcal(displayed.training), tone: .workout))
         }
-        let prefix = daily ? "" : "日均"
-        return [
-            Row(id: "resting", label: prefix + "静息消耗", value: EnergyKilocalorieDisplay.kcal(displayed.resting), tone: .resting),
-            Row(id: "baseline-extra", label: prefix + "基准额外消耗", value: EnergyKilocalorieDisplay.kcal(displayed.baselineExtra), tone: .factor)
-        ] + activityRows(displayed.activity, prefix: prefix) + [
-            Row(id: "training", label: prefix + "训练消耗", value: EnergyKilocalorieDisplay.kcal(displayed.training), tone: .workout)
+        return rows
+    }
+
+    private static func breakdownRows(_ displayed: EnergyKilocalorieDisplay.Parts, prefix: String) -> [Row] {
+        let components: [(id: String, label: String, value: Int, tone: Tone)] = [
+            ("resting", "静息消耗", displayed.resting, .resting),
+            ("baseline-extra", "基准额外消耗", displayed.baselineExtra, .factor)
         ]
+        let rows = components.filter { $0.value != 0 }.map {
+            Row(id: $0.id, label: prefix + $0.label, value: EnergyKilocalorieDisplay.kcal($0.value), tone: $0.tone)
+        }
+        return rows + activityRows(displayed.activity, prefix: prefix)
     }
 
     private static func activityRows(_ activity: DailyEnergyTotal.Activity, prefix: String) -> [Row] {
         switch activity {
         case .absent:
             [Row(id: "activity", label: prefix + "活动消耗", value: "未记录", tone: .activity)]
+        case .selected(0):
+            []
         case let .selected(value):
             [Row(id: "activity", label: prefix + "活动消耗", value: energy(value), tone: .activity)]
         }
     }
 
-    private static func workoutRows(in day: ProgressDailyMetrics) -> [Row] {
-        day.records.filter { $0.activity.kind == .workout }.map { record in
-            let calories = record.calories.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+    private static func workoutRows(in day: ProgressDailyMetrics, includesTraining: Bool = true) -> [Row] {
+        DailyEnergyTotal.listTrainingContributions(in: day.records).compactMap { record, calories in
+            guard !isDisplayedZero(calories) else { return nil }
             let title = record.activity.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return Row(
                 id: record.activity.id.uuidString,
                 label: title.isEmpty ? "训练记录" : title,
-                value: calories.map(energy) ?? "未估算",
+                value: calories.map { includesTraining ? energy($0) : "未计入" } ?? "未估算",
                 tone: .workout
             )
         }
@@ -134,9 +141,10 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         tone: Tone
     ) -> [Row] {
         if daily, let day = days.first {
-            return day.records.filter { $0.activity.kind == .meal }.map { record in
+            return day.records.filter { $0.activity.kind == .meal }.compactMap { record in
                 let mealType = MealType(rawValue: record.activity.detail)
                 let value = grams(record).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+                guard !isDisplayedZero(value) else { return nil }
                 return Row(
                     id: record.activity.id.uuidString,
                     label: (mealType?.rawValue ?? "餐次未记录") + " · " + record.activity.title,
@@ -145,7 +153,7 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
                 )
             }
         }
-        return days.filter { dayTotal($0).knownCount > 0 }.map { day in
+        return days.filter { dayTotal($0).knownCount > 0 && !isDisplayedZero(dayTotal($0).value) }.map { day in
             Row(
                 id: "day-\(day.date.timeIntervalSinceReferenceDate)",
                 label: day.date.formatted(.dateTime.month().day()),
@@ -155,11 +163,15 @@ struct ProgressEnergyBreakdown: Equatable, Sendable {
         }
     }
 
+    private static func isDisplayedZero(_ value: Double?) -> Bool {
+        value?.rounded() == 0
+    }
+
     private static func energy(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(0))) + " kcal"
+        value.rounded().formatted(.number.precision(.fractionLength(0))) + " kcal"
     }
 
     private static func gramsText(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(0))) + " g"
+        value.rounded().formatted(.number.precision(.fractionLength(0))) + " g"
     }
 }

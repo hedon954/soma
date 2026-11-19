@@ -138,17 +138,16 @@ enum DailyEnergyTotal {
     /// 与进展页训练列表相同的汇总：运动记录且不是日常活动，按记录身份去重后加总列表展示的估算。
     /// `nil`、非有限、小于 0、或达到 100000 的单条不计入、不编成 0。
     static func listTrainingKilocalories(in entries: [ProgressHistoryRecord]) -> Double {
-        var seen: Set<UUID> = []
-        var total = 0.0
-        for record in entries where isListTraining(record) {
-            guard seen.insert(record.activity.id).inserted, let value = record.calories, isUsableActive(value) else { continue }
-            total += value
-        }
-        return total
+        listTrainingContributions(in: entries).reduce(0) { $0 + ($1.kilocalories ?? 0) }
     }
 
-    private static func isListTraining(_ record: ProgressHistoryRecord) -> Bool {
-        record.activity.kind == .workout && !record.isDailyActivity
+    static func listTrainingContributions(in entries: [ProgressHistoryRecord]) -> [(record: ProgressHistoryRecord, kilocalories: Double?)] {
+        var seen: Set<UUID> = []
+        return entries.compactMap { record in
+            guard record.activity.kind == .workout, !record.isDailyActivity,
+                  seen.insert(record.activity.id).inserted else { return nil }
+            return (record, record.calories.flatMap { isUsableActive($0) ? $0 : nil })
+        }
     }
 }
 

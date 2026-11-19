@@ -4,7 +4,7 @@
 - 日期：2026-11-12
 - 版本：0.0.36
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)（日活动与总消耗）
-- 后续修订：暂无
+- 后续修订：[PRD 082](082-coach-progress-reliability.md)（明细隐藏零值，日消耗逐条展示训练记录）
 - 下游落地：[ADR 0151](../adr/0151-training-energy-in-total.md)、[BUG 0068](../bugs/0068-health-activity-cancels-lifestyle-baseline.md)、[验收](../acceptance.md)、[工程契约](../../CLAUDE.md)
 
 ## 背景

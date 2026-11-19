@@ -48,10 +48,10 @@ enum EnergyKilocalorieDisplay {
     static func parts(_ components: DailyEnergyTotal.Components) -> Parts {
         let total = whole(components.totalKilocalories)
         let resting = whole(components.restingKilocalories)
-        var remainder = max(0, total - resting)
-        let activity = displayedActivity(components.activity, fitting: remainder)
-        remainder -= activityKilocalories(activity)
+        let remainder = max(0, total - resting)
+        // Preserve the whole-kcal training entries even when rounded rest and activity would exceed the remainder.
         let training = min(whole(components.trainingKilocalories), remainder)
+        let activity = displayedActivity(components.activity, fitting: remainder - training)
         let extra = total - resting - activityKilocalories(activity) - training
         return Parts(resting: resting, baselineExtra: extra, activity: activity, training: training, total: total)
     }

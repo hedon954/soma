@@ -26,11 +26,8 @@ struct ProgressEnergySourcesView: View {
                         }
                         LabeledContent("静息消耗", value: energy(day.energy.estimate?.restingKilocalories ?? day.restingFormula?.dailyKilocalories))
                         LabeledContent("残差系数", value: factorText(day.energy.estimate))
-                        if let components = day.energy.estimate?.components {
-                            let displayed = EnergyKilocalorieDisplay.parts(components)
-                            LabeledContent("基准额外消耗", value: EnergyKilocalorieDisplay.kcal(displayed.baselineExtra))
-                            activityContent(displayed.activity)
-                            LabeledContent("训练消耗", value: EnergyKilocalorieDisplay.kcal(displayed.training))
+                        ForEach(ProgressEnergyBreakdown.dayExpenditureRows(day).filter { $0.id != "resting" && $0.id != "missing" }) { row in
+                            LabeledContent(row.label, value: row.value)
                         }
                         LabeledContent("预估总消耗", value: day.energy.estimate?.components.map {
                             EnergyKilocalorieDisplay.kcal(EnergyKilocalorieDisplay.parts($0).total)
@@ -164,15 +161,5 @@ struct ProgressEnergySourcesView: View {
             }
         }
         return "\(resting) × \(factor) ≈ \(total) kcal"
-    }
-
-    @ViewBuilder
-    private func activityContent(_ activity: DailyEnergyTotal.Activity) -> some View {
-        switch activity {
-        case .absent:
-            LabeledContent("活动消耗", value: "未记录")
-        case let .selected(value):
-            LabeledContent("活动消耗", value: energy(value))
-        }
     }
 }

@@ -32,6 +32,13 @@ final class DailyEnergyTotalTests: XCTestCase {
         XCTAssertEqual(withTraining.displayedActivity, 250)
         XCTAssertEqual(withTraining.total, 2570)
         XCTAssertTrue(withTraining.addsUp)
+
+        let roundingEdge = EnergyKilocalorieDisplay.parts(.init(
+            restingKilocalories: 1600.5, coefficient: 1, activity: .selected(10.5), trainingKilocalories: 80
+        ))
+        XCTAssertEqual(roundingEdge.training, 80)
+        XCTAssertEqual(roundingEdge.total, 1691)
+        XCTAssertTrue(roundingEdge.addsUp)
     }
 
     func testActiveEnergyChangesTheTotalWithoutChangingTheCoefficient() throws {

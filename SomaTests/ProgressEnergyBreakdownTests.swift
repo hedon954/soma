@@ -10,7 +10,7 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
 
     func testDailyIntakeListsOnlyMealsAndPreservesMissingEvidence() {
         let snapshot = make(.day, records: [
-            record(5, .meal, "早餐", 400), record(5, .meal, "晚餐", nil),
+            record(5, .meal, "早餐", 400), record(5, .meal, "晚餐", nil), record(5, .meal, "零热量", 0),
             record(5, .workout, "虚构训练", 300)
         ])
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .intake).rows
@@ -47,7 +47,7 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
     func testExpenditureShowsEffectiveFactorAndTrainingAfterTimeReplacement() {
         let snapshot = make(.day, records: [record(5, .workout, "训练", 800, calorieMET: 5)], hasProfile: true)
         let breakdown = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure)
-        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "基准额外消耗", "活动消耗", "训练消耗"])
+        XCTAssertEqual(breakdown.rows.map(\.label), ["静息消耗", "基准额外消耗", "活动消耗", "训练"])
         XCTAssertEqual(breakdown.rows[0].value, "1,618 kcal")
         XCTAssertEqual(breakdown.rows[1].value, "647 kcal")
         XCTAssertEqual(breakdown.rows[2].value, "未记录")
@@ -69,14 +69,42 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         XCTAssertEqual(rows.suffix(2).map(\.tone), [.workout, .workout])
     }
 
+    func testEstimatedDayShowsEachNonzeroTrainingRecordOnce() {
+        let squat = record(5, .workout, "深蹲", 90)
+        let anotherSquat = record(5, .workout, "深蹲", 40)
+        var activity = record(5, .workout, "日常活动", 0)
+        activity.isDailyActivity = true
+        activity.activeEnergyKilocalories = 0
+        let snapshot = make(.day, records: [
+            squat, squat, anotherSquat, record(5, .workout, "零消耗动作", 0),
+            record(5, .workout, "热量未知动作", nil), activity
+        ], hasProfile: true)
+        let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure).rows
+        let training = rows.filter { $0.tone == .workout }
+        XCTAssertFalse(rows.contains { $0.tone == .activity || $0.value == "0 kcal" })
+        XCTAssertEqual(snapshot.days.first?.energy.estimate?.components?.trainingKilocalories, 130)
+        XCTAssertEqual(Set(training.map(\.label)), ["深蹲", "热量未知动作"])
+        XCTAssertEqual(training.count, 3)
+        XCTAssertEqual(training.first { $0.id == squat.activity.id.uuidString }?.value, "90 kcal")
+        XCTAssertEqual(training.first { $0.id == anotherSquat.activity.id.uuidString }?.value, "40 kcal")
+        XCTAssertEqual(training.first { $0.label == "热量未知动作" }?.value, "未估算")
+    }
+
     func testPeriodExpenditureUsesSameEstimateDaysAndWeightedComponents() {
         let snapshot = make(.month, records: [], hasProfile: true)
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure).rows
         XCTAssertEqual(snapshot.estimateDayCount, 4)
-        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗", "日均训练消耗"])
+        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗"])
         XCTAssertEqual(rows[2].value, "未记录")
-        XCTAssertEqual(rows[3].value, "0 kcal")
         XCTAssertFalse(rows.contains { $0.label.contains("预估总消耗") })
+    }
+
+    func testPeriodExpenditureKeepsNonzeroDailyAverageTraining() {
+        let snapshot = make(.month, records: [record(2, .workout, "深蹲", 140), record(5, .workout, "今天的训练", 500)], hasProfile: true)
+        let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .expenditure).rows
+        XCTAssertEqual(rows.filter { $0.tone == .workout }, [
+            .init(id: "training", label: "日均训练消耗", value: "35 kcal", tone: .workout)
+        ])
     }
 
     func testEmptyAndUnavailableHaveSmallHonestLists() {
@@ -93,7 +121,7 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
     func testDailyProteinListsMealGramsAndPreservesMissingEvidence() {
         let snapshot = make(.day, records: [
             record(5, .meal, "早餐", 400, protein: 38),
-            record(5, .meal, "晚餐", 500),
+            record(5, .meal, "晚餐", 500), record(5, .meal, "零蛋白质", 10, protein: 0),
             record(5, .workout, "虚构训练", 300, protein: 99)
         ])
         let rows = ProgressEnergyBreakdown(snapshot: snapshot, kind: .protein).rows
@@ -154,7 +182,7 @@ final class ProgressEnergyBreakdownTests: XCTestCase {
         let activity = components.reduce(0) { $0 + $1.activityKilocalories } / count
         XCTAssertEqual(components.map(\.coefficient), Array(repeating: ResidualEnergyCoefficient.initialFallback, count: components.count))
         XCTAssertEqual(resting + extra + activity, components.reduce(0) { $0 + $1.totalKilocalories } / count, accuracy: 0.001)
-        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗", "日均训练消耗"])
+        XCTAssertEqual(rows.map(\.label), ["日均静息消耗", "日均基准额外消耗", "日均活动消耗"])
         let training = components.reduce(0) { $0 + $1.trainingKilocalories } / count
         XCTAssertEqual(resting + extra + activity + training, components.reduce(0) { $0 + $1.totalKilocalories } / count, accuracy: 0.001)
     }

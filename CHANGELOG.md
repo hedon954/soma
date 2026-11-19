@@ -8,6 +8,7 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 ### Changed
 
 - 进展的日常活动与训练、饮食记录使用一致的行布局，并展示 Apple 健康或 COROS 的来源图标。
+- 能量明细省略零值，单日消耗逐条展示训练记录的估算热量。
 
 ### Fixed
 
