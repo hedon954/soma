@@ -11,7 +11,9 @@ struct WorkoutNumericField: View {
     var flat = false
     var inline = false
     var parsesDuration = false
+    var defersInput = false
     let validRange: ClosedRange<Double>
+    @State private var isEditing = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -23,31 +25,7 @@ struct WorkoutNumericField: View {
                         .foregroundStyle(.secondary)
                         .fixedSize()
                 }
-                ZStack(alignment: inline ? .leading : .center) {
-                    Text(sizingText)
-                        .font(.subheadline.monospacedDigit())
-                        .hidden()
-                        .fixedSize()
-                    TextField(
-                        accessibilityLabel,
-                        text: $text,
-                        prompt: Text(emptyPrompt)
-                    )
-                    .keyboardType(
-                        parsesDuration
-                            ? .default
-                            : (decimal ? .decimalPad : .numberPad)
-                    )
-                    .font(.subheadline.monospacedDigit())
-                    .multilineTextAlignment(inline ? .leading : .center)
-                    .focused($focused)
-                    .frame(minWidth: inline ? nil : (compact ? 32 : 50))
-                    .accessibilityLabel(accessibilityLabel)
-                    .accessibilityValue(accessibilityValue)
-                    .accessibilityHint(
-                        isInvalid ? "请修改为\(rangeDescription)" : ""
-                    )
-                }
+                input
                 if !unit.isEmpty {
                     Text(unit)
                         .font(inline ? .subheadline : .caption)
@@ -87,6 +65,42 @@ struct WorkoutNumericField: View {
             }
         }
         .fixedSize(horizontal: inline && !isInvalid, vertical: false)
+    }
+
+    private var input: some View {
+        Group {
+            if defersInput, !isEditing {
+                Button { isEditing = true } label: {
+                    Text(text.isEmpty ? emptyPrompt : text)
+                        .frame(minHeight: AppTheme.minimumTapTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                ZStack(alignment: inline ? .leading : .center) {
+                    Text(sizingText).hidden().fixedSize()
+                    TextField(accessibilityLabel, text: $text, prompt: Text(emptyPrompt))
+                        .keyboardType(parsesDuration ? .default : decimal ? .decimalPad : .numberPad)
+                        .multilineTextAlignment(inline ? .leading : .center)
+                        .focused($focused)
+                        .onAppear {
+                            if defersInput {
+                                focused = true
+                            }
+                        }
+                        .onChange(of: focused) { _, focused in
+                            if defersInput, !focused {
+                                isEditing = false
+                            }
+                        }
+                }
+            }
+        }
+        .font(.subheadline.monospacedDigit())
+        .frame(minWidth: inline ? nil : (compact ? 32 : 50))
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(isInvalid ? "请修改为\(rangeDescription)" : "")
     }
 
     private var sizingText: String {

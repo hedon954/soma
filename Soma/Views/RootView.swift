@@ -327,6 +327,7 @@ struct RootView: View {
                     .seedLongStreamIfRequested(in: modelContext)
                 TrainingContentTestFixture.seedIfRequested(in: modelContext)
                 ProgressHistoryTestFixture.seedIfRequested(in: modelContext)
+                LibraryAndMealTestFixture.seedBackfillIfRequested(in: modelContext)
                 ConversationSessionHistoryFixture.seedIfRequested(in: modelContext)
                 conversationSessions.resolveForEntry(
                     dataSpace: dataSpace.activeSpace,
@@ -343,6 +344,9 @@ struct RootView: View {
                         responseMessageID: performanceSession.responseMessageID,
                         modelContext: modelContext
                     )
+                }
+                BatchReviewPerformanceFixture.start(session: conversationSessions.activeSessionReference, context: modelContext) {
+                    tabSelection.wrappedValue = $0
                 }
                 startDevicePerformanceHarnessIfRequested()
                 await Task.yield()

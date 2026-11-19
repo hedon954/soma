@@ -61,15 +61,39 @@ struct ConversationContextProjection {
             }
         }
 
-        let exchanges = candidates.map { userMessage in
+        var manualReceipts: [UUID: [String]] = [:]
+        var standaloneReceipts: [Exchange] = []
+        var precedingUser: UUID?
+        for message in sessionMessages {
+            if let currentDate, message.date >= currentDate {
+                break
+            }
+            if !message.isFromCoach {
+                precedingUser = message.id
+            } else if message.isManualCorrectionReceipt, let summary = message.manualCorrectionSummary {
+                if let precedingUser {
+                    manualReceipts[precedingUser, default: []].append(summary)
+                } else {
+                    standaloneReceipts.append(Exchange(
+                        turnID: message.id, date: message.date, userText: "[来自设备上的手动记录编辑]",
+                        assistantText: summary, mediaAttachments: []
+                    ))
+                }
+            }
+        }
+        let exchanges = standaloneReceipts + candidates.map { userMessage -> Exchange in
             let assistantMessage = userMessage.turnID.flatMap {
                 assistantsByTurnID[$0]
             }
+            var summaries: [String] = []
+            if let correction = assistantMessage?.manualCorrectionSummary {
+                summaries.append(correction)
+            }
+            summaries.append(contentsOf: manualReceipts[userMessage.id] ?? [])
+            let corrections = summaries.isEmpty ? nil : summaries.joined(separator: "\n")
             let assistantText = [
                 assistantMessage?.text,
-                assistantMessage?.manualCorrectionSummary.map {
-                    "[用户在回复卡片中的最新修订]\n\($0)"
-                }
+                corrections.map { "[用户在回复卡片中的最新修订]\n\($0)" }
             ]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -77,7 +101,7 @@ struct ConversationContextProjection {
             let saved = userMessage.turnID.flatMap { canonicalTurns[$0] }
             let revision = AgentCanonicalTurn.fingerprint(
                 user: userMessage.text, assistant: assistantMessage?.text,
-                correction: assistantMessage?.manualCorrectionSummary
+                correction: corrections
             )
             return Exchange(
                 turnID: userMessage.turnID ?? userMessage.id,

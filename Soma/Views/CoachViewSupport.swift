@@ -129,6 +129,27 @@ final class CoachTailScrollCoordinator {
     }
 }
 
+@MainActor
+final class SessionComposerStore {
+    private struct Key: Hashable {
+        let session: UUID?
+        let space: DataSpace
+    }
+
+    private var drafts: [Key: CoachComposerState] = [:]
+
+    func composer(for session: UUID?, space: DataSpace) -> CoachComposerState {
+        let key = Key(session: session, space: space)
+        if let existing = drafts[key] {
+            return existing
+        }
+        drafts = drafts.filter { !$0.value.draft.isEmpty || !$0.value.attachments.isEmpty }
+        let composer = CoachComposerState()
+        drafts[key] = composer
+        return composer
+    }
+}
+
 /// 输入区的全部可变状态。会话页只持有引用、在事件回调里读写，
 /// 绝不在 body 里读取任何字段；`CoachComposer` 经 `@Bindable` 成为
 /// 唯一的渲染消费者。打字与听写因此只重渲染输入区，不再让消息列表、
@@ -144,6 +165,7 @@ final class CoachComposerState {
     var selectedExerciseSuggestion: ExerciseInputSuggestion?
     var isPersistingSubmission = false
     var focusRequest = UUID()
+    var focusesAfterMount = false
     var dismissRequest = UUID()
     /// 语音服务只在用户第一次点麦克风时创建。
     var speechInput: SpeechInputService?
@@ -156,6 +178,17 @@ final class CoachComposerState {
 
     func requestFocus() {
         focusRequest = UUID()
+    }
+
+    func prepareMealBackfill(_ target: MealBackfillTarget) {
+        if !draft.hasPrefix(target.prompt) {
+            draft = target.prompt + (draft.isEmpty ? "" : "\n" + draft)
+        }
+        selectedExerciseSuggestion = nil
+        selectedShortcutID = nil
+        autofilledPrompt = nil
+        focusesAfterMount = true
+        requestFocus()
     }
 
     func dismissKeyboard() {

@@ -139,7 +139,13 @@ enum CoachTimelineBuilder {
     }
 }
 
-@MainActor
+@ModelActor
+actor CoachTimelineReader {
+    func records(on day: Date, timeZone: TimeZone) -> [CoachTimelineRecord] {
+        CoachTimelineLoader.records(on: day, timeZone: timeZone, in: modelContext)
+    }
+}
+
 enum CoachTimelineLoader {
     static func records(
         on day: Date,
@@ -153,15 +159,15 @@ enum CoachTimelineLoader {
             return []
         }
         var workouts = FetchDescriptor<WorkoutEntry>(
-            predicate: #Predicate { $0.date >= start && $0.date < end }
+            predicate: #Predicate { $0.date >= start && $0.date < end && $0.sourceTurnID == nil }
         )
         workouts.fetchLimit = 240
         var meals = FetchDescriptor<MealEntry>(
-            predicate: #Predicate { $0.date >= start && $0.date < end }
+            predicate: #Predicate { $0.date >= start && $0.date < end && $0.sourceTurnID == nil }
         )
         meals.fetchLimit = 50
         var bodies = FetchDescriptor<BodyEntry>(
-            predicate: #Predicate { $0.date >= start && $0.date < end }
+            predicate: #Predicate { $0.date >= start && $0.date < end && $0.sourceTurnID == nil }
         )
         bodies.fetchLimit = 20
 

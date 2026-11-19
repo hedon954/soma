@@ -64,11 +64,14 @@ enum GymSelection {
 enum StructuredDataStore {
     static func activateGym(
         _ gym: GymProfile,
-        in context: ModelContext
+        in context: ModelContext,
+        save: Bool = true
     ) {
         let gyms = allGymsForMutation(in: context)
         GymSelection.activate(gym, among: gyms)
-        try? context.save()
+        if save {
+            try? context.save()
+        }
     }
 
     static func deleteGym(

@@ -532,7 +532,17 @@ private struct WorkoutRecordEditor: View {
         calorieDurationMinutes = EditorValue.string(workout.calorieDurationMinutes)
         calorieDurationEstimated = workout.calorieDurationEstimated
         calorieScope = workout.calorieScope
-        try? modelContext.save()
+        do {
+            if modelContext.hasChanges {
+                try RecordCorrectionReceipt.record(
+                    "训练记录 \(AgentFacingRecordID.correctionToken(workout.businessID)) 已改为 \(workout.exercise)，\(WorkoutHistoryFormatter.text(for: workout))",
+                    sessionID: workout.sourceSessionID, recordDate: workout.date, in: modelContext
+                )
+            }
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+        }
     }
 }
 
@@ -542,6 +552,7 @@ private struct MealRecordEditor: View {
 
     @State private var date: Date
     @State private var mealType: MealType
+    @State private var saveError: String?
     @State private var title: String
     @State private var calories: String
     @State private var protein: String
@@ -699,10 +710,19 @@ private struct MealRecordEditor: View {
             ToolbarItem(placement: .topBarTrailing) { MealShareButton(meal: meal) }
             ToolbarItem(placement: .confirmationAction) {
                 if isDirty {
-                    Button("保存", action: save)
+                    Button("保存") { save() }
                         .disabled(!isValid)
                 }
             }
+        }
+        .alert("饮食记录未保存", isPresented: Binding(get: { saveError != nil }, set: {
+            if !$0 {
+                saveError = nil
+            }
+        })) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
         }
     }
 
@@ -754,6 +774,9 @@ private struct MealRecordEditor: View {
         title = normalizedTitle
         notes = normalizedNotes
         meal.date = date
+        if meal.mealType != mealType {
+            meal.mealTypeConfirmed = true
+        }
         meal.mealType = mealType
         meal.title = normalizedTitle
         let normalizedItems = editedItems
@@ -795,7 +818,21 @@ private struct MealRecordEditor: View {
             recommendedEatingOrder = ""
         }
         meal.notes = normalizedNotes
-        try? modelContext.save()
+        do {
+            if meal.mealTypeConfirmed == true {
+                try MealCoverageStore.setSkipped(false, meal: mealType, day: date, in: modelContext, save: false)
+            }
+            if modelContext.hasChanges {
+                try RecordCorrectionReceipt.record(
+                    "饮食记录 \(AgentFacingRecordID.correctionToken(meal.businessID)) 已更新，\(meal.mealType.rawValue) · \(meal.title)",
+                    sessionID: meal.sourceSessionID, recordDate: meal.date, in: modelContext
+                )
+            }
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            saveError = AppErrorMessage.message(for: error, operation: .save)
+        }
     }
 }
 

@@ -263,6 +263,7 @@ final class ConversationSessionController {
     @ObservationIgnored
     private let defaults: UserDefaults
 
+    private var emptyToday: Date?
     private(set) var activeSessionID: UUID?
     private(set) var dataSpace: DataSpace?
     private(set) var hasManualSessionOverride = false
@@ -343,6 +344,29 @@ final class ConversationSessionController {
         return session
     }
 
+    /// Select a business date without rewriting or creating historical sessions.
+    func returnToToday(dataSpace: DataSpace, now: Date = .now, calendar: Calendar = .current, in context: ModelContext) throws {
+        let start = calendar.startOfDay(for: now)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }
+        var query = FetchDescriptor<ConversationSession>(
+            predicate: #Predicate { item in
+                (item.businessDate ?? item.startedAt) >= start && (item.businessDate ?? item.startedAt) < end
+            },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse), SortDescriptor(\.id)]
+        )
+        query.fetchLimit = 1
+        if let existing = try context.fetch(query).first {
+            select(existing, dataSpace: dataSpace)
+        } else {
+            activeSessionID = nil
+            activeSessionReference = nil
+            self.dataSpace = dataSpace
+            emptyToday = start
+            hasManualSessionOverride = true
+            defaults.removeObject(forKey: Self.activeSessionDefaultsKey(for: dataSpace))
+        }
+    }
+
     private func session(
         id: UUID,
         in context: ModelContext
@@ -376,6 +400,12 @@ final class ConversationSessionController {
         calendar: Calendar = .current,
         in context: ModelContext
     ) -> ConversationSession {
+        if self.dataSpace == dataSpace, emptyToday != nil, activeSessionID == nil {
+            let session = ConversationSession(startedAt: now)
+            context.insert(session)
+            activate(session, dataSpace: dataSpace)
+            return session
+        }
         if self.dataSpace == dataSpace,
            hasManualSessionOverride,
            let activeSession = activeSession(in: context)
@@ -452,6 +482,7 @@ final class ConversationSessionController {
         _ session: ConversationSession,
         dataSpace: DataSpace
     ) {
+        emptyToday = nil
         activeSessionID = session.id
         activeSessionReference = session
         self.dataSpace = dataSpace

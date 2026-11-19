@@ -10,6 +10,7 @@ struct CoachView: View {
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(ConversationSessionController.self) private var conversationSessions
     @Environment(\.modelContext) private var historyContext
+    @State private var draftStore = SessionComposerStore()
     @State private var sessionHistory = ConversationSessionHistory()
     @State private var sessionTransition = CoachSessionTransitionCoordinator()
 
@@ -17,7 +18,8 @@ struct CoachView: View {
         CoachSessionPage(
             sessionID: conversationSessions.activeSessionID,
             dataSpace: dataSpace.activeSpace,
-            sessionTransition: sessionTransition
+            sessionTransition: sessionTransition,
+            composer: draftStore.composer(for: conversationSessions.activeSessionID, space: dataSpace.activeSpace)
         )
         // Session 身份变化时在查询创建前同步回到 30 条，不能先拿上一条
         // Session 的分页上限构造一次重视图，再在 onChange 里补救。
@@ -26,13 +28,38 @@ struct CoachView: View {
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { notification in
             sessionHistory.applySave(notification, in: historyContext)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .startMealBackfill)) { notification in
+            guard let target = notification.object as? MealBackfillTarget else { return }
+            if let session = conversationSessions.activeSessionReference, !Calendar.current.isDateInToday(session.effectiveBusinessDate) {
+                do {
+                    try conversationSessions.returnToToday(dataSpace: dataSpace.activeSpace, in: historyContext)
+                } catch {
+                    backfillError = AppErrorMessage.message(for: error, operation: .load)
+                    return
+                }
+            }
+            let composer = draftStore.composer(for: conversationSessions.activeSessionID, space: dataSpace.activeSpace)
+            composer.prepareMealBackfill(target)
+        }
+        .alert("未能打开补记", isPresented: Binding(get: { backfillError != nil }, set: {
+            if !$0 {
+                backfillError = nil
+            }
+        })) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(backfillError ?? "")
+        }
     }
+
+    @State private var backfillError: String?
 }
 
 struct CoachSessionPage: View {
     let sessionID: UUID?
     let dataSpace: DataSpace
     let sessionTransition: CoachSessionTransitionCoordinator
+    let composer: CoachComposerState
 
     @State private var messageLimit = CoachMessagePagePolicy.pageSize
 
@@ -40,6 +67,7 @@ struct CoachSessionPage: View {
         CoachSessionView(
             sessionID: sessionID,
             dataSpace: dataSpace,
+            composer: composer,
             messageLimit: messageLimit,
             sessionTransition: sessionTransition,
             onLoadEarlier: {
@@ -55,6 +83,7 @@ struct CoachSessionView: View {
     @Environment(DataSpaceController.self) var dataSpace
     @Environment(ConversationProcessingService.self) var processor
     @Environment(ConversationSessionController.self) var conversationSessions
+    @Environment(InsightsSnapshotRevisionState.self) var insightsRevision
     @Environment(SomaCaptureRouter.self) private var captureRouter
     @Environment(LocationContextService.self) var locationContext
     @AppStorage(ConversationLocationPreference.defaultsKey)
@@ -68,13 +97,14 @@ struct CoachSessionView: View {
 
     /// 输入区状态只在事件回调里读写；body 不读取任何字段，
     /// 打字与听写因此只重渲染 `CoachComposer` 子树。
-    @State var composer = CoachComposerState()
+    let composer: CoachComposerState
     @State var sheet: CoachSheet?
     @State private var showsGyms = false
     @State var scrollRequest = UUID()
     @State private var sessionDrawerPresented = false
     @State private var showsSessionDeleteBlockedAlert = false
     @State var pendingDeletionError: String?
+    @State private var showsVideoUnsupported = false
 
     private var pendingDeletionPresented: Binding<Bool> {
         Binding(
@@ -92,6 +122,7 @@ struct CoachSessionView: View {
     /// 重新挂载时重复解码 UserDefaults JSON。
     @State private var inputShortcuts: [AgentInputShortcut] = []
     @State private var suggestionSnapshot = CoachSuggestionSnapshot.empty
+    @State private var timelineRevision = 0
     @State private var timelineRecords: [CoachTimelineRecord] = []
     @State private var suggestionDataRevision = 0
     @State private var loadedSuggestionRevision = -1
@@ -120,6 +151,7 @@ struct CoachSessionView: View {
     init(
         sessionID: UUID?,
         dataSpace: DataSpace,
+        composer: CoachComposerState,
         messageLimit: Int,
         sessionTransition: CoachSessionTransitionCoordinator,
         onLoadEarlier: @escaping () -> Void
@@ -153,6 +185,7 @@ struct CoachSessionView: View {
         jobDescriptor.fetchLimit = 100
         _agentJobs = Query(jobDescriptor)
 
+        self.composer = composer
         self.messageLimit = messageLimit
         self.sessionTransition = sessionTransition
         self.onLoadEarlier = onLoadEarlier
@@ -195,8 +228,95 @@ struct CoachSessionView: View {
     }
 
     var body: some View {
+        coachPresentation
+            .onReceive(
+                NotificationCenter.default.publisher(for: .prefillCoachDraft)
+            ) { notification in
+                guard let text = notification.object as? String else { return }
+                composer.draft = text
+                composer.requestFocus()
+            }
+            .modifier(CoachScheduleDraftSendModifier(onSend: consumeCoachSendIfNeeded))
+            .onReceive(
+                NotificationCenter.default.publisher(for: .focusCoachComposer)
+            ) { _ in
+                composer.requestFocus()
+            }
+            .modifier(CoachPerformanceSessionSelectionModifier(onSelect: selectSession))
+            .task(id: captureRouter.mediaDelivery?.id) {
+                handleMediaDelivery()
+            }
+            .task(id: requestedSuggestionRevision) {
+                guard let requestedSuggestionRevision else { return }
+                await refreshSuggestionSnapshot(
+                    targetRevision: requestedSuggestionRevision
+                )
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: ModelContext.didSave,
+                    object: modelContext
+                )
+            ) { notification in
+                if ModelContextSaveImpact.affectsCoachSuggestions(
+                    notification,
+                    in: modelContext
+                ) {
+                    suggestionDataRevision &+= 1
+                    requestSuggestionSnapshotIfNeeded()
+                }
+                if ModelContextSaveImpact.affectsCoachTimeline(
+                    notification,
+                    in: modelContext
+                ) {
+                    timelineRevision &+= 1
+                }
+            }
+            .task(id: timelineRequest) { await refreshTimelineRecords() }
+            .onAppear {
+                visibility.isVisible = true
+                timelineRevision &+= 1
+            }
+            .task {
+                // 先让 TabView 提交选中外观；次要快照请求不参与点击当帧。
+                await Task.yield()
+                guard visibility.isVisible else { return }
+                refreshInputShortcuts()
+                requestSuggestionSnapshotIfNeeded()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .agentInputShortcutsDidChange)
+            ) { _ in
+                refreshInputShortcuts()
+            }
+            .onDisappear {
+                visibility.isVisible = false
+                guard let speechInput = composer.speechInput,
+                      speechInput.isListening
+                else {
+                    return
+                }
+                Task { @MainActor in
+                    // AVAudioSession 停用可能同步等待系统音频服务；先让 Tab 切换提交。
+                    await Task.yield()
+                    speechInput.stop()
+                }
+            }
+    }
+
+    private var coachPresentation: some View {
         ZStack(alignment: .leading) {
             conversationArea
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    TimelineView(.periodic(from: .now, by: 60)) { tick in
+                        if Calendar.current.isDate(currentSession?.effectiveBusinessDate ?? tick.date, inSameDayAs: tick.date),
+                           !AppTestRuntime.isRunning || ProcessInfo.processInfo.environment["SOMA_UI_TEST_MEAL_BACKFILL"] == "1"
+                        {
+                            MealBackfillView(day: tick.date, isCoach: true)
+                                .padding(.horizontal, 14)
+                        }
+                    }
+                }
 
             if sessionDrawerPresented {
                 Color.black.opacity(0.16)
@@ -236,7 +356,8 @@ struct CoachSessionView: View {
             ToolbarItem(placement: .principal) {
                 CoachTitleWithBusinessDate(
                     businessDate: currentSession?.effectiveBusinessDate ?? .now,
-                    onChangeBusinessDate: changeBusinessDate
+                    onChangeBusinessDate: changeBusinessDate,
+                    onReturnToday: returnToToday
                 )
             }
         }
@@ -247,6 +368,12 @@ struct CoachSessionView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text("这条对话正在处理或仍有未完成的任务，暂不能删除。")
+        }
+        .alert("当前模型不支持完整视频", isPresented: $showsVideoUnsupported) {
+            Button("切换模型") { openLLMConfiguration() }
+            Button("继续编辑", role: .cancel) {}
+        } message: {
+            Text("草稿和视频仍在输入框。请选择支持完整视频分析的模型后再发送。")
         }
         .alert("未能删除暂存消息", isPresented: pendingDeletionPresented) {
             Button("知道了", role: .cancel) { pendingDeletionError = nil }
@@ -294,78 +421,6 @@ struct CoachSessionView: View {
                     onClear: clearPendingQueue,
                     onOpenLLMConfiguration: openLLMConfigurationFromPendingQueue
                 )
-            }
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .prefillCoachDraft)
-        ) { notification in
-            guard let text = notification.object as? String else { return }
-            composer.draft = text
-            composer.requestFocus()
-        }
-        .modifier(CoachScheduleDraftSendModifier(onSend: consumeCoachSendIfNeeded))
-        .onReceive(
-            NotificationCenter.default.publisher(for: .focusCoachComposer)
-        ) { _ in
-            composer.requestFocus()
-        }
-        .modifier(CoachPerformanceSessionSelectionModifier(onSelect: selectSession))
-        .task(id: captureRouter.mediaDelivery?.id) {
-            handleMediaDelivery()
-        }
-        .task(id: requestedSuggestionRevision) {
-            guard let requestedSuggestionRevision else { return }
-            await refreshSuggestionSnapshot(
-                targetRevision: requestedSuggestionRevision
-            )
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: ModelContext.didSave,
-                object: modelContext
-            )
-        ) { notification in
-            if ModelContextSaveImpact.affectsCoachSuggestions(
-                notification,
-                in: modelContext
-            ) {
-                suggestionDataRevision &+= 1
-                requestSuggestionSnapshotIfNeeded()
-            }
-            if ModelContextSaveImpact.affectsCoachTimeline(
-                notification,
-                in: modelContext
-            ) {
-                refreshTimelineRecords()
-            }
-        }
-        .onAppear {
-            visibility.isVisible = true
-            refreshTimelineRecords()
-        }
-        .task {
-            // 先让 TabView 提交选中外观；次要快照请求不参与点击当帧。
-            await Task.yield()
-            guard visibility.isVisible else { return }
-            refreshInputShortcuts()
-            requestSuggestionSnapshotIfNeeded()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .agentInputShortcutsDidChange)
-        ) { _ in
-            refreshInputShortcuts()
-        }
-        .onDisappear {
-            visibility.isVisible = false
-            guard let speechInput = composer.speechInput,
-                  speechInput.isListening
-            else {
-                return
-            }
-            Task { @MainActor in
-                // AVAudioSession 停用可能同步等待系统音频服务；先让 Tab 切换提交。
-                await Task.yield()
-                speechInput.stop()
             }
         }
     }
@@ -475,6 +530,10 @@ struct CoachSessionView: View {
                 .onReceive(
                     NotificationCenter.default.publisher(for: .coachDoubleReselected)
                 ) { _ in
+                    if let currentSession, !Calendar.current.isDateInToday(currentSession.effectiveBusinessDate) {
+                        returnToToday()
+                        return
+                    }
                     visibility.tailScroll.followState.resumeExplicitly()
                     guard messageListPosition.contentFitsViewport != true else {
                         return
@@ -710,17 +769,38 @@ struct CoachSessionView: View {
             composer.selectedShortcutID = nil
         }
     }
+}
 
-    private func refreshTimelineRecords() {
-        guard let session = currentSession else {
+extension CoachSessionView {
+    private struct TimelineRequest: Equatable {
+        let date: Date
+        let timeZone: TimeZone
+        let revision: Int
+    }
+
+    private var timelineRequest: TimelineRequest? {
+        currentSession.map {
+            TimelineRequest(date: $0.effectiveBusinessDate, timeZone: $0.businessTimeZone, revision: timelineRevision)
+        }
+    }
+
+    private func refreshTimelineRecords() async {
+        guard let request = timelineRequest else {
             timelineRecords = []
             return
         }
-        timelineRecords = CoachTimelineLoader.records(
-            on: session.effectiveBusinessDate,
-            timeZone: session.businessTimeZone,
-            in: modelContext
-        )
+        guard visibility.isVisible else { return }
+        let container = modelContext.container
+        let worker = Task.detached(priority: .utility) {
+            await CoachTimelineReader(modelContainer: container).records(on: request.date, timeZone: request.timeZone)
+        }
+        let records = await withTaskCancellationHandler {
+            await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        guard !Task.isCancelled, timelineRequest == request, records != timelineRecords else { return }
+        timelineRecords = records
     }
 
     private func requestSuggestionSnapshotIfNeeded() {
@@ -766,6 +846,16 @@ struct CoachSessionView: View {
         if suggestionDataRevision != targetRevision {
             requestedSuggestionRevision = nil
             requestSuggestionSnapshotIfNeeded()
+        }
+    }
+
+    private func returnToToday() {
+        do {
+            try conversationSessions.returnToToday(dataSpace: dataSpace.activeSpace, in: modelContext)
+            prepareComposerForSessionChange()
+            closeSessionDrawer(animated: false)
+        } catch {
+            pendingDeletionError = AppErrorMessage.message(for: error, operation: .load)
         }
     }
 
@@ -874,7 +964,8 @@ struct CoachSessionView: View {
     }
 
     private func prepareComposerForSessionChange() {
-        composer.prepareForSessionChange()
+        composer.stopVoice()
+        composer.dismissKeyboard()
         scrollRequest = UUID()
     }
 
@@ -949,6 +1040,24 @@ struct CoachSessionView: View {
 
     private func send() {
         guard composer.speechInput?.isListening == true || !composer.trimmedDraft.isEmpty || !composer.attachments.isEmpty else {
+            return
+        }
+        if !remoteExecutionEnabled || composer.useLocalForNextMessage,
+           composer.attachments.contains(where: { $0.kind == .video })
+        {
+            let route = ai.route(text: composer.trimmedDraft, hasMedia: true, hasVideo: true)
+            let capability = ai.modelMultimodalAssessment(provider: route.provider, baseURL: route.baseURL, model: route.model)
+            if capability.support == .unsupported || capability.directVideoSupport == false {
+                showsVideoUnsupported = true
+                return
+            }
+        }
+        if composer.speechInput?.isListening != true, composer.attachments.isEmpty,
+           let read = DeviceCoachRead.matching(composer.trimmedDraft)
+        {
+            if submitDeviceRead(read, text: composer.trimmedDraft) {
+                composer.clearAfterSubmission()
+            }
             return
         }
         guard locationPreference != .unasked else {

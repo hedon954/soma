@@ -4,6 +4,7 @@ import SwiftUI
 struct CoachTitleWithBusinessDate: View {
     let businessDate: Date
     let onChangeBusinessDate: (Date) -> Void
+    let onReturnToday: () -> Void
     @State var showsPicker = false
     @State var pendingDate = Date.now
 
@@ -11,25 +12,34 @@ struct CoachTitleWithBusinessDate: View {
         VStack(spacing: 1) {
             Text("Soma")
                 .font(.headline.weight(.medium))
-            Button {
-                pendingDate = businessDate
-                showsPicker = true
-            } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "calendar")
-                    Text(businessDate.formatted(.dateTime.month().day()))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .medium))
+            HStack(spacing: 8) {
+                Button {
+                    pendingDate = businessDate
+                    showsPicker = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "calendar")
+                        Text(businessDate.formatted(.dateTime.month().day()))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .medium))
+                    }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(AppTheme.tint)
                 }
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(AppTheme.tint)
+                .buttonStyle(.plain)
+                .accessibilityLabel("本次对话的记录日期")
+                .accessibilityValue(
+                    businessDate.formatted(date: .long, time: .omitted)
+                )
+                .accessibilityHint("更改后，本次对话新增的记录默认使用这个日期")
+                TimelineView(.periodic(from: .now, by: 60)) { tick in
+                    if !Calendar.current.isDate(businessDate, inSameDayAs: tick.date) {
+                        Button("回到今天", action: onReturnToday)
+                            .font(.caption.weight(.medium))
+                            .accessibilityIdentifier("coach-return-today")
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("本次对话的记录日期")
-            .accessibilityValue(
-                businessDate.formatted(date: .long, time: .omitted)
-            )
-            .accessibilityHint("更改后，本次对话新增的记录默认使用这个日期")
         }
         .sheet(isPresented: $showsPicker) {
             NavigationStack {

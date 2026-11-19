@@ -23,7 +23,7 @@ enum ChatRecordEditPolicy {
     static func latestEditableAssistantMessageID(
         in messages: [CoachMessage]
     ) -> UUID? {
-        guard let last = messages.last, last.isFromCoach else { return nil }
+        guard let last = messages.last(where: { !$0.isManualCorrectionReceipt }), last.isFromCoach else { return nil }
         return last.id
     }
 }
@@ -369,6 +369,7 @@ private struct InlineWorkoutCard: View {
                                 accessibilityTitle: "预计消耗，千卡"
                             )
                         }
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("inline-workout-calories")
                     } else if let calories = workout.estimatedCalories {
                         Label("约 \(calories) kcal", systemImage: "flame.fill")
@@ -378,6 +379,7 @@ private struct InlineWorkoutCard: View {
                             .accessibilityIdentifier("inline-workout-calories")
                     }
                 }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("inline-workout-footer")
             }
         }
@@ -399,6 +401,7 @@ private struct InlineWorkoutCard: View {
     private func save() -> Bool {
         let normalized = exercise.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty, workoutDraft.isValid else { return false }
+        let previous = (workout.exercise, workout.exerciseID, workout.setEntries, workout.estimatedCalories)
         let nameKey = ExerciseLibraryStore.canonicalNameKey(normalized)
         if let exerciseID = workout.exerciseID {
             var descriptor = FetchDescriptor<ExerciseDefinition>(
@@ -433,11 +436,20 @@ private struct InlineWorkoutCard: View {
             )
         )
         caloriesText = workout.estimatedCalories.map(String.init) ?? ""
-        sourceMessage?.recordManualCorrection(
-            "训练记录 \(AgentFacingRecordID.correctionToken(workout.businessID)) 已修改，动作 \(workout.exercise)，保留 \(workoutDraft.groups.count) 个逻辑组的逐组事实"
-        )
-        try? modelContext.save()
-        return true
+        do {
+            let current = (workout.exercise, workout.exerciseID, workout.setEntries, workout.estimatedCalories)
+            if current != previous {
+                try RecordCorrectionReceipt.record(
+                    "训练记录 \(AgentFacingRecordID.correctionToken(workout.businessID)) 已改为 \(workout.exercise)，\(WorkoutHistoryFormatter.text(for: workout))",
+                    sessionID: sourceMessage?.sessionID ?? workout.sourceSessionID, recordDate: workout.date, in: modelContext
+                )
+            }
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            return false
+        }
     }
 
     private func deleteRecord() {
@@ -521,14 +533,22 @@ private struct InlineBodyCard: View {
 
     private func save() -> Bool {
         guard !entry.isHealthImported else { return false }
-        entry.weight = Double(weight)
-        entry.bodyFat = Double(bodyFat)
-        entry.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        sourceMessage?.recordManualCorrection(
-            "身体记录 \(AgentFacingRecordID.correctionToken(entry.businessID)) 已改为体重\(weight)kg、体脂\(bodyFat)%"
-        )
-        try? modelContext.save()
-        return true
+        let values = (Double(weight), Double(bodyFat), notes.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard values != (entry.weight, entry.bodyFat, entry.notes) else { return true }
+        (entry.weight, entry.bodyFat, entry.notes) = values
+        let measurement = [entry.weight.map { "体重 \($0.formatted()) kg" } ?? "体重未填写",
+                           entry.bodyFat.map { "体脂 \($0.formatted())%" } ?? "体脂未填写"].joined(separator: "，")
+        do {
+            try RecordCorrectionReceipt.record(
+                "身体记录 \(AgentFacingRecordID.correctionToken(entry.businessID)) 已更新，\(measurement)",
+                sessionID: sourceMessage?.sessionID ?? entry.sourceSessionID, recordDate: entry.date, in: modelContext
+            )
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            return false
+        }
     }
 
     private func deleteRecord() {
@@ -599,16 +619,24 @@ private struct InlineGymCard: View {
     private func save() -> Bool {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return false }
+        let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized != gym.name || normalizedNotes != gym.notes || (isCurrent && !gym.isCurrent) else { return true }
         gym.name = normalized
-        gym.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        gym.notes = normalizedNotes
         if isCurrent {
-            StructuredDataStore.activateGym(gym, in: modelContext)
+            StructuredDataStore.activateGym(gym, in: modelContext, save: false)
         }
-        sourceMessage?.recordManualCorrection(
-            "健身房记录 \(gym.id.uuidString) 已改为 \(normalized)，当前状态 \(gym.isCurrent ? "已选择" : "未选择")"
-        )
-        try? modelContext.save()
-        return true
+        do {
+            try RecordCorrectionReceipt.record(
+                "健身房记录 \(gym.id.uuidString) 已改为 \(normalized)，当前状态 \(gym.isCurrent ? "已选择" : "未选择")",
+                sessionID: sourceMessage?.sessionID, recordDate: .now, in: modelContext
+            )
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            return false
+        }
     }
 
     private func deleteRecord() {

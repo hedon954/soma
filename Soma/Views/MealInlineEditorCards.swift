@@ -147,15 +147,31 @@ struct InlineMealCards: View {
     private func save() -> Bool {
         let items = drafts.compactMap(\.item)
         guard !items.isEmpty else { return false }
+        let changedType = meal.mealType != mealType
+        let changedItems = meal.items != items
+        if changedType {
+            meal.mealTypeConfirmed = true
+        }
         meal.mealType = mealType
         meal.title = MealItemDraft.title(for: items)
         meal.replaceItemsAndDeriveTotals(items)
-        sourceMessage?.recordManualCorrection(
-            "饮食记录 \(AgentFacingRecordID.correctionToken(meal.businessID)) 已改为 \(mealType.rawValue)，"
-                + "\(items.count) 项菜品：\(MealItemDraft.summary(for: items))"
-        )
-        try? modelContext.save()
-        return true
+        do {
+            if meal.mealTypeConfirmed == true {
+                try MealCoverageStore.setSkipped(false, meal: mealType, day: meal.date, in: modelContext, save: false)
+            }
+            if changedType || changedItems {
+                try RecordCorrectionReceipt.record(
+                    "饮食记录 \(AgentFacingRecordID.correctionToken(meal.businessID)) 已改为 \(mealType.rawValue)，"
+                        + "\(items.count) 项菜品：\(MealItemDraft.summary(for: items))",
+                    sessionID: sourceMessage?.sessionID ?? meal.sourceSessionID, recordDate: meal.date, in: modelContext
+                )
+            }
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            return false
+        }
     }
 
     private func deleteRecord() {

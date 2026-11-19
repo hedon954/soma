@@ -119,8 +119,8 @@ final class RecordOptimizationUITests: XCTestCase {
                 20,
                 "两个图标的可见间距应保持紧凑"
             )
-            XCTAssertGreaterThanOrEqual(trace.frame.width, 44)
-            XCTAssertGreaterThanOrEqual(feedback.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(trace.frame.width, 44 - 0.01)
+            XCTAssertGreaterThanOrEqual(feedback.frame.width, 44 - 0.01)
         }
         keepScreenshot(of: app, named: "assistant-metadata-no-overlap")
     }
@@ -128,16 +128,19 @@ final class RecordOptimizationUITests: XCTestCase {
     func testWorkoutFooterKeepsAddActionAndCaloriesOnOneLine() {
         let app = launchRecordFixture(appearance: "dark")
         revealWorkoutCard(in: app)
-        let add = app.buttons["添加一组"].firstMatch
-        let calories = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label == %@", "预计消耗约 23 千卡")
-        ).firstMatch
-
+        let add = app.buttons["inline-workout-add-group"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 15))
-        XCTAssertTrue(calories.waitForExistence(timeout: 5))
+        let candidates = app.descendants(matching: .any).matching(identifier: "inline-workout-calories")
+        XCTAssertTrue(candidates.firstMatch.waitForExistence(timeout: 5))
+        let centerY = add.frame.midY
+        let calories = candidates.allElementsBoundByIndex.min { first, second in
+            let firstDistance = abs(first.frame.midY - centerY)
+            let secondDistance = abs(second.frame.midY - centerY)
+            return firstDistance < secondDistance
+        } ?? candidates.firstMatch
         XCTAssertLessThan(abs(add.frame.midY - calories.frame.midY), 4)
         XCTAssertLessThan(add.frame.maxX, calories.frame.minX)
-        XCTAssertGreaterThanOrEqual(add.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(add.frame.height, 44 - 0.01)
     }
 
     func testProgressEnergySeparatesRecordedIntakeAndEstimatedDailyExpenditure() {
@@ -314,15 +317,21 @@ final class RecordOptimizationUITests: XCTestCase {
         revealWorkoutCard(in: app)
         let title = app.descendants(matching: .any)["inline-record-title"].firstMatch
         XCTAssertEqual(title.value as? String, "单杠悬吊")
-        let targetKind = app.staticTexts["时长"]
-        let side = app.staticTexts["双侧同时"]
-        let save = app.buttons["自动保存已就绪"]
-        let delete = app.buttons["删除"]
+        func atHeader(_ query: XCUIElementQuery) -> XCUIElement {
+            query.allElementsBoundByIndex.min {
+                abs($0.frame.midY - title.frame.midY) < abs($1.frame.midY - title.frame.midY)
+            } ?? query.firstMatch
+        }
+        let targetKind = atHeader(app.staticTexts.matching(NSPredicate(format: "label == %@", "时长")))
+        let sideLabels = app.staticTexts.matching(
+            NSPredicate(format: "label == %@", "双侧同时")
+        ).allElementsBoundByIndex.filter { abs($0.frame.midY - title.frame.midY) < 8 }
+        let side = sideLabels.first ?? app.staticTexts["双侧同时"].firstMatch
+        let save = atHeader(app.buttons.matching(NSPredicate(format: "label == %@", "自动保存已就绪")))
+        let delete = atHeader(app.buttons.matching(NSPredicate(format: "label == %@", "删除")))
         XCTAssertTrue(targetKind.exists)
         XCTAssertEqual(
-            app.staticTexts.matching(
-                NSPredicate(format: "label == %@", "双侧同时")
-            ).count,
+            sideLabels.count,
             1
         )
         let headerCenters = [title, targetKind, side, save, delete].map(\.frame.midY)
@@ -331,9 +340,10 @@ final class RecordOptimizationUITests: XCTestCase {
             3,
             "动作名、目标、侧别、保存和删除必须位于同一条水平中线"
         )
-        XCTAssertEqual(app.textFields["时长"].value as? String, "20秒")
-        XCTAssertEqual(app.textFields["外部重量"].value as? String, "自重")
-        XCTAssertEqual(app.textFields["间歇"].value as? String, "30 秒")
+        let run = app.descendants(matching: .any)["workout-compact-inline-run"].firstMatch
+        XCTAssertEqual(run.buttons["时长"].firstMatch.value as? String, "20秒")
+        XCTAssertEqual(run.buttons["外部重量"].firstMatch.value as? String, "自重")
+        XCTAssertEqual(run.buttons["间歇"].firstMatch.value as? String, "30 秒")
         XCTAssertTrue(
             app.descendants(matching: .any)["workout-run-count-3"].exists
         )

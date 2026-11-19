@@ -62,6 +62,18 @@ extension CoachSessionView {
             showsUserQuestions: message.isFromCoach && message.turnID != nil
                 && message.turnID == projection.latestUserTurnID
                 && message.id == projection.latestAssistantMessageID,
+            showsSuggestedReads: !processorIsProcessing && message.turnID != nil
+                && message.turnID == projection.latestUserTurnID
+                && message.id == projection.latestAssistantMessageID
+                && conversationSessions.activeSessionReference.map { Calendar.current.isDateInToday($0.effectiveBusinessDate) } == true,
+            latestUserEndedTraining: userConfirmedTrainingEnd(projection, for: message),
+            onSuggestedRead: { read in await submitSuggestedRead(read, from: message) },
+            onSuggestionsWillReveal: {
+                guard didFinishInitialScroll, visibility.tailScroll.followState.isFollowing,
+                      messageListPosition.isNearBottom || !hasUserInteractedWithMessageList
+                else { return }
+                scrollRequest = UUID()
+            },
             onQuestionAnswer: { questionID, optionID, text in
                 try submitQuestionAnswer(
                     message,
@@ -99,5 +111,12 @@ extension CoachSessionView {
                 projection: projection
             )
         }
+    }
+
+    private func userConfirmedTrainingEnd(_ projection: CoachMessageRenderProjection, for reply: CoachMessage) -> Bool {
+        guard reply.id == projection.latestAssistantMessageID,
+              let user = projection.messages.last(where: { !$0.isFromCoach && $0.turnID == reply.turnID })
+        else { return false }
+        return ["今天练完了", "这次训练结束了", "今天的训练结束了", "训练已完成"].contains { user.text.hasPrefix($0) }
     }
 }

@@ -130,6 +130,12 @@ struct CoachComposer: View {
         .padding(.vertical, 6)
         .background(AppTheme.pageBackground)
         .onChange(of: state.focusRequest) {
+            state.focusesAfterMount = false
+            focused = true
+        }
+        .onAppear {
+            guard state.focusesAfterMount else { return }
+            state.focusesAfterMount = false
             focused = true
         }
         .onChange(of: state.dismissRequest) {

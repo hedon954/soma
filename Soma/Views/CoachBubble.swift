@@ -11,6 +11,10 @@ struct CoachBubble: View, Equatable {
     var isStaged = false
     var canRetry = false
     var showsUserQuestions = false
+    var showsSuggestedReads = false
+    var latestUserEndedTraining = false
+    var onSuggestedRead: (DeviceCoachRead) async -> Bool = { _ in false }
+    var onSuggestionsWillReveal: () -> Void = {}
     var onQuestionAnswer: (String, String?, String?) throws -> Bool = { _, _, _ in false }
     var onComposeAnswer: (String) throws -> Bool = { _ in false }
     var onRetry: () -> Void = {}
@@ -25,6 +29,8 @@ struct CoachBubble: View, Equatable {
             && lhs.isStaged == rhs.isStaged
             && lhs.canRetry == rhs.canRetry
             && lhs.showsUserQuestions == rhs.showsUserQuestions
+            && lhs.showsSuggestedReads == rhs.showsSuggestedReads
+            && lhs.latestUserEndedTraining == rhs.latestUserEndedTraining
             && (lhs.onDiscardPending == nil) == (rhs.onDiscardPending == nil)
     }
 
@@ -47,8 +53,10 @@ struct CoachBubble: View, Equatable {
                     StoredMediaStrip(attachments: payload.mediaAttachments)
                 }
 
-                if message.isFromCoach,
-                   !payload.turnItems.isEmpty || isLive
+                if let raw = message.deviceReadKindRaw, let read = DeviceCoachRead(rawValue: raw) {
+                    CoachDeviceReadView(read: read, date: message.date)
+                } else if message.isFromCoach,
+                          !payload.turnItems.isEmpty || isLive
                 {
                     if isLive {
                         CoachLiveAgentTurnTranscript(
@@ -129,6 +137,29 @@ struct CoachBubble: View, Equatable {
                 if let draft = payload.scheduleDraft {
                     CoachScheduleDraftCard(payload: draft)
                 }
+                if message.isFromCoach, !isLive, let corrections = message.manualCorrectionSummary {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("我已按你的编辑更新记录。", systemImage: "checkmark.circle")
+                            .font(.subheadline.weight(.medium))
+                        Text(corrections).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("coach-record-correction")
+                }
+                if showsSuggestedReads, message.agentStatus == .succeeded, !isLive,
+                   payload.userQuestions == nil, Calendar.current.isDateInToday(message.date)
+                {
+                    let types = producedRecordTypes(payload.transcriptSegments)
+                    if !types.isEmpty {
+                        CoachSuggestedReads(
+                            recordedFood: types.contains(ConversationIntent.meal.rawValue),
+                            recordedWorkout: types.contains(ConversationIntent.workout.rawValue),
+                            userEndedTraining: latestUserEndedTraining,
+                            date: message.date,
+                            submit: onSuggestedRead,
+                            onWillReveal: onSuggestionsWillReveal
+                        )
+                    }
+                }
                 metaLine
             }
 
@@ -142,6 +173,16 @@ struct CoachBubble: View, Equatable {
         } message: {
             Text("这条消息会从对话中移除，已保存的记录及其附件会保留。")
         }
+    }
+
+    private func producedRecordTypes(_ segments: [AgentTurnTranscriptSegment]) -> Set<String> {
+        var types: Set<String> = []
+        for segment in segments {
+            if case let .record(reference) = segment {
+                types.insert(reference.recordType)
+            }
+        }
+        return types
     }
 
     /// PRD 033：时间与位置合并成一行 caption，位置不再单独占一个胶囊。

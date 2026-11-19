@@ -41,13 +41,7 @@ struct InlineRecordShell<Content: View, Accessory: View>: View {
                     .padding(.vertical, 4)
                     .accessibilityHidden(true)
                 if isEditable, let titleText {
-                    TextField("名称", text: titleText, axis: .vertical)
-                        .font(.subheadline.weight(.semibold))
-                        .textFieldStyle(.plain)
-                        .lineLimit(1 ... 3)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
-                        .accessibilityIdentifier("inline-record-title")
+                    InlineRecordTitle(text: titleText)
                 } else {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
@@ -320,5 +314,42 @@ extension View {
                 save: save
             )
         )
+    }
+}
+
+/// Mount the multiline UIKit text input only for the title actually being edited.
+private struct InlineRecordTitle: View {
+    @Binding var text: String
+    @State private var isEditing = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Group {
+            if isEditing {
+                TextField("名称", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onAppear { focused = true }
+                    .onChange(of: focused) {
+                        if !focused {
+                            isEditing = false
+                        }
+                    }
+            } else {
+                Button { isEditing = true } label: {
+                    Text(text.isEmpty ? "名称" : text)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("编辑名称")
+                .accessibilityValue(text)
+            }
+        }
+        .font(.subheadline.weight(.semibold))
+        .lineLimit(1 ... 3)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, minHeight: AppTheme.minimumTapTarget, alignment: .leading)
+        .accessibilityIdentifier("inline-record-title")
     }
 }

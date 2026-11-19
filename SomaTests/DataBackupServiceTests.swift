@@ -64,6 +64,43 @@ final class DataBackupServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testBackupRestoresMealCoverageAndCoachCorrections() throws {
+        let source = DataSpaceController(isStoredInMemoryOnly: true)
+        let context = try XCTUnwrap(source.personalContainer).mainContext
+        let date = DataArchiveTestSupport.fixedDate
+        let meal = MealEntry(date: date, mealType: .lunch, title: "合成午餐", calories: 450)
+        meal.mealTypeConfirmed = true
+        context.insert(meal)
+        let receipt = CoachMessage(date: date, isFromCoach: true, text: "")
+        receipt.manualCorrectionSummary = "- 午餐 已更新为 450 kcal"
+        context.insert(receipt)
+        let read = CoachMessage(date: date, isFromCoach: true, text: "")
+        read.deviceReadKindRaw = DeviceCoachRead.dailyEnergy.rawValue
+        context.insert(read)
+        try MealCoverageStore.setSkipped(true, meal: .dinner, day: date, in: context, now: date)
+
+        let snapshot = try PersonalDataSnapshot.capture(from: context, now: date)
+        let root = try DataArchiveTestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try DataBackupService.write(snapshot: snapshot, to: root, credential: makeCredential(), now: date)
+        let backup = try DataBackupService.prepareRestore(from: root, password: "password") { _, _ in
+            throw DataArchiveError.invalidBackup
+        }
+        let destination = DataSpaceController(isStoredInMemoryOnly: true)
+        let restored = try XCTUnwrap(destination.personalContainer).mainContext
+        try backup.snapshot.replace(in: restored, mediaPathMapping: backup.mediaPathMapping)
+
+        let restoredMeal = try XCTUnwrap(restored.fetch(FetchDescriptor<MealEntry>()).first)
+        XCTAssertEqual(restoredMeal.mealTypeConfirmed, true)
+        XCTAssertEqual(restoredMeal.calories, 450)
+        let foodDay = try EnergyEvidenceStore.contextEntry(for: date, in: restored)
+        XCTAssertEqual(try MealCoverageStore.skipped(foodDay), [.dinner])
+        let messages = try restored.fetch(FetchDescriptor<CoachMessage>())
+        XCTAssertEqual(messages.first(where: \.isManualCorrectionReceipt)?.manualCorrectionSummary, receipt.manualCorrectionSummary)
+        XCTAssertTrue(messages.contains { $0.deviceReadKindRaw == DeviceCoachRead.dailyEnergy.rawValue })
+    }
+
+    @MainActor
     func testBackupIsEncryptedAndPreparesCompleteRestore() throws {
         let snapshot = try DataArchiveTestSupport.makeSnapshot()
         let root = try DataArchiveTestSupport.temporaryDirectory()

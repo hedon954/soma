@@ -5,6 +5,63 @@ import SwiftUI
 import UIKit
 
 extension CoachSessionView {
+    @discardableResult
+    func submitDeviceRead(_ read: DeviceCoachRead, text: String, session boundSession: ConversationSession? = nil) -> Bool {
+        guard !composer.isPersistingSubmission, !processor.isProcessing else { return false }
+        let session = boundSession ?? conversationSessions.ensureActiveSession(dataSpace: dataSpace.activeSpace, in: modelContext)
+        let time = Date()
+        let turn = UUID()
+        let user = CoachMessage(date: time, sessionID: session.id, isFromCoach: false, text: text, turnID: turn)
+        // Keep only the read intent in conversation storage. Reload model values on-device when rendering.
+        let answer = CoachMessage(
+            date: time.addingTimeInterval(0.001), sessionID: session.id, isFromCoach: true,
+            text: "我已在设备上查阅这一天的记录。", agentStatus: .succeeded, turnID: turn
+        )
+        answer.deviceReadKindRaw = read.rawValue
+        modelContext.insert(user)
+        modelContext.insert(answer)
+        session.recordUserMessage(text, at: time)
+        do {
+            try modelContext.save()
+            visibility.tailScroll.followState.resumeExplicitly()
+            scrollRequest = UUID()
+            return true
+        } catch {
+            modelContext.rollback()
+            pendingDeletionError = AppErrorMessage.message(for: error, operation: .save)
+            return false
+        }
+    }
+
+    func submitSuggestedRead(_ read: DeviceCoachRead, from reply: CoachMessage) async -> Bool {
+        guard let sessionID = reply.sessionID else { return false }
+        let replyID = reply.id
+        let date = reply.date
+        guard suggestionSession(sessionID: sessionID, replyID: replyID, date: date) != nil else { return false }
+        let dataRevision = insightsRevision.dataRevision
+        let result = try? await read.load(day: date, container: modelContext.container)
+        guard !Task.isCancelled, result?.isAvailable == true, insightsRevision.dataRevision == dataRevision,
+              let session = suggestionSession(sessionID: sessionID, replyID: replyID, date: date)
+        else { return false }
+        return submitDeviceRead(read, text: read.prompt, session: session)
+    }
+
+    private func suggestionSession(sessionID: UUID, replyID: UUID, date: Date) -> ConversationSession? {
+        guard !composer.isPersistingSubmission, !processor.isProcessing,
+              modelContext.container === dataSpace.activeContainer,
+              Calendar.current.isDateInToday(date),
+              let session = conversationSessions.activeSessionReference, session.id == sessionID,
+              Calendar.current.isDateInToday(session.effectiveBusinessDate)
+        else { return nil }
+        var latestTurn = FetchDescriptor<CoachMessage>(predicate: #Predicate { $0.sessionID == sessionID && $0.turnID != nil },
+                                                       sortBy: [SortDescriptor(\.date, order: .reverse)])
+        latestTurn.fetchLimit = 1
+        guard let latest = try? modelContext.fetch(latestTurn).first,
+              latest.id == replyID, latest.isFromCoach, latest.agentStatus == .succeeded
+        else { return nil }
+        return session
+    }
+
     func submitQuestionAnswer(
         _ message: CoachMessage,
         questionID: String,

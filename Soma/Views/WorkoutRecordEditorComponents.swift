@@ -13,8 +13,17 @@ struct WorkoutLogicalGroupsEditor: View {
     var density: WorkoutRecordEditorDensity = .standard
     var showsAddButton = true
 
-    private var runs: [WorkoutLogicalGroupRun] {
-        draft.displayRuns
+    private let runs: [WorkoutLogicalGroupRun]
+
+    init(draft: Binding<WorkoutRecordDraft>, isEditable: Bool, fallbackRestSeconds: Int? = nil,
+         density: WorkoutRecordEditorDensity = .standard, showsAddButton: Bool = true)
+    {
+        _draft = draft
+        runs = draft.wrappedValue.displayRuns
+        self.isEditable = isEditable
+        self.fallbackRestSeconds = fallbackRestSeconds
+        self.density = density
+        self.showsAddButton = showsAddButton
     }
 
     private var resolvedFallbackRest: Int? {
@@ -241,6 +250,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     decimal: false,
                     inline: true,
                     parsesDuration: effort.targetKind == .duration,
+                    defersInput: density == .chatCompact,
                     validRange: effort.targetKind == .duration
                         ? 1 ... 86400
                         : 1 ... 1000
@@ -260,6 +270,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     decimal: true,
                     emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
                     inline: true,
+                    defersInput: density == .chatCompact,
                     validRange: 0 ... 1000
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -380,6 +391,7 @@ struct WorkoutLogicalGroupsEditor: View {
                         decimal: false,
                         prefix: label,
                         inline: true,
+                        defersInput: density == .chatCompact,
                         validRange: 0 ... 3600
                     )
                 } else if let value {
@@ -500,6 +512,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     decimal: false,
                     inline: true,
                     parsesDuration: effort.targetKind == .duration,
+                    defersInput: density == .chatCompact,
                     validRange: effort.targetKind == .duration
                         ? 1 ... 86400
                         : 1 ... 1000
@@ -512,6 +525,7 @@ struct WorkoutLogicalGroupsEditor: View {
                     decimal: true,
                     emptyPrompt: effort.externalWeightKG == 0 ? "自重" : "—",
                     inline: true,
+                    defersInput: density == .chatCompact,
                     validRange: 0 ... 1000
                 )
                 if groupsAreUniform, let rest = inlineRest(for: run) {
@@ -528,6 +542,7 @@ struct WorkoutLogicalGroupsEditor: View {
                         decimal: false,
                         prefix: "间歇",
                         inline: true,
+                        defersInput: density == .chatCompact,
                         validRange: 0 ... 3600
                     )
                 }

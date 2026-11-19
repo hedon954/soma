@@ -43,41 +43,54 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
-    func testExerciseTrendsSwitchUnitsAndOpenSelectedRecordInBothThemes() {
+    func testHistoricalMealBackfillSupportsSkipUndoAndDatedDraft() {
         for appearance in ["light", "dark"] {
-            let app = launch(appearance)
-            openLibrary(app)
-            app.buttons["exercise-category-region-胸部"].tap()
-            let exercise = app.buttons["exercise-link-分类推举"]
-            XCTAssertTrue(exercise.waitForExistence(timeout: 5))
-            exercise.tap()
-            let metric = app.segmentedControls["exercise-trend-metric"]
-            for _ in 0 ..< 8 where !metric.isHittable {
-                app.swipeUp()
+            let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .distantPast
+            let date = Calendar.current.dateComponents([.year, .month, .day], from: yesterday)
+            let visibleDate = "\(date.month ?? 0)月\(date.day ?? 0)日"
+            let app = XCUIApplication()
+            app.launchEnvironment = [
+                "SOMA_UI_TEST_PROCESS": "1", "SOMA_UI_TEST_MEAL_BACKFILL": "1", "SOMA_UI_TEST_APPEARANCE": appearance
+            ]
+            if appearance == "dark" {
+                app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
             }
-            XCTAssertTrue(metric.buttons["容量"].isSelected)
-            let capacityChart = app.descendants(matching: .any)["exercise-capacity-trend"].firstMatch
-            for _ in 0 ..< 3 where capacityChart.frame.midY >= app.tabBars.firstMatch.frame.minY {
-                app.swipeUp()
+            app.launch()
+            let recentMeals = app.buttons["coach-meal-backfill-history"]
+            XCTAssertTrue(recentMeals.waitForExistence(timeout: 15))
+            XCTAssertTrue(recentMeals.label.contains("过去 2 天"))
+            XCTAssertTrue(recentMeals.label.contains("4 餐待补"))
+            keep(app, "meal-backfill-reminder-\(appearance)")
+            recentMeals.tap()
+            let title = app.navigationBars["过去几天的饮食"]
+            XCTAssertTrue(title.waitForExistence(timeout: 5), app.debugDescription)
+            let dinner = app.buttons["记录\(visibleDate)的晚餐"]
+            let skip = app.buttons["标记\(visibleDate)的晚餐没吃"]
+            XCTAssertTrue(dinner.waitForExistence(timeout: 5), app.debugDescription)
+            XCTAssertFalse(app.buttons["记录\(visibleDate)的早餐"].exists)
+            XCTAssertFalse(app.buttons["记录\(visibleDate)的午餐"].exists)
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "核对餐次")).firstMatch.exists)
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "补充热量")).firstMatch.exists)
+            XCTAssertTrue(skip.isHittable)
+            for action in [dinner, skip] {
+                XCTAssertGreaterThanOrEqual(action.frame.width + 0.01, 44)
+                XCTAssertGreaterThanOrEqual(action.frame.height + 0.01, 44)
             }
-            capacityChart.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.42)).tap()
-            let selected = app.descendants(matching: .any)["exercise-trend-selected-record"].firstMatch
-            XCTAssertTrue(selected.waitForExistence(timeout: 5), capacityChart.debugDescription)
-            let chart = app.descendants(matching: .any)["exercise-effort-trend"].firstMatch
-            for (title, unit) in [("重量", "kg"), ("次数", "次"), ("时长", "秒")] {
-                metric.buttons[title].tap()
-                XCTAssertTrue(chart.waitForExistence(timeout: 5))
-                XCTAssertEqual(chart.label, "训练\(title)趋势，单位\(unit)")
-                XCTAssertFalse(selected.exists)
-            }
-            for _ in 0 ..< 3 where chart.frame.midY >= app.tabBars.firstMatch.frame.minY {
-                app.swipeUp()
-            }
-            chart.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.42)).tap()
-            XCTAssertTrue(selected.waitForExistence(timeout: 5), chart.debugDescription)
-            keep(app, "exercise-trend-selection-\(appearance)")
-            selected.tap()
-            XCTAssertTrue(app.staticTexts["训练数据"].waitForExistence(timeout: 5))
+            skip.tap()
+            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: dinner)
+            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+            let undo = app.buttons["撤销\(visibleDate)的晚餐没吃"]
+            XCTAssertTrue(undo.waitForExistence(timeout: 5))
+            undo.tap()
+            XCTAssertTrue(dinner.waitForExistence(timeout: 5))
+            keep(app, "meal-backfill-history-\(appearance)")
+            dinner.tap()
+            let composer = app.textViews["coach-message-input"]
+            let prompt = "帮我记录\(date.year ?? 0)年\(date.month ?? 0)月\(date.day ?? 0)日的晚餐："
+            let draft = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", prompt), object: composer)
+            XCTAssertEqual(XCTWaiter.wait(for: [draft], timeout: 5), .completed)
+            XCTAssertFalse(title.exists)
+            keep(app, "meal-backfill-dated-draft-\(appearance)")
             app.terminate()
         }
     }
@@ -146,6 +159,45 @@ final class LibraryAndMealsUITests: XCTestCase {
             XCTAssertFalse(saveImage.exists)
             app.navigationBars["分享饮食"].buttons["关闭"].tap()
             XCTAssertTrue(share.waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
+    func testExerciseTrendsSwitchUnitsAndOpenSelectedRecordInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance)
+            openLibrary(app)
+            app.buttons["exercise-category-region-胸部"].tap()
+            let exercise = app.buttons["exercise-link-分类推举"]
+            XCTAssertTrue(exercise.waitForExistence(timeout: 5))
+            exercise.tap()
+            let metric = app.segmentedControls["exercise-trend-metric"]
+            for _ in 0 ..< 8 where !metric.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(metric.buttons["容量"].isSelected)
+            let capacityChart = app.descendants(matching: .any)["exercise-capacity-trend"].firstMatch
+            for _ in 0 ..< 3 where capacityChart.frame.midY >= app.tabBars.firstMatch.frame.minY {
+                app.swipeUp()
+            }
+            capacityChart.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.42)).tap()
+            let selected = app.descendants(matching: .any)["exercise-trend-selected-record"].firstMatch
+            XCTAssertTrue(selected.waitForExistence(timeout: 5), capacityChart.debugDescription)
+            let chart = app.descendants(matching: .any)["exercise-effort-trend"].firstMatch
+            for (title, unit) in [("重量", "kg"), ("次数", "次"), ("时长", "秒")] {
+                metric.buttons[title].tap()
+                XCTAssertTrue(chart.waitForExistence(timeout: 5))
+                XCTAssertEqual(chart.label, "训练\(title)趋势，单位\(unit)")
+                XCTAssertFalse(selected.exists)
+            }
+            for _ in 0 ..< 3 where chart.frame.midY >= app.tabBars.firstMatch.frame.minY {
+                app.swipeUp()
+            }
+            chart.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.42)).tap()
+            XCTAssertTrue(selected.waitForExistence(timeout: 5), chart.debugDescription)
+            keep(app, "exercise-trend-selection-\(appearance)")
+            selected.tap()
+            XCTAssertTrue(app.staticTexts["训练数据"].waitForExistence(timeout: 5))
             app.terminate()
         }
     }
