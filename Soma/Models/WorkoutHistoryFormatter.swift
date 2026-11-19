@@ -10,10 +10,14 @@ enum WorkoutHistoryFormatter {
     }
 
     static func text(for sets: [WorkoutSet]) -> String {
+        text(for: completedEvidence(sets), fallbackRestSeconds: nil)
+    }
+
+    static func completedEvidence(_ sets: [WorkoutSet]) -> [WorkoutSetEvidence] {
         let completed = sets
             .filter { $0.status == .completed }
             .sorted { $0.order < $1.order }
-        let evidence = completed.flatMap { set -> [WorkoutSetEvidence] in
+        return completed.flatMap { set -> [WorkoutSetEvidence] in
             let completedEfforts = set.efforts
                 .filter { $0.status == .completed }
                 .sorted { $0.order < $1.order }
@@ -48,7 +52,6 @@ enum WorkoutHistoryFormatter {
                 recordedVideoKind: set.recordedVideoKind
             )]
         }
-        return text(for: evidence, fallbackRestSeconds: nil)
     }
 
     static func text(

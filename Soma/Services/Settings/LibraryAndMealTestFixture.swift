@@ -22,10 +22,20 @@ enum LibraryAndMealTestFixture {
             ("分类未标注", [], [], [])
         ]
         for (name, primary, secondary, patterns) in entries {
-            context.insert(ExerciseDefinition(
+            let definition = ExerciseDefinition(
                 canonicalName: name, primaryMuscles: primary,
                 secondaryMuscles: secondary, movementPatterns: patterns
-            ))
+            )
+            context.insert(definition)
+            if name == "分类推举" {
+                for offset in 1 ... 2 {
+                    guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: day) else { continue }
+                    context.insert(WorkoutEntry(
+                        date: date, exercise: name, exerciseID: definition.id,
+                        setEntries: [.init(reps: 8 + offset, externalWeightKG: 20), .init(durationSeconds: 30 + offset * 5)]
+                    ))
+                }
+            }
         }
     }
 }

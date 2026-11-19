@@ -14,6 +14,9 @@ struct ExerciseDetailView: View {
     @State private var historyLimit = 50
     @State private var historyRevision = 0
     @State private var sourceHasMoreHistory = false
+    @State private var trendMetric: ExerciseTrendMetric = .capacity
+    @State private var selectedCapacityDate: Date?
+    @State private var selectedTrendRecord: UUID?
     @State private var olderHistoryExpanded = false
     @State private var showsContentEditor = false
     @State private var showsMediaEditor = false
@@ -169,12 +172,36 @@ struct ExerciseDetailView: View {
                     }
                     .padding(.vertical, 4)
 
-                    if let latestVolume = historyProjection.latestVolume {
-                        volumeTrendView(
-                            latestVolume: latestVolume,
-                            points: historyProjection.displayedVolumeTrend,
-                            change: historyProjection.volumeChange
+                    Picker("训练趋势", selection: $trendMetric) {
+                        ForEach(ExerciseTrendMetric.allCases) { metric in
+                            Text(metric.rawValue).tag(metric)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("exercise-trend-metric")
+                    .onChange(of: trendMetric) {
+                        selectedCapacityDate = nil
+                        selectedTrendRecord = nil
+                    }
+
+                    if trendMetric == .capacity {
+                        if let latestVolume = historyProjection.latestVolume {
+                            volumeTrendView(
+                                latestVolume: latestVolume,
+                                points: historyProjection.displayedVolumeTrend,
+                                change: historyProjection.volumeChange
+                            )
+                        }
+                    } else {
+                        ExerciseEffortTrends(
+                            metric: trendMetric,
+                            observations: historyProjection.allHistory.prefix(12).map(\.effortObservation),
+                            selectedRecord: $selectedTrendRecord
                         )
+                    }
+                    if let selected = historyProjection.allHistory.first(where: { $0.id == selectedTrendRecord }) {
+                        historyLink(selected)
+                            .accessibilityIdentifier("exercise-trend-selected-record")
                     }
                 } else {
                     Text("完成一次这个动作后，这里会显示最近记录与容量趋势。")
@@ -428,38 +455,43 @@ struct ExerciseDetailView: View {
                     )
                 }
             }
-            if points.count > 1 {
-                Chart(points) { point in
-                    LineMark(
-                        x: .value("日期", point.date),
-                        y: .value("容量", point.volume)
-                    )
-                    .interpolationMethod(.linear)
-                    .lineStyle(
-                        StrokeStyle(
-                            lineWidth: 2.25,
-                            lineCap: .round,
-                            lineJoin: .round
+            if !points.isEmpty {
+                Chart {
+                    ForEach(points) { point in
+                        LineMark(
+                            x: .value("日期", point.date),
+                            y: .value("容量", point.volume)
                         )
-                    )
-                    .foregroundStyle(AppMetricRole.trainingLoad.accent)
-                    PointMark(
-                        x: .value("日期", point.date),
-                        y: .value("容量", point.volume)
-                    )
-                    .symbolSize(34)
-                    .foregroundStyle(AppMetricRole.trainingLoad.accent)
-                    if points.count <= 4 {
+                        .interpolationMethod(.linear)
+                        .lineStyle(
+                            StrokeStyle(
+                                lineWidth: 2.25,
+                                lineCap: .round,
+                                lineJoin: .round
+                            )
+                        )
+                        .foregroundStyle(AppMetricRole.trainingLoad.accent)
                         PointMark(
                             x: .value("日期", point.date),
                             y: .value("容量", point.volume)
                         )
-                        .foregroundStyle(.clear)
-                        .annotation(position: .top) {
-                            Text(number(point.volume))
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                        .symbolSize(34)
+                        .foregroundStyle(AppMetricRole.trainingLoad.accent)
+                        if points.count <= 4 {
+                            PointMark(
+                                x: .value("日期", point.date),
+                                y: .value("容量", point.volume)
+                            )
+                            .foregroundStyle(.clear)
+                            .annotation(position: .top) {
+                                Text(number(point.volume))
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                    }
+                    if let selected = points.first(where: { $0.id == selectedTrendRecord }) {
+                        RuleMark(x: .value("选中日期", selected.date)).foregroundStyle(AppTheme.tint)
                     }
                 }
                 .chartXAxis {
@@ -472,9 +504,20 @@ struct ExerciseDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .chartXSelection(value: $selectedCapacityDate)
+                .chartGesture { proxy in
+                    SpatialTapGesture().onEnded { proxy.selectXValue(at: $0.location.x) }
+                }
+                .onChange(of: selectedCapacityDate) {
+                    guard trendMetric == .capacity else { return }
+                    selectedTrendRecord = selectedCapacityDate.flatMap { date in
+                        points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }?.id
+                    }
+                }
                 .frame(height: 150)
                 .accessibilityLabel("最近有效训练容量趋势")
                 .accessibilityValue(volumeTrendAccessibilityValue(points))
+                .accessibilityIdentifier("exercise-capacity-trend")
             }
         }
     }
@@ -636,6 +679,14 @@ private struct ExerciseHistoryItem: Identifiable {
         case let .legacy(value): ExerciseQuickFill.text(for: value)
         case let .session(value): value.summary
         }
+    }
+
+    var effortObservation: ExerciseEffortObservation {
+        let efforts: [WorkoutSetEvidence] = switch source {
+        case let .legacy(value): value.setEntries
+        case let .session(value): WorkoutHistoryFormatter.completedEvidence(value.sets)
+        }
+        return .init(id: id, date: date, efforts: efforts)
     }
 
     var volume: Double? {
