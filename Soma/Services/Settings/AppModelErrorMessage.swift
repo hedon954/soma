@@ -29,7 +29,7 @@ extension AppErrorMessage {
         let unsupported = ["unknown variant", "unsupported", "not support", "doesn't support", "not allowed", "不支持"]
             .contains(where: text.contains)
         if unsupported, text.contains("video_url") || text.contains("video input") || text.contains("不支持视频") {
-            return "当前模型不支持这次视频输入，未能完成分析。请更换支持视频或图片的模型后重试；原视频仍保留。"
+            return "当前模型不支持这次视频输入，未能完成分析。请更换支持完整视频的模型后重试；原视频仍保留。"
         }
         if unsupported, text.contains("image_url") || text.contains("image input") || text.contains("vision") {
             return "当前模型不支持图片分析。请在设置中更换支持图片的模型后重试；原附件仍保留。"

@@ -5,49 +5,29 @@ import XCTest
 
 @MainActor
 final class VideoFrameFallbackTests: XCTestCase {
-    func testExplicitVideoRejectionRetriesOnceWithFramesOnOriginalMessage() async throws {
+    func testExplicitVideoRejectionKeepsOriginalAndNeverRetriesWithFrames() async throws {
         let url = try await SyntheticVideoFixture.make()
         defer { try? FileManager.default.removeItem(at: url) }
-        let data = try Data(contentsOf: url)
-        let answer = try Self.chunk("根据提供的画面，可以观察静态姿态。")
-        var requests: [ChatCompletionParameters] = []
-        let service = AIService(apiKeyOverride: "fixture", agentStreamLoader: { parameters, _, _, _ in
-            requests.append(parameters)
-            let attempt = requests.count
-            return AsyncThrowingStream { continuation in
-                if attempt == 1 {
-                    continuation.finish(throwing: APIError.responseUnsuccessful(
-                        description: "unknown variant `video_url`, expected `text`, `image_url`, `file`",
-                        statusCode: 400
-                    ))
-                } else {
-                    continuation.yield(answer)
-                    continuation.finish()
-                }
-            }
+        let original = try Data(contentsOf: url)
+        var count = 0
+        let service = AIService(apiKeyOverride: "fixture", agentStreamLoader: { _, _, _, _ in
+            count += 1
+            throw APIError.responseUnsuccessful(description: "unsupported video_url", statusCode: 400)
         })
-        var messages = [
-            ChatCompletionParameters.Message(role: .user, content: .text("先前虚构视频")),
-            .init(role: .assistant, content: .text("已收到")),
-            .init(role: .user, content: service.agentUserContent(prompt: "对比姿态", images: [Data([1, 2])], maximumImageCount: 12))
-        ]
-        let outcome = try await service.consumeAgentStepWithRetry(
-            messages: &messages,
-            request: request(videos: [.init(data: data, mimeType: "video/mp4", messageIndex: 0)]),
-            trace: nil
-        )
-        XCTAssertEqual(requests.count, 2)
-        XCTAssertEqual(outcome.mediaMode, .keyframes)
-        let body = try json(requests[1])
-        let encodedMessages = try XCTUnwrap(body["messages"] as? [[String: Any]])
-        let oldParts = try XCTUnwrap(encodedMessages[0]["content"] as? [[String: Any]])
-        XCTAssertEqual(oldParts.filter { $0["type"] as? String == "image_url" }.count, 8)
-        let currentParts = try XCTUnwrap(encodedMessages[2]["content"] as? [[String: Any]])
-        XCTAssertEqual(currentParts.filter { $0["type"] as? String == "image_url" }.count, 1)
-        XCTAssertEqual(try Data(contentsOf: url), data)
+        var messages = [ChatCompletionParameters.Message(role: .user, content: .text("虚构视频"))]
+        do {
+            _ = try await service.consumeAgentStepWithRetry(messages: &messages, request: request(videos: [
+                .init(data: original, mimeType: "video/mp4")
+            ]), trace: nil)
+            XCTFail("Unsupported video should require a compatible model")
+        } catch let StreamingFailure.interrupted(error, _, _, _) {
+            XCTAssertEqual(error as? ConversationMediaPreparationError, .nativeVideoUnsupported)
+        }
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(try Data(contentsOf: url), original)
     }
 
-    func testOnlyExplicitVideoTypeRejectionsAllowFallback() {
+    func testOnlyExplicitVideoTypeRejectionsAreClassifiedAsUnsupported() {
         let unsupported = "unknown variant `video_url`, expected `text`, `image_url`"
         for status in [400, 415, 422] {
             XCTAssertTrue(VideoInputRejection.isExplicit(APIError.responseUnsuccessful(description: unsupported, statusCode: status)))
@@ -135,7 +115,7 @@ final class VideoFrameFallbackTests: XCTestCase {
                                                             request: request(videos: [.init(data: Data([1]), mimeType: "video/mp4")]), trace: nil)
             XCTFail("Invalid video must fail explicitly")
         } catch let StreamingFailure.interrupted(error, _, _, _) {
-            XCTAssertTrue(error is VideoFrameFallbackError)
+            XCTAssertEqual(error as? ConversationMediaPreparationError, .nativeVideoUnsupported)
         }
         XCTAssertEqual(count, 1)
         let cancelled = Task {
@@ -150,31 +130,7 @@ final class VideoFrameFallbackTests: XCTestCase {
         }
     }
 
-    func testFallbackCheckpointAndRepeatedStepsDoNotDuplicateImages() async throws {
-        let answer = try Self.chunk("虚构画面结果")
-        var requests: [ChatCompletionParameters] = []
-        let service = AIService(apiKeyOverride: "fixture", agentStreamLoader: { parameters, _, _, _ in
-            requests.append(parameters)
-            return AsyncThrowingStream { continuation in continuation.yield(answer); continuation.finish() }
-        })
-        let state = AgentVideoFallbackState(isActive: true)
-        state.frames = [.init(frames: (0 ..< 8).map { Data([UInt8($0 + 1)]) }, timestampsSeconds: (0 ..< 8).map { Double($0) * 1.96 / 7 }, durationSeconds: 2)]
-        var streamRequest = request(videos: [.init(data: Data([3]), mimeType: "video/mp4")])
-        streamRequest.videoFallbackState = state
-        var activations = 0
-        streamRequest.onVideoFallback = { activations += 1 }
-        var messages = [ChatCompletionParameters.Message(role: .user, content: .text("虚构视频"))]
-        for _ in 0 ..< 2 {
-            let result = try await service.consumeAgentStepWithRetry(messages: &messages, request: streamRequest, trace: nil)
-            XCTAssertEqual(result.mediaMode, .keyframes)
-        }
-        XCTAssertEqual(activations, 1)
-        for parameters in requests {
-            let body = try json(parameters)
-            let items = try XCTUnwrap(body["messages"] as? [[String: Any]])
-            let parts = try XCTUnwrap(items[0]["content"] as? [[String: Any]])
-            XCTAssertEqual(parts.filter { $0["type"] as? String == "image_url" }.count, 8)
-        }
+    func testLegacyFrameModeCheckpointStillDecodes() throws {
         var checkpoint = AgentLoopCheckpoint.empty
         checkpoint.videoInputMode = .keyframes
         let restored = try JSONDecoder().decode(AgentLoopCheckpoint.self, from: JSONEncoder().encode(checkpoint))
@@ -189,10 +145,6 @@ final class VideoFrameFallbackTests: XCTestCase {
                          baseURL: "https://fixture.invalid/v1", model: "fixture", reason: "test"),
             apiKey: "fixture", userPrompt: "分析虚构视频", textItemID: UUID()
         )
-    }
-
-    private func json(_ parameters: ChatCompletionParameters) throws -> [String: Any] {
-        try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(parameters)) as? [String: Any])
     }
 
     private static func chunk(_ text: String) throws -> ChatCompletionChunkObject {

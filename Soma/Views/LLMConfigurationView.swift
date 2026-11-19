@@ -274,7 +274,7 @@ struct LLMConfigurationView: View {
             Image(systemName: capabilityIcon)
                 .foregroundStyle(capabilityColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text(selectedCapability.label)
+                Text(selectedCapabilityAssessment.directVideoSupport == true ? "支持完整视频输入" : selectedCapability.label)
                     .font(.footnote)
                     .foregroundStyle(
                         selectedCapability == .unsupported

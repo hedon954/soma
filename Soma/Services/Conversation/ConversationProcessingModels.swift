@@ -13,12 +13,30 @@ struct ConversationProcessingContext {
 
 enum ConversationMediaPreparationError: LocalizedError {
     case attachmentPersistenceFailed
+    case attachmentUnavailable
+    case historicalAttachmentUnavailable
+    case imageLimitExceeded
+    case historicalImageLimitExceeded
     case fullVideoUnavailable
+    case nativeVideoUnsupported
+    case nativeVideoCapabilityUnverified
 
     var errorDescription: String? {
         switch self {
         case .attachmentPersistenceFailed:
             "附件未能完整保存到本机，请检查存储空间后重试"
+        case .attachmentUnavailable:
+            "本次发送的图片或视频有一项无法从本机读取。请在待处理列表移除这条任务，再重新选择原件发送。"
+        case .historicalAttachmentUnavailable:
+            "找不到这次引用的历史图片或视频。请在待处理列表移除这条任务，再重新选择原件发送。"
+        case .imageLimitExceeded:
+            "本次选中的图片过多。请在待处理列表移除这条任务，再分次发送。"
+        case .historicalImageLimitExceeded:
+            "这次引用的图片超出了单轮上限。请在待处理列表移除这条任务，再指出要查看的哪一张或分次发送。"
+        case .nativeVideoUnsupported:
+            "当前模型不支持完整视频分析。视频仍保存在本机，请切换支持视频的模型后重试"
+        case .nativeVideoCapabilityUnverified:
+            "当前模型目录未确认支持完整视频。视频仍保存在本机，请在「LLM 配置」中选择标明支持视频输入的模型后重试。"
         case .fullVideoUnavailable:
             "视频已保存在本机，但未能准备完整视频。请确认模型支持视频，并尝试体积更小的可播放文件后重试"
         }
@@ -72,9 +90,9 @@ struct PreparedConversationMedia: Sendable {
     var videos: [AgentVideoInput] = []
     var imageCount: Int
     var videoCount: Int
-    var failedVideoCount: Int = 0
     var mode: AgentMediaMode = .text
     var preparationMilliseconds: Int = 0
+    var preparationFailure: ConversationMediaPreparationError?
 
     var hasVideo: Bool {
         videoCount > 0

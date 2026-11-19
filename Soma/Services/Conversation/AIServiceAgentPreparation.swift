@@ -37,31 +37,34 @@ struct PreparedAgentRun {
     var completedOperationCount: Int
     var clearedHistoryFrames: Bool
     var maxSteps: Int
-    var requiresVideoFrames: Bool
 }
 
 extension AIService {
     func prepareAgentRun(
         _ request: AgentRunPreparationRequest
-    ) throws -> PreparedAgentRun {
+    ) async throws -> PreparedAgentRun {
+        let hasVideo = request.hasVideo || !request.videos.isEmpty || request.history.contains { !$0.videos.isEmpty }
         let routing = try resolvedRoute(
             requested: request.checkpoint?.route ?? request.requestedRoute,
             text: request.text,
             hasMedia: !request.images.isEmpty || request.history.contains { !$0.images.isEmpty || !$0.videos.isEmpty },
-            hasVideo: request.hasVideo || request.history.contains { !$0.videos.isEmpty }
+            hasVideo: hasVideo
         )
         let route = routing.route
-        let assessment = modelMultimodalAssessment(
+        var assessment = modelMultimodalAssessment(
             provider: route.provider,
             baseURL: route.baseURL,
             model: route.model
         )
-        let support = assessment.support
         let historicalImageCount = request.history.reduce(0) { $0 + $1.images.count }
-        if request.history.contains(where: \.videoPreparationFailed) {
-            throw ConversationMediaPreparationError.fullVideoUnavailable
+        if let failure = request.history.lazy.compactMap(\.mediaPreparationFailure).first {
+            throw failure
         }
         let historicalVideoCount = request.history.reduce(0) { $0 + $1.videos.count }
+        if hasVideo {
+            assessment = try await requireNativeVideoCapability(assessment, route: route, apiKey: routing.apiKey)
+        }
+        let support = assessment.support
         let hasVisualInput = historicalVideoCount > 0 || !request.images.isEmpty
             || !request.videos.isEmpty
             || historicalImageCount > 0
@@ -178,9 +181,33 @@ extension AIService {
             checkpointBatches: batches,
             completedOperationCount: request.checkpoint?.lastCompletedStep ?? 0,
             clearedHistoryFrames: false,
-            maxSteps: maxSteps,
-            requiresVideoFrames: assessment.directVideoSupport == false
+            maxSteps: maxSteps
         )
+    }
+
+    private func requireNativeVideoCapability(
+        _ cached: MultimodalCapabilityAssessment,
+        route: AIModelRoute,
+        apiKey: String
+    ) async throws -> MultimodalCapabilityAssessment {
+        var assessment = cached
+        if assessment.support != .unsupported, assessment.directVideoSupport == nil {
+            do {
+                let models = try await fetchAvailableModels(provider: route.provider, baseURL: route.baseURL, apiKey: apiKey)
+                assessment = models.first(where: { $0.id == route.model })?.multimodalAssessment ?? .unknown
+            } catch AIServiceError.invalidResponse {
+                throw ConversationMediaPreparationError.nativeVideoCapabilityUnverified
+            } catch let error as ModelRequestFailure where [404, 405, 501].contains(error.statusCode) {
+                throw ConversationMediaPreparationError.nativeVideoCapabilityUnverified
+            }
+        }
+        if assessment.support == .unsupported || assessment.directVideoSupport == false {
+            throw ConversationMediaPreparationError.nativeVideoUnsupported
+        }
+        guard ModelCapability.directVideoCapability(assessment: assessment) != nil else {
+            throw ConversationMediaPreparationError.nativeVideoCapabilityUnverified
+        }
+        return assessment
     }
 
     func makeAgentCheckpoint(

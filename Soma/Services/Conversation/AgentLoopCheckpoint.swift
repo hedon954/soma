@@ -90,6 +90,23 @@ struct AgentLoopCheckpoint: Codable, Equatable, Sendable {
             : AgentToolExposurePolicy.toolNames(for: groups)
     }
 
+    func releasingRouteAfterVideoRejection(_ error: Error) -> Self? {
+        guard route != nil, lastCompletedStep == 0, observations.isEmpty, assistantPassages.isEmpty,
+              toolBatches?.isEmpty != false else { return nil }
+        let failure: ConversationMediaPreparationError?
+        if case let StreamingFailure.interrupted(underlying, _, _, receivedMeaningfulDelta) = error {
+            guard !receivedMeaningfulDelta else { return nil }
+            failure = underlying as? ConversationMediaPreparationError
+        } else {
+            failure = error as? ConversationMediaPreparationError
+        }
+        guard failure == .nativeVideoUnsupported || failure == .nativeVideoCapabilityUnverified else { return nil }
+        var checkpoint = self
+        checkpoint.route = nil
+        checkpoint.extraConfigJSON = nil
+        return checkpoint
+    }
+
     static let empty = AgentLoopCheckpoint(
         lastCompletedStep: 0,
         assistantPassages: [],
@@ -165,7 +182,8 @@ struct AgentConversationExchange: Sendable {
     var assistantText: String?
     var images: [Data]
     var videos: [AgentVideoInput] = []
-    var videoPreparationFailed = false
+    var referencedImageOrdinal: Int?
+    var mediaPreparationFailure: ConversationMediaPreparationError?
     var imageAttachmentCount: Int
     var videoAttachmentCount: Int
 

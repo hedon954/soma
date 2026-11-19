@@ -23,7 +23,7 @@ extension AIService {
         trace: ((AgentTraceEvent) -> Void)? = nil,
         execute: (AgentToolCall) async throws -> AgentToolResult
     ) async throws -> AgentOutcome {
-        let prepared = try prepareAgentRun(AgentRunPreparationRequest(
+        let prepared = try await prepareAgentRun(AgentRunPreparationRequest(
             text: text,
             images: images,
             videos: videos,
@@ -41,9 +41,6 @@ extension AIService {
             historySummary: historySummary
         ))
         let videos = prepared.videos
-        let videoFallback = AgentVideoFallbackState(
-            isActive: checkpoint?.videoInputMode == .keyframes || prepared.requiresVideoFrames
-        )
         let selectedRoute = prepared.selectedRoute
         let provider = selectedRoute.provider
         let model = selectedRoute.model
@@ -73,7 +70,6 @@ extension AIService {
             checkpoint.extraConfigJSON = prepared.extraConfigJSON
             checkpoint.initialInput = prepared.modelInput
             checkpoint.route = selectedRoute
-            checkpoint.videoInputMode = videoFallback.isActive ? .keyframes : nil
             onCheckpoint?(checkpoint)
         }
 
@@ -141,7 +137,7 @@ extension AIService {
                     historyExchangeCount: history.count,
                     historicalImageCount: historicalImageCount,
                     directVideoCount: videos.count,
-                    mediaMode: videoFallback.isActive ? .keyframes : initialMediaMode(
+                    mediaMode: initialMediaMode(
                         images: images,
                         videos: videos,
                         hasVideo: hasVideo
@@ -158,14 +154,6 @@ extension AIService {
                     )
                 )
 
-                var fallbackCheckpoint = makeAgentCheckpoint(
-                    completedOperationCount: completedOperationCount, assistantPassages: assistantPassages,
-                    state: toolState, nextModelStep: currentModelStep, batches: checkpointBatches
-                )
-                fallbackCheckpoint.extraConfigJSON = prepared.extraConfigJSON
-                fallbackCheckpoint.initialInput = prepared.modelInput
-                fallbackCheckpoint.route = selectedRoute
-                fallbackCheckpoint.videoInputMode = .keyframes
                 let streamedStep = try await executeAgentModelStep(
                     messages: &toolState.messages,
                     request: AgentModelStepExecutionRequest(
@@ -187,9 +175,7 @@ extension AIService {
                             assistantReasoningByMessageIndex: toolState
                                 .assistantReasoningByMessageIndex,
                             enforceFirstStepDeadline: firstStepDeadlineEnabled
-                                && currentModelStep == 1,
-                            videoFallbackState: videoFallback,
-                            onVideoFallback: { onCheckpoint?(fallbackCheckpoint) }
+                                && currentModelStep == 1
                         ),
                         history: history,
                         checkpointWasProvided: checkpoint != nil,

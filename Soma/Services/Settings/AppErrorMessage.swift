@@ -52,6 +52,9 @@ enum AppErrorMessage {
         if let content = error as? TrainingContentError {
             return content.errorDescription ?? operation.fallback
         }
+        if let media = error as? ConversationMediaPreparationError {
+            return media.errorDescription ?? AppErrorOperation.media.fallback
+        }
         if error is CancellationError {
             return "操作已取消，需要时可以重新开始。"
         }
@@ -157,7 +160,9 @@ enum AppErrorMessage {
             "远程模型当前请求过多。请稍后重试。"
         case "provider_context_exceeded":
             "这次内容超过远程模型可处理的长度。请减少附件或分开发送后重试。"
-        case "provider_vision_unsupported", "direct_video_unsupported":
+        case "direct_video_unsupported":
+            "远程模型暂不支持完整视频分析。原视频已保留，请换用支持完整视频的模型后重试。"
+        case "provider_vision_unsupported":
             "远程模型暂不支持这次图片或视频输入。请减少附件或改用文字补充，并在设置中反馈模型能力问题；原附件仍保留。"
         case "video_fallback_unavailable", "full_video_unavailable":
             "视频未能转换为可分析的输入。原视频仍保留，请减少视频数量、重新选择可播放文件，或更换支持完整视频的模型。"

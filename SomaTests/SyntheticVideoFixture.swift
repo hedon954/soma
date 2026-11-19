@@ -3,9 +3,10 @@ import XCTest
 
 /// Synthetic solid-color video. No camera or user media is used.
 enum SyntheticVideoFixture {
-    static func make() async throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("fixture-\(UUID().uuidString).mp4")
-        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+    static func make(quickTime: Bool = false) async throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("fixture-\(UUID().uuidString)")
+            .appendingPathExtension(quickTime ? "mov" : "mp4")
+        let writer = try AVAssetWriter(outputURL: url, fileType: quickTime ? .mov : .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 128,

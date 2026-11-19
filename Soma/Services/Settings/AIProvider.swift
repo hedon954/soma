@@ -212,10 +212,6 @@ enum ModelCapability {
     static func directVideoCapability(
         assessment: MultimodalCapabilityAssessment
     ) -> DirectVideoCapability? {
-        guard assessment.support != .unsupported, assessment.directVideoSupport != false else { return nil }
-        return DirectVideoCapability(
-            maximumRawBytes: 7 * 1024 * 1024,
-            preferredMIMEType: "video/mp4"
-        )
+        supportsDirectVideo(assessment: assessment) ? .standard : nil
     }
 }

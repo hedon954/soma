@@ -91,8 +91,13 @@ final class ConversationContextProjectionTests: XCTestCase {
             hasCurrentMedia: false,
             exchanges: exchanges
         ), [exchanges[1].turnID, exchanges[2].turnID])
-        XCTAssertTrue(HistoricalMediaSelectionPolicy.selectedTurnIDs(
+        XCTAssertEqual(HistoricalMediaSelectionPolicy.selectedTurnIDs(
             currentText: "比较上一张",
+            hasCurrentMedia: true,
+            exchanges: exchanges
+        ), [exchanges[2].turnID])
+        XCTAssertTrue(HistoricalMediaSelectionPolicy.selectedTurnIDs(
+            currentText: "比较这两张新照片",
             hasCurrentMedia: true,
             exchanges: exchanges
         ).isEmpty)

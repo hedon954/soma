@@ -21,27 +21,21 @@ extension ConversationProcessingService {
         let hasVideo = job.mediaAttachments.contains { $0.kind == .video }
         var capabilities = hasVideo ? try await client.capabilities() : nil
         var supportsDirectVideo = capabilities?.directVideo == true
-        var supportsFrameFallback = capabilities?.videoFrameFallback == true
-        if hasVideo, !supportsDirectVideo, !supportsFrameFallback {
+        if hasVideo, !supportsDirectVideo {
             throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程服务暂不支持视频分析。请更新远程服务，或关闭远程执行后使用本机的模型配置重试。")
         }
         let media = await prepareStoredMedia(
             job.mediaAttachments,
             frameLimit: Self.maximumAnalysisImageCount,
-            directVideoCapability: supportsDirectVideo || supportsFrameFallback
+            directVideoCapability: supportsDirectVideo
                 ? DirectVideoCapability(
                     maximumRawBytes: 7 * 1024 * 1024,
                     preferredMIMEType: "video/mp4"
                 )
                 : nil
         )
-        if media.failedVideoCount > 0,
-           media.videos.count != media.videoCount
-        {
-            throw RemoteAgentError.server(
-                code: "full_video_unavailable",
-                message: "完整视频准备失败，请使用体积更小的可播放视频后重试。"
-            )
+        if let failure = media.preparationFailure {
+            throw failure
         }
         let resolution = GymLocationResolver.resolve(
             text: userMessage.text,
@@ -61,16 +55,15 @@ extension ConversationProcessingService {
                 .selectedHistoricalTurnIDs,
             context: context
         )
-        if preparedHistory.history.contains(where: \.videoPreparationFailed) {
-            throw ConversationMediaPreparationError.fullVideoUnavailable
+        if let failure = preparedHistory.mediaPreparationFailure {
+            throw failure
         }
         if preparedHistory.history.contains(where: { !$0.videos.isEmpty }), capabilities == nil {
             capabilities = try await client.capabilities()
             supportsDirectVideo = capabilities?.directVideo == true
-            supportsFrameFallback = capabilities?.videoFrameFallback == true
         }
         if preparedHistory.history.contains(where: { !$0.videos.isEmpty }),
-           !supportsDirectVideo, !supportsFrameFallback
+           !supportsDirectVideo
         {
             throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程模型未开启完整视频输入。")
         }
@@ -97,7 +90,8 @@ extension ConversationProcessingService {
         } else {
             nil
         }
-        let agentContext = [persistentContext, weatherGuidance]
+        let labelEvidence = await NutritionLabelRecognition.context(for: media.frames, history: preparedHistory.history)
+        let agentContext = [persistentContext, weatherGuidance, labelEvidence]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
@@ -134,17 +128,6 @@ extension ConversationProcessingService {
             )
         )
         modelInput.envelope.tools = configuration.tools
-        if supportsFrameFallback {
-            do {
-                modelInput = try await AgentModelVideoFallbackPreparation.adding(to: modelInput)
-            } catch {
-                try Task.checkCancellation()
-                if !supportsDirectVideo {
-                    throw error
-                }
-            }
-        }
-        let usesFrames = !supportsDirectVideo && modelInput.envelope.videoFallbacks?.isEmpty == false
         if job.contextSnapshot?.remoteCanonicalFrames == nil,
            let currentFrame = modelInput.envelope.messages.last,
            currentFrame.role == .user
@@ -156,7 +139,7 @@ extension ConversationProcessingService {
         }
         return PreparedRemoteAgentSubmission(
             modelInput: modelInput,
-            mediaMode: usesFrames ? .keyframes : media.mode,
+            mediaMode: preparedHistory.history.contains(where: { !$0.videos.isEmpty }) ? .directVideo : media.mode,
             historyExchangeCount: preparedHistory.history.count,
             compactionSummary: compaction.didUpdate ? compaction.summary : nil,
             compactionStrategy: compaction.strategy

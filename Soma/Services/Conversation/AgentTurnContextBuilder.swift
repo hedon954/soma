@@ -38,7 +38,8 @@ enum AgentTurnContextBuilder {
         let selectedTurnIDs = HistoricalMediaSelectionPolicy.selectedTurnIDs(
             currentText: userText,
             hasCurrentMedia: hasCurrentMedia,
-            exchanges: projection.exchanges
+            exchanges: projection.exchanges,
+            archived: projection.evictedExchanges
         )
         return AgentTurnContextEnvelope(
             trustedTime: TrustedTurnContext.make(

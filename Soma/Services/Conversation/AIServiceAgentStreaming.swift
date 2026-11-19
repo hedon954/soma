@@ -37,8 +37,6 @@ struct AgentStreamStepRequest {
     var reasoningItemID: UUID = .init()
     var assistantReasoningByMessageIndex: [Int: String] = [:]
     var enforceFirstStepDeadline: Bool = false
-    var videoFallbackState: AgentVideoFallbackState?
-    var onVideoFallback: (() -> Void)?
 }
 
 struct AgentModelStepExecutionRequest {
@@ -186,43 +184,8 @@ extension AIService {
     ) async throws -> AgentStreamOutcome {
         var requestAttempt = 0
         var transientRetryCount = 0
-        var activeVideos = request.videos
-        let fallbackState = request.videoFallbackState ?? AgentVideoFallbackState()
-        var mediaMode = initialMediaMode(
-            images: request.images,
-            videos: activeVideos,
-            hasVideo: request.hasVideo
-        )
+        let mediaMode = initialMediaMode(images: request.images, videos: request.videos, hasVideo: request.hasVideo)
         while true {
-            if fallbackState.isActive, !activeVideos.isEmpty {
-                do {
-                    let frames: [VideoFrameSet]
-                    if let cached = fallbackState.frames {
-                        frames = cached
-                    } else {
-                        frames = try await VideoFrameFallbackPreparer.prepare(activeVideos)
-                        fallbackState.frames = frames
-                    }
-                    if !fallbackState.appliedToMessages {
-                        messages = try AgentVideoFrameProjection.applying(frames, videos: activeVideos, to: messages)
-                        fallbackState.appliedToMessages = true
-                        request.onVideoFallback?()
-                        let at = Date()
-                        trace?(.span(AgentTraceSpan(
-                            step: request.step, kind: .model,
-                            title: "改用 \(frames.reduce(0) { $0 + $1.frames.count }) 张画面分析",
-                            status: .succeeded, startedAt: at, endedAt: at,
-                            metadata: AgentTraceText.jsonObject([
-                                "media_mode": "keyframes", "fallback_reason": "video_input_unsupported"
-                            ])
-                        )))
-                    }
-                    activeVideos = []
-                    mediaMode = .keyframes
-                } catch {
-                    throw StreamingFailure.interrupted(error, passage: "", reasoning: "", receivedMeaningfulDelta: false)
-                }
-            }
             requestAttempt += 1
             do {
                 var streamed = try await consumeAgentStream(
@@ -235,7 +198,7 @@ extension AIService {
                         parallelToolCalls: true,
                         streamOptions: .init(includeUsage: true)
                     ),
-                    videos: activeVideos,
+                    videos: request.videos,
                     mediaMode: mediaMode,
                     route: request.route,
                     apiKey: request.apiKey,
@@ -248,7 +211,6 @@ extension AIService {
                 )
                 streamed.requestAttempt = requestAttempt
                 streamed.mediaMode = mediaMode
-                streamed.fallbackReason = mediaMode == .keyframes ? "video_input_unsupported" : nil
                 return streamed
             } catch let StreamingFailure.interrupted(
                 error,
@@ -256,11 +218,11 @@ extension AIService {
                 reasoning,
                 receivedMeaningfulDelta
             ) {
-                if !receivedMeaningfulDelta, !activeVideos.isEmpty, !fallbackState.isActive,
-                   VideoInputRejection.isExplicit(error)
-                {
-                    fallbackState.isActive = true
-                    continue
+                if !request.videos.isEmpty, VideoInputRejection.isExplicit(error) {
+                    throw StreamingFailure.interrupted(
+                        ConversationMediaPreparationError.nativeVideoUnsupported,
+                        passage: passage, reasoning: reasoning, receivedMeaningfulDelta: receivedMeaningfulDelta
+                    )
                 }
                 guard !receivedMeaningfulDelta,
                       transientRetryCount < maximumRetryCount,

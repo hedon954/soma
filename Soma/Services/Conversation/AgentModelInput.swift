@@ -123,7 +123,10 @@ enum AgentModelInputBuilder {
 
         for (exchangeIndex, exchange) in history.enumerated() {
             let scope = exchange.turnID.map { "turn-" + $0.uuidString.lowercased() } ?? "history-\(exchangeIndex)"
-            var mediaIDs = exchange.images.indices.map { "\(scope)-image-\($0)" }
+            var mediaIDs = exchange.images.indices.map { index in
+                let originalIndex = exchange.referencedImageOrdinal.map { $0 - 1 } ?? index
+                return "\(scope)-image-\(originalIndex)"
+            }
             media.append(contentsOf: zip(mediaIDs, exchange.images).map {
                 .image(id: $0.0, data: $0.1)
             })

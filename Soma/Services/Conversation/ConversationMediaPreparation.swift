@@ -1,9 +1,15 @@
 import Foundation
+import ImageIO
 
 struct PreparedAgentHistory {
     var projection: ConversationContextProjection
     var history: [AgentConversationExchange]
     var preparationMilliseconds: Int
+    var missingReferencedTurn = false
+
+    var mediaPreparationFailure: ConversationMediaPreparationError? {
+        missingReferencedTurn ? .historicalAttachmentUnavailable : history.lazy.compactMap(\.mediaPreparationFailure).first
+    }
 }
 
 extension ConversationProcessingService {
@@ -24,59 +30,56 @@ extension ConversationProcessingService {
         frameLimit: Int,
         directVideoCapability: DirectVideoCapability? = .standard
     ) async -> PreparedConversationMedia {
-        var frameGroups: [[Data]] = []
-        var imageCount = 0
+        var images: [Data] = []
+        let imageAttachments = attachments.filter { $0.kind == .image }
         let videoAttachments = attachments.filter { $0.kind == .video }
         let videoCount = videoAttachments.count
-        var failedVideoCount = 0
-        for attachment in attachments {
-            switch attachment.kind {
-            case .none, .video:
+        let imageLimit = max(0, frameLimit)
+        var failure: ConversationMediaPreparationError? = imageAttachments.count > imageLimit ? .imageLimitExceeded : nil
+        for attachment in imageAttachments.prefix(imageLimit) {
+            guard let url = MediaStore.url(at: attachment.path), let data = try? Data(contentsOf: url),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0
+            else {
+                failure = .attachmentUnavailable
                 continue
-            case .image:
-                guard let url = MediaStore.url(at: attachment.path) else {
-                    continue
-                }
-                if let data = try? Data(contentsOf: url) {
-                    frameGroups.append([data])
-                    imageCount += 1
-                }
             }
+            images.append(data)
         }
         var videos: [AgentVideoInput] = []
-        if let directVideoCapability, !videoAttachments.isEmpty {
+        if failure == nil, let directVideoCapability {
             for attachment in videoAttachments {
-                guard let url = MediaStore.url(at: attachment.path),
-                      let input = await DirectVideoPreparer.input(
-                          for: url,
-                          capability: directVideoCapability
-                      )
-                else {
-                    videos = []
+                guard let url = MediaStore.url(at: attachment.path) else {
+                    failure = .attachmentUnavailable
+                    break
+                }
+                guard let input = await DirectVideoPreparer.input(for: url, capability: directVideoCapability) else {
+                    failure = .fullVideoUnavailable
                     break
                 }
                 videos.append(input)
             }
         }
-        if videos.count != videoCount {
-            failedVideoCount = videoCount
+        if failure == nil, videos.count != videoCount {
+            failure = .nativeVideoUnsupported
+        }
+        if failure != nil {
             videos = []
         }
         let mode: AgentMediaMode = if !videos.isEmpty {
             .directVideo
-        } else if imageCount > 0 {
+        } else if !images.isEmpty {
             .images
         } else {
             .text
         }
         return PreparedConversationMedia(
             attachments: attachments,
-            frames: balancedFrames(from: frameGroups, limit: frameLimit),
+            frames: images,
             videos: videos,
-            imageCount: imageCount,
+            imageCount: imageAttachments.count,
             videoCount: videoCount,
-            failedVideoCount: failedVideoCount,
-            mode: mode
+            mode: mode,
+            preparationFailure: failure
         )
     }
 
@@ -99,27 +102,5 @@ extension ConversationProcessingService {
             model: route.model
         )
         return assessment.support == .unsupported ? nil : .standard
-    }
-
-    private nonisolated func balancedFrames(
-        from groups: [[Data]],
-        limit: Int
-    ) -> [Data] {
-        guard limit > 0 else { return [] }
-        var result: [Data] = []
-        var index = 0
-        while result.count < limit {
-            var appended = false
-            for group in groups where index < group.count {
-                result.append(group[index])
-                appended = true
-                if result.count == limit {
-                    return result
-                }
-            }
-            guard appended else { break }
-            index += 1
-        }
-        return result
     }
 }

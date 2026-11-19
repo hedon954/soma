@@ -227,6 +227,7 @@ export class ProtocolError extends Error {
       | "provider_vision_unsupported"
       | "provider_configuration_invalid"
       | "video_fallback_unavailable"
+      | "direct_video_unsupported"
       | "provider_timeout"
       | "waiting_for_device"
       | "tool_schema_unsupported"

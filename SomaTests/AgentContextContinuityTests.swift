@@ -4,13 +4,13 @@ import XCTest
 
 @MainActor
 final class AgentContextContinuityTests: XCTestCase {
-    func testFrozenInputSurvivesNewHistoryAndChangedPersona() throws {
+    func testFrozenInputSurvivesNewHistoryAndChangedPersona() async throws {
         let suite = "AgentContextContinuityTests.\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         ReActPromptSection.role.save("旧人格", in: defaults)
         let ai = AIService(defaults: defaults, apiKeyOverride: "fixture-key")
-        let original = try ai.prepareAgentRun(request(text: "第一轮"))
+        let original = try await ai.prepareAgentRun(request(text: "第一轮"))
         var checkpoint = AgentLoopCheckpoint.empty
         checkpoint.initialInput = original.modelInput
         checkpoint.route = original.selectedRoute
@@ -18,12 +18,12 @@ final class AgentContextContinuityTests: XCTestCase {
         var resumedRequest = request(text: "不应改写原始输入", checkpoint: checkpoint)
         resumedRequest.history = [AgentConversationExchange(userText: "新增历史", assistantText: "新答案",
                                                             images: [], imageAttachmentCount: 0, videoAttachmentCount: 0)]
-        let resumed = try ai.prepareAgentRun(resumedRequest)
+        let resumed = try await ai.prepareAgentRun(resumedRequest)
         XCTAssertEqual(resumed.modelInput, original.modelInput)
         XCTAssertEqual(resumed.selectedRoute, original.selectedRoute)
         XCTAssertTrue(resumed.modelInput.messages[0].text.contains("旧人格"))
         XCTAssertFalse(resumed.modelInput.messages[0].text.contains("新人格"))
-        let fresh = try ai.prepareAgentRun(request(text: "下一轮"))
+        let fresh = try await ai.prepareAgentRun(request(text: "下一轮"))
         XCTAssertTrue(fresh.modelInput.messages[0].text.contains("新人格"))
     }
 

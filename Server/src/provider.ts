@@ -247,6 +247,9 @@ export class OpenAICompatibleManagedProvider implements ManagedModelProvider {
         if (!response.ok) {
           const description = await boundedProviderError(response);
           if (usesDirectVideo && !useFrames && explicitlyRejectsVideo(response.status, description)) {
+            if (manifests.length === 0) {
+              throw new ProtocolError("direct_video_unsupported", "当前模型不支持完整视频分析。请切换模型后重试。", 422);
+            }
             fallbackMap = checkedFallbackMedia(manifests, media, videoIDs);
             usesDirectVideo = false;
             useFrames = true;
