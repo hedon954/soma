@@ -9,9 +9,11 @@ struct MealBackfillView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var textSize
+    @Environment(\.coachTabIsActive) private var isCoachTabActive
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var meals: [MealEntry]
     @Query private var evidence: [EnergyContextEntry]
-    @AppStorage("mealBackfill.hiddenDay") private var hiddenDay = 0.0
+    @State private var isReminderDismissed = false
     @State private var showsHistory = false
     @State private var expandedDays: [Date: Bool] = [:]
     @State private var undo: MealBackfillTarget?
@@ -40,7 +42,7 @@ struct MealBackfillView: View {
             let days = coverage(at: LibraryAndMealTestFixture.reminderTime(timeline.date))
             if isCoach {
                 if Calendar.current.isDate(day, inSameDayAs: timeline.date),
-                   hiddenDay != day.timeIntervalSinceReferenceDate,
+                   !isReminderDismissed,
                    !days.isEmpty || undo != nil
                 {
                     reminder(days)
@@ -56,6 +58,19 @@ struct MealBackfillView: View {
                     }
                 }
             }
+        }
+        .onChange(of: isCoachTabActive) { _, isActive in
+            if isActive {
+                isReminderDismissed = false
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                isReminderDismissed = false
+            }
+        }
+        .onChange(of: day) {
+            isReminderDismissed = false
         }
         .alert("饮食记录未更新", isPresented: Binding(get: { error != nil }, set: {
             if !$0 {
@@ -100,18 +115,20 @@ struct MealBackfillView: View {
     private func reminder(_ days: [DayCoverage]) -> some View {
         let history = days.filter { $0.date != day }
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Label("补记饮食", systemImage: "fork.knife")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.mealEmphasis)
-                Spacer()
-                Button {
-                    hiddenDay = day.timeIntervalSinceReferenceDate
-                } label: {
-                    Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44)
+            if !days.isEmpty {
+                HStack {
+                    Label("补记饮食", systemImage: "fork.knife")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.mealEmphasis)
+                    Spacer()
+                    Button {
+                        isReminderDismissed = true
+                    } label: {
+                        Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭补餐提醒")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("今天先不提醒")
             }
             if let today = days.first(where: { $0.date == day }) {
                 dayRows(today)

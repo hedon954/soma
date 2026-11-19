@@ -16,4 +16,4 @@
 
 0.0.37 的回归见 [BUG 0072 · 营养表列归属](../bugs/0072-nutrition-label-obscured-column.md)、[BUG 0073 · 建议可用性](../bugs/0073-stale-coach-next-actions.md)、[BUG 0074 · 重量校正的实际来源](../bugs/0074-stale-workout-weight-correction.md)和 [BUG 0075 · 仅补记缺失餐次](../bugs/0075-already-recorded-meals-in-backfill.md)。
 
-PRD 082 的补餐输入回归见 [BUG 0076 · 点击记录后界面超时](../bugs/0076-meal-backfill-keyboard-watchdog.md)。
+PRD 082 的补餐输入回归见 [BUG 0076 · 键盘焦点循环](../bugs/0076-meal-backfill-keyboard-watchdog.md)，提醒重进回归见 [BUG 0077 · 关闭提醒的生效范围](../bugs/0077-meal-backfill-dismissal-lifetime.md)。

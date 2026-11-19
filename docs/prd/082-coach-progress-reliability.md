@@ -2,7 +2,7 @@
 
 - 状态：已实现，模拟器验证通过，真机验收见技术方案
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)
-- 下游落地：[ADR 0152](../adr/0152-coach-progress-reliability.md)、[ADR 0153](../adr/0153-agent-daily-energy-read.md)、[BUG 0069](../bugs/0069-batch-record-rendering.md)、[BUG 0072](../bugs/0072-nutrition-label-obscured-column.md)、[BUG 0073](../bugs/0073-stale-coach-next-actions.md)、[BUG 0074](../bugs/0074-stale-workout-weight-correction.md)、[BUG 0075](../bugs/0075-already-recorded-meals-in-backfill.md)、[BUG 0076](../bugs/0076-meal-backfill-keyboard-watchdog.md)
+- 下游落地：[ADR 0152](../adr/0152-coach-progress-reliability.md)、[ADR 0153](../adr/0153-agent-daily-energy-read.md)、[BUG 0069](../bugs/0069-batch-record-rendering.md)、[BUG 0072](../bugs/0072-nutrition-label-obscured-column.md)、[BUG 0073](../bugs/0073-stale-coach-next-actions.md)、[BUG 0074](../bugs/0074-stale-workout-weight-correction.md)、[BUG 0075](../bugs/0075-already-recorded-meals-in-backfill.md)、[BUG 0076](../bugs/0076-meal-backfill-keyboard-watchdog.md)、[BUG 0077](../bugs/0077-meal-backfill-dismissal-lifetime.md)
 - 日期：2026-11-18
 - 版本：0.0.37（构建 41），基线为 0.0.36（构建 40）
 - 现行约束：[PRD 000](000-origin-through-0.0.11.md)、[PRD 081](081-training-energy-in-total.md)、[ADR 0000](../adr/0000-origin-through-0.0.11.md)、[ADR 0151](../adr/0151-training-energy-in-total.md)
@@ -96,7 +96,7 @@
 - 今天会话顶部固定一张紧凑提示卡，「补记饮食」和餐具图标使用饮食语义绿。默认回顾前 **3 个自然日**，最多 9 个历史餐次。更早日期可从进展的缺记录说明或日期选择进入补记入口。
 - 今天先按保守时点提示已过时段的空餐次，首版建议早餐 **10:30**、午餐 **15:00**、晚餐 **20:30**。页面回前台、跨过时点或餐次状态变化后重新判断。时点只影响提示，统计使用记录事实。今天在午后缺两餐时，同一张卡显示「早餐」「午餐」两行，每行保留「记录」「没吃」。
 - 晚上 8 点打开教练，午餐已有记录而早餐缺失时，今天只提示早餐。昨天三餐都空时显示三条，昨天只缺晚餐时显示一条。历史补记按日期最多三条，一个全齐的日期直接收起。
-- 历史缺项默认收起。标题例如「补记过去几天的饮食」，副信息显示「3 天 · 9 餐待补」。点击「查看」打开按日期倒序分组的原生列表，先展开最近一天；其他日期显示缺项计数，可按需展开。今天与历史共用同一张卡。关闭可隐藏到本地次日，日期和进展入口仍可补记。
+- 历史缺项默认收起。标题例如「补记过去几天的饮食」，副信息显示「3 天 · 9 餐待补」。点击「查看」打开按日期倒序分组的原生列表，先展开最近一天；其他日期显示缺项计数，可按需展开。今天与历史共用同一张卡。「×」只收起本次提醒。切回教练、从后台回来或重新打开 App 后，只要仍有待补餐次就再次显示。全部补齐后收起提醒。日期和进展入口仍可补记。
 - 「记录」保留用户的现有草稿和附件，经用户选择后把「帮我记录 11 月 15 日的早餐：」填入今天会话的输入框，并聚焦。日期和餐次作为绑定意图保留。用户可补文字、从相册选图或拍照，点击发送后才写入。
 - 「没吃」一次只作用于指定日期和餐次，提供撤销，列表即时更新。全部处理后自然收起。历史与当天复用操作。记录、没吃和撤销按钮各自至少有 44 × 44 点的触达范围，无障碍标签包含日期和餐次。提醒限于 App 内。
 

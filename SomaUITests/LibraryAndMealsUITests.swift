@@ -129,6 +129,53 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
+    func testMealBackfillReturnsOnReentryUntilAllDueMealsAreResolved() {
+        let app = XCUIApplication()
+        app.launchEnvironment = [
+            "SOMA_UI_TEST_PROCESS": "1",
+            "SOMA_UI_TEST_MEAL_BACKFILL": "1",
+            "SOMA_UI_TEST_APPEARANCE": "dark",
+            "SOMA_UI_PERFORMANCE_FIXTURE": "long-stream-production-completion",
+            "SOMA_UI_PERFORMANCE_FAST_STREAM": "1"
+        ]
+        app.launch()
+        let close = app.buttons["关闭补餐提醒"]
+        let breakfast = app.buttons["记录今天的早餐"]
+        XCTAssertTrue(breakfast.waitForExistence(timeout: 15))
+        close.tap()
+        XCTAssertTrue(breakfast.waitForNonExistence(timeout: 5))
+        app.tabBars.buttons["进展"].tap()
+        app.tabBars.buttons["教练"].tap()
+        XCTAssertTrue(breakfast.waitForExistence(timeout: 5))
+
+        close.tap()
+        XCTAssertTrue(breakfast.waitForNonExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(breakfast.waitForExistence(timeout: 5))
+        app.buttons["标记今天的早餐没吃"].tap()
+
+        app.buttons["coach-meal-backfill-history"].tap()
+        let calendar = Calendar.current
+        for (daysAgo, meals) in [(1, ["晚餐"]), (2, ["早餐", "午餐", "晚餐"])] {
+            guard let day = calendar.date(byAdding: .day, value: -daysAgo, to: .now) else {
+                XCTFail("无法构造补餐测试日期")
+                return
+            }
+            let date = "\(calendar.component(.month, from: day))月\(calendar.component(.day, from: day))日"
+            for meal in meals {
+                let skip = app.buttons["标记\(date)的\(meal)没吃"]
+                XCTAssertTrue(skip.waitForExistence(timeout: 5))
+                skip.tap()
+            }
+        }
+        app.navigationBars["过去几天的饮食"].buttons["完成"].tap()
+        XCTAssertFalse(close.exists)
+        app.tabBars.buttons["进展"].tap()
+        app.tabBars.buttons["教练"].tap()
+        XCTAssertFalse(close.exists)
+    }
+
     func testSendingThreePhotosFromTheFocusedComposerAfterAgentReply() {
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()
@@ -140,9 +187,7 @@ final class LibraryAndMealsUITests: XCTestCase {
                 "SOMA_UI_PERFORMANCE_FIXTURE": "long-stream-production-completion",
                 "SOMA_UI_PERFORMANCE_FAST_STREAM": "1"
             ]
-            app.launchArguments = [
-                "-conversation.locationPreference", "disabled", "-agent.remote.enabled", "NO", "-mealBackfill.hiddenDay", "0"
-            ]
+            app.launchArguments = ["-conversation.locationPreference", "disabled", "-agent.remote.enabled", "NO"]
             app.launch()
             let phase = app.descendants(matching: .any)["performance-fixture-phase"]
             let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "completed"), object: phase)

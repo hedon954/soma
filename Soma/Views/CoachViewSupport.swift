@@ -14,9 +14,8 @@ enum CoachSheet: Identifiable {
     }
 }
 
-/// 教练 Tab 是否为当前选中项。由 RootView 写入一次布尔环境值，只有实时转写
-/// 观察者和激活滚底驱动这两枚叶子读取；教练子树的其余部分不因 Tab 切换重算，
-/// `@Query` 也不会随选中态变化重建。
+/// 教练 Tab 是否为当前选中项。由 RootView 写入布尔环境值，由需要追踪激活态的
+/// 局部视图读取，避免让整个教练会话随 Tab 切换重算。
 private struct CoachTabIsActiveKey: EnvironmentKey {
     static let defaultValue = true
 }
