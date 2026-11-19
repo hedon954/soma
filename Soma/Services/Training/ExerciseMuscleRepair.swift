@@ -55,7 +55,7 @@
         var merges: [Merge]? = nil
 
         static var planURL: URL {
-            URL.applicationSupportDirectory.appending(path: "exercise-muscle-repair-20261119.json")
+            URL.temporaryDirectory.appending(path: "soma-exercise-muscle-repair-plan.json", directoryHint: .notDirectory)
         }
 
         static func load() throws -> Self {
