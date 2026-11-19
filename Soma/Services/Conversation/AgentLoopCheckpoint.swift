@@ -149,6 +149,41 @@ struct AgentCheckpointToolBatch: Codable, Equatable, @unchecked Sendable {
     var isComplete: Bool {
         completedResults.count == calls.count
     }
+
+    /// Keep confirmed results at the front so the normal checkpoint resume executes only pending saves.
+    func reopeningRecordSaveFailures(observations: [AgentObservation]) -> (Self, AgentPartialRecordSave)? {
+        guard isComplete else { return nil }
+        let saveFailures = completedResults.filter {
+            !$0.result.ok && $0.result.code == "save_failed" && $0.result.retryable == true && $0.call.action.name.isRecordCreation
+        }
+        guard !saveFailures.isEmpty else { return nil }
+        let saved = observations.filter { $0.result.ok && $0.action.name.isRecordCreation }
+        let recordCount = Set(saved.flatMap { $0.result.recordRefs ?? [] }.map(\.identityKey)).count
+        guard recordCount > 0 else { return nil }
+        let savedSignatures = Set(saved.map(\.action.signature))
+        let failures = saveFailures.filter { !savedSignatures.contains($0.call.action.signature) }
+        guard !failures.isEmpty else { return nil }
+        let failedIDs = Set(failures.map(\.call.id))
+        var pending = self
+        pending.completedResults.removeAll { failedIDs.contains($0.call.id) }
+        pending.calls = pending.completedResults.map(\.call) + failures.map(\.call)
+        return (pending, AgentPartialRecordSave(savedCount: recordCount, failedOperationCount: failures.count))
+    }
+}
+
+struct AgentPartialRecordSave: LocalizedError, Equatable {
+    let savedCount: Int
+    let failedOperationCount: Int
+
+    var errorDescription: String? {
+        "已保存 \(savedCount) 条记录，\(failedOperationCount) 项保存未完成。轻点「重试」继续未完成的保存。"
+    }
+}
+
+private extension AgentToolName {
+    var isRecordCreation: Bool {
+        self == .createWorkout || self == .createMeal
+    }
 }
 
 struct AgentCheckpointObservation: Codable, Equatable, Sendable {

@@ -5,6 +5,90 @@ import XCTest
 
 final class AgentReActLoopTests: XCTestCase {
     @MainActor
+    func testOnlySuccessfulMutationsDeduplicateBeforeAndAfterRestoringCheckpoint() async throws {
+        let service = AIService(apiKeyOverride: "test-key")
+        let action = AgentToolCall(name: .createMeal, arguments: .init())
+        let first = AgentCheckpointToolCall(id: "first", argumentsJSON: "{}", action: action)
+        let failure = AgentToolResult.failure("饮食记录未保存，请重试。", code: "save_failed")
+        let batch = AgentCheckpointToolBatch(modelStep: 1, modelOperationStep: 1, passage: "", calls: [first], completedResults: [
+            .init(step: 2, call: first, result: failure)
+        ])
+        for restoresCheckpoint in [false, true] {
+            var state = AgentToolLoopState(messages: [], tools: [])
+            var executions = 0
+            if restoresCheckpoint {
+                service.restoreCheckpointBatches([batch], state: &state)
+            } else {
+                let failed = try await service.applyResolvedToolCall(native: first.native, call: action, step: 2, state: &state, execute: { _ in
+                    executions += 1
+                    return failure
+                }, trace: nil)
+                XCTAssertFalse(failed.ok)
+            }
+            let retry = AgentCheckpointToolCall(id: "retry", argumentsJSON: "{}", action: action)
+            let saved = try await service.applyResolvedToolCall(native: retry.native, call: action, step: 3, state: &state, execute: { _ in
+                executions += 1
+                return .success("已保存", recordType: .meal)
+            }, trace: nil)
+            XCTAssertEqual(saved.recordType, .meal)
+            let duplicate = AgentCheckpointToolCall(id: "duplicate", argumentsJSON: "{}", action: action)
+            _ = try await service.applyResolvedToolCall(native: duplicate.native, call: action, step: 4, state: &state, execute: { _ in
+                XCTFail("成功写入只执行一次")
+                return .failure("重复执行")
+            }, trace: nil)
+            XCTAssertEqual(executions, restoresCheckpoint ? 1 : 2)
+        }
+    }
+
+    @MainActor
+    func testPartialRecordSaveRetriesOnlyTheFailedCreation() async throws {
+        let initialTransport = MockAgentStreamTransport(responses: [
+            .toolCalls([
+                ("create_meal", #"{"title":"虚构早餐"}"#),
+                ("create_meal", #"{"title":"虚构午餐"}"#)
+            ])
+        ])
+        let firstService = AIService(apiKeyOverride: "test-key", agentStreamLoader: initialTransport.load)
+        firstService.configure(provider: .openAI, baseURL: "https://example.com/v1", model: "gpt-4.1-mini")
+        let record = AgentRecordReference(recordType: "meal", recordID: 42, title: "虚构午餐")
+        var checkpoint: AgentLoopCheckpoint?
+        var attempted: [String] = []
+        do {
+            _ = try await firstService.runAgent(text: "帮我记两餐虚构饮食", images: [], hasVideo: false, context: "测试上下文",
+                                                onCheckpoint: { checkpoint = $0 })
+            { call in
+                attempted.append(call.arguments.title ?? "")
+                if call.arguments.title == "虚构早餐" {
+                    return .failure("饮食记录未保存，请重试。", code: "save_failed")
+                }
+                return .success("午餐已保存", recordRefs: [record], recordType: .meal)
+            }
+            XCTFail("部分保存应等待用户主动重试")
+        } catch let failure as AgentPartialRecordSave {
+            XCTAssertEqual(failure, .init(savedCount: 1, failedOperationCount: 1))
+            XCTAssertEqual(LLMOutageClassifier.disposition(for: failure), try .waitForUser(message: XCTUnwrap(failure.errorDescription)))
+        }
+        XCTAssertEqual(attempted, ["虚构早餐", "虚构午餐"])
+        let persisted = try JSONDecoder().decode(AgentLoopCheckpoint.self, from: JSONEncoder().encode(XCTUnwrap(checkpoint)))
+        XCTAssertEqual(persisted.toolBatches?.last?.completedResults.first?.result.recordRefs, [record])
+        XCTAssertEqual(persisted.toolBatches?.last?.calls.last?.action.arguments.title, "虚构早餐")
+
+        let retryTransport = MockAgentStreamTransport(responses: [.text(["早餐和午餐都已保存。"])])
+        let retryService = AIService(apiKeyOverride: "test-key", agentStreamLoader: retryTransport.load)
+        retryService.configure(provider: .openAI, baseURL: "https://example.com/v1", model: "gpt-4.1-mini")
+        attempted = []
+        let outcome = try await retryService.runAgent(text: "帮我记两餐虚构饮食", images: [], hasVideo: false, context: "测试上下文",
+                                                      checkpoint: persisted)
+        { call in
+            attempted.append(call.arguments.title ?? "")
+            return .success("早餐已保存", recordRefs: [.init(recordType: "meal", recordID: 43, title: "虚构早餐")], recordType: .meal)
+        }
+        XCTAssertEqual(attempted, ["虚构早餐"])
+        XCTAssertEqual(outcome.observations.compactMap { $0.result.recordRefs?.first?.recordID }, [42, 43])
+        XCTAssertEqual(retryTransport.requests.count, 1)
+    }
+
+    @MainActor
     func testInternalDraftIsMovedToReasoningBeforeFinalAnswerRetry() async throws {
         let suiteName = "SomaTests.internal-draft.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

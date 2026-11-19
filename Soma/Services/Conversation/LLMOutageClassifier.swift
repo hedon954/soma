@@ -34,7 +34,10 @@ enum LLMOutageClassifier {
     ]
 
     static func disposition(for error: Error) -> LLMFailureDisposition {
-        disposition(for: signal(for: error))
+        if let partial = error as? AgentPartialRecordSave, let summary = partial.errorDescription {
+            return .waitForUser(message: summary)
+        }
+        return disposition(for: signal(for: error))
     }
 
     static func disposition(for signal: LLMFailureSignal) -> LLMFailureDisposition {

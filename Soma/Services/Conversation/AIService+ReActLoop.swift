@@ -73,6 +73,13 @@ extension AIService {
             onCheckpoint?(checkpoint)
         }
 
+        func pauseForRecordSaveRetry(batchIndex: Int) throws {
+            guard let (pending, error) = checkpointBatches[batchIndex].reopeningRecordSaveFailures(observations: toolState.observations) else { return }
+            checkpointBatches[batchIndex] = pending
+            persistCheckpoint(nextModelStep: pending.modelStep)
+            throw error
+        }
+
         persistCheckpoint(nextModelStep: currentModelStep)
         do {
             if let pendingBatchIndex = checkpointBatches.indices.last,
@@ -109,6 +116,7 @@ extension AIService {
                         : pendingModelStep
                     persistCheckpoint(nextModelStep: nextStep)
                 }
+                try pauseForRecordSaveRetry(batchIndex: pendingBatchIndex)
                 currentModelStep = pendingModelStep + 1
             }
 
@@ -300,6 +308,7 @@ extension AIService {
                         : currentModelStep
                     persistCheckpoint(nextModelStep: nextStep)
                 }
+                try pauseForRecordSaveRetry(batchIndex: batchIndex)
                 if let outcome = try completeQuestionIfNeeded(observations: toolState.observations, trace: trace) {
                     return outcome
                 }
@@ -382,6 +391,7 @@ extension AIService {
 
         let result: AgentToolResult
         let wasDeduplicated: Bool
+        let mutationSignature = call.name.isMutation ? call.signature : nil
         do {
             if let preflightResult {
                 result = preflightResult
@@ -398,8 +408,8 @@ extension AIService {
             } else if call.name == .proposeTrainingSchedule {
                 result = try await execute(call)
                 wasDeduplicated = false
-            } else if call.name.isMutation,
-                      !state.executedMutations.insert(call.signature).inserted
+            } else if let mutationSignature,
+                      state.executedMutations.contains(mutationSignature)
             {
                 result = .success("相同写入操作已经执行，本次重复调用已忽略。")
                 wasDeduplicated = true
@@ -415,7 +425,11 @@ extension AIService {
             } else {
                 result = try await execute(call)
                 wasDeduplicated = false
-                if !call.name.isMutation {
+                if let mutationSignature {
+                    if result.ok {
+                        state.executedMutations.insert(mutationSignature)
+                    }
+                } else {
                     state.executedReads[call.signature] = result
                 }
             }
@@ -524,7 +538,9 @@ extension AIService {
                     result: result
                 ))
                 if call.name.isMutation {
-                    state.executedMutations.insert(call.signature)
+                    if result.ok {
+                        state.executedMutations.insert(call.signature)
+                    }
                 } else if call.name != .loadSkill {
                     state.executedReads[call.signature] = result
                 }
