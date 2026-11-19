@@ -18,6 +18,7 @@ final class WorkoutShareUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = "1"
+        app.launchEnvironment["SOMA_UI_WORKOUT_SHARE_MUSCLES"] = "1"
         app.launchEnvironment["SOMA_UI_TEST_APPEARANCE"] = appearance
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 15))

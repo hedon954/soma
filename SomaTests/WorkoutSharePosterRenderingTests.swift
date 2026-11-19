@@ -110,7 +110,7 @@ final class WorkoutSharePosterRenderingTests: XCTestCase {
         return WorkoutSharePosterModel(
             dateText: "2026.09.05 周六", title: "下肢力量训练", focusMuscles: ["股四头肌", "臀大肌"],
             durationText: "约 35 分 38 秒", volumeValue: "5,840", exerciseCount: exerciseCount, completedSets: 22,
-            estimatedCalories: 187, intensities: [.quadriceps: 5, .calves: 5],
+            estimatedCalories: 187, intensities: [.quadriceps: 5, .hamstring: 5, .adductors: 2.2, .gluteal: 2.2],
             exercises: rows.map { name, summary, sets in
                 WorkoutSharePosterModel.ExerciseLine(id: UUID(), name: name, setCount: sets, loadGroups: summary.components(separatedBy: "；"))
             }

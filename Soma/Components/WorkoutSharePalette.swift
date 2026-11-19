@@ -9,5 +9,6 @@ enum WorkoutSharePalette {
     static let cardRule = Color(white: 0.90)
     static let groupSurface = Color(white: 0.965)
     static let hero = Color(red: 1, green: 0.71, blue: 0.21)
-    static let activeMuscle = Color(red: 0.89, green: 0.29, blue: 0)
+    static let activeMuscle = Color(red: 0.86, green: 0.25, blue: 0)
+    static let secondaryMuscle = activeMuscle.opacity(0.60)
 }

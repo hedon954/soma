@@ -24,6 +24,15 @@ enum ProgressHistoryTestFixture {
                 ])
             }
             context.insert(profile)
+            let shareExercise: ExerciseDefinition? = if ProcessInfo.processInfo.environment["SOMA_UI_WORKOUT_SHARE_MUSCLES"] == "1" {
+                ExerciseDefinition(canonicalName: "虚构深蹲", primaryMuscles: ["股四头肌", "臀大肌"],
+                                   secondaryMuscles: ["内收肌", "腘绳肌"])
+            } else {
+                nil
+            }
+            if let shareExercise {
+                context.insert(shareExercise)
+            }
             for offset in -90 ... 0 {
                 let day = calendar.date(byAdding: .day, value: offset, to: today)!
                 context.insert(MealEntry(
@@ -37,7 +46,9 @@ enum ProgressHistoryTestFixture {
                 ))
                 context.insert(confirmation)
                 if offset.isMultiple(of: 3) {
-                    context.insert(WorkoutEntry(date: day, exercise: "虚构深蹲", sets: 5, reps: 5, weight: 40, restSeconds: 60))
+                    let workout = WorkoutEntry(date: day, exercise: "虚构深蹲", exerciseID: shareExercise?.id, sets: 5, reps: 5, weight: 40, restSeconds: 60)
+                    workout.exerciseDefinition = shareExercise
+                    context.insert(workout)
                 }
                 if offset.isMultiple(of: 7) || offset == -90 {
                     context.insert(BodyEntry(date: day, weight: 70 + Double(abs(offset)) / 100, bodyFat: 18, waist: 80))

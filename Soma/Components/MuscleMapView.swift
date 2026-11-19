@@ -230,7 +230,7 @@ struct MuscleMapView: View {
             if structural || intensity <= 0 {
                 return Color.white.opacity(structural ? 0.6 : 0.4)
             }
-            return WorkoutSharePalette.activeMuscle.opacity(intensity < 0.55 ? 0.48 : 1)
+            return intensity < 0.55 ? WorkoutSharePalette.secondaryMuscle : WorkoutSharePalette.activeMuscle
         }
         if structural {
             return Color.secondary.opacity(0.16)
