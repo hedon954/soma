@@ -34,20 +34,37 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         XCTAssertEqual(day.days.first?.recordedEnergyDifference, 1064.5)
         let caption = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: day))
         XCTAssertEqual(caption.metricLabel, "已记饮食差额")
-        XCTAssertTrue(caption.detail.contains("尚未确认饮食完整"))
+        XCTAssertTrue(caption.detail.contains("有餐次待补"))
         let period = snapshot(.week, [meal(9, 1200)], confirmsFood: false)
         XCTAssertNil(try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: period)).kilocalories)
     }
 
-    func testWeekAndMonthSumSameDayPairsAndExcludeTodayFutureAndUnmatchedDays() throws {
+    func testLegacyAssignedMainMealsCountWithoutAnExtraConfirmation() throws {
+        let recorded = [
+            meal(8, 350, type: .breakfast), meal(8, 600, type: .lunch),
+            meal(8, 640, type: .dinner), meal(8, 100, type: .snack),
+            meal(9, 350, type: .breakfast), meal(9, 600, type: .lunch), meal(9, 100, type: .snack),
+            meal(10, 350, type: .breakfast), meal(10, nil, type: .lunch), meal(10, 640, type: .dinner)
+        ]
+        for period in [ProgressPeriod.week, .month] {
+            let facts = snapshot(period, recorded, confirmsFood: false)
+            let result = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: facts))
+            XCTAssertEqual(try XCTUnwrap(result.kilocalories), 574.5, accuracy: 0.001)
+            XCTAssertEqual(result.includedDayCount, 1)
+            XCTAssertNil(facts.days.first { $0.date == date(9) }?.estimatedEnergyDeficit)
+            XCTAssertNil(facts.days.first { $0.date == date(10) }?.estimatedEnergyDeficit)
+        }
+    }
+
+    func testWeekAndMonthSumSameDayPairsAndIncludeCompleteTodayAndExcludeFutureAndUnmatchedDays() throws {
         for period in [ProgressPeriod.week, .month] {
             // 静息所需体重直到 8 日才存在；7 日只有摄入，9 日只有消耗。
             let facts = snapshot(period, [meal(7, 1000), meal(8, 2000), meal(10, 100), meal(11, 9000)], weightDay: 8)
             let result = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: facts))
-            XCTAssertEqual(try XCTUnwrap(result.kilocalories), 264.5, accuracy: 0.001)
-            XCTAssertEqual(result.includedDayCount, 1)
-            XCTAssertEqual(result.eligibleDayCount, period == .week ? 3 : 9)
-            XCTAssertTrue(result.detail.contains("截至昨日"))
+            XCTAssertEqual(try XCTUnwrap(result.kilocalories), 2429, accuracy: 0.001)
+            XCTAssertEqual(result.includedDayCount, 2)
+            XCTAssertEqual(result.eligibleDayCount, period == .week ? 4 : 10)
+            XCTAssertTrue(result.detail.contains("含今日估算"))
         }
     }
 
@@ -68,9 +85,9 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         XCTAssertEqual(noProfile.days.first?.energyDeficitMissingReason, "缺少消耗估算")
         let monday = snapshot(.week, [meal(7, 2000)], now: date(7, hour: 12))
         let empty = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: monday))
-        XCTAssertNil(empty.kilocalories)
-        XCTAssertEqual(empty.eligibleDayCount, 0)
-        XCTAssertEqual(empty.detail, "暂无已结束日期")
+        XCTAssertNotNil(empty.kilocalories)
+        XCTAssertEqual(empty.eligibleDayCount, 1)
+        XCTAssertTrue(empty.detail.contains("含今日估算"))
         let future = snapshot(.day, [meal(11, 2000)], anchor: date(11))
         XCTAssertNil(future.days.first?.estimatedEnergyDeficit)
         XCTAssertNil(try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: future)).kilocalories)
@@ -151,7 +168,11 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         )
     }
 
-    private func meal(_ day: Int, _ calories: Double?, partial: Bool = false) -> ProgressHistoryRecord {
+    private func meal(_ day: Int, _ calories: Double?, partial: Bool = false, type: MealType? = nil) -> ProgressHistoryRecord {
+        if let type {
+            return .init(activity: .init(id: UUID(), kind: .meal, date: date(day), title: "虚构餐食", detail: type.rawValue, metric: nil),
+                         calories: calories, caloriesArePartial: partial)
+        }
         var value = record(day, .meal, calories: calories)
         value.caloriesArePartial = partial
         return value

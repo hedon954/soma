@@ -5,7 +5,7 @@ import SwiftUI
 struct DailyActivityScope: ViewModifier {
     @Environment(DataSpaceController.self) private var dataSpace
     @Environment(\.scenePhase) private var scenePhase
-    @State private var activity = DailyActivitySyncCoordinator()
+    @State private var activity = Self.makeActivityCoordinator()
     @State private var bodyMass = BodyMassSyncCoordinator()
     @State private var energy = EnergyRefreshCoordinator()
 
@@ -17,7 +17,15 @@ struct DailyActivityScope: ViewModifier {
             .task {
                 await activity.prepare()
                 updateContext()
+                #if DEBUG
+                    if ProgressActivityRetryFixture.isRequested {
+                        await activity.connect()
+                    }
+                #endif
             }
+        #if DEBUG
+            .task { await ProgressActivityRetryFixture.listenForFailure() }
+        #endif
             .onDisappear {
                 activity.setContext(space: dataSpace.activeSpace, foreground: false)
                 bodyMass.setContext(space: dataSpace.activeSpace, foreground: false)
@@ -44,6 +52,15 @@ struct DailyActivityScope: ViewModifier {
             }
     }
 
+    private static func makeActivityCoordinator() -> DailyActivitySyncCoordinator {
+        #if DEBUG
+            if let fixture = ProgressActivityRetryFixture.makeCoordinator() {
+                return fixture
+            }
+        #endif
+        return DailyActivitySyncCoordinator()
+    }
+
     private func updateContext() {
         let container = dataSpace.activeSpace == .personal ? dataSpace.personalContainer : dataSpace.demoContainer
         energy.bind(context: container?.mainContext, foreground: scenePhase == .active)
@@ -51,7 +68,12 @@ struct DailyActivityScope: ViewModifier {
         activity.bind(context: personalContext)
         bodyMass.bind(context: personalContext)
         bodyMass.setEnabled(activity.isEnabled)
-        activity.setContext(space: dataSpace.activeSpace, foreground: scenePhase == .active)
+        #if DEBUG
+            let activityForeground = scenePhase == .active || ProgressActivityRetryFixture.isRequested
+        #else
+            let activityForeground = scenePhase == .active
+        #endif
+        activity.setContext(space: dataSpace.activeSpace, foreground: activityForeground)
         bodyMass.setContext(space: dataSpace.activeSpace, foreground: scenePhase == .active)
     }
 }

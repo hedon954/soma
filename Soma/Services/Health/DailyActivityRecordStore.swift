@@ -25,14 +25,15 @@ enum DailyActivityRecordStore {
                 var query = FetchDescriptor<WorkoutEntry>(predicate: #Predicate { $0.projectionKey == key })
                 query.fetchLimit = 1
                 let existing = try context.fetch(query).first
+                let stored = existing?.dailyActivity
                 var merged = DailyActivitySummary(key: summary.key, winningSource: summary.winningSource)
                 for kind in DailyActivityMetricKind.allCases {
                     let metric = summary[kind]
                     merged[kind] = [.loading, .failed].contains(metric.availability)
-                        ? existing?.dailyActivity?[kind] ?? DailyActivityMetric() : metric
+                        ? stored?[kind] ?? DailyActivityMetric() : metric
                 }
                 if merged.winningSource == nil {
-                    merged.winningSource = existing?.dailyActivity?.winningSource ?? .appleHealth
+                    merged.winningSource = stored?.winningSource ?? .appleHealth
                 }
                 guard merged.metrics.values.contains(where: { $0.value != nil }) else {
                     if let existing {
@@ -41,6 +42,15 @@ enum DailyActivityRecordStore {
                     continue
                 }
                 let winning = merged.resolvedWinningSource
+                if let stored, stored.key == merged.key, stored.resolvedWinningSource == winning,
+                   DailyActivityMetricKind.allCases.allSatisfy({ kind in
+                       let old = stored[kind]
+                       let new = merged[kind]
+                       return old.value == new.value && old.availability == new.availability && old.source?.sources == new.source?.sources
+                   })
+                {
+                    continue
+                }
                 let entry = existing ?? WorkoutEntry(
                     date: summary.key.start,
                     exercise: "日常活动",

@@ -32,26 +32,26 @@ final class ProgressHistoryUITests: XCTestCase {
     }
 
     func testTotalDeficitInDayWeekMonthAndAbsentFromYear() {
-        for (appearance, largeType) in [("light", false), ("dark", false), ("dark", true)] {
-            let app = launch(appearance, largeType: largeType)
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance)
             for period in ["日", "周", "月"] {
                 selectPeriod(period, in: app)
                 let deficit = app.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
                 XCTAssertTrue(deficit.waitForExistence(timeout: 5))
                 reveal(deficit, in: app, fullyVisible: true)
-                XCTAssertEqual(deficit.label, "当前热量缺口")
+                XCTAssertEqual(deficit.label, "预估热量缺口")
                 XCTAssertFalse(app.descendants(matching: .any)["progress-total-energy-deficit"].firstMatch.exists)
                 let value = deficit.value as? String ?? ""
-                XCTAssertTrue(value.contains("千卡") || value.contains("待估算"))
+                XCTAssertTrue(value.contains("千卡"), value)
                 if period == "日" {
                     XCTAssertTrue(value.contains("仍可摄入"))
                     let calories = app.buttons["progress-calories-ring-breakdown"]
                     XCTAssertGreaterThan(deficit.frame.minY, calories.frame.maxY)
                 } else {
-                    XCTAssertTrue(value.contains("天") || value.contains("暂无已结束日期"))
+                    XCTAssertTrue(value.contains("其中 0 天缺饮食记录"), value)
                     XCTAssertFalse(value.contains("仍可摄入"))
                 }
-                keep(app, "total-deficit-\(period)-\(appearance)-\(largeType)")
+                keep(app, "total-deficit-\(period)-\(appearance)")
             }
             selectPeriod("年", in: app)
             let removed = XCTNSPredicateExpectation(
@@ -60,23 +60,33 @@ final class ProgressHistoryUITests: XCTestCase {
             )
             XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 5), .completed)
             app.terminate()
-            if !largeType {
-                let empty = launch(appearance, hasRecords: false)
-                let caption = empty.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
-                XCTAssertTrue(caption.waitForExistence(timeout: 5))
-                reveal(caption, in: empty, fullyVisible: true)
-                let firstResource = empty.buttons["全部训练"].firstMatch
-                XCTAssertTrue(firstResource.waitForExistence(timeout: 5))
-                let gap = firstResource.frame.minY - caption.frame.maxY
-                // 18 pt 卡内留白 + 28 pt 页面间距；空记录容器不能再占一份页面间距。
-                XCTAssertGreaterThanOrEqual(gap, 44)
-                XCTAssertLessThanOrEqual(gap, 48)
-                XCTAssertFalse(empty.staticTexts["饮食记录"].exists)
-                XCTAssertFalse(empty.staticTexts["训练记录"].exists)
-                keep(empty, "energy-empty-spacing-\(appearance)")
-                empty.terminate()
-            }
+            let empty = launch(appearance, hasRecords: false)
+            let caption = empty.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
+            XCTAssertTrue(caption.waitForExistence(timeout: 5))
+            reveal(caption, in: empty, fullyVisible: true)
+            let reviewMeals = empty.buttons["补记餐次"].firstMatch
+            reveal(reviewMeals, in: empty)
+            XCTAssertTrue(empty.staticTexts["饮食记录"].exists)
+            XCTAssertFalse(empty.staticTexts["训练记录"].exists)
+            reviewMeals.tap()
+            XCTAssertTrue(empty.navigationBars["饮食记录完整度"].waitForExistence(timeout: 5))
+            XCTAssertTrue(empty.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "记录", "的早餐")).firstMatch.exists)
+            keep(empty, "energy-empty-meal-review-\(appearance)")
+            empty.terminate()
         }
+    }
+
+    func testLargestTextCanScrollToEnergySummaryAndOpenWorkoutHistory() {
+        let app = launch("dark", largeType: true)
+        selectPeriod("日", in: app)
+        let summary = app.descendants(matching: .any)["progress-energy-balance-caption"].firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        reveal(summary, in: app, fullyVisible: true)
+        XCTAssertTrue((summary.value as? String)?.contains("仍可摄入") == true)
+        let workouts = app.buttons["全部训练"].firstMatch
+        reveal(workouts, in: app)
+        workouts.tap()
+        XCTAssertTrue(app.navigationBars["训练记录"].waitForExistence(timeout: 5))
     }
 
     func testDefaultDayShowsEstimatedCalorieDeficitInBothThemes() {
@@ -88,7 +98,6 @@ final class ProgressHistoryUITests: XCTestCase {
             XCTAssertTrue(app.otherElements["progress-nutrition-rings"].waitForExistence(timeout: 5))
             XCTAssertFalse(app.buttons["progress-training-summary"].exists)
             XCTAssertFalse(app.buttons["progress-body-summary"].exists)
-            XCTAssertFalse(app.staticTexts["预估热量缺口"].exists)
             XCTAssertFalse(app.staticTexts["与预估的差值"].exists)
             keep(app, "progress-calorie-deficit-\(appearance)")
             picker.buttons["周"].tap()
@@ -203,6 +212,95 @@ final class ProgressHistoryUITests: XCTestCase {
         XCTAssertTrue(list.staticTexts["400 kcal"].exists)
         keep(large, "training-total-day-large-dark")
         large.terminate()
+    }
+
+    func testLiveActivityRefreshKeepsEnergyPopoverDateAndRecordPositionInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let notification = "top.hedon.soma.test.activity-refresh.\(UUID().uuidString)"
+            let app = launch(appearance, noBaseline: true, energyFixture: true, dailyActivity: true, activityRefresh: notification)
+            let expenditure = app.buttons["progress-expenditure-breakdown"]
+            XCTAssertTrue(expenditure.waitForExistence(timeout: 10))
+            let date = app.staticTexts["progress-date-range"].label
+            expenditure.tap()
+            let popover = app.scrollViews["progress-energy-breakdown-list"]
+            XCTAssertTrue(popover.staticTexts["486 kcal"].waitForExistence(timeout: 5))
+            postActivityRefresh(notification)
+            XCTAssertTrue(popover.staticTexts["529 kcal"].waitForExistence(timeout: 5))
+            XCTAssertTrue(popover.staticTexts["活动消耗"].exists)
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.25)).tap()
+            let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: popover)
+            XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
+
+            let activity = app.buttons["progress-daily-activity"].firstMatch
+            reveal(activity, in: app)
+            XCTAssertTrue(activity.label.hasPrefix("日常活动"), activity.debugDescription)
+            let activityLabel = activity.label
+            XCTAssertTrue((activity.value as? String)?.contains("步数 9,782 步") == true, activity.debugDescription)
+            XCTAssertTrue((activity.value as? String)?.contains("步行与跑步距离") == true, activity.debugDescription)
+            XCTAssertTrue((activity.value as? String)?.contains("活动消耗 529 千卡") == true, activity.debugDescription)
+            let training = app.staticTexts["训练记录"].firstMatch
+            let meals = app.staticTexts["饮食记录"].firstMatch
+            XCTAssertTrue(training.exists)
+            XCTAssertTrue(meals.exists)
+            XCTAssertLessThan(activity.frame.maxY, training.frame.minY)
+            XCTAssertLessThan(training.frame.maxY, meals.frame.minY)
+            let scrollPosition = activity.frame.minY
+
+            postActivityRefresh(notification)
+            let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "步数 10,124 步"), object: activity)
+            XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
+            XCTAssertEqual(activity.label, activityLabel)
+            XCTAssertEqual(activity.frame.minY, scrollPosition, accuracy: 2)
+            XCTAssertEqual(app.staticTexts["progress-date-range"].label, date)
+            XCTAssertFalse(app.descendants(matching: .any)["insights-loading"].firstMatch.exists)
+            keep(app, "progress-live-activity-\(appearance)")
+            activity.tap()
+            XCTAssertTrue(app.navigationBars["日常活动"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.descendants(matching: .any)["daily-metric-steps"].firstMatch.label.contains("10,124"))
+            app.terminate()
+        }
+    }
+
+    func testActivityReadFailureCanRetryInPlaceInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let signal = "top.hedon.soma.test.activity-failure.\(UUID().uuidString)"
+            let app = XCUIApplication()
+            app.launchEnvironment = [
+                "SOMA_UI_TEST_PROCESS": "1",
+                "SOMA_UI_TEST_APPEARANCE": appearance,
+                "SOMA_UI_ACTIVITY_READ_RETRY": signal
+            ]
+            app.launchArguments = ["-data.activeSpace", "personal"]
+            app.launch()
+            let progress = app.tabBars.buttons["进展"]
+            XCTAssertTrue(progress.waitForExistence(timeout: 15))
+            progress.tap()
+            let dateLabel = app.staticTexts["progress-date-range"]
+            XCTAssertTrue(dateLabel.waitForExistence(timeout: 10))
+            let date = dateLabel.label
+            let activity = app.buttons["progress-daily-activity"].firstMatch
+            reveal(activity, in: app)
+            XCTAssertTrue((activity.value as? String)?.contains("6,200") == true)
+            postActivityRefresh(signal)
+            let retry = app.buttons["重试日常活动同步"]
+            reveal(retry, in: app)
+            XCTAssertTrue(app.staticTexts["同步失败，显示上次数据"].exists)
+            XCTAssertTrue((activity.value as? String)?.contains("6,200") == true)
+            XCTAssertGreaterThanOrEqual(retry.frame.height + 0.01, 44)
+            keep(app, "progress-activity-read-failure-\(appearance)")
+            retry.tap()
+            let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "6,420"), object: activity)
+            XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
+            XCTAssertFalse(retry.exists)
+            XCTAssertEqual(app.staticTexts["progress-date-range"].label, date)
+            XCTAssertFalse(app.descendants(matching: .any)["insights-loading"].firstMatch.exists)
+            app.terminate()
+        }
+    }
+
+    private func postActivityRefresh(_ notification: String) {
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                             CFNotificationName(notification as CFString), nil, nil, true)
     }
 
     func testLegacyPresentedTotalReviewStillLoadsProgressDayAcrossThemes() {
@@ -462,7 +560,7 @@ final class ProgressHistoryUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
-    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true, energyFixture: Bool = false, dailyActivity: Bool = false, legacyEnergyTotal: Bool = false) -> XCUIApplication {
+    private func launch(_ appearance: String, largeType: Bool = false, noBaseline: Bool = false, hasRecords: Bool = true, energyFixture: Bool = false, dailyActivity: Bool = false, legacyEnergyTotal: Bool = false, activityRefresh: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["SOMA_UI_TEST_PROCESS"] = "1"
         app.launchEnvironment["SOMA_UI_PROGRESS_FIXTURE"] = hasRecords ? "1" : "0"
@@ -475,6 +573,9 @@ final class ProgressHistoryUITests: XCTestCase {
         }
         if dailyActivity {
             app.launchEnvironment["SOMA_UI_DAILY_ACTIVITY_FIXTURE"] = "1"
+        }
+        if let activityRefresh {
+            app.launchEnvironment["SOMA_UI_ACTIVITY_REFRESH_NOTIFICATION"] = activityRefresh
         }
         if legacyEnergyTotal {
             app.launchEnvironment["SOMA_UI_LEGACY_ENERGY_TOTAL_FIXTURE"] = "1"

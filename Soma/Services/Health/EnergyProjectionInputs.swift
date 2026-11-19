@@ -6,4 +6,5 @@ struct EnergyContextFacts: Sendable {
     let lifestyle: EnergyLifestyleFacts?
     let confirmation: EnergyDayConfirmation?
     let learningPaused: Bool?
+    var skippedMeals: Set<MealType> = []
 }

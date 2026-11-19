@@ -21,6 +21,7 @@ struct ProgressHistoryRecord: Sendable {
     var calorieMET: Double?
     var activeEnergyKilocalories: Double?
     var isDailyActivity = false
+    var dailyActivity: DailyActivitySummary?
     /// 日常活动获胜来源。只用于判断训练能否从同一份日活动能量里拆出，不把多个来源相加。
     var dailyActivitySource: DailyActivityWinningSource?
     var trainingEvidence: EnergyTrainingEvent?
@@ -66,6 +67,7 @@ struct ProgressDailyMetrics: Sendable, Identifiable {
     let restingFormula: RestingEnergyFormulaInput?
     let usesLaterProfile: Bool
     var foodConfirmedComplete = false
+    var allMealsExplicitlySkipped = false
     var id: Date {
         date
     }
@@ -126,11 +128,15 @@ enum ProgressHistoryProjection {
             guard let weight = record.weight else { return false }
             return weight.isFinite && weight > 0 && record.activity.date <= now
         }.sorted { $0.activity.date < $1.activity.date }
+        let contexts = Dictionary((profile?.energyFacts.contexts ?? []).filter { $0.timeZoneIdentifier == calendar.timeZone.identifier }
+            .map { ($0.date, $0.skippedMeals) }, uniquingKeysWith: { _, last in last })
         var days: [ProgressDailyMetrics] = []
         var cursor = window.start
         while cursor < window.end, let next = calendar.date(byAdding: .day, value: 1, to: cursor), next > cursor {
             let entries = (groups[cursor] ?? []).sorted { $0.activity.date < $1.activity.date }
             let meals = entries.filter { $0.activity.kind == .meal }
+            let coverage = MealCoverage(recorded: Set(meals.compactMap { MealType(rawValue: $0.activity.detail) }),
+                                        skipped: contexts[cursor] ?? [])
             let workouts = entries.filter { $0.activity.kind == .workout }
             let recordedActivity = workouts.compactMap(\.activeEnergyKilocalories).last
             let weight = weights.last { $0.activity.date < next }?.weight
@@ -152,17 +158,18 @@ enum ProgressHistoryProjection {
                 logicalSets: workouts.reduce(0) { $0 + max(0, $1.logicalSets) },
                 energy: runtime.outcomes[cursor] ?? .init(estimate: nil, missingReason: cursor > today ? "尚未发生" : "缺少有效静息消耗，请补充身体资料"),
                 restingFormula: formula, usesLaterProfile: (profile?.updatedAt ?? .distantPast) >= next,
-                foodConfirmedComplete: runtime.completeFoodDays.contains(cursor)
+                foodConfirmedComplete: runtime.completeFoodDays.contains(cursor) || coverage.isComplete,
+                allMealsExplicitlySkipped: meals.isEmpty && coverage.isComplete
             ))
             cursor = next
         }
         let eligible = window.period == .day ? days.filter { !$0.isFuture } : days.filter(\.isCompleteDay)
-        let intake = eligible.filter { $0.intake.knownCount > 0 }.map(\.intake.value)
+        let intake = eligible.filter { $0.intake.knownCount > 0 || $0.allMealsExplicitlySkipped }.map(\.intake.value)
         let estimates = eligible.compactMap { $0.energy.estimate?.totalKilocalories }
         let buckets = window.buckets(calendar: calendar).map { bucket in
             let contents = days.filter { $0.date >= bucket.start && $0.date < bucket.end && !$0.isFuture }
             let included = window.period == .year ? contents.filter(\.isCompleteDay) : contents
-            let intake = included.filter { $0.intake.knownCount > 0 }.map(\.intake.value)
+            let intake = included.filter { $0.intake.knownCount > 0 || $0.allMealsExplicitlySkipped }.map(\.intake.value)
             let estimates = included.compactMap { $0.energy.estimate?.totalKilocalories }
             return ProgressEnergyChartBucket(
                 start: bucket.start, end: bucket.end, intake: mean(intake), estimate: mean(estimates),

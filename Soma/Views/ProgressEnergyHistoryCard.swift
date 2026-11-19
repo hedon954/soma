@@ -59,7 +59,15 @@ struct ProgressEnergyHistoryCard: View {
                     }
                 }
                 if let deficit = ProgressEnergyDeficit.make(snapshot: snapshot) {
-                    ProgressEnergyBalanceCaption(summary: deficit)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ProgressEnergyBalanceCaption(summary: deficit)
+                        if snapshot.window.period != .day {
+                            Text(deficit.detail)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.accent)
+                                .accessibilityHidden(true)
+                        }
+                    }
                 }
             }
         }

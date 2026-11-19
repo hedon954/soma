@@ -225,6 +225,43 @@ final class DailyActivityCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.summaries.isEmpty)
     }
 
+    func testDayReadRetryPreservesSavedValueAndRejectsOldStreamResults() async throws {
+        let (coordinator, reader, root) = makeCoordinator()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = try ModelContainer(for: Schema(SomaDataSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = container.mainContext
+        coordinator.bind(context: context)
+        await coordinator.prepare()
+        coordinator.setContext(space: .personal, foreground: true)
+        await coordinator.connect()
+        await waitFor { await reader.count == 1 }
+
+        let date = Date.now
+        let key = DailyActivityDayKey(date: date, calendar: .current)
+        let owner = UUID()
+        coordinator.select(date: date, owner: owner)
+        await reader.send(.values(.steps, [.init(key: key, value: 6200)], date), request: 0)
+        await waitFor { coordinator.summary(for: date)?[.steps].value == 6200 }
+        let stored = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutEntry>()).first)
+        await reader.send(.failure(.steps), request: 0)
+        await waitFor { coordinator.readRecovery(for: date) == .failed }
+        XCTAssertEqual(stored.dailyActivity?[.steps].value, 6200)
+
+        coordinator.retryRead(for: date, owner: UUID())
+        XCTAssertEqual(coordinator.readRecovery(for: date), .failed)
+        coordinator.retryRead(for: date, owner: owner)
+        coordinator.retryRead(for: date, owner: owner)
+        await waitFor { await reader.count == 2 }
+        XCTAssertEqual(coordinator.readRecovery(for: date), .retrying)
+        XCTAssertEqual(stored.dailyActivity?[.steps].value, 6200)
+        await reader.send(.values(.steps, [.init(key: key, value: 99)], date), request: 0)
+        await reader.send(.values(.steps, [.init(key: key, value: 6420)], date), request: 1)
+        await waitFor { coordinator.readRecovery(for: date) == nil }
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutEntry>()).map(\.id), [stored.id])
+        XCTAssertEqual(stored.dailyActivity?[.steps].value, 6420)
+        await coordinator.disconnect()
+    }
+
     private func makeCoordinator() -> (DailyActivitySyncCoordinator, ActivityReaderStub, URL) {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let reader = ActivityReaderStub()

@@ -378,14 +378,18 @@ end
 
 insights_source = File.read(File.join(ROOT, "Soma/Views/InsightsView.swift"))
 fail_check("InsightsView restored on-appear revision polling") if insights_source.include?("refreshRevision")
-unless insights_source.include?(".task(id: request)") && insights_source.include?("Task.detached") &&
-       insights_source.include?("guard request == key") && insights_source.include?("withTaskCancellationHandler")
-  fail_check("Insights history lost cancellable off-main reading or request identity checks")
+unless insights_source.include?(".task(id: request)") && insights_source.include?("ProgressHistoryLoader.snapshot(") &&
+       insights_source.include?("guard request == key") && insights_source.include?("try Task.checkCancellation()")
+  fail_check("Insights history must use the shared snapshot reader and reject superseded requests")
 end
 if insights_source.include?("equipmentDescriptor") || insights_source.include?("definitionDescriptor")
   fail_check("Insights snapshot restored materializing full equipment or exercise objects for counts")
 end
 progress_loader = File.read(File.join(ROOT, service_file("ProgressHistoryLoader.swift")))
+unless progress_loader.include?("Task.detached") && progress_loader.include?("withTaskCancellationHandler") &&
+       progress_loader.include?("ProgressHistoryProjection.build(")
+  fail_check("The shared progress snapshot reader must build off-main and propagate cancellation")
+end
 unless progress_loader.include?("@ModelActor") && progress_loader.include?("descriptor.fetchLimit = 256") &&
        progress_loader.include?("descriptor.fetchOffset") && progress_loader.include?("try Task.checkCancellation()") &&
        progress_loader.scan(/\$0.date >= start && \$0.date < end/).length == 5 &&

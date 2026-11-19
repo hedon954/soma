@@ -1,8 +1,65 @@
 import Foundation
 import SwiftData
 
+#if DEBUG
+    private final class ActivityRefreshListener {
+        let continuation: AsyncStream<Void>.Continuation
+
+        init(_ continuation: AsyncStream<Void>.Continuation) {
+            self.continuation = continuation
+        }
+    }
+
+    private let receiveActivityRefresh: CFNotificationCallback = { _, observer, _, _, _ in
+        guard let observer else { return }
+        Unmanaged<ActivityRefreshListener>.fromOpaque(observer).takeUnretainedValue().continuation.yield(())
+    }
+#endif
+
 @MainActor
 enum ProgressHistoryTestFixture {
+    #if DEBUG
+        static func listenForDailyActivityUpdates(in context: ModelContext) async {
+            guard AppTestRuntime.isRunning,
+                  context.container.configurations.allSatisfy(\.isStoredInMemoryOnly),
+                  let notification = ProcessInfo.processInfo.environment["SOMA_UI_ACTIVITY_REFRESH_NOTIFICATION"]
+            else { return }
+            let key = DailyActivityDayKey(date: .now, calendar: .current)
+            var summary = DailyActivitySyncCoordinator.demo(key: key)
+            await listenForActivitySignal(named: notification) {
+                let firstUpdate = summary[.activeEnergy].value == 486
+                summary[.steps].value = firstUpdate ? 9782 : 10124
+                summary[.steps].readAt = .now
+                if firstUpdate {
+                    summary[.activeEnergy].value = 529
+                    summary[.activeEnergy].readAt = .now
+                }
+                do {
+                    try DailyActivityRecordStore.replace([summary], in: context)
+                } catch {
+                    assertionFailure("Progress activity update fixture could not save")
+                }
+            }
+        }
+
+        static func listenForActivitySignal(named notification: String, onSignal: @MainActor () async -> Void) async {
+            let (updates, continuation) = AsyncStream<Void>.makeStream()
+            let listener = ActivityRefreshListener(continuation)
+            let observer = Unmanaged.passUnretained(listener).toOpaque()
+            let center = CFNotificationCenterGetDarwinNotifyCenter()
+            let name = CFNotificationName(notification as CFString)
+            CFNotificationCenterAddObserver(center, observer, receiveActivityRefresh, name.rawValue, nil, .deliverImmediately)
+            defer {
+                CFNotificationCenterRemoveObserver(center, observer, name, nil)
+                withExtendedLifetime(listener) { continuation.finish() }
+            }
+            for await _ in updates {
+                guard !Task.isCancelled else { return }
+                await onSignal()
+            }
+        }
+    #endif
+
     static func seedIfRequested(in context: ModelContext) {
         guard AppTestRuntime.isRunning,
               ProcessInfo.processInfo.environment["SOMA_UI_PROGRESS_FIXTURE"] == "1"

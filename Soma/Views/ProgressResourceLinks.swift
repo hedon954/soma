@@ -1,57 +1,64 @@
 import SwiftUI
 
+enum ProgressResourceDestination: CaseIterable, Hashable {
+    case workouts, meals, body, footprints, gyms, exercises
+
+    var label: (String, String, AppSemanticRole) {
+        switch self {
+        case .workouts: ("全部训练", "dumbbell.fill", .training)
+        case .meals: ("全部饮食", "fork.knife", .meal)
+        case .body: ("身体记录", "scalemass.fill", .body)
+        case .footprints: ("足迹", "shoeprints.fill", .trend)
+        case .gyms: ("健身房", "building.2.fill", .training)
+        case .exercises: ("动作库", "figure.strengthtraining.traditional", .training)
+        }
+    }
+
+    @ViewBuilder var view: some View {
+        switch self {
+        case .workouts: WorkoutHistoryView()
+        case .meals: MealHistoryView()
+        case .body: BodyHistoryView()
+        case .footprints: FootprintsView()
+        case .gyms: GymLibraryView()
+        case .exercises: ExerciseLibraryView()
+        }
+    }
+}
+
 struct ProgressResourceLinks: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: 10),
-                count: dynamicTypeSize >= .xxLarge ? 2 : 3
-            ),
-            spacing: 10
-        ) {
-            link("全部训练", systemImage: "dumbbell.fill", role: .training) {
-                WorkoutHistoryView()
+        let destinations = ProgressResourceDestination.allCases
+        let columns = dynamicTypeSize >= .xxLarge ? 2 : 3
+        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+            ForEach(Array(stride(from: 0, to: destinations.count, by: columns)), id: \.self) { start in
+                GridRow {
+                    ForEach(destinations[start...].prefix(columns), id: \.self) { destination in
+                        link(destination)
+                    }
+                }
             }
-            link("全部饮食", systemImage: "fork.knife", role: .meal) {
-                MealHistoryView()
-            }
-            link("身体记录", systemImage: "scalemass.fill", role: .body) {
-                BodyHistoryView()
-            }
-            link("足迹", systemImage: "shoeprints.fill", role: .trend) {
-                FootprintsView()
-            }
-            link("健身房", systemImage: "building.2.fill", role: .training) {
-                GymLibraryView()
-            }
-            link("动作库", systemImage: "figure.strengthtraining.traditional", role: .training) {
-                ExerciseLibraryView()
-            }
-            .accessibilityIdentifier("exercise-library-link")
         }
         .buttonStyle(ProgressResourceButtonStyle())
     }
 
-    private func link(
-        _ title: String,
-        systemImage: String,
-        role: AppSemanticRole,
-        @ViewBuilder destination: () -> some View
-    ) -> some View {
-        NavigationLink(destination: destination) {
+    private func link(_ destination: ProgressResourceDestination) -> some View {
+        let (title, systemImage, role) = destination.label
+        return NavigationLink(value: destination) {
             VStack(spacing: 8) {
                 SemanticIconBadge(systemImage: systemImage, role: role, size: 36, cornerRadius: 10)
                 Text(title)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppTheme.accent)
                     .multilineTextAlignment(.center)
                     .lineLimit(2, reservesSpace: dynamicTypeSize.isAccessibilitySize)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityLabel(title)
+        .accessibilityIdentifier(destination == .exercises ? "exercise-library-link" : title)
     }
 }
 

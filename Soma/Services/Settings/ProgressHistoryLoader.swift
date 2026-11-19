@@ -8,9 +8,23 @@ struct ProgressHistoryFacts: Sendable {
 
 @ModelActor
 actor ProgressHistoryLoader {
-    func load(window: ProgressPeriodWindow) async throws -> ProgressHistoryFacts {
+    static func snapshot(
+        in container: ModelContainer, window: ProgressPeriodWindow, now: Date, calendar: Calendar
+    ) async throws -> (snapshot: ProgressHistorySnapshot, targetDeficit: Double?) {
+        let task = Task.detached(priority: .userInitiated) {
+            let facts = try await ProgressHistoryLoader(modelContainer: container).load(window: window, calendar: calendar)
+            try Task.checkCancellation()
+            let snapshot = ProgressHistoryProjection.build(
+                window: window, records: facts.records, profile: facts.profile, now: now, calendar: calendar
+            )
+            return (snapshot, facts.profile?.dailyTargetDeficitKilocalories)
+        }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
+    func load(window: ProgressPeriodWindow, calendar: Calendar = .current) async throws -> ProgressHistoryFacts {
         let plannedDays = try await EnergyPlanForecastLoader.load(in: modelContainer)
-        let start = Calendar.current.date(byAdding: .day, value: -56, to: window.start) ?? window.start
+        let start = calendar.date(byAdding: .day, value: -56, to: window.start) ?? window.start
         let end = window.end
         var workouts = try read(FetchDescriptor<WorkoutEntry>(
             predicate: #Predicate { $0.date >= start && $0.date < end }, sortBy: [SortDescriptor(\.date)]
@@ -18,7 +32,7 @@ actor ProgressHistoryLoader {
             try ProgressHistoryRecord(
                 activity: .workout(workout), calories: workout.dailyActivity?[.activeEnergy].value ?? workout.estimatedCalories.map(Double.init),
                 calorieMET: workout.calorieMET, activeEnergyKilocalories: workout.dailyActivity?[.activeEnergy].value,
-                isDailyActivity: workout.isDailyActivity,
+                isDailyActivity: workout.isDailyActivity, dailyActivity: workout.dailyActivity,
                 dailyActivitySource: workout.isDailyActivity ? workout.dailyActivityWinningSource : nil,
                 trainingEvidence: trainingEvidence(workout), volume: workout.estimatedVolume,
                 logicalSets: Self.workingSetCount(workout), exerciseID: workout.exerciseID,
@@ -46,7 +60,8 @@ actor ProgressHistoryLoader {
         )) { meal in
             let totals = meal.items.isEmpty ? nil : MealNutritionTotals.derive(from: meal.items)
             return ProgressHistoryRecord(
-                activity: .init(id: meal.id, kind: .meal, date: meal.date, title: meal.title, detail: meal.mealType.rawValue, metric: nil),
+                activity: .init(id: meal.id, kind: .meal, date: meal.date, title: meal.title,
+                                detail: MealType(rawValue: meal.mealTypeRaw)?.rawValue ?? "未分类", metric: nil),
                 calories: (totals?.knownCalories ?? meal.calories).map(Double.init),
                 protein: totals?.knownProtein ?? meal.protein, carbs: totals?.knownCarbs ?? meal.carbs, fat: totals?.knownFat ?? meal.fat,
                 caloriesArePartial: totals.map { !$0.caloriesIsComplete } ?? (meal.calories == nil)
@@ -94,7 +109,8 @@ actor ProgressHistoryLoader {
             try EnergyContextFacts(date: entry.date, timeZoneIdentifier: entry.timeZoneIdentifier,
                                    lifestyle: entry.lifestyleData.map { try decoder.decode(EnergyLifestyleFacts.self, from: $0) },
                                    confirmation: entry.confirmationData.map { try decoder.decode(EnergyDayConfirmation.self, from: $0) },
-                                   learningPaused: entry.learningPaused)
+                                   learningPaused: entry.learningPaused,
+                                   skippedMeals: Set(entry.skippedMealsData.map { try decoder.decode([MealType].self, from: $0) } ?? []))
         }
         return try .init(
             contexts: facts,

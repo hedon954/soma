@@ -67,30 +67,34 @@ struct ProgressTrainingBodyCards: View {
 
 struct ProgressDayRecordSections: View {
     let day: ProgressDailyMetrics
+    let activityOwner: UUID
+    var onBackfillMeals: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             // 进展「日」展示当日日常活动；「训练记录」区块仍排除（ADR 0146 / Hedon 2026-11-05）。
-            let dailyRecords = day.records.filter(\.isDailyActivity)
-            if !dailyRecords.isEmpty {
-                Text("日常活动").font(.headline)
-                ForEach(dailyRecords, id: \.activity.id) { record in
-                    NavigationLink { ProgressRecentActivityDestination(activity: record.activity) } label: {
-                        ProgressRecentActivityRow(activity: record.activity)
-                    }.buttonStyle(.plain)
-                }
-            }
-            ForEach([ProgressRecentActivity.Kind.meal, .workout, .body], id: \.title) { kind in
+            ProgressDailyActivitySection(date: day.date, records: day.records.filter(\.isDailyActivity), owner: activityOwner)
+            ForEach([ProgressRecentActivity.Kind.workout, .meal, .body], id: \.title) { kind in
                 let records = day.records.filter {
                     $0.activity.kind == kind && (kind != .workout || !$0.isDailyActivity)
                 }
-                if !records.isEmpty {
+                let needsMeals = kind == .meal && !day.isFuture && !day.foodConfirmedComplete
+                if !records.isEmpty || (needsMeals && onBackfillMeals != nil) {
                     HStack {
-                        Text(kind.title).font(.headline)
+                        Text(kind.title).font(.headline).accessibilityAddTraits(.isHeader)
                         Spacer()
                         if kind == .workout {
                             ProgressDayShareButton(day: day.date)
+                        } else if needsMeals, let onBackfillMeals {
+                            Button("补记餐次", action: onBackfillMeals)
+                                .font(.subheadline)
+                                .frame(minHeight: 44)
                         }
+                    }
+                    if kind == .meal, day.intake.missingCount > 0 {
+                        Text("有饮食记录缺少热量")
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.accent.opacity(0.68))
                     }
                     ForEach(records, id: \.activity.id) { record in
                         NavigationLink { ProgressRecentActivityDestination(activity: record.activity) } label: {

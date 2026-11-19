@@ -14,6 +14,7 @@ struct InsightsView: View {
     @State private var errorMessage: String?
     @State private var showingCalendar = false
     @State private var showingSources = false
+    @State private var showingMealCoverage = false
     @State private var calendarDate = Date.now
     @State private var followsCurrentPeriod: Bool
     @State private var loadedRequest: ProgressHistoryRequest?
@@ -37,12 +38,12 @@ struct InsightsView: View {
     }
 
     private var showsCurrentSnapshot: Bool {
-        snapshot != nil && loadedRequest == request
+        snapshot != nil && loadedRequest?.canDisplay(request) == true
     }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 28) {
                 periodControls
                 if let errorMessage {
                     HStack {
@@ -56,8 +57,13 @@ struct InsightsView: View {
                     if period != .day {
                         ProgressTrainingBodyCards(snapshot: snapshot)
                     }
-                    if period == .day, let day = snapshot.days.first, !day.isFuture, !day.records.isEmpty {
-                        ProgressDayRecordSections(day: day)
+                    if period == .day, let day = snapshot.days.first, !day.isFuture {
+                        ProgressDayRecordSections(day: day, activityOwner: activityOwner, onBackfillMeals: { showingMealCoverage = true })
+                    } else if period == .week || period == .month,
+                              snapshot.days.contains(where: { !$0.isFuture && $0.energyDeficitMissingReason != nil })
+                    {
+                        Button("查看缺项") { showingMealCoverage = true }
+                            .frame(minHeight: 44)
                     }
                     ProgressResourceLinks()
                 } else if errorMessage == nil {
@@ -72,6 +78,7 @@ struct InsightsView: View {
             .frame(maxWidth: .infinity)
         }
         .accessibilityIdentifier("insights-content")
+        .navigationDestination(for: ProgressResourceDestination.self) { $0.view }
         .appPageBackground()
         .navigationTitle("进展")
         .navigationBarTitleDisplayMode(.inline)
@@ -109,14 +116,38 @@ struct InsightsView: View {
                 ProgressEnergySourcesView(snapshot: snapshot)
             }
         }
-        .task(id: request) {
+        .sheet(isPresented: $showingMealCoverage) {
+            if let snapshot, let latest = snapshot.days.last(where: { !$0.isFuture })?.date {
+                let pastDays = Calendar.current.dateComponents([.day], from: snapshot.window.start, to: latest).day ?? 0
+                let missingExpenditure = Set(snapshot.days.filter { !$0.isFuture && $0.energy.estimate == nil }.map(\.date))
+                NavigationStack {
+                    MealBackfillView(day: latest, pastDays: pastDays, missingExpenditure: missingExpenditure)
+                        .navigationTitle("饮食记录完整度")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) { Button("完成") { showingMealCoverage = false } }
+                        }
+                }
+            }
+        }
+        .task(id: window) {
             if window.period == .day {
                 activity.select(date: window.start, owner: activityOwner)
             } else {
                 activity.releaseSelection(owner: activityOwner)
             }
+        }
+        .onChange(of: activity.generation) {
+            if window.period == .day {
+                activity.select(date: window.start, owner: activityOwner)
+            }
+        }
+        .task(id: request) {
             await load(request)
         }
+        #if DEBUG
+        .task { await ProgressHistoryTestFixture.listenForDailyActivityUpdates(in: modelContext) }
+        #endif
         .onDisappear { activity.releaseSelection(owner: activityOwner) }
         .refreshable { revision += 1 }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in refreshDate() }
@@ -186,19 +217,8 @@ struct InsightsView: View {
         let container = modelContext.container
         let calendar = Calendar.current
         let now = Date.now
-        let loader = Task.detached(priority: .userInitiated) {
-            try await ProgressHistoryLoader(modelContainer: container).load(window: key.window)
-        }
         do {
-            let facts = try await withTaskCancellationHandler { try await loader.value } onCancel: { loader.cancel() }
-            try Task.checkCancellation()
-            guard request == key else { return }
-            let local = Task.detached(priority: .userInitiated) {
-                ProgressHistoryProjection.build(
-                    window: key.window, records: facts.records, profile: facts.profile, now: now, calendar: calendar
-                )
-            }
-            let projection = await withTaskCancellationHandler { await local.value } onCancel: { local.cancel() }
+            let projection = try await ProgressHistoryLoader.snapshot(in: container, window: key.window, now: now, calendar: calendar).snapshot
             try Task.checkCancellation()
             guard request == key else { return }
             try EnergyRuntimePersistence.apply(projection.energyUpdates, in: modelContext)
@@ -213,10 +233,14 @@ struct InsightsView: View {
     }
 }
 
-private struct ProgressHistoryRequest: Hashable {
+struct ProgressHistoryRequest: Hashable {
     let window: ProgressPeriodWindow
     let revision: Int
     let timeZoneID: String
+
+    func canDisplay(_ other: Self) -> Bool {
+        window == other.window && timeZoneID == other.timeZoneID
+    }
 }
 
 struct ProgressRecentActivityDestination: View {

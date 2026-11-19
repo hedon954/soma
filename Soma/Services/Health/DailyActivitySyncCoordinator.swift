@@ -2,6 +2,10 @@ import Foundation
 import Observation
 import SwiftData
 
+enum DailyActivityReadRecovery: Equatable {
+    case failed, retrying
+}
+
 extension Notification.Name {
     static let personalDataDidReplace = Notification.Name("Soma.personalDataDidReplace")
 }
@@ -31,6 +35,7 @@ final class DailyActivitySyncCoordinator {
     private var historyOwner: UUID?
     private var historyDay: DailyActivityDayKey?
     private var historyRequest = UUID()
+    private var readRetries: [String: DailyActivityDayKey] = [:]
     private var connectionRevision = 0
     /// 系统汇总（Apple 策略 / 回退基线）。
     private var aggregates: [DailyActivityDayKey: DailyActivitySummary] = [:]
@@ -169,6 +174,7 @@ final class DailyActivitySyncCoordinator {
         historyDay = key
         historyRequest = UUID()
         tasks.removeValue(forKey: "history")?.cancel()
+        readRetries.removeValue(forKey: "history")
         guard space == .personal, isEnabled, foreground, isPrepared, !automaticDays.contains(key), key.start <= now else { return }
         monitor(DailyActivityWindow(containing: date, now: now, calendar: calendar, recent: false), slot: "history")
     }
@@ -179,6 +185,30 @@ final class DailyActivitySyncCoordinator {
         historyDay = nil
         historyRequest = UUID()
         tasks.removeValue(forKey: "history")?.cancel()
+        readRetries.removeValue(forKey: "history")
+    }
+
+    func readRecovery(for date: Date, calendar: Calendar = .current) -> DailyActivityReadRecovery? {
+        let key = DailyActivityDayKey(date: date, calendar: calendar)
+        if readRetries.values.contains(key) {
+            return .retrying
+        }
+        return hasFailedRead(for: key) ? .failed : nil
+    }
+
+    func retryRead(for date: Date, owner: UUID, now: Date = .now, calendar: Calendar = .current) {
+        let key = DailyActivityDayKey(date: date, calendar: calendar)
+        guard space == .personal, isEnabled, isPrepared, foreground, historyOwner == owner,
+              historyDay == key, hasFailedRead(for: key)
+        else { return }
+        let isAutomatic = automaticDays.contains(key)
+        let slot = isAutomatic ? "automatic" : "history"
+        guard readRetries[slot] == nil else { return }
+        let anchor = isAutomatic ? automaticDays.map(\.start).max() ?? date : date
+        let window = DailyActivityWindow(containing: anchor, now: now, calendar: calendar, recent: isAutomatic)
+        tasks.removeValue(forKey: slot)?.cancel()
+        readRetries[slot] = key
+        monitor(window, slot: slot, preservesReadings: true)
     }
 
     func summary(for date: Date, calendar: Calendar = .current) -> DailyActivitySummary? {
@@ -195,12 +225,17 @@ final class DailyActivitySyncCoordinator {
             task.cancel()
         }
         tasks = [:]
+        readRetries = [:]
         automaticDays = []
         historyDay = nil
         historyRequest = UUID()
     }
 
-    private func monitor(_ requestedWindow: DailyActivityWindow, slot: String) {
+    private func hasFailedRead(for key: DailyActivityDayKey) -> Bool {
+        summaries[key]?.metrics.values.contains { $0.availability == .failed } == true
+    }
+
+    private func monitor(_ requestedWindow: DailyActivityWindow, slot: String, preservesReadings: Bool = false) {
         var window = requestedWindow
         do {
             if let recordContext {
@@ -208,16 +243,24 @@ final class DailyActivitySyncCoordinator {
             }
         } catch {
             errorMessage = "本机训练时段暂时无法读取，请重新读取活动。"
+            if preservesReadings {
+                readRetries.removeValue(forKey: slot)
+            }
             return
         }
         let token = generation
         let historyToken = historyRequest
-        for key in window.days {
+        for key in window.days where !preservesReadings || aggregates[key] == nil {
             aggregates[key] = DailyActivitySummary(key: key)
             summaries[key] = DailyActivitySummary(key: key, winningSource: .appleHealth)
         }
         tasks[slot] = Task { [weak self, reader] in
             guard !Task.isCancelled else { return }
+            defer {
+                if preservesReadings, !Task.isCancelled {
+                    self?.readRetries.removeValue(forKey: slot)
+                }
+            }
             let stream = await reader.updates(in: window)
             for await update in stream {
                 guard let self, !Task.isCancelled, generation == token,
@@ -225,6 +268,13 @@ final class DailyActivitySyncCoordinator {
                       slot != "history" || historyRequest == historyToken
                 else { return }
                 apply(update, window: window)
+                if let key = readRetries[slot] {
+                    if case .failure = update {
+                        readRetries.removeValue(forKey: slot)
+                    } else if !hasFailedRead(for: key) {
+                        readRetries.removeValue(forKey: slot)
+                    }
+                }
                 do {
                     if let recordContext {
                         if case let .trainingEvidence(entries) = update {

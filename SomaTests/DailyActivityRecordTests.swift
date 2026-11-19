@@ -5,6 +5,24 @@ import XCTest
 
 @MainActor
 final class DailyActivityRecordTests: XCTestCase {
+    func testEquivalentSamplesDoNotChangeStoredActivityData() throws {
+        let container = try ModelContainer(for: Schema(SomaDataSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = container.mainContext
+        let start = Date.now
+        let key = DailyActivityDayKey(date: start, calendar: .current)
+        var day = DailyActivitySummary(key: key)
+        day[.steps].replace(value: 1234, readAt: start)
+        try DailyActivityRecordStore.replace([day], in: context)
+        let row = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutEntry>()).first)
+        let original = row.dailyActivityData
+        day[.steps].replace(value: 1234, readAt: start.addingTimeInterval(10))
+        try DailyActivityRecordStore.replace([day], in: context)
+        XCTAssertEqual(row.dailyActivityData, original)
+        day[.steps].replace(value: 1270, readAt: start.addingTimeInterval(20))
+        try DailyActivityRecordStore.replace([day], in: context)
+        XCTAssertEqual(row.dailyActivity?[.steps].value, 1270)
+    }
+
     func testDailyMovementDoesNotCountAsTrainingOrKeepAnOldScheduleFresh() async throws {
         let container = try ModelContainer(for: Schema(SomaDataSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let context = container.mainContext, calendar = Calendar.current, today = calendar.startOfDay(for: .now)

@@ -24,17 +24,24 @@ enum EnergyFoodEvidence {
         var meals: [Meal] = []
         while true {
             let page = try context.fetch(query)
-            meals += page.map { meal in
-                let totals = meal.items.isEmpty ? nil : MealNutritionTotals.derive(from: meal.items)
-                return .init(id: meal.id, date: meal.date, calories: (totals?.knownCalories ?? meal.calories).map(Double.init),
-                             partial: totals.map { !$0.caloriesIsComplete } ?? (meal.calories == nil))
-            }
+            meals += page.map(project)
             if page.count < 256 {
                 break
             }
             query.fetchOffset = (query.fetchOffset ?? 0) + page.count
         }
         return digest(meals)
+    }
+
+    static func fingerprint(for entries: [MealEntry]) -> String {
+        digest(entries.map(project))
+    }
+
+    private static func project(_ meal: MealEntry) -> Meal {
+        let items = meal.items
+        let totals = items.isEmpty ? nil : MealNutritionTotals.derive(from: items)
+        return .init(id: meal.id, date: meal.date, calories: (totals?.knownCalories ?? meal.calories).map(Double.init),
+                     partial: totals.map { !$0.caloriesIsComplete } ?? (meal.calories == nil))
     }
 
     private static func digest(_ meals: [Meal]) -> String {

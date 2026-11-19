@@ -19,7 +19,6 @@ enum ModelContextSaveImpact {
         GymEquipment.self,
         UserProfile.self,
         EnergyContextEntry.self,
-        EnergyEvidenceEntry.self,
         ExerciseDefinition.self,
         ExercisePerformance.self,
         WorkoutSession.self,
@@ -56,7 +55,13 @@ enum ModelContextSaveImpact {
         guard belongsToSameContainer(notification, as: modelContext) else {
             return false
         }
-        return affects(notification, entities: insightsEntities)
+        if affects(notification, entities: insightsEntities) {
+            return true
+        }
+        return affects(notification, entities: ["EnergyEvidenceEntry"], in: modelContext) { model in
+            guard let entry = model as? EnergyEvidenceEntry else { return true }
+            return entry.kindRaw != EnergyEvidenceKind.daily.rawValue
+        }
     }
 
     static func affectsEnergyInputs(_ notification: Notification, in context: ModelContext) -> Bool {
@@ -113,7 +118,19 @@ enum ModelContextSaveImpact {
         guard belongsToSameContainer(notification, as: modelContext) else {
             return false
         }
-        return affects(notification, entities: coachTimelineEntities)
+        return affects(notification, entities: coachTimelineEntities, in: modelContext) { model in
+            // Chat-owned records already appear on their reply; HealthKit has its own surface.
+            if let entry = model as? WorkoutEntry {
+                return entry.sourceTurnID == nil && !entry.isDailyActivity
+            }
+            if let entry = model as? MealEntry {
+                return entry.sourceTurnID == nil
+            }
+            if let entry = model as? BodyEntry {
+                return entry.sourceTurnID == nil
+            }
+            return true
+        }
     }
 
     static func affectsExerciseLibraryRecents(
