@@ -172,10 +172,12 @@ enum PerformanceTestFixture {
         }
 
         let startedAt = Date.now.addingTimeInterval(-3600)
+        let testsMealBackfill = scenario == .productionCompletion && LibraryAndMealTestFixture.showsBackfill
         let session = ConversationSession(
             startedAt: startedAt,
             updatedAt: .now,
-            title: title
+            title: title,
+            businessDate: testsMealBackfill ? .now : nil
         )
         context.insert(session)
 
@@ -210,8 +212,8 @@ enum PerformanceTestFixture {
         }
         let meal = MealEntry(
             date: olderSession.startedAt.addingTimeInterval(1),
-            mealType: .breakfast,
-            title: "虚构十项早餐",
+            mealType: testsMealBackfill ? .lunch : .breakfast,
+            title: testsMealBackfill ? "虚构十项午餐" : "虚构十项早餐",
             items: mealItems,
             sourceTurnID: mealTurnID,
             sourceSessionID: olderSession.id

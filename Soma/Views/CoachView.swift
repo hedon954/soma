@@ -310,7 +310,7 @@ struct CoachSessionView: View {
                 .safeAreaInset(edge: .top, spacing: 0) {
                     TimelineView(.periodic(from: .now, by: 60)) { tick in
                         if Calendar.current.isDate(currentSession?.effectiveBusinessDate ?? tick.date, inSameDayAs: tick.date),
-                           !AppTestRuntime.isRunning || ProcessInfo.processInfo.environment["SOMA_UI_TEST_MEAL_BACKFILL"] == "1"
+                           !AppTestRuntime.isRunning || LibraryAndMealTestFixture.showsBackfill
                         {
                             MealBackfillView(day: tick.date, isCoach: true)
                                 .padding(.horizontal, 14)

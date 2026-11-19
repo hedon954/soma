@@ -37,7 +37,7 @@ struct MealBackfillView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
-            let days = coverage(at: timeline.date)
+            let days = coverage(at: LibraryAndMealTestFixture.reminderTime(timeline.date))
             if isCoach {
                 if Calendar.current.isDate(day, inSameDayAs: timeline.date),
                    hiddenDay != day.timeIntervalSinceReferenceDate,

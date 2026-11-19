@@ -28,6 +28,15 @@ final class CoachDraftEditorTests: XCTestCase {
         XCTAssertEqual(view.returnKeyType, .default)
     }
 
+    func testSpeculativeWidthDoesNotChangeTheEditorsScrollMode() {
+        let view = CoachDraftEditor()
+        view.text = String(repeating: "训练后记得拉伸", count: 5)
+        let wide = view.measuredHeight(width: 330)
+        let narrow = view.measuredHeight(width: 80)
+        XCTAssertGreaterThan(narrow, wide)
+        XCTAssertFalse(view.isScrollEnabled, "测量候选宽度不能改变实际编辑器的滚动状态")
+    }
+
     func testLongTextCapsAtFiveLinesAndBecomesScrollableWithoutLosingText() throws {
         let view = CoachDraftEditor()
         let text = String(repeating: "一行训练说明\n", count: 20)
@@ -35,10 +44,14 @@ final class CoachDraftEditorTests: XCTestCase {
         let line = try XCTUnwrap(view.font).lineHeight
         let height = view.measuredHeight(width: 235)
         XCTAssertLessThanOrEqual(height, ceil(5 * line))
+        view.frame = CGRect(x: 0, y: 0, width: 235, height: height)
+        view.layoutIfNeeded()
         XCTAssertTrue(view.isScrollEnabled)
         XCTAssertEqual(view.text, text)
         view.text = "完成"
         XCTAssertEqual(view.measuredHeight(width: 235) + 2 * CoachDraftEditor.verticalInset, 44, accuracy: 1)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
         XCTAssertFalse(view.isScrollEnabled)
     }
 

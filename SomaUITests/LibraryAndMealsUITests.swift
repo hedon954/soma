@@ -95,6 +95,40 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
+    func testTodaysMealBackfillFocusesAfterAgentReply() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment = [
+                "SOMA_UI_TEST_PROCESS": "1",
+                "SOMA_UI_TEST_MEAL_BACKFILL": "1",
+                "SOMA_UI_TEST_APPEARANCE": appearance,
+                "SOMA_UI_PERFORMANCE_FIXTURE": "long-stream-production-completion",
+                "SOMA_UI_PERFORMANCE_FAST_STREAM": "1"
+            ]
+            app.launch()
+            let breakfast = app.buttons["记录今天的早餐"]
+            XCTAssertTrue(breakfast.waitForExistence(timeout: 15), app.debugDescription)
+            let phase = app.descendants(matching: .any)["performance-fixture-phase"]
+            let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value BEGINSWITH %@", "completed"), object: phase)
+            XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 20), .completed)
+
+            breakfast.tap()
+            let input = app.textViews["coach-message-input"]
+            let today = Calendar.current.dateComponents([.year, .month, .day], from: .now)
+            let prompt = "帮我记录\(today.year ?? 0)年\(today.month ?? 0)月\(today.day ?? 0)日的早餐："
+            let draft = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", prompt), object: input)
+            XCTAssertEqual(XCTWaiter.wait(for: [draft], timeout: 5), .completed)
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            input.typeText("粥")
+            XCTAssertEqual(input.value as? String, prompt + "粥")
+            keep(app, "meal-backfill-after-reply-\(appearance)")
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            XCTAssertEqual(input.value as? String, prompt + "粥")
+            app.terminate()
+        }
+    }
+
     func testCoachShortcutChipsSupportFullTapTargetsAndSelectionInBothThemes() {
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()

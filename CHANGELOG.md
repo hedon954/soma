@@ -5,6 +5,10 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复教练补餐预填时，输入框测量触发额外布局更新的问题。键盘在输入区更新后聚焦。
+
 ## [0.0.37] - 2026-11-19
 
 ### Added

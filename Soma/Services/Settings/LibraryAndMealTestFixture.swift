@@ -3,10 +3,17 @@ import SwiftData
 
 @MainActor
 enum LibraryAndMealTestFixture {
+    static var showsBackfill: Bool {
+        AppTestRuntime.isRunning && ProcessInfo.processInfo.environment["SOMA_UI_TEST_MEAL_BACKFILL"] == "1"
+    }
+
+    static func reminderTime(_ now: Date) -> Date {
+        guard showsBackfill, PerformanceTestFixture.requestedStreamScenario == .productionCompletion else { return now }
+        return Calendar.current.date(bySettingHour: 13, minute: 0, second: 0, of: now) ?? now
+    }
+
     static func seedBackfillIfRequested(in context: ModelContext) {
-        guard AppTestRuntime.isRunning,
-              context.container.configurations.allSatisfy(\.isStoredInMemoryOnly),
-              ProcessInfo.processInfo.environment["SOMA_UI_TEST_MEAL_BACKFILL"] == "1"
+        guard showsBackfill, context.container.configurations.allSatisfy(\.isStoredInMemoryOnly)
         else { return }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)

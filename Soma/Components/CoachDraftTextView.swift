@@ -22,13 +22,17 @@ struct CoachDraftTextView: UIViewRepresentable {
     func updateUIView(_ view: CoachDraftEditor, context: Context) {
         context.coordinator.onTextChange = onTextChange
         context.coordinator.isFocused = $isFocused
-        view.font = UIFont.preferredFont(forTextStyle: .body)
-        context.coordinator.render(text, in: view)
-        if isFocused, !view.isFirstResponder {
-            view.becomeFirstResponder()
-        } else if !isFocused, view.isFirstResponder {
-            view.resignFirstResponder()
+        let font = UIFont.preferredFont(forTextStyle: .body)
+        if view.font != font {
+            view.font = font
         }
+        context.coordinator.render(text, in: view)
+        context.coordinator.updateFocus(in: view)
+    }
+
+    static func dismantleUIView(_ view: CoachDraftEditor, coordinator: Coordinator) {
+        coordinator.cancelFocusUpdate()
+        view.delegate = nil
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: CoachDraftEditor, context _: Context) -> CGSize? {
@@ -39,10 +43,31 @@ struct CoachDraftTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var onTextChange: (String) -> Void
         var isFocused: Binding<Bool>
+        private var focusUpdate: Task<Void, Never>?
 
         init(onTextChange: @escaping (String) -> Void, isFocused: Binding<Bool>) {
             self.onTextChange = onTextChange
             self.isFocused = isFocused
+        }
+
+        func updateFocus(in view: UITextView) {
+            cancelFocusUpdate()
+            guard isFocused.wrappedValue != view.isFirstResponder else { return }
+            // 键盘会改变 SwiftUI 安全区。让本次 representable 更新先结束。
+            focusUpdate = Task { @MainActor [weak self, weak view] in
+                guard !Task.isCancelled, let self, let view, view.window != nil else { return }
+                focusUpdate = nil
+                if isFocused.wrappedValue {
+                    view.becomeFirstResponder()
+                } else {
+                    view.resignFirstResponder()
+                }
+            }
+        }
+
+        func cancelFocusUpdate() {
+            focusUpdate?.cancel()
+            focusUpdate = nil
         }
 
         func render(_ value: String, in view: UITextView) {
@@ -109,11 +134,26 @@ final class CoachDraftEditor: UITextView {
     }
 
     func measuredHeight(width: CGFloat) -> CGFloat {
+        max(AppTheme.minimumTapTarget - 2 * Self.verticalInset, min(naturalHeight(width: width), heightLimit))
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0 else { return }
+        // 只有实际布局宽度决定滚动状态。SwiftUI 的候选宽度只用于测量。
+        let needsScrolling = naturalHeight(width: bounds.width) > heightLimit
+        if isScrollEnabled != needsScrolling {
+            isScrollEnabled = needsScrolling
+        }
+    }
+
+    private var heightLimit: CGFloat {
         let lineHeight = font?.lineHeight ?? 21
         let insets = textContainerInset.top + textContainerInset.bottom
-        let limit = ceil(Self.maximumLines * lineHeight + insets)
-        let natural = ceil(sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
-        isScrollEnabled = natural > limit
-        return max(AppTheme.minimumTapTarget - 2 * Self.verticalInset, min(natural, limit))
+        return ceil(Self.maximumLines * lineHeight + insets)
+    }
+
+    private func naturalHeight(width: CGFloat) -> CGFloat {
+        ceil(sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
     }
 }
