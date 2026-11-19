@@ -5,8 +5,8 @@
 - 版本：0.0.33
 - 维护者：Soma maintainers
 - 部分替代：[ADR 0144](../../0.0.30/adr/0144-healthkit-daily-activity.md)（在日活动只读边界上增加 `bodyMass` 与 `bodyFatPercentage` 导入；其余三项日活动决策仍有效）
-- 后续替代：[ADR 0150](../../../adr/0150-healthkit-body-daily-records.md)（按自然日一条健康记录、取消同秒配对与列表日卡全量）
-- 上游依据：[PRD 080](../../../prd/080-healthkit-body-mass.md)
+- 后续替代：[ADR 0150](../../0.0.35/adr/0150-healthkit-body-daily-records.md)（按自然日一条健康记录、取消同秒配对与列表日卡全量）
+- 上游依据：[PRD 080](../../0.0.35/prd/080-healthkit-body-mass.md)
 - 下游落地：[验收](../../../acceptance.md)、[数据库结构](../../../engineering/database-schema.md)、[工程原则](../../../../CLAUDE.md)
 
 ## 背景

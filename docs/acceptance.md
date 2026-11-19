@@ -1,6 +1,6 @@
 # Soma 验收清单
 - 后续修订：[ADR 0152](adr/0152-coach-progress-reliability.md)（教练回今天、原片视频及部分保存恢复）
-- 后续修订：[PRD 080](prd/080-healthkit-body-mass.md)、[ADR 0149](archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录与身体曲线）
+- 后续修订：[PRD 080](archive/0.0.35/prd/080-healthkit-body-mass.md)、[ADR 0149](archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](archive/0.0.35/adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录与身体曲线）
 - 后续修订：[PRD 079](archive/0.0.32/prd/079-daily-target-deficit.md)、[ADR 0148](archive/0.0.32/adr/0148-daily-target-deficit.md)（每日目标热量缺口）
 - 后续修订：[PRD 078](archive/0.0.32/prd/078-residual-energy-coefficient.md)、[ADR 0147](archive/0.0.32/adr/0147-residual-energy-coefficient.md)、[PRD 081](prd/081-training-energy-in-total.md)、[ADR 0151](adr/0151-training-energy-in-total.md)（总消耗再加入训练列表消耗）
 - 后续修订：[PRD 076](archive/0.0.30/prd/076-adaptive-energy-system.md)、[ADR 0145](archive/0.0.30/adr/0145-adaptive-energy-system.md)（动态消耗、完整性与本地校准）
@@ -70,7 +70,7 @@
 | 多个健身房和当前场馆 | 聊天可创建、更新、切换；健身房列表可直接选择当前场馆。 |
 | 健身房审查 | 详情展示全部上传照片、AI 环境总结和器械列表；健身房与器械支持编辑、删除。 |
 | 饮食与身体记录 | 聊天或媒体生成本地记录；饮食详情食物项与聊天菜品行共用同一套稳定可编辑行，分隔线不创建空行。菜名过长时换行；份量与宏量能一行放下就同行，放不下时宏量另起一行、份量只在超过整行宽度时换行。整餐热量与宏量始终由菜品派生：字段完整时显示精确总计，部分菜品有值时显示 `≥ 已知小计`，全部未知显示破折号。只修改相同单位的正数份数时按比例缩放当前已有营养；直接修改其他字段互不联动。总糖不再保存；证据足够时整餐可保存「较慢／中等／较快」的组成升糖速度及成对依据，明确实际反应因人而异，不输出血糖峰值或诊断。详细评价超过实际五行才显示展开/收起。详情保留原始文字、食物/体型照片和 AI 说明。 |
-| 训练与动作分析 | 训练动作使用稳定 ID；Tool Schema v4 在动作搜索/新建/更新及训练新建/更新中显式传递 `target_kind`、`laterality`、逻辑组、effort 侧别与逐组间歇。左右各做必须形成同一逻辑组的 left/right evidence；本次显式 evidence 优先于动作库 fallback。旧聚合与新逐组 Session 统一进入动作历史；缺失字段保持空，动作图与视频复盘仍只由用户主动触发。 |
+| 训练与动作分析 | 训练动作使用稳定 ID；动作创建 Tool v5 显式保存主要和辅助受力块 ID、`target_kind` 与 `laterality`。动作搜索、更新和训练写入 Tool v4 沿用完成方式、侧别与逐组间歇。左右各做必须形成同一逻辑组的 left/right evidence；本次显式 evidence 优先于动作库 fallback。旧聚合与新逐组 Session 统一进入动作历史；缺失字段保持空，动作图与视频复盘仍只由用户主动触发。 |
 | 动作快捷输入 | 输入框只在本地 active 标准名称中匹配；建议行给出「动作名 + 最近一次训练数据」，相邻次数、重量、间歇和侧别一致的组压缩为 `50kg 5×5组 间歇60s`，异构组仅按连续同值分段且不改变底层 evidence。点按只修改草稿，仍由用户主动发送。 |
 | 训练课程与带练 | 计划详情依次展示可编辑概览、确定性训练效果和动作列表；侧别与按次数/按时长保存在动作定义，两类计划间歇在动作设定统一编辑，独立组只编辑次数或时长、重量、类型与备注。聊天动作卡读取动作定义的目标单位和侧别，不允许旧记录形成第二套配置源；聊天密度使用动作头与标签，数据行按“完成值 · 重量”呈现、连续同值组右侧 `×N`；各组都相同时组间歇与完成值同一行，组有差别时在组块中间，换侧间歇在左右记录中间；不加 A/B/C 前缀或重复大卡层。训练页最近训练与计划详情最近执行记录使用系统左滑删除，不使用长按菜单。点击开始只选择一次三种录像策略即进入首个动作；准备页紧凑展示本次待练分组参数并可调整，主操作固定可见，计时与休息自动推进，进度按动作/逻辑组分段，语音播报组数与次数/秒数。动作记录先于 Session 自动完成，最后进入本地分享预览。教练基于当日原始训练生成计划时，同时组装一次已完成 Session，删除 Session 不删除原始记录。 |
 | 自动录像 | Session 可关闭、每动作首个工作组或每组自动录制；主界面始终保留主动录像。倒计时只取景，开组进入 `.setInProgress` 并等预览宿主后再 `startRecording`。每次请求拥有 attempt 单终态并绑定 Effort，成功 key 为 true 的有效文件必须保留；提前结束和重复 stop 不产生第二个 Alert。相机失败暂停自动策略但不阻断训练；失败提示给出具体原因与恢复办法，技术标识只留诊断，`startingRecording` 与录像进行中不改写视频连接、不重建 RotationCoordinator。紧凑与放大预览、历史缩略均 fill。真实 Delegate、系统中断和左右独立片段仍需真机证据。 |

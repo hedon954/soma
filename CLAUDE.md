@@ -3,7 +3,7 @@
 - 后续修订：
   - [ADR 0153](docs/adr/0153-agent-daily-energy-read.md)（明确请求时允许模型读取「进展」显示的当日日账）
   - [PRD 081](docs/prd/081-training-energy-in-total.md)、[ADR 0151](docs/adr/0151-training-energy-in-total.md)（预估总消耗独立加入训练列表消耗）
-  - [PRD 080](docs/prd/080-healthkit-body-mass.md)、[ADR 0149](docs/archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](docs/adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录、来源图标与身体曲线）
+  - [PRD 080](docs/archive/0.0.35/prd/080-healthkit-body-mass.md)、[ADR 0149](docs/archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](docs/archive/0.0.35/adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录、来源图标与身体曲线）
   - [PRD 079](docs/archive/0.0.32/prd/079-daily-target-deficit.md)、[ADR 0148](docs/archive/0.0.32/adr/0148-daily-target-deficit.md)（减脂与增肌减脂共用可设置目标缺口，默认 400 kcal；清空恢复默认）
   - [PRD 078](docs/archive/0.0.32/prd/078-residual-energy-coefficient.md)、[ADR 0147](docs/archive/0.0.32/adr/0147-residual-energy-coefficient.md)（总消耗改为静息 × 残差系数 + 所选日活动能量）
   - [PRD 077](docs/archive/0.0.31/prd/077-daily-activity-source-priority.md)、[ADR 0146](docs/archive/0.0.31/adr/0146-daily-activity-source-priority.md)（日常活动多来源整包择优与独立列表）

@@ -1,6 +1,6 @@
 # 数据库结构与 ER 图
 
-- 后续修订：[PRD 080](../prd/080-healthkit-body-mass.md)、[ADR 0149](../archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](../adr/0150-healthkit-body-daily-records.md)（体重健康导入、每日一条记录与最初来源字段）
+- 后续修订：[PRD 080](../archive/0.0.35/prd/080-healthkit-body-mass.md)、[ADR 0149](../archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](../archive/0.0.35/adr/0150-healthkit-body-daily-records.md)（体重健康导入、每日一条记录与最初来源字段）
 - 后续修订：[PRD 075](../archive/0.0.30/prd/075-healthkit-daily-activity.md)、[ADR 0144](../archive/0.0.30/adr/0144-healthkit-daily-activity.md)（日常活动运动记录与统计）
 
 - 上游依据：[ADR 0143](../archive/0.0.27/adr/0143-composable-training.md)（slotsData 的可选组合内容；持久字段不变）

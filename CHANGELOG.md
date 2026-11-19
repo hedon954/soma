@@ -5,6 +5,8 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+## [0.0.38] - 2026-11-20
+
 ### Changed
 
 - 进展的日常活动与训练、饮食记录使用一致的行布局，并展示 Apple 健康或 COROS 的来源图标。
@@ -16,6 +18,14 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 - 教练新建动作时保存受力块 ID，训练详情和分享自动高亮。
 - 修复教练补餐和发送时，键盘焦点切换导致界面卡死的问题。输入框测量只计算高度。
 - 教练补餐提醒关闭后，下次进入仍会提示未补齐的餐次。
+
+### Privacy and compatibility
+
+- 最低支持 iOS 17。动作受力块 ID 使用现有本机肌群字段保存，已有标注和备份兼容。远程 Agent 可通过支持 v5 动作创建协议的服务版本写入受力标注。
+
+### Known limitations
+
+- 此版发布 GitHub 源码。TestFlight 和 App Store 分发受反馈凭据迁移门禁约束。
 
 ## [0.0.37] - 2026-11-19
 

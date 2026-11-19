@@ -2,6 +2,7 @@
 
 - 状态：已实现，模拟器验证通过，真机验收见技术方案
 - 修订自：[PRD 000](000-origin-through-0.0.11.md)、[PRD 081](081-training-energy-in-total.md)（能量明细）
+- 后续修订：[PRD 083](083-coach-input-and-training-metadata.md)（补餐输入、进展明细与动作元数据）
 - 下游落地：[ADR 0152](../adr/0152-coach-progress-reliability.md)、[ADR 0153](../adr/0153-agent-daily-energy-read.md)、[BUG 0069](../bugs/0069-batch-record-rendering.md)、[BUG 0072](../bugs/0072-nutrition-label-obscured-column.md)、[BUG 0073](../bugs/0073-stale-coach-next-actions.md)、[BUG 0074](../bugs/0074-stale-workout-weight-correction.md)、[BUG 0075](../bugs/0075-already-recorded-meals-in-backfill.md)、[BUG 0076](../bugs/0076-meal-backfill-keyboard-watchdog.md)、[BUG 0077](../bugs/0077-meal-backfill-dismissal-lifetime.md)、[ADR 0154](../adr/0154-exercise-muscle-map-ids.md)、[BUG 0078](../bugs/0078-exercise-muscle-map-missing.md)
 - 日期：2026-11-18
 - 版本：0.0.37（构建 41），基线为 0.0.36（构建 40）

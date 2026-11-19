@@ -4,10 +4,10 @@
 - 日期：2026-11-10
 - 版本：0.0.35
 - 维护者：Soma maintainers
-- 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（健康身体测量的存储与展示）
+- 部分替代：[ADR 0000](../../../adr/0000-origin-through-0.0.11.md)（健康身体测量的存储与展示）
 - 后续替代：暂无
 - 上游依据：[PRD 080](../prd/080-healthkit-body-mass.md)
-- 下游落地：[验收](../acceptance.md)、[数据库结构](../engineering/database-schema.md)、[工程原则](../../CLAUDE.md)
+- 下游落地：[验收](../../../acceptance.md)、[数据库结构](../../../engineering/database-schema.md)、[工程原则](../../../../CLAUDE.md)
 
 ## 背景
 

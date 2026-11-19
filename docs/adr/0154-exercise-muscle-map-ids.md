@@ -2,8 +2,9 @@
 
 - 状态：已采纳
 - 日期：2026-11-19
+- 版本：0.0.38
 - 部分替代：[ADR 0000](0000-origin-through-0.0.11.md)（动作库肌群来源与写入）
-- 上游依据：[PRD 082](../prd/082-coach-progress-reliability.md)
+- 上游依据：[PRD 082](../prd/082-coach-progress-reliability.md)、[PRD 083](../prd/083-coach-input-and-training-metadata.md)
 - 下游落地：[BUG 0078](../bugs/0078-exercise-muscle-map-missing.md)
 
 ## 背景

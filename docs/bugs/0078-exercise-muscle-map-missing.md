@@ -1,6 +1,6 @@
 # BUG 0078 · 训练关联动作缺少受力标注
 
-- 上游依据：[PRD 082](../prd/082-coach-progress-reliability.md)、[ADR 0154](../adr/0154-exercise-muscle-map-ids.md)
+- 上游依据：[PRD 082](../prd/082-coach-progress-reliability.md)、[PRD 083](../prd/083-coach-input-and-training-metadata.md)、[ADR 0154](../adr/0154-exercise-muscle-map-ids.md)
 
 ## 症状
 
