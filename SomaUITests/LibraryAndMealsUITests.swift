@@ -43,6 +43,45 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
+    func testExerciseTrendsSwitchUnitsAndOpenSelectedRecordInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance)
+            openLibrary(app)
+            app.buttons["exercise-category-region-胸部"].tap()
+            let exercise = app.buttons["exercise-link-分类推举"]
+            XCTAssertTrue(exercise.waitForExistence(timeout: 5))
+            exercise.tap()
+            let metric = app.segmentedControls["exercise-trend-metric"]
+            for _ in 0 ..< 8 where !metric.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertTrue(metric.buttons["容量"].isSelected)
+            let capacityChart = app.descendants(matching: .any)["exercise-capacity-trend"].firstMatch
+            for _ in 0 ..< 3 where capacityChart.frame.midY >= app.tabBars.firstMatch.frame.minY {
+                app.swipeUp()
+            }
+            capacityChart.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.42)).tap()
+            let selected = app.descendants(matching: .any)["exercise-trend-selected-record"].firstMatch
+            XCTAssertTrue(selected.waitForExistence(timeout: 5), capacityChart.debugDescription)
+            let chart = app.descendants(matching: .any)["exercise-effort-trend"].firstMatch
+            for (title, unit) in [("重量", "kg"), ("次数", "次"), ("时长", "秒")] {
+                metric.buttons[title].tap()
+                XCTAssertTrue(chart.waitForExistence(timeout: 5))
+                XCTAssertEqual(chart.label, "训练\(title)趋势，单位\(unit)")
+                XCTAssertFalse(selected.exists)
+            }
+            for _ in 0 ..< 3 where chart.frame.midY >= app.tabBars.firstMatch.frame.minY {
+                app.swipeUp()
+            }
+            chart.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.42)).tap()
+            XCTAssertTrue(selected.waitForExistence(timeout: 5), chart.debugDescription)
+            keep(app, "exercise-trend-selection-\(appearance)")
+            selected.tap()
+            XCTAssertTrue(app.staticTexts["训练数据"].waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
     private func openLibrary(_ app: XCUIApplication) {
         let link = app.buttons["动作库"].firstMatch
         for _ in 0 ..< 15 {
