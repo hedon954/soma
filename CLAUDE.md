@@ -1,6 +1,7 @@
 # Soma Engineering Principles
 
 - 后续修订：
+  - [ADR 0153](docs/adr/0153-agent-daily-energy-read.md)（明确请求时允许模型读取「进展」显示的当日日账）
   - [PRD 081](docs/prd/081-training-energy-in-total.md)、[ADR 0151](docs/adr/0151-training-energy-in-total.md)（预估总消耗独立加入训练列表消耗）
   - [PRD 080](docs/prd/080-healthkit-body-mass.md)、[ADR 0149](docs/archive/0.0.33/adr/0149-healthkit-body-mass.md)、[ADR 0150](docs/adr/0150-healthkit-body-daily-records.md)（Apple 健康体重导入、每日一条记录、来源图标与身体曲线）
   - [PRD 079](docs/archive/0.0.32/prd/079-daily-target-deficit.md)、[ADR 0148](docs/archive/0.0.32/adr/0148-daily-target-deficit.md)（减脂与增肌减脂共用可设置目标缺口，默认 400 kcal；清空恢复默认）
@@ -137,7 +138,7 @@ App → Views → Services → Models
 
 按 PRD 079 / ADR 0148，减脂与增肌减脂推荐摄入 = max(0, 预估总消耗 − 用户目标缺口)，仍可摄入 = max(0, 推荐摄入 − 已记录摄入)。目标缺口不是实际消耗或健康事实；超过 800 kcal 仅非阻塞提醒，不是医学阈值。
 训练项汇总当天训练列表的有效估算。手表或其他 App 可能已把同场训练计入日活动能量，明细保留重复计量的说明。缺少日活动读数时保留未知。不把 COROS 与 Apple 的活动能量相加。不读取静息能量、心率、睡眠或路线。
-健康事实与派生依据不进入模型、应用备份/导出或 Server；个人库及其目录排除系统备份并采用 complete 文件保护。
+健康事实与派生依据留在设备上。[ADR 0153](docs/adr/0153-agent-daily-energy-read.md) 允许 `get_daily_energy` 把「进展」可见的当日日账汇总交给 App 直连模型的本轮请求。健康数据继续排除在应用备份/导出和 Server 之外；个人库及其目录排除系统备份并采用 complete 文件保护。
 
 ### Sensitive data
 

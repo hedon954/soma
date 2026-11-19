@@ -11,6 +11,12 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0075](0075-already-recorded-meals-in-backfill.md) | 已修复 | 补餐提醒要求重复核对已有记录 | 三餐槽位、跨天计数、旧餐次与周月覆盖 |
+| [0074](0074-stale-workout-weight-correction.md) | 已修复，独立磁盘库回归通过 | 训练记录变动后仍可提交旧重量校正 | 实际来源冲突、重开后幂等、撤销清单 |
+| [0073](0073-stale-coach-next-actions.md) | 已修复 | 训练记录缺失后建议仍可提交 | 实际可用性、会话范围、双击去重 |
+| [0072](0072-nutrition-label-obscured-column.md) | 已修复，模型端到端待验收 | 反光遮住列标题后营养数值串列 | 列归属、中文基准、历史图片序号 |
+| [0071](0071-unverified-video-input.md) | 已修复，提供方实测待验收 | 视频未经模型能力确认就发送，拒绝后换模型可能无效 | 当前和历史视频门禁、完整字节、手动重试检查点 |
+| [0070](0070-in-memory-media-cleanup.md) | 已修复，模拟器回归通过 | 内存数据空间启动时误删磁盘附件 | 内存库不能触发磁盘媒体清理或写入完成标记 |
 | [0068](0068-health-activity-cancels-lifestyle-baseline.md) | 系数不再被活动读数取消；总量改由 PRD 078 加上所选日活动能量 | 健康活动日合计取消生活系数并形成错误总消耗 | 系数保持，活动能量入总量，训练列表消耗另加，缺数不编造 |
 | [0067](0067-workout-live-activity-stale-progress.md) | 已修复，完整本地门禁通过，真机锁屏与灵动岛待验收 | 带练灵动岛和锁屏状态卡停在 0 组且呈搜索条 | 快照后投影、进度分数、复用 Activity、状态卡布局 |
 | [0066](0066-guided-replacement-computed-predicate-crash.md) | 已修复，完整本地门禁通过，真机交互待验收 | 替换动作用计算属性 Predicate 闪退 | 不可变候选、`archivedAt` 查询、同动作改目标重建、静态门禁 |
@@ -82,3 +88,5 @@
 
 Bug 形成正式 PRD/ADR 修复时，Bug 用“下游落地”链接新文，新文用“上游依据”反向链接 Bug；
 关系必须通过 `make check` 的双向文档门禁。
+
+- [BUG 0069 · 批量训练审查卡渲染与进展快照失效](0069-batch-record-rendering.md)

@@ -1,5 +1,6 @@
 # Agent Tool 目录
 
+- 后续修订：[ADR 0153](../adr/0153-agent-daily-energy-read.md)（本机 Agent 只读当日日账）
 - 后续修订：[ADR 0141](../archive/0.0.27/adr/0141-coach-training-schedule-draft.md)（增加不落库的 `propose_training_schedule`）
 - 后续修订：[ADR 0000](../adr/0000-origin-through-0.0.11.md)（固定提问工具与曝光例外）
 - 后续修订：[ADR 0145](../archive/0.0.30/adr/0145-adaptive-energy-system.md)（明确生活/完整性事实与训练热量口径）
@@ -21,10 +22,10 @@
 
 ## 暴露策略
 
-运行时只解码当前协议 35 个名称。每次请求把当轮允许的集合放进 API `tools` 参数；System
+每次请求把当轮允许的集合放进 API `tools` 参数；System
 Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，整轮固定。
 
-- 未选快捷按钮：注册当前协议全部 34 个 Tool，含 `load_skill` 与 `ask_user_questions`。Skill 目录完整可见。不做关键词或本机状态剪枝。
+- 未选快捷按钮时注册当前执行方式可用的全部 Tool，含 `load_skill` 与 `ask_user_questions`。Skill 目录完整可见。`get_daily_energy` 可由 App 直连的模型调用。
 - 选中快捷按钮：只暴露该按钮 `toolNames` 与当前协议的交集；按钮绑定 Skill 时首轮直载完整
   Markdown 与专属上下文。ADR 0082 之后曝光边界由按钮持有，Skill 不再声明工具。
 - `ask_user_questions` 始终可用；按钮绑定的确定性操作仍须在当前业务工具曝光范围内。
@@ -33,7 +34,7 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 - 未知 Tool 名称在保存快捷按钮与运行时都被丢弃，解码失败不能执行。
 - 每次模型调用都把本轮工具名写进 Trace model span 与诊断日志（ADR 0083）。
 
-## 当前 34 个 Tool
+## 当前工具
 
 | 组 | Tool | 用途 |
 | --- | --- | --- |
@@ -42,6 +43,7 @@ Prompt 不声明 Tool 名称或 Schema。判断发生在 ReAct Loop 开始时，
 | exercises | `search_exercises`、`create_exercise`、`update_exercise`、`archive_exercise`、`merge_exercises` | 动作搜索、创建、修正、归档和合并 |
 | workouts | `list_workouts`、`get_workout`、`create_workout`、`update_workout`、`delete_workout` | 训练记录单一职责 CRUD |
 | meals | `list_meals`、`get_meal`、`create_meal`、`update_meal`、`delete_meal` | 饮食记录单一职责 CRUD |
+| meals | `get_daily_energy` | 无参数，读取调用时「进展」所见的当日日账 |
 | body | `list_body_entries`、`get_body_entry`、`create_body_entry`、`update_body`、`delete_body_entry` | 身体与体态记录单一职责 CRUD |
 | body | `record_energy_context` | 明确工作、通勤、家务与逐日饮食/训练/携带完整性；未知保持未知，不返回健康推导 |
 | plans | `list_programs`、`get_program`、`create_program`、`update_program`、`archive_program`、`delete_program`、`start_program`、`propose_training_schedule` | 课程读取、创建、直接更新当前处方、归档、删除和带练启动；计划草稿支持动作逐组参数、课程和嵌套计划，只校验不落库 |
