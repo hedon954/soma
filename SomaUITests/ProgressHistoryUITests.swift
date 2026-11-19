@@ -280,7 +280,9 @@ final class ProgressHistoryUITests: XCTestCase {
             let date = dateLabel.label
             let activity = app.buttons["progress-daily-activity"].firstMatch
             reveal(activity, in: app)
+            XCTAssertEqual(activity.label, "日常活动，Apple")
             XCTAssertTrue((activity.value as? String)?.contains("6,200") == true)
+            keep(app, "progress-activity-apple-\(appearance)")
             postActivityRefresh(signal)
             let retry = app.buttons["重试日常活动同步"]
             reveal(retry, in: app)

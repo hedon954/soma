@@ -13,7 +13,7 @@ final class DailyActivityUITests: XCTestCase {
             let row = matchingCards.firstMatch
             reveal(row, in: app)
             XCTAssertEqual(matchingCards.count, 1)
-            XCTAssertTrue(row.label.contains("日常活动"))
+            XCTAssertEqual(row.label, "日常活动，COROS")
             let metrics = row.value as? String ?? ""
             XCTAssertEqual(metrics, "步数 8,640 步，步行与跑步距离 6.1 千米，活动消耗 486 千卡")
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "最近读取")).firstMatch.exists)

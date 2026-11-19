@@ -12,7 +12,7 @@ struct ProgressDailyActivitySection: View {
             Text("日常活动").font(.headline).accessibilityAddTraits(.isHeader)
             ForEach(records, id: \.activity.id) { record in
                 if let summary = record.dailyActivity {
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
                         let card = ProgressDailyActivityCard(summary: summary)
                         NavigationLink { ProgressRecentActivityDestination(activity: record.activity) } label: { card }
                             .buttonStyle(.plain)
@@ -21,11 +21,9 @@ struct ProgressDailyActivitySection: View {
                             .accessibilityHint("打开活动详情")
                             .accessibilityIdentifier("progress-daily-activity")
                         if record.activity.id == records.first?.activity.id, let recovery {
-                            Divider().padding(.horizontal, 16)
                             recoveryRow(recovery, hasSavedValues: true)
                         }
                     }
-                    .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 18))
                 } else {
                     NavigationLink { ProgressRecentActivityDestination(activity: record.activity) } label: {
                         ProgressRecentActivityRow(activity: record.activity)
@@ -36,7 +34,6 @@ struct ProgressDailyActivitySection: View {
             }
             if let recovery, records.first?.dailyActivity == nil {
                 recoveryRow(recovery, hasSavedValues: !records.isEmpty)
-                    .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 18))
             }
         }
     }
@@ -57,6 +54,7 @@ struct ProgressDailyActivitySection: View {
         .foregroundStyle(AppTheme.accent)
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
+        .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func recoveryLabel(_ recovery: DailyActivityReadRecovery, hasSavedValues: Bool) -> some View {
@@ -104,32 +102,57 @@ struct ProgressDailyActivityCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(summary.resolvedWinningSource.title, systemImage: "figure.walk")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption)
-            }
-            let layout = size.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout(alignment: .top))
-            layout {
-                ForEach(DailyActivityMetricKind.allCases, id: \.self) { metric in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(metric == .walkingRunningDistance ? "步跑距离" : metric.title).font(.caption)
-                        HStack(alignment: .firstTextBaseline, spacing: 3) {
-                            Text(metric.displayValue(summary[metric].value))
-                                .font(.headline.monospacedDigit())
-                                .contentTransition(reduceMotion ? .identity : .numericText())
-                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: summary[metric].value)
-                            Text(metric.unit).font(.caption2)
-                        }
+        HStack(alignment: size.isAccessibilitySize ? .top : .center, spacing: 12) {
+            DailyActivitySourceIcon(kind: .winning(summary.resolvedWinningSource), size: 24)
+                .frame(width: 40, height: 40)
+                .background(AppTheme.insetBackground, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 7) {
+                Text(summary.resolvedWinningSource.title)
+                    .font(.subheadline.weight(.semibold))
+                if size.isAccessibilitySize {
+                    stackedMetrics
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 8) { metrics }
+                        stackedMetrics
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.accent.opacity(0.46))
+                .accessibilityHidden(true)
         }
         .foregroundStyle(AppTheme.accent)
-        .padding(16)
+        .padding(.vertical, 5)
+        .frame(minHeight: 64)
         .contentShape(Rectangle())
+    }
+
+    private var stackedMetrics: some View {
+        VStack(alignment: .leading, spacing: 8) { metrics }
+    }
+
+    private var metrics: some View {
+        ForEach(DailyActivityMetricKind.allCases, id: \.self) { metric in
+            VStack(alignment: .leading, spacing: 3) {
+                Text(metric == .walkingRunningDistance ? "步跑距离" : metric.title)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.accent.opacity(0.64))
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(metric.displayValue(summary[metric].value))
+                        .font(.subheadline.monospacedDigit().weight(.medium))
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: summary[metric].value)
+                    Text(metric.unit)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.accent.opacity(0.64))
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }

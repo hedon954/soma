@@ -5,6 +5,10 @@ Soma 使用 [Semantic Versioning](https://semver.org/)。这里只记录可发�
 
 ## [Unreleased]
 
+### Changed
+
+- 进展的日常活动与训练、饮食记录使用一致的行布局，并展示 Apple 健康或 COROS 的来源图标。
+
 ### Fixed
 
 - 修复教练补餐和发送时，键盘焦点切换导致界面卡死的问题。输入框测量只计算高度。
