@@ -86,6 +86,9 @@ actor MediaMaintenance {
         defaults: UserDefaults = .standard
     ) async {
         guard !isRunning, !defaults.bool(forKey: Self.currentCleanupKey) else { return }
+        // In-memory stores cannot account for references in the persistent media directory.
+        guard !personalContainer.configurations.contains(where: \.isStoredInMemoryOnly),
+              !demoContainer.configurations.contains(where: \.isStoredInMemoryOnly) else { return }
         isRunning = true
         defer { isRunning = false }
 
