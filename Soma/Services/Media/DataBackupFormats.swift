@@ -60,6 +60,7 @@ enum DataArchiveError: LocalizedError {
     case invalidPasswordOrCorruptBackup
     case invalidPassword
     case missingMedia
+    case mediaTooLargeForAutomaticBackup
     case noCompleteBackup
     case destinationUnavailable
     case backupNotConfigured
@@ -79,6 +80,8 @@ enum DataArchiveError: LocalizedError {
             "备份密码至少需要 8 个字符。"
         case .missingMedia:
             "有记录引用的图片或视频已不存在，本次备份未完成。"
+        case .mediaTooLargeForAutomaticBackup:
+            "有较大的视频，请打开「数据与备份」手动备份。上一份备份仍可恢复。"
         case .noCompleteBackup:
             "所选目录中没有找到完整的 Soma 备份。"
         case .destinationUnavailable:

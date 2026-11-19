@@ -12,6 +12,7 @@ enum DataBackupService {
         to selectedDirectory: URL,
         credential: DataBackupCredential,
         now: Date = .now,
+        maximumMediaBytes: Int? = nil,
         mediaURL: (String) -> URL? = MediaStore.url(at:)
     ) throws -> DataBackupWriteResult {
         let snapshot = snapshot.withoutHealthActivity()
@@ -70,7 +71,16 @@ enum DataBackupService {
                 else {
                     throw DataArchiveError.missingMedia
                 }
-                let plaintext = try Data(contentsOf: sourceURL, options: .mappedIfSafe)
+                let file = try FileHandle(forReadingFrom: sourceURL)
+                defer { try? file.close() }
+                if let maximumMediaBytes,
+                   try file.seekToEnd() > UInt64(maximumMediaBytes)
+                {
+                    throw DataArchiveError.mediaTooLargeForAutomaticBackup
+                }
+                try file.seek(toOffset: 0)
+                let plaintext = try file.readToEnd() ?? Data()
+                try Task.checkCancellation()
                 let encrypted = try DataBackupCrypto.seal(
                     plaintext,
                     keyData: credential.keyData
@@ -89,6 +99,7 @@ enum DataBackupService {
                 ))
             }
 
+            try Task.checkCancellation()
             let envelope = DataBackupEnvelope(
                 snapshot: snapshot,
                 media: mediaDescriptors
@@ -111,6 +122,7 @@ enum DataBackupService {
                 options: .atomic
             )
 
+            try Task.checkCancellation()
             try fileManager.moveItem(at: partialURL, to: finalURL)
             rotateBackups(in: root, keeping: retainedBackupCount)
             return DataBackupWriteResult(

@@ -251,6 +251,7 @@ struct RootView: View {
             .onReceive(
                 NotificationCenter.default.publisher(for: ModelContext.didSave)
             ) { notification in
+                dataManagement.recordPersonalSave(notification, personalContainer: dataSpace.personalContainer)
                 guard ModelContextSaveImpact.affectsInsights(
                     notification,
                     in: modelContext

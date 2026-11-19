@@ -37,6 +37,9 @@ final class DataManagementCoordinator {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let backupBackgroundLease: BackgroundExecutionLease
     @ObservationIgnored private var automaticBackupTask: Task<Void, Never>?
+    @ObservationIgnored private var backupDataRevision = 0
+    @ObservationIgnored private var lastCapturedBackupRevision: Int?
+    @ObservationIgnored private var nextAutomaticBackupTime: Date?
     private(set) var activity: DataManagementActivity?
     private(set) var lastBackupAt: Date?
     private(set) var lastErrorMessage: String?
@@ -65,6 +68,11 @@ final class DataManagementCoordinator {
 
     var isWorking: Bool {
         activity != nil
+    }
+
+    func recordPersonalSave(_ notification: Notification, personalContainer: ModelContainer) {
+        guard let context = notification.object as? ModelContext, context.container === personalContainer else { return }
+        backupDataRevision &+= 1
     }
 
     func exportRecords(
@@ -151,6 +159,7 @@ final class DataManagementCoordinator {
         allowBusySkip: Bool = false,
         skipIfUnchanged: Bool = false
     ) async throws -> DataBackupWriteResult? {
+        let capturedRevision = backupDataRevision
         if activity != nil {
             if allowBusySkip {
                 return nil
@@ -174,10 +183,13 @@ final class DataManagementCoordinator {
         }
         let snapshot = try await captureSnapshot(from: personalContainer)
         try Task.checkCancellation()
-        let fingerprint = try snapshot.contentFingerprint()
+        let fingerprint = try await runDetached(priority: .utility) {
+            try snapshot.contentFingerprint()
+        }
         if skipIfUnchanged,
            fingerprint == defaults.string(forKey: DefaultsKey.contentFingerprint)
         {
+            lastCapturedBackupRevision = capturedRevision
             return nil
         }
         do {
@@ -190,7 +202,8 @@ final class DataManagementCoordinator {
                     return try DataBackupService.write(
                         snapshot: snapshot,
                         to: destination,
-                        credential: credential
+                        credential: credential,
+                        maximumMediaBytes: skipIfUnchanged ? 96 * 1024 * 1024 : nil
                     )
                 }
                 return (result, refreshedBookmark)
@@ -200,6 +213,7 @@ final class DataManagementCoordinator {
             }
             recordBackupSuccess(at: backedUp.0.completedAt)
             defaults.set(fingerprint, forKey: DefaultsKey.contentFingerprint)
+            lastCapturedBackupRevision = capturedRevision
             return backedUp.0
         } catch is CancellationError {
             throw CancellationError()
@@ -212,10 +226,14 @@ final class DataManagementCoordinator {
     func backupWhenEnteringBackground(
         personalContainer: ModelContainer
     ) {
-        guard isBackupConfigured, automaticBackupTask == nil else { return }
+        guard isBackupConfigured, automaticBackupTask == nil,
+              backupDataRevision != lastCapturedBackupRevision,
+              nextAutomaticBackupTime.map({ $0 <= .now }) != false
+        else { return }
+        nextAutomaticBackupTime = .now.addingTimeInterval(60)
         backupBackgroundLease.begin { [weak self] in
             self?.automaticBackupTask?.cancel()
-            self?.automaticBackupTask = nil
+            // The task retains ownership until its cancellation cleanup finishes.
         }
         automaticBackupTask = Task { [weak self] in
             guard let self else { return }
@@ -223,11 +241,13 @@ final class DataManagementCoordinator {
                 backupBackgroundLease.end()
                 automaticBackupTask = nil
             }
-            _ = try? await backupNow(
-                personalContainer: personalContainer,
-                allowBusySkip: true,
-                skipIfUnchanged: true
-            )
+            do {
+                _ = try await backupNow(personalContainer: personalContainer, allowBusySkip: true, skipIfUnchanged: true)
+            } catch is CancellationError {
+                nextAutomaticBackupTime = nil
+            } catch {
+                nextAutomaticBackupTime = .now.addingTimeInterval(300)
+            }
         }
     }
 
