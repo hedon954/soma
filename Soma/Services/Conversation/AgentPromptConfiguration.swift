@@ -10,6 +10,12 @@ struct AgentPromptConfiguration: Codable, Equatable, Sendable {
     var tools: [AgentModelTool]
     var selectedSkillID: String?
 
+    var forRemoteExecution: Self {
+        var copy = self
+        copy.tools.removeAll { $0.name.isAppDirectOnly }
+        return copy
+    }
+
     var fingerprint: String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

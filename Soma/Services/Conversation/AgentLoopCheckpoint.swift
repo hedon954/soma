@@ -136,6 +136,12 @@ struct AgentCheckpointToolResult: Codable, Equatable, @unchecked Sendable {
     var step: Int
     var call: AgentCheckpointToolCall
     var result: AgentToolResult
+
+    init(step: Int, call: AgentCheckpointToolCall, result: AgentToolResult) {
+        self.step = step
+        self.call = call
+        self.result = result.forPersistence(of: call.action.name)
+    }
 }
 
 struct AgentCheckpointToolBatch: Codable, Equatable, @unchecked Sendable {

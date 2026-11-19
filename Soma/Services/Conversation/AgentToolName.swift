@@ -36,6 +36,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
     case recordPerformanceAnalysis = "record_performance_analysis"
     case submitFeedback = "submit_feedback"
     case recordEnergyContext = "record_energy_context"
+    case getDailyEnergy = "get_daily_energy"
 
     var isTypedTool: Bool {
         switch self {
@@ -61,6 +62,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
              .getWorkout,
              .listMeals,
              .getMeal,
+             .getDailyEnergy,
              .listBodyEntries,
              .getBodyEntry,
              .listPrograms,
@@ -74,7 +76,7 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
 
     var schemaVersion: Int {
         switch self {
-        case .askUserQuestions, .proposeTrainingSchedule, .recordEnergyContext: 1
+        case .askUserQuestions, .proposeTrainingSchedule, .recordEnergyContext, .getDailyEnergy: 1
         case .searchExercises,
              .createExercise,
              .updateExercise,
@@ -164,6 +166,11 @@ enum AgentToolName: String, Codable, CaseIterable, Equatable, Sendable {
         case .recordPerformanceAnalysis: "保存视频复盘"
         case .submitFeedback: "提交产品反馈"
         case .recordEnergyContext: "记录生活与完整性事实"
+        case .getDailyEnergy: "读取今日饮食与能量"
         }
+    }
+
+    var isAppDirectOnly: Bool {
+        self == .getDailyEnergy
     }
 }

@@ -154,7 +154,7 @@ final class AgentPromptMigrationRefactorTests: XCTestCase {
         )
         let tools = AgentToolExposurePolicy.tools(selectedShortcut: shortcut)
         XCTAssertEqual(Set(tools), [
-            .listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal, .askUserQuestions
+            .listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal, .getDailyEnergy, .askUserQuestions
         ])
         XCTAssertFalse(tools.contains(.loadSkill))
     }

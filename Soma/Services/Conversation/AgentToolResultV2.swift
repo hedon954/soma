@@ -79,6 +79,11 @@ struct AgentToolResult: Codable, Equatable, Sendable {
         message
     }
 
+    func forPersistence(of tool: AgentToolName) -> Self {
+        guard tool == .getDailyEnergy, ok else { return self }
+        return .success("本轮曾读取当日日账。需要当前数值时请重新读取进展日账。", code: "daily_energy_read")
+    }
+
     enum CodingKeys: String, CodingKey {
         case ok, code, message, data, page, observation, field, expected, retryable
         case recordRefs = "record_refs"

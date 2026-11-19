@@ -17,6 +17,23 @@ final class ProgressEnergyDeficitTests: XCTestCase {
         XCTAssertEqual(facts.days.first?.estimatedEnergyDeficit, result.kilocalories)
     }
 
+    func testAgentDayLedgerUsesTheVisibleProgressAmountsAndBreakdown() throws {
+        let day = snapshot(.day, [meal(10, 1800), record(10, .workout, calories: 100, met: 5)], goal: .fatLoss, confirmsFood: false)
+        let result = AgentDailyEnergyRead.result(from: day, targetDeficit: nil, at: date(10, hour: 12), calendar: calendar)
+        guard case let .object(values)? = result.data else { return XCTFail("未返回进展日账") }
+        let progressDeficit = try XCTUnwrap(ProgressEnergyDeficit.make(snapshot: day))
+        XCTAssertEqual(values["recorded_intake_kcal"], .number(1800))
+        XCTAssertEqual(values["estimated_total_expenditure_kcal"], try .number(Double(EnergyKilocalorieDisplay.whole(XCTUnwrap(day.averageEstimate)))))
+        XCTAssertEqual(values["remaining_intake_kcal"], try .number(Double(EnergyKilocalorieDisplay.whole(XCTUnwrap(progressDeficit.remainingIntakeKilocalories)))))
+        XCTAssertEqual(values["energy_difference_label"], .string(progressDeficit.metricLabel))
+        XCTAssertEqual(values["target_deficit_kcal"], .number(DailyTargetDeficit.resolve(nil)))
+        XCTAssertEqual(values["food_coverage_confirmed"], .bool(false))
+        XCTAssertEqual(values["missing_reason"], .string("有餐次待补"))
+        XCTAssertEqual(values["expenditure"], .array(ProgressEnergyBreakdown(snapshot: day, kind: .expenditure).rows.map {
+            .object(["label": .string($0.label), "display": .string($0.value)])
+        }))
+    }
+
     func testMissingAndPartialIntakeNeverBecomeZeroButExplicitZeroIsValid() throws {
         for meals in [[], [meal(10, nil)], [meal(10, 100, partial: true)], [meal(10, 100), meal(10, nil)]] {
             let facts = snapshot(.day, meals)

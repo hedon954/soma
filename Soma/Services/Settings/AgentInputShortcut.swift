@@ -129,6 +129,7 @@ enum AgentInputShortcutStore {
                     .getWorkout,
                     .listMeals,
                     .getMeal,
+                    .getDailyEnergy,
                     .listBodyEntries,
                     .getBodyEntry
                 ]),

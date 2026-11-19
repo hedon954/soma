@@ -7,6 +7,7 @@ export interface DeviceToolDefinition {
   description?: string;
   schemaVersion: 1 | 2 | 3 | 4;
   mutation: boolean;
+  appDirectOnly?: true;
   parameters: {
     type: "object";
     properties: Record<string, Record<string, unknown>>;
@@ -247,6 +248,13 @@ function recordDomainDefinitions(): DeviceToolDefinition[] {
 }
 
 const definitions: DeviceToolDefinition[] = [
+  {
+    name: "get_daily_energy",
+    schemaVersion: 1,
+    mutation: false,
+    appDirectOnly: true,
+    parameters: parameters({}),
+  },
   {
     name: "record_energy_context",
     description: "只记录用户明确的生活事实和日期范围内的完整性，不向模型返回健康依据或消耗系数。",
@@ -726,11 +734,13 @@ const definitions: DeviceToolDefinition[] = [
   },
 ];
 
+const remoteDefinitions = definitions.filter((definition) => !definition.appDirectOnly);
+
 export const deviceToolRegistry = new Map(
-  definitions.map((definition) => [definition.name, definition]),
+  remoteDefinitions.map((definition) => [definition.name, definition]),
 );
 export const deviceToolRegistryByVersion = new Map(
-  definitions.map((definition) => [
+  remoteDefinitions.map((definition) => [
     registryKey(definition.name, definition.schemaVersion),
     definition,
   ]),

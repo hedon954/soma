@@ -17,7 +17,7 @@ enum ConversationRecorder {
     ) -> AgentToolResult {
         // Startup migration repairs historical IDs. These two create tools allocate
         // only their new rows and already require stable referenced exercise IDs.
-        if call.name != .createMeal, call.name != .createWorkout {
+        if call.name != .createMeal, call.name != .createWorkout, call.name != .getDailyEnergy {
             try? BusinessIDAllocator.assignMissingIDs(in: context)
         }
         let occurredAt: Date?
@@ -52,6 +52,7 @@ enum ConversationRecorder {
             )
         }
         return switch call.name {
+        case .getDailyEnergy: .failure("日账读取由 App 直连的 Agent 执行。", code: "tool_unavailable", retryable: false)
         case .recordEnergyContext:
             AgentEnergyContextTool.execute(call.arguments, sourceDate: resolvedSourceDate, sourceTurnID: sourceTurnID, in: context)
         case .searchExercises, .createExercise, .updateExercise,

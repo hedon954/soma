@@ -13,6 +13,8 @@ extension AgentToolName {
 
     private var toolDescription: String {
         switch self {
+        case .getDailyEnergy:
+            "当用户询问今日摄入、消耗、缺口、剩余额度，或要根据今日记录安排饮食时调用。读取调用当下进展页的单日日账，含分项、目标、缺项。报告原值并区分估算与记录；同一轮先记录或更正时，保存完成后再调用。"
         case .recordEnergyContext:
             "只记录用户明确提供的工作坐/站/走、工时、通勤家务及逐日饮食/训练/携带完整性。不要让用户挑系数，不推测完整性；省略未知项。日期范围最多31日且必须获用户明确确认，生活事实只从范围起日生效，完整性适用于明确范围。可更正同日已有事实；计算留在本机。"
         case .askUserQuestions:
@@ -96,6 +98,7 @@ extension AgentToolName {
 
     private var toolParameters: JSONSchema {
         switch self {
+        case .getDailyEnergy: object([:])
         case .recordEnergyContext: AgentEnergyContextSchema.parameters
         case .askUserQuestions:
             AgentUserQuestionsSchema.parameters
@@ -168,7 +171,15 @@ extension AgentToolName {
                 "exercise_id": integer("要合并并归档的来源动作 Int64 ID"),
                 "target_exercise_id": integer("保留的目标动作 Int64 ID")
             ], required: ["exercise_id", "target_exercise_id"])
-        case .listWorkouts, .listMeals, .listBodyEntries:
+        case .listWorkouts:
+            object([
+                "exercise_id": integer("可选动作 Int64 ID。指定时读取此动作历史，包括有据的逐组重量、次数、时长和侧别"),
+                "date_from": string("ISO8601 或 yyyy-MM-dd 起始日期（含）"),
+                "date_to": string("ISO8601 或 yyyy-MM-dd 结束日期（含）"),
+                "sort": string("排序", values: ["newest", "oldest"]),
+                "limit": integer("最多返回多少条，默认 3，最大 10")
+            ])
+        case .listMeals, .listBodyEntries:
             object([
                 "date_from": string("ISO8601 或 yyyy-MM-dd 起始日期（含）"),
                 "date_to": string("ISO8601 或 yyyy-MM-dd 结束日期（含）"),

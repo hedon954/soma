@@ -304,6 +304,7 @@ extension ConversationProcessingService {
                 responseMessage: responseMessage
             )
             guard let name = AgentToolName(rawValue: request.name),
+                  !name.isAppDirectOnly,
                   name.supportedSchemaVersions.contains(request.schemaVersion),
                   name.isMutation == request.mutation,
                   job.turnID == userMessage.turnID,

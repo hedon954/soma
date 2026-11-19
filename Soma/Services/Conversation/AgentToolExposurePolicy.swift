@@ -28,7 +28,7 @@ enum AgentToolGroup: String, CaseIterable, Sendable {
         case .workouts:
             [.listWorkouts, .getWorkout, .createWorkout, .updateWorkout, .deleteWorkout]
         case .meals:
-            [.listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal]
+            [.listMeals, .getMeal, .createMeal, .updateMeal, .deleteMeal, .getDailyEnergy]
         case .body:
             [
                 .listBodyEntries,

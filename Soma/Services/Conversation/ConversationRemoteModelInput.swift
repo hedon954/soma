@@ -95,10 +95,10 @@ extension ConversationProcessingService {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
-        let configuration = try job.contextSnapshot?.configuration ?? AgentPromptConfiguration.capture(
+        let configuration = try (job.contextSnapshot?.configuration ?? AgentPromptConfiguration.capture(
             defaults: context.ai.defaults, selectedSkillID: job.selectedSkillID,
             selectedShortcutID: job.selectedShortcutID
-        )
+        )).forRemoteExecution
         let selectedSkill = configuration.skills.first { $0.id == configuration.selectedSkillID }
         let userPrompt = ReActAgentPrompt.user(
             text: userMessage.text,

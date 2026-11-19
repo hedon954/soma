@@ -5,6 +5,67 @@ import XCTest
 
 final class AgentReActLoopTests: XCTestCase {
     @MainActor
+    func testModelReadsLiveDayLedgerAgainAfterABusinessWriteWithoutPersistingValues() async throws {
+        let container = try ModelContainer(for: Schema(SomaDataSchema.models), configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let clock = Date.now
+        let fixtureTitle = "虚构日账核对餐"
+        let item = MealEntry(date: clock, mealType: .breakfast, title: fixtureTitle, calories: 210)
+        context.insert(item)
+        try context.save()
+        let transport = MockAgentStreamTransport(responses: [
+            .toolCall(name: "get_daily_energy", argumentsFragments: ["{}"]),
+            .toolCall(name: "create_meal", argumentsFragments: [#"{"title":"虚构新增午餐"}"#]),
+            .toolCall(name: "get_daily_energy", argumentsFragments: ["{}"]),
+            .text(["日账已读取。"])
+        ])
+        let service = AIService(apiKeyOverride: "test-key", agentStreamLoader: transport.load)
+        service.configure(provider: .openAI, baseURL: "https://example.com/v1", model: "gpt-4.1-mini")
+        var amounts: [AgentJSONValue] = []
+        var checkpoint: AgentLoopCheckpoint?
+        var trace: [AgentTraceEvent] = []
+        _ = try await service.runAgent(text: "先查今天日账、记录这餐，再查一次", images: [], hasVideo: false, context: "测试上下文",
+                                       onCheckpoint: { checkpoint = $0 }, trace: { trace.append($0) })
+        { call in
+            if call.name == .createMeal {
+                context.insert(MealEntry(date: clock, mealType: .lunch, title: "虚构新增午餐", calories: 370))
+                try context.save()
+                return .success("已记录")
+            }
+            XCTAssertEqual(call.name, .getDailyEnergy)
+            let result = try await AgentDailyEnergyRead.load(in: container, now: clock)
+            if case let .object(data)? = result.data, let intake = data["recorded_intake_kcal"] {
+                amounts.append(intake)
+                XCTAssertEqual(data["estimated_total_expenditure_kcal"], .null)
+                XCTAssertEqual(data["remaining_intake_kcal"], .null)
+            }
+            return result
+        }
+        XCTAssertEqual(amounts, [.number(210), .number(580)])
+        let providerRequest = try JSONEncoder().encode(XCTUnwrap(transport.requests.last))
+        XCTAssertTrue(try XCTUnwrap(String(bytes: providerRequest, encoding: .utf8)).contains(fixtureTitle))
+        let checkpointJSON = try JSONEncoder().encode(XCTUnwrap(checkpoint))
+        XCTAssertFalse(try XCTUnwrap(String(bytes: checkpointJSON, encoding: .utf8)).contains(fixtureTitle))
+        let ledgerSpans = trace.compactMap { event -> AgentTraceSpan? in
+            guard case let .span(span) = event, span.title == AgentToolName.getDailyEnergy.displayTitle,
+                  span.status == .succeeded else { return nil }
+            return span
+        }
+        XCTAssertEqual(ledgerSpans.count, 2)
+        XCTAssertTrue(ledgerSpans.allSatisfy { $0.output?.contains(fixtureTitle) == false })
+    }
+
+    func testDirectDailyEnergySchemaIsEmptyAndExcludedFromRemoteConfiguration() throws {
+        let tool = AgentToolName.getDailyEnergy
+        try AgentToolSchemaValidator.validateTopLevelKeys(Data("{}".utf8), for: tool)
+        XCTAssertThrowsError(try AgentToolSchemaValidator.validateTopLevelKeys(Data(#"{"date_from":"2026-11-18"}"#.utf8), for: tool))
+        let config = try AgentPromptConfiguration.capture(defaults: .standard, selectedSkillID: nil, selectedShortcutID: nil)
+        XCTAssertTrue(config.tools.contains(where: { $0.name == tool }))
+        XCTAssertFalse(config.forRemoteExecution.tools.contains(where: { $0.name == tool }))
+        XCTAssertFalse(tool.isMutation)
+    }
+
+    @MainActor
     func testOnlySuccessfulMutationsDeduplicateBeforeAndAfterRestoringCheckpoint() async throws {
         let service = AIService(apiKeyOverride: "test-key")
         let action = AgentToolCall(name: .createMeal, arguments: .init())

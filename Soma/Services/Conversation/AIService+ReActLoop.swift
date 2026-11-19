@@ -408,6 +408,13 @@ extension AIService {
             } else if call.name == .proposeTrainingSchedule {
                 result = try await execute(call)
                 wasDeduplicated = false
+            } else if call.name == .getDailyEnergy {
+                if state.exposedToolNames.contains(call.name.rawValue) {
+                    result = try await execute(call)
+                } else {
+                    result = .failure("本轮未开放日账读取。", code: "tool_unavailable", retryable: false)
+                }
+                wasDeduplicated = false
             } else if let mutationSignature,
                       state.executedMutations.contains(mutationSignature)
             {
@@ -484,6 +491,7 @@ extension AIService {
             "record_type": result.recordType
                 .map { $0.rawValue as Any } ?? NSNull()
         ])
+        let persistedResult = result.forPersistence(of: call.name)
         let completedSpan = AgentTraceSpan(
             id: spanID,
             step: step,
@@ -495,12 +503,12 @@ extension AIService {
             startedAt: startedAt,
             endedAt: endedAt,
             input: traceInput,
-            output: AgentTraceText.json(result),
+            output: AgentTraceText.json(persistedResult),
             metadata: traceMetadata,
             errorMessage: result.ok ? nil : result.observation
         )
         trace?(.span(completedSpan))
-        state.observations.append(AgentObservation(step: step, action: call, result: result))
+        state.observations.append(AgentObservation(step: step, action: call, result: persistedResult))
         state.messages.append(ChatCompletionParameters.Message(
             role: .tool,
             content: .text(AgentTraceText.json(result)),

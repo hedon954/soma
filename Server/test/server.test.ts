@@ -819,6 +819,16 @@ test("worker returns invalid tool arguments to the model for correction", async 
   );
 });
 
+test("the direct daily energy tool is unavailable through the remote worker", () => {
+  assert.equal(deviceToolRegistry.has("get_daily_energy"), false);
+  assert.throws(() => validateDeviceTool({
+    name: "get_daily_energy",
+    schemaVersion: 1,
+    arguments: {},
+    allowedNames: ["get_daily_energy"],
+  }), /设备不支持该 Tool Schema/);
+});
+
 test("plan schema 3 validates nested prescriptions and keeps schema 2 registered", () => {
   assert.equal(deviceToolRegistry.get("get_program")?.schemaVersion, 3);
   assert.equal(deviceToolRegistry.get("create_program")?.schemaVersion, 3);
