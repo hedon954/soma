@@ -82,6 +82,35 @@ final class LibraryAndMealsUITests: XCTestCase {
         }
     }
 
+    func testCoachShortcutChipsSupportFullTapTargetsAndSelectionInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment = ["SOMA_UI_TEST_PROCESS": "1", "SOMA_UI_TEST_APPEARANCE": appearance]
+            app.launch()
+            let meal = app.buttons["快捷按钮：记录饮食"]
+            let workout = app.buttons["快捷按钮：训练记录"]
+            let review = app.buttons["快捷按钮：近期分析"]
+            XCTAssertTrue(meal.waitForExistence(timeout: 10))
+            for button in [meal, workout, review] {
+                XCTAssertTrue(button.isHittable)
+                XCTAssertGreaterThanOrEqual(button.frame.height + 0.01, 44)
+                XCTAssertGreaterThanOrEqual(button.frame.width + 0.01, 44)
+                XCTAssertEqual(button.value as? String, "未选择")
+            }
+            keep(app, "coach-shortcuts-outline-\(appearance)")
+            meal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
+            XCTAssertEqual(meal.value as? String, "已选择")
+            XCTAssertTrue(meal.isSelected)
+            workout.tap()
+            XCTAssertEqual(meal.value as? String, "未选择")
+            XCTAssertEqual(workout.value as? String, "已选择")
+            keep(app, "coach-shortcuts-selected-\(appearance)")
+            workout.tap()
+            XCTAssertEqual(workout.value as? String, "未选择")
+            app.terminate()
+        }
+    }
+
     private func openLibrary(_ app: XCUIApplication) {
         let link = app.buttons["动作库"].firstMatch
         for _ in 0 ..< 15 {

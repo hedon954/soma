@@ -129,11 +129,6 @@ struct CoachComposer: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(AppTheme.pageBackground)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(AppTheme.separator)
-                .frame(height: 0.5)
-        }
         .onChange(of: state.focusRequest) {
             focused = true
         }
@@ -173,24 +168,29 @@ struct CoachComposer: View {
                                         : shortcutColor(shortcut)
                                 )
                             Text(shortcut.title)
+                                .font(.footnote)
                                 .foregroundStyle(
-                                    isSelected ? AppTheme.onAccent : Color.secondary
+                                    isSelected ? AppTheme.onAccent : AppTheme.accent
                                 )
+                                .lineLimit(1)
                         }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .font(.subheadline)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
                         .background(
-                            isSelected
-                                ? AppTheme.accentEmphasis
-                                : AppTheme.insetBackground,
+                            isSelected ? AppTheme.accentEmphasis : Color.clear,
                             in: Capsule()
                         )
-                        .frame(minHeight: AppTheme.minimumTapTarget)
+                        .overlay {
+                            Capsule().strokeBorder(isSelected ? Color.clear : AppTheme.separator, lineWidth: 1)
+                        }
+                        .frame(minWidth: AppTheme.minimumTapTarget, minHeight: AppTheme.minimumTapTarget)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("快捷按钮：\(shortcut.title)")
                     .accessibilityValue(isSelected ? "已选择" : "未选择")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
                 if gyms.count >= 2 {
                     gymStrip
