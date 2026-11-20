@@ -24,15 +24,22 @@ Release 真机安装成功后会写入可复用的产品指纹。性能录制使
 
 1. 在 `project.yml` 更新 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`。
 2. 在根 `CHANGELOG.md` 建立相同版本的用户可感知说明。
-3. 运行：
+3. 提交前，对照上一个发布 tag 审阅本次发布范围。同步受影响的 PRD、ADR、Bug、Research、工程文档、
+   README、Changelog、验收记录和目录索引。按工程契约推进三版本活文档窗口，同时核对文档生命周期关系、
+   测试证据和待验事项。提示词、数据结构、隐私及部署受影响时，更新各自的维护文档。完整清单见
+   [soma-release 发布技能](../../.agents/skills/soma-release/SKILL.md)。
+4. 检查暂存差异并运行质量门禁后，提交发布元数据和文档：
 
    ```bash
+   git diff --cached --check
    make verify
-   ./scripts/verify-release.sh v1.0.0
    ```
 
-4. 提交 release metadata。
-5. 创建 annotated tag：
+5. 提交后在干净工作区验证发布元数据，再创建 annotated tag：
+
+   ```bash
+   ./scripts/verify-release.sh v1.0.0
+   ```
 
    ```bash
    git tag -a v1.0.0 -m "Soma v1.0.0
