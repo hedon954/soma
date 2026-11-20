@@ -214,7 +214,7 @@
 | 无损编辑 | `WorkoutRecordDraft` 按有序 evidence 建立逻辑组和 effort；聊天 `InlineWorkoutCard` 与详情 `WorkoutRecordDetailView` 共用 `WorkoutLogicalGroupsEditor`，聊天使用 10/9 pt 紧凑密度、详情保留标准密度；保存从 draft evidence 回写，不经聚合标量重建，控件触达仍不少于 44 pt。 |
 | 侧别与目标 | 编辑器覆盖双侧同时、左右各做、仅左、仅右，以及次数或时长；正常界面没有组号，VoiceOver 可用序号定位。侧别、类型、目标、次数/时长和重量相同的连续组压缩为 `×N`，间歇不参与判断；动作最后一组没有组间歇，左右动作仍有换侧间歇。 |
 | 真值回归 | `WorkoutRecordEditorProjectionTests` 覆盖顺序、legacy 无索引、左右 effort、四种侧别、次数/时长、忽略间歇的连续压缩、最后一组间歇目标、录像元数据无损、添加继承结构与复制移除录像；缺失值保持 `nil`。 |
-| 设计依据 | 浅深设计稿、当前实施截图、页面规则、未采用方案与验证矩阵保存在 [工程报告](engineering/soma-ui-design-system.md)；Coding Agent 使用 `.claude/skills/soma-ui-development/`。 |
+| 设计依据 | 页面规则、未采用方案与验证矩阵见 [工程报告](engineering/soma-ui-design-system.md)，当前双主题实拍见 [模拟器截图](assets/ui/0.0.38/README.md)；Coding Agent 使用 `.claude/skills/soma-ui-development/`。 |
 
 ## 已实现：LLM 暂存补偿与显式配置
 

@@ -23,12 +23,12 @@ Soma 的目标不是替你制造更多数据，而是让真正发生过的训练
     <th width="50%">深色主题</th>
   </tr>
   <tr>
-    <td><img src="docs/assets/ui/2026-08-22/reference-coach-light.png" alt="Soma 教练浅色主题设计稿"></td>
-    <td><img src="docs/assets/ui/2026-08-22/reference-coach-dark.png" alt="Soma 教练深色主题设计稿"></td>
+    <td><img src="docs/assets/ui/0.0.38/coach-light.webp" alt="Soma 教练浅色主题"></td>
+    <td><img src="docs/assets/ui/0.0.38/coach-dark.webp" alt="Soma 教练深色主题"></td>
   </tr>
 </table>
 
-> 界面图仅使用虚构演示数据。Soma 不会把真实身体照片、健康记录或密钥放进仓库与测试素材。
+> 界面图来自 iPhone 17 Pro 模拟器上的 Soma 0.0.38，使用虚构演示数据。Soma 不会把真实身体照片、健康记录或密钥放进仓库与测试素材。
 
 ## 为什么是 Soma
 
@@ -99,14 +99,27 @@ Soma 的界面以系统原生交互和低干扰信息层级为主。黑白负责
 
 <table>
   <tr>
-    <th width="50%">计划与最近训练</th>
-    <th width="50%">连续性与长期趋势</th>
+    <th width="50%">训练计划与课程</th>
+    <th width="50%">周能量趋势</th>
   </tr>
   <tr>
-    <td><img src="docs/assets/ui/2026-08-22/implementation-training-light.png" alt="Soma 训练页面"></td>
-    <td><img src="docs/assets/ui/2026-08-22/implementation-progress-trends-light.png" alt="Soma 进展趋势页面"></td>
+    <td><img src="docs/assets/ui/0.0.38/training-light.webp" alt="Soma 训练页面"></td>
+    <td><img src="docs/assets/ui/0.0.38/deficit-week-light.webp" alt="Soma 进展趋势页面"></td>
   </tr>
 </table>
+
+<table>
+  <tr>
+    <th width="50%">当日饮食与能量</th>
+    <th width="50%">设置与健康连接</th>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/ui/0.0.38/progress-day-light.webp" alt="进展页的当日饮食与能量"></td>
+    <td><img src="docs/assets/ui/0.0.38/settings-light.webp" alt="设置页的健康、个人资料和服务入口"></td>
+  </tr>
+</table>
+
+[查看完整界面截图](docs/assets/ui/0.0.38/README.md)，包括教练补餐、训练计划和记录、单餐与训练分享、四种进展周期、体重记录及数据备份。
 
 ## 隐私与可控性
 

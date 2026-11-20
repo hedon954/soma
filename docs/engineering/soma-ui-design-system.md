@@ -1,19 +1,16 @@
 # Soma UI 设计系统与优化工程报告
 
-- 日期：2026-08-27（训练记录卡片规则更新）
+- 界面截图：[Soma 0.0.38 模拟器实拍](../assets/ui/0.0.38/README.md)
 - 产品依据：[PRD 039](../archive/0.0.9/prd/039-frequency-first-dual-theme-ui.md)
 - 上游依据：[ADR 0089](../archive/0.0.9/adr/0089-semantic-dual-theme-and-lossless-workout-editor.md)
 - 开发规则：`.claude/skills/soma-ui-development/`
-- 验证记录：`design-qa.md`
+- 验证记录：[视觉 QA](../../design-qa.md)
 
 ## 1. 最终结论
 
 Soma 的主视觉是黑白，而不是某一种彩色品牌色。深色使用纯黑页面与两级深灰；浅色使用纯白页面
 与两级浅灰。彩色只出现在少量类别图标、指标轨迹或状态点，并且由含义决定，不由页面决定。这个
 结论同时适用于根导航、聊天、训练、进展、设置、记录编辑和带练。
-
-![教练页深色设计稿](../assets/ui/2026-08-22/reference-coach-dark.png)
-![教练页浅色设计稿](../assets/ui/2026-08-22/reference-coach-light.png)
 
 ## 2. 设计依据
 
@@ -26,9 +23,6 @@ COROS 参考最有价值的不是某个色值，而是纯黑底、清晰卡片�
 优先结构，只采用这些可抽象原则。
 
 ## 3. 设计系统
-
-![教练页浅色实施稿](../assets/ui/2026-08-22/implementation-coach-light.png)
-![教练页深色实施稿](../assets/ui/2026-08-22/implementation-coach-dark.png)
 
 ### 3.1 表面
 
@@ -88,15 +82,13 @@ COROS 参考最有价值的不是某个色值，而是纯黑底、清晰卡片�
 
 ### 4.1 四个 Tab
 
-![教练页双主题实施稿](../assets/ui/2026-08-22/implementation-coach-dark.png)
-
 顶层固定为教练、训练、进展、设置，每个 Tab 保留自己的导航栈。未选中图标使用线框 SF Symbol，
-选中项可以使用 fill 版本和中性选中底。Tab 图标和文字尺寸遵循系统，不用彩色品牌导航或自绘底栏。
+选中项可以使用 fill 版本和中性选中底。单击已选中的教练 Tab 保持原位，双击回到今天的会话尾部。
+训练、进展和设置在详情里单击当前 Tab 可返回根页。
 
 ### 4.2 教练
 
-![教练页深色设计稿](../assets/ui/2026-08-22/reference-coach-dark.png)
-![教练页浅色设计稿](../assets/ui/2026-08-22/reference-coach-light.png)
+<img src="../assets/ui/0.0.38/coach-light.webp" width="290" alt="教练对话与快捷建议 · 浅色"> <img src="../assets/ui/0.0.38/coach-dark.webp" width="290" alt="教练对话与快捷建议 · 深色">
 
 AI 回复采用开放阅读版式，避免每段都装进厚重气泡，也不设置重复头像或装饰列。用户消息仍右对齐，
 但使用主题 inset 灰；暗色不使用大白块。每条消息下方固定显示日期和时间。输入区只保留加号、文本、麦克风和发送；照片、
@@ -108,11 +100,10 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 
 ### 4.3 训练
 
-![训练页浅色实施稿](../assets/ui/2026-08-22/implementation-training-light.png)
-![训练页深色实施稿](../assets/ui/2026-08-22/implementation-training-dark.png)
+<img src="../assets/ui/0.0.38/training-light.webp" width="290" alt="训练计划与课程 · 浅色"> <img src="../assets/ui/0.0.38/training-dark.webp" width="290" alt="训练计划与课程 · 深色">
 
-训练页按进行中训练、我的计划、最近训练排列。没有进行中 Session 时不造空卡；新建计划保留右上角
-加号，继续或开始训练是一跳操作。计划与最近训练图标使用训练橙和柔和语义底；橙色不扩张为全页主色。
+训练页依序展示进行中训练、训练计划、我的课程、最近训练和已归档内容。继续训练和打开当前课程使用直接入口。
+右上角可新建训练内容。计划可以编排课程、动作和已有计划，课程也可单独开始带练。计划与训练记录图标使用训练语义色。
 
 计划详情直接展示并编辑当前名称、安排与动作参数，保存后覆盖当前计划。界面不显示版本号、版本入口、
 版本历史、恢复版本或带版本后缀的名称。已开始和已完成训练读取各自不可变的处方快照，因此修改计划只影响
@@ -120,21 +111,17 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 
 ### 4.4 进展
 
-![进展页浅色实施稿](../assets/ui/2026-08-23/progress-overview-light.png)
-![进展页深色实施稿](../assets/ui/2026-08-23/progress-overview-dark.png)
+<img src="../assets/ui/0.0.38/progress-day-light.webp" width="290" alt="进展日页 · 浅色"> <img src="../assets/ui/0.0.38/progress-day-dark.webp" width="290" alt="进展日页 · 深色">
 
-进展用单张训练概览卡分段切换近 7 天、连续性和训练容量，再阅读一条变化结论、最近三项混合活动、
-体重趋势和完整数据入口。最近活动标题旁用语义图标与短下划线明确训练记录、饮食记录入口。无可靠证据的指标不补零。
-活动按时间混排训练、饮食和身体记录。训练日与连续性使用频率青、训练容量使用负荷橙、
-体重曲线使用身体蓝；每个指标显示对应 SF Symbol。数据入口的训练、饮食、身体、足迹和动作库图标
-使用各自类别色，颜色不扩张到卡片或导航。
+进展依自然日、周、月和年切换。日页上方是饮食与能量摘要，可以进入摄入、消耗与营养明细。向下滚动可查看日常活动、训练、饮食与身体记录。日常活动行展示步数、步跑距离、活动能量和真实来源。周、月和年有相应的趋势图和选点入口；周、月缺口标明有效日期与缺餐覆盖。
+
+训练频率使用青色、训练容量使用橙色、身体测量使用蓝色。日常活动和体重记录各自保留来源。完整滚动位置和各周期示例见[界面截图](../assets/ui/0.0.38/README.md#进展)。
 
 ### 4.5 设置
 
-![设置页浅色实施稿](../assets/ui/2026-08-22/implementation-settings-light.png)
-![设置页深色实施稿](../assets/ui/2026-08-22/implementation-settings-dark.png)
+<img src="../assets/ui/0.0.38/settings-light.webp" width="290" alt="设置 · 浅色"> <img src="../assets/ui/0.0.38/settings-dark.webp" width="290" alt="设置 · 深色">
 
-设置按个人与训练、服务、平铺低频入口、显示、关于、反馈排列。任务、后台、数据、隐私和高级入口
+设置按个人与训练、服务、平铺低频入口、显示、关于、反馈排列。Apple 健康位于「个人与训练」，LLM 配置位于「服务」。任务、后台、数据、隐私和高级入口
 直接成组，不再使用没有独立含义的“更多”标题。浅色每组使用 `#F7F7F7` 卡和清晰组间距，分区标题
 对齐卡片外沿；反馈输入落在 inset 表面并使用 1 pt separator 边界。因此纯白页面不会与行内容融为
 一体。反馈直接位于最后，用户无需深入二级页。
@@ -146,7 +133,7 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 
 ## 5. 训练记录与带练
 
-![训练记录编辑最终设计稿](../assets/ui/2026-08-22/reference-workout-editor.png)
+<img src="../assets/ui/0.0.38/workout-detail-dark.webp" width="290" alt="训练记录详情和肌群图">
 
 界面把底层 effort 投影为逻辑组，但不把事实聚合丢失。次数/时长和侧别由动作定义统一决定，记录只
 保存当次完成证据。双侧同时为一行；左右各做在同一逻辑组内
@@ -164,8 +151,7 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 
 只有“左右各做”需要在内嵌数据块中显示“左”“右”两条 effort，因为这两行代表不同完成证据；
 “仅左”和“仅右”的方向已经由标题标签完整表达，单行数据块不得再次显示“左”“右”或重复
-“仅左”“仅右”。上方设计稿只作为布局和层级参考，其中的字母顺序前缀及单侧数据块内重复方向不属于
-最终产品规则。
+“仅左”“仅右”。
 
 实现分三层：`WorkoutEffortDraft` 保存单条 evidence；`LogicalWorkoutGroupDraft` 组织左右 effort；
 `WorkoutRecordDraft` 保持顺序并生成显示 run。保存直接回写 evidence，不从总组数、统一重量或总时长
@@ -173,6 +159,8 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 进度也按动作与逻辑组推进，相机错误只影响录像状态。
 
 ### 5.1 计划总览与动作详情
+
+<img src="../assets/ui/0.0.38/exercise-trend-light.webp" width="290" alt="动作详情中的训练趋势与选中日期">
 
 计划动作把组间歇与换侧间歇放在“动作设定”，与左右方式处于同一层；换侧间歇只在左右分开时出现。
 独立组只编辑类型、次数或时长、重量与备注，不重复两类计划间歇。连续组压缩不比较间歇；开始训练时
@@ -190,8 +178,6 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 
 ## 6. 未采用方案
 
-![训练记录编辑最终设计稿](../assets/ui/2026-08-22/reference-workout-editor.png)
-
 - 复制 COROS 页面：会引入品牌依赖，也不匹配 Soma 的聊天审查主路径。
 - 使用彩色全局主色：会让导航和内容争夺注意力。
 - 暗色用户消息使用白色气泡：对比面积过大，阅读被切断。
@@ -203,15 +189,11 @@ AI 文本不是自由 UI。Prompt 只允许普通 Markdown，本地 `CoachRespon
 
 ## 7. 可访问性、隐私与恢复
 
-![设置页浅色实施稿](../assets/ui/2026-08-22/implementation-settings-light.png)
-
 Dynamic Type 负责字号缩放，Light 字重不通过固定字号实现。图标按钮提供 VoiceOver label，点击目标
 至少 44 pt。键盘、主题切换、前后台、相机错误和重试不能清空草稿、媒体或成功训练进度。截图、
 设计稿和测试只使用虚构数据，不存放真实身体照片、健康事实、位置、密钥或 Agent Trace。
 
 ## 8. 验证与迭代规则
-
-![教练页深色实施稿](../assets/ui/2026-08-22/implementation-coach-dark.png)
 
 自动化覆盖主题映射、表面对比、日期时间、受控 Markdown、记录顺序、四种侧别、标题标签唯一性、
 单侧数据块不重复方向、次数/时长、压缩、缺失值、录像无损和暗色语义色稳定性。视觉 QA 必须把来源

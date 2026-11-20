@@ -17,6 +17,12 @@
 - 日常活动行采用与训练、饮食记录一致的样式，显示实际来源图标。
 - 消耗明细省略零值，单日按训练记录展示对应估算。训练列表、总消耗和明细使用同一口径，周期明细仍按日均展示。
 
+## 模拟器截图
+
+<img src="../assets/ui/0.0.38/meal-draft-light.webp" width="270" alt="补餐草稿保留日期和餐次"> <img src="../assets/ui/0.0.38/coach-media-composer.webp" width="270" alt="教练输入框预览三张待发图片">
+
+<img src="../assets/ui/0.0.38/activity-light.webp" width="270" alt="进展日页的日常活动来源与三项读数"> <img src="../assets/ui/0.0.38/energy-expenditure-light.webp" width="270" alt="消耗明细列出有估算的实际训练"> <img src="../assets/ui/0.0.38/workout-detail-dark.webp" width="270" alt="训练详情展示肌群受力图">
+
 ## 验收
 
 补记餐次、发送和重进教练的路径可正常使用。新建动作后可读取主要和辅助受力标注。进展日消耗同时展示各条有效训练热量，记录缺项和零值分别处理。
