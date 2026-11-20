@@ -8,6 +8,7 @@
 | 0.0.36 | [ADR 0151](0151-training-energy-in-total.md) | 总消耗直接加入训练列表估算，兼容历史能量依据 |
 | 0.0.37 | [ADR 0152](0152-coach-progress-reliability.md)、[ADR 0153](0153-agent-daily-energy-read.md) | 教练连续性、进展原位刷新与模型读取当日日账 |
 | 0.0.38 | [ADR 0154](0154-exercise-muscle-map-ids.md) | 新建动作保存受力块 ID |
+| 未发布 | [ADR 0155](0155-fixed-system-prompts.md) | 按请求场景维护固定 System 与动态 User |
 
 每次发布，把滑出窗口的原文移入[文档归档](../archive/README.md)，将仍有效的边界合并进压缩起点。
 窗口内最早文档的前驱指向起点。同一修订的正向与反向关系写入两份文档的头部，并由 `make check` 验证。

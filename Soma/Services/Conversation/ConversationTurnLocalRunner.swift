@@ -43,6 +43,7 @@ extension ConversationProcessingService {
         let effectiveGym = resolution.gymID.flatMap { id in
             context.gyms.first { $0.id == id }
         }
+        let isPerformanceReview = job.contextSnapshot?.configuration?.scene == .performanceReview
         let prepared = await prepareHistory(
             excludingTurnID: turnID,
             currentFrameCount: media.frames.count,
@@ -50,7 +51,8 @@ extension ConversationProcessingService {
             hasCurrentMedia: !media.attachments.isEmpty,
             selectedHistoricalTurnIDs: job.contextSnapshot?.envelope?
                 .selectedHistoricalTurnIDs,
-            context: context
+            context: context,
+            includeHistory: !isPerformanceReview
         )
         if let failure = prepared.mediaPreparationFailure {
             handleAttemptFailure(failure, job: job, responseMessage: responseMessage, activeTrace: nil,
@@ -61,13 +63,17 @@ extension ConversationProcessingService {
         let projection = prepared.projection
         let history = prepared.history
         let historicalFrameCount = history.reduce(0) { $0 + $1.images.count }
-        let compaction = await ConversationCompactionMiddleware.prepare(
-            sessionID: job.sessionID,
-            excludingTurnID: turnID,
-            projection: projection,
-            ai: context.ai,
-            in: context.modelContext
-        )
+        let compaction = if isPerformanceReview {
+            ConversationCompactionResult(summary: nil, didUpdate: false, strategy: nil)
+        } else {
+            await ConversationCompactionMiddleware.prepare(
+                sessionID: job.sessionID,
+                excludingTurnID: turnID,
+                projection: projection,
+                ai: context.ai,
+                in: context.modelContext
+            )
+        }
         let persistentContext = composePersistentContext(
             job: job,
             userMessage: userMessage,
@@ -473,8 +479,12 @@ extension ConversationProcessingService {
         currentText: String,
         hasCurrentMedia: Bool,
         selectedHistoricalTurnIDs: [UUID]?,
-        context: ConversationProcessingContext
+        context: ConversationProcessingContext,
+        includeHistory: Bool = true
     ) async -> PreparedAgentHistory {
+        guard includeHistory else {
+            return PreparedAgentHistory(projection: ConversationContextProjection(exchanges: []), history: [], preparationMilliseconds: 0)
+        }
         let startedAt = Date.now
         let projection = ConversationContextProjection.make(
             messages: ConversationContextHistory.messages(

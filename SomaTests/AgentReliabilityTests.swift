@@ -483,7 +483,7 @@ final class AgentReliabilityTests: XCTestCase {
             equipment: [],
             in: context
         )
-        XCTAssertTrue(pack.contains("Int64 record_id"))
+        XCTAssertTrue(pack.contains("生活方式尚未提供。"))
         XCTAssertFalse(pack.contains("未填写"))
         XCTAssertFalse(pack.contains("健身房：无"))
         XCTAssertFalse(pack.contains("70kg"))
@@ -530,7 +530,9 @@ final class AgentReliabilityTests: XCTestCase {
             timeZone: TimeZone(secondsFromGMT: 0) ?? .current
         )
         XCTAssertTrue(pack.contains("record_id: 54"))
-        XCTAssertTrue(pack.contains("Int64 record_id"))
+        XCTAssertFalse(pack.contains("工具只使用 Int64"))
+        let tool = try JSONEncoder().encode(AgentToolName.getWorkout.chatTool)
+        XCTAssertTrue(String(data: tool, encoding: .utf8)?.contains("Int64") == true)
         XCTAssertTrue(pack.contains("record_id: 12"))
         XCTAssertTrue(pack.contains("[record_id:54]"))
         XCTAssertFalse(pack.contains(meal.id.uuidString))

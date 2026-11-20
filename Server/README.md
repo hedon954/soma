@@ -85,6 +85,8 @@ baseline 只登记最早的 migration，并会先确认其中声明的表都已�
    npm run build
    ```
 
+   构建产物的 `dist/src/prompts/` 包含 Worker 使用的 Markdown 模板。发布时保留该目录及其文件。
+
 4. 分别启动 API 和 Worker：
 
    ```bash

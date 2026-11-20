@@ -140,7 +140,7 @@ enum ReActAgentError: LocalizedError {
 }
 
 enum AgentFinalAnswerRecoveryPrompt {
-    static let text = "请现在只输出面向用户的最终答复：直接给结论、必要依据和下一步，不要输出分析草稿或自我对话。"
+    static let text = SomaPrompt.text("coach_final_answer_user_message")
 }
 
 /// Some compatible models occasionally place their internal scratchpad in

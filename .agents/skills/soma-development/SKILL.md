@@ -39,6 +39,21 @@ Agent Tool, or model thinking display as a speculative convenience.
 - External data is normalized, cursor-based, idempotent, and deletion-aware.
 - Real user media and health data never become fixtures, screenshots, logs, or Issue content.
 
+### LLM prompts
+
+- Give each LLM request scenario one complete `xxx_system_prompt.md` and one complete `xxx_user_prompt.md`.
+  Send the System file as-is and put all user, session, personalization, and Skill context in named
+  `{{snake_case}}` User placeholders. Keep one file per built-in Skill. Image endpoints use their native prompt field.
+- Keep tool descriptions, parameter guidance, schemas, and tool feedback with the tool code. Send tool
+  definitions as native API metadata. Keep button presets, composer drafts, interface copy, and data formatters
+  with the feature code.
+- Update the [prompt source catalog](../../../docs/engineering/prompt-source-catalog.md) in the same change
+  when adding, moving, removing, or changing the inputs of a model request. Record its call site and context
+  sources. Changes to remote data flows must follow the accepted PRD/ADR privacy boundary.
+- Preserve System text across users and turns within a build, keep Tool ordering deterministic, and preserve
+  frozen Job snapshots. Run `make check` for prompt pairs and resource references, and `make verify` for
+  runtime assembly. Verify Server builds when changing their resource packaging.
+
 ## 3. Implement the smallest vertical slice
 
 1. Add or update the narrowest deterministic test.

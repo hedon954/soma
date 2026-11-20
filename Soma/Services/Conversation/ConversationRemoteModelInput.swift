@@ -46,6 +46,7 @@ extension ConversationProcessingService {
         let effectiveGym = resolution.gymID.flatMap { id in
             context.gyms.first { $0.id == id }
         }
+        let isPerformanceReview = job.contextSnapshot?.configuration?.scene == .performanceReview
         let preparedHistory = await prepareHistory(
             excludingTurnID: turnID,
             currentFrameCount: media.frames.count,
@@ -53,7 +54,8 @@ extension ConversationProcessingService {
             hasCurrentMedia: !media.attachments.isEmpty,
             selectedHistoricalTurnIDs: job.contextSnapshot?.envelope?
                 .selectedHistoricalTurnIDs,
-            context: context
+            context: context,
+            includeHistory: !isPerformanceReview
         )
         if let failure = preparedHistory.mediaPreparationFailure {
             throw failure
@@ -67,13 +69,17 @@ extension ConversationProcessingService {
         {
             throw RemoteAgentError.server(code: "direct_video_unsupported", message: "远程模型未开启完整视频输入。")
         }
-        let compaction = await ConversationCompactionMiddleware.prepare(
-            sessionID: job.sessionID,
-            excludingTurnID: turnID,
-            projection: preparedHistory.projection,
-            ai: context.ai,
-            in: context.modelContext
-        )
+        let compaction = if isPerformanceReview {
+            ConversationCompactionResult(summary: nil, didUpdate: false, strategy: nil)
+        } else {
+            await ConversationCompactionMiddleware.prepare(
+                sessionID: job.sessionID,
+                excludingTurnID: turnID,
+                projection: preparedHistory.projection,
+                ai: context.ai,
+                in: context.modelContext
+            )
+        }
         let persistentContext = composePersistentContext(
             job: job,
             userMessage: userMessage,
@@ -108,7 +114,7 @@ extension ConversationProcessingService {
             directVideoCount: media.videos.count,
             imageAttachmentCount: media.imageCount,
             videoAttachmentCount: media.videoCount,
-            selectedSkill: selectedSkill
+            configuration: configuration
         )
         var modelInput = try AgentModelInputBuilder.build(
             systemPrompt: configuration.systemPrompt,

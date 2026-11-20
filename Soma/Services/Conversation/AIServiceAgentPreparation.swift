@@ -98,7 +98,7 @@ extension AIService {
             directVideoCount: request.videos.count,
             imageAttachmentCount: request.imageAttachmentCount,
             videoAttachmentCount: request.videoAttachmentCount,
-            selectedSkill: selectedSkill
+            configuration: configuration
         )
         let historyForPrompt = request.history
         let exposedTools = configuration.tools.map(\.name)

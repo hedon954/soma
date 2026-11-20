@@ -685,6 +685,25 @@ test("APNs retry remains in outbox with backoff until accepted", async () => {
   );
 });
 
+test("performance review uses the same integer identifier as the app Tool Schema", () => {
+  const name = "record_performance_analysis";
+  const validate = (performance_id: unknown) => validateDeviceTool({
+    name,
+    schemaVersion: 2,
+    allowedNames: [name],
+    arguments: {
+      performance_id,
+      input_fingerprint: "fixture-fingerprint",
+      evidence: "可见杠铃",
+      limitations: "侧面拍摄",
+      feedback: "保持稳定"
+    },
+  });
+
+  assert.doesNotThrow(() => validate(7));
+  assert.throws(() => validate("7"));
+});
+
 test("tool validation rejects paths URLs and unsupported schemas", () => {
   assert.equal(
     validateDeviceTool({

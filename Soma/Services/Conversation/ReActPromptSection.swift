@@ -33,11 +33,9 @@ enum ReActPromptSection: String, CaseIterable, Identifiable {
     var defaultText: String {
         switch self {
         case .role:
-            """
-            使用简洁、自然、有同理心的中文，像一位长期了解用户的私人教练。先给结论，再给必要依据和下一步；简单问题通常用两到五句，复杂问题使用少量自然段或列表。避免复述用户输入、堆砌术语、冗长表格和多级标题。
-            """
+            SomaPrompt.text("coach_default_persona").trimmingCharacters(in: .whitespacesAndNewlines)
         case .policy:
-            ReActAgentPrompt.fixedContract
+            ReActAgentPrompt.system
         }
     }
 

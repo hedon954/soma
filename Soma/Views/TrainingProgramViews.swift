@@ -1522,10 +1522,11 @@ struct PerformanceReviewView: View {
             do {
                 let fingerprint = try await TrainingIntelligenceService
                     .performanceFingerprintAsync(for: performance)
-                let prompt = TrainingIntelligenceService.performanceReviewPrompt(
+                let prompt = try TrainingIntelligenceService.performanceReviewPrompt(
                     performance: performance,
                     sets: sets,
-                    fingerprint: fingerprint
+                    fingerprint: fingerprint,
+                    in: modelContext
                 )
                 let attachment = try TrainingIntelligenceService
                     .makePendingPerformanceVideo(performance: performance)
@@ -1548,7 +1549,8 @@ struct PerformanceReviewView: View {
                     attachments: [attachment],
                     context: context,
                     includeLocation: false,
-                    locationService: locationContext
+                    locationService: locationContext,
+                    promptScene: .performanceReview
                 )
                 // ADR 0045：落盘成功即接受，模型不可用只会让任务进入暂存。
                 guard accepted else {

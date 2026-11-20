@@ -3,7 +3,7 @@ import SwiftUI
 struct FixedAgentContractView: View {
     var body: some View {
         ScrollView {
-            MarkdownText(ReActAgentPrompt.fixedContract)
+            MarkdownText(ReActAgentPrompt.system)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
         }

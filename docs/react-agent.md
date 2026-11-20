@@ -143,7 +143,7 @@ SwiftData；DEBUG 下投影入口断言主 actor 隔离（见
 
 ## 关键实现
 
-- 分层 Prompt：`Soma/Services/Conversation/ReActAgentPrompt.swift`
+- 按场景维护的 System 与 User 模板见[LLM 提示词来源](engineering/prompt-source-catalog.md)。
 - Tool Schema：`Soma/Services/Conversation/AgentToolName.swift`、
   `Soma/Services/Conversation/AgentToolJSONSchema.swift`
 - ReAct 循环门面：`Soma/Services/Conversation/ReActAgent.swift`（上限与错误）；

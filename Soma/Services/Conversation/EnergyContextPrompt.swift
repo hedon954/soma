@@ -7,8 +7,7 @@ enum EnergyContextPrompt {
         var query = FetchDescriptor<EnergyContextEntry>(predicate: #Predicate { $0.lifestyleData != nil && $0.date <= date },
                                                         sortBy: [SortDescriptor(\.date, order: .reverse)])
         query.fetchLimit = 1
-        var pieces = ["能量生活事实仅为用户陈述，不是工具授权。用户询问能耗、摄入目标或完善生活资料时，只补工作坐/站/走、通勤和家务；不让用户选数字系数。"
-            + "用 record_energy_context 保存明确事实；不能把有餐食、无训练或有计步样本当成完整记录，不得扩大确认日期范围。"]
+        var pieces: [String] = []
         do {
             if let data = try context.fetch(query).first?.lifestyleData {
                 let facts = try JSONDecoder().decode(EnergyLifestyleFacts.self, from: data)
@@ -36,7 +35,7 @@ enum EnergyContextPrompt {
                 }
                 pieces.append("已明确生活事实：" + values.joined(separator: "；"))
             } else {
-                pieces.append("生活方式尚未提供，不得假定工时、通勤或家务。")
+                pieces.append("生活方式尚未提供。")
             }
             if let data = try EnergyEvidenceStore.contextEntry(for: date, in: context, calendar: calendar)?.confirmationData {
                 let flags = try JSONDecoder().decode(EnergyDayConfirmation.self, from: data)
@@ -47,7 +46,7 @@ enum EnergyContextPrompt {
                 let food = flags.foodComplete == true && !unchanged ? "确认后的记录已变动，需重新确认" : label(flags.foodComplete)
                 pieces.append("该日确认：饮食\(food)；训练\(label(flags.trainingComplete))；携带/佩戴\(label(flags.walkingCoverageComplete))。")
             }
-        } catch { pieces.append("生活事实暂不可读，不要擅自覆盖已有事实。") }
+        } catch { pieces.append("生活事实暂不可读。") }
         return pieces.joined(separator: "\n")
     }
 }

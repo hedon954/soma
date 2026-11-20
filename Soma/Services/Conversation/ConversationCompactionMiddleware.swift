@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import SwiftOpenAI
 
 struct ConversationCompactionResult: Sendable {
     var summary: String?
@@ -90,50 +89,12 @@ enum ConversationCompactionMiddleware {
 }
 
 extension AIService {
-    func compactConversation(
-        _ input: String,
-        tier: AIModelTier
-    ) async throws -> String {
-        let provider = provider(for: tier)
-        let route = AIModelRoute(
-            tier: tier,
-            provider: provider,
-            baseURL: baseURL(for: provider, tier: tier),
-            model: model(for: provider, tier: tier),
-            reason: "Session 滚动压缩"
+    func compactConversation(_ input: String, tier: AIModelTier) async throws -> String {
+        try await completeTextPrompt(
+            system: SomaPrompt.text("conversation_summary_system_prompt"),
+            user: input,
+            reason: "Session 滚动压缩",
+            tier: tier
         )
-        let resolved = try resolvedRoute(
-            requested: route,
-            text: input,
-            hasMedia: false,
-            hasVideo: false
-        )
-        var messages = [
-            ChatCompletionParameters.Message(
-                role: .system,
-                content: .text("你是 Soma 的对话压缩器。只压缩输入，不回答用户，也不创造事实。")
-            ),
-            ChatCompletionParameters.Message(role: .user, content: .text(input))
-        ]
-        let outcome = try await consumeAgentStepWithRetry(
-            messages: &messages,
-            request: AgentStreamStepRequest(
-                tools: [],
-                model: resolved.route.model,
-                provider: resolved.route.provider,
-                images: [],
-                videos: [],
-                hasVideo: false,
-                step: 0,
-                route: resolved.route,
-                apiKey: resolved.apiKey,
-                userPrompt: input,
-                textItemID: UUID()
-            ),
-            trace: nil
-        )
-        let text = outcome.passage.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw ReActAgentError.emptyResponse }
-        return text
     }
 }

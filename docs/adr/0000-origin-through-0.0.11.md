@@ -6,6 +6,7 @@
 - 覆盖版本：0.0.1–0.0.35
 - 部分替代：无
 - 修订自：无。更早原文在 `docs/archive/`，仅供考古，默认不要读取
+- 后续修订：[ADR 0155](0155-fixed-system-prompts.md)（模型输入前缀与任务快照）
 - 后续替代：
   - [ADR 0154](0154-exercise-muscle-map-ids.md)（动作库肌群来源与写入）
   - [ADR 0152](0152-coach-progress-reliability.md)（回到今天、训练视频能力确认与降级、诊断投递与餐次覆盖）

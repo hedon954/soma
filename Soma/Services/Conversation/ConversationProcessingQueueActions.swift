@@ -174,6 +174,11 @@ extension ConversationProcessingService {
             })?.selectedShortcutID,
             createdAt: submittedAt
         )
+        if let configuration = previousJob?.contextSnapshot?.configuration {
+            var snapshot = job.contextSnapshot
+            snapshot?.configuration = configuration
+            job.contextSnapshot = snapshot
+        }
         if previousJob?.executionKind == .deterministicQuestion {
             job.backend = .local
             job.executionKind = .deterministicQuestion

@@ -193,9 +193,9 @@ extension AIService {
                         messages: messages,
                         model: .custom(request.model),
                         store: request.provider == .openAI ? false : nil,
-                        toolChoice: .auto,
-                        tools: request.tools,
-                        parallelToolCalls: true,
+                        toolChoice: request.tools.isEmpty ? nil : .auto,
+                        tools: request.tools.isEmpty ? nil : request.tools,
+                        parallelToolCalls: request.tools.isEmpty ? nil : true,
                         streamOptions: .init(includeUsage: true)
                     ),
                     videos: request.videos,

@@ -1,3 +1,4 @@
+import { loadPrompt, renderPrompt } from "./prompt.js";
 import { ProtocolError, type AgentModelMessage } from "./domain.js";
 import type { ProviderMedia } from "./worker.js";
 
@@ -100,8 +101,12 @@ export async function boundedProviderError(response: Response): Promise<string> 
   return new TextDecoder().decode(data);
 }
 
+const fallbackPrompt = loadPrompt("video-fallback");
+
 export function frameFallbackPrompt(manifest: VideoFrameFallback): string {
-  return `[SOMA VIDEO FRAME FALLBACK v1]\n当前视频改用 ${manifest.frameIDs.length} 张画面，覆盖 ${manifest.durationSeconds} 秒。` +
-    "本说明替代此前完整视频直传说明。只能观察静态画面，不能声称观看了完整视频或确定完整动作节奏、速度与连续轨迹。" +
-    `画面时间（秒）：${manifest.timestampsSeconds.join("、")}。遵循原有授权和工具结果，不重复写入。`;
+  return renderPrompt(fallbackPrompt, {
+    frame_count: String(manifest.frameIDs.length),
+    duration: String(manifest.durationSeconds),
+    timestamps: manifest.timestampsSeconds.join("、"),
+  });
 }

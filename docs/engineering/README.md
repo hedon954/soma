@@ -14,7 +14,7 @@
 - [用户错误呈现清单](user-facing-errors.md)
 - [Agent Tool 目录](agent-tool-catalog.md)（受控提问工具与确定性按钮：ADR 0136，本机读取当日日账：ADR 0153）
 - [ReAct Agent](../react-agent.md)（受控提问成功后停止模型循环：ADR 0136）
-- [默认 Prompt 来源目录](prompt-source-catalog.md)
+- [LLM 提示词来源](prompt-source-catalog.md)
 - [训练智能与可靠 Agent 实施次序](implementation-sequence.md)
 - [训练智能与可靠 Agent 全量 Todo](implementation-todo.md)
 - [可选 Agent Server 部署与运维](../../Server/README.md)

@@ -321,8 +321,11 @@ final class ConversationContextProjectionTests: XCTestCase {
         )
         XCTAssertTrue(
             (historicalContent.first?["text"] as? String)?
-                .contains("media_source=recent_gym_turn") == true
+                .contains("可供本轮健身房写入引用") == true
         )
+        let functions = (object["tools"] as? [[String: Any]])?.compactMap { $0["function"] as? [String: Any] } ?? []
+        let gymTool = try XCTUnwrap(functions.first { $0["name"] as? String == "update_gym" })
+        XCTAssertTrue((gymTool["description"] as? String)?.contains("media_source=recent_gym_turn") == true)
 
         let trace = try XCTUnwrap(
             try context.fetch(FetchDescriptor<AgentTrace>()).first

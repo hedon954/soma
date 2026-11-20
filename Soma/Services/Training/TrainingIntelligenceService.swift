@@ -79,31 +79,23 @@ enum TrainingIntelligenceService {
         let historyText = relevant.prefix(30).map {
             "\($0.date.formatted(date: .numeric, time: .omitted)) · \($0.exercise) · \(ExerciseQuickFill.text(for: $0))"
         }.joined(separator: "\n")
-        let prompt = """
-        用户主动请求优化训练课程“\(program.name)”。
-        请只依据以下计划和真实历史，分别给出每个动作的建议重量、次数、组数与间歇；
-        缺少证据时明确说“保持原课程”或“暂无足够历史”，不要虚构能力或健康事实。
-        只输出面向用户的简洁建议，不调用任何工具，不改写课程。
-
-        [课程]
-        \(prescriptionText)
-
-        [相关训练历史]
-        \(historyText.isEmpty ? "暂无" : historyText)
-        """
-        let outcome = try await ai.runAgent(
-            text: prompt,
-            images: [],
-            hasVideo: false,
-            context: "这是用户主动触发的一次训练课程优化。建议是一般训练信息，不构成医疗诊断。"
-        ) { _ in
-            .failure("计划优化流程不执行 Tool；请直接返回建议。")
-        }
+        let prompt = SomaPrompt.text("training_optimization_user_prompt", [
+            "program_name": program.name,
+            "prescription": prescriptionText,
+            "history": historyText.isEmpty ? "暂无" : historyText
+        ])
+        let advice = try await ai.completeTextPrompt(
+            system: SomaPrompt.text("training_optimization_system_prompt"),
+            user: prompt,
+            reason: "训练课程优化",
+            tier: .standard,
+            recoverFinalAnswer: true
+        )
         let snapshot = RecommendationSnapshot(
             targetKind: "training_program",
             targetID: program.id,
             inputFingerprint: fingerprint,
-            advice: outcome.finalAnswer
+            advice: advice
         )
         context.insert(snapshot)
         try context.save()
@@ -115,28 +107,17 @@ enum TrainingIntelligenceService {
         ai: AIService,
         in context: ModelContext
     ) async throws -> ExerciseContent {
-        let prompt = """
-        用户主动请求生成“\(exercise.canonicalName)”的动作说明。
-        只返回一个 JSON 对象，不要 Markdown：
-        {
-          "coachingNotes": "简洁的准备、执行、呼吸和常见错误提示，包含不适时停止训练的安全提醒",
-          "primaryMuscles": ["主要肌群"],
-          "secondaryMuscles": ["辅助肌群"],
-          "movementPatterns": ["动作模式"]
-        }
-        内容是一般训练指导，不作诊断；肌群仅描述通用主要和辅助参与，不描述为用户个人受力结果。
-        """
-        let outcome = try await ai.runAgent(
-            text: prompt,
-            images: [],
-            hasVideo: false,
-            context: "这是用户主动触发的动作内容生成。"
-        ) { _ in
-            .failure("动作内容生成流程不执行 Tool；请直接返回 JSON。")
-        }
+        let prompt = SomaPrompt.text("exercise_content_user_prompt", ["exercise_name": exercise.canonicalName])
+        let answer = try await ai.completeTextPrompt(
+            system: SomaPrompt.text("exercise_content_system_prompt"),
+            user: prompt,
+            reason: "动作说明生成",
+            tier: .standard,
+            recoverFinalAnswer: true
+        )
         let generated = try decodeJSON(
             GeneratedExerciseContent.self,
-            from: outcome.finalAnswer
+            from: answer
         )
         let content = ExerciseContent(
             coachingNotes: generated.coachingNotes,
@@ -227,8 +208,13 @@ enum TrainingIntelligenceService {
     static func performanceReviewPrompt(
         performance: ExercisePerformance,
         sets: [WorkoutSet],
-        fingerprint: String
-    ) -> String {
+        fingerprint: String,
+        in context: ModelContext
+    ) throws -> String {
+        try BusinessIDAllocator.assign(performance, namespace: "performance", in: context)
+        guard let performanceID = performance.businessID else {
+            throw TrainingIntelligenceError.performanceIDMissing
+        }
         let completed = sets
             .filter {
                 $0.performanceID == performance.id
@@ -243,19 +229,12 @@ enum TrainingIntelligenceService {
                 set.actualReps.map { "\($0)次" }
             ].compactMap { $0 }.joined(separator: " · ")
         }.joined(separator: "\n")
-        return """
-        我主动请求复盘这段“\(performance.exerciseName)”训练视频。
-        关联 Performance ID：\(performance.id.uuidString)
-        输入指纹：\(fingerprint)
-        已确认的实际组：
-        \(setText.isEmpty ? "未提供可确认的组数值" : setText)
-
-        请只依据本消息附带的完整视频分析可见内容；可见证据不足时，不要描述为完整动作。
-        不推断不可见关节、疼痛或伤病，不作医疗诊断。若出现疼痛、眩晕或明显不适，建议停止训练并寻求专业帮助。
-        完成分析后必须调用 record_performance_analysis，原样传回上述 performance_id 和 input_fingerprint，
-        并分别填写：按阶段描述的 evidence、镜头/遮挡/采样造成的 limitations、以及中性可执行的 feedback。
-        不要调用 create_workout 或 update_workout，也不要修改任何训练事实。
-        """
+        return SomaPrompt.text("performance_review_user_prompt", [
+            "exercise_name": performance.exerciseName,
+            "performance_id": String(performanceID),
+            "fingerprint": fingerprint,
+            "sets": setText.isEmpty ? "未提供可确认的组数值" : setText
+        ])
     }
 
     static func makePendingPerformanceVideo(
@@ -357,25 +336,16 @@ enum ExerciseImageGenerationService {
     ) -> String {
         switch kind {
         case .actionIllustration:
-            """
-            为私人健身记录 App Soma 生成“\(exercise.canonicalName)”动作示意图。
-            正方形 1:1，浅灰白干净背景（#F4F6F5），单个成年人穿不透明深灰短袖与黑色短裤，
-            以正确起始或最有辨识度的动作阶段展示，清楚呈现必要器械、身体姿势和动作方向。
-            风格必须统一：扁平化矢量运动教学插画、边缘清晰、无厚重阴影、无写实皮肤纹理、
-            无油画感；配色克制，主色贴近 Soma 绿色 #1FB25E 作为点缀即可。
-            全身完整入镜，移动端缩略图仍可辨认。不要文字、标签、数字、水印、Logo 或额外人物。
-            这是一般动作示意，不描绘具体用户，也不作医疗诊断。
-            """
+            SomaPrompt.text("exercise_illustration_prompt", ["exercise_name": exercise.canonicalName])
         case .muscleMap:
-            """
-            （已停用）肌群图改由 App 内程序化渲染，不再请求图像生成。
-            """
+            "（已停用）肌群图改由 App 内程序化渲染，不再请求图像生成。"
         }
     }
 }
 
 enum TrainingIntelligenceError: LocalizedError, Equatable {
     case videoMissing
+    case performanceIDMissing
     case invalidModelOutput
     case muscleMapGenerationRetired
 
@@ -385,6 +355,8 @@ enum TrainingIntelligenceError: LocalizedError, Equatable {
             "肌群受力图已改为程序化渲染，不再支持 AI 生成。"
         case .videoMissing:
             "这项动作没有可供复盘的本机视频。"
+        case .performanceIDMissing:
+            "无法取得这项训练的编号，请重新打开训练后重试。"
         case .invalidModelOutput:
             "模型没有按可审查格式返回结果，请重试。"
         }

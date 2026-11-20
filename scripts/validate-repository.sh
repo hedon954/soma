@@ -336,6 +336,7 @@ done
 plutil -lint Soma/Resources/Info.plist ExportOptions.plist >/dev/null
 ./scripts/check-markdown-links.rb
 ./scripts/check-document-lifecycle-links.rb
+ruby ./scripts/check-prompt-resources.rb
 ./scripts/check-secrets.sh
 ruby ./scripts/check-agent-tool-registry.rb
 ruby ./scripts/check-agent-model-input-parity.rb

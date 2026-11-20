@@ -24,6 +24,11 @@ targets:
     platform: iOS
     sources:
       - path: Soma
+        excludes:
+          - Resources/Prompts
+      - path: Soma/Resources/Prompts
+        type: folder
+        buildPhase: resources
       - path: Shared
     dependencies:
       - sdk: HealthKit.framework

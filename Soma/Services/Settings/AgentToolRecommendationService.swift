@@ -1,5 +1,4 @@
 import Foundation
-import SwiftOpenAI
 
 struct AgentToolRecommendation: Equatable, Sendable {
     /// 已按工具目录校验过的工具名，未知名称会被丢弃。
@@ -43,28 +42,14 @@ enum AgentToolRecommendationService {
         shortcutTitle: String,
         skill: AgentSkillDescriptor
     ) -> String {
-        """
-        快捷按钮名称：\(shortcutTitle)
-
-        Skill 名称：\(skill.title)
-        Skill 说明：\(skill.summary)
-        使用时机：\(skill.whenToUse)
-
-        Skill 正文：
-        \(skill.markdown)
-
-        可选工具目录（工具名=用途）：
-        \(catalog)
-
-        请选出这个快捷按钮真正需要的最小工具集合。
-        只输出一个 JSON 对象，不要代码块、不要额外说明：
-        {"tools":["工具名"],"reason":"一到两句中文理由"}
-        规则：
-        1. 工具名必须逐字来自上面的目录，不要发明新名字。
-        2. 需要写入时必须同时包含对应的查询工具，例如更新训练要同时给出 list_workouts 与
-           get_workout。
-        3. 与这个按钮无关的领域一律不选；load_skill 总是要选。
-        """
+        SomaPrompt.text("shortcut_tool_recommendation_user_prompt", [
+            "shortcut_title": shortcutTitle,
+            "skill_title": skill.title,
+            "skill_description": skill.summary,
+            "when_to_use": skill.whenToUse,
+            "skill_markdown": skill.markdown,
+            "tools": catalog
+        ])
     }
 
     static func parse(_ text: String) -> AgentToolRecommendation? {
@@ -95,7 +80,12 @@ enum AgentToolRecommendationService {
         tier: AIModelTier,
         ai: AIService
     ) async throws -> AgentToolRecommendation {
-        let text = try await ai.completeToolRecommendation(prompt: prompt, tier: tier)
+        let text = try await ai.completeTextPrompt(
+            system: SomaPrompt.text("shortcut_tool_recommendation_system_prompt"),
+            user: prompt,
+            reason: "快捷按钮工具推荐",
+            tier: tier
+        )
         guard let recommendation = parse(text) else {
             throw AgentToolRecommendationError.unusableResponse
         }
@@ -109,56 +99,5 @@ enum AgentToolRecommendationService {
               start < end
         else { return nil }
         return String(text[start ... end]).data(using: .utf8)
-    }
-}
-
-extension AIService {
-    func completeToolRecommendation(
-        prompt: String,
-        tier: AIModelTier
-    ) async throws -> String {
-        let provider = provider(for: tier)
-        let route = AIModelRoute(
-            tier: tier,
-            provider: provider,
-            baseURL: baseURL(for: provider, tier: tier),
-            model: model(for: provider, tier: tier),
-            reason: "快捷按钮工具推荐"
-        )
-        let resolved = try resolvedRoute(
-            requested: route,
-            text: prompt,
-            hasMedia: false,
-            hasVideo: false
-        )
-        var messages = [
-            ChatCompletionParameters.Message(
-                role: .system,
-                content: .text(
-                    "你是 Soma 的工具编排助手。只输出 JSON，不解释，不臆造工具名。"
-                )
-            ),
-            ChatCompletionParameters.Message(role: .user, content: .text(prompt))
-        ]
-        let outcome = try await consumeAgentStepWithRetry(
-            messages: &messages,
-            request: AgentStreamStepRequest(
-                tools: [],
-                model: resolved.route.model,
-                provider: resolved.route.provider,
-                images: [],
-                videos: [],
-                hasVideo: false,
-                step: 0,
-                route: resolved.route,
-                apiKey: resolved.apiKey,
-                userPrompt: prompt,
-                textItemID: UUID()
-            ),
-            trace: nil
-        )
-        let text = outcome.passage.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw ReActAgentError.emptyResponse }
-        return text
     }
 }

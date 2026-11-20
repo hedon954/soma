@@ -744,7 +744,7 @@ const definitions: DeviceToolDefinition[] = [
     mutation: true,
     parameters: parameters(
       {
-        performance_id: stringValue,
+        performance_id: integerValue,
         input_fingerprint: stringValue,
         evidence: stringValue,
         limitations: stringValue,

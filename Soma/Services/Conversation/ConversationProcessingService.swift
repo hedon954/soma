@@ -104,7 +104,8 @@ final class ConversationProcessingService {
         includeLocation: Bool,
         locationService: LocationContextService,
         selectedShortcutID: String? = nil,
-        forceLocal: Bool = false
+        forceLocal: Bool = false,
+        promptScene: AgentPromptScene = .coach
     ) async -> Bool {
         let persistedAttachments: [MediaAttachmentReference]
         do {
@@ -119,7 +120,8 @@ final class ConversationProcessingService {
             includeLocation: includeLocation,
             locationService: locationService,
             selectedShortcutID: selectedShortcutID,
-            forceLocal: forceLocal
+            forceLocal: forceLocal,
+            promptScene: promptScene
         )
     }
 
@@ -131,7 +133,8 @@ final class ConversationProcessingService {
         locationService: LocationContextService,
         selectedShortcutID: String?,
         forceLocal: Bool,
-        questionAction: AgentQuestionAction? = nil
+        questionAction: AgentQuestionAction? = nil,
+        promptScene: AgentPromptScene = .coach
     ) -> Bool {
         // ADR 0045：发送不再以 LLM 当前可用为前提，也不因为已有任务在途而拒绝。
         let useRemote = questionAction == nil && !forceLocal && RemoteAgentPreference.isEnabled()
@@ -195,7 +198,8 @@ final class ConversationProcessingService {
         frozenContext?.configuration = try? AgentPromptConfiguration.capture(
             defaults: context.ai.defaults,
             selectedSkillID: job.selectedSkillID,
-            selectedShortcutID: job.selectedShortcutID
+            selectedShortcutID: job.selectedShortcutID,
+            scene: promptScene
         )
         job.contextSnapshot = frozenContext
 

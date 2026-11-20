@@ -3,6 +3,23 @@ import SwiftData
 import XCTest
 
 final class AgentPromptMigrationRefactorTests: XCTestCase {
+    func testBundledUserPromptLeavesPlaceholderSyntaxInDynamicInputLiteral() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SomaTests.\(UUID())"))
+        let configuration = try AgentPromptConfiguration.capture(defaults: defaults, selectedSkillID: nil, selectedShortcutID: nil)
+        let userText = "保留 {{text}} 和 {{context}}"
+        let prompt = ReActAgentPrompt.user(
+            text: userText,
+            context: "可信上下文 {{summary}}",
+            imageCount: 2,
+            hasVideo: true,
+            configuration: configuration
+        )
+
+        XCTAssertTrue(prompt.contains("## 当前用户输入\n\n" + userText))
+        XCTAssertTrue(prompt.contains("## 可信本机上下文\n\n可信上下文 {{summary}}"))
+        XCTAssertTrue(prompt.contains("当前请求实际提供：2 张图片、0 个完整视频"))
+    }
+
     func testTurnBusinessDateOverrideDoesNotMutateSessionDefault() throws {
         let zone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
         let turnSentAt = try XCTUnwrap(

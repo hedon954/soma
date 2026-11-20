@@ -21,10 +21,11 @@ final class AgentContextContinuityTests: XCTestCase {
         let resumed = try await ai.prepareAgentRun(resumedRequest)
         XCTAssertEqual(resumed.modelInput, original.modelInput)
         XCTAssertEqual(resumed.selectedRoute, original.selectedRoute)
-        XCTAssertTrue(resumed.modelInput.messages[0].text.contains("旧人格"))
-        XCTAssertFalse(resumed.modelInput.messages[0].text.contains("新人格"))
+        XCTAssertTrue(resumed.modelInput.messages.last?.text.contains("旧人格") == true)
+        XCTAssertFalse(resumed.modelInput.messages.last?.text.contains("新人格") == true)
         let fresh = try await ai.prepareAgentRun(request(text: "下一轮"))
-        XCTAssertTrue(fresh.modelInput.messages[0].text.contains("新人格"))
+        XCTAssertEqual(fresh.modelInput.messages.first, original.modelInput.messages.first)
+        XCTAssertTrue(fresh.modelInput.messages.last?.text.contains("新人格") == true)
     }
 
     func testNextTurnAppendsAfterNativeToolFramesWithoutRewritingPrefix() throws {
