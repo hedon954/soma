@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="告诉 Soma 你想增肌还是减脂。一起排训练计划，记下每组和每顿饭，过一阵再看哪些该继续、哪些要改。">
+  <meta name="theme-color" content="#f8f7f3">
+  <title>Soma — 从定目标到看进展</title>
+  <link rel="canonical" href="https://hedon.top/soma/">
+  <link rel="icon" href="assets/soma-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="demo.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a href="#top" class="brand" aria-label="Soma 首页">
+        <img src="assets/soma-icon.png" width="31" height="31" alt="">
+        <span>Soma</span>
+      </a>
+      <nav class="primary-nav" aria-label="主导航">
+        <a href="#demo">定目标</a>
+        <a href="#training">训练和饮食</a>
+        <a href="#progress">看进展</a>
+        <a href="#next-week">下一周</a>
+      </nav>
+      <a class="button button-outline header-cta" href="#start">如何安装</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="shell hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow hero-label">iPhone 上的私人教练</p>
+        <h1 id="hero-title">想增肌，<br>还是想减脂<span class="hero-period">？</span></h1>
+        <p class="hero-details">先告诉 Soma 你想做到什么、每周能练几次。照着计划练，把吃的和练的记下来。卡住了，就翻着记录一起想想下一步。</p>
+        <a class="button button-primary" href="#demo">从目标开始</a>
+      </div>
+      <div class="hero-visual">
+        <img class="hero-photo" src="assets/strength-studio.webp" alt="" width="1536" height="1024" fetchpriority="high">
+        <figure class="app-shot hero-shot">
+          <div class="iphone">
+            <div class="iphone-screen">
+              <img src="assets/coach-dark.webp" width="1206" height="2622" alt="Soma 教练里的杠铃深蹲和鸡胸肉杂粮饭记录">
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="shell goals chapter" id="demo" aria-labelledby="demo-title">
+      <header class="section-heading">
+        <p class="eyebrow step-label">定目标</p>
+        <h2 id="demo-title">第一句话，先说你想做到什么</h2>
+      </header>
+      <div class="goal-stage">
+        <div class="goal-copy">
+          <fieldset class="scenes goal-picker">
+            <legend class="sr-only">选择要看的健身目标</legend>
+            <label>
+              <input type="radio" name="goal" value="gain" aria-controls="gain-intro" checked>
+              <span>我想增肌</span>
+            </label>
+            <label>
+              <input type="radio" name="goal" value="loss" aria-controls="loss-intro">
+              <span>我想减脂</span>
+            </label>
+          </fieldset>
+          <div id="gain-intro" class="dialogue goal-dialogue" data-goal="gain">
+            <p class="message">想练壮一点。现在深蹲能用 52.5 公斤做 4 组，每组 8 次，想慢慢练到 75 公斤。一周能去健身房 3 次。</p>
+            <p class="answer"><span>Soma</span>你每次大概能练多久？平时能用到哪些器械？</p>
+            <p class="message">一次 45 分钟。有杠铃、哑铃和拉力器。</p>
+            <p class="answer"><span>Soma</span>我先按每周 3 次排一周力量训练。把深蹲放在第一天，你看看这样排合不合适。</p>
+          </div>
+          <div id="loss-intro" class="dialogue goal-dialogue" data-goal="loss" hidden>
+            <p class="message">我现在 74 公斤，想减到 72。工作日经常在外面吃，一周能练 3 次。</p>
+            <p class="answer"><span>Soma</span>你平时练什么？每次能留多少时间？</p>
+            <p class="message">平时练杠铃和哑铃，一次 45 分钟左右。</p>
+            <p class="answer"><span>Soma</span>我先排一周力量训练。吃的先照平时记几天，我们再看哪里适合调整。</p>
+          </div>
+          <p class="goal-next">教练把计划列出来，你可以改完再保存。要按增肌或减脂看进展，在「设置」的「身体信息」里选健身目标。</p>
+        </div>
+        <div class="goal-visual">
+          <figure class="app-shot goal-shot">
+            <div class="iphone">
+              <div class="iphone-screen">
+                <img src="assets/fitness-goal-dark.webp" width="1206" height="2622" alt="身体信息页面和健身目标选项">
+              </div>
+            </div>
+            <figcaption>在「身体信息」里选健身目标</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="shell journey chapter" aria-labelledby="journey-title">
+      <header class="section-heading journey-heading">
+        <h2 id="journey-title">第一周，边练边记</h2>
+      </header>
+
+      <article class="training-chapter" id="training">
+        <div class="training-intro">
+          <div class="step-copy">
+            <p class="eyebrow step-label">训练</p>
+            <h3>今天练了什么，记下来</h3>
+            <p>到健身房，从「训练」打开今天的课程。Soma 会告诉你下一组做什么、休息多久。已经练完了，也可以回到教练里发条消息。</p>
+          </div>
+          <div class="step-copy training-note">
+            <blockquote class="step-quote">深蹲练完了，52.5 公斤，4 组，每组 8 次。</blockquote>
+            <p>Soma 把这条消息和动作库里的杠铃深蹲对上，保存实际组数、次数和重量，算出这次容量 <strong>1,680 kg</strong>。记错了，打开记录就能改。</p>
+            <p>下次练深蹲，打开动作历史就能找到今天这一笔。今天这套练得顺，还可以让教练把做过的动作排成一节课，下次直接开练。</p>
+          </div>
+        </div>
+        <div class="step-visual step-training">
+          <figure class="app-shot">
+            <div class="iphone">
+              <div class="iphone-screen">
+                <img src="assets/guided-squat-wide-dark.webp" width="1206" height="2622" loading="lazy" alt="带练准备页的杠铃深蹲照片，以及 52.5 公斤、4 组、每组 8 次的训练目标">
+              </div>
+            </div>
+            <figcaption>开练前看目标</figcaption>
+          </figure>
+          <figure class="app-shot">
+            <div class="iphone">
+              <div class="iphone-screen">
+                <img src="assets/squat-record-dark.webp" width="1206" height="2622" loading="lazy" alt="第一次杠铃深蹲的记录，52.5 公斤、4 组、每组 8 次">
+              </div>
+            </div>
+            <figcaption>练完看记录</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="journey-step meals-chapter" id="meals">
+        <div class="step-copy">
+          <p class="eyebrow step-label">饮食</p>
+          <h3>午饭拍张照，吃完就记上</h3>
+          <blockquote class="step-quote">这顿午饭帮我记一下。</blockquote>
+          <p>Soma 根据照片和你补充的内容，记下这一餐的食物和能估出的营养。比如这碗鸡胸肉糙米饭，记了约 <strong>568 千卡</strong>和 <strong>46 克蛋白质</strong>。菜名或份量不对，点开这一餐就能改。</p>
+          <p>这一餐会计入当天的摄入。晚饭前想知道今天已经吃了多少，问教练，它会用当天已记下的几餐来回答。</p>
+        </div>
+        <div class="step-visual step-meal">
+          <img class="meal-photo" src="assets/chicken-rice-bowl.webp" width="900" height="600" loading="lazy" alt="一盘烤鸡胸肉、糙米饭和蔬菜">
+          <figure class="app-shot meal-shot">
+            <div class="iphone">
+              <div class="iphone-screen">
+                <img src="assets/energy-day-dark.webp" width="1206" height="2622" loading="lazy" alt="当天的饮食与能量，展示已记录摄入和营养环">
+              </div>
+            </div>
+            <figcaption>记下来的一餐会计入当天摄入</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="coaching" id="coach">
+        <div class="step-copy">
+          <p class="eyebrow step-label">教练</p>
+          <h3>哪儿卡住了，就问哪儿</h3>
+          <p>课表照着练了一阵，发现重量加不上去，或者忙起来漏了几顿没记。告诉教练发生了什么，它可以先看你已有的记录，再跟你商量下一步。</p>
+          <p data-goal="gain">想看看动作哪里做得不顺，也可以发一段视频给教练，问下一组该留意什么。</p>
+          <p data-goal="loss" hidden>漏记的餐可以补上。进展里的摄入和差额会跟着更新，下次再看时也有数可查。</p>
+          <p>决定了下周要改什么，再去改课程。已经做过的组还在，过一阵再回来比。</p>
+          <div class="dialogue coaching-chat" data-goal="gain">
+            <p class="message">前一次 72.5 公斤做完了四组，昨天最后一组只做了 6 个。这周还试 75 吗？</p>
+            <p class="answer"><span>Soma</span>下次先用 72.5 公斤，看看四组能不能都做满 8 次。等这个重量做稳了，再试 75。</p>
+          </div>
+          <div class="dialogue coaching-chat" data-goal="loss" hidden>
+            <p class="message">这周体重没怎么变，周三和周五的晚饭也没记。我是不是该少吃点？</p>
+            <p class="answer"><span>Soma</span>先把那两顿补上，再一起看这周实际记下的摄入和体重变化。</p>
+          </div>
+        </div>
+        <figure class="app-shot coaching-shot">
+          <div class="iphone">
+            <div class="iphone-screen">
+              <img src="assets/coach-today-energy-dark.webp" width="1206" height="2622" loading="lazy" alt="教练对话里查看今天还能摄入多少热量">
+            </div>
+          </div>
+          <figcaption>问今天还能吃多少，可以点开明细看怎么算的</figcaption>
+        </figure>
+      </article>
+
+      <article class="journey-step progress-chapter" id="progress">
+        <div class="step-copy">
+          <p class="eyebrow step-label">进展</p>
+          <h3>过几周，把训练、饮食和体重放一起看</h3>
+          <p>体重也可以发给教练记，或者从 Apple 健康同步。到「进展」看一周或一个月，把它和训练、饮食放在一起看。</p>
+          <p>训练记录告诉你练了几天、做了多少。饮食记录加起来是已记摄入，训练消耗也会算进预估总消耗。再对照体重趋势，看看哪一项变了，哪一项还得多看几天。</p>
+          <div class="goal-result" data-goal="gain">
+            <h4>深蹲练了 14 周，回头看看进展</h4>
+            <p>这 12 次有加重，也有降回去重练的时候。四组都做满 8 次的重量，从 52.5 公斤到了 72.5 公斤。接下来先把 72.5 公斤练稳，再试 75。</p>
+          </div>
+          <div class="goal-result" data-goal="loss" hidden>
+            <h4>减脂时，看体重是不是往目标走</h4>
+            <p>把每周有记录的摄入、预估消耗和几周的体重趋势一起看。到了自己定的 72 公斤，再决定要不要改成维持。</p>
+          </div>
+          <div class="lift-compare" data-goal="gain">
+            <p>杠铃深蹲</p>
+            <h4>4 组，每组 8 次</h4>
+            <dl>
+              <div><dt>第一次</dt><dd>52.5 <small>kg</small></dd></div>
+              <div><dt>最近一次</dt><dd>72.5 <small>kg</small></dd></div>
+            </dl>
+          </div>
+        </div>
+        <div class="step-visual step-progress">
+          <figure class="app-shot" data-goal="gain">
+            <div class="iphone">
+              <div class="iphone-screen">
+                <img src="assets/squat-history-dark.webp" width="1206" height="2622" loading="lazy" alt="杠铃深蹲的 12 次训练容量曲线，从 1,680 公斤到 2,320 公斤，中间有几次回落">
+              </div>
+            </div>
+            <figcaption>8 月到 11 月的深蹲容量</figcaption>
+          </figure>
+          <figure class="app-shot" data-goal="loss" hidden>
+            <div class="iphone">
+              <div class="iphone-screen">
+                <img src="assets/energy-week-dark.webp" width="1206" height="2622" loading="lazy" alt="进展里的每周热量图，每天的摄入和预估消耗放在一起">
+              </div>
+            </div>
+            <figcaption>进展的周视图里，摄入和预估消耗放在一起</figcaption>
+          </figure>
+        </div>
+      </article>
+    </section>
+
+    <section class="shell" id="next-week" aria-labelledby="loop-title">
+      <div class="loop">
+        <div class="loop-copy">
+          <h2 id="loop-title">下周，接着这周练</h2>
+          <p data-goal="gain">这周最后一组还差两次，下周先用原来的重量。练完照样记，看能不能做满，再决定要不要加。</p>
+          <p data-goal="loss" hidden>这周有两顿没记，就先补上。下周照样记录训练和吃饭，周末再看体重往哪儿走、要不要调整吃法。</p>
+          <p>到了目标也可以继续。定下一个训练目标，或者先维持一阵，手上已经有记录可以参考。</p>
+          <a class="button loop-button" href="#training">回到下一次训练</a>
+        </div>
+        <nav class="loop-cycle" aria-label="每周怎么用 Soma">
+          <p class="loop-center" aria-hidden="true">一周接一周</p>
+          <ol>
+            <li><a href="#meals">平时记下来</a></li>
+            <li><a href="#progress">周末看进展</a></li>
+            <li><a href="#coach">挑一件事改</a></li>
+            <li><a href="#training">下次接着练</a></li>
+          </ol>
+          <div class="loop-arrows" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </nav>
+      </div>
+    </section>
+
+    <section class="shell privacy-section" id="privacy" aria-labelledby="privacy-title">
+      <div class="privacy">
+        <div class="privacy-heading">
+          <h2 id="privacy-title">记录保存在<br>你的 iPhone 上</h2>
+        </div>
+        <dl class="privacy-list">
+          <div><dt>不用注册</dt><dd>训练记录、饮食记录，还有原始照片和视频，默认都保存在手机里。</dd></div>
+          <div><dt>模型自己选</dt><dd>你选的模型负责处理聊天消息。API Key 存在 iPhone 的钥匙串里。</dd></div>
+          <div><dt>记错了可以改</dt><dd>随时都能改或删。训练和饮食记录也能导出。</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="shell questions" id="faq" aria-labelledby="faq-title">
+      <h2 id="faq-title">常见问题</h2>
+      <div class="faq-list">
+        <details>
+          <summary>第一次用教练，要怎么设置？</summary>
+          <p>在 Soma 的设置里选模型服务，再填模型和你的 API Key。视频等功能能不能用，要看你选的模型。</p>
+        </details>
+        <details>
+          <summary>怎么装到 iPhone 上？</summary>
+          <p>把 GitHub 上的源码下载到 Mac，用 Xcode 构建。可以先在 iPhone 模拟器里试试演示空间。装到自己的 iPhone 上，需要 iOS 17 或更新版本，还要用自己的 Apple Developer Team 签名。</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="shell start" id="start" aria-labelledby="start-title">
+      <div>
+        <img src="assets/soma-icon.png" width="52" height="52" alt="" loading="lazy">
+        <h2 id="start-title">把 Soma 装到 iPhone</h2>
+        <p>支持 iOS 17 及以上，用 Xcode 从源码安装。</p>
+      </div>
+      <a class="button button-primary" href="https://github.com/hedon954/soma#开始体验">看安装步骤</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner">
+      <a href="#top" class="brand"><img src="assets/soma-icon.png" width="28" height="28" alt=""><span>Soma</span></a>
+      <p>Your body, understood.</p>
+      <a href="https://github.com/hedon954/soma">GitHub</a>
+    </div>
+  </footer>
+</body>
+</html>
