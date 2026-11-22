@@ -1,20 +1,5 @@
 import SwiftUI
 
-enum AssistantFeedbackScroller {
-    static func scrollAfterLayout(
-        to target: AssistantFeedbackScrollTarget,
-        using proxy: ScrollViewProxy
-    ) {
-        Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo(target, anchor: .bottom)
-            }
-        }
-    }
-}
-
 struct ConversationStarterSuggestion {
     let title: String
     let prompt: String

@@ -74,6 +74,26 @@ struct QQMailFeedbackClient {
         self.transport = transport
     }
 
+    static func submitFromComposer(
+        id: UUID,
+        message: String,
+        attachments: [PendingAttachment]
+    ) async throws {
+        #if DEBUG
+            if AppTestRuntime.isRunning,
+               ProcessInfo.processInfo.environment["SOMA_UI_FEEDBACK_SUCCESS"] == "1"
+            {
+                return
+            }
+        #endif
+        let credentials = try FeedbackMailConfiguration.credentials()
+        try await QQMailFeedbackClient(credentials: credentials).submit(
+            id: id,
+            message: message,
+            attachments: attachments
+        )
+    }
+
     func submit(
         id: UUID,
         message: String,

@@ -5,13 +5,19 @@ struct AssistantFeedbackScrollTarget: Hashable {
     let messageID: UUID
 }
 
+enum AssistantFeedbackScrollEvent {
+    case expanded
+    case focusChanged(Bool)
+    case editorHeightChanged
+}
+
 /// BUG 0031：逐回复反馈在消息叶子节点原位展开，不做页面切换，也不改变 CoachView 根状态。
 struct AssistantFeedbackButton: View {
     let messageID: UUID
     let traceID: UUID?
     let timestamp: String
     let timestampAccessibilityLabel: String
-    var onExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
+    var onScrollEvent: (AssistantFeedbackScrollEvent, AssistantFeedbackScrollTarget) -> Void
     @State private var isExpanded = false
 
     private var scrollTarget: AssistantFeedbackScrollTarget {
@@ -38,7 +44,7 @@ struct AssistantFeedbackButton: View {
                 Button {
                     isExpanded.toggle()
                     if isExpanded {
-                        onExpanded(scrollTarget)
+                        onScrollEvent(.expanded, scrollTarget)
                     }
                 } label: {
                     CompactActionLabel(
@@ -71,12 +77,18 @@ struct AssistantFeedbackButton: View {
                         isEmbedded: true,
                         assistantMessageID: messageID,
                         isCompact: true,
+                        onEditorFocusChanged: { isFocused in
+                            onScrollEvent(.focusChanged(isFocused), scrollTarget)
+                        },
                         onSubmitted: {
                             withAnimation(.easeInOut(duration: 0.32)) {
                                 isExpanded = false
                             }
                         }
                     )
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
+                        onScrollEvent(.editorHeightChanged, scrollTarget)
+                    }
                     .padding(.bottom, 4)
 
                     Color.clear

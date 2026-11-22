@@ -19,7 +19,7 @@ struct CoachBubble: View, Equatable {
     var onComposeAnswer: (String) throws -> Bool = { _ in false }
     var onRetry: () -> Void = {}
     var onDiscardPending: (() -> Void)?
-    var onFeedbackExpanded: (AssistantFeedbackScrollTarget) -> Void = { _ in }
+    var onFeedbackScroll: (AssistantFeedbackScrollEvent, AssistantFeedbackScrollTarget) -> Void = { _, _ in }
     @State private var showsPendingDeletionConfirmation = false
 
     static func == (lhs: CoachBubble, rhs: CoachBubble) -> Bool {
@@ -207,7 +207,7 @@ struct CoachBubble: View, Equatable {
                 traceID: message.agentTraceID,
                 timestamp: content.text,
                 timestampAccessibilityLabel: content.accessibilityLabel,
-                onExpanded: onFeedbackExpanded
+                onScrollEvent: onFeedbackScroll
             )
         } else {
             Text(content.text)

@@ -314,4 +314,5 @@ final class CoachVisibilityState {
     var autoScrollGate = CoachMessageAutoScrollGate()
     var tailMessageID: UUID?
     let tailScroll = CoachTailScrollCoordinator()
+    let feedbackScroller = AssistantFeedbackScroller()
 }

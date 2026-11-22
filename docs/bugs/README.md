@@ -11,6 +11,7 @@
 
 | Bug | 状态 | 摘要 | 回归门禁 |
 | --- | --- | --- | --- |
+| [0079](0079-feedback-composer-visibility-and-success.md) | 已修复，真机待复验 | 键盘挡住逐回复反馈的发送按钮，设置反馈确认层无法自动退出 | 双主题多行输入直接发送、设置页连续发送 |
 | [0078](0078-exercise-muscle-map-missing.md) | 已修复 | 新动作缺少受力标注时，训练详情和分享只有轮廓 | ID 校验、旧库补齐、有效标注保护、分享汇总 |
 | [0077](0077-meal-backfill-dismissal-lifetime.md) | 已修复 | 同一天重新进入教练后仍隐藏缺餐提醒 | 关闭、跨 Tab 和前后台重进、处理全部待补餐次 |
 | [0076](0076-meal-backfill-keyboard-watchdog.md) | 已修复输入区缺陷，真机待复测 | 补餐弹键盘或发送收键盘时焦点循环，界面超时 | 候选测量、补餐预填与聚焦、三图发送并收起键盘 |
@@ -66,7 +67,7 @@
 | [0028](0028-remote-model-tool-list-missing-from-logs.md) | 已修复，待部署与真机复验 | 远程模型 Span 与诊断日志缺少每次调用的绑定工具清单 | Worker Event 工具清单与 iOS 远程 Span 摘要测试 |
 | [0029](0029-visible-failure-keeps-retrying-and-stale-error.md) | 已修复，待真机网络故障复验 | 可见失败后仍自动重试，成功后残留旧错误与独立文字重试按钮 | ReAct 三次退避、Loop 外人工屏障、同气泡清理与网络故障验收 |
 | [0030](0030-prominent-button-loses-dark-mode-label.md) | 已修复，待真机界面复验 | 深色模式实心主按钮白底白字，开始训练等文字消失 | 显式反色按钮样式、禁止原始 prominent 写法与浅深主题验收 |
-| [0031](0031-feedback-sheet-transition-jank.md) | 已修复，待真机手感复验 | 逐回复反馈页进出场卡顿，图标与时间相距过远 | 原位反馈编辑器、发送时定向读取上下文与静态门禁 |
+| [0031](0031-feedback-sheet-transition-jank.md) | 已修复，待真机手感复验 | 逐回复反馈页进出场卡顿，图标与时间相距过远 | 原位反馈编辑器、发送时定向读取上下文与静态门禁；键盘避让与成功确认见 [0079](0079-feedback-composer-visibility-and-success.md) |
 | [0032](0032-sentinel-false-crash-reports.md) | 已修复，待真实 MetricKit 崩溃验收 | 启动哨兵把模拟器停止、强杀与安装替换误报为崩溃 | 只有 MetricKit 可入队、证据字段、旧误报清理与静态门禁 |
 | [0033](0033-model-name-multimodal-misclassification.md) | 已修复，待真实供应商目录验收 | provider 与模型名硬编码导致多模态和直传视频误判 | 明确模型目录来源、未知放行与远程显式能力开关 |
 | [0034](0034-large-session-inline-editor-render-hang.md) | 已修复，待真机连续交互复验 | 大会话最新饮食卡预创建几十个输入控件，切换后卡死退出 | 按需单字段编辑、十项虚构饮食卡 UI 回归与真机会话往返 |

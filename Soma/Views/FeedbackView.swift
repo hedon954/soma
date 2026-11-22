@@ -1,19 +1,6 @@
 import SwiftUI
 import UIKit
 
-enum FeedbackSuccessPresentationAction: Equatable {
-    case acknowledgeThenCollapse
-    case acknowledgeInPlace
-}
-
-enum FeedbackSuccessPresentationPolicy {
-    static let acknowledgementHold: Duration = .milliseconds(1000)
-
-    static func action(isEmbedded: Bool) -> FeedbackSuccessPresentationAction {
-        isEmbedded ? .acknowledgeThenCollapse : .acknowledgeInPlace
-    }
-}
-
 struct FeedbackView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -21,6 +8,7 @@ struct FeedbackView: View {
     var isEmbedded = false
     var assistantMessageID: UUID?
     var isCompact = false
+    var onEditorFocusChanged: (Bool) -> Void = { _ in }
     var onSubmitted: () -> Void = {}
     @State private var draftID = UUID()
     @State private var message = ""
@@ -73,7 +61,13 @@ struct FeedbackView: View {
                 dismissButton: .default(Text("知道了"))
             )
         }
+        .onChange(of: editorFocused) { _, isFocused in
+            onEditorFocusChanged(isFocused)
+        }
         .onDisappear {
+            if editorFocused {
+                onEditorFocusChanged(false)
+            }
             submissionTask?.cancel()
             scheduleTemporaryVideoCleanup(in: attachments)
         }
@@ -190,7 +184,7 @@ struct FeedbackView: View {
             )
         )
         .animation(.easeInOut(duration: 0.28), value: showsSuccess)
-        .sensoryFeedback(.success, trigger: showsSuccess)
+        .sensoryFeedback(.success, trigger: showsSuccess) { _, isVisible in isVisible }
     }
 
     private var successAcknowledgement: some View {
@@ -271,6 +265,7 @@ struct FeedbackView: View {
         }
         .appPrimaryButtonStyle()
         .disabled(isSending || showsSuccess || isEmpty)
+        .accessibilityIdentifier("feedback-send")
         .accessibilityHint("提交当前文字和附件")
     }
 
@@ -316,12 +311,12 @@ struct FeedbackView: View {
         let submittedAttachments = attachments
         submissionTask = Task { @MainActor in
             defer {
+                showsSuccess = false
                 isSending = false
                 submissionTask = nil
             }
             do {
-                let credentials = try FeedbackMailConfiguration.credentials()
-                try await QQMailFeedbackClient(credentials: credentials).submit(
+                try await QQMailFeedbackClient.submitFromComposer(
                     id: id,
                     message: submittedMessage,
                     attachments: submittedAttachments
@@ -332,18 +327,10 @@ struct FeedbackView: View {
                 rating = nil
                 draftID = UUID()
                 showsSuccess = true
-                try await Task.sleep(
-                    for: FeedbackSuccessPresentationPolicy.acknowledgementHold
-                )
-                guard !Task.isCancelled else { return }
-                if FeedbackSuccessPresentationPolicy.action(
-                    isEmbedded: isEmbedded
-                ) == .acknowledgeThenCollapse {
+                try await Task.sleep(for: .seconds(1))
+                try Task.checkCancellation()
+                if assistantMessageID != nil {
                     onSubmitted()
-                } else {
-                    withAnimation(.easeOut(duration: 0.32)) {
-                        showsSuccess = false
-                    }
                 }
             } catch is CancellationError {
                 return

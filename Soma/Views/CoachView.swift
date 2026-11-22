@@ -445,6 +445,11 @@ struct CoachSessionView: View {
                 }
                 .safeAreaInset(edge: .bottom) {
                     composer(pendingCount: projection.pendingJobCount)
+                        .onGeometryChange(for: CGFloat.self) { geometry in
+                            geometry.frame(in: .global).minY
+                        } action: { top in
+                            visibility.feedbackScroller.composerTopChanged(to: top, using: proxy)
+                        }
                 }
                 .appToast(
                     $recordSaveToast,

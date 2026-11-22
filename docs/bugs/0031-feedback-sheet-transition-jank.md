@@ -4,6 +4,7 @@
 - 发现日期：2026-08-23
 - 影响范围：教练页逐回复反馈入口、反馈编辑器展开与收起
 - 上游依据：[PRD 042](../archive/0.0.11/prd/042-user-controlled-recovery-message-feedback-and-action-art.md)
+- 后续修订：[BUG 0079](0079-feedback-composer-visibility-and-success.md)（键盘避让与成功确认）
 - 下游落地：
   - [ADR 0093](../archive/0.0.11/adr/0093-bounded-per-reply-multimodal-feedback-context.md)
   - [PRD 048](../archive/0.0.17/prd/048-reviewable-record-derivation-and-user-controlled-interruption.md)
@@ -48,7 +49,7 @@ Sheet 仍然需要创建新页面、建立导航容器并执行系统转场；�
 - 自动化测试或静态检查：上下文按消息 ID 读取测试；`make check` 禁止 `CoachView` 全量查询
   `AgentTrace`、禁止逐回复反馈恢复 `.sheet`、禁止入口预组装上下文，并禁止恢复已删除的上下文提示；
   同时要求消息专属底部锚点、展开滚动意图和 `anchor: .bottom` 的聊天滚动落点同时存在。
-- `FeedbackSubmissionTests` 覆盖逐回复成功后收起、设置页成功后确认的分流；静态门禁要求成功回调
+- 逐回复与设置页成功确认的回归见 [BUG 0079](0079-feedback-composer-visibility-and-success.md)。静态门禁要求成功回调
   由叶子组件消费并把 `isExpanded` 置为 `false`。
 - 手工验收：在浅色、深色 iPhone 模拟器和真机连续展开、收起反馈编辑器，确认没有页面切换；
   时间与图标同排并保留 8 pt 可见间距，关闭按钮可见且可访问；从编辑器底部在屏幕外的状态点按

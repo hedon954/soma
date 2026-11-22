@@ -227,11 +227,11 @@ fi
 grep -q '\.id(scrollTarget)' \
   Soma/Views/AssistantFeedbackButton.swift ||
   fail "BUG 0031: inline feedback must expose a message-scoped bottom scroll target"
-grep -q 'onExpanded(scrollTarget)' \
+grep -q 'onScrollEvent(.expanded, scrollTarget)' \
   Soma/Views/AssistantFeedbackButton.swift ||
   fail "BUG 0031: expanding feedback must request scrolling only after the user taps"
 grep -q 'proxy.scrollTo(target, anchor: \.bottom)' \
-  Soma/Views/CoachConversationStarter.swift ||
+  Soma/Views/AssistantFeedbackScroller.swift ||
   fail "BUG 0031: feedback expansion must scroll its editor bottom into view"
 grep -q 'onSubmitted:' \
   Soma/Views/AssistantFeedbackButton.swift ||

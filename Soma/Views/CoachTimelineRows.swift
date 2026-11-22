@@ -91,11 +91,11 @@ extension CoachSessionView {
             ) == true
                 ? { discardPending(message) }
                 : nil,
-            onFeedbackExpanded: { target in
-                AssistantFeedbackScroller.scrollAfterLayout(
-                    to: target,
-                    using: proxy
-                )
+            onFeedbackScroll: { event, target in
+                if case .focusChanged(true) = event {
+                    stopFollowingLiveMessage()
+                }
+                visibility.feedbackScroller.handle(event, target: target, using: proxy)
             }
         )
         .equatable()

@@ -167,17 +167,6 @@ final class FeedbackSubmissionTests: XCTestCase {
         )
     }
 
-    func testSuccessfulReplyFeedbackAcknowledgesThenCollapses() {
-        XCTAssertEqual(
-            FeedbackSuccessPresentationPolicy.action(isEmbedded: true),
-            .acknowledgeThenCollapse
-        )
-        XCTAssertEqual(
-            FeedbackSuccessPresentationPolicy.action(isEmbedded: false),
-            .acknowledgeInPlace
-        )
-    }
-
     func testAssistantReplyFeedbackIncludesRatingAndBoundedDiagnostics() throws {
         let context = try AssistantFeedbackContext(
             messageID: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000101")),
